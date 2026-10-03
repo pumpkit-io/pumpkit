@@ -50,10 +50,10 @@ export function Login() {
       <div className="w-full max-w-[380px]">
         <div className="rounded-xl border border-border bg-card">
           <div className="flex flex-col space-y-1.5 p-6">
-            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">Welcome back</h2>
-            <p className="text-sm text-muted-foreground">
-              Choose your preferred sign in method
-            </p>
+            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">
+              Welcome back
+            </h2>
+            <p className="text-sm text-muted-foreground">Choose your preferred sign in method</p>
           </div>
           <div className="p-6 pt-0">
             <div className="grid gap-6">
@@ -63,15 +63,16 @@ export function Login() {
                   <div className="h-px w-full shrink-0 bg-border" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase tracking-wider">
-                  <span className="bg-card px-2 text-muted-foreground normal-case">
-                    or
-                  </span>
+                  <span className="bg-card px-2 text-muted-foreground normal-case">or</span>
                 </div>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none text-foreground" htmlFor="email">
+                  <label
+                    className="text-sm font-medium leading-none text-foreground"
+                    htmlFor="email"
+                  >
                     Email
                   </label>
                   <input
@@ -91,11 +92,7 @@ export function Login() {
                     {error}
                   </div>
                 )}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={loading || !email}
-                >
+                <Button type="submit" className="w-full" disabled={loading || !email}>
                   {loading ? 'Sending…' : 'Sign in with email'}
                 </Button>
               </form>

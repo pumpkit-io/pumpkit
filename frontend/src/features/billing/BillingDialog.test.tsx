@@ -40,17 +40,37 @@ function renderDialog() {
 describe('BillingDialog', () => {
   beforeEach(() => {
     vi.mocked(billingService.fetchSubscription).mockResolvedValue({
-      status: null, stripePriceId: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, isActive: false,
+      status: null,
+      stripePriceId: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      isActive: false,
     });
     vi.mocked(billingService.fetchPrices).mockResolvedValue([
-      { id: 'price_m', currency: 'eur', unitAmount: 900, recurring: { interval: 'month', intervalCount: 1 }, product: { id: 'prod_1', name: 'Pro', description: null } },
+      {
+        id: 'price_m',
+        currency: 'eur',
+        unitAmount: 900,
+        recurring: { interval: 'month', intervalCount: 1 },
+        product: { id: 'prod_1', name: 'Pro', description: null },
+      },
     ]);
     vi.mocked(billingService.fetchProducts).mockResolvedValue([
-      { id: 'starter-pack', name: 'Starter pack', description: 'Placeholder', amountCents: 1000, currency: 'eur' },
+      {
+        id: 'starter-pack',
+        name: 'Starter pack',
+        description: 'Placeholder',
+        amountCents: 1000,
+        currency: 'eur',
+      },
     ]);
     vi.mocked(billingService.fetchPurchases).mockResolvedValue([]);
-    vi.mocked(billingService.startPurchaseCheckout).mockResolvedValue('https://checkout.stripe.test/p');
-    vi.mocked(billingService.startSubscriptionCheckout).mockResolvedValue('https://checkout.stripe.test/s');
+    vi.mocked(billingService.startPurchaseCheckout).mockResolvedValue(
+      'https://checkout.stripe.test/p',
+    );
+    vi.mocked(billingService.startSubscriptionCheckout).mockResolvedValue(
+      'https://checkout.stripe.test/s',
+    );
   });
 
   it('renders subscription plans and one-time products', async () => {
@@ -63,13 +83,19 @@ describe('BillingDialog', () => {
   it('starts a purchase checkout when Buy is clicked', async () => {
     renderDialog();
     fireEvent.click(await screen.findByRole('button', { name: /buy starter pack/i }));
-    await waitFor(() => expect(billingService.startPurchaseCheckout).toHaveBeenCalledWith('starter-pack'));
+    await waitFor(() =>
+      expect(billingService.startPurchaseCheckout).toHaveBeenCalledWith('starter-pack'),
+    );
     await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://checkout.stripe.test/p'));
   });
 
   it('shows Manage for an active subscription', async () => {
     vi.mocked(billingService.fetchSubscription).mockResolvedValue({
-      status: 'active', stripePriceId: 'price_m', currentPeriodEnd: '2030-01-01T00:00:00Z', cancelAtPeriodEnd: false, isActive: true,
+      status: 'active',
+      stripePriceId: 'price_m',
+      currentPeriodEnd: '2030-01-01T00:00:00Z',
+      cancelAtPeriodEnd: false,
+      isActive: true,
     });
     renderDialog();
     expect(await screen.findByRole('button', { name: /manage subscription/i })).toBeInTheDocument();
@@ -77,7 +103,11 @@ describe('BillingDialog', () => {
 
   it('opens the billing portal in the current tab via redirectTo', async () => {
     vi.mocked(billingService.fetchSubscription).mockResolvedValue({
-      status: 'active', stripePriceId: 'price_m', currentPeriodEnd: '2030-01-01T00:00:00Z', cancelAtPeriodEnd: false, isActive: true,
+      status: 'active',
+      stripePriceId: 'price_m',
+      currentPeriodEnd: '2030-01-01T00:00:00Z',
+      cancelAtPeriodEnd: false,
+      isActive: true,
     });
     vi.mocked(billingService.openBillingPortal).mockResolvedValue('https://portal.stripe.test/x');
     renderDialog();

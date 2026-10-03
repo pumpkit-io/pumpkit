@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { billingService, errorMessage } from '@/services/billingService';
 import { formatAmount } from '@/lib/money';
@@ -19,7 +25,11 @@ const STATUS_LABEL: Record<string, string> = {
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div role="alert" aria-live="polite" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-destructive">
+    <div
+      role="alert"
+      aria-live="polite"
+      className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-destructive"
+    >
       {message}
     </div>
   );
@@ -68,13 +78,19 @@ export function BillingDialog() {
     <Dialog open={isOpen} onOpenChange={(next) => (next ? null : close())}>
       <DialogContent className="max-w-[640px]">
         <DialogHeader>
-          <DialogTitle className="font-sans text-base font-semibold tracking-tight">Billing</DialogTitle>
-          <p className="mt-1 font-sans text-xs text-muted-foreground">Manage your plan and one-time purchases.</p>
+          <DialogTitle className="font-sans text-base font-semibold tracking-tight">
+            Billing
+          </DialogTitle>
+          <p className="mt-1 font-sans text-xs text-muted-foreground">
+            Manage your plan and one-time purchases.
+          </p>
         </DialogHeader>
 
         <div className="max-h-[65vh] space-y-6 overflow-y-auto px-6 pb-4">
           {error && <ErrorBanner message={error} />}
-          {isLoading && !data && <div className="py-6 font-sans text-sm text-muted-foreground">Loading…</div>}
+          {isLoading && !data && (
+            <div className="py-6 font-sans text-sm text-muted-foreground">Loading…</div>
+          )}
 
           {data && (
             <>
@@ -86,7 +102,8 @@ export function BillingDialog() {
                       Status: <span className="font-medium capitalize">{subscription.status}</span>
                       {subscription.currentPeriodEnd && (
                         <span className="text-muted-foreground">
-                          {' '}· {subscription.cancelAtPeriodEnd ? 'ends' : 'renews'}{' '}
+                          {' '}
+                          · {subscription.cancelAtPeriodEnd ? 'ends' : 'renews'}{' '}
                           {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
                         </span>
                       )}
@@ -97,9 +114,13 @@ export function BillingDialog() {
                   </div>
                 ) : (
                   <>
-                    <p className="font-sans text-xs text-muted-foreground">You have no active subscription.</p>
+                    <p className="font-sans text-xs text-muted-foreground">
+                      You have no active subscription.
+                    </p>
                     {data.prices.length === 0 ? (
-                      <p className="font-sans text-xs text-muted-foreground">No plans are available yet.</p>
+                      <p className="font-sans text-xs text-muted-foreground">
+                        No plans are available yet.
+                      </p>
                     ) : (
                       <div className="grid gap-3 sm:grid-cols-2">
                         {data.prices.map((price) => (
@@ -107,7 +128,12 @@ export function BillingDialog() {
                             key={price.id}
                             title={price.product?.name ?? 'Plan'}
                             description={price.product?.description}
-                            priceLabel={recurringLabel(price.unitAmount, price.currency, price.recurring!.interval, price.recurring!.intervalCount)}
+                            priceLabel={recurringLabel(
+                              price.unitAmount,
+                              price.currency,
+                              price.recurring!.interval,
+                              price.recurring!.intervalCount,
+                            )}
                             actionLabel={pendingId === price.id ? 'Redirecting…' : 'Subscribe'}
                             ariaLabel={`Subscribe to ${price.product?.name ?? 'plan'}`}
                             disabled={pendingId !== null}
@@ -121,7 +147,9 @@ export function BillingDialog() {
               </section>
 
               <section className="space-y-3">
-                <h3 className="font-sans text-sm font-semibold text-foreground">One-time purchases</h3>
+                <h3 className="font-sans text-sm font-semibold text-foreground">
+                  One-time purchases
+                </h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {data.products.map((product) => (
                     <ProductCard
@@ -139,11 +167,19 @@ export function BillingDialog() {
                 {data.purchases.length > 0 && (
                   <ul className="divide-y divide-border rounded-xl border border-border">
                     {data.purchases.slice(0, 10).map((purchase) => (
-                      <li key={purchase.id} className="flex items-center justify-between px-4 py-2 font-sans text-xs">
-                        <span className="text-foreground">{productNames.get(purchase.productId) ?? purchase.productId}</span>
+                      <li
+                        key={purchase.id}
+                        className="flex items-center justify-between px-4 py-2 font-sans text-xs"
+                      >
+                        <span className="text-foreground">
+                          {productNames.get(purchase.productId) ?? purchase.productId}
+                        </span>
                         <span className="text-muted-foreground">
-                          {formatAmount(purchase.amountTotalCents ?? purchase.amountSubtotalCents, purchase.currency)} ·{' '}
-                          {STATUS_LABEL[purchase.status] ?? purchase.status} ·{' '}
+                          {formatAmount(
+                            purchase.amountTotalCents ?? purchase.amountSubtotalCents,
+                            purchase.currency,
+                          )}{' '}
+                          · {STATUS_LABEL[purchase.status] ?? purchase.status} ·{' '}
                           {new Date(purchase.createdAt).toLocaleDateString()}
                         </span>
                       </li>
@@ -156,7 +192,11 @@ export function BillingDialog() {
         </div>
 
         <DialogFooter>
-          <button type="button" onClick={onManage} className="font-sans text-xs text-muted-foreground underline-offset-2 hover:underline">
+          <button
+            type="button"
+            onClick={onManage}
+            className="font-sans text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
             Payments &amp; invoices →
           </button>
         </DialogFooter>

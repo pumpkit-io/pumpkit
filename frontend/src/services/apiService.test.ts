@@ -25,7 +25,9 @@ function adapter(statusByUrl: Record<string, number | 'network'>): AxiosAdapter 
       });
     }
     const data =
-      config.url === '/refresh-token' ? { access_token: 'refreshed', expires_at: inMinutes(30) } : { ok: true };
+      config.url === '/refresh-token'
+        ? { access_token: 'refreshed', expires_at: inMinutes(30) }
+        : { ok: true };
     return { data, status: 200, statusText: 'OK', headers: {}, config };
   };
 }

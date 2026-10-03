@@ -36,10 +36,7 @@ export function initPostHog(): void {
   initialised = true;
 }
 
-export function identifyUser(
-  distinctId: string,
-  properties?: Record<string, unknown>,
-): void {
+export function identifyUser(distinctId: string, properties?: Record<string, unknown>): void {
   if (!initialised) return;
   posthog.identify(distinctId, properties);
 }

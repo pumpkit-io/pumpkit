@@ -27,9 +27,7 @@ export function AvatarEditor({ value, initials, onChange, onError }: AvatarEdito
       onChange(dataUrl);
     } catch (e) {
       const message =
-        e instanceof AvatarProcessingError
-          ? e.message
-          : 'Could not process that image.';
+        e instanceof AvatarProcessingError ? e.message : 'Could not process that image.';
       onError(message);
     } finally {
       setBusy(false);

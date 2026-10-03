@@ -12,7 +12,9 @@ interface SidebarContextValue {
 export const SidebarContext = createContext<SidebarContextValue | null>(null);
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsedState] = useState<boolean>(() => storage.get<boolean>('sidebar-collapsed', false));
+  const [collapsed, setCollapsedState] = useState<boolean>(() =>
+    storage.get<boolean>('sidebar-collapsed', false),
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const setCollapsed = useCallback((v: boolean) => {

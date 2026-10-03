@@ -43,9 +43,30 @@ function AppRoutes() {
       <Route path="/oauth/google/callback" element={<GoogleAuthCallback />} />
       <Route path="/auth/magic-link/callback" element={<MagicLinkCallback />} />
       <Route path="/login/magic-link/sent" element={<MagicLinkSent />} />
-      <Route path="/billing/success" element={<ProtectedRoute><BillingSuccessRedirect /></ProtectedRoute>} />
-      <Route path="/billing/cancelled" element={<ProtectedRoute><BillingCancelledRedirect /></ProtectedRoute>} />
-      <Route path="/billing" element={<ProtectedRoute><Navigate to="/home" replace state={{ openBilling: true }} /></ProtectedRoute>} />
+      <Route
+        path="/billing/success"
+        element={
+          <ProtectedRoute>
+            <BillingSuccessRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing/cancelled"
+        element={
+          <ProtectedRoute>
+            <BillingCancelledRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing"
+        element={
+          <ProtectedRoute>
+            <Navigate to="/home" replace state={{ openBilling: true }} />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }

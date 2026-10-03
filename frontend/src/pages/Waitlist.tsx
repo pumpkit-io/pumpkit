@@ -42,11 +42,15 @@ export function Waitlist() {
         <div className="noise-overlay" />
         <div className="particles">
           {[...Array(20)].map((_, i) => (
-            <div key={i} className="particle" style={{
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 20}s`,
-              animationDuration: `${15 + Math.random() * 20}s`,
-            }} />
+            <div
+              key={i}
+              className="particle"
+              style={{
+                left: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 20}s`,
+                animationDuration: `${15 + Math.random() * 20}s`,
+              }}
+            />
           ))}
         </div>
       </div>
@@ -99,8 +103,8 @@ export function Waitlist() {
                 </h1>
 
                 <p className="subtitle">
-                  We're putting the finishing touches on something great.
-                  Join the waitlist to get early access.
+                  We're putting the finishing touches on something great. Join the waitlist to get
+                  early access.
                 </p>
 
                 <form onSubmit={handleSubmit} className="email-form">

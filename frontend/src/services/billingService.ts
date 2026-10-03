@@ -88,13 +88,17 @@ export const billingService = {
       id: p.id,
       currency: p.currency,
       unitAmount: p.unit_amount,
-      recurring: p.recurring ? { interval: p.recurring.interval, intervalCount: p.recurring.interval_count } : null,
+      recurring: p.recurring
+        ? { interval: p.recurring.interval, intervalCount: p.recurring.interval_count }
+        : null,
       product: p.product,
     }));
   },
 
   startSubscriptionCheckout: async (priceId: string): Promise<string> => {
-    const { data } = await apiService.post<{ url: string }>('/stripe/checkout', { price_id: priceId });
+    const { data } = await apiService.post<{ url: string }>('/stripe/checkout', {
+      price_id: priceId,
+    });
     return data.url;
   },
 

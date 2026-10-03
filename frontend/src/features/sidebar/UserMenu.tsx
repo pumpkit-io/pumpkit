@@ -30,10 +30,20 @@ export function UserMenu({ trigger }: { trigger: ReactNode }) {
     <DropdownMenu onOpenChange={(open) => open && track('sidebar_user_menu_opened')}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" className="w-48">
-        <DropdownMenuItem onSelect={() => { track('user_menu_account_clicked'); account.open(); }}>
+        <DropdownMenuItem
+          onSelect={() => {
+            track('user_menu_account_clicked');
+            account.open();
+          }}
+        >
           <UserIcon className="h-3.5 w-3.5" /> Account
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => { track('user_menu_billing_clicked'); billing.open('user_menu'); }}>
+        <DropdownMenuItem
+          onSelect={() => {
+            track('user_menu_billing_clicked');
+            billing.open('user_menu');
+          }}
+        >
           <CreditCard className="h-3.5 w-3.5" /> Billing
         </DropdownMenuItem>
         <DropdownMenuSub>

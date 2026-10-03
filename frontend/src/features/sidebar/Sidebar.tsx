@@ -12,14 +12,19 @@ import { UserMenu } from './UserMenu';
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '';
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
   return (first + last).toUpperCase() || '•';
 }
 
 function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () => void }) {
   const label = collapsed ? 'Open sidebar' : 'Close sidebar';
   return (
-    <button type="button" onClick={onClick} className="group relative flex h-10 w-10 items-center justify-center" aria-label={label}>
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative flex h-10 w-10 items-center justify-center"
+      aria-label={label}
+    >
       <span className="flex h-full w-full items-center justify-center rounded-xl text-muted-foreground transition-all duration-150 ease-out group-hover:bg-[var(--hover)] group-hover:text-foreground">
         <PanelLeft className="h-5 w-5" />
       </span>
@@ -36,8 +41,12 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
   const expandedBodyRef = useRef<HTMLDivElement>(null);
 
   const isExpanded = forceExpanded || !collapsed;
-  const display = profile ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email : '•';
-  const fade = prefersReducedMotion ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' as const };
+  const display = profile
+    ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email
+    : '•';
+  const fade = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.15, ease: 'easeOut' as const };
   const brandVisible = isExpanded || !hovered;
   const toggleVisible = isExpanded || hovered;
 
@@ -47,10 +56,17 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
   }, [isExpanded]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-card" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+    <div
+      className="flex h-full w-full flex-col bg-card"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div className="relative mt-1 h-14 overflow-hidden">
         <motion.div
-          className={cn('absolute inset-y-0 left-0 flex items-center', isExpanded ? 'pl-3' : 'pl-2')}
+          className={cn(
+            'absolute inset-y-0 left-0 flex items-center',
+            isExpanded ? 'pl-3' : 'pl-2',
+          )}
           initial={false}
           animate={{ opacity: brandVisible ? 1 : 0 }}
           transition={fade}
@@ -60,7 +76,10 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           <Brand size="sm" showName={isExpanded} />
         </motion.div>
         <motion.div
-          className={cn('absolute inset-y-0 right-0 flex items-center', isExpanded ? 'pr-3' : 'pr-2')}
+          className={cn(
+            'absolute inset-y-0 right-0 flex items-center',
+            isExpanded ? 'pr-3' : 'pr-2',
+          )}
           initial={false}
           animate={{ opacity: toggleVisible ? 1 : 0 }}
           transition={fade}
@@ -82,7 +101,11 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           <div className="mt-auto">
             <UserMenu
               trigger={
-                <button type="button" aria-label="User menu" className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs text-foreground hover:bg-muted/80">
+                <button
+                  type="button"
+                  aria-label="User menu"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs text-foreground hover:bg-muted/80"
+                >
                   {initials(display)}
                 </button>
               }
@@ -100,7 +123,11 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
         >
           {/* Add your app's navigation here. */}
           <nav className="flex-1 py-2" aria-label="Main">
-            <SidebarRowButton icon={<House className="h-4 w-4" />} label="Home" aria-current="page" />
+            <SidebarRowButton
+              icon={<House className="h-4 w-4" />}
+              label="Home"
+              aria-current="page"
+            />
           </nav>
           <UserCard />
         </motion.div>

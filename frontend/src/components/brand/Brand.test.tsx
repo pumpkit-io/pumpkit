@@ -5,12 +5,20 @@ import { Brand } from './Brand';
 
 describe('Brand', () => {
   it('shows the app name by default', () => {
-    render(<ThemeProvider><Brand /></ThemeProvider>);
+    render(
+      <ThemeProvider>
+        <Brand />
+      </ThemeProvider>,
+    );
     expect(screen.getByText('Pumpkit')).toBeInTheDocument();
   });
 
   it('can hide the name', () => {
-    render(<ThemeProvider><Brand showName={false} /></ThemeProvider>);
+    render(
+      <ThemeProvider>
+        <Brand showName={false} />
+      </ThemeProvider>,
+    );
     expect(screen.queryByText('Pumpkit')).not.toBeInTheDocument();
   });
 });

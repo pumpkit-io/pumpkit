@@ -9,7 +9,12 @@ import { APP_NAME } from '@/lib/app';
 const transitionVariants: { item: Variants } = {
   item: {
     hidden: { opacity: 0, filter: 'blur(12px)', y: 12 },
-    visible: { opacity: 1, filter: 'blur(0px)', y: 0, transition: { type: 'spring', bounce: 0.3, duration: 1.5 } },
+    visible: {
+      opacity: 1,
+      filter: 'blur(0px)',
+      y: 0,
+      transition: { type: 'spring', bounce: 0.3, duration: 1.5 },
+    },
   },
 };
 
@@ -21,7 +26,10 @@ function HeroHeader() {
           <Brand size="sm" />
         </Link>
         <div className="flex items-center gap-2">
-          <a href="#pricing" className="hidden px-3 py-2 font-sans text-sm text-muted-foreground hover:text-foreground sm:inline">
+          <a
+            href="#pricing"
+            className="hidden px-3 py-2 font-sans text-sm text-muted-foreground hover:text-foreground sm:inline"
+          >
             Pricing
           </a>
           <Button asChild size="sm" onClick={() => track('landing_nav_get_started_clicked')}>

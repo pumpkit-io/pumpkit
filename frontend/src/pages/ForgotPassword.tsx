@@ -18,7 +18,8 @@ export function ForgotPassword() {
       setStatus({ type: 'success', message: response.message });
       setEmail('');
     } catch (error: any) {
-      const message = error?.response?.data?.detail ?? 'Unable to send reset instructions. Please try again.';
+      const message =
+        error?.response?.data?.detail ?? 'Unable to send reset instructions. Please try again.';
       setStatus({ type: 'error', message });
     } finally {
       setLoading(false);
@@ -30,7 +31,9 @@ export function ForgotPassword() {
       <div className="w-full max-w-[420px]">
         <div className="rounded-xl border border-border bg-card">
           <div className="flex flex-col space-y-1.5 p-6">
-            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">Reset your password</h2>
+            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">
+              Reset your password
+            </h2>
             <p className="text-sm text-muted-foreground">
               Enter your email and we'll send you a reset link.
             </p>
@@ -65,11 +68,7 @@ export function ForgotPassword() {
                 </div>
               )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={loading}
-              >
+              <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Sending reset link…' : 'Send reset link'}
               </Button>
             </form>
@@ -77,7 +76,10 @@ export function ForgotPassword() {
         </div>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Remembered your password?{' '}
-          <Link to="/login" className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity">
+          <Link
+            to="/login"
+            className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity"
+          >
             Back to sign in
           </Link>
         </p>

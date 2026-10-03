@@ -45,7 +45,7 @@ export function Signup() {
     uppercase: false,
     lowercase: false,
     number: false,
-    special: false
+    special: false,
   });
 
   const handlePasswordChange = (value: string) => {
@@ -55,7 +55,7 @@ export function Signup() {
       uppercase: /[A-Z]/.test(value),
       lowercase: /[a-z]/.test(value),
       number: /[0-9]/.test(value),
-      special: /[^A-Za-z0-9]/.test(value)
+      special: /[^A-Za-z0-9]/.test(value),
     });
 
     if (!value) {
@@ -127,22 +127,25 @@ export function Signup() {
         first_name: firstName,
         last_name: lastName,
         email,
-        password
+        password,
       });
 
       navigate('/login', {
         state: {
           signupSuccess: true,
           message: result.message,
-          email: result.email
-        }
+          email: result.email,
+        },
       });
     } catch (err: any) {
       if (err.response?.data?.detail) {
         if (typeof err.response.data.detail === 'string') {
           const detail = err.response.data.detail;
           setErrors({ form: detail });
-          if (detail === 'Email already registered. We sent you an email to confirm your account before signing in.') {
+          if (
+            detail ===
+            'Email already registered. We sent you an email to confirm your account before signing in.'
+          ) {
             setShowResendVerification(true);
             setResendSuccess(false);
           } else {
@@ -172,16 +175,19 @@ export function Signup() {
       <div className="w-full max-w-[420px]">
         <div className="rounded-xl border border-border bg-card">
           <div className="flex flex-col space-y-1.5 p-6">
-            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">Create an account</h2>
-            <p className="text-sm text-muted-foreground">
-              Enter your details to get started
-            </p>
+            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">
+              Create an account
+            </h2>
+            <p className="text-sm text-muted-foreground">Enter your details to get started</p>
           </div>
           <div className="p-6 pt-0">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none text-foreground" htmlFor="firstName">
+                  <label
+                    className="text-sm font-medium leading-none text-foreground"
+                    htmlFor="firstName"
+                  >
                     First name
                   </label>
                   <input
@@ -197,7 +203,10 @@ export function Signup() {
                   {errors.firstName && <div className={errorClass}>{errors.firstName}</div>}
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none text-foreground" htmlFor="lastName">
+                  <label
+                    className="text-sm font-medium leading-none text-foreground"
+                    htmlFor="lastName"
+                  >
                     Last name
                   </label>
                   <input
@@ -232,7 +241,10 @@ export function Signup() {
               </div>
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none text-foreground" htmlFor="password">
+                  <label
+                    className="text-sm font-medium leading-none text-foreground"
+                    htmlFor="password"
+                  >
                     Password
                   </label>
                   <div className="relative">
@@ -252,7 +264,11 @@ export function Signup() {
                         className="absolute inset-y-0 right-2 flex items-center text-muted-foreground transition-colors hover:text-foreground"
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
                       >
-                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        {showPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
                       </button>
                     )}
                   </div>
@@ -291,7 +307,9 @@ export function Signup() {
                       setResendSuccess(true);
                       setErrors({});
                     } catch {
-                      setErrors({ form: 'Failed to resend confirmation email. Please try again later.' });
+                      setErrors({
+                        form: 'Failed to resend confirmation email. Please try again later.',
+                      });
                     } finally {
                       setResendLoading(false);
                     }
@@ -306,11 +324,7 @@ export function Signup() {
                   Confirmation email sent. Please check your inbox.
                 </div>
               )}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={loading}
-              >
+              <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Creating account…' : 'Create account'}
               </Button>
             </form>
@@ -318,7 +332,10 @@ export function Signup() {
         </div>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Already have an account?{' '}
-          <Link to="/login" className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity">
+          <Link
+            to="/login"
+            className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity"
+          >
             Sign in
           </Link>
         </p>

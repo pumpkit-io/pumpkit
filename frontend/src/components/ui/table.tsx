@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import {
   useRef,
@@ -13,11 +13,11 @@ import {
   type TdHTMLAttributes,
   type ThHTMLAttributes,
   type RefObject,
-} from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "@/lib/utils";
+} from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
-const springs = { fast: { type: "spring" as const, duration: 0.08, bounce: 0 } };
+const springs = { fast: { type: 'spring' as const, duration: 0.08, bounce: 0 } };
 const fontWeights = { normal: "'wght' 400", semibold: "'wght' 550" };
 
 // ─── useProximityHover ──────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ const Table = forwardRef<HTMLTableElement, TableProps>(({ children, className, .
         </AnimatePresence>
         <table
           ref={ref}
-          className={cn("w-full text-[13px] border-collapse relative", className)}
+          className={cn('w-full text-[13px] border-collapse relative', className)}
           {...props}
         >
           {children}
@@ -184,21 +184,21 @@ const Table = forwardRef<HTMLTableElement, TableProps>(({ children, className, .
     </TableContext.Provider>
   );
 });
-Table.displayName = "Table";
+Table.displayName = 'Table';
 
 // ─── TableHeader ────────────────────────────────────────────────────────────
 
 const TableHeader = forwardRef<HTMLTableSectionElement, HTMLAttributes<HTMLTableSectionElement>>(
-  ({ className, ...props }, ref) => <thead ref={ref} className={cn("", className)} {...props} />,
+  ({ className, ...props }, ref) => <thead ref={ref} className={cn('', className)} {...props} />,
 );
-TableHeader.displayName = "TableHeader";
+TableHeader.displayName = 'TableHeader';
 
 // ─── TableBody ──────────────────────────────────────────────────────────────
 
 const TableBody = forwardRef<HTMLTableSectionElement, HTMLAttributes<HTMLTableSectionElement>>(
-  ({ className, ...props }, ref) => <tbody ref={ref} className={cn("", className)} {...props} />,
+  ({ className, ...props }, ref) => <tbody ref={ref} className={cn('', className)} {...props} />,
 );
-TableBody.displayName = "TableBody";
+TableBody.displayName = 'TableBody';
 
 // ─── TableRow ───────────────────────────────────────────────────────────────
 
@@ -228,14 +228,14 @@ const TableRow = forwardRef<HTMLTableRowElement, TableRowProps>(
       <tr
         ref={(node) => {
           internalRef.current = node;
-          if (typeof ref === "function") ref(node);
+          if (typeof ref === 'function') ref(node);
           else if (ref) (ref as React.MutableRefObject<HTMLTableRowElement | null>).current = node;
         }}
         data-proximity-index={index}
         className={cn(
-          "group/row relative z-10 border-b transition-[border-color] duration-80",
-          hideBorder ? "border-transparent" : "border-border/40",
-          isBodyRow && activeIdx === index && "is-active",
+          'group/row relative z-10 border-b transition-[border-color] duration-80',
+          hideBorder ? 'border-transparent' : 'border-border/40',
+          isBodyRow && activeIdx === index && 'is-active',
           className,
         )}
         style={{
@@ -247,16 +247,16 @@ const TableRow = forwardRef<HTMLTableRowElement, TableRowProps>(
     );
   },
 );
-TableRow.displayName = "TableRow";
+TableRow.displayName = 'TableRow';
 
 // ─── TableHead ──────────────────────────────────────────────────────────────
 
 const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
-    <th ref={ref} className={cn("px-3 py-2 text-left text-foreground", className)} {...props} />
+    <th ref={ref} className={cn('px-3 py-2 text-left text-foreground', className)} {...props} />
   ),
 );
-TableHead.displayName = "TableHead";
+TableHead.displayName = 'TableHead';
 
 // ─── TableCell ──────────────────────────────────────────────────────────────
 
@@ -265,13 +265,13 @@ const TableCell = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCel
     <td
       ref={ref}
       className={cn(
-        "px-3 py-2 text-muted-foreground transition-colors duration-80 group-[.is-active]/row:text-foreground",
+        'px-3 py-2 text-muted-foreground transition-colors duration-80 group-[.is-active]/row:text-foreground',
         className,
       )}
       {...props}
     />
   ),
 );
-TableCell.displayName = "TableCell";
+TableCell.displayName = 'TableCell';
 
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell };

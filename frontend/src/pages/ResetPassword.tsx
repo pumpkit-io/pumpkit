@@ -51,7 +51,8 @@ export function ResetPassword() {
         },
       });
     } catch (error: any) {
-      const message = error?.response?.data?.detail ?? 'Unable to reset password. Please try again.';
+      const message =
+        error?.response?.data?.detail ?? 'Unable to reset password. Please try again.';
       setStatus({ type: 'error', message });
     } finally {
       setLoading(false);
@@ -63,7 +64,9 @@ export function ResetPassword() {
       <div className="w-full max-w-[420px]">
         <div className="rounded-xl border border-border bg-card">
           <div className="flex flex-col space-y-1.5 p-6">
-            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">Choose a new password</h2>
+            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">
+              Choose a new password
+            </h2>
             <p className="text-sm text-muted-foreground">
               Enter and confirm your new password below.
             </p>
@@ -71,7 +74,10 @@ export function ResetPassword() {
           <div className="p-6 pt-0">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none text-foreground" htmlFor="new-password">
+                <label
+                  className="text-sm font-medium leading-none text-foreground"
+                  htmlFor="new-password"
+                >
                   New password
                 </label>
                 <div className="relative">
@@ -98,14 +104,21 @@ export function ResetPassword() {
                       className="absolute inset-y-0 right-2 flex items-center text-muted-foreground transition-colors hover:text-foreground"
                       aria-label={showNewPassword ? 'Hide password' : 'Show password'}
                     >
-                      {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showNewPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
                     </button>
                   )}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none text-foreground" htmlFor="confirm-password">
+                <label
+                  className="text-sm font-medium leading-none text-foreground"
+                  htmlFor="confirm-password"
+                >
                   Confirm password
                 </label>
                 <div className="relative">
@@ -132,7 +145,11 @@ export function ResetPassword() {
                       className="absolute inset-y-0 right-2 flex items-center text-muted-foreground transition-colors hover:text-foreground"
                       aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                     >
-                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
                     </button>
                   )}
                 </div>
@@ -140,7 +157,8 @@ export function ResetPassword() {
 
               {tokenMissing && (
                 <div className="rounded-lg border border-border bg-muted p-3 text-sm text-muted-foreground">
-                  This reset link is missing or invalid. Request a new password reset from the sign in page.
+                  This reset link is missing or invalid. Request a new password reset from the sign
+                  in page.
                 </div>
               )}
 
@@ -156,11 +174,7 @@ export function ResetPassword() {
                 </div>
               )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={loading || tokenMissing}
-              >
+              <Button type="submit" className="w-full" disabled={loading || tokenMissing}>
                 {loading ? 'Updating password…' : 'Update password'}
               </Button>
             </form>
@@ -168,7 +182,10 @@ export function ResetPassword() {
         </div>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Need to go back?{' '}
-          <Link to="/login" className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity">
+          <Link
+            to="/login"
+            className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity"
+          >
             Back to sign in
           </Link>
         </p>

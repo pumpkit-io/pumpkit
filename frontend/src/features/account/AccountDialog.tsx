@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -22,7 +26,11 @@ function emptyForm(): FormState {
   return { firstName: '', lastName: '', avatarUrl: null };
 }
 
-function formFromProfile(profile: { firstName: string | null; lastName: string | null; avatarUrl: string | null }): FormState {
+function formFromProfile(profile: {
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+}): FormState {
   return {
     firstName: profile.firstName ?? '',
     lastName: profile.lastName ?? '',
@@ -58,9 +66,9 @@ export function AccountDialog() {
   const isDirty = useMemo(() => {
     if (!profile) return false;
     return (
-      (form.firstName || null) !== (profile.firstName ?? null)
-      || (form.lastName || null) !== (profile.lastName ?? null)
-      || form.avatarUrl !== profile.avatarUrl
+      (form.firstName || null) !== (profile.firstName ?? null) ||
+      (form.lastName || null) !== (profile.lastName ?? null) ||
+      form.avatarUrl !== profile.avatarUrl
     );
   }, [form, profile]);
 
@@ -107,8 +115,7 @@ export function AccountDialog() {
       track('account_profile_saved', { fields_changed: fieldsChanged });
       close();
     } catch (e) {
-      const detail = (e as { response?: { data?: { detail?: unknown } } })
-        ?.response?.data?.detail;
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
       const message =
         typeof detail === 'string'
           ? detail
@@ -177,9 +184,7 @@ export function AccountDialog() {
               />
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className="font-sans text-xs font-medium text-muted-foreground">
-                Last name
-              </span>
+              <span className="font-sans text-xs font-medium text-muted-foreground">Last name</span>
               <Input
                 value={form.lastName}
                 onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
@@ -191,16 +196,9 @@ export function AccountDialog() {
           </div>
 
           <label className="flex flex-col gap-1.5">
-            <span className="font-sans text-xs font-medium text-muted-foreground">
-              Email
-            </span>
+            <span className="font-sans text-xs font-medium text-muted-foreground">Email</span>
             <div className="flex items-center gap-3">
-              <Input
-                value={profile.email}
-                readOnly
-                disabled
-                className="bg-muted/30"
-              />
+              <Input value={profile.email} readOnly disabled className="bg-muted/30" />
               <span className="whitespace-nowrap font-sans text-[11px] text-muted-foreground">
                 Managed by sign-in
               </span>
@@ -216,11 +214,7 @@ export function AccountDialog() {
             <Button type="button" variant="ghost" onClick={close} disabled={pendingSave}>
               Cancel
             </Button>
-            <Button
-              type="button"
-              onClick={onSave}
-              disabled={!isDirty || pendingSave}
-            >
+            <Button type="button" onClick={onSave} disabled={!isDirty || pendingSave}>
               {pendingSave ? 'Saving…' : 'Save changes'}
             </Button>
           </div>

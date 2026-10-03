@@ -90,7 +90,7 @@ export const authService = {
     const currentTime = Date.now();
     const refreshThreshold = 10 * 60 * 1000;
 
-    return expirationTime <= (currentTime + refreshThreshold);
+    return expirationTime <= currentTime + refreshThreshold;
   },
 
   refreshToken: async (): Promise<void> => {
@@ -123,9 +123,7 @@ export const authService = {
     return response.data;
   },
 
-  requestPasswordReset: async (
-    payload: PasswordResetRequestPayload,
-  ): Promise<MessageResponse> => {
+  requestPasswordReset: async (payload: PasswordResetRequestPayload): Promise<MessageResponse> => {
     const response = await api.post('/password-reset/request', payload);
     return response.data;
   },

@@ -4,13 +4,24 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
-    fetchProfile: vi.fn().mockResolvedValue({ email: 'ada@example.com', firstName: 'Ada', lastName: 'Lovelace', avatarUrl: null }),
+    fetchProfile: vi.fn().mockResolvedValue({
+      email: 'ada@example.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      avatarUrl: null,
+    }),
     updateProfile: vi.fn(),
   },
 }));
 vi.mock('@/services/billingService', () => ({
   billingService: {
-    fetchSubscription: vi.fn().mockResolvedValue({ status: null, stripePriceId: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, isActive: false }),
+    fetchSubscription: vi.fn().mockResolvedValue({
+      status: null,
+      stripePriceId: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      isActive: false,
+    }),
     fetchPrices: vi.fn().mockResolvedValue([]),
     fetchProducts: vi.fn().mockResolvedValue([]),
     fetchPurchases: vi.fn().mockResolvedValue([]),
@@ -27,7 +38,10 @@ function renderHome(state?: unknown) {
   return render(
     <AuthProvider>
       <ThemeProvider>
-        <MemoryRouter initialEntries={[{ pathname: "/home", state }]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <MemoryRouter
+          initialEntries={[{ pathname: '/home', state }]}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
           <Home />
         </MemoryRouter>
       </ThemeProvider>

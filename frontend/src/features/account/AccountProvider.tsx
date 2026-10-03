@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 
 interface AccountContextValue {
   isOpen: boolean;

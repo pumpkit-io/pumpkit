@@ -18,9 +18,7 @@ export function EmailConfirmationRedirect() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="text-center">
-        <p className="text-sm text-muted-foreground">
-          Confirming your email...
-        </p>
+        <p className="text-sm text-muted-foreground">Confirming your email...</p>
       </div>
     </div>
   );

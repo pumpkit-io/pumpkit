@@ -44,11 +44,11 @@ class TokenErrorBoundary extends Component<Props, State> {
       'invalid token',
       'unauthorized',
       'refresh token',
-      'authentication failed'
+      'authentication failed',
     ];
 
     const errorMessage = error.message?.toLowerCase() || '';
-    return tokenErrorMessages.some(msg => errorMessage.includes(msg));
+    return tokenErrorMessages.some((msg) => errorMessage.includes(msg));
   }
 
   render() {

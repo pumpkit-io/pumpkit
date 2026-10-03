@@ -6,13 +6,30 @@ vi.mock('@/services/billingService', () => ({ billingService: { fetchPrices: vi.
 import { billingService } from '@/services/billingService';
 import { PricingSection } from './pricing-section';
 
-const renderSection = () => render(<MemoryRouter><PricingSection /></MemoryRouter>);
+const renderSection = () =>
+  render(
+    <MemoryRouter>
+      <PricingSection />
+    </MemoryRouter>,
+  );
 
 describe('PricingSection', () => {
   it('lists recurring prices from Stripe', async () => {
     vi.mocked(billingService.fetchPrices).mockResolvedValue([
-      { id: 'price_m', currency: 'eur', unitAmount: 900, recurring: { interval: 'month', intervalCount: 1 }, product: { id: 'p', name: 'Pro', description: 'For teams' } },
-      { id: 'price_once', currency: 'eur', unitAmount: 500, recurring: null, product: { id: 'q', name: 'One-off', description: null } },
+      {
+        id: 'price_m',
+        currency: 'eur',
+        unitAmount: 900,
+        recurring: { interval: 'month', intervalCount: 1 },
+        product: { id: 'p', name: 'Pro', description: 'For teams' },
+      },
+      {
+        id: 'price_once',
+        currency: 'eur',
+        unitAmount: 500,
+        recurring: null,
+        product: { id: 'q', name: 'One-off', description: null },
+      },
     ]);
     renderSection();
     expect(await screen.findByText('Pro')).toBeInTheDocument();

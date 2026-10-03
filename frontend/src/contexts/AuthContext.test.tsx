@@ -4,7 +4,12 @@ import type { ReactNode } from 'react';
 
 vi.mock('@/services/userService', () => ({
   userService: {
-    fetchProfile: vi.fn().mockResolvedValue({ email: 'a@example.com', firstName: null, lastName: null, avatarUrl: null }),
+    fetchProfile: vi.fn().mockResolvedValue({
+      email: 'a@example.com',
+      firstName: null,
+      lastName: null,
+      avatarUrl: null,
+    }),
   },
 }));
 

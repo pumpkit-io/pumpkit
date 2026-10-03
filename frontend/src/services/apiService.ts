@@ -40,7 +40,10 @@ const REFRESH_LOCK_NAME = `${APP_SLUG}:refresh-token`;
 let refreshInFlight: Promise<string> | null = null;
 
 async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
-  const locks = (typeof navigator !== 'undefined' && (navigator as Navigator & { locks?: LockManager }).locks) || null;
+  const locks =
+    (typeof navigator !== 'undefined' &&
+      (navigator as Navigator & { locks?: LockManager }).locks) ||
+    null;
   if (locks) {
     return await locks.request(REFRESH_LOCK_NAME, async () => fn());
   }
@@ -115,7 +118,7 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // Add response interceptor with automatic token refresh
@@ -135,12 +138,14 @@ api.interceptors.response.use(
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
-        }).then(token => {
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          return api(originalRequest);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return api(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
       }
 
       originalRequest._retry = true;
@@ -161,11 +166,9 @@ api.interceptors.response.use(
         // the still-valid access token can be used until it actually expires.
         const refreshStatus = refreshError?.response?.status;
         const expiresAt = localStorage.getItem('token_expires_at');
-        const accessTokenLooksExpired =
-          !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+        const accessTokenLooksExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
         const accessTokenMissing = !localStorage.getItem('auth_token');
-        const mustSignOut =
-          refreshStatus === 401 || accessTokenMissing || accessTokenLooksExpired;
+        const mustSignOut = refreshStatus === 401 || accessTokenMissing || accessTokenLooksExpired;
 
         if (mustSignOut) {
           localStorage.removeItem('auth_token');
@@ -179,7 +182,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 // Export the configured axios instance
@@ -188,8 +191,12 @@ export { api };
 // Export a convenient service object
 export const apiService = {
   get: <T = any>(url: string, config?: any): Promise<AxiosResponse<T>> => api.get(url, config),
-  post: <T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> => api.post(url, data, config),
-  put: <T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> => api.put(url, data, config),
-  patch: <T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> => api.patch(url, data, config),
-  delete: <T = any>(url: string, config?: any): Promise<AxiosResponse<T>> => api.delete(url, config),
+  post: <T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> =>
+    api.post(url, data, config),
+  put: <T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> =>
+    api.put(url, data, config),
+  patch: <T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> =>
+    api.patch(url, data, config),
+  delete: <T = any>(url: string, config?: any): Promise<AxiosResponse<T>> =>
+    api.delete(url, config),
 };

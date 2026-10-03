@@ -42,7 +42,10 @@ function useBillingReturn() {
       billing.open('checkout_success');
     } else if (state.checkoutStatus === 'cancelled') {
       track('billing_checkout_cancelled', { kind: state.checkoutKind });
-      billing.openWithError('Checkout was cancelled. You have not been charged.', 'checkout_cancelled');
+      billing.openWithError(
+        'Checkout was cancelled. You have not been charged.',
+        'checkout_cancelled',
+      );
     } else {
       billing.open('billing_route');
     }
@@ -68,7 +71,8 @@ function HomeInner() {
                   Welcome{firstName ? `, ${firstName}` : ''}
                 </h1>
                 <p className="mt-3 font-sans text-sm text-muted-foreground">
-                  This is the {APP_NAME} app shell. Build your product here — see “Building your app” in the README.
+                  This is the {APP_NAME} app shell. Build your product here — see “Building your
+                  app” in the README.
                 </p>
               </div>
             </div>

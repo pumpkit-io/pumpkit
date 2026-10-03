@@ -16,9 +16,7 @@ export const Switch = React.forwardRef<
       )}
       {...props}
     >
-      <SwitchPrimitive.Thumb
-        className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-[0_1px_4px_rgba(8,8,12,0.4)] transition-transform duration-200 data-[state=checked]:translate-x-[1rem] data-[state=unchecked]:translate-x-0"
-      />
+      <SwitchPrimitive.Thumb className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-[0_1px_4px_rgba(8,8,12,0.4)] transition-transform duration-200 data-[state=checked]:translate-x-[1rem] data-[state=unchecked]:translate-x-0" />
     </SwitchPrimitive.Root>
   );
 });

@@ -1,18 +1,14 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-interface SidebarRowButtonProps
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+interface SidebarRowButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   icon: ReactNode;
   label: string;
   trailing?: ReactNode;
 }
 
 export const SidebarRowButton = forwardRef<HTMLButtonElement, SidebarRowButtonProps>(
-  function SidebarRowButton(
-    { icon, label, trailing, className, ...rest },
-    ref,
-  ) {
+  function SidebarRowButton({ icon, label, trailing, className, ...rest }, ref) {
     return (
       <button
         {...rest}

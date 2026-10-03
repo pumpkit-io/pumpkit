@@ -52,18 +52,13 @@ export function MagicLinkSent() {
               Magic link sent
             </h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Check your inbox for{' '}
-              <strong className="font-medium text-foreground">{email}</strong> and
-              click the link to sign in.
+              Check your inbox for <strong className="font-medium text-foreground">{email}</strong>{' '}
+              and click the link to sign in.
             </p>
 
             {showGmailButton && (
               <Button asChild className="mt-2 w-full">
-                <a
-                  href={INBOX_REDIRECT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={INBOX_REDIRECT_URL} target="_blank" rel="noopener noreferrer">
                   Open Gmail inbox
                   <ArrowUpRight className="ml-1 h-4 w-4" />
                 </a>
