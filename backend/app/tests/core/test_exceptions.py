@@ -10,7 +10,9 @@ from app.main import app as main_app
 
 
 def test_main_app_registers_unhandled_exception_handler():
-    assert main_app.exception_handlers.get(Exception) is exceptions_module.unhandled_exception_handler
+    assert (
+        main_app.exception_handlers.get(Exception) is exceptions_module.unhandled_exception_handler
+    )
 
 
 async def test_unhandled_exception_returns_500_with_error_id(monkeypatch):

@@ -29,6 +29,7 @@ _LLM_CLIENT_TIMEOUT = httpx.Timeout(
 )
 _LLM_CLIENT_MAX_RETRIES = 2
 
+
 class LLMNotConfiguredError(RuntimeError):
     """Raised when an LLM call is attempted without OPENROUTER_API_KEY configured."""
 

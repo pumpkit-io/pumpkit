@@ -35,7 +35,9 @@ def stripe_stubs(monkeypatch):
 
     monkeypatch.setattr(purchases_mediator.stripe.checkout.Session, "create", _create_session)
     monkeypatch.setattr(
-        purchases_mediator.stripe_customers_service, "ensure_stripe_customer", AsyncMock(return_value="cus_1")
+        purchases_mediator.stripe_customers_service,
+        "ensure_stripe_customer",
+        AsyncMock(return_value="cus_1"),
     )
     monkeypatch.setattr(purchases_mediator, "_resolve_charge_id", AsyncMock(return_value="ch_1"))
     patch_construct_event(monkeypatch)
@@ -43,13 +45,21 @@ def stripe_stubs(monkeypatch):
 
 
 async def _checkout(db, user) -> str:
-    response = await purchases_mediator.create_checkout_session(db, user=user, product_id=PRODUCT.id)
+    response = await purchases_mediator.create_checkout_session(
+        db, user=user, product_id=PRODUCT.id
+    )
     assert response.session_id == "cs_test_1"
     purchase = await purchases_service.get_purchase_by_session_id(db, session_id="cs_test_1")
     return purchase.id
 
 
-def _completed(purchase_id: str, user_id: str, *, subtotal: int = PRODUCT.amount_cents, currency: str = PRODUCT.currency) -> dict:
+def _completed(
+    purchase_id: str,
+    user_id: str,
+    *,
+    subtotal: int = PRODUCT.amount_cents,
+    currency: str = PRODUCT.currency,
+) -> dict:
     return {
         "id": "cs_test_1",
         "object": "checkout.session",
@@ -60,12 +70,19 @@ def _completed(purchase_id: str, user_id: str, *, subtotal: int = PRODUCT.amount
         "currency": currency,
         "payment_intent": "pi_1",
         "client_reference_id": user_id,
-        "metadata": {"kind": "purchase", "purchase_id": purchase_id, "product_id": PRODUCT.id, "user_id": user_id},
+        "metadata": {
+            "kind": "purchase",
+            "purchase_id": purchase_id,
+            "product_id": PRODUCT.id,
+            "user_id": user_id,
+        },
     }
 
 
 async def _send(db, event_id: str, event_type: str, obj: dict) -> None:
-    await stripe_mediator.handle_webhook(db=db, payload=webhook_payload(event_id, event_type, obj), signature="sig")
+    await stripe_mediator.handle_webhook(
+        db=db, payload=webhook_payload(event_id, event_type, obj), signature="sig"
+    )
 
 
 async def test_checkout_creates_pending_row_with_catalog_price(db, user, stripe_stubs):
@@ -89,7 +106,9 @@ async def test_checkout_rejects_unknown_product(db, user, stripe_stubs):
 async def test_completed_marks_paid_and_calls_hook_once(db, user, stripe_stubs, hook_spies):
     purchase_id = await _checkout(db, user)
     await _send(db, "evt_c1", "checkout.session.completed", _completed(purchase_id, user.id))
-    await _send(db, "evt_c1", "checkout.session.completed", _completed(purchase_id, user.id))  # replay
+    await _send(
+        db, "evt_c1", "checkout.session.completed", _completed(purchase_id, user.id)
+    )  # replay
     purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
     assert purchase.status == "paid"
     assert purchase.stripe_charge_id == "ch_1"
@@ -98,7 +117,9 @@ async def test_completed_marks_paid_and_calls_hook_once(db, user, stripe_stubs, 
 
 async def test_amount_mismatch_marks_failed_without_hook(db, user, stripe_stubs, hook_spies):
     purchase_id = await _checkout(db, user)
-    await _send(db, "evt_bad", "checkout.session.completed", _completed(purchase_id, user.id, subtotal=1))
+    await _send(
+        db, "evt_bad", "checkout.session.completed", _completed(purchase_id, user.id, subtotal=1)
+    )
     purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
     assert purchase.status == "failed"
     hook_spies.paid.assert_not_awaited()
@@ -106,7 +127,12 @@ async def test_amount_mismatch_marks_failed_without_hook(db, user, stripe_stubs,
 
 async def test_currency_mismatch_marks_failed_without_hook(db, user, stripe_stubs, hook_spies):
     purchase_id = await _checkout(db, user)
-    await _send(db, "evt_cur", "checkout.session.completed", _completed(purchase_id, user.id, currency="usd"))
+    await _send(
+        db,
+        "evt_cur",
+        "checkout.session.completed",
+        _completed(purchase_id, user.id, currency="usd"),
+    )
     purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
     assert purchase.status == "failed"
     hook_spies.paid.assert_not_awaited()
@@ -125,14 +151,21 @@ async def test_unpaid_completed_session_stays_pending(db, user, stripe_stubs, ho
 async def test_partial_then_full_refund(db, user, stripe_stubs, hook_spies):
     purchase_id = await _checkout(db, user)
     await _send(db, "evt_c", "checkout.session.completed", _completed(purchase_id, user.id))
-    charge = {"id": "ch_1", "payment_intent": "pi_1", "amount": PRODUCT.amount_cents, "amount_refunded": 100}
+    charge = {
+        "id": "ch_1",
+        "payment_intent": "pi_1",
+        "amount": PRODUCT.amount_cents,
+        "amount_refunded": 100,
+    }
     await _send(db, "evt_r1", "charge.refunded", charge)
     await _send(db, "evt_r1", "charge.refunded", charge)  # replay
     purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
     assert purchase.status == "partially_refunded"
     assert purchase.refunded_amount_cents == 100
 
-    await _send(db, "evt_r2", "charge.refunded", {**charge, "amount_refunded": PRODUCT.amount_cents})
+    await _send(
+        db, "evt_r2", "charge.refunded", {**charge, "amount_refunded": PRODUCT.amount_cents}
+    )
     await db.refresh(purchase)
     assert purchase.status == "refunded"
     reasons = [call.args[2] for call in hook_spies.reversed.await_args_list]
@@ -184,7 +217,9 @@ async def test_session_expired_after_paid_stays_paid(db, user, stripe_stubs, hoo
 
 async def test_async_payment_failed_fails_pending(db, user, stripe_stubs, hook_spies):
     purchase_id = await _checkout(db, user)
-    await _send(db, "evt_a", "checkout.session.async_payment_failed", _completed(purchase_id, user.id))
+    await _send(
+        db, "evt_a", "checkout.session.async_payment_failed", _completed(purchase_id, user.id)
+    )
     purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
     assert purchase.status == "failed"
 
@@ -193,7 +228,9 @@ async def test_async_payment_succeeded_marks_paid(db, user, stripe_stubs, hook_s
     purchase_id = await _checkout(db, user)
     unpaid = {**_completed(purchase_id, user.id), "payment_status": "unpaid"}
     await _send(db, "evt_c", "checkout.session.completed", unpaid)
-    await _send(db, "evt_s", "checkout.session.async_payment_succeeded", _completed(purchase_id, user.id))
+    await _send(
+        db, "evt_s", "checkout.session.async_payment_succeeded", _completed(purchase_id, user.id)
+    )
     purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
     assert purchase.status == "paid"
     hook_spies.paid.assert_awaited_once()
@@ -222,7 +259,11 @@ async def test_metadata_purchase_id_must_match_session(db, user, stripe_stubs, h
 
 async def test_resolve_charge_id_from_expanded_stripe_object(monkeypatch):
     pi = stripe.PaymentIntent.construct_from(
-        {"id": "pi_1", "object": "payment_intent", "latest_charge": {"id": "ch_real", "object": "charge"}},
+        {
+            "id": "pi_1",
+            "object": "payment_intent",
+            "latest_charge": {"id": "ch_real", "object": "charge"},
+        },
         "sk_test",
     )
     monkeypatch.setattr(stripe.PaymentIntent, "retrieve", lambda *a, **k: pi)
@@ -238,7 +279,12 @@ async def test_resolve_charge_id_from_string(monkeypatch):
 
 
 async def test_refund_for_unknown_charge_is_ignored(db, stripe_stubs, hook_spies):
-    await _send(db, "evt_u", "charge.refunded", {"id": "ch_other", "payment_intent": "pi_other", "amount": 500, "amount_refunded": 500})
+    await _send(
+        db,
+        "evt_u",
+        "charge.refunded",
+        {"id": "ch_other", "payment_intent": "pi_other", "amount": 500, "amount_refunded": 500},
+    )
     hook_spies.reversed.assert_not_awaited()
 
 

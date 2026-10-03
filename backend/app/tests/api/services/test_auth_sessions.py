@@ -5,7 +5,9 @@ from app.core.security import hash_token
 from app.db.models import AuthSession
 
 
-async def _make_session(db, user, *, token: str, family_id: str, revoked: bool = False) -> AuthSession:
+async def _make_session(
+    db, user, *, token: str, family_id: str, revoked: bool = False
+) -> AuthSession:
     session = AuthSession(
         user_id=user.id,
         auth_method="magic_link",

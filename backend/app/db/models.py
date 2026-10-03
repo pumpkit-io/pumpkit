@@ -385,7 +385,9 @@ class Purchase(Base):
     )
 
     stripe_checkout_session_id: Mapped[str] = mapped_column(String, unique=True)
-    stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String, index=True, nullable=True)
+    stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(
+        String, index=True, nullable=True
+    )
     stripe_charge_id: Mapped[Optional[str]] = mapped_column(String, index=True, nullable=True)
 
     currency: Mapped[str] = mapped_column(String)

@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 from app.core.logger import logger
 from app.core.posthog import posthog_client
 
-
 _REDACTED = "[redacted]"
 _SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie", "stripe-signature", "x-api-key"}
 _SENSITIVE_QUERY_KEY = re.compile(r"token|code|state|password|secret", re.IGNORECASE)

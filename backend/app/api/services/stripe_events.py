@@ -36,9 +36,7 @@ async def try_record_event(
     existence check and then race on the insert.
     """
     key = f"{namespace}:{event_id}" if namespace else event_id
-    existing = await db.execute(
-        select(StripeEvent.id).where(StripeEvent.id == key)
-    )
+    existing = await db.execute(select(StripeEvent.id).where(StripeEvent.id == key))
     if existing.scalar_one_or_none() is not None:
         return False
 

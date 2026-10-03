@@ -301,9 +301,7 @@ async def handle_webhook(
             logger.info("Ignoring replayed Stripe event %s (%s)", event_id, event_type)
             await db.rollback()
             return
-        await _dispatch_event(
-            db, event_type=event_type, event_id=event_id, data_object=data_object
-        )
+        await _dispatch_event(db, event_type=event_type, event_id=event_id, data_object=data_object)
         await db.commit()
     except Exception:
         await db.rollback()
@@ -335,11 +333,19 @@ async def _dispatch_event(
                 data_object.get("id"),
                 data_object.get("client_reference_id"),
             )
-    elif event_type == "checkout.session.async_payment_succeeded" and purchases_mediator.is_purchase_event(data_object):
+    elif (
+        event_type == "checkout.session.async_payment_succeeded"
+        and purchases_mediator.is_purchase_event(data_object)
+    ):
         await purchases_mediator.handle_checkout_async_payment_succeeded(db, session=data_object)
-    elif event_type == "checkout.session.async_payment_failed" and purchases_mediator.is_purchase_event(data_object):
+    elif (
+        event_type == "checkout.session.async_payment_failed"
+        and purchases_mediator.is_purchase_event(data_object)
+    ):
         await purchases_mediator.handle_checkout_async_payment_failed(db, session=data_object)
-    elif event_type == "checkout.session.expired" and purchases_mediator.is_purchase_event(data_object):
+    elif event_type == "checkout.session.expired" and purchases_mediator.is_purchase_event(
+        data_object
+    ):
         await purchases_mediator.handle_checkout_session_expired(db, session=data_object)
     elif event_type == "charge.refunded":
         await purchases_mediator.handle_charge_refunded(db, charge=data_object)

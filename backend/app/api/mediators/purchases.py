@@ -78,7 +78,8 @@ async def create_checkout_session(
         logger.exception("Failed to create purchase checkout session for user_id=%s", user.id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=getattr(exc, "user_message", None) or "Could not start checkout. Please try again.",
+            detail=getattr(exc, "user_message", None)
+            or "Could not start checkout. Please try again.",
         )
 
     if not session.url:
@@ -235,7 +236,9 @@ async def handle_charge_refunded(db: AsyncSession, *, charge: dict[str, Any]) ->
     )
 
 
-async def handle_charge_dispute_funds_withdrawn(db: AsyncSession, *, dispute: dict[str, Any]) -> None:
+async def handle_charge_dispute_funds_withdrawn(
+    db: AsyncSession, *, dispute: dict[str, Any]
+) -> None:
     purchase = await _find_purchase_for_charge(
         db, charge_id=dispute.get("charge"), payment_intent_id=dispute.get("payment_intent")
     )
@@ -245,7 +248,9 @@ async def handle_charge_dispute_funds_withdrawn(db: AsyncSession, *, dispute: di
     await purchase_hooks.on_purchase_reversed(db, purchase, "disputed")
 
 
-async def handle_charge_dispute_funds_reinstated(db: AsyncSession, *, dispute: dict[str, Any]) -> None:
+async def handle_charge_dispute_funds_reinstated(
+    db: AsyncSession, *, dispute: dict[str, Any]
+) -> None:
     purchase = await _find_purchase_for_charge(
         db, charge_id=dispute.get("charge"), payment_intent_id=dispute.get("payment_intent")
     )
@@ -276,7 +281,9 @@ def is_purchase_event(data_object: dict[str, Any]) -> bool:
     return (data_object.get("metadata") or {}).get("kind") == PURCHASE_METADATA_KIND
 
 
-async def _find_purchase_for_session(db: AsyncSession, session: dict[str, Any]) -> Optional[Purchase]:
+async def _find_purchase_for_session(
+    db: AsyncSession, session: dict[str, Any]
+) -> Optional[Purchase]:
     session_id = session.get("id", "")
     purchase = await purchases_service.get_purchase_by_session_id(db, session_id=session_id)
     if purchase is None:

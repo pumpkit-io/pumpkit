@@ -29,7 +29,9 @@ async def test_subscription_event_upserts_row(db, user, monkeypatch):
     user.stripe_customer_id = "cus_1"
     await db.commit()
 
-    payload = webhook_payload("evt_1", "customer.subscription.created", _subscription_object("cus_1"))
+    payload = webhook_payload(
+        "evt_1", "customer.subscription.created", _subscription_object("cus_1")
+    )
     await stripe_mediator.handle_webhook(db=db, payload=payload, signature="sig")
 
     sub = (await db.execute(select(Subscription))).scalar_one()
@@ -45,13 +47,17 @@ async def test_replayed_event_is_ignored(db, user, monkeypatch):
 
     await stripe_mediator.handle_webhook(
         db=db,
-        payload=webhook_payload("evt_1", "customer.subscription.created", _subscription_object("cus_1")),
+        payload=webhook_payload(
+            "evt_1", "customer.subscription.created", _subscription_object("cus_1")
+        ),
         signature="sig",
     )
     # Same event id, different content: must be ignored entirely.
     await stripe_mediator.handle_webhook(
         db=db,
-        payload=webhook_payload("evt_1", "customer.subscription.updated", _subscription_object("cus_1", "canceled")),
+        payload=webhook_payload(
+            "evt_1", "customer.subscription.updated", _subscription_object("cus_1", "canceled")
+        ),
         signature="sig",
     )
     sub = (await db.execute(select(Subscription))).scalar_one()
@@ -65,7 +71,9 @@ async def test_handler_exception_rolls_back_event_row(db, user, monkeypatch):
         raise RuntimeError("handler failed")
 
     monkeypatch.setattr(stripe_mediator, "_dispatch_event", _explode)
-    payload = webhook_payload("evt_fail", "customer.subscription.created", _subscription_object("cus_1"))
+    payload = webhook_payload(
+        "evt_fail", "customer.subscription.created", _subscription_object("cus_1")
+    )
 
     try:
         await stripe_mediator.handle_webhook(db=db, payload=payload, signature="sig")

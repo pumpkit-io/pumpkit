@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
+
 @dataclass(frozen=True)
 class ModelUsage:
     """
