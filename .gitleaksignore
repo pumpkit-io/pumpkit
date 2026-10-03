@@ -1,0 +1,2 @@
+# Dummy JWT secret in the test fixture environment, not a real credential.
+backend/app/tests/conftest.py:generic-api-key:23

@@ -2,6 +2,7 @@
   "name": "pumpkit-e2e",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "End-to-end smoke tests (run against docker compose up)",
   "scripts": {
     "test": "playwright test",
