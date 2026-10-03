@@ -1,0 +1,14 @@
+*.env
+.venv/
+node_modules/
+*.DS_Store
+*.vscode
+__pycache__/
+.worktrees/
+
+# Build outputs (generated, not tracked)
+frontend/dist/
+
+# Local tooling / data (never commit)
+.superpowers/
+backups/

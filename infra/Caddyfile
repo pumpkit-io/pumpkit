@@ -1,0 +1,55 @@
+# Values come from the Caddy service environment (see docs/deployment.md):
+#   DOMAIN, ACME_EMAIL, APP_DIR
+{
+    email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    # Backend API: anything under /api/* goes to FastAPI
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # PostHog reverse proxy — a first-party path bypasses adblockers. Keep the
+    # prefix non-obvious (lists match names like /ingest or /analytics) and set
+    # VITE_POSTHOG_HOST=https://<domain>/ph-relay in frontend/.env.
+    @ph_static path /ph-relay/static/*
+    @ph_general path /ph-relay/*
+
+    handle @ph_static {
+        uri strip_prefix /ph-relay
+        reverse_proxy https://eu-assets.i.posthog.com {
+            header_up Host eu-assets.i.posthog.com
+        }
+    }
+
+    handle @ph_general {
+        uri strip_prefix /ph-relay
+        reverse_proxy https://eu.i.posthog.com {
+            header_up Host eu.i.posthog.com
+        }
+    }
+
+    # SPA: serve the built frontend, fall back to index.html for client routes
+    handle {
+        root * {$APP_DIR}/frontend/dist
+
+        # Hashed build assets are content-addressed → cache forever.
+        @assets path /assets/*
+        header @assets Cache-Control "public, max-age=31536000, immutable"
+
+        # index.html and SPA routes must always revalidate so deploys show up immediately.
+        @html not path /assets/*
+        header @html Cache-Control "no-cache"
+
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+# www -> apex permanent redirect
+www.{$DOMAIN} {
+    redir https://{$DOMAIN}{uri} permanent
+}

@@ -1,0 +1,16 @@
+{
+  "name": "pumpkit-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end smoke tests (run against docker compose up)",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^20.11.17",
+    "typescript": "^5.4.0"
+  }
+}
