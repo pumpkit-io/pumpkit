@@ -138,7 +138,9 @@ async def client(db_session_maker, user):
     # Load the user through the request's own session so handlers that mutate
     # `current_user` and commit actually persist the change.
     async def _get_user(db: AsyncSession = Depends(get_async_db)) -> User:
-        return await db.get(User, user.id)
+        db_user = await db.get(User, user.id)
+        assert db_user is not None
+        return db_user
 
     app.dependency_overrides[get_async_db] = _get_db
     app.dependency_overrides[user_service.get_user] = _get_user

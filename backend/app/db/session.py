@@ -31,12 +31,14 @@ class DatabaseSessionHandler:
         # Synchronous DB sessions setup
         self.url: str = build_database_url(driver="default", **url_parts)
         self.engine: Engine = create_engine(self.url)
-        self.session_maker: Session = sessionmaker(bind=self.engine, expire_on_commit=False)
+        self.session_maker: sessionmaker[Session] = sessionmaker(
+            bind=self.engine, expire_on_commit=False
+        )
 
         # Asynchronous DB sessions setup
         self.async_url: str = build_database_url(driver="asyncpg", **url_parts)
         self.async_engine: AsyncEngine = create_async_engine(self.async_url)
-        self.async_session_maker: AsyncSession = async_sessionmaker(
+        self.async_session_maker: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self.async_engine, class_=AsyncSession, expire_on_commit=False
         )
 

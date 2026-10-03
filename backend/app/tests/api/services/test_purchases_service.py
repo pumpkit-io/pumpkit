@@ -21,9 +21,8 @@ async def test_create_and_lookup(db, user):
     assert purchase.status == "pending"
     assert purchase.amount_subtotal_cents == PRODUCT.amount_cents
     assert purchase.currency == PRODUCT.currency
-    assert (
-        await purchases_service.get_purchase_by_session_id(db, session_id="cs_1")
-    ).id == "purchase_1"
+    by_session = await purchases_service.get_purchase_by_session_id(db, session_id="cs_1")
+    assert by_session is not None and by_session.id == "purchase_1"
     assert (await purchases_service.get_purchase_by_id(db, purchase_id="purchase_1")) is not None
 
 
@@ -40,12 +39,12 @@ async def test_paid_then_lookup_by_stripe_ids(db, user):
     )
     await db.commit()
     assert purchase.status == "paid"
-    assert (
-        await purchases_service.get_purchase_by_payment_intent_id(db, payment_intent_id="pi_1")
-    ).id == purchase.id
-    assert (
-        await purchases_service.get_purchase_by_charge_id(db, charge_id="ch_1")
-    ).id == purchase.id
+    by_intent = await purchases_service.get_purchase_by_payment_intent_id(
+        db, payment_intent_id="pi_1"
+    )
+    assert by_intent is not None and by_intent.id == purchase.id
+    by_charge = await purchases_service.get_purchase_by_charge_id(db, charge_id="ch_1")
+    assert by_charge is not None and by_charge.id == purchase.id
 
 
 async def test_dispute_reinstated_restores_partial_refund_status(db, user):

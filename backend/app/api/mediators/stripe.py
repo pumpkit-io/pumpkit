@@ -195,25 +195,18 @@ async def start_trial(
     """
     customer_id = await stripe_customers_service.ensure_stripe_customer(db=db, user=user)
 
-    trial_settings = {
-        # If the trial ends and there's still no payment method, cancel the subscription.
-        "end_behavior": {"missing_payment_method": "cancel"}
-    }
-    payment_settings = {
-        # Save the default payment method (if provided) on the subscription, so if the user later
-        # goes to the billing portal and adds a card, it will be attached to the subscription and the
-        # trial can convert to a paid subscription without the user having to re-enter their card details.
-        "save_default_payment_method": "on_subscription"
-    }
-
     try:
         created = await asyncio.to_thread(
             stripe.Subscription.create,
             customer=customer_id,
             items=[{"price": trial_request.price_id}],
             trial_period_days=trial_request.trial_period_days,
-            trial_settings=trial_settings,
-            payment_settings=payment_settings,
+            # If the trial ends and there's still no payment method, cancel the subscription.
+            trial_settings={"end_behavior": {"missing_payment_method": "cancel"}},
+            # Save the default payment method (if provided) on the subscription, so if the user later
+            # goes to the billing portal and adds a card, it will be attached to the subscription and the
+            # trial can convert to a paid subscription without the user having to re-enter their card details.
+            payment_settings={"save_default_payment_method": "on_subscription"},
             metadata={"user_id": user.id},
         )
     except stripe.StripeError as exc:

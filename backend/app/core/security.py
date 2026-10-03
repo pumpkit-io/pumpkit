@@ -240,8 +240,6 @@ def _verify_auth_token(token: str, expected_type: TokenType) -> Optional[dict]:
         return None
     except jwt.InvalidTokenError:
         return None
-    except jwt.JWTError:
-        return None
 
 
 #############################
