@@ -1,3 +1,4 @@
+if command -v gitleaks >/dev/null; then gitleaks git --pre-commit --staged --no-banner --redact; fi
 npx lint-staged
 (cd frontend && npm run typecheck && npm test)
 (cd e2e && npm run typecheck)
