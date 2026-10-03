@@ -1,0 +1,7 @@
+# Build output
+dist/
+coverage/
+# Lockfiles
+package-lock.json
+# Static assets and generated files
+public/

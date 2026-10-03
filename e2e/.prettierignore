@@ -1,0 +1,7 @@
+# Test output and generated files
+playwright-report/
+test-results/
+storageState.json
+.tmp/
+# Lockfiles
+package-lock.json

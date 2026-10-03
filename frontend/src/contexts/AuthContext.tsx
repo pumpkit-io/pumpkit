@@ -48,7 +48,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // `import.meta.env.DEV` guard means production builds dead-code-eliminate this.
 export const BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true';
 if (BYPASS_AUTH) {
-  // eslint-disable-next-line no-console
   console.warn('[auth] VITE_BYPASS_AUTH is ON — all routes treated as authenticated. Dev only.');
 }
 
