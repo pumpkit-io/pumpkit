@@ -26,6 +26,7 @@ Checks before you push:
 ```bash
 cd backend && uv run ruff check . && uv run ruff format --check . && uv run --extra dev pyright && uv run --extra dev pytest
 cd frontend && npm run lint && npm run format:check && npm run typecheck && npm test && npm run build
+cd e2e && npm run format:check && npm run typecheck
 ```
 
 The project layout and common recipes are in [docs/development.md](./docs/development.md).

@@ -8,7 +8,7 @@ Open-source social listening and AI reply tool for X: finds conversations worth 
 - Dev: `docker compose up --build` (Postgres, backend on :8000, frontend on :5173)
 - Lint: `cd backend && uv run ruff check .` · `cd frontend && npm run lint`
 - Format: `cd backend && uv run ruff format .` · `cd frontend && npm run format` (same in `e2e/`)
-- Typecheck: `cd backend && uv run --extra dev pyright` · `cd frontend && npm run typecheck`
+- Typecheck: `cd backend && uv run --extra dev pyright` · `cd frontend && npm run typecheck` (same in `e2e/`)
 - Test: `cd backend && uv run --extra dev pytest` (SQLite, no services needed) · `cd frontend && npm test` · `cd e2e && npm test` (against `docker compose up`)
 - Build: `cd frontend && npm run build`
 - Config comes from environment variables; see the three `.env.example` files and `docs/configuration.md`. Never commit secrets.
