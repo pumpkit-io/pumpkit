@@ -91,4 +91,4 @@ class Settings(BaseSettings):
         return self.ENV == "prod"
 
 
-settings: Settings = Settings()
+settings: Settings = Settings()  # pyright: ignore[reportCallIssue]

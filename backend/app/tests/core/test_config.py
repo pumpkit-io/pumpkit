@@ -10,7 +10,7 @@ def test_settings_boot_without_optional_providers(monkeypatch):
         "POSTHOG_HOST",
     ):
         monkeypatch.delenv(key, raising=False)
-    s = Settings()
+    s = Settings()  # pyright: ignore[reportCallIssue]
     assert s.OPENROUTER_API_KEY is None
     assert s.POSTHOG_ENABLED is False
     assert s.POSTHOG_PROJECT_API_KEY is None

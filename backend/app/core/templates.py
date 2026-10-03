@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -12,7 +12,7 @@ class TemplatesHelper:
             autoescape=select_autoescape(["html", "xml"]),  # Make user inputs safe from XSS attacks
         )
 
-    def render_template(self, template_name: str, **context: str) -> str:
+    def render_template(self, template_name: str, **context: Any) -> str:
         template = self._template_env.get_template(template_name)
         return template.render(**context)
 

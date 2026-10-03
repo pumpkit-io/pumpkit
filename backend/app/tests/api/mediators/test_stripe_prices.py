@@ -23,5 +23,6 @@ async def test_list_prices_parses_stripe_objects(monkeypatch):
     result = await stripe_mediator.list_prices()
 
     assert result.data[0].id == "price_1"
-    assert result.data[0].product.name == "Pro"
-    assert result.data[0].recurring.interval == "month"
+    price_out = result.data[0]
+    assert price_out.product is not None and price_out.product.name == "Pro"
+    assert price_out.recurring is not None and price_out.recurring.interval == "month"

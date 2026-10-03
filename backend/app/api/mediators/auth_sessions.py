@@ -126,9 +126,9 @@ async def logout(request: Request, db: AsyncSession) -> JSONResponse:
     """
     Logout user by revoking their refresh token.
     """
+    cookie_name = "__Host-refresh_token" if settings.is_env_production() else "refresh_token"
     try:
         # Get refresh token from cookie
-        cookie_name = "__Host-refresh_token" if settings.is_env_production() else "refresh_token"
         refresh_token_value = request.cookies.get(cookie_name)
 
         if refresh_token_value:

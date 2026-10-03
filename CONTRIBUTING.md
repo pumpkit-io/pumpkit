@@ -24,7 +24,7 @@ npm install                                   # repo root: installs the Husky pr
 Checks before you push:
 
 ```bash
-cd backend && uv run ruff check . && uv run ruff format --check . && uv run --extra dev pytest
+cd backend && uv run ruff check . && uv run ruff format --check . && uv run --extra dev pyright && uv run --extra dev pytest
 cd frontend && npm run lint && npm run format:check && npm run typecheck && npm test && npm run build
 ```
 

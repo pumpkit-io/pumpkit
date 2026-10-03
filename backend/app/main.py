@@ -58,7 +58,7 @@ app.include_router(support.router, prefix="/api/v1")
 
 # Set up rate limiting and ensure rate limit exceptions are properly handled
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
 
 # Register the global unhandled-exception handler.
 register_exception_handlers(app)

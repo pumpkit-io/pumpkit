@@ -324,7 +324,7 @@ async def _handle_login_google_flow(
             user.last_name = id_info.get("family_name")
             should_commit = True
         if not user.display_name and id_info.get("name"):
-            user.display_name = id_info.get("name")
+            user.display_name = id_info["name"]
             should_commit = True
         if should_commit:
             await db.commit()
@@ -343,7 +343,7 @@ async def _handle_login_google_flow(
         )
     else:
         # Since the third-party auth record exists, we need to update it
-        third_party_auth.profile_json = id_info
+        third_party_auth.profile_json = dict(id_info)
         await db.commit()
 
     # Create the access token

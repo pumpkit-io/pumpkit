@@ -10,6 +10,7 @@ import app.api.mediators.purchases as purchases_mediator
 import app.api.mediators.stripe as stripe_mediator
 import app.api.services.purchases as purchases_service
 from app.core.purchases import PRODUCTS
+from app.db.models import Purchase
 
 from .stripe_helpers import patch_construct_event, webhook_payload
 
@@ -50,7 +51,14 @@ async def _checkout(db, user) -> str:
     )
     assert response.session_id == "cs_test_1"
     purchase = await purchases_service.get_purchase_by_session_id(db, session_id="cs_test_1")
+    assert purchase is not None
     return purchase.id
+
+
+async def _get_purchase(db, purchase_id: str) -> Purchase:
+    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    assert purchase is not None
+    return purchase
 
 
 def _completed(
@@ -87,7 +95,7 @@ async def _send(db, event_id: str, event_type: str, obj: dict) -> None:
 
 async def test_checkout_creates_pending_row_with_catalog_price(db, user, stripe_stubs):
     purchase_id = await _checkout(db, user)
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "pending"
     line = stripe_stubs["line_items"][0]["price_data"]
     assert stripe_stubs["mode"] == "payment"
@@ -109,7 +117,7 @@ async def test_completed_marks_paid_and_calls_hook_once(db, user, stripe_stubs, 
     await _send(
         db, "evt_c1", "checkout.session.completed", _completed(purchase_id, user.id)
     )  # replay
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "paid"
     assert purchase.stripe_charge_id == "ch_1"
     assert hook_spies.paid.await_count == 1
@@ -120,7 +128,7 @@ async def test_amount_mismatch_marks_failed_without_hook(db, user, stripe_stubs,
     await _send(
         db, "evt_bad", "checkout.session.completed", _completed(purchase_id, user.id, subtotal=1)
     )
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "failed"
     hook_spies.paid.assert_not_awaited()
 
@@ -133,7 +141,7 @@ async def test_currency_mismatch_marks_failed_without_hook(db, user, stripe_stub
         "checkout.session.completed",
         _completed(purchase_id, user.id, currency="usd"),
     )
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "failed"
     hook_spies.paid.assert_not_awaited()
 
@@ -143,7 +151,7 @@ async def test_unpaid_completed_session_stays_pending(db, user, stripe_stubs, ho
     obj = _completed(purchase_id, user.id)
     obj["payment_status"] = "unpaid"
     await _send(db, "evt_unpaid", "checkout.session.completed", obj)
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "pending"
     hook_spies.paid.assert_not_awaited()
 
@@ -159,7 +167,7 @@ async def test_partial_then_full_refund(db, user, stripe_stubs, hook_spies):
     }
     await _send(db, "evt_r1", "charge.refunded", charge)
     await _send(db, "evt_r1", "charge.refunded", charge)  # replay
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "partially_refunded"
     assert purchase.refunded_amount_cents == 100
 
@@ -177,7 +185,7 @@ async def test_dispute_withdrawn_then_reinstated(db, user, stripe_stubs, hook_sp
     await _send(db, "evt_c", "checkout.session.completed", _completed(purchase_id, user.id))
     dispute = {"id": "dp_1", "charge": "ch_1", "payment_intent": "pi_1"}
     await _send(db, "evt_d1", "charge.dispute.funds_withdrawn", dispute)
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "disputed"
     assert hook_spies.reversed.await_args.args[2] == "disputed"
 
@@ -192,7 +200,7 @@ async def test_payment_failed_then_paid_ends_paid(db, user, stripe_stubs, hook_s
     pi = {"id": "pi_1", "metadata": {"kind": "purchase", "purchase_id": purchase_id}}
     await _send(db, "evt_f", "payment_intent.payment_failed", pi)
     await _send(db, "evt_c", "checkout.session.completed", _completed(purchase_id, user.id))
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "paid"
     hook_spies.paid.assert_awaited_once()
 
@@ -200,7 +208,7 @@ async def test_payment_failed_then_paid_ends_paid(db, user, stripe_stubs, hook_s
 async def test_session_expired_fails_pending_without_hooks(db, user, stripe_stubs, hook_spies):
     purchase_id = await _checkout(db, user)
     await _send(db, "evt_e", "checkout.session.expired", _completed(purchase_id, user.id))
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "failed"
     hook_spies.paid.assert_not_awaited()
     hook_spies.reversed.assert_not_awaited()
@@ -211,7 +219,7 @@ async def test_session_expired_after_paid_stays_paid(db, user, stripe_stubs, hoo
     purchase_id = await _checkout(db, user)
     await _send(db, "evt_c", "checkout.session.completed", _completed(purchase_id, user.id))
     await _send(db, "evt_e", "checkout.session.expired", _completed(purchase_id, user.id))
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "paid"
 
 
@@ -220,7 +228,7 @@ async def test_async_payment_failed_fails_pending(db, user, stripe_stubs, hook_s
     await _send(
         db, "evt_a", "checkout.session.async_payment_failed", _completed(purchase_id, user.id)
     )
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "failed"
 
 
@@ -231,7 +239,7 @@ async def test_async_payment_succeeded_marks_paid(db, user, stripe_stubs, hook_s
     await _send(
         db, "evt_s", "checkout.session.async_payment_succeeded", _completed(purchase_id, user.id)
     )
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "paid"
     hook_spies.paid.assert_awaited_once()
 
@@ -252,7 +260,7 @@ async def test_metadata_purchase_id_must_match_session(db, user, stripe_stubs, h
     obj = _completed(purchase_id, user.id)
     obj["id"] = "cs_other"
     await _send(db, "evt_m", "checkout.session.completed", obj)
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "pending"
     hook_spies.paid.assert_not_awaited()
 
@@ -294,7 +302,7 @@ async def test_hook_exception_rolls_back_purchase_and_event(db, user, stripe_stu
     hook_spies.paid.side_effect = RuntimeError("grant failed")
     with pytest.raises(RuntimeError):
         await _send(db, "evt_boom", "checkout.session.completed", _completed(purchase_id, user_id))
-    purchase = await purchases_service.get_purchase_by_id(db, purchase_id=purchase_id)
+    purchase = await _get_purchase(db, purchase_id)
     assert purchase.status == "pending"
     # Retry after the bug is fixed succeeds because the event row was rolled back.
     hook_spies.paid.side_effect = None

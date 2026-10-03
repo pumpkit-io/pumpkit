@@ -175,7 +175,7 @@ async def _settle_checkout_session(db: AsyncSession, session: dict[str, Any]) ->
         purchase,
         payment_intent_id=payment_intent_id,
         charge_id=charge_id,
-        amount_subtotal_cents=amount_subtotal,
+        amount_subtotal_cents=product.amount_cents,
         amount_tax_cents=amount_tax if isinstance(amount_tax, int) else None,
         amount_total_cents=session.get("amount_total"),
     )
