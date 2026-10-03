@@ -13,6 +13,7 @@ __pycache__/
 
 # Build outputs (generated, not tracked)
 frontend/dist/
+*.tsbuildinfo
 
 # Local tooling / data (never commit)
 .superpowers/
