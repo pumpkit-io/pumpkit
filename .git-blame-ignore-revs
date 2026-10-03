@@ -1,0 +1,5 @@
+# Bulk formatting commits. Use with: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# style: format frontend with prettier
+5a338176fb73ee6d215a6468ebb638577045c560
+# style: format backend with ruff
+76b4ff075526b038155aa935575efea499f38158
