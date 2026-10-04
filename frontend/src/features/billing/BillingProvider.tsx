@@ -3,8 +3,6 @@ import {
   billingService,
   errorMessage,
   type Price,
-  type Product,
-  type Purchase,
   type SubscriptionView,
 } from '@/services/billingService';
 import { track } from '@/lib/analytics';
@@ -12,8 +10,6 @@ import { track } from '@/lib/analytics';
 export interface BillingData {
   subscription: SubscriptionView;
   prices: Price[];
-  products: Product[];
-  purchases: Purchase[];
 }
 
 interface BillingContextValue {
@@ -38,13 +34,11 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [subscription, prices, products, purchases] = await Promise.all([
+      const [subscription, prices] = await Promise.all([
         billingService.fetchSubscription(),
         billingService.fetchPrices(),
-        billingService.fetchProducts(),
-        billingService.fetchPurchases(),
       ]);
-      setData({ subscription, prices: prices.filter((p) => p.recurring), products, purchases });
+      setData({ subscription, prices: prices.filter((p) => p.recurring) });
     } catch (e) {
       setError(errorMessage(e, 'Could not load billing information.'));
     } finally {
