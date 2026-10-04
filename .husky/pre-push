@@ -1,0 +1,7 @@
+# Pushes to main go through a PR (GitHub ruleset "main protection"); fail fast locally.
+while read -r _ _ remote_ref _; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "pre-push: direct pushes to main are not allowed. Push a branch and open a PR." >&2
+    exit 1
+  fi
+done

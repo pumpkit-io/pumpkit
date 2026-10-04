@@ -15,8 +15,8 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 # Run everything (Postgres, backend on :8000, frontend on :5173)
 docker compose up --build
 
-# Local tooling for tests, linting and the pre-commit hook
-npm install                                   # repo root: installs the Husky pre-commit hook
+# Local tooling for tests, linting and the Git hooks
+npm install                                   # repo root: installs the Husky pre-commit and pre-push hooks
 (cd frontend && npm install) && (cd e2e && npm install)
 (cd backend && uv sync --extra dev)
 ```
