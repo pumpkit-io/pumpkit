@@ -53,14 +53,17 @@ for _key, _value in _TEST_ENV.items():
     os.environ.setdefault(_key, _value)
 
 import re  # noqa: E402
-from typing import Callable  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from datetime import timedelta  # noqa: E402
+from typing import Awaitable, Callable  # noqa: E402
 from unittest.mock import MagicMock  # noqa: E402
+from urllib.parse import parse_qs, urlsplit  # noqa: E402
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from fastapi import Depends  # noqa: E402
 from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
-from sqlalchemy import event  # noqa: E402
+from sqlalchemy import event, select  # noqa: E402
 from sqlalchemy.ext.asyncio import (  # noqa: E402
     AsyncSession,
     async_sessionmaker,
@@ -74,7 +77,7 @@ from app.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
-from app.db.models import User  # noqa: E402
+from app.db.models import MagicLink, User  # noqa: E402
 from app.db.session import get_async_db  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -169,6 +172,93 @@ async def client(db_session_maker, user):
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def new_browser(db_session_maker):
+    """
+    Factory for ASGI clients that each act as one browser with its own cookie jar.
+    Only the database is overridden: real access-token verification runs.
+    """
+
+    async def _get_db():
+        async with db_session_maker() as session:
+            yield session
+
+    app.dependency_overrides[get_async_db] = _get_db
+    browsers: list[AsyncClient] = []
+
+    def _new() -> AsyncClient:
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        browser = AsyncClient(transport=transport, base_url="http://test")
+        browsers.append(browser)
+        return browser
+
+    yield _new
+    for browser in browsers:
+        await browser.aclose()
+    app.dependency_overrides.pop(get_async_db, None)
+
+
+@dataclass(frozen=True)
+class SignedIn:
+    """What a browser holds after a Magic link sign-in: the fragment's access token and expiry."""
+
+    access_token: str
+    expires_at: str
+
+
+def magic_link_token(link_url: str) -> str:
+    """The token query parameter of an emailed Magic link."""
+    return parse_qs(urlsplit(link_url).query)["token"][0]
+
+
+def callback_fragment(location: str) -> dict[str, str]:
+    """The parameters in the fragment of a frontend callback redirect."""
+    return {key: values[0] for key, values in parse_qs(urlsplit(location).fragment).items()}
+
+
+@pytest.fixture
+def sign_in_by_magic_link(db, auth_outbox) -> Callable[[AsyncClient, str], Awaitable[SignedIn]]:
+    """
+    Sign a browser in over HTTP: request a Magic link, open it from the outbox,
+    and keep the refresh cookie in the browser. Each call starts a new Session.
+    """
+
+    async def _sign_in(browser: AsyncClient, email: str) -> SignedIn:
+        # Earlier links for this email would hold the request cool-down: age them past it.
+        links = (await db.execute(select(MagicLink).where(MagicLink.email == email))).scalars()
+        for link in links:
+            link.sent_at = link.sent_at - timedelta(minutes=2)
+        await db.commit()
+
+        sent_before = len(auth_outbox.messages)
+        requested = await browser.post("/api/v1/login/magic-link/request", json={"email": email})
+        assert requested.status_code == 200
+        assert len(auth_outbox.messages) == sent_before + 1
+        link_url = auth_outbox.messages[-1].link_url
+
+        opened = await browser.get(
+            "/api/v1/login/magic-link", params={"token": magic_link_token(link_url)}
+        )
+        assert opened.status_code == 303, opened.text
+        fragment = callback_fragment(opened.headers["location"])
+        assert "refresh_token" in browser.cookies
+        return SignedIn(access_token=fragment["access_token"], expires_at=fragment["expires_at"])
+
+    return _sign_in
+
+
+@pytest_asyncio.fixture
+async def authed_client(new_browser, sign_in_by_magic_link, user) -> AsyncClient:
+    """
+    A browser signed in as `user` by a real Magic link sign-in. It sends the issued
+    access token as a bearer header, so every request runs real token verification.
+    """
+    browser = new_browser()
+    signed_in = await sign_in_by_magic_link(browser, user.email)
+    browser.headers["Authorization"] = f"Bearer {signed_in.access_token}"
+    return browser
 
 
 @pytest.fixture

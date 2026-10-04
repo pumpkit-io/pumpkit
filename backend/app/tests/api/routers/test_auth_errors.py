@@ -3,7 +3,6 @@ from fastapi import HTTPException, status
 import app.api.mediators.magic_link_auth as magic_link_auth_mediator
 import app.api.mediators.sessions as sessions_mediator
 import app.api.services.refresh_tokens as refresh_tokens_service
-from app.core.security import create_refresh_token
 
 
 async def _boom(**_kwargs):
@@ -46,14 +45,11 @@ async def test_logout_without_session_succeeds(client, fake_posthog):
 
 
 async def test_unexpected_logout_failure_reaches_global_handler(
-    client, monkeypatch, user, assert_reported_500
+    authed_client, monkeypatch, assert_reported_500
 ):
-    monkeypatch.setattr(refresh_tokens_service, "revoke_all_user_sessions", _boom)
-    refresh_token = create_refresh_token(data={"sub": user.id, "email": user.email})
+    monkeypatch.setattr(refresh_tokens_service, "revoke_session", _boom)
 
-    client.cookies.set("refresh_token", refresh_token)
-
-    response = await client.post("/api/v1/logout")
+    response = await authed_client.post("/api/v1/logout")
 
     assert_reported_500(response)
 

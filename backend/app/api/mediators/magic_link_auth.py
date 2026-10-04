@@ -1,26 +1,20 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from fastapi import Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.services.magic_link_auth as magic_link_auth_service
-import app.api.services.refresh_tokens as refresh_tokens_service
+import app.api.services.sessions as sessions
 import app.api.services.users as user_service
 from app.core.auth_mailer import AuthMailer, AuthMailerError
 from app.core.config import settings
 from app.core.datetimes import as_utc
 from app.core.ids import ulid_with_prefix
 from app.core.logger import logger
-from app.core.security import (
-    create_access_token,
-    create_redirect_response,
-    create_refresh_token,
-    generate_token,
-    hash_token,
-)
+from app.core.security import generate_token, hash_token
 from app.db.models import MagicLink, User
 from app.schemas.common import MessageResponse
 
@@ -128,7 +122,7 @@ async def complete_magic_link(
         logger.error("Magic link login failed: token already used (id=%s)", magic_link.id)
         raise RejectedMagicLinkError("This magic link has already been used.")
 
-    if magic_link.expires_at <= datetime.now(timezone.utc):
+    if as_utc(magic_link.expires_at) <= datetime.now(timezone.utc):
         logger.error("Magic link login failed: token expired (id=%s)", magic_link.id)
         raise RejectedMagicLinkError("This magic link has expired.")
 
@@ -159,38 +153,16 @@ async def complete_magic_link(
         )
         await user_service.create_user(db=db, user=user)
 
-    # Create access and refresh tokens
-    access_token = create_access_token(
-        data={"sub": user.id, "email": user.email},
-    )
-    refresh_token = create_refresh_token(
-        data={"sub": user.id, "email": user.email},
-    )
-    await refresh_tokens_service.create_refresh_token(
-        db=db,
-        user_id=user.id,
-        refresh_token=refresh_token,
+    result = await sessions.start(
+        db,
+        user=user,
         sign_in_method="magic_link",
-        ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
+        client=sessions.ClientInfo.from_request(request),
     )
-
-    # Build the redirect to the frontend callback page
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
-    )
-    frontend_redirect_params = {
-        "access_token": access_token,
-        "token_type": "Bearer",
-        "expires_at": expires_at.isoformat(),
-    }
-    frontend_redirect_url = (
-        f"{settings.FRONTEND_URL}/auth/magic-link/callback#{urlencode(frontend_redirect_params)}"
-    )
-    return create_redirect_response(
-        redirect_url=frontend_redirect_url,
-        refresh_token=refresh_token,
-    )
+    await db.commit()
+    if isinstance(result, sessions.SessionRefusal):
+        return result.as_sign_in_redirect()
+    return result.as_callback_redirect("/auth/magic-link/callback")
 
 
 def build_inbox_redirect_response() -> RedirectResponse:
