@@ -2,7 +2,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import app.api.services.auth_sessions as auth_sessions_service
+import app.api.services.refresh_tokens as refresh_tokens_service
 import app.api.services.users as user_service
 from app.core.config import settings
 from app.core.logger import logger
@@ -50,28 +50,26 @@ async def refresh_token(request: Request, db: AsyncSession) -> JSONResponse:
     # Validate against database and lock the row so a concurrent request
     # cannot rotate the same token at the same time.
     refresh_token_hash = hash_token(refresh_token_value)
-    db_auth_session = await auth_sessions_service.get_active_auth_session_by_hash(
+    db_refresh_token = await refresh_tokens_service.get_active_refresh_token_by_hash(
         db=db, token_hash=refresh_token_hash, lock_for_update=True
     )
 
-    if not db_auth_session or db_auth_session.user_id != user_id:
+    if not db_refresh_token or db_refresh_token.user_id != user_id:
         # A malicious attacker is probably replaying a stolen refresh token.
         # Check if the token exists in the database and is revoked - if so,
         # the same token was already used in another request.
-        stale_session = await auth_sessions_service.get_auth_session_by_hash(
+        stale_token = await refresh_tokens_service.get_refresh_token_by_hash(
             db=db,
             token_hash=refresh_token_hash,
         )
-        if stale_session and stale_session.is_revoked:
-            # Token reuse detected - revoke the entire family of tokens to protect the user
+        if stale_token and stale_token.is_revoked:
+            # Token reuse detected - revoke the whole Session to protect the User
             logger.error(
-                "Refresh token reuse detected: revoking family (family_id=%s, user_id=%s)",
-                stale_session.family_id,
-                stale_session.user_id,
+                "Refresh token reuse detected: revoking Session (session_id=%s, user_id=%s)",
+                stale_token.session_id,
+                stale_token.user_id,
             )
-            await auth_sessions_service.revoke_auth_session_family(
-                db=db, family_id=stale_session.family_id
-            )
+            await refresh_tokens_service.revoke_session(db=db, session_id=stale_token.session_id)
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -88,7 +86,7 @@ async def refresh_token(request: Request, db: AsyncSession) -> JSONResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create new access token (the new session rotation will revoke the old token)
+    # Create new access token (rotating the refresh token below revokes the old one)
     new_access_token = create_access_token(
         data={
             "sub": user.id,
@@ -103,13 +101,13 @@ async def refresh_token(request: Request, db: AsyncSession) -> JSONResponse:
             "email": user.email,
         },
     )
-    await auth_sessions_service.create_auth_session(
+    await refresh_tokens_service.create_refresh_token(
         db=db,
         user_id=user.id,
         refresh_token=new_refresh_token,
-        auth_method=db_auth_session.auth_method,
-        family_id=db_auth_session.family_id,
-        previous_session=db_auth_session,
+        sign_in_method=db_refresh_token.sign_in_method,
+        session_id=db_refresh_token.session_id,
+        previous_token=db_refresh_token,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
@@ -136,7 +134,7 @@ async def logout(request: Request, db: AsyncSession) -> JSONResponse:
         payload = verify_refresh_token(token=refresh_token_value)
         user_id = payload.get("sub") if payload else None
         if user_id:
-            await auth_sessions_service.revoke_all_user_auth_sessions(db=db, user_id=user_id)
+            await refresh_tokens_service.revoke_all_user_sessions(db=db, user_id=user_id)
 
     response = JSONResponse(
         content={"message": "Logged out successfully"}, status_code=status.HTTP_200_OK

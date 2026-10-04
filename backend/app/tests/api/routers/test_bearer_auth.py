@@ -4,6 +4,8 @@ Unlike the shared `client` fixture, these tests do not override
 `get_current_user`, so the real bearer-token extraction runs.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -62,3 +64,24 @@ async def test_valid_token_authenticates(raw_client, user):
     )
     assert response.status_code == 200
     assert response.json()["email"] == "alice@example.com"
+
+
+async def test_suspended_user_is_401(raw_client, db, user):
+    user.suspended_until = datetime.now(timezone.utc) + timedelta(days=1)
+    await db.commit()
+    token = create_access_token({"sub": str(user.id)})
+    response = await raw_client.get(
+        "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+async def test_user_whose_suspension_ended_authenticates(raw_client, db, user):
+    user.suspended_until = datetime.now(timezone.utc) - timedelta(days=1)
+    await db.commit()
+    token = create_access_token({"sub": str(user.id)})
+    response = await raw_client.get(
+        "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200

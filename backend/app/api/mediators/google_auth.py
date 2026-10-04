@@ -12,8 +12,8 @@ from fastapi.responses import JSONResponse
 from google.oauth2 import id_token
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import app.api.services.auth_sessions as auth_sessions_service
-import app.api.services.third_party_auth as third_party_auth_service
+import app.api.services.google_identities as google_identities_service
+import app.api.services.refresh_tokens as refresh_tokens_service
 import app.api.services.users as user_service
 from app.api.configs.google import (
     GOOGLE_AUTHORIZATION_ENDPOINT,
@@ -35,7 +35,7 @@ from app.core.security import (
     encode_payload,
     generate_token,
 )
-from app.db.models import ThirdPartyAuth, User
+from app.db.models import GoogleIdentity, User
 
 
 async def login_google() -> JSONResponse:
@@ -285,19 +285,15 @@ async def _handle_login_google_flow(
             detail="Login with Google failed. Please try again.",
         )
 
-    # Locate or create user and third-party auth record
+    # Locate or create the User and their Google identity
     user = None
-    third_party_auth: Optional[
-        ThirdPartyAuth
-    ] = await third_party_auth_service.get_third_party_auth(
-        db=db,
-        provider="google",
-        subject=subject,
+    google_identity: Optional[GoogleIdentity] = await google_identities_service.get_google_identity(
+        db=db, subject=subject
     )
 
-    if third_party_auth:
-        # Get the user from the third-party auth record
-        user = await user_service.get_user_by_id(db=db, user_id=third_party_auth.user_id)
+    if google_identity:
+        # Get the User from their Google identity
+        user = await user_service.get_user_by_id(db=db, user_id=google_identity.user_id)
 
     if user is None:
         # Get the user from the email
@@ -329,21 +325,20 @@ async def _handle_login_google_flow(
         if should_commit:
             await db.commit()
 
-    if third_party_auth is None:
-        # Since the third-party auth record does not exist, we need to create it
-        third_party_auth = ThirdPartyAuth(
-            id=ulid_with_prefix("third_party_auth"),
+    if google_identity is None:
+        # Link a new Google identity to the User
+        google_identity = GoogleIdentity(
+            id=ulid_with_prefix("google_identity"),
             user_id=user.id,
-            provider="google",
             subject=subject,
             profile_json=id_info,
         )
-        await third_party_auth_service.create_third_party_auth(
-            db=db, third_party_auth=third_party_auth
+        await google_identities_service.create_google_identity(
+            db=db, google_identity=google_identity
         )
     else:
-        # Since the third-party auth record exists, we need to update it
-        third_party_auth.profile_json = dict(id_info)
+        # Refresh the existing Google identity's profile
+        google_identity.profile_json = dict(id_info)
         await db.commit()
 
     # Create the access token
@@ -356,11 +351,11 @@ async def _handle_login_google_flow(
         data={"sub": user.id, "email": user.email},
     )
 
-    await auth_sessions_service.create_auth_session(
+    await refresh_tokens_service.create_refresh_token(
         db=db,
         user_id=user.id,
         refresh_token=refresh_token,
-        auth_method="google",
+        sign_in_method="google",
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
