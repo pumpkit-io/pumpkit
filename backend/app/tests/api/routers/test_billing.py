@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import select
 
 from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan
@@ -5,89 +6,9 @@ from app.core.config import settings
 from app.db.models import Subscription
 
 CHECKOUT = "/api/v1/stripe/checkout"
+CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly"}
 PORTAL = "/api/v1/stripe/billing-portal"
 PLANS = "/api/v1/stripe/plans"
-
-
-async def test_checkout_creates_the_stripe_customer_and_a_checkout(client, db, fake_billing, user):
-    response = await client.post(CHECKOUT, json={"price_id": "price_123"})
-
-    assert response.status_code == 200
-    assert response.json() == {"url": fake_billing.checkout_url, "session_id": "cs_fake_1"}
-    assert fake_billing.customers_created == [
-        CustomerCall(email="alice@example.com", name="Alice", user_id=user.id)
-    ]
-    assert fake_billing.checkouts == [
-        CheckoutCall(
-            customer_id="cus_fake_1", price_id="price_123", user_id=user.id, trial_period_days=None
-        )
-    ]
-    await db.refresh(user)
-    assert user.stripe_customer_id == "cus_fake_1"
-
-
-async def test_a_gateway_failure_on_checkout_returns_502_with_error_id(
-    client, fake_billing, assert_reported_502
-):
-    fake_billing.fail_on = {"create_subscription_checkout"}
-
-    response = await client.post(CHECKOUT, json={"price_id": "price_123"})
-
-    assert_reported_502(response)
-
-
-async def test_a_failed_checkout_keeps_the_new_customer_and_a_retry_reuses_it(
-    client, db, fake_billing, user
-):
-    fake_billing.fail_on = {"create_subscription_checkout"}
-    failed = await client.post(CHECKOUT, json={"price_id": "price_123"})
-    assert failed.status_code == 502
-
-    await db.refresh(user)
-    assert user.stripe_customer_id == "cus_fake_1"
-
-    fake_billing.fail_on = set()
-    retried = await client.post(CHECKOUT, json={"price_id": "price_123"})
-
-    assert retried.status_code == 200
-    assert len(fake_billing.customers_created) == 1
-    assert [call.customer_id for call in fake_billing.checkouts] == ["cus_fake_1"]
-
-
-async def test_a_gateway_failure_creating_the_customer_returns_502_and_saves_nothing(
-    client, db, fake_billing, user, assert_reported_502
-):
-    fake_billing.fail_on = {"create_customer"}
-
-    response = await client.post(CHECKOUT, json={"price_id": "price_123"})
-
-    assert_reported_502(response)
-    assert fake_billing.checkouts == []
-    await db.refresh(user)
-    assert user.stripe_customer_id is None
-
-
-async def test_the_portal_endpoint_returns_the_gateway_url(client, db, fake_billing, user):
-    user.stripe_customer_id = "cus_existing"
-    await db.commit()
-    fake_billing.portal_url = "https://billing.test/portal/abc"
-
-    response = await client.post(PORTAL)
-
-    assert response.status_code == 200
-    assert response.json() == {"url": "https://billing.test/portal/abc"}
-    assert fake_billing.portals == ["cus_existing"]
-    assert fake_billing.customers_created == []
-
-
-async def test_the_portal_creates_the_stripe_customer_when_missing(client, db, fake_billing, user):
-    response = await client.post(PORTAL)
-
-    assert response.status_code == 200
-    assert fake_billing.portals == ["cus_fake_1"]
-    await db.refresh(user)
-    assert user.stripe_customer_id == "cus_fake_1"
-
 
 MONTHLY = Plan(
     key="pumpkit_pro_monthly",
@@ -116,6 +37,150 @@ STRAY = Plan(
     interval="month",
     interval_count=1,
 )
+
+
+@pytest.fixture(autouse=True)
+def monthly_plan(fake_billing):
+    """The test settings sell `pumpkit_pro_monthly`; the fake resolves it."""
+    fake_billing.plans = [MONTHLY]
+
+
+async def test_checkout_by_plan_key_creates_a_checkout_for_that_plans_price(
+    client, db, fake_billing, user
+):
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert response.json() == {"url": fake_billing.checkout_url, "session_id": "cs_fake_1"}
+    assert fake_billing.customers_created == [
+        CustomerCall(email="alice@example.com", name="Alice", user_id=user.id)
+    ]
+    assert fake_billing.checkouts == [
+        CheckoutCall(
+            customer_id="cus_fake_1",
+            price_id="price_monthly",
+            user_id=user.id,
+            trial_period_days=None,
+        )
+    ]
+    await db.refresh(user)
+    assert user.stripe_customer_id == "cus_fake_1"
+
+
+async def test_checkout_with_an_unknown_plan_key_returns_400_without_calling_the_gateway(
+    client, db, fake_billing, user
+):
+    fake_billing.plans = [MONTHLY, STRAY]
+
+    response = await client.post(CHECKOUT, json={"plan_key": "stray_test_price"})
+
+    assert response.status_code == 400
+    assert fake_billing.plan_lookups == []
+    assert fake_billing.customers_created == []
+    assert fake_billing.checkouts == []
+    await db.refresh(user)
+    assert user.stripe_customer_id is None
+
+
+@pytest.mark.parametrize(
+    "smuggled",
+    [
+        {"price_id": "price_stray"},
+        {"quantity": 5},
+        {"trial_period_days": 365},
+    ],
+    ids=["price", "quantity", "trial-length"],
+)
+async def test_a_checkout_payload_cannot_set_the_price_quantity_or_trial(
+    client, fake_billing, smuggled
+):
+    response = await client.post(CHECKOUT, json={**CHECKOUT_MONTHLY, **smuggled})
+
+    assert response.status_code == 422
+    assert fake_billing.customers_created == []
+    assert fake_billing.checkouts == []
+
+
+async def test_checkout_without_a_plan_key_is_rejected(client, fake_billing):
+    response = await client.post(CHECKOUT, json={"price_id": "price_monthly"})
+
+    assert response.status_code == 422
+    assert fake_billing.checkouts == []
+
+
+async def test_a_configured_plan_the_provider_cannot_resolve_fails_checkout_with_502(
+    client, fake_billing, assert_reported_502
+):
+    fake_billing.plans = []
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert_reported_502(response)
+    assert fake_billing.customers_created == []
+    assert fake_billing.checkouts == []
+
+
+async def test_a_gateway_failure_on_checkout_returns_502_with_error_id(
+    client, fake_billing, assert_reported_502
+):
+    fake_billing.fail_on = {"create_subscription_checkout"}
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert_reported_502(response)
+
+
+async def test_a_failed_checkout_keeps_the_new_customer_and_a_retry_reuses_it(
+    client, db, fake_billing, user
+):
+    fake_billing.fail_on = {"create_subscription_checkout"}
+    failed = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+    assert failed.status_code == 502
+
+    await db.refresh(user)
+    assert user.stripe_customer_id == "cus_fake_1"
+
+    fake_billing.fail_on = set()
+    retried = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert retried.status_code == 200
+    assert len(fake_billing.customers_created) == 1
+    assert [call.customer_id for call in fake_billing.checkouts] == ["cus_fake_1"]
+
+
+async def test_a_gateway_failure_creating_the_customer_returns_502_and_saves_nothing(
+    client, db, fake_billing, user, assert_reported_502
+):
+    fake_billing.fail_on = {"create_customer"}
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert_reported_502(response)
+    assert fake_billing.checkouts == []
+    await db.refresh(user)
+    assert user.stripe_customer_id is None
+
+
+async def test_the_portal_endpoint_returns_the_gateway_url(client, db, fake_billing, user):
+    user.stripe_customer_id = "cus_existing"
+    await db.commit()
+    fake_billing.portal_url = "https://billing.test/portal/abc"
+
+    response = await client.post(PORTAL)
+
+    assert response.status_code == 200
+    assert response.json() == {"url": "https://billing.test/portal/abc"}
+    assert fake_billing.portals == ["cus_existing"]
+    assert fake_billing.customers_created == []
+
+
+async def test_the_portal_creates_the_stripe_customer_when_missing(client, db, fake_billing, user):
+    response = await client.post(PORTAL)
+
+    assert response.status_code == 200
+    assert fake_billing.portals == ["cus_fake_1"]
+    await db.refresh(user)
+    assert user.stripe_customer_id == "cus_fake_1"
 
 
 async def test_the_plans_endpoint_returns_only_the_configured_plans(

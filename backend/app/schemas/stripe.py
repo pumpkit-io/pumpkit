@@ -1,19 +1,21 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import SubscriptionStatus
 
 
 class CheckoutRequest(BaseModel):
     """
-    Request payload to create a Stripe checkout session.
+    Request payload to create a Stripe checkout session. The client picks a
+    Plan by key and nothing else: the server decides the price, the quantity
+    and any Trial, so any other field is rejected.
     """
 
-    price_id: str = Field(..., min_length=1)
-    quantity: int = Field(default=1, ge=1)
-    trial_period_days: Optional[int] = Field(default=None, ge=1)
+    model_config = ConfigDict(extra="forbid")
+
+    plan_key: str = Field(..., min_length=1)
 
 
 class CheckoutResponse(BaseModel):

@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.api.services.stripe_events as stripe_events_service
 import app.api.services.subscriptions as subscriptions_service
 import app.api.services.users as users_service
-from app.core.billing_gateway import BillingGateway, WebhookEvent, WebhookSignatureError
+from app.core.billing_gateway import (
+    BillingGateway,
+    BillingProviderError,
+    WebhookEvent,
+    WebhookSignatureError,
+)
 from app.core.config import settings
 from app.core.logger import logger
 from app.db.models import SubscriptionStatus, User
@@ -103,14 +108,21 @@ async def create_checkout_session(
     checkout_request: CheckoutRequest,
 ) -> CheckoutResponse:
     """
-    Create a Stripe Checkout for a Subscription.
+    Create a Stripe Checkout for one unit of a configured Plan. An unknown
+    Plan key is the client's fault (400) and reaches no Stripe call; a
+    configured Plan Stripe can't resolve is a provider failure (502).
     """
+    plan_key = checkout_request.plan_key
+    if plan_key not in settings.BILLING_PLAN_KEYS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Plan.")
+
+    plan = next((p for p in await gateway.list_plans([plan_key]) if p.key == plan_key), None)
+    if plan is None:
+        raise BillingProviderError(f"Configured Plan {plan_key} has no active recurring price")
+
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     session = await gateway.create_subscription_checkout(
-        customer_id=customer_id,
-        price_id=checkout_request.price_id,
-        user_id=user.id,
-        trial_period_days=checkout_request.trial_period_days,
+        customer_id=customer_id, price_id=plan.price_id, user_id=user.id
     )
     return CheckoutResponse(url=session.url, session_id=session.id)
 
