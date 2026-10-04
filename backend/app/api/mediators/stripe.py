@@ -99,6 +99,21 @@ async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, use
     return customer_id
 
 
+async def _trial_period_days_for(db: AsyncSession, user: User) -> Optional[int]:
+    """
+    The Trial a Checkout for this User should start with: the configured length
+    for a User who has never had a Subscription, otherwise none. Each User gets
+    at most one Trial.
+
+    Subscription rows are written by the `customer.subscription.created`
+    webhook, so a second Checkout started before that webhook lands still
+    sees the User as eligible.
+    """
+    if await subscriptions_service.has_had_subscription(db, user_id=user.id):
+        return None
+    return settings.BILLING_TRIAL_PERIOD_DAYS
+
+
 async def create_checkout_session(
     db: AsyncSession,
     gateway: BillingGateway,
@@ -106,9 +121,10 @@ async def create_checkout_session(
     checkout_request: CheckoutRequest,
 ) -> CheckoutResponse:
     """
-    Create a Stripe Checkout for one unit of a configured Plan. An unknown
-    Plan key is the client's fault (400) and reaches no Stripe call; a
-    configured Plan Stripe can't resolve is a provider failure (502).
+    Create a Stripe Checkout for one unit of a configured Plan, with a Trial
+    if the User is eligible. An unknown Plan key is the client's fault (400)
+    and reaches no Stripe call; a configured Plan Stripe can't resolve is a
+    provider failure (502).
     """
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
@@ -118,12 +134,13 @@ async def create_checkout_session(
     if plan is None:
         raise BillingProviderError(f"Configured Plan {plan_key} has no active recurring price")
 
+    trial_period_days = await _trial_period_days_for(db, user)
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     session = await gateway.create_subscription_checkout(
         customer_id=customer_id,
         price_id=plan.price_id,
         user_id=user.id,
-        trial_period_days=settings.BILLING_TRIAL_PERIOD_DAYS,
+        trial_period_days=trial_period_days,
     )
     return CheckoutResponse(url=session.url, session_id=session.id)
 

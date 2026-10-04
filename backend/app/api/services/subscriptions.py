@@ -3,13 +3,22 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Subscription, SubscriptionStatus, User
 
 # Stripe subscription statuses that represent a terminal lifecycle state
 _TERMINAL_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
+
+
+async def has_had_subscription(db: AsyncSession, *, user_id: str) -> bool:
+    """
+    Whether the User has ever had a Subscription, in any status. Only such a
+    User has used up their Trial.
+    """
+    result = await db.execute(select(exists().where(Subscription.user_id == user_id)))
+    return bool(result.scalar())
 
 
 async def get_latest_subscription_for_user(

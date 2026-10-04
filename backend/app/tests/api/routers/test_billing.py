@@ -2,6 +2,7 @@ import pytest
 
 from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan
 from app.core.config import settings
+from app.db.models import Subscription
 
 CHECKOUT = "/api/v1/stripe/checkout"
 CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly"}
@@ -73,6 +74,25 @@ async def test_checkout_for_a_user_who_never_had_a_subscription_includes_the_tri
 
     assert response.status_code == 200
     assert [c.trial_period_days for c in fake_billing.checkouts] == [14]
+
+
+async def test_checkout_for_a_user_who_has_had_a_subscription_includes_no_trial(
+    client, db, fake_billing, user
+):
+    db.add(
+        Subscription(
+            user_id=user.id,
+            stripe_subscription_id="sub_old",
+            stripe_customer_id="cus_old",
+            status="canceled",
+        )
+    )
+    await db.commit()
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
 
 
 async def test_checkout_with_an_unknown_plan_key_returns_400_without_calling_the_gateway(
