@@ -3,7 +3,6 @@ from typing import Literal, Optional, get_args
 
 from sqlalchemy import (
     JSON,
-    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -43,15 +42,6 @@ SubscriptionStatus = Literal[
     "canceled",
     "unpaid",
     "paused",
-]
-
-PurchaseStatus = Literal[
-    "pending",
-    "paid",
-    "refunded",
-    "partially_refunded",
-    "disputed",
-    "failed",
 ]
 
 
@@ -95,9 +85,6 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     subscriptions: Mapped[list["Subscription"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    purchases: Mapped[list["Purchase"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
@@ -260,47 +247,3 @@ class StripeEvent(Base):
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-
-
-class Purchase(Base):
-    """One-time Stripe Checkout purchase of a catalog product (app/core/purchases.py).
-
-    Created ``pending`` when the Checkout Session is created and moved through
-    its lifecycle by the Stripe webhook. What a purchase unlocks is decided in
-    app/api/hooks/purchases.py.
-    """
-
-    __tablename__ = "purchases"
-
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: ulid_with_prefix("purchase")
-    )
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    product_id: Mapped[str] = mapped_column(String, index=True)
-
-    status: Mapped[PurchaseStatus] = mapped_column(
-        PgEnum(*get_args(PurchaseStatus), name="purchase_status_enum"),
-        index=True,
-        default="pending",
-    )
-
-    stripe_checkout_session_id: Mapped[str] = mapped_column(String, unique=True)
-    stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(
-        String, index=True, nullable=True
-    )
-    stripe_charge_id: Mapped[Optional[str]] = mapped_column(String, index=True, nullable=True)
-
-    currency: Mapped[str] = mapped_column(String)
-    amount_subtotal_cents: Mapped[int] = mapped_column(BigInteger)
-    amount_tax_cents: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    amount_total_cents: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    refunded_amount_cents: Mapped[int] = mapped_column(BigInteger, default=0)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    user: Mapped["User"] = relationship(back_populates="purchases")
-
-    __table_args__ = (Index("ix_purchases_user_id_created_at", "user_id", "created_at"),)
