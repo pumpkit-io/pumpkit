@@ -9,10 +9,9 @@ const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
 async function identifyFromBackend(): Promise<boolean> {
   try {
     const profile = await userService.fetchProfile();
-    // Use email as distinct_id — stable for the lifetime of an account and
-    // already returned by /users/me. If you ever need to support email
-    // changes without losing continuity, swap to a server-issued user_id.
-    identifyUser(profile.email, {
+    // The User ID is the distinct_id: stable even if the email changes, and
+    // not itself an email address. The email stays a person property.
+    identifyUser(profile.id, {
       email: profile.email,
       first_name: profile.firstName,
       last_name: profile.lastName,

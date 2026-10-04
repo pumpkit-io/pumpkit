@@ -1,6 +1,7 @@
 import { apiService } from './apiService';
 
 export interface UserProfile {
+  id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
@@ -8,6 +9,7 @@ export interface UserProfile {
 }
 
 interface UserProfileResponse {
+  id: string;
   email: string;
   first_name: string | null;
   last_name: string | null;
@@ -16,6 +18,7 @@ interface UserProfileResponse {
 
 function fromResponse(data: UserProfileResponse): UserProfile {
   return {
+    id: data.id,
     email: data.email,
     firstName: data.first_name,
     lastName: data.last_name,
