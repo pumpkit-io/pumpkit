@@ -9,9 +9,9 @@ from typing import Any, Literal, Optional
 
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi import status
+from fastapi import Depends, HTTPException, status
 from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
 from app.core.logger import logger
@@ -19,10 +19,27 @@ from app.core.logger import logger
 TokenType = Literal["access", "refresh"]
 
 
-# FastAPI dependency to extract the access token from the Authorization header "Bearer <token>"
-# The tokenUrl is just for OpenAPI documentation - it doesn't affect the actual token extraction.
-# The tokenUrl should point to the endpoint that returns the access token in its content: {"access_token": "<token>", ...}
-oauth2_scheme: OAuth2PasswordBearer = OAuth2PasswordBearer(tokenUrl="login")
+# Extracts the access token from an "Authorization: Bearer <token>" header. Access tokens are
+# issued by the magic-link and OAuth sign-in flows, so this is a plain bearer scheme rather than
+# an OAuth2 password grant. auto_error=False lets us raise the 401 + "WWW-Authenticate: Bearer"
+# challenge ourselves, independent of the installed FastAPI version's HTTPBearer default.
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def get_bearer_token(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+) -> str:
+    """
+    FastAPI dependency returning the raw bearer token, or raising 401 if it is missing or malformed.
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return credentials.credentials
+
 
 # Data encryption helper
 _fernet = Fernet(settings.FERNET_ENCRYPTION_KEY.encode())
