@@ -2,7 +2,6 @@ import base64
 import binascii
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -13,7 +12,7 @@ from google.oauth2 import id_token
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.services.google_identities as google_identities_service
-import app.api.services.refresh_tokens as refresh_tokens_service
+import app.api.services.sessions as sessions
 import app.api.services.users as user_service
 from app.api.configs.google import (
     GOOGLE_AUTHORIZATION_ENDPOINT,
@@ -28,9 +27,6 @@ from app.core.config import settings
 from app.core.ids import ulid_with_prefix
 from app.core.logger import logger
 from app.core.security import (
-    create_access_token,
-    create_redirect_response,
-    create_refresh_token,
     decode_payload,
     encode_payload,
     generate_token,
@@ -341,43 +337,17 @@ async def _handle_login_google_flow(
         google_identity.profile_json = dict(id_info)
         await db.commit()
 
-    # Create the access token
-    access_token = create_access_token(
-        data={"sub": user.id, "email": user.email},
-    )
-
-    # Create and store the refresh token
-    refresh_token = create_refresh_token(
-        data={"sub": user.id, "email": user.email},
-    )
-
-    await refresh_tokens_service.create_refresh_token(
-        db=db,
-        user_id=user.id,
-        refresh_token=refresh_token,
+    result = await sessions.start(
+        db,
+        user=user,
         sign_in_method="google",
-        ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
+        client=sessions.ClientInfo.from_request(request),
     )
-
-    # Create the redirect response
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-
-    frontend_redirect_params = {
-        "access_token": access_token,
-        "token_type": "Bearer",
-        "expires_at": expires_at.isoformat(),
-    }
-    frontend_redirect_url = (
-        f"{settings.FRONTEND_URL}/oauth/google/callback#{urlencode(frontend_redirect_params)}"
-    )
-
-    redirect_response = create_redirect_response(
-        redirect_url=frontend_redirect_url,
-        refresh_token=refresh_token,
-    )
+    await db.commit()
+    if isinstance(result, sessions.SessionRefusal):
+        redirect_response = result.as_sign_in_redirect()
+    else:
+        redirect_response = result.as_callback_redirect("/oauth/google/callback")
 
     # Delete the cookies
     redirect_response.delete_cookie(key=GOOGLE_LOGIN_STATE_COOKIE, path="/")

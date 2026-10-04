@@ -10,7 +10,6 @@ from typing import Any, Literal, Optional
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends, HTTPException, status
-from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
@@ -229,91 +228,6 @@ def _verify_auth_token(token: str, expected_type: TokenType) -> Optional[dict]:
         return None
     except jwt.InvalidTokenError:
         return None
-
-
-#############################
-# REQUEST RESPONSE CREATION #
-#############################
-
-
-def create_auth_response(access_token: str, refresh_token: str) -> JSONResponse:
-    """
-    Create a JSON response with the provided access token, the access token's expiration datetime, and
-    an HTTP-only cookie containing the refresh token.
-    """
-    # Access token expiration datetime
-    expires_at: datetime = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-
-    # Create response with access token information
-    response = JSONResponse(
-        content={
-            "access_token": access_token,  # Access token is short-lived - can be stored in memory
-            "token_type": "Bearer",
-            "expires_at": expires_at.isoformat(),
-        },
-        status_code=status.HTTP_200_OK,
-        headers={
-            # Required by OAuth for responses containing credentials (cookies included)
-            "Cache-Control": "no-store",
-            "Pragma": "no-cache",
-        },
-    )
-
-    # Use "__Host-" prefix in production for enhanced security.
-    # A cookie whose name starts with "__Host-" is accepted only if it:
-    # 1. is sent over HTTPS (like in production)
-    # 2. doesn't have the domain attribute
-    # 3. has the path="/" attribute
-    # If any of the above conditions are not met, the cookie is rejected - better security.
-    cookie_name = "__Host-refresh_token" if settings.is_env_production() else "refresh_token"
-
-    # Set refresh token as HTTP-only cookie to enhance security
-    response.set_cookie(
-        key=cookie_name,
-        value=refresh_token,
-        max_age=settings.COOKIE_MAX_AGE_SECONDS,
-        httponly=True,  # Mitigates JS theft (XSS) attacks
-        secure=settings.is_env_production(),
-        samesite="lax",
-        path="/",
-        # Cannot set domain if using "__Host-" prefix
-    )
-
-    return response
-
-
-def create_redirect_response(redirect_url: str, refresh_token: str) -> RedirectResponse:
-    """
-    Create a redirect response with the provided redirect URL and an HTTP-only cookie containing the refresh token.
-    """
-    response = RedirectResponse(
-        url=redirect_url,
-        status_code=status.HTTP_303_SEE_OTHER,  # PRG pattern
-        headers={
-            # Required by OAuth for responses containing credentials (cookies included)
-            "Cache-Control": "no-store",
-            "Pragma": "no-cache",
-        },
-    )
-
-    # Use "__Host-" prefix in production for enhanced security.
-    cookie_name = "__Host-refresh_token" if settings.is_env_production() else "refresh_token"
-
-    # Set refresh token as HTTP-only cookie to enhance security
-    response.set_cookie(
-        key=cookie_name,
-        value=refresh_token,
-        max_age=settings.COOKIE_MAX_AGE_SECONDS,
-        httponly=True,  # Mitigates JS theft (XSS) attacks
-        secure=settings.is_env_production(),
-        samesite="lax",
-        path="/",
-        # Cannot set domain if using "__Host-" prefix
-    )
-
-    return response
 
 
 #################################
