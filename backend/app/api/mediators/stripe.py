@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.api.services.stripe as stripe_service
 import app.api.services.stripe_customers as stripe_customers_service
 import app.api.services.stripe_events as stripe_events_service
+from app.core.billing_gateway import BillingGateway, WebhookEvent, WebhookSignatureError
 from app.core.config import settings
 from app.core.logger import logger
 from app.db.models import SubscriptionStatus, User
@@ -247,11 +247,12 @@ async def start_trial(
 
 async def handle_webhook(
     db: AsyncSession,
+    gateway: BillingGateway,
     payload: bytes,
     signature: Optional[str],
 ) -> None:
     """
-    Verify the Stripe webhook signature, deduplicate by event id, and dispatch.
+    Verify the webhook through the gateway, deduplicate by event id, and dispatch.
 
     The `stripe_events` insert and every handler write share ONE transaction,
     committed at the end. Handlers must not commit. If a handler raises, the
@@ -265,65 +266,49 @@ async def handle_webhook(
         )
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload=payload,
-            sig_header=signature,
-            secret=settings.STRIPE_WEBHOOK_SECRET,
-        )
-    except ValueError:
-        logger.exception("Invalid Stripe webhook payload")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload.")
-    except stripe.SignatureVerificationError:
-        logger.exception("Invalid Stripe webhook signature")
+        event = gateway.verify_webhook(payload=payload, signature=signature)
+    except WebhookSignatureError:
+        logger.warning("Rejected a Stripe webhook that failed verification", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature.")
-
-    event_id: str = event["id"]
-    event_type: str = event["type"]
-    # construct_event returns a stripe.Event whose nested objects are
-    # StripeObject (attribute-style, no .get()). Handlers use plain dict
-    # semantics, so re-parse the raw payload — the signature is already
-    # verified, so the bytes are trusted.
-    data_object: dict[str, Any] = json.loads(payload)["data"]["object"]
 
     try:
         is_new = await stripe_events_service.try_record_event(
-            db, event_id=event_id, event_type=event_type
+            db, event_id=event.id, event_type=event.type
         )
         if not is_new:
-            logger.info("Ignoring replayed Stripe event %s (%s)", event_id, event_type)
+            logger.info("Ignoring replayed Stripe event %s (%s)", event.id, event.type)
             await db.rollback()
             return
-        await _dispatch_event(db, event_type=event_type, event_id=event_id, data_object=data_object)
+        await _dispatch_event(db, event)
         await db.commit()
     except Exception:
         await db.rollback()
         raise
 
 
-async def _dispatch_event(
-    db: AsyncSession,
-    *,
-    event_type: str,
-    event_id: str,
-    data_object: dict[str, Any],
-) -> None:
+async def _dispatch_event(db: AsyncSession, event: WebhookEvent) -> None:
     """Route a verified, first-seen Stripe event to its handler. Must not commit."""
-    if event_type in (
-        "customer.subscription.created",
-        "customer.subscription.updated",
-        "customer.subscription.deleted",
-    ):
-        await _handle_subscription_event(db=db, subscription=data_object, event_id=event_id)
-    elif event_type == "checkout.session.completed":
-        # The subsequent customer.subscription.created event writes the row.
-        # Log for observability.
-        logger.info(
-            "Stripe checkout.session.completed (session_id=%s, client_reference_id=%s)",
-            data_object.get("id"),
-            data_object.get("client_reference_id"),
-        )
-    else:
-        logger.info("Unhandled Stripe webhook event type: %s (event_id=%s)", event_type, event_id)
+    match event.type:
+        case (
+            "customer.subscription.created"
+            | "customer.subscription.updated"
+            | "customer.subscription.deleted"
+        ):
+            await _handle_subscription_event(
+                db=db, subscription=event.data_object, event_id=event.id
+            )
+        case "checkout.session.completed":
+            # The subsequent customer.subscription.created event writes the row.
+            # Log for observability.
+            logger.info(
+                "Stripe checkout.session.completed (session_id=%s, client_reference_id=%s)",
+                event.data_object.get("id"),
+                event.data_object.get("client_reference_id"),
+            )
+        case _:
+            logger.info(
+                "Unhandled Stripe webhook event type: %s (event_id=%s)", event.type, event.id
+            )
 
 
 async def _handle_subscription_event(

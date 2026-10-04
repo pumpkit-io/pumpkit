@@ -74,6 +74,7 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 import app.core.exceptions as exceptions_module  # noqa: E402
 from app.api.dependencies import get_current_user  # noqa: E402
 from app.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
+from app.core.billing_gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from app.core.clock import get_clock  # noqa: E402
 from app.core.google_sign_in import (  # noqa: E402
     FakeGoogleSignIn,
@@ -135,6 +136,19 @@ def fake_google():
     app.dependency_overrides[get_google_sign_in] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_google_sign_in, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_billing():
+    """
+    Every test bills through a fake `BillingGateway` instead of Stripe. Request it
+    by name to configure results, read its recorded calls, set `fail_on`, or sign
+    webhook events with `fake_billing.signed_event(...)`.
+    """
+    fake = FakeBillingGateway()
+    app.dependency_overrides[get_billing_gateway] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_billing_gateway, None)
 
 
 @pytest.fixture(autouse=True)

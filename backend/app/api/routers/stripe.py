@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.mediators.stripe as stripe_mediator
 from app.api.dependencies import get_current_user
+from app.core.billing_gateway import BillingGateway, get_billing_gateway
 from app.core.rate_limit import limiter
 from app.db.models import User
 from app.db.session import get_async_db
@@ -92,6 +93,7 @@ async def start_stripe_trial(
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> JSONResponse:
     # Signature verification requires the raw, unmodified request body.
     payload = await request.body()
@@ -100,6 +102,8 @@ async def stripe_webhook(
     # handle_webhook owns the transaction: it commits on success and rolls back
     # before re-raising, so unexpected errors reach the global handler as a 500
     # and Stripe retries the event.
-    await stripe_mediator.handle_webhook(db=db, payload=payload, signature=signature)
+    await stripe_mediator.handle_webhook(
+        db=db, gateway=gateway, payload=payload, signature=signature
+    )
 
     return JSONResponse(content={"received": True}, status_code=status.HTTP_200_OK)
