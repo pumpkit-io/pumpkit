@@ -70,11 +70,32 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 
 import app.core.exceptions as exceptions_module  # noqa: E402
 from app.api.dependencies import get_current_user  # noqa: E402
+from app.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
+from app.core.rate_limit import limiter  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
 from app.db.models import User  # noqa: E402
 from app.db.session import get_async_db  # noqa: E402
 from app.main import app  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def auth_outbox():
+    """
+    Every test sends auth email to an in-memory outbox instead of Resend.
+    Request it by name to read `auth_outbox.messages` or set `auth_outbox.fail = True`.
+    """
+    outbox = OutboxAuthMailer()
+    app.dependency_overrides[get_auth_mailer] = lambda: outbox
+    yield outbox
+    app.dependency_overrides.pop(get_auth_mailer, None)
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    """The slowapi limiter is a process-wide in-memory store; start each test with empty counters."""
+    limiter.reset()
+    yield
 
 
 @pytest_asyncio.fixture

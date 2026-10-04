@@ -13,7 +13,21 @@ async def create_magic_link(
 ) -> None:
     """Create a new magic link in the database."""
     db.add(magic_link)
-    await db.commit()
+    await db.flush()
+
+
+async def discard_unsent_magic_link(
+    db: AsyncSession,
+    magic_link: MagicLink,
+) -> None:
+    """
+    Void a just-issued Magic link whose email could not be sent.
+
+    The row is deleted rather than marked consumed: a link that never reached
+    the User must not count toward the per-email cool-down.
+    """
+    await db.delete(magic_link)
+    await db.flush()
 
 
 async def get_magic_link_by_token_hash(
@@ -51,7 +65,7 @@ async def invalidate_magic_links_for_email(
         .where(MagicLink.email == email, MagicLink.consumed_at.is_(None))
         .values(consumed_at=datetime.now(timezone.utc))
     )
-    await db.commit()
+    await db.flush()
 
 
 async def atomically_consume_magic_link(

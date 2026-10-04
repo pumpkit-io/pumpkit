@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.mediators.magic_link_auth as magic_link_auth_mediator
+from app.core.auth_mailer import AuthMailer, get_auth_mailer
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.db.session import get_async_db
@@ -22,11 +23,13 @@ async def request_magic_link(
     request: Request,
     request_data: MagicLinkRequest,
     db: AsyncSession = Depends(get_async_db),
+    mailer: AuthMailer = Depends(get_auth_mailer),
 ) -> MessageResponse:
     return await magic_link_auth_mediator.request_magic_link(
         email=request_data.email,
         request=request,
         db=db,
+        mailer=mailer,
     )
 
 
