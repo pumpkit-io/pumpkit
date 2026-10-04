@@ -1,30 +1,25 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import { track } from '../../lib/analytics';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { session } from '@/lib/session';
+import { track } from '@/lib/analytics';
 
 export function GoogleAuthCallback() {
   const navigate = useNavigate();
-  const auth = useAuth();
-  const hash = window.location.hash;
+  const { hash } = useLocation();
   const handled = useRef(false);
 
   useEffect(() => {
     if (handled.current) return;
     handled.current = true;
-    const params = new URLSearchParams(hash.substring(1));
-    const accessToken = params.get('access_token');
-    const expiresAt = params.get('expires_at');
-
-    if (accessToken && expiresAt) {
+    // Replace, so the URL holding the access token leaves browser history.
+    if (session.startFromFragment(hash)) {
       track('login_google_succeeded');
-      auth.login(accessToken, expiresAt);
-      navigate('/home');
+      navigate('/home', { replace: true });
     } else {
-      track('login_google_failed', { error_code: 'google_token_missing' });
-      navigate('/login?error=google_token_missing');
+      track('login_google_failed', { error_code: 'sign_in_failed' });
+      navigate('/login?error=sign_in_failed', { replace: true });
     }
-  }, [hash, auth, navigate]);
+  }, [hash, navigate]);
 
   return (
     <div className="flex justify-center items-center h-screen">

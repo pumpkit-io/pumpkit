@@ -85,6 +85,19 @@ describe('refresh', () => {
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login');
   });
+
+  it('ends the Session with account_suspended when the refresh is answered 401 account_suspended', async () => {
+    session.start('old', inMinutes(5));
+    sessionStorage.setItem(IDENTIFIED_KEY, '1');
+    fakeBackend({ '/refresh-token': { status: 401, data: { detail: 'account_suspended' } } });
+
+    await expect(session.refresh()).rejects.toBeTruthy();
+
+    expect(session.get()).toBeNull();
+    expect(sessionStorage.getItem(IDENTIFIED_KEY)).toBeNull();
+    expect(resetPostHog).toHaveBeenCalledTimes(1);
+    expect(hardRedirect).toHaveBeenCalledWith('/login?error=account_suspended');
+  });
 });
 
 describe('transient refresh failures', () => {
