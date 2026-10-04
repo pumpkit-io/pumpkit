@@ -8,16 +8,15 @@ import app.api.services.stripe_events as stripe_events_service
 import app.api.services.subscriptions as subscriptions_service
 import app.api.services.users as users_service
 from app.core.billing_gateway import BillingGateway, WebhookEvent, WebhookSignatureError
+from app.core.config import settings
 from app.core.logger import logger
 from app.db.models import SubscriptionStatus, User
 from app.schemas.stripe import (
     BillingPortalResponse,
     CheckoutRequest,
     CheckoutResponse,
-    PriceProduct,
-    PriceRecurring,
-    PriceResponse,
-    PricesListResponse,
+    PlanResponse,
+    PlansListResponse,
     SubscriptionMeResponse,
     TrialRequest,
     TrialResponse,
@@ -51,33 +50,29 @@ async def get_subscription_me(db: AsyncSession, user: User) -> SubscriptionMeRes
     )
 
 
-async def list_prices(gateway: BillingGateway) -> PricesListResponse:
+async def list_plans(gateway: BillingGateway) -> PlansListResponse:
     """
-    Return all active Stripe prices with their parent products.
+    Return the configured Plans, in settings order, with their current prices.
+    A configured Plan the provider can't resolve is left out and logged, so one
+    misconfigured key doesn't hide the others.
     """
-    prices = await gateway.list_prices()
-    return PricesListResponse(
+    keys = settings.BILLING_PLAN_KEYS
+    resolved = {plan.key: plan for plan in await gateway.list_plans(keys)}
+    for key in keys:
+        if key not in resolved:
+            logger.error("Configured Plan %s has no active recurring price in Stripe", key)
+    return PlansListResponse(
         data=[
-            PriceResponse(
-                id=price.id,
-                currency=price.currency,
-                unit_amount=price.unit_amount,
-                recurring=(
-                    PriceRecurring(interval=price.interval, interval_count=price.interval_count)
-                    if price.interval
-                    else None
-                ),
-                product=(
-                    PriceProduct(
-                        id=price.product_id,
-                        name=price.product_name,
-                        description=price.product_description,
-                    )
-                    if price.product_id
-                    else None
-                ),
+            PlanResponse(
+                key=plan.key,
+                product_name=plan.product_name,
+                amount=plan.amount,
+                currency=plan.currency,
+                interval=plan.interval,
+                interval_count=plan.interval_count,
             )
-            for price in prices
+            for key in keys
+            if (plan := resolved.get(key))
         ]
     )
 

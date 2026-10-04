@@ -1,10 +1,12 @@
 from sqlalchemy import select
 
-from app.core.billing_gateway import CheckoutCall, CustomerCall, Price
+from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan
+from app.core.config import settings
 from app.db.models import Subscription
 
 CHECKOUT = "/api/v1/stripe/checkout"
 PORTAL = "/api/v1/stripe/billing-portal"
+PLANS = "/api/v1/stripe/plans"
 
 
 async def test_checkout_creates_the_stripe_customer_and_a_checkout(client, db, fake_billing, user):
@@ -87,50 +89,86 @@ async def test_the_portal_creates_the_stripe_customer_when_missing(client, db, f
     assert user.stripe_customer_id == "cus_fake_1"
 
 
-async def test_prices_come_from_the_gateway(client, fake_billing):
-    fake_billing.prices = [
-        Price(
-            id="price_1",
-            currency="usd",
-            unit_amount=500,
-            interval="month",
-            interval_count=1,
-            product_id="prod_1",
-            product_name="Pro",
-            product_description="d",
-        ),
-        Price(id="price_once", currency="usd", unit_amount=900),
-    ]
+MONTHLY = Plan(
+    key="pumpkit_pro_monthly",
+    price_id="price_monthly",
+    product_name="Pumpkit Pro",
+    amount=900,
+    currency="eur",
+    interval="month",
+    interval_count=1,
+)
+YEARLY = Plan(
+    key="pumpkit_pro_yearly",
+    price_id="price_yearly",
+    product_name="Pumpkit Pro",
+    amount=9000,
+    currency="eur",
+    interval="year",
+    interval_count=1,
+)
+STRAY = Plan(
+    key="stray_test_price",
+    price_id="price_stray",
+    product_name="Test product",
+    amount=1,
+    currency="eur",
+    interval="month",
+    interval_count=1,
+)
 
-    response = await client.get("/api/v1/stripe/prices")
+
+async def test_the_plans_endpoint_returns_only_the_configured_plans(
+    client, fake_billing, monkeypatch
+):
+    monkeypatch.setattr(
+        settings, "BILLING_PLAN_KEYS", ["pumpkit_pro_yearly", "pumpkit_pro_monthly"]
+    )
+    fake_billing.plans = [MONTHLY, STRAY, YEARLY]
+
+    response = await client.get(PLANS)
 
     assert response.status_code == 200
     assert response.json() == {
         "data": [
             {
-                "id": "price_1",
-                "currency": "usd",
-                "unit_amount": 500,
-                "recurring": {"interval": "month", "interval_count": 1},
-                "product": {"id": "prod_1", "name": "Pro", "description": "d"},
+                "key": "pumpkit_pro_yearly",
+                "product_name": "Pumpkit Pro",
+                "amount": 9000,
+                "currency": "eur",
+                "interval": "year",
+                "interval_count": 1,
             },
             {
-                "id": "price_once",
-                "currency": "usd",
-                "unit_amount": 900,
-                "recurring": None,
-                "product": None,
+                "key": "pumpkit_pro_monthly",
+                "product_name": "Pumpkit Pro",
+                "amount": 900,
+                "currency": "eur",
+                "interval": "month",
+                "interval_count": 1,
             },
         ]
     }
 
 
-async def test_a_gateway_failure_listing_prices_returns_502(
+async def test_a_configured_plan_the_provider_does_not_know_is_left_out(
+    client, fake_billing, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_PLAN_KEYS", ["pumpkit_pro_monthly", "pumpkit_gone"])
+    fake_billing.plans = [MONTHLY]
+
+    response = await client.get(PLANS)
+
+    assert response.status_code == 200
+    assert [plan["key"] for plan in response.json()["data"]] == ["pumpkit_pro_monthly"]
+
+
+async def test_a_gateway_failure_listing_plans_returns_502(
     client, fake_billing, assert_reported_502
 ):
-    fake_billing.fail_on = {"list_prices"}
+    fake_billing.fail_on = {"list_plans"}
 
-    response = await client.get("/api/v1/stripe/prices")
+    response = await client.get(PLANS)
 
     assert_reported_502(response)
 
@@ -176,7 +214,7 @@ async def test_billing_api_serves_only_subscription_routes(client):
     }
     assert billing_paths == {
         "/api/v1/stripe/me",
-        "/api/v1/stripe/prices",
+        "/api/v1/stripe/plans",
         "/api/v1/stripe/checkout",
         "/api/v1/stripe/billing-portal",
         "/api/v1/stripe/trial",

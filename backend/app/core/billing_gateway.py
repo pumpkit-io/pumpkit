@@ -21,7 +21,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Callable, Optional, Protocol, TypeVar
+from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar
 
 import stripe
 from starlette.concurrency import run_in_threadpool
@@ -47,17 +47,20 @@ class CheckoutSession:
 
 
 @dataclass(frozen=True)
-class Price:
-    """A price the provider offers, with its recurrence and product when it has them."""
+class Plan:
+    """
+    A Plan resolved from its key (the provider's price lookup key) to the
+    provider's current price: an `amount` in the currency's minor units every
+    `interval_count` `interval`s.
+    """
 
-    id: str
+    key: str
+    price_id: str
+    product_name: str
+    amount: int
     currency: str
-    unit_amount: Optional[int]
-    interval: Optional[str] = None
-    interval_count: int = 1
-    product_id: Optional[str] = None
-    product_name: Optional[str] = None
-    product_description: Optional[str] = None
+    interval: str
+    interval_count: int
 
 
 @dataclass(frozen=True)
@@ -89,8 +92,11 @@ class BillingGateway(Protocol):
         """Create a billing-portal session for the customer and return its URL."""
         ...
 
-    async def list_prices(self) -> list[Price]:
-        """List the provider's active prices."""
+    async def list_plans(self, keys: Sequence[str]) -> list[Plan]:
+        """
+        Resolve Plan keys to the provider's current active recurring prices.
+        Keys the provider doesn't know are left out; the order isn't guaranteed.
+        """
         ...
 
     async def create_trial_subscription(
@@ -107,20 +113,22 @@ class BillingGateway(Protocol):
         ...
 
 
-def _price(price: dict[str, Any]) -> Price:
-    recurring = price.get("recurring") or {}
+def _plan(price: dict[str, Any]) -> Optional[Plan]:
+    """A Stripe price as a Plan, or None when it can't be one (not recurring, no flat amount)."""
+    recurring = price.get("recurring")
+    if not price.get("lookup_key") or not recurring or price.get("unit_amount") is None:
+        return None
     product = price.get("product")
     if not isinstance(product, dict) or product.get("deleted"):
         product = {}
-    return Price(
-        id=price["id"],
+    return Plan(
+        key=price["lookup_key"],
+        price_id=price["id"],
+        product_name=product.get("name") or price.get("nickname") or price["lookup_key"],
+        amount=price["unit_amount"],
         currency=price["currency"],
-        unit_amount=price.get("unit_amount"),
-        interval=recurring.get("interval"),
+        interval=recurring["interval"],
         interval_count=recurring.get("interval_count") or 1,
-        product_id=product.get("id"),
-        product_name=product.get("name"),
-        product_description=product.get("description"),
     )
 
 
@@ -192,14 +200,24 @@ class StripeBillingGateway:
         )
         return portal.url
 
-    async def list_prices(self) -> list[Price]:
-        prices = await self._call(
-            "list prices",
-            lambda: self._client.v1.prices.list(
-                {"active": True, "expand": ["data.product"], "limit": 100}
-            ),
-        )
-        return [_price(price.to_dict()) for price in prices.data]
+    async def list_plans(self, keys: Sequence[str]) -> list[Plan]:
+        plans: list[Plan] = []
+        # Stripe accepts at most 10 lookup keys per request.
+        for start in range(0, len(keys), 10):
+            batch = list(keys[start : start + 10])
+            prices = await self._call(
+                "list Plans",
+                lambda: self._client.v1.prices.list(
+                    {
+                        "active": True,
+                        "lookup_keys": batch,
+                        "expand": ["data.product"],
+                        "limit": 100,
+                    }
+                ),
+            )
+            plans.extend(plan for price in prices.data if (plan := _plan(price.to_dict())))
+        return plans
 
     async def create_trial_subscription(
         self, *, customer_id: str, price_id: str, user_id: str, trial_period_days: int
@@ -268,12 +286,13 @@ class FakeBillingGateway:
     fail_on: set[str] = field(default_factory=set)
     checkout_url: str = "https://checkout.test/session"
     portal_url: str = "https://billing.test/portal"
-    prices: list[Price] = field(default_factory=list)
+    plans: list[Plan] = field(default_factory=list)
     trial_subscription: dict[str, Any] = field(default_factory=dict)
 
     customers_created: list[CustomerCall] = field(default_factory=list)
     checkouts: list[CheckoutCall] = field(default_factory=list)
     portals: list[str] = field(default_factory=list)
+    plan_lookups: list[list[str]] = field(default_factory=list)
     trials: list[TrialCall] = field(default_factory=list)
 
     def _maybe_fail(self, method: str) -> None:
@@ -309,9 +328,10 @@ class FakeBillingGateway:
         self.portals.append(customer_id)
         return self.portal_url
 
-    async def list_prices(self) -> list[Price]:
-        self._maybe_fail("list_prices")
-        return list(self.prices)
+    async def list_plans(self, keys: Sequence[str]) -> list[Plan]:
+        self._maybe_fail("list_plans")
+        self.plan_lookups.append(list(keys))
+        return [plan for plan in self.plans if plan.key in keys]
 
     async def create_trial_subscription(
         self, *, customer_id: str, price_id: str, user_id: str, trial_period_days: int

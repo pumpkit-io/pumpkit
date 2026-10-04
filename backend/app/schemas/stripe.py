@@ -64,40 +64,23 @@ class SubscriptionMeResponse(BaseModel):
     is_active: bool
 
 
-class PriceProduct(BaseModel):
+class PlanResponse(BaseModel):
     """
-    Minimal view of a Stripe product attached to a price.
-    """
-
-    id: str
-    name: Optional[str] = None
-    description: Optional[str] = None
-
-
-class PriceRecurring(BaseModel):
-    """
-    Minimal view of a recurring price's interval configuration.
+    A Plan a User can subscribe to: `amount` in the currency's minor units,
+    charged every `interval_count` `interval`s.
     """
 
+    key: str
+    product_name: str
+    amount: int
+    currency: str
     interval: str
     interval_count: int
 
 
-class PriceResponse(BaseModel):
+class PlansListResponse(BaseModel):
     """
-    Minimal view of a Stripe price for a pricing page.
-    """
-
-    id: str
-    currency: str
-    unit_amount: Optional[int]
-    recurring: Optional[PriceRecurring] = None
-    product: Optional[PriceProduct] = None
-
-
-class PricesListResponse(BaseModel):
-    """
-    List of active Stripe prices.
+    The Plans Pumpkit sells, in display order.
     """
 
-    data: list[PriceResponse]
+    data: list[PlanResponse]

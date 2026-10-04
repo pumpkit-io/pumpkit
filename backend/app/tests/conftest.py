@@ -46,6 +46,7 @@ _TEST_ENV = {
     "STRIPE_CHECKOUT_SUCCESS_URL": "http://localhost:5173/billing/success",
     "STRIPE_CHECKOUT_CANCEL_URL": "http://localhost:5173/billing/cancelled",
     "STRIPE_BILLING_PORTAL_RETURN_URL": "http://localhost:5173/billing",
+    "BILLING_PLAN_KEYS": '["pumpkit_pro_monthly"]',
     "OPENROUTER_API_KEY": "sk-or-test",
     "POSTHOG_ENABLED": "false",
 }
