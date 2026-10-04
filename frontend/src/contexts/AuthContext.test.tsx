@@ -13,17 +13,13 @@ vi.mock('@/lib/posthog', () => ({
 
 import { hardRedirect } from '@/lib/navigation';
 import { identifyUser, resetPostHog } from '@/lib/posthog';
-import { session } from '@/lib/session';
+import { SESSION_STORAGE_KEY, session } from '@/lib/session';
 import { api } from '@/services/apiService';
 import { AuthProvider, useAuth } from './AuthContext';
 
-const SESSION_KEY = 'pumpkit:session';
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>;
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 const originalAdapter = api.defaults.adapter;
-
-const storeSession = (accessToken: string, expiresAt: string) =>
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ accessToken, expiresAt }));
 
 type Answer = { status: number; data?: unknown } | 'network';
 
@@ -90,7 +86,7 @@ describe('AuthProvider bootstrap', () => {
   });
 
   it('trusts a fresh Session without refreshing', async () => {
-    storeSession('t', inMinutes(60));
+    session.start('t', inMinutes(60));
     const backend = fakeBackend({ '/refresh-token': refreshed });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
@@ -98,7 +94,7 @@ describe('AuthProvider bootstrap', () => {
   });
 
   it('refreshes a near-expiry Session on boot', async () => {
-    storeSession('t', inMinutes(5));
+    session.start('t', inMinutes(5));
     const backend = fakeBackend({ '/refresh-token': refreshed });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
@@ -110,7 +106,7 @@ describe('AuthProvider bootstrap', () => {
     ['a 503', { status: 503 } as Answer],
     ['a network error', 'network' as Answer],
   ])('stays signed in past expiry when refresh fails with %s', async (_label, answer) => {
-    storeSession('t', inMinutes(-5));
+    session.start('t', inMinutes(-5));
     fakeBackend({ '/refresh-token': answer });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -120,12 +116,12 @@ describe('AuthProvider bootstrap', () => {
   });
 
   it('ends the Session when refresh is answered 401', async () => {
-    storeSession('t', inMinutes(5));
+    session.start('t', inMinutes(5));
     fakeBackend({ '/refresh-token': { status: 401, data: { detail: 'invalid_refresh_token' } } });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isAuthenticated).toBe(false);
-    expect(localStorage.getItem(SESSION_KEY)).toBeNull();
+    expect(localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login');
   });
@@ -133,7 +129,7 @@ describe('AuthProvider bootstrap', () => {
 
 describe('AuthProvider analytics identity', () => {
   it('identifies the person once by User ID, keeping the email as a property', async () => {
-    storeSession('t', inMinutes(60));
+    session.start('t', inMinutes(60));
     fakeBackend();
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
@@ -150,12 +146,12 @@ describe('AuthProvider analytics identity', () => {
 
 describe('AuthProvider while running', () => {
   it('refreshes a near-expiry Session when the window regains focus', async () => {
-    storeSession('t', inMinutes(60));
+    session.start('t', inMinutes(60));
     const backend = fakeBackend({ '/refresh-token': refreshed });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
 
-    storeSession('t', inMinutes(5));
+    session.start('t', inMinutes(5));
     act(() => {
       window.dispatchEvent(new Event('focus'));
     });
@@ -165,16 +161,20 @@ describe('AuthProvider while running', () => {
   });
 
   it('signs out when another tab clears the Session', async () => {
-    storeSession('t', inMinutes(60));
+    session.start('t', inMinutes(60));
     fakeBackend();
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
 
     act(() => {
-      const oldValue = localStorage.getItem(SESSION_KEY);
-      localStorage.removeItem(SESSION_KEY);
+      const oldValue = localStorage.getItem(SESSION_STORAGE_KEY);
+      localStorage.removeItem(SESSION_STORAGE_KEY);
       window.dispatchEvent(
-        new StorageEvent('storage', { key: SESSION_KEY, oldValue, storageArea: localStorage }),
+        new StorageEvent('storage', {
+          key: SESSION_STORAGE_KEY,
+          oldValue,
+          storageArea: localStorage,
+        }),
       );
     });
 
@@ -189,9 +189,13 @@ describe('AuthProvider while running', () => {
 
     act(() => {
       const newValue = JSON.stringify({ accessToken: 't', expiresAt: inMinutes(60) });
-      localStorage.setItem(SESSION_KEY, newValue);
+      localStorage.setItem(SESSION_STORAGE_KEY, newValue);
       window.dispatchEvent(
-        new StorageEvent('storage', { key: SESSION_KEY, newValue, storageArea: localStorage }),
+        new StorageEvent('storage', {
+          key: SESSION_STORAGE_KEY,
+          newValue,
+          storageArea: localStorage,
+        }),
       );
     });
 
@@ -213,7 +217,7 @@ describe('AuthProvider while running', () => {
   });
 
   it('logout ends the Session with the backend and routes to the sign-in page', async () => {
-    storeSession('t', inMinutes(60));
+    session.start('t', inMinutes(60));
     const backend = fakeBackend();
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
@@ -222,7 +226,7 @@ describe('AuthProvider while running', () => {
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(backend.calls('/logout')).toBe(1);
-    expect(localStorage.getItem(SESSION_KEY)).toBeNull();
+    expect(localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login');
   });

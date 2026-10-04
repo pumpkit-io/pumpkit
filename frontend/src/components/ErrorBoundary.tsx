@@ -10,7 +10,7 @@ interface State {
   error: Error | null;
 }
 
-class TokenErrorBoundary extends Component<Props, State> {
+class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -51,4 +51,4 @@ class TokenErrorBoundary extends Component<Props, State> {
   }
 }
 
-export { TokenErrorBoundary };
+export { ErrorBoundary };

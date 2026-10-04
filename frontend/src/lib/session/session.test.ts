@@ -12,10 +12,14 @@ vi.mock('@/lib/posthog', () => ({
 import { hardRedirect } from '@/lib/navigation';
 import { resetPostHog } from '@/lib/posthog';
 import { api } from '@/services/apiService';
-import { session } from '@/lib/session';
+import {
+  installRefreshOnUnauthorized,
+  POSTHOG_IDENTIFIED_KEY,
+  SESSION_STORAGE_KEY,
+  session,
+} from '@/lib/session';
 
-const SESSION_KEY = 'pumpkit:session';
-const IDENTIFIED_KEY = 'pumpkit:posthog-identified';
+installRefreshOnUnauthorized();
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 const originalAdapter = api.defaults.adapter;
 
@@ -74,29 +78,93 @@ afterEach(() => {
 describe('refresh', () => {
   it('ends the Session when the refresh is answered 401', async () => {
     session.start('old', inMinutes(5));
-    sessionStorage.setItem(IDENTIFIED_KEY, '1');
+    sessionStorage.setItem(POSTHOG_IDENTIFIED_KEY, '1');
     fakeBackend({ '/refresh-token': refused });
 
     await expect(session.refresh()).rejects.toBeTruthy();
 
-    expect(localStorage.getItem(SESSION_KEY)).toBeNull();
+    expect(localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
     expect(session.get()).toBeNull();
-    expect(sessionStorage.getItem(IDENTIFIED_KEY)).toBeNull();
+    expect(sessionStorage.getItem(POSTHOG_IDENTIFIED_KEY)).toBeNull();
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login');
   });
 
   it('ends the Session with account_suspended when the refresh is answered 401 account_suspended', async () => {
     session.start('old', inMinutes(5));
-    sessionStorage.setItem(IDENTIFIED_KEY, '1');
+    sessionStorage.setItem(POSTHOG_IDENTIFIED_KEY, '1');
     fakeBackend({ '/refresh-token': { status: 401, data: { detail: 'account_suspended' } } });
 
     await expect(session.refresh()).rejects.toBeTruthy();
 
     expect(session.get()).toBeNull();
-    expect(sessionStorage.getItem(IDENTIFIED_KEY)).toBeNull();
+    expect(sessionStorage.getItem(POSTHOG_IDENTIFIED_KEY)).toBeNull();
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login?error=account_suspended');
+  });
+});
+
+describe('starting from a callback fragment', () => {
+  const expiry = encodeURIComponent('2099-01-01T00:00:00+00:00');
+
+  it('starts the Session from a complete fragment', () => {
+    const result = session.startFromFragment(
+      `#access_token=tok&token_type=Bearer&expires_at=${expiry}`,
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(session.get()).toEqual({ accessToken: 'tok', expiresAt: '2099-01-01T00:00:00+00:00' });
+  });
+
+  it.each([
+    ['no fragment', '', 'missing_token'],
+    ['no token', `#token_type=Bearer&expires_at=${expiry}`, 'missing_token'],
+    ['no expiry', '#access_token=tok&token_type=Bearer', 'invalid_expiry'],
+    ['an unparseable expiry', '#access_token=tok&expires_at=soon', 'invalid_expiry'],
+  ])('returns a failure reason for %s and starts nothing', (_label, fragment, reason) => {
+    expect(session.startFromFragment(fragment)).toEqual({ ok: false, reason });
+    expect(session.get()).toBeNull();
+  });
+});
+
+describe('ending once', () => {
+  it('ends the Session once when several concurrent 401s meet a refused refresh', async () => {
+    session.start('old', inMinutes(5));
+    const seen: Array<unknown> = [];
+    const unsubscribe = session.subscribe((s) => seen.push(s));
+    fakeBackend({
+      '/users/me': { status: 401, data: { detail: 'Could not validate credentials' } },
+      '/refresh-token': async () => {
+        await new Promise((r) => setTimeout(r, 0));
+        return refused;
+      },
+    });
+
+    const results = await Promise.allSettled([
+      api.get('/users/me'),
+      api.get('/users/me'),
+      api.get('/users/me'),
+      session.refresh(),
+    ]);
+
+    expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected', 'rejected', 'rejected']);
+    expect(seen).toEqual([null]);
+    expect(resetPostHog).toHaveBeenCalledTimes(1);
+    expect(hardRedirect).toHaveBeenCalledTimes(1);
+    expect(hardRedirect).toHaveBeenCalledWith('/login');
+    unsubscribe();
+  });
+
+  it('ends a newly started Session again', async () => {
+    session.start('first', inMinutes(60));
+    await session.end('other_tab');
+    session.start('second', inMinutes(60));
+
+    await session.end('other_tab');
+
+    expect(session.get()).toBeNull();
+    expect(resetPostHog).toHaveBeenCalledTimes(2);
+    expect(hardRedirect).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -106,13 +174,13 @@ describe('transient refresh failures', () => {
     ['a network error', 'network' as Answer],
   ])('keep the Session in place past expiry on %s', async (_label, answer) => {
     session.start('expired', inMinutes(-5));
-    sessionStorage.setItem(IDENTIFIED_KEY, '1');
+    sessionStorage.setItem(POSTHOG_IDENTIFIED_KEY, '1');
     fakeBackend({ '/refresh-token': answer });
 
     await expect(session.refresh()).rejects.toBeTruthy();
 
     expect(session.get()).toEqual({ accessToken: 'expired', expiresAt: expect.any(String) });
-    expect(sessionStorage.getItem(IDENTIFIED_KEY)).toBe('1');
+    expect(sessionStorage.getItem(POSTHOG_IDENTIFIED_KEY)).toBe('1');
     expect(resetPostHog).not.toHaveBeenCalled();
     expect(hardRedirect).not.toHaveBeenCalled();
   });
@@ -233,16 +301,16 @@ function otherTabWrites(key: string | null, newValue: string | null) {
 describe('other tabs', () => {
   it('ends the Session here with other_tab when another tab clears it', async () => {
     session.start('t', inMinutes(60));
-    sessionStorage.setItem(IDENTIFIED_KEY, '1');
+    sessionStorage.setItem(POSTHOG_IDENTIFIED_KEY, '1');
     const seen: Array<unknown> = [];
     const unsubscribe = session.subscribe((s) => seen.push(s));
     const backend = fakeBackend({});
 
-    otherTabWrites(SESSION_KEY, null);
+    otherTabWrites(SESSION_STORAGE_KEY, null);
 
     await vi.waitFor(() => expect(hardRedirect).toHaveBeenCalledWith('/login'));
     expect(seen).toEqual([null]);
-    expect(sessionStorage.getItem(IDENTIFIED_KEY)).toBeNull();
+    expect(sessionStorage.getItem(POSTHOG_IDENTIFIED_KEY)).toBeNull();
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(backend.sent).toHaveLength(0);
     unsubscribe();
@@ -262,7 +330,7 @@ describe('other tabs', () => {
     const unsubscribe = session.subscribe((s) => seen.push(s));
     const started = { accessToken: 'from-other-tab', expiresAt: inMinutes(30) };
 
-    otherTabWrites(SESSION_KEY, JSON.stringify(started));
+    otherTabWrites(SESSION_STORAGE_KEY, JSON.stringify(started));
 
     expect(seen).toEqual([started]);
     expect(session.get()).toEqual(started);
@@ -298,14 +366,14 @@ describe('signing out', () => {
     ['is unreachable', 'network' as Answer],
   ])('ends the Session even when backend logout %s', async (_label, answer) => {
     session.start('t', inMinutes(60));
-    sessionStorage.setItem(IDENTIFIED_KEY, '1');
+    sessionStorage.setItem(POSTHOG_IDENTIFIED_KEY, '1');
     const backend = fakeBackend({ '/logout': answer });
 
     await session.end('user');
 
     expect(backend.calls('/refresh-token')).toHaveLength(0);
-    expect(localStorage.getItem(SESSION_KEY)).toBeNull();
-    expect(sessionStorage.getItem(IDENTIFIED_KEY)).toBeNull();
+    expect(localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(POSTHOG_IDENTIFIED_KEY)).toBeNull();
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login');
   });
