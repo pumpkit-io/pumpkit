@@ -29,8 +29,6 @@ from app.db.base import Base
 
 
 AuthMethod = Literal[
-    # First-party authentication
-    "local",
     # Third-party authentication
     "google",
     # Passwordless authentication
@@ -94,9 +92,6 @@ class User(Base):
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True)
 
     # Relationships
-    first_party_auth: Mapped[Optional["FirstPartyAuth"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
     third_party_auth: Mapped[list["ThirdPartyAuth"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -112,37 +107,6 @@ class User(Base):
     auth_sessions: Mapped[list["AuthSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    email_verifications: Mapped[list["EmailVerification"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    password_resets: Mapped[list["PasswordReset"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-
-
-class FirstPartyAuth(Base):
-    """
-    Data for first-party authentication, based on email and password
-    """
-
-    __tablename__ = "first_party_auth"
-
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: ulid_with_prefix("first_party_auth")
-    )
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
-
-    # Status
-    is_email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    # Password
-    password_hash: Mapped[str] = mapped_column(String)
-    password_set_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-    # Relationships
-    user: Mapped["User"] = relationship(back_populates="first_party_auth")
 
 
 class ThirdPartyAuth(Base):
@@ -229,61 +193,11 @@ class AuthSession(Base):
     )
 
 
-class EmailVerification(Base):
-    """
-    Email verification for first-party authentication
-    """
-
-    __tablename__ = "email_verifications"
-
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: ulid_with_prefix("email_verification")
-    )
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-
-    # Email verification information
-    email_to_verify: Mapped[str] = mapped_column(String)
-    token_hash: Mapped[str] = mapped_column(String, unique=True)
-    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-
-    # Relationships
-    user: Mapped["User"] = relationship(back_populates="email_verifications")
-
-    __table_args__ = (CheckConstraint("expires_at > sent_at", name="expires_at_gt_sent_at"),)
-
-
-class PasswordReset(Base):
-    """
-    One-time password to reset password for local authentication
-    """
-
-    __tablename__ = "password_resets"
-
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: ulid_with_prefix("password_reset")
-    )
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-
-    # Password reset information
-    token_hash: Mapped[str] = mapped_column(String, unique=True)
-    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-
-    # Relationships
-    user: Mapped["User"] = relationship(back_populates="password_resets")
-
-    __table_args__ = (CheckConstraint("expires_at > sent_at", name="expires_at_gt_sent_at"),)
-
-
 class MagicLink(Base):
     """
     One-time token used to sign a user in via magic link.
 
-    Unlike EmailVerification (which is tied to a specific User row), a MagicLink
-    can exist before the User exists: a request for an unknown email creates a
+    A MagicLink can exist before the User exists: a request for an unknown email creates a
     row with user_id=NULL, and the User is created on consume.
     """
 
