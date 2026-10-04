@@ -1,13 +1,9 @@
-from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_bearer_token, verify_access_token
 from app.db.models import User
-from app.db.session import get_async_db
 
 
 async def get_user_by_email(
@@ -37,44 +33,6 @@ async def create_user(
     """Create a new user in the database"""
     db.add(user)
     await db.commit()
-
-
-async def get_user(
-    token: str = Depends(get_bearer_token), db: AsyncSession = Depends(get_async_db)
-) -> User:
-    """
-    Get the user from the provided JWT token
-    """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    # Verify and decode the JWT token
-    payload = verify_access_token(token)
-    if payload is None:
-        raise credentials_exception
-
-    # Extract user ID from token payload
-    user_id: Optional[str] = payload.get("sub")
-    if user_id is None:
-        raise credentials_exception
-
-    # Get user from database
-    user = await get_user_by_id(db=db, user_id=user_id)
-    if user is None:
-        raise credentials_exception
-
-    # Check if the user account is active
-    if not user.is_active:
-        raise credentials_exception
-
-    # Check if the user is banned
-    if user.banned_until and user.banned_until > datetime.now(timezone.utc):
-        raise credentials_exception
-
-    return user
 
 
 async def update_user_profile(db: AsyncSession, user: User, changes: dict[str, Any]) -> User:

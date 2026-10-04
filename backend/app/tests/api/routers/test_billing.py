@@ -41,3 +41,19 @@ async def test_checkout_unknown_product_is_400(client):
     response = await client.post("/api/v1/billing/purchases/checkout", json={"product_id": "nope"})
     assert response.status_code == 400
     assert "product_id must be one of" in response.json()["detail"]
+
+
+async def test_unexpected_checkout_failure_returns_500_with_captured_error_id(
+    client, monkeypatch, assert_reported_500
+):
+    monkeypatch.setattr(
+        purchases_mediator,
+        "create_checkout_session",
+        AsyncMock(side_effect=RuntimeError("stripe exploded")),
+    )
+
+    response = await client.post(
+        "/api/v1/billing/purchases/checkout", json={"product_id": PRODUCTS[0].id}
+    )
+
+    assert_reported_500(response)

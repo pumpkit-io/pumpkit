@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Request, status
 from fastapi.responses import RedirectResponse
 
-import app.api.mediators.support as support_mediator
-from app.core.logger import logger
+from app.core.config import settings
 from app.core.rate_limit import limiter
 
 router = APIRouter(tags=["support"])
@@ -14,13 +13,12 @@ router = APIRouter(tags=["support"])
 )
 @limiter.limit("60/minute")
 async def support_contact(request: Request) -> RedirectResponse:
-    try:
-        return support_mediator.build_contact_redirect_response()
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("Unexpected error building support contact redirect")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Something went wrong. Please try again later or contact us for support.",
-        )
+    """
+    303-redirect to a mailto: link for the support address. Browsers follow
+    Location: mailto:... transparently, so the anchor on the frontend does
+    not need to know the support address.
+    """
+    return RedirectResponse(
+        url=f"mailto:{settings.RESEND_SUPPORT_ADDRESS}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
