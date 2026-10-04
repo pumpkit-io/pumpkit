@@ -38,12 +38,12 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
-    # A permanently Suspended User can't keep a Session
-    if not user.is_active:
-        raise credentials_exception
-
-    # A Suspended User can't keep a Session until the suspension ends
-    if user.banned_until and user.banned_until > datetime.now(timezone.utc):
+    # A Suspended User can't keep a Session until the suspension ends.
+    # Postgres returns an aware datetime; SQLite drops the offset, and values are stored in UTC.
+    suspended_until = user.suspended_until
+    if suspended_until and suspended_until.tzinfo is None:
+        suspended_until = suspended_until.replace(tzinfo=timezone.utc)
+    if suspended_until and suspended_until > datetime.now(timezone.utc):
         raise credentials_exception
 
     return user

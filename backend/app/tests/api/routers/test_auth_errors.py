@@ -1,9 +1,9 @@
 import resend
 from fastapi import HTTPException, status
 
-import app.api.mediators.auth_sessions as auth_sessions_mediator
 import app.api.mediators.magic_link_auth as magic_link_auth_mediator
-import app.api.services.auth_sessions as auth_sessions_service
+import app.api.mediators.sessions as sessions_mediator
+import app.api.services.refresh_tokens as refresh_tokens_service
 from app.core.security import create_refresh_token
 
 
@@ -14,7 +14,7 @@ async def _boom(**_kwargs):
 async def test_unexpected_auth_error_returns_500_with_error_id_captured_once(
     client, monkeypatch, assert_reported_500
 ):
-    monkeypatch.setattr(auth_sessions_mediator, "refresh_token", _boom)
+    monkeypatch.setattr(sessions_mediator, "refresh_token", _boom)
 
     response = await client.post("/api/v1/refresh-token")
 
@@ -29,7 +29,7 @@ async def test_intentional_http_exception_passes_through_uncaptured(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing"
         )
 
-    monkeypatch.setattr(auth_sessions_mediator, "refresh_token", _unauthorized)
+    monkeypatch.setattr(sessions_mediator, "refresh_token", _unauthorized)
 
     response = await client.post("/api/v1/refresh-token")
 
@@ -49,7 +49,7 @@ async def test_logout_without_session_succeeds(client, fake_posthog):
 async def test_unexpected_logout_failure_reaches_global_handler(
     client, monkeypatch, user, assert_reported_500
 ):
-    monkeypatch.setattr(auth_sessions_service, "revoke_all_user_auth_sessions", _boom)
+    monkeypatch.setattr(refresh_tokens_service, "revoke_all_user_sessions", _boom)
     refresh_token = create_refresh_token(data={"sub": user.id, "email": user.email})
 
     client.cookies.set("refresh_token", refresh_token)

@@ -9,8 +9,8 @@ from fastapi import Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import app.api.services.auth_sessions as auth_sessions_service
 import app.api.services.magic_link_auth as magic_link_auth_service
+import app.api.services.refresh_tokens as refresh_tokens_service
 import app.api.services.users as user_service
 from app.core.config import settings
 from app.core.ids import ulid_with_prefix
@@ -183,11 +183,11 @@ async def complete_magic_link(
     refresh_token = create_refresh_token(
         data={"sub": user.id, "email": user.email},
     )
-    await auth_sessions_service.create_auth_session(
+    await refresh_tokens_service.create_refresh_token(
         db=db,
         user_id=user.id,
         refresh_token=refresh_token,
-        auth_method="magic_link",
+        sign_in_method="magic_link",
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
