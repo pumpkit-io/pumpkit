@@ -1,37 +1,24 @@
-import re
-from unittest.mock import MagicMock
-
-import pytest
+import resend
 from fastapi import HTTPException, status
 
 import app.api.mediators.auth_sessions as auth_sessions_mediator
 import app.api.mediators.magic_link_auth as magic_link_auth_mediator
-import app.core.exceptions as exceptions_module
+import app.api.services.auth_sessions as auth_sessions_service
+from app.core.security import create_refresh_token
 
 
-@pytest.fixture
-def fake_posthog(monkeypatch) -> MagicMock:
-    fake = MagicMock()
-    monkeypatch.setattr(exceptions_module, "posthog_client", fake)
-    return fake
+async def _boom(**_kwargs):
+    raise RuntimeError("kaboom")
 
 
 async def test_unexpected_auth_error_returns_500_with_error_id_captured_once(
-    client, monkeypatch, fake_posthog
+    client, monkeypatch, assert_reported_500
 ):
-    async def _boom(**_kwargs):
-        raise RuntimeError("kaboom")
-
     monkeypatch.setattr(auth_sessions_mediator, "refresh_token", _boom)
 
     response = await client.post("/api/v1/refresh-token")
 
-    assert response.status_code == 500
-    error_id = response.json()["error_id"]
-    assert re.fullmatch(r"[0-9a-f]{8}", error_id)
-    fake_posthog.capture_exception.assert_called_once()
-    _, kwargs = fake_posthog.capture_exception.call_args
-    assert kwargs["properties"]["error_id"] == error_id
+    assert_reported_500(response)
 
 
 async def test_intentional_http_exception_passes_through_uncaptured(
@@ -51,31 +38,72 @@ async def test_intentional_http_exception_passes_through_uncaptured(
     fake_posthog.capture_exception.assert_not_called()
 
 
-async def test_invalid_magic_link_redirects_to_login_error_page(client, monkeypatch, fake_posthog):
-    async def _invalid(**_kwargs):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+async def test_logout_without_session_succeeds(client, fake_posthog):
+    response = await client.post("/api/v1/logout")
 
-    monkeypatch.setattr(magic_link_auth_mediator, "complete_magic_link", _invalid)
+    assert response.status_code == 200
+    assert response.json() == {"message": "Logged out successfully"}
+    fake_posthog.capture_exception.assert_not_called()
 
-    response = await client.get("/api/v1/login/magic-link", params={"token": "bad"})
+
+async def test_unexpected_logout_failure_reaches_global_handler(
+    client, monkeypatch, user, assert_reported_500
+):
+    monkeypatch.setattr(auth_sessions_service, "revoke_all_user_auth_sessions", _boom)
+    refresh_token = create_refresh_token(data={"sub": user.id, "email": user.email})
+
+    client.cookies.set("refresh_token", refresh_token)
+
+    response = await client.post("/api/v1/logout")
+
+    assert_reported_500(response)
+
+
+async def test_magic_link_email_send_failure_reaches_global_handler(
+    client, monkeypatch, assert_reported_500
+):
+    def _send_fails(_params):
+        raise RuntimeError("resend is down")
+
+    monkeypatch.setattr(resend.Emails, "send", _send_fails)
+
+    response = await client.post(
+        "/api/v1/login/magic-link/request", json={"email": "bob@example.com"}
+    )
+
+    assert_reported_500(response)
+
+
+async def test_invalid_magic_link_redirects_to_login_error_page(client, fake_posthog):
+    response = await client.get("/api/v1/login/magic-link", params={"token": "not-a-real-token"})
 
     assert response.status_code == 303
     assert response.headers["location"] == "http://localhost:5173/login?error=invalid_magic_link"
     fake_posthog.capture_exception.assert_not_called()
 
 
-async def test_unexpected_magic_link_error_reaches_global_handler(
+async def test_other_http_exception_on_magic_link_is_not_turned_into_a_redirect(
     client, monkeypatch, fake_posthog
 ):
-    async def _boom(**_kwargs):
-        raise RuntimeError("kaboom")
+    async def _unavailable(**_kwargs):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Try again later"
+        )
 
+    monkeypatch.setattr(magic_link_auth_mediator, "complete_magic_link", _unavailable)
+
+    response = await client.get("/api/v1/login/magic-link", params={"token": "whatever"})
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Try again later"}
+    fake_posthog.capture_exception.assert_not_called()
+
+
+async def test_unexpected_magic_link_error_reaches_global_handler(
+    client, monkeypatch, assert_reported_500
+):
     monkeypatch.setattr(magic_link_auth_mediator, "complete_magic_link", _boom)
 
     response = await client.get("/api/v1/login/magic-link", params={"token": "whatever"})
 
-    assert response.status_code == 500
-    error_id = response.json()["error_id"]
-    fake_posthog.capture_exception.assert_called_once()
-    _, kwargs = fake_posthog.capture_exception.call_args
-    assert kwargs["properties"]["error_id"] == error_id
+    assert_reported_500(response)

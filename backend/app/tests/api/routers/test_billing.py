@@ -1,8 +1,7 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import app.api.mediators.purchases as purchases_mediator
-import app.core.exceptions as exceptions_module
 from app.core.purchases import PRODUCTS
 
 
@@ -44,20 +43,17 @@ async def test_checkout_unknown_product_is_400(client):
     assert "product_id must be one of" in response.json()["detail"]
 
 
-async def test_unexpected_checkout_failure_returns_500_with_captured_error_id(client, monkeypatch):
+async def test_unexpected_checkout_failure_returns_500_with_captured_error_id(
+    client, monkeypatch, assert_reported_500
+):
     monkeypatch.setattr(
         purchases_mediator,
         "create_checkout_session",
         AsyncMock(side_effect=RuntimeError("stripe exploded")),
     )
-    fake_posthog = MagicMock()
-    monkeypatch.setattr(exceptions_module, "posthog_client", fake_posthog)
 
     response = await client.post(
         "/api/v1/billing/purchases/checkout", json={"product_id": PRODUCTS[0].id}
     )
 
-    assert response.status_code == 500
-    error_id = response.json()["error_id"]
-    fake_posthog.capture_exception.assert_called_once()
-    assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
+    assert_reported_500(response)

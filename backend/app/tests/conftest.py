@@ -52,9 +52,14 @@ _TEST_ENV = {
 for _key, _value in _TEST_ENV.items():
     os.environ.setdefault(_key, _value)
 
+import re  # noqa: E402
+from typing import Callable  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from fastapi import Depends  # noqa: E402
-from httpx import ASGITransport, AsyncClient  # noqa: E402
+from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
 from sqlalchemy import event  # noqa: E402
 from sqlalchemy.ext.asyncio import (  # noqa: E402
     AsyncSession,
@@ -63,6 +68,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 from sqlalchemy.pool import NullPool  # noqa: E402
 
+import app.core.exceptions as exceptions_module  # noqa: E402
 from app.api.dependencies import get_current_user  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
@@ -142,3 +148,28 @@ async def client(db_session_maker, user):
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fake_posthog(monkeypatch) -> MagicMock:
+    """Replace the PostHog client the global handler captures exceptions with."""
+    fake = MagicMock()
+    monkeypatch.setattr(exceptions_module, "posthog_client", fake)
+    return fake
+
+
+@pytest.fixture
+def assert_reported_500(fake_posthog) -> Callable[[Response], None]:
+    """
+    Assert the global handler's contract: a 500 whose body carries an
+    `error_id`, captured in PostHog exactly once under that same ID.
+    """
+
+    def _assert(response: Response) -> None:
+        assert response.status_code == 500
+        error_id = response.json()["error_id"]
+        assert re.fullmatch(r"[0-9a-f]{8}", error_id)
+        fake_posthog.capture_exception.assert_called_once()
+        assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
+
+    return _assert

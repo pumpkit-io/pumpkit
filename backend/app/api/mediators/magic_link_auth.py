@@ -5,7 +5,7 @@ from typing import Optional
 from urllib.parse import quote, urlencode
 
 import resend
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +41,10 @@ _LOGO_PATH = (
 )
 _LOGO_CONTENT_ID = "app-logo"
 _LOGO_BASE64 = base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
+
+
+class RejectedMagicLinkError(Exception):
+    """A Magic link that can't sign anyone in: missing, unknown, already used or expired."""
 
 
 async def request_magic_link(
@@ -83,38 +87,32 @@ async def request_magic_link(
     )
     await magic_link_auth_service.create_magic_link(db=db, magic_link=magic_link)
 
-    # Send the email with the magic link.
+    # Send the email with the magic link. A failed send is unexpected and
+    # reaches the global handler.
     magic_url = f"{settings.BACKEND_URL}/api/v1/login/magic-link?token={token}"
-    try:
-        resend.Emails.send(
-            {
-                "from": f"{settings.APP_NAME} <{settings.RESEND_NOREPLY_ADDRESS}>",
-                "to": [email],
-                "subject": f"Sign in to {settings.APP_NAME}",
-                "html": templates_helper.render_template(
-                    "emails/magic_link.html",
-                    display_name=user.display_name if user else "",
-                    magic_url=magic_url,
-                    expires_in_minutes=settings.MAGIC_LINK_TOKEN_DURATION_MINUTES,
-                    app_name=settings.APP_NAME,
-                    logo_cid=_LOGO_CONTENT_ID,
-                ),
-                "attachments": [
-                    {
-                        "filename": "logo.png",
-                        "content": _LOGO_BASE64,
-                        "content_type": "image/png",
-                        "content_id": _LOGO_CONTENT_ID,
-                    }
-                ],
-            }
-        )
-    except Exception:
-        logger.exception("Failed to send magic-link email to %s", email)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="We couldn't send the sign-in link. Please try again later.",
-        )
+    resend.Emails.send(
+        {
+            "from": f"{settings.APP_NAME} <{settings.RESEND_NOREPLY_ADDRESS}>",
+            "to": [email],
+            "subject": f"Sign in to {settings.APP_NAME}",
+            "html": templates_helper.render_template(
+                "emails/magic_link.html",
+                display_name=user.display_name if user else "",
+                magic_url=magic_url,
+                expires_in_minutes=settings.MAGIC_LINK_TOKEN_DURATION_MINUTES,
+                app_name=settings.APP_NAME,
+                logo_cid=_LOGO_CONTENT_ID,
+            ),
+            "attachments": [
+                {
+                    "filename": "logo.png",
+                    "content": _LOGO_BASE64,
+                    "content_type": "image/png",
+                    "content_id": _LOGO_CONTENT_ID,
+                }
+            ],
+        }
+    )
 
     return MessageResponse(message=_GENERIC_REQUEST_MESSAGE)
 
@@ -131,9 +129,7 @@ async def complete_magic_link(
     """
 
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Magic link token is required."
-        )
+        raise RejectedMagicLinkError("Magic link token is required.")
 
     # Get and validate the magic link by the token hash.
     token_hash = hash_token(token)
@@ -143,21 +139,15 @@ async def complete_magic_link(
 
     if not magic_link:
         logger.error("Magic link login failed: invalid token (hash=%s...)", token_hash[:8])
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired magic link."
-        )
+        raise RejectedMagicLinkError("Invalid or expired magic link.")
 
     if magic_link.consumed_at:
         logger.error("Magic link login failed: token already used (id=%s)", magic_link.id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="This magic link has already been used."
-        )
+        raise RejectedMagicLinkError("This magic link has already been used.")
 
     if magic_link.expires_at <= datetime.now(timezone.utc):
         logger.error("Magic link login failed: token expired (id=%s)", magic_link.id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="This magic link has expired."
-        )
+        raise RejectedMagicLinkError("This magic link has expired.")
 
     # Atomically consume the row to prevent race conditions
     consumed = await magic_link_auth_service.atomically_consume_magic_link(
@@ -166,9 +156,7 @@ async def complete_magic_link(
     if consumed is None:
         # Race: another concurrent request consumed it
         logger.error("Magic link login failed: token consumed in race (id=%s)", magic_link.id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="This magic link has already been used."
-        )
+        raise RejectedMagicLinkError("This magic link has already been used.")
 
     # Resolve the user and create it in the database if it doesn't exist yet.
     # The email used for identity resolution comes from the consumed MagicLink row,

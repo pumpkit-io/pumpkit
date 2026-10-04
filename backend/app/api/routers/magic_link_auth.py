@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,16 +37,15 @@ async def login_magic_link(
     token: str,
     db: AsyncSession = Depends(get_async_db),
 ) -> RedirectResponse:
-    # The browser lands here from an email link, so a rejected link (the
-    # mediator's HTTPException) goes to the login error page instead of JSON.
-    # Anything else is unexpected and reaches the global handler.
+    # The browser lands here from an email link, so a rejected Magic link goes
+    # to the login error page instead of JSON. Any other error propagates.
     try:
         return await magic_link_auth_mediator.complete_magic_link(
             token=token,
             request=request,
             db=db,
         )
-    except HTTPException:
+    except magic_link_auth_mediator.RejectedMagicLinkError:
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/login?error=invalid_magic_link",
             status_code=status.HTTP_303_SEE_OTHER,
