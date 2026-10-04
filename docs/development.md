@@ -5,7 +5,7 @@
 ```
 backend/app/
   api/routers/     HTTP endpoints only: auth deps, parsing, response shaping
-  api/mediators/   orchestration across services (webhook dispatch, purchases, auth flows)
+  api/mediators/   orchestration across services (webhook dispatch, purchases, Google and Magic link sign-in)
   api/services/    one resource or capability each: DB access, Stripe, users, tokens
   api/hooks/       extension points you implement (purchase hooks)
   api/configs/     third-party provider configuration (Google)
