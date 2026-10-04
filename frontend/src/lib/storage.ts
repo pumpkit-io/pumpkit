@@ -1,6 +1,6 @@
 import { APP_SLUG } from './app';
 
-export type StorageKey = 'theme' | 'sidebar-collapsed' | 'posthog-identified';
+export type StorageKey = 'theme' | 'sidebar-collapsed' | 'posthog-identified' | 'session';
 
 export function storageKey(key: StorageKey): string {
   return `${APP_SLUG}:${key}`;

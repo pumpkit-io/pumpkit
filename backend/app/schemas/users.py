@@ -13,6 +13,7 @@ _AVATAR_DATA_URL_PATTERN = re.compile(r"data:image/(jpeg|png|webp);base64,[A-Za-
 class UserProfileResponse(BaseModel):
     """Response payload containing the current user's basic profile information."""
 
+    id: str
     email: EmailStr
     first_name: Optional[str]
     last_name: Optional[str]

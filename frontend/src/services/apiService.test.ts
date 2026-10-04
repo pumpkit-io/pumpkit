@@ -1,127 +1,95 @@
-import { AxiosError, type AxiosAdapter, type InternalAxiosRequestConfig } from 'axios';
+import type { InternalAxiosRequestConfig } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn() }));
-
-import { hardRedirect } from '@/lib/navigation';
+import { SESSION_STORAGE_KEY } from '@/lib/session/store';
 import { api, performRefresh } from './apiService';
 
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 const originalAdapter = api.defaults.adapter;
 
-function adapter(statusByUrl: Record<string, number | 'network'>): AxiosAdapter {
-  return async (config: InternalAxiosRequestConfig) => {
-    const outcome = statusByUrl[config.url ?? ''] ?? 200;
-    if (outcome === 'network') {
-      throw new AxiosError('Network Error', 'ERR_NETWORK', config);
-    }
-    if (outcome >= 400) {
-      throw new AxiosError('fail', String(outcome), config, null, {
-        status: outcome,
-        statusText: '',
-        data: {},
-        headers: {},
-        config,
-      });
-    }
-    const data =
-      config.url === '/refresh-token'
-        ? { access_token: 'refreshed', expires_at: inMinutes(30) }
-        : { ok: true };
+const storedSession = () => JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) ?? 'null');
+const storeSession = (accessToken: string, expiresAt: string) =>
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ accessToken, expiresAt }));
+
+/** Fakes HTTP at the axios adapter; /refresh-token answers with `token`. */
+function fakeRefresh(token: string) {
+  const sent: string[] = [];
+  api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+    sent.push(config.url ?? '');
+    await new Promise((r) => setTimeout(r, 0));
+    const data = { access_token: token, token_type: 'Bearer', expires_at: inMinutes(30) };
     return { data, status: 200, statusText: 'OK', headers: {}, config };
   };
+  return { refreshCalls: () => sent.filter((url) => url === '/refresh-token').length };
 }
 
 describe('performRefresh', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => {
-    vi.restoreAllMocks();
+    api.defaults.adapter = originalAdapter;
     vi.unstubAllGlobals();
   });
 
-  it('collapses concurrent calls into one request', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({
-      data: { access_token: 'new', expires_at: inMinutes(30) },
-    } as never);
+  it('collapses concurrent calls into one request and stores the new Session', async () => {
+    const backend = fakeRefresh('new');
     const [a, b] = await Promise.all([performRefresh(), performRefresh()]);
     expect([a, b]).toEqual(['new', 'new']);
-    expect(post).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem('auth_token')).toBe('new');
+    expect(backend.refreshCalls()).toBe(1);
+    expect(storedSession()).toEqual({ accessToken: 'new', expiresAt: expect.any(String) });
   });
 
   it('skips the network call when another tab refreshed while waiting for the lock', async () => {
-    localStorage.setItem('auth_token', 'old');
-    localStorage.setItem('token_expires_at', inMinutes(5));
+    storeSession('old', inMinutes(5));
     vi.stubGlobal('navigator', {
       ...navigator,
       locks: {
-        request: vi.fn(async (_name: string, cb: () => Promise<unknown>) => {
-          localStorage.setItem('auth_token', 'from-other-tab');
-          localStorage.setItem('token_expires_at', inMinutes(30));
+        request: async (_name: string, cb: () => Promise<unknown>) => {
+          storeSession('from-other-tab', inMinutes(30));
           return cb();
-        }),
+        },
       },
     });
-    const post = vi.spyOn(api, 'post');
+    const backend = fakeRefresh('new');
     await expect(performRefresh()).resolves.toBe('from-other-tab');
-    expect(post).not.toHaveBeenCalled();
+    expect(backend.refreshCalls()).toBe(0);
   });
 
   it('refreshes over the network when the token is valid but nobody else refreshed', async () => {
-    localStorage.setItem('auth_token', 'old');
-    localStorage.setItem('token_expires_at', inMinutes(5));
-    const post = vi.spyOn(api, 'post').mockResolvedValue({
-      data: { access_token: 'new', expires_at: inMinutes(30) },
-    } as never);
+    storeSession('old', inMinutes(5));
+    const backend = fakeRefresh('new');
     await expect(performRefresh()).resolves.toBe('new');
-    expect(post).toHaveBeenCalledTimes(1);
+    expect(backend.refreshCalls()).toBe(1);
   });
 
   it('serializes through the app-scoped navigator lock', async () => {
-    const request = vi.fn((_name: string, cb: () => Promise<unknown>) => cb());
-    vi.stubGlobal('navigator', { ...navigator, locks: { request } });
-    vi.spyOn(api, 'post').mockResolvedValue({
-      data: { access_token: 'new', expires_at: inMinutes(30) },
-    } as never);
+    const lockNames: string[] = [];
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: {
+        request: (name: string, cb: () => Promise<unknown>) => {
+          lockNames.push(name);
+          return cb();
+        },
+      },
+    });
+    fakeRefresh('new');
     await performRefresh();
-    expect(request.mock.calls[0][0]).toBe('pumpkit:refresh-token');
+    expect(lockNames).toEqual(['pumpkit:refresh-token']);
   });
 });
 
-describe('401 interceptor', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.mocked(hardRedirect).mockClear();
-    localStorage.setItem('auth_token', 'old');
-    localStorage.setItem('token_expires_at', inMinutes(5));
-  });
+describe('request interceptor', () => {
   afterEach(() => {
     api.defaults.adapter = originalAdapter;
   });
 
-  it('retries the request with the refreshed token', async () => {
-    let calls = 0;
-    const base = adapter({});
+  it('sends the Session access token as a bearer token', async () => {
+    storeSession('t', inMinutes(30));
+    let authorization: unknown;
     api.defaults.adapter = async (config) => {
-      if (config.url === '/users/me' && calls++ === 0) return adapter({ '/users/me': 401 })(config);
-      return base(config);
+      authorization = config.headers?.Authorization;
+      return { data: {}, status: 200, statusText: 'OK', headers: {}, config };
     };
-    const response = await api.get('/users/me');
-    expect(response.data).toEqual({ ok: true });
-    expect(localStorage.getItem('auth_token')).toBe('refreshed');
-  });
-
-  it('signs out when /refresh-token returns 401', async () => {
-    api.defaults.adapter = adapter({ '/users/me': 401, '/refresh-token': 401 });
-    await expect(api.get('/users/me')).rejects.toBeTruthy();
-    expect(localStorage.getItem('auth_token')).toBeNull();
-    expect(hardRedirect).toHaveBeenCalledWith('/login');
-  });
-
-  it('keeps the session when refresh fails for a network error', async () => {
-    api.defaults.adapter = adapter({ '/users/me': 401, '/refresh-token': 'network' });
-    await expect(api.get('/users/me')).rejects.toBeTruthy();
-    expect(localStorage.getItem('auth_token')).toBe('old');
-    expect(hardRedirect).not.toHaveBeenCalled();
+    await api.get('/users/me');
+    expect(authorization).toBe('Bearer t');
   });
 });

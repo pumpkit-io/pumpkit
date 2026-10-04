@@ -1,6 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import { APP_SLUG } from '@/lib/app';
-import { hardRedirect } from '@/lib/navigation';
+import { readSession, writeSession } from '@/lib/session/store';
 
 // Create a shared axios instance with token refresh functionality
 const api = axios.create({
@@ -31,8 +31,9 @@ const api = axios.create({
 //      call. A token that is merely unexpired is NOT proof of a refresh, so
 //      proactive and post-401 refreshes still reach /refresh-token.
 //
-// Both the response interceptor (on 401) and authService.refreshToken delegate
-// to performRefresh — there is exactly one path to /refresh-token.
+// The Session module (`@/lib/session`) delegates every refresh (bootstrap,
+// periodic, focus and the 401 interceptor) to performRefresh — there is
+// exactly one path to /refresh-token.
 // =============================================================================
 
 const REFRESH_LOCK_NAME = `${APP_SLUG}:refresh-token`;
@@ -50,34 +51,26 @@ async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
   return fn();
 }
 
-function readStoredToken(): { token: string | null; expiresAt: string | null } {
-  return {
-    token: localStorage.getItem('auth_token'),
-    expiresAt: localStorage.getItem('token_expires_at'),
-  };
-}
-
 function tokenStillFreshFor(seconds: number): boolean {
-  const { token, expiresAt } = readStoredToken();
-  if (!token || !expiresAt) return false;
-  return new Date(expiresAt).getTime() > Date.now() + seconds * 1000;
+  const session = readSession();
+  if (!session) return false;
+  return new Date(session.expiresAt).getTime() > Date.now() + seconds * 1000;
 }
 
 export function performRefresh(): Promise<string> {
   if (refreshInFlight) return refreshInFlight;
-  const observed = localStorage.getItem('auth_token');
+  const observed = readSession()?.accessToken ?? null;
   refreshInFlight = withRefreshLock(async () => {
     // Another tab may have refreshed while we were waiting. If so, skip the
-    // network call — the cookie has already been rotated and our localStorage
-    // has the new access token.
-    const stored = readStoredToken().token;
+    // network call — the cookie has already been rotated and storage has the
+    // new access token.
+    const stored = readSession()?.accessToken ?? null;
     if (stored && stored !== observed && tokenStillFreshFor(30)) {
       return stored;
     }
     const response = await api.post('/refresh-token');
     const { access_token, expires_at } = response.data;
-    localStorage.setItem('auth_token', access_token);
-    localStorage.setItem('token_expires_at', expires_at);
+    writeSession({ accessToken: access_token, expiresAt: expires_at });
     return access_token;
   }).finally(() => {
     refreshInFlight = null;
@@ -85,102 +78,19 @@ export function performRefresh(): Promise<string> {
   return refreshInFlight;
 }
 
-// =============================================================================
-// 401 retry queue: serializes other in-flight requests that 401'd while a
-// refresh is happening, so they retry with the new token after refresh.
-// =============================================================================
-
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (value: any) => void;
-  reject: (error: any) => void;
-}> = [];
-
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) {
-      reject(error);
-    } else {
-      resolve(token);
-    }
-  });
-  failedQueue = [];
-};
-
-// Add auth token to requests if available
+// Add the access token to requests if there is a Session. The 401 → refresh →
+// retry response interceptor lives in the Session module (`@/lib/session`),
+// which owns the sign-out rule; `main.tsx` installs it with
+// `installRefreshOnUnauthorized()`.
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const session = readSession();
+    if (session) {
+      config.headers.Authorization = `Bearer ${session.accessToken}`;
     }
     return config;
   },
   (error) => {
-    return Promise.reject(error);
-  },
-);
-
-// Add response interceptor with automatic token refresh
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    const requestUrl = originalRequest?.url ?? '';
-
-    // Skip retry/refresh logic for auth endpoints that expect 401s
-    if (['/login', '/refresh-token'].some((path) => requestUrl?.includes(path))) {
-      return Promise.reject(error);
-    }
-
-    // If error is 401 and we haven't already tried to refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch((err) => {
-            return Promise.reject(err);
-          });
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      try {
-        const newToken = await performRefresh();
-        processQueue(null, newToken);
-
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
-      } catch (refreshError: any) {
-        processQueue(refreshError, null);
-
-        // A 401 from /refresh-token is unambiguous: the session is dead and
-        // no retry will fix it. Clear local auth state and bounce to /login.
-        // For non-401 failures (network, 5xx) we keep the session in place —
-        // the still-valid access token can be used until it actually expires.
-        const refreshStatus = refreshError?.response?.status;
-        const expiresAt = localStorage.getItem('token_expires_at');
-        const accessTokenLooksExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
-        const accessTokenMissing = !localStorage.getItem('auth_token');
-        const mustSignOut = refreshStatus === 401 || accessTokenMissing || accessTokenLooksExpired;
-
-        if (mustSignOut) {
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('token_expires_at');
-          hardRedirect('/login');
-        }
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
-      }
-    }
-
     return Promise.reject(error);
   },
 );

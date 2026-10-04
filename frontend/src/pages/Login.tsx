@@ -4,11 +4,19 @@ import { Button } from '../components/ui/button';
 import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
 import { authService } from '../services/authService';
 import { track } from '../lib/analytics';
+import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
 
 function emailDomain(email: string): string {
   const at = email.lastIndexOf('@');
   return at >= 0 ? email.slice(at + 1).toLowerCase() : 'unknown';
 }
+
+const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
+  [SIGN_IN_ERROR.invalidMagicLink]:
+    'That sign-in link is invalid or has expired. Please request a new one.',
+  [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
+  [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Please try again.",
+};
 
 export function Login() {
   const location = useLocation();
@@ -18,12 +26,12 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    if (urlParams.get('error') === 'invalid_magic_link') {
-      setError('That sign-in link is invalid or has expired. Please request a new one.');
-      track('login_magic_link_invalid_shown');
-      window.history.replaceState({}, document.title, location.pathname);
-    }
+    const code = new URLSearchParams(location.search).get('error');
+    if (!isSignInErrorCode(code)) return;
+    setError(SIGN_IN_ERROR_MESSAGES[code]);
+    if (code === SIGN_IN_ERROR.invalidMagicLink) track('login_magic_link_invalid_shown');
+    // Drop the code from the URL so a reload doesn't show the message again.
+    window.history.replaceState({}, document.title, location.pathname);
   }, [location.search, location.pathname]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,7 +96,10 @@ export function Login() {
                   />
                 </div>
                 {error && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
+                  >
                     {error}
                   </div>
                 )}

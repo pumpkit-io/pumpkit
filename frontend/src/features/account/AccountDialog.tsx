@@ -107,7 +107,7 @@ export function AccountDialog() {
       setProfile(next);
       // Refresh the PostHog person profile so updated name lands server-side
       // without waiting for the next browser session.
-      identifyUser(next.email, {
+      identifyUser(next.id, {
         email: next.email,
         first_name: next.firstName,
         last_name: next.lastName,
