@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -26,13 +27,19 @@ async def get_user_by_id(
     return result.scalar_one_or_none()
 
 
+@dataclass(frozen=True)
+class NameHints:
+    """Names a Sign-in method suggests for a User, used only to fill empty profile fields."""
+
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    display_name: Optional[str] = None
+
+
 async def resolve_user_by_verified_email(
     db: AsyncSession,
     email: str,
-    *,
-    first_name: Optional[str] = None,
-    last_name: Optional[str] = None,
-    display_name: Optional[str] = None,
+    hints: NameHints = NameHints(),
 ) -> User:
     """
     The User a Sign-in method has proven owns this email: found, or created.
@@ -46,34 +53,28 @@ async def resolve_user_by_verified_email(
     if user is None:
         user = User(
             email=normalized_email,
-            display_name=display_name or normalized_email.split("@", 1)[0],
-            first_name=first_name,
-            last_name=last_name,
+            display_name=hints.display_name or normalized_email.split("@", 1)[0],
+            first_name=hints.first_name,
+            last_name=hints.last_name,
             is_admin=False,
         )
         db.add(user)
         await db.flush()
         return user
 
-    fill_empty_profile(user, first_name=first_name, last_name=last_name, display_name=display_name)
+    fill_empty_profile(user, hints)
     await db.flush()
     return user
 
 
-def fill_empty_profile(
-    user: User,
-    *,
-    first_name: Optional[str] = None,
-    last_name: Optional[str] = None,
-    display_name: Optional[str] = None,
-) -> None:
+def fill_empty_profile(user: User, hints: NameHints) -> None:
     """Fill the User's empty profile fields from name hints, never overwriting what they have."""
-    if not user.first_name and first_name:
-        user.first_name = first_name
-    if not user.last_name and last_name:
-        user.last_name = last_name
-    if not user.display_name and display_name:
-        user.display_name = display_name
+    if not user.first_name and hints.first_name:
+        user.first_name = hints.first_name
+    if not user.last_name and hints.last_name:
+        user.last_name = hints.last_name
+    if not user.display_name and hints.display_name:
+        user.display_name = hints.display_name
 
 
 async def update_user_profile(db: AsyncSession, user: User, changes: dict[str, Any]) -> User:

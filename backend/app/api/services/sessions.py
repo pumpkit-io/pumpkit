@@ -5,14 +5,14 @@ Every Sign-in method starts a Session here, `/refresh-token` rotates it and
 `/logout` ends it. This module alone owns the token claims, the refresh cookie
 (name, `__Host-` prefix, attributes), the callback fragment format, rotation
 with reuse detection, and the suspension rule (`may_hold_session`). It flushes
-and never commits: the calling mediator commits once, including after a refusal,
-because some refusals revoke Sessions.
+and never commits: the calling mediator commits once, including after a refused
+Rotate, because those refusals revoke Sessions.
 """
 
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from urllib.parse import urlencode
 
 from fastapi import Request, status
@@ -41,6 +41,17 @@ def _refresh_cookie_name() -> str:
     # In production the "__Host-" prefix makes the browser accept the cookie only
     # over HTTPS, with path "/" and no domain attribute.
     return "__Host-refresh_token" if settings.is_env_production() else "refresh_token"
+
+
+def _refresh_cookie_attributes() -> dict[str, Any]:
+    """The refresh cookie's attributes, the same where it is set and where it is cleared."""
+    return {
+        "key": _refresh_cookie_name(),
+        "path": "/",
+        "httponly": True,  # Out of reach of page scripts (XSS)
+        "secure": settings.is_env_production(),
+        "samesite": "lax",
+    }
 
 
 @dataclass(frozen=True)
@@ -101,13 +112,9 @@ class IssuedSession:
 
     def _set_refresh_cookie(self, response: Union[JSONResponse, RedirectResponse]) -> None:
         response.set_cookie(
-            key=_refresh_cookie_name(),
             value=self.refresh_token,
             max_age=settings.COOKIE_MAX_AGE_SECONDS,
-            httponly=True,  # Out of reach of page scripts (XSS)
-            secure=settings.is_env_production(),
-            samesite="lax",
-            path="/",
+            **_refresh_cookie_attributes(),
         )
 
 
@@ -122,7 +129,10 @@ class RefusalReason(enum.Enum):
 
 @dataclass(frozen=True)
 class SessionRefusal:
-    """A refused Start or Rotate. Commit before responding: a refusal may have revoked Sessions."""
+    """
+    A refused Start or Rotate. A refused Start wrote nothing, so the sign-in can
+    roll back. A refused Rotate may have revoked Sessions: commit before responding.
+    """
 
     reason: RefusalReason
 
@@ -143,10 +153,18 @@ class SessionRefusal:
 
     def as_sign_in_redirect(self) -> RedirectResponse:
         """The answer to a refused browser sign-in: the sign-in page with the refusal code."""
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error={self.code}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+        return sign_in_error_redirect(self.code)
+
+
+def sign_in_error_redirect(code: str) -> RedirectResponse:
+    """
+    Where a browser sign-in that didn't start a Session lands: the frontend's
+    sign-in page with a machine-readable error code (e.g. `sign_in_failed`).
+    """
+    return RedirectResponse(
+        url=f"{settings.FRONTEND_URL}/login?error={code}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 SessionResult = Union[IssuedSession, SessionRefusal]
@@ -197,6 +215,16 @@ async def rotate(
     if presented is None or presented.user_id != user_id:
         return SessionRefusal(RefusalReason.INVALID)
 
+    user = await user_service.get_user_by_id(db=db, user_id=user_id)
+    if user is None:
+        return SessionRefusal(RefusalReason.INVALID)
+
+    # Suspension comes first: whatever token a Suspended User presents (even an
+    # already-rotated or revoked one), every one of their Sessions ends.
+    if not may_hold_session(user):
+        await refresh_tokens_service.revoke_all_user_sessions(db=db, user_id=user.id)
+        return SessionRefusal(RefusalReason.SUSPENDED)
+
     if presented.rotated_at is not None:
         # Someone holds a copy of a token that was already exchanged: likely theft.
         logger.error(
@@ -209,14 +237,6 @@ async def rotate(
 
     if presented.is_revoked or as_utc(presented.expires_at) <= datetime.now(timezone.utc):
         return SessionRefusal(RefusalReason.INVALID)
-
-    user = await user_service.get_user_by_id(db=db, user_id=user_id)
-    if user is None:
-        return SessionRefusal(RefusalReason.INVALID)
-
-    if not may_hold_session(user):
-        await refresh_tokens_service.revoke_all_user_sessions(db=db, user_id=user.id)
-        return SessionRefusal(RefusalReason.SUSPENDED)
 
     issued, new_token = await _issue(
         db,
@@ -248,13 +268,7 @@ def ended_session_response() -> JSONResponse:
     response = JSONResponse(
         content={"message": "Logged out successfully"}, status_code=status.HTTP_200_OK
     )
-    response.delete_cookie(
-        key=_refresh_cookie_name(),
-        path="/",
-        httponly=True,
-        secure=settings.is_env_production(),
-        samesite="lax",
-    )
+    response.delete_cookie(**_refresh_cookie_attributes())
     return response
 
 

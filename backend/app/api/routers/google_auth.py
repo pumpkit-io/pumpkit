@@ -12,8 +12,8 @@ router = APIRouter(tags=["auth"])
 
 
 @router.get("/login/google", status_code=status.HTTP_200_OK)
-async def login_google() -> JSONResponse:
-    return await google_auth_mediator.login_google()
+async def start_google_sign_in() -> JSONResponse:
+    return await google_auth_mediator.start_google_sign_in()
 
 
 @router.get("/oauth/google/callback", status_code=status.HTTP_303_SEE_OTHER)

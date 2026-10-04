@@ -6,7 +6,7 @@ from app.tests.api.routers.test_magic_link_request import GENERIC_MESSAGE
 from app.tests.conftest import magic_link_token
 
 
-async def test_suspended_user_completing_a_magic_link_lands_on_login_without_a_session(
+async def test_suspended_user_completing_a_magic_link_lands_on_the_sign_in_page_without_a_session(
     new_browser, auth_outbox, suspend_user, user
 ):
     await suspend_user(user.email)
@@ -23,6 +23,22 @@ async def test_suspended_user_completing_a_magic_link_lands_on_login_without_a_s
     assert opened.headers["location"] == "http://localhost:5173/login?error=account_suspended"
     assert "refresh_token" not in browser.cookies
     assert "set-cookie" not in opened.headers
+
+
+async def test_a_magic_link_refused_for_suspension_stays_used(
+    new_browser, auth_outbox, suspend_user, lift_suspension, user
+):
+    await suspend_user(user.email)
+    browser = new_browser()
+    await browser.post("/api/v1/login/magic-link/request", json={"email": user.email})
+    token = magic_link_token(auth_outbox.messages[-1].link_url)
+    refused = await browser.get("/api/v1/login/magic-link", params={"token": token})
+    assert refused.headers["location"] == "http://localhost:5173/login?error=account_suspended"
+
+    await lift_suspension(user.email)
+    reopened = await browser.get("/api/v1/login/magic-link", params={"token": token})
+
+    assert reopened.headers["location"] == "http://localhost:5173/login?error=invalid_magic_link"
 
 
 async def test_suspending_a_signed_in_user_refuses_their_refresh_and_revokes_all_sessions(
@@ -47,6 +63,27 @@ async def test_suspending_a_signed_in_user_refuses_their_refresh_and_revokes_all
 
     await sign_in_by_magic_link(browser, user.email)
     assert (await browser.post("/api/v1/refresh-token")).status_code == 200
+
+
+async def test_a_suspended_user_replaying_a_rotated_refresh_token_is_refused_as_suspended(
+    new_browser, sign_in_by_magic_link, suspend_user, lift_suspension, user
+):
+    browser = new_browser()
+    other_browser = new_browser()
+    await sign_in_by_magic_link(browser, user.email)
+    await sign_in_by_magic_link(other_browser, user.email)
+    rotated_away = browser.cookies["refresh_token"]
+    assert (await browser.post("/api/v1/refresh-token")).status_code == 200
+
+    await suspend_user(user.email)
+    browser.cookies.set("refresh_token", rotated_away)
+    refused = await browser.post("/api/v1/refresh-token")
+
+    assert refused.status_code == 401
+    assert refused.json() == {"detail": "account_suspended"}
+    # Suspension revokes every Session, not only the replayed one.
+    await lift_suspension(user.email)
+    assert (await other_browser.post("/api/v1/refresh-token")).status_code == 401
 
 
 async def test_suspended_users_still_valid_access_token_is_refused(
