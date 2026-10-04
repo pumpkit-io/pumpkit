@@ -17,9 +17,10 @@ export type { Session } from './store';
  * Why a Session ended. These are the only ways a Session ends.
  * - `user`: the User signed out (also calls backend logout).
  * - `session_ended`: the refresh endpoint answered 401.
+ * - `account_suspended`: the refresh endpoint answered 401 because the User is Suspended.
  * - `other_tab`: Session storage was cleared in another tab.
  */
-export type EndSessionReason = 'user' | 'session_ended' | 'other_tab';
+export type EndSessionReason = 'user' | 'session_ended' | 'account_suspended' | 'other_tab';
 
 const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
 
@@ -27,13 +28,15 @@ const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
 const ROUTE_AFTER_END: Record<EndSessionReason, string> = {
   user: '/login',
   session_ended: '/login',
+  account_suspended: '/login?error=account_suspended',
   other_tab: '/login',
 };
 
 /** The reason a refresh failure ends the Session, or null if it must not. */
 function refusalReason(error: unknown): EndSessionReason | null {
   if (!isAxiosError(error) || error.response?.status !== 401) return null;
-  return 'session_ended';
+  const detail = (error.response.data as { detail?: unknown } | undefined)?.detail;
+  return detail === 'account_suspended' ? 'account_suspended' : 'session_ended';
 }
 
 type Listener = (session: Session | null) => void;
@@ -138,6 +141,19 @@ export const session = {
     const current = { accessToken, expiresAt };
     writeSession(current);
     notify(current);
+  },
+  /**
+   * Start a Session from a sign-in callback's URL fragment
+   * (`#access_token=…&token_type=Bearer&expires_at=<ISO>`). Returns false,
+   * starting nothing, when the token or a parseable expiry is missing.
+   */
+  startFromFragment(fragment: string): boolean {
+    const params = new URLSearchParams(fragment.replace(/^#/, ''));
+    const accessToken = params.get('access_token');
+    const expiresAt = params.get('expires_at');
+    if (!accessToken || !expiresAt || Number.isNaN(Date.parse(expiresAt))) return false;
+    session.start(accessToken, expiresAt);
+    return true;
   },
   /**
    * Refresh through the single refresh path. A 401 ends the Session; any other

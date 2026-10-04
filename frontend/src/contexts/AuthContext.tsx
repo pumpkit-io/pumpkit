@@ -29,7 +29,6 @@ type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (token: string, expiresAt: string) => void;
   logout: () => Promise<void>;
 }
 
@@ -117,10 +116,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('focus', onFocus);
   }, [checkTokenRefresh]);
 
-  const login = (token: string, expiresAt: string) => {
-    session.start(token, expiresAt);
-  };
-
   // Ending a Session clears storage, resets the analytics identity and routes
   // to the sign-in page.
   const logout = () => session.end('user');
@@ -128,7 +123,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextType = {
     isAuthenticated: status === 'authenticated',
     isLoading: status === 'loading',
-    login,
     logout,
   };
 

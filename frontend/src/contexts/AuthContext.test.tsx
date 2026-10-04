@@ -198,13 +198,15 @@ describe('AuthProvider while running', () => {
     expect(result.current.isAuthenticated).toBe(true);
   });
 
-  it('login starts a Session', async () => {
+  it('becomes authenticated when a sign-in callback starts a Session in this tab', async () => {
     fakeBackend();
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     const expiresAt = inMinutes(60);
-    act(() => result.current.login('t', expiresAt));
+    act(() => {
+      session.startFromFragment(`#access_token=t&expires_at=${encodeURIComponent(expiresAt)}`);
+    });
 
     expect(result.current.isAuthenticated).toBe(true);
     expect(session.get()).toEqual({ accessToken: 't', expiresAt });
