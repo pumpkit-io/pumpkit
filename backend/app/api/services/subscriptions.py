@@ -67,7 +67,7 @@ async def upsert_subscription(
 ) -> None:
     """
     Insert or update the local Subscription replica keyed by the Stripe subscription ID.
-    Does not commit: the caller owns the transaction (webhook mediator or trial endpoint).
+    Does not commit: the caller owns the transaction (the webhook mediator).
     """
     subscription = await get_subscription_by_stripe_id(
         db=db, stripe_subscription_id=stripe_subscription_id

@@ -40,8 +40,6 @@ Every Stripe call goes through the `BillingGateway` port (`core/billing_gateway.
 
 `mediators/stripe.handle_webhook` owns the webhook transaction: it records the event for deduplication, dispatches it and commits once. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it.
 
-Cardless trials are available via `POST /api/v1/stripe/trial`, but they are not wired into the billing dialog.
-
 ### Call an LLM
 
 Set `OPENROUTER_API_KEY`, then from a mediator:

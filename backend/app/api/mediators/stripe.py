@@ -23,8 +23,6 @@ from app.schemas.stripe import (
     PlanResponse,
     PlansListResponse,
     SubscriptionMeResponse,
-    TrialRequest,
-    TrialResponse,
 )
 
 
@@ -138,47 +136,6 @@ async def create_billing_portal_session(
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     url = await gateway.create_portal_url(customer_id=customer_id)
     return BillingPortalResponse(url=url)
-
-
-async def start_trial(
-    db: AsyncSession,
-    gateway: BillingGateway,
-    user: User,
-    trial_request: TrialRequest,
-) -> TrialResponse:
-    """
-    Start a cardless trial by creating a Stripe subscription with no payment method attached.
-    When the trial ends without a card, Stripe will cancel the subscription automatically.
-    """
-    customer_id = await _ensure_stripe_customer(db, gateway, user)
-    subscription = await gateway.create_trial_subscription(
-        customer_id=customer_id,
-        price_id=trial_request.price_id,
-        user_id=user.id,
-        trial_period_days=trial_request.trial_period_days,
-    )
-
-    # The customer.subscription.created webhook will upsert the local row.
-    # We still write it here so the response is immediately consistent for
-    # a frontend that reads /stripe/me right after this call.
-    await _upsert_subscription_from_stripe_object(
-        db=db,
-        user_id=user.id,
-        subscription=subscription,
-    )
-    await db.commit()
-
-    # Parse the trial end timestamp if available for the response payload
-    trial_end: Optional[datetime] = None
-    trial_end_ts = subscription.get("trial_end")
-    if trial_end_ts:
-        trial_end = datetime.fromtimestamp(trial_end_ts, tz=timezone.utc)
-
-    return TrialResponse(
-        subscription_id=subscription["id"],
-        status=subscription["status"],
-        trial_end=trial_end,
-    )
 
 
 async def handle_webhook(

@@ -1,9 +1,7 @@
 import pytest
-from sqlalchemy import select
 
 from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan
 from app.core.config import settings
-from app.db.models import Subscription
 
 CHECKOUT = "/api/v1/stripe/checkout"
 CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly"}
@@ -238,33 +236,14 @@ async def test_a_gateway_failure_listing_plans_returns_502(
     assert_reported_502(response)
 
 
-async def test_the_trial_endpoint_starts_a_trial_through_the_gateway(
-    client, db, fake_billing, user
-):
-    fake_billing.trial_subscription = {
-        "id": "sub_trial",
-        "customer": "cus_fake_1",
-        "status": "trialing",
-        "trial_end": 1_900_000_000,
-        "cancel_at_period_end": False,
-        "items": {"data": [{"price": {"id": "price_trial"}, "current_period_end": 1_900_000_000}]},
-    }
-
+async def test_the_cardless_trial_route_no_longer_exists(client, fake_billing):
+    """A Trial comes only through Checkout, with a card (spec #10)."""
     response = await client.post(
-        "/api/v1/stripe/trial", json={"price_id": "price_trial", "trial_period_days": 7}
+        "/api/v1/stripe/trial", json={"price_id": "price_monthly", "trial_period_days": 365}
     )
 
-    assert response.status_code == 200
-    assert response.json()["subscription_id"] == "sub_trial"
-    assert response.json()["status"] == "trialing"
-    assert [(t.customer_id, t.price_id, t.trial_period_days) for t in fake_billing.trials] == [
-        ("cus_fake_1", "price_trial", 7)
-    ]
-    await db.commit()
-    sub = (await db.execute(select(Subscription))).scalar_one()
-    assert sub.user_id == user.id
-    assert sub.stripe_price_id == "price_trial"
-    assert sub.current_period_end is not None
+    assert response.status_code == 404
+    assert fake_billing.customers_created == []
 
 
 async def test_billing_api_serves_only_subscription_routes(client):
@@ -282,6 +261,5 @@ async def test_billing_api_serves_only_subscription_routes(client):
         "/api/v1/stripe/plans",
         "/api/v1/stripe/checkout",
         "/api/v1/stripe/billing-portal",
-        "/api/v1/stripe/trial",
         "/api/v1/stripe/webhook",
     }

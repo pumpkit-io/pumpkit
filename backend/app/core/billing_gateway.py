@@ -99,15 +99,6 @@ class BillingGateway(Protocol):
         """
         ...
 
-    async def create_trial_subscription(
-        self, *, customer_id: str, price_id: str, user_id: str, trial_period_days: int
-    ) -> dict[str, Any]:
-        """
-        Start a Subscription in Trial without a card and return it as a dict.
-        Only the `/stripe/trial` endpoint uses it; it goes when that endpoint does.
-        """
-        ...
-
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         """Verify a webhook payload and its signature, or raise `WebhookSignatureError`."""
         ...
@@ -219,26 +210,6 @@ class StripeBillingGateway:
             plans.extend(plan for price in prices.data if (plan := _plan(price.to_dict())))
         return plans
 
-    async def create_trial_subscription(
-        self, *, customer_id: str, price_id: str, user_id: str, trial_period_days: int
-    ) -> dict[str, Any]:
-        subscription = await self._call(
-            "start a Trial",
-            lambda: self._client.v1.subscriptions.create(
-                {
-                    "customer": customer_id,
-                    "items": [{"price": price_id}],
-                    "trial_period_days": trial_period_days,
-                    # With no card when the Trial ends, cancel instead of billing.
-                    "trial_settings": {"end_behavior": {"missing_payment_method": "cancel"}},
-                    # A card added later in the billing portal converts the Trial.
-                    "payment_settings": {"save_default_payment_method": "on_subscription"},
-                    "metadata": {"user_id": user_id},
-                }
-            ),
-        )
-        return subscription.to_dict()
-
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         # Pure HMAC work, no network: no need to leave the event loop.
         try:
@@ -265,14 +236,6 @@ class CheckoutCall:
     trial_period_days: Optional[int]
 
 
-@dataclass(frozen=True)
-class TrialCall:
-    customer_id: str
-    price_id: str
-    user_id: str
-    trial_period_days: int
-
-
 @dataclass
 class FakeBillingGateway:
     """
@@ -287,13 +250,11 @@ class FakeBillingGateway:
     checkout_url: str = "https://checkout.test/session"
     portal_url: str = "https://billing.test/portal"
     plans: list[Plan] = field(default_factory=list)
-    trial_subscription: dict[str, Any] = field(default_factory=dict)
 
     customers_created: list[CustomerCall] = field(default_factory=list)
     checkouts: list[CheckoutCall] = field(default_factory=list)
     portals: list[str] = field(default_factory=list)
     plan_lookups: list[list[str]] = field(default_factory=list)
-    trials: list[TrialCall] = field(default_factory=list)
 
     def _maybe_fail(self, method: str) -> None:
         if method in self.fail_on:
@@ -332,20 +293,6 @@ class FakeBillingGateway:
         self._maybe_fail("list_plans")
         self.plan_lookups.append(list(keys))
         return [plan for plan in self.plans if plan.key in keys]
-
-    async def create_trial_subscription(
-        self, *, customer_id: str, price_id: str, user_id: str, trial_period_days: int
-    ) -> dict[str, Any]:
-        self._maybe_fail("create_trial_subscription")
-        self.trials.append(
-            TrialCall(
-                customer_id=customer_id,
-                price_id=price_id,
-                user_id=user_id,
-                trial_period_days=trial_period_days,
-            )
-        )
-        return dict(self.trial_subscription)
 
     def signed_event(
         self, *, event_id: str, event_type: str, data_object: dict[str, Any]
