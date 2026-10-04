@@ -18,7 +18,7 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 docker compose up --build
 ```
 
-Fill in the remaining values in the three `.env` files (Resend, Stripe, optionally Google); every variable is described in [docs/configuration.md](./docs/configuration.md). Then open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs.
+Fill in the remaining values in the three `.env` files (Resend, which sends Magic links; Stripe; optionally Google). Every variable is described in [docs/configuration.md](./docs/configuration.md). Users sign in only with Google or a Magic link (see [ADR 0002](./docs/adr/0002-google-and-magic-link-only.md)). Then open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs.
 
 To receive Stripe webhooks locally:
 
