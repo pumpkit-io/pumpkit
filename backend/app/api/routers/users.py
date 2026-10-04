@@ -17,6 +17,7 @@ async def get_current_user_profile(
     """Return the authenticated user's profile data."""
 
     return UserProfileResponse(
+        id=current_user.id,
         email=current_user.email,
         first_name=current_user.first_name,
         last_name=current_user.last_name,
@@ -41,6 +42,7 @@ async def update_current_user_profile(
     )
 
     return UserProfileResponse(
+        id=current_user.id,
         email=current_user.email,
         first_name=current_user.first_name,
         last_name=current_user.last_name,

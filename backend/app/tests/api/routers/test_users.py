@@ -1,10 +1,11 @@
 _TINY_JPEG = "data:image/jpeg;base64,/9j/4AAQSkZJRg=="
 
 
-async def test_get_me_includes_avatar(client):
+async def test_get_me_includes_avatar(client, user):
     response = await client.get("/api/v1/users/me")
     assert response.status_code == 200
     assert response.json() == {
+        "id": user.id,
         "email": "alice@example.com",
         "first_name": None,
         "last_name": None,
@@ -26,6 +27,16 @@ async def test_patch_updates_only_present_fields_and_derives_display_name(client
     body = response.json()
     assert body["first_name"] == "Ada"  # untouched because omitted
     assert body["avatar_data_url"] == _TINY_JPEG
+
+
+async def test_current_user_response_identifies_the_user_by_id(authed_client, user):
+    response = await authed_client.get("/api/v1/users/me")
+    assert response.status_code == 200
+    assert response.json()["id"] == user.id
+
+    response = await authed_client.patch("/api/v1/users/me", json={"first_name": "Ada"})
+    assert response.status_code == 200
+    assert response.json()["id"] == user.id
 
 
 async def test_patch_null_clears_avatar(client):

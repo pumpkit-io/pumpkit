@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/services/userService', () => ({
   userService: {
     fetchProfile: vi.fn().mockResolvedValue({
+      id: 'user_01HZX',
       email: 'ada@example.com',
       firstName: 'Ada',
       lastName: 'Lovelace',
