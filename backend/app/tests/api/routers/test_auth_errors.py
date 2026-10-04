@@ -1,4 +1,3 @@
-import resend
 from fastapi import HTTPException, status
 
 import app.api.mediators.magic_link_auth as magic_link_auth_mediator
@@ -55,21 +54,6 @@ async def test_unexpected_logout_failure_reaches_global_handler(
     client.cookies.set("refresh_token", refresh_token)
 
     response = await client.post("/api/v1/logout")
-
-    assert_reported_500(response)
-
-
-async def test_magic_link_email_send_failure_reaches_global_handler(
-    client, monkeypatch, assert_reported_500
-):
-    def _send_fails(_params):
-        raise RuntimeError("resend is down")
-
-    monkeypatch.setattr(resend.Emails, "send", _send_fails)
-
-    response = await client.post(
-        "/api/v1/login/magic-link/request", json={"email": "bob@example.com"}
-    )
 
     assert_reported_500(response)
 

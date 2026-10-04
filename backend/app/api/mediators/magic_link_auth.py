@@ -1,10 +1,7 @@
-import base64
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional
 from urllib.parse import quote, urlencode
 
-import resend
 from fastapi import Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.api.services.magic_link_auth as magic_link_auth_service
 import app.api.services.refresh_tokens as refresh_tokens_service
 import app.api.services.users as user_service
+from app.core.auth_mailer import AuthMailer, AuthMailerError
 from app.core.config import settings
+from app.core.datetimes import as_utc
 from app.core.ids import ulid_with_prefix
 from app.core.logger import logger
 from app.core.security import (
@@ -22,7 +21,6 @@ from app.core.security import (
     generate_token,
     hash_token,
 )
-from app.core.templates import templates_helper
 from app.db.models import MagicLink, User
 from app.schemas.common import MessageResponse
 
@@ -33,15 +31,6 @@ _GENERIC_REQUEST_MESSAGE = "If an account exists for that email, we've sent you 
 # In-app cool-down between consecutive requests for the same email, in seconds.
 _REQUEST_COOLDOWN_SECONDS = 60
 
-# Logo embedded inline in the magic-link email via CID. Loaded once at import
-# time so we don't re-read + re-encode the file on every send. Replace
-# templates/emails/assets/logo.png with your own logo.
-_LOGO_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "templates" / "emails" / "assets" / "logo.png"
-)
-_LOGO_CONTENT_ID = "app-logo"
-_LOGO_BASE64 = base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
-
 
 class RejectedMagicLinkError(Exception):
     """A Magic link that can't sign anyone in: missing, unknown, already used or expired."""
@@ -51,18 +40,22 @@ async def request_magic_link(
     email: str,
     request: Request,
     db: AsyncSession,
+    mailer: AuthMailer,
 ) -> MessageResponse:
     """
-    Generate a one-time magic-link token, store its hash, and email it to the user.
+    Issue a one-time Magic link, store its hash, and email it to the User.
 
     The clear-text token only ever exists in the email body and the user's URL bar.
     Always returns a generic message to avoid disclosing account existence.
+    If the email can't be sent, the link is discarded so an immediate retry
+    sends a new one, and `AuthMailerError` reaches the global handler.
     """
+    now = datetime.now(timezone.utc)
 
     # Cool-down: bail if a link was just issued for this email
     latest = await magic_link_auth_service.get_latest_magic_link_by_email(db=db, email=email)
     if latest:
-        seconds_since_last = (datetime.now(timezone.utc) - latest.sent_at).total_seconds()
+        seconds_since_last = (now - as_utc(latest.sent_at)).total_seconds()
         if seconds_since_last < _REQUEST_COOLDOWN_SECONDS:
             return MessageResponse(message=_GENERIC_REQUEST_MESSAGE)
 
@@ -75,44 +68,34 @@ async def request_magic_link(
     token = generate_token(num_bytes=settings.MAGIC_LINK_TOKEN_NUM_BYTES)
     token_hash = hash_token(token)
 
-    # Persist the magic link row BEFORE sending the email so the cool-down check above can see it on a fast double-click.
     magic_link = MagicLink(
         user_id=user.id if user else None,
         email=email,
         token_hash=token_hash,
-        expires_at=datetime.now(timezone.utc)
-        + timedelta(minutes=settings.MAGIC_LINK_TOKEN_DURATION_MINUTES),
+        sent_at=now,
+        expires_at=now + timedelta(minutes=settings.MAGIC_LINK_TOKEN_DURATION_MINUTES),
         requester_ip=request.client.host if request.client else None,
         requester_user_agent=request.headers.get("user-agent"),
     )
     await magic_link_auth_service.create_magic_link(db=db, magic_link=magic_link)
+    # Sanctioned early commit: persist the issued link before the external send,
+    # so a fast double-click hits the cool-down instead of sending a second email.
+    await db.commit()
 
-    # Send the email with the magic link. A failed send is unexpected and
-    # reaches the global handler.
     magic_url = f"{settings.BACKEND_URL}/api/v1/login/magic-link?token={token}"
-    resend.Emails.send(
-        {
-            "from": f"{settings.APP_NAME} <{settings.RESEND_NOREPLY_ADDRESS}>",
-            "to": [email],
-            "subject": f"Sign in to {settings.APP_NAME}",
-            "html": templates_helper.render_template(
-                "emails/magic_link.html",
-                display_name=user.display_name if user else "",
-                magic_url=magic_url,
-                expires_in_minutes=settings.MAGIC_LINK_TOKEN_DURATION_MINUTES,
-                app_name=settings.APP_NAME,
-                logo_cid=_LOGO_CONTENT_ID,
-            ),
-            "attachments": [
-                {
-                    "filename": "logo.png",
-                    "content": _LOGO_BASE64,
-                    "content_type": "image/png",
-                    "content_id": _LOGO_CONTENT_ID,
-                }
-            ],
-        }
-    )
+    try:
+        await mailer.send_magic_link(
+            to=email,
+            display_name=user.display_name if user else "",
+            link_url=magic_url,
+            expires_in_minutes=settings.MAGIC_LINK_TOKEN_DURATION_MINUTES,
+        )
+    except AuthMailerError:
+        # The email never left, so the link must not hold the cool-down.
+        # Commit before re-raising: the request session rolls back on errors.
+        await magic_link_auth_service.discard_unsent_magic_link(db=db, magic_link=magic_link)
+        await db.commit()
+        raise
 
     return MessageResponse(message=_GENERIC_REQUEST_MESSAGE)
 

@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.services.users as user_service
+from app.core.datetimes import as_utc
 from app.core.security import get_bearer_token, verify_access_token
 from app.db.models import User
 from app.db.session import get_async_db
@@ -39,11 +40,7 @@ async def get_current_user(
         raise credentials_exception
 
     # A Suspended User can't keep a Session until the suspension ends.
-    # Postgres returns an aware datetime; SQLite drops the offset, and values are stored in UTC.
-    suspended_until = user.suspended_until
-    if suspended_until and suspended_until.tzinfo is None:
-        suspended_until = suspended_until.replace(tzinfo=timezone.utc)
-    if suspended_until and suspended_until > datetime.now(timezone.utc):
+    if user.suspended_until and as_utc(user.suspended_until) > datetime.now(timezone.utc):
         raise credentials_exception
 
     return user
