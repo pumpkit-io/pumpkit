@@ -38,11 +38,11 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
-    # Check if the user account is active
+    # A permanently Suspended User can't keep a Session
     if not user.is_active:
         raise credentials_exception
 
-    # Check if the user is banned
+    # A Suspended User can't keep a Session until the suspension ends
     if user.banned_until and user.banned_until > datetime.now(timezone.utc):
         raise credentials_exception
 

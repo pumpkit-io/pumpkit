@@ -127,38 +127,25 @@ async def logout(request: Request, db: AsyncSession) -> JSONResponse:
     Logout user by revoking their refresh token.
     """
     cookie_name = "__Host-refresh_token" if settings.is_env_production() else "refresh_token"
-    try:
-        # Get refresh token from cookie
-        refresh_token_value = request.cookies.get(cookie_name)
+    refresh_token_value = request.cookies.get(cookie_name)
 
-        if refresh_token_value:
-            # Verify and get user from refresh token
-            payload = verify_refresh_token(token=refresh_token_value)
-            if payload:
-                user_id = payload.get("sub")
-                if user_id:
-                    # Revoke all refresh tokens for this user
-                    await auth_sessions_service.revoke_all_user_auth_sessions(
-                        db=db, user_id=user_id
-                    )
+    # A missing or invalid refresh token means there is no Session to revoke:
+    # the User is already signed out, so that still succeeds. Anything that
+    # fails while revoking is unexpected and reaches the global handler.
+    if refresh_token_value:
+        payload = verify_refresh_token(token=refresh_token_value)
+        user_id = payload.get("sub") if payload else None
+        if user_id:
+            await auth_sessions_service.revoke_all_user_auth_sessions(db=db, user_id=user_id)
 
-    except Exception:
-        logger.exception("Unexpected error during logout")
-        # Still return success even if there's an error - user should be logged out
-
-    finally:
-        # Create response that clears the refresh token cookie
-        response = JSONResponse(
-            content={"message": "Logged out successfully"}, status_code=status.HTTP_200_OK
-        )
-
-        # Clear the refresh token cookie
-        response.delete_cookie(
-            key=cookie_name,
-            path="/",
-            httponly=True,
-            secure=settings.is_env_production(),
-            samesite="lax",
-        )
-
-        return response
+    response = JSONResponse(
+        content={"message": "Logged out successfully"}, status_code=status.HTTP_200_OK
+    )
+    response.delete_cookie(
+        key=cookie_name,
+        path="/",
+        httponly=True,
+        secure=settings.is_env_production(),
+        samesite="lax",
+    )
+    return response
