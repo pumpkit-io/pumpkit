@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.mediators.purchases as purchases_mediator
 import app.api.services.purchases as purchases_service
 import app.api.services.users as user_service
-from app.core.logger import logger
 from app.core.purchases import PRODUCTS
 from app.core.rate_limit import limiter
 from app.db.models import User
@@ -53,18 +52,9 @@ async def create_purchase_checkout(
     current_user: User = Depends(user_service.get_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> PurchaseCheckoutResponse:
-    try:
-        return await purchases_mediator.create_checkout_session(
-            db, user=current_user, product_id=checkout_request.product_id
-        )
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("Unexpected error while creating purchase checkout session")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Something went wrong. Please try again later or contact us for support.",
-        )
+    return await purchases_mediator.create_checkout_session(
+        db, user=current_user, product_id=checkout_request.product_id
+    )
 
 
 @router.get(
