@@ -67,6 +67,12 @@ async def resolve_user_by_verified_email(
     return user
 
 
+async def set_stripe_customer_id(db: AsyncSession, user: User, stripe_customer_id: str) -> None:
+    """Record the User's Stripe customer. Flushes, never commits."""
+    user.stripe_customer_id = stripe_customer_id
+    await db.flush()
+
+
 def fill_empty_profile(user: User, hints: NameHints) -> None:
     """Fill the User's empty profile fields from name hints, never overwriting what they have."""
     if not user.first_name and hints.first_name:

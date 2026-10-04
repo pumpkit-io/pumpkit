@@ -39,8 +39,11 @@ async def get_stripe_me(
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("30/minute")
-async def list_stripe_prices(request: Request) -> PricesListResponse:
-    return await stripe_mediator.list_prices()
+async def list_stripe_prices(
+    request: Request,
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PricesListResponse:
+    return await stripe_mediator.list_prices(gateway=gateway)
 
 
 @router.post(
@@ -54,9 +57,10 @@ async def create_stripe_checkout(
     checkout_request: CheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> CheckoutResponse:
     return await stripe_mediator.create_checkout_session(
-        db=db, user=current_user, checkout_request=checkout_request
+        db=db, gateway=gateway, user=current_user, checkout_request=checkout_request
     )
 
 
@@ -70,8 +74,11 @@ async def create_stripe_billing_portal(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> BillingPortalResponse:
-    return await stripe_mediator.create_billing_portal_session(db=db, user=current_user)
+    return await stripe_mediator.create_billing_portal_session(
+        db=db, gateway=gateway, user=current_user
+    )
 
 
 @router.post(
@@ -85,8 +92,11 @@ async def start_stripe_trial(
     trial_request: TrialRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> TrialResponse:
-    return await stripe_mediator.start_trial(db=db, user=current_user, trial_request=trial_request)
+    return await stripe_mediator.start_trial(
+        db=db, gateway=gateway, user=current_user, trial_request=trial_request
+    )
 
 
 @router.post("/stripe/webhook", status_code=status.HTTP_200_OK)

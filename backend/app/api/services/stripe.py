@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Subscription, SubscriptionStatus, User
@@ -51,20 +51,6 @@ async def get_user_by_stripe_customer_id(
     query = select(User).where(User.stripe_customer_id == stripe_customer_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
-
-
-async def set_user_stripe_customer_id(
-    db: AsyncSession,
-    user_id: str,
-    stripe_customer_id: str,
-) -> None:
-    """
-    Persist the Stripe customer id on a user.
-    """
-    await db.execute(
-        update(User).where(User.id == user_id).values(stripe_customer_id=stripe_customer_id)
-    )
-    await db.commit()
 
 
 async def upsert_subscription(

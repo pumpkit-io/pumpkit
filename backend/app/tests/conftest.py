@@ -373,18 +373,27 @@ def fake_posthog(monkeypatch) -> MagicMock:
     return fake
 
 
+def _assert_reported(fake_posthog: MagicMock, response: Response, status_code: int) -> None:
+    assert response.status_code == status_code
+    error_id = response.json()["error_id"]
+    assert re.fullmatch(r"[0-9a-f]{8}", error_id)
+    fake_posthog.capture_exception.assert_called_once()
+    assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
+
+
 @pytest.fixture
 def assert_reported_500(fake_posthog) -> Callable[[Response], None]:
     """
     Assert the global handler's contract: a 500 whose body carries an
     `error_id`, captured in PostHog exactly once under that same ID.
     """
+    return lambda response: _assert_reported(fake_posthog, response, 500)
 
-    def _assert(response: Response) -> None:
-        assert response.status_code == 500
-        error_id = response.json()["error_id"]
-        assert re.fullmatch(r"[0-9a-f]{8}", error_id)
-        fake_posthog.capture_exception.assert_called_once()
-        assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
 
-    return _assert
+@pytest.fixture
+def assert_reported_502(fake_posthog) -> Callable[[Response], None]:
+    """
+    Assert the billing-provider failure contract: a 502 whose body carries an
+    `error_id`, captured in PostHog exactly once under that same ID.
+    """
+    return lambda response: _assert_reported(fake_posthog, response, 502)
