@@ -6,9 +6,9 @@
 backend/app/
   api/routers/     HTTP endpoints only: auth deps, parsing, response shaping
   api/mediators/   orchestration across services (webhook dispatch, Google and Magic link sign-in)
-  api/services/    one resource or capability each: DB access, Stripe, users, tokens
+  api/services/    one resource or capability each: DB access, Subscriptions, users, tokens
   api/configs/     third-party provider configuration (Google)
-  core/            settings, security, logging, OpenRouter and PostHog clients
+  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer)
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
@@ -35,6 +35,8 @@ The call direction in the backend is `router -> mediator -> service`, never back
 Pumpkit bills only by Subscription (see `docs/adr/0003-subscription-only-billing.md`). Create each Plan as a recurring price in Stripe. Plans appear on the landing page and in the billing dialog automatically.
 
 Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` and `checkout.session.completed` (logged only; the Subscription events write the rows).
+
+Every Stripe call goes through the `BillingGateway` port (`core/billing_gateway.py`): only its Stripe adapter uses the SDK, it returns plain data, and any provider failure is a `BillingProviderError`, which the global handler returns as a 502 with an `error_id`. Routers inject it with `Depends(get_billing_gateway)`; tests get `FakeBillingGateway` through the autouse `fake_billing` fixture, which also signs webhook events (`fake_billing.signed_event(...)`) to post to the endpoint.
 
 `mediators/stripe.handle_webhook` owns the webhook transaction: it records the event for deduplication, dispatches it and commits once. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it.
 

@@ -16,7 +16,7 @@ Open-source social listening and AI reply tool for X: finds conversations worth 
 ## Where things are
 
 - `backend/app/api/`: HTTP layer split into `routers/` → `mediators/` → `services/`, plus provider `configs/`.
-- `backend/app/core/`: settings, security, logging, LLM client (OpenRouter), PostHog, rate limiting.
+- `backend/app/core/`: settings, security, logging, LLM client (OpenRouter), PostHog, rate limiting, the billing gateway (the only Stripe SDK user).
 - `backend/app/db/`, `backend/alembic/`: SQLAlchemy models, sessions, migrations.
 - `frontend/src/`: `pages/` (routes), `features/` (self-contained modules), `components/`, `services/` (API clients), `lib/`.
 - `e2e/`: Playwright smoke tests. `infra/`, `scripts/deploy.sh`, `docs/deployment.md`: single-server deploy.

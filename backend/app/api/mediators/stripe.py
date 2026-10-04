@@ -4,8 +4,8 @@ from typing import Any, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import app.api.services.stripe as stripe_service
 import app.api.services.stripe_events as stripe_events_service
+import app.api.services.subscriptions as subscriptions_service
 import app.api.services.users as users_service
 from app.core.billing_gateway import BillingGateway, WebhookEvent, WebhookSignatureError
 from app.core.logger import logger
@@ -28,7 +28,9 @@ async def get_subscription_me(db: AsyncSession, user: User) -> SubscriptionMeRes
     """
     Return the authenticated user's latest subscription view.
     """
-    subscription = await stripe_service.get_latest_subscription_for_user(db=db, user_id=user.id)
+    subscription = await subscriptions_service.get_latest_subscription_for_user(
+        db=db, user_id=user.id
+    )
 
     if subscription is None:
         # No subscription found - return the default status indicating no active subscription
@@ -45,7 +47,7 @@ async def get_subscription_me(db: AsyncSession, user: User) -> SubscriptionMeRes
         stripe_price_id=subscription.stripe_price_id,
         current_period_end=subscription.current_period_end,
         cancel_at_period_end=subscription.cancel_at_period_end,
-        is_active=stripe_service.is_subscription_active(subscription),
+        is_active=subscriptions_service.is_subscription_active(subscription),
     )
 
 
@@ -255,7 +257,7 @@ async def _handle_subscription_event(
         )
         return
 
-    user = await stripe_service.get_user_by_stripe_customer_id(
+    user = await subscriptions_service.get_user_by_stripe_customer_id(
         db=db, stripe_customer_id=customer_id
     )
     if user is None:
@@ -298,7 +300,7 @@ async def _upsert_subscription_from_stripe_object(
 
     cancel_at_period_end = bool(subscription.get("cancel_at_period_end", False))
 
-    await stripe_service.upsert_subscription(
+    await subscriptions_service.upsert_subscription(
         db=db,
         user_id=user_id,
         stripe_subscription_id=sub_id,
