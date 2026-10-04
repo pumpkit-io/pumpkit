@@ -32,7 +32,7 @@ The call direction in the backend is `router -> mediator -> service`, never back
 
 ### Subscriptions
 
-Pumpkit bills only by Subscription (see `docs/adr/0003-subscription-only-billing.md`). Create each Plan as a recurring price in Stripe with a lookup key (for example `pumpkit_pro_monthly`), and list that key in `BILLING_PLAN_KEYS` (see `docs/configuration.md`). Only those Plans appear on the landing page and in the billing dialog (`GET /api/v1/stripe/plans`), and Checkout (`POST /api/v1/stripe/checkout`) takes nothing but a Plan key: the server resolves the price and always buys one.
+Pumpkit bills only by Subscription (see `docs/adr/0003-subscription-only-billing.md`). Create each Plan as a recurring price in Stripe with a lookup key (for example `pumpkit_pro_monthly`), and list that key in `BILLING_PLAN_KEYS` (see `docs/configuration.md`). Only those Plans appear on the landing page and in the billing dialog (`GET /api/v1/stripe/plans`), and Checkout (`POST /api/v1/stripe/checkout`) takes nothing but a Plan key: the server resolves the price and always buys one. A User who has never had a Subscription gets a Trial of `BILLING_TRIAL_PERIOD_DAYS` days, once, through that Checkout with a card; the client can't ask for one.
 
 Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` and `checkout.session.completed` (logged only; the Subscription events write the rows).
 

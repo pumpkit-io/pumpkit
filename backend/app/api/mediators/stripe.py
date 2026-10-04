@@ -120,7 +120,10 @@ async def create_checkout_session(
 
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     session = await gateway.create_subscription_checkout(
-        customer_id=customer_id, price_id=plan.price_id, user_id=user.id
+        customer_id=customer_id,
+        price_id=plan.price_id,
+        user_id=user.id,
+        trial_period_days=settings.BILLING_TRIAL_PERIOD_DAYS,
     )
     return CheckoutResponse(url=session.url, session_id=session.id)
 

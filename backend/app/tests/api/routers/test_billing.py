@@ -58,11 +58,21 @@ async def test_checkout_by_plan_key_creates_a_checkout_for_that_plans_price(
             customer_id="cus_fake_1",
             price_id="price_monthly",
             user_id=user.id,
-            trial_period_days=None,
+            trial_period_days=14,
         )
     ]
     await db.refresh(user)
     assert user.stripe_customer_id == "cus_fake_1"
+
+
+async def test_checkout_for_a_user_who_never_had_a_subscription_includes_the_trial(
+    client, fake_billing
+):
+    """The test settings configure a 14-day Trial."""
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert [c.trial_period_days for c in fake_billing.checkouts] == [14]
 
 
 async def test_checkout_with_an_unknown_plan_key_returns_400_without_calling_the_gateway(
