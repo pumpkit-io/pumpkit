@@ -54,8 +54,8 @@ for _key, _value in _TEST_ENV.items():
 
 import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
-from datetime import timedelta  # noqa: E402
-from typing import Awaitable, Callable  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
+from typing import Awaitable, Callable, Iterator  # noqa: E402
 from unittest.mock import MagicMock  # noqa: E402
 from urllib.parse import parse_qs, urlsplit  # noqa: E402
 
@@ -74,6 +74,7 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 import app.core.exceptions as exceptions_module  # noqa: E402
 from app.api.dependencies import get_current_user  # noqa: E402
 from app.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
+from app.core.clock import get_clock  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
@@ -92,6 +93,31 @@ def auth_outbox():
     app.dependency_overrides[get_auth_mailer] = lambda: outbox
     yield outbox
     app.dependency_overrides.pop(get_auth_mailer, None)
+
+
+class FrozenClock:
+    """A clock that stands still until a test moves it."""
+
+    def __init__(self, now: datetime) -> None:
+        self._now = now
+
+    def __call__(self) -> datetime:
+        return self._now
+
+    def advance(self, delta: timedelta) -> None:
+        self._now += delta
+
+
+@pytest.fixture
+def clock() -> Iterator[FrozenClock]:
+    """
+    Freeze the time endpoints read through `get_clock` (Magic link cool-down and
+    expiry) at the real current time. Move it with `clock.advance(timedelta(...))`.
+    """
+    frozen = FrozenClock(datetime.now(timezone.utc))
+    app.dependency_overrides[get_clock] = lambda: frozen
+    yield frozen
+    app.dependency_overrides.pop(get_clock, None)
 
 
 @pytest.fixture(autouse=True)
