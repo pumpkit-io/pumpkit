@@ -129,7 +129,7 @@ api.interceptors.response.use(
     const requestUrl = originalRequest?.url ?? '';
 
     // Skip retry/refresh logic for auth endpoints that expect 401s
-    if (['/login', '/signup', '/refresh-token'].some((path) => requestUrl?.includes(path))) {
+    if (['/login', '/refresh-token'].some((path) => requestUrl?.includes(path))) {
       return Promise.reject(error);
     }
 
