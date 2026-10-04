@@ -11,7 +11,6 @@ from sqlalchemy import (
     Index,
     String,
     Text,
-    UniqueConstraint,
     func,
 )
 from sqlalchemy import (
@@ -119,7 +118,8 @@ class GoogleIdentity(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
 
     # OAuth response
-    subject: Mapped[str] = mapped_column(String, index=True)
+    # A Google account links to at most one User
+    subject: Mapped[str] = mapped_column(String, unique=True)
     id_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     # JSONB on Postgres; JSON variant lets the SQLite test DB create the table.
     profile_json: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
@@ -130,11 +130,6 @@ class GoogleIdentity(Base):
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="google_identities")
-
-    __table_args__ = (
-        # A User can link several Google accounts, each at most once
-        UniqueConstraint("user_id", "subject", name="uq_google_identities_user_id_subject"),
-    )
 
 
 class RefreshToken(Base):

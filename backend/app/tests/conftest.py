@@ -74,6 +74,11 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 import app.core.exceptions as exceptions_module  # noqa: E402
 from app.api.dependencies import get_current_user  # noqa: E402
 from app.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
+from app.core.google_sign_in import (  # noqa: E402
+    FakeGoogleSignIn,
+    GoogleClaims,
+    get_google_sign_in,
+)
 from app.core.rate_limit import limiter  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
@@ -92,6 +97,18 @@ def auth_outbox():
     app.dependency_overrides[get_auth_mailer] = lambda: outbox
     yield outbox
     app.dependency_overrides.pop(get_auth_mailer, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_google():
+    """
+    Every test exchanges Google authorization codes with a fake instead of Google.
+    Request it by name to set `fake_google.claims` or `fake_google.fail = True`.
+    """
+    fake = FakeGoogleSignIn()
+    app.dependency_overrides[get_google_sign_in] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_google_sign_in, None)
 
 
 @pytest.fixture(autouse=True)
@@ -245,6 +262,26 @@ def sign_in_by_magic_link(db, auth_outbox) -> Callable[[AsyncClient, str], Await
         fragment = callback_fragment(opened.headers["location"])
         assert "refresh_token" in browser.cookies
         return SignedIn(access_token=fragment["access_token"], expires_at=fragment["expires_at"])
+
+    return _sign_in
+
+
+@pytest.fixture
+def sign_in_with_google(fake_google) -> Callable[[AsyncClient, GoogleClaims], Awaitable[Response]]:
+    """
+    Run a browser through Google sign-in: start it, then land on the callback as
+    Google would, with the fake answering the code exchange with these claims.
+    Returns the callback response (not followed).
+    """
+
+    async def _sign_in(browser: AsyncClient, claims: GoogleClaims) -> Response:
+        fake_google.claims = claims
+        started = await browser.get("/api/v1/login/google")
+        assert started.status_code == 200
+        state = parse_qs(urlsplit(started.json()["url"]).query)["state"][0]
+        return await browser.get(
+            "/api/v1/oauth/google/callback", params={"code": "auth-code", "state": state}
+        )
 
     return _sign_in
 

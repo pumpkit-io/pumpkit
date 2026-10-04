@@ -5,33 +5,28 @@ import json
 from typing import Optional
 from urllib.parse import urlencode
 
-import requests
-from fastapi import HTTPException, Request, status
-from fastapi.responses import JSONResponse
-from google.oauth2 import id_token
+from fastapi import Request, status
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.services.google_identities as google_identities_service
 import app.api.services.sessions as sessions
-import app.api.services.users as user_service
 from app.api.configs.google import (
     GOOGLE_AUTHORIZATION_ENDPOINT,
     GOOGLE_CODE_VERIFIER_COOKIE,
-    GOOGLE_JWKS_REQUEST,
     GOOGLE_LOGIN_STATE_COOKIE,
     GOOGLE_NONCE_COOKIE,
     GOOGLE_OAUTH_LOGIN_SCOPES,
-    GOOGLE_TOKEN_ENDPOINT,
 )
 from app.core.config import settings
-from app.core.ids import ulid_with_prefix
+from app.core.exceptions import report_unexpected_exception
+from app.core.google_sign_in import GoogleSignIn, GoogleSignInError
 from app.core.logger import logger
 from app.core.security import (
     decode_payload,
     encode_payload,
     generate_token,
 )
-from app.db.models import GoogleIdentity, User
 
 
 async def login_google() -> JSONResponse:
@@ -92,251 +87,73 @@ async def login_google() -> JSONResponse:
 
 async def oauth_google_callback(
     request: Request,
-    code: str,
-    state: str,
     db: AsyncSession,
-    error: Optional[str] = None,
-):
+    google_sign_in: GoogleSignIn,
+    code: Optional[str],
+    state: Optional[str],
+    error: Optional[str],
+) -> RedirectResponse:
     """
-    Route Google OAuth callbacks to the appropriate handler based on the recorded flow.
+    Finish Google sign-in where Google sends the browser back. It always ends on
+    a redirect: the frontend callback with a new Session, or the sign-in page
+    with `sign_in_failed` or `account_suspended`. An unexpected exception is
+    reported like the global handler would, and the sign-in is rolled back, so
+    a failure halfway leaves no User or Google identity behind.
     """
-
-    if error:
-        logger.error("Google OAuth returned error: %s", error)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Google authentication was cancelled. Please try again.",
-        )
-
-    # Decode the state
     try:
-        state_payload = decode_payload(state)
-    except (json.JSONDecodeError, ValueError, binascii.Error):
-        logger.exception("Failed to decode Google OAuth state payload")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid OAuth state. Please try again.",
-        )
-
-    # Route the flow to the appropriate OAuth handler based on the state
-    flow = state_payload.get("flow")
-
-    login_state_cookie = request.cookies.get(GOOGLE_LOGIN_STATE_COOKIE)
-
-    if flow == "login" and state == login_state_cookie:
-        response = await _handle_login_google_flow(
+        response = await _sign_in_with_google(
             request=request,
+            db=db,
+            google_sign_in=google_sign_in,
             code=code,
             state=state,
-            db=db,
+            error=error,
         )
-    else:
-        logger.error(
-            "Unexpected Google OAuth flow and state combination received. flow=%s, state=%s",
-            flow,
-            state,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid OAuth state. Please try again.",
-        )
-
+    except Exception as exc:
+        report_unexpected_exception(request, exc)
+        await db.rollback()
+        response = _sign_in_failed_redirect()
+    _delete_google_cookies(response)
     return response
 
 
-async def _handle_login_google_flow(
+async def _sign_in_with_google(
     request: Request,
-    code: str,
-    state: str,
     db: AsyncSession,
-):
-    """
-    Handle the Google OAuth login flow. Validate state and nonce, exchange the authorization code, and
-    issue tokens for this application.
-    """
-    # Validate state
-    stored_state = request.cookies.get(GOOGLE_LOGIN_STATE_COOKIE)
-    if not stored_state or stored_state != state:
-        logger.error("Google OAuth state mismatch detected")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid login state. Please try signing in again.",
-        )
+    google_sign_in: GoogleSignIn,
+    code: Optional[str],
+    state: Optional[str],
+    error: Optional[str],
+) -> RedirectResponse:
+    if error:
+        logger.warning("Google sign-in returned an error: %s", error)
+        return _sign_in_failed_redirect()
+    if not code or not state:
+        logger.warning("Google sign-in callback without a code or state")
+        return _sign_in_failed_redirect()
 
-    # Validate code verifier
+    # The state must be the one this browser was given, for the sign-in flow (CSRF).
+    if state != request.cookies.get(GOOGLE_LOGIN_STATE_COOKIE) or _state_flow(state) != "login":
+        logger.warning("Google sign-in state mismatch")
+        return _sign_in_failed_redirect()
+
     code_verifier = request.cookies.get(GOOGLE_CODE_VERIFIER_COOKIE)
-    if not code_verifier:
-        logger.error("Missing Google OAuth code verifier cookie")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login session expired. Please try signing in again.",
-        )
-
-    # Validate nonce
     nonce = request.cookies.get(GOOGLE_NONCE_COOKIE)
-    if not nonce:
-        logger.error("Missing Google OAuth nonce cookie")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login session expired. Please try signing in again.",
-        )
-
-    # Exchange the authorization code for tokens
-    token_payload = {
-        "code": code,
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "client_secret": settings.GOOGLE_CLIENT_SECRET,
-        "redirect_uri": settings.GOOGLE_OAUTH_REDIRECT_URI,
-        "grant_type": "authorization_code",
-        "code_verifier": code_verifier,
-    }
+    if not code_verifier or not nonce:
+        logger.warning("Google sign-in cookies missing or expired")
+        return _sign_in_failed_redirect()
 
     try:
-        token_response = requests.post(
-            GOOGLE_TOKEN_ENDPOINT,
-            data=token_payload,
-            timeout=settings.GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS,
+        claims = await google_sign_in.exchange_code(
+            code=code, code_verifier=code_verifier, nonce=nonce
         )
-    except requests.RequestException as exc:
-        logger.exception("Failed to exchange Google OAuth code: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not complete login with Google. Please try again.",
-        )
+    except GoogleSignInError as exc:
+        logger.warning("Google sign-in failed: %s", exc)
+        return _sign_in_failed_redirect()
 
-    if token_response.status_code != status.HTTP_200_OK:
-        logger.error(
-            "Google token endpoint returned %s: %s",
-            token_response.status_code,
-            token_response.text,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login with Google failed. Please try again.",
-        )
-
-    # Parse the token response
-    try:
-        token_data = token_response.json()
-    except ValueError as exc:
-        logger.exception("Invalid JSON from Google token endpoint: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login with Google failed. Please try again.",
-        )
-
-    # Validate the token response
-    id_token_value = token_data.get("id_token")
-    access_token_value = token_data.get("access_token")
-
-    if not id_token_value or not access_token_value:
-        logger.error("Incomplete token payload received from Google: %s", token_data)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login with Google failed. Please try again.",
-        )
-
-    # Verify the ID token
-    try:
-        id_info = id_token.verify_oauth2_token(
-            id_token_value,
-            GOOGLE_JWKS_REQUEST,
-            settings.GOOGLE_CLIENT_ID,
-        )
-    except ValueError as exc:
-        logger.exception("Failed to verify Google ID token: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login with Google failed. Please try again.",
-        )
-
-    # Validate the nonce
-    if id_info.get("nonce") != nonce:
-        logger.error("Google ID token nonce mismatch")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid login state. Please try signing in again.",
-        )
-
-    # Validate the email
-    email = id_info.get("email")
-    email_verified = id_info.get("email_verified", False)
-    if not email or not email_verified:
-        logger.error(
-            "Google account email missing or unverified. email=%s, verified=%s",
-            email,
-            email_verified,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Your Google account email is not verified. Please verify it with Google and try again.",
-        )
-
-    # Validate the subject
-    subject = id_info.get("sub")
-    if not subject:
-        logger.error("Missing subject in Google ID token")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login with Google failed. Please try again.",
-        )
-
-    # Locate or create the User and their Google identity
-    user = None
-    google_identity: Optional[GoogleIdentity] = await google_identities_service.get_google_identity(
-        db=db, subject=subject
-    )
-
-    if google_identity:
-        # Get the User from their Google identity
-        user = await user_service.get_user_by_id(db=db, user_id=google_identity.user_id)
-
-    if user is None:
-        # Get the user from the email
-        user = await user_service.get_user_by_email(db=db, email=email)
-
-    if user is None:
-        # Since the user does not exist, we need to create it
-        user = User(
-            id=ulid_with_prefix("user"),
-            email=email,
-            display_name=id_info.get("name") or email,
-            first_name=id_info.get("given_name"),
-            last_name=id_info.get("family_name"),
-            is_admin=False,
-        )
-        await user_service.create_user(db=db, user=user)
-    else:
-        # Since the user exists, we need to update it
-        should_commit = False
-        if not user.first_name and id_info.get("given_name"):
-            user.first_name = id_info.get("given_name")
-            should_commit = True
-        if not user.last_name and id_info.get("family_name"):
-            user.last_name = id_info.get("family_name")
-            should_commit = True
-        if not user.display_name and id_info.get("name"):
-            user.display_name = id_info["name"]
-            should_commit = True
-        if should_commit:
-            await db.commit()
-
-    if google_identity is None:
-        # Link a new Google identity to the User
-        google_identity = GoogleIdentity(
-            id=ulid_with_prefix("google_identity"),
-            user_id=user.id,
-            subject=subject,
-            profile_json=id_info,
-        )
-        await google_identities_service.create_google_identity(
-            db=db, google_identity=google_identity
-        )
-    else:
-        # Refresh the existing Google identity's profile
-        google_identity.profile_json = dict(id_info)
-        await db.commit()
-
+    # One sign-in, one transaction: the User, their Google identity and the
+    # Session commit together.
+    user = await google_identities_service.resolve_user(db, claims)
     result = await sessions.start(
         db,
         user=user,
@@ -345,13 +162,27 @@ async def _handle_login_google_flow(
     )
     await db.commit()
     if isinstance(result, sessions.SessionRefusal):
-        redirect_response = result.as_sign_in_redirect()
-    else:
-        redirect_response = result.as_callback_redirect("/oauth/google/callback")
+        return result.as_sign_in_redirect()
+    return result.as_callback_redirect("/oauth/google/callback")
 
-    # Delete the cookies
-    redirect_response.delete_cookie(key=GOOGLE_LOGIN_STATE_COOKIE, path="/")
-    redirect_response.delete_cookie(key=GOOGLE_NONCE_COOKIE, path="/")
-    redirect_response.delete_cookie(key=GOOGLE_CODE_VERIFIER_COOKIE, path="/")
 
-    return redirect_response
+def _state_flow(state: str) -> Optional[str]:
+    try:
+        payload = decode_payload(state)
+    except (json.JSONDecodeError, ValueError, binascii.Error):
+        return None
+    return payload.get("flow") if isinstance(payload, dict) else None
+
+
+def _sign_in_failed_redirect() -> RedirectResponse:
+    return RedirectResponse(
+        url=f"{settings.FRONTEND_URL}/login?error=sign_in_failed",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+def _delete_google_cookies(response: RedirectResponse) -> None:
+    # The state, nonce and PKCE verifier are single-use, whatever the outcome.
+    response.delete_cookie(key=GOOGLE_LOGIN_STATE_COOKIE, path="/")
+    response.delete_cookie(key=GOOGLE_NONCE_COOKIE, path="/")
+    response.delete_cookie(key=GOOGLE_CODE_VERIFIER_COOKIE, path="/")
