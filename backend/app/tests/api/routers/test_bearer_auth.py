@@ -1,7 +1,7 @@
 """Pins the Authorization-header contract of authenticated endpoints.
 
 Unlike the shared `client` fixture, these tests do not override
-`user_service.get_user`, so the real bearer-token extraction runs.
+`get_current_user`, so the real bearer-token extraction runs.
 """
 
 import pytest

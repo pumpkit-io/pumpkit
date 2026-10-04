@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.mediators.stripe as stripe_mediator
-import app.api.services.users as user_service
+from app.api.dependencies import get_current_user
 from app.core.rate_limit import limiter
 from app.db.models import User
 from app.db.session import get_async_db
@@ -26,7 +26,7 @@ router = APIRouter(tags=["stripe"])
     status_code=status.HTTP_200_OK,
 )
 async def get_stripe_me(
-    current_user: User = Depends(user_service.get_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> SubscriptionMeResponse:
     return await stripe_mediator.get_subscription_me(db=db, user=current_user)
@@ -51,7 +51,7 @@ async def list_stripe_prices(request: Request) -> PricesListResponse:
 async def create_stripe_checkout(
     request: Request,
     checkout_request: CheckoutRequest,
-    current_user: User = Depends(user_service.get_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> CheckoutResponse:
     return await stripe_mediator.create_checkout_session(
@@ -67,7 +67,7 @@ async def create_stripe_checkout(
 @limiter.limit("20/minute")
 async def create_stripe_billing_portal(
     request: Request,
-    current_user: User = Depends(user_service.get_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> BillingPortalResponse:
     return await stripe_mediator.create_billing_portal_session(db=db, user=current_user)
@@ -82,7 +82,7 @@ async def create_stripe_billing_portal(
 async def start_stripe_trial(
     request: Request,
     trial_request: TrialRequest,
-    current_user: User = Depends(user_service.get_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> TrialResponse:
     return await stripe_mediator.start_trial(db=db, user=current_user, trial_request=trial_request)

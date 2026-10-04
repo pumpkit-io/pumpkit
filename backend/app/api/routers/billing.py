@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.mediators.purchases as purchases_mediator
 import app.api.services.purchases as purchases_service
-import app.api.services.users as user_service
+from app.api.dependencies import get_current_user
 from app.core.purchases import PRODUCTS
 from app.core.rate_limit import limiter
 from app.db.models import User
@@ -24,7 +24,7 @@ router = APIRouter(tags=["billing"])
     "/billing/products", response_model=ProductsListResponse, status_code=status.HTTP_200_OK
 )
 async def list_products(
-    current_user: User = Depends(user_service.get_user),
+    current_user: User = Depends(get_current_user),
 ) -> ProductsListResponse:
     return ProductsListResponse(
         data=[
@@ -49,7 +49,7 @@ async def list_products(
 async def create_purchase_checkout(
     request: Request,
     checkout_request: PurchaseCheckoutRequest,
-    current_user: User = Depends(user_service.get_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> PurchaseCheckoutResponse:
     return await purchases_mediator.create_checkout_session(
@@ -61,7 +61,7 @@ async def create_purchase_checkout(
     "/billing/purchases", response_model=PurchasesListResponse, status_code=status.HTTP_200_OK
 )
 async def list_purchases(
-    current_user: User = Depends(user_service.get_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> PurchasesListResponse:
     purchases = await purchases_service.list_purchases_for_user(db, user_id=current_user.id)
