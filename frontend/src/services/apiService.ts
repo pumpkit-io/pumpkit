@@ -16,7 +16,7 @@ const api = axios.create({
 //
 // The backend implements refresh-token rotation with theft detection: two
 // parallel /refresh-token calls using the same cookie value will cause the
-// second to be flagged as token replay and revoke the entire session family.
+// second to be flagged as token replay and revoke the whole Session.
 // To make refresh correct regardless of timing/frequency/tab count, we serialize
 // refresh attempts on three levels:
 //

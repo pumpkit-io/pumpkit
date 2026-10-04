@@ -11,7 +11,6 @@ from sqlalchemy import (
     Index,
     String,
     Text,
-    UniqueConstraint,
     func,
 )
 from sqlalchemy import (
@@ -28,14 +27,11 @@ from app.db.base import Base
 # - The naming conventions SQLAlchemy will follow when creating DB indexes and constraints are defined in backend/app/db/base.py
 
 
-AuthMethod = Literal[
-    # Third-party authentication
+# The ways a User can sign in (see docs/adr/0002-google-and-magic-link-only.md)
+SignInMethod = Literal[
     "google",
-    # Passwordless authentication
     "magic_link",
 ]
-
-ThirdPartyAuthProvider = Literal["google",]
 
 # All possible subscription statuses according to Stripe documentation: https://stripe.com/docs/billing/subscriptions/overview#subscription-statuses
 SubscriptionStatus = Literal[
@@ -84,15 +80,15 @@ class User(Base):
     )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Status
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    banned_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Suspension: NULL means not Suspended; a future date means Suspended until then
+    # (a permanent suspension uses a far-future date)
+    suspended_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Stripe
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True)
 
     # Relationships
-    third_party_auth: Mapped[list["ThirdPartyAuth"]] = relationship(
+    google_identities: Mapped[list["GoogleIdentity"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     magic_links: Mapped[list["MagicLink"]] = relationship(
@@ -104,28 +100,26 @@ class User(Base):
     purchases: Mapped[list["Purchase"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    auth_sessions: Mapped[list["AuthSession"]] = relationship(
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
 
-class ThirdPartyAuth(Base):
+class GoogleIdentity(Base):
     """
-    Data for third-party authentication, based on OAuth
+    The link between a User and the Google account they sign in with
     """
 
-    __tablename__ = "third_party_auth"
+    __tablename__ = "google_identities"
 
     id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: ulid_with_prefix("third_party_auth")
+        String, primary_key=True, default=lambda: ulid_with_prefix("google_identity")
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    provider: Mapped[ThirdPartyAuthProvider] = mapped_column(
-        PgEnum(*get_args(ThirdPartyAuthProvider), name="third_party_auth_provider_enum"), index=True
-    )
 
     # OAuth response
-    subject: Mapped[str] = mapped_column(String, index=True)
+    # A Google account links to at most one User
+    subject: Mapped[str] = mapped_column(String, unique=True)
     id_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     # JSONB on Postgres; JSON variant lets the SQLite test DB create the table.
     profile_json: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
@@ -135,43 +129,35 @@ class ThirdPartyAuth(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship(back_populates="third_party_auth")
-
-    __table_args__ = (
-        # A logged user can link the same provider multiple times only if the subject differs (i.e., the connected account is different)
-        UniqueConstraint(
-            "user_id", "provider", "subject", name="uq_third_party_auth_user_id_provider_subject"
-        ),
-    )
+    user: Mapped["User"] = relationship(back_populates="google_identities")
 
 
-class AuthSession(Base):
+class RefreshToken(Base):
     """
-    Sessions of authenticated users
+    A refresh token issued to a User. A Session is the set of refresh tokens that
+    share a `session_id`: each rotation adds a token to the same Session.
     """
 
-    __tablename__ = "auth_sessions"
+    __tablename__ = "refresh_tokens"
 
     id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: ulid_with_prefix("auth_session")
+        String, primary_key=True, default=lambda: ulid_with_prefix("refresh_token")
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
 
-    # Authentication method
-    auth_method: Mapped[AuthMethod] = mapped_column(
-        PgEnum(*get_args(AuthMethod), name="auth_method_enum"), index=True
+    # The Sign-in method that started the Session
+    sign_in_method: Mapped[SignInMethod] = mapped_column(
+        PgEnum(*get_args(SignInMethod), name="sign_in_method_enum"), index=True
     )
 
-    # Refresh token lineage and rotation
-    family_id: Mapped[str] = mapped_column(
-        String, index=True
-    )  # Refresh tokens belonging to the same lineage share the same family ID
+    # Session membership and rotation
+    session_id: Mapped[str] = mapped_column(String, index=True)
     refresh_token_hash: Mapped[str] = mapped_column(String, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     rotated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     replaced_by: Mapped[Optional[str]] = mapped_column(
-        ForeignKey("auth_sessions.id", ondelete="SET NULL")
+        ForeignKey("refresh_tokens.id", ondelete="SET NULL")
     )  # ID of the newer refresh token that replaced this one
 
     # Refresh token status
@@ -183,11 +169,11 @@ class AuthSession(Base):
     user_agent: Mapped[Optional[str]] = mapped_column(String)
 
     # Relationships
-    user: Mapped["User"] = relationship(back_populates="auth_sessions")
+    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
 
     __table_args__ = (
         # Helps housekeeping queries
-        Index("ix_auth_sessions_user_id_is_revoked", "user_id", "is_revoked"),
+        Index("ix_refresh_tokens_user_id_is_revoked", "user_id", "is_revoked"),
         # Sanity check on expiration timestamp
         CheckConstraint("expires_at > created_at", name="expires_at_gt_created_at"),
     )
