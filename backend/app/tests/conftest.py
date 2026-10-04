@@ -54,8 +54,8 @@ for _key, _value in _TEST_ENV.items():
 
 import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
-from datetime import timedelta  # noqa: E402
-from typing import Awaitable, Callable  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
+from typing import Awaitable, Callable, Optional  # noqa: E402
 from unittest.mock import MagicMock  # noqa: E402
 from urllib.parse import parse_qs, urlsplit  # noqa: E402
 
@@ -259,6 +259,33 @@ async def authed_client(new_browser, sign_in_by_magic_link, user) -> AsyncClient
     signed_in = await sign_in_by_magic_link(browser, user.email)
     browser.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     return browser
+
+
+async def _set_suspended_until(db: AsyncSession, email: str, until: Optional[datetime]) -> None:
+    # Operators suspend a User by setting `suspended_until` directly (no endpoint yet).
+    found = (await db.execute(select(User).where(User.email == email))).scalar_one()
+    found.suspended_until = until
+    await db.commit()
+
+
+@pytest.fixture
+def suspend_user(db) -> Callable[[str], Awaitable[None]]:
+    """Suspend the User with this email until a day from now."""
+
+    async def _suspend(email: str) -> None:
+        await _set_suspended_until(db, email, datetime.now(timezone.utc) + timedelta(days=1))
+
+    return _suspend
+
+
+@pytest.fixture
+def lift_suspension(db) -> Callable[[str], Awaitable[None]]:
+    """End the suspension of the User with this email."""
+
+    async def _lift(email: str) -> None:
+        await _set_suspended_until(db, email, None)
+
+    return _lift
 
 
 @pytest.fixture
