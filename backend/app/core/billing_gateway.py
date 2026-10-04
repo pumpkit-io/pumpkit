@@ -82,10 +82,11 @@ class BillingGateway(Protocol):
         *,
         customer_id: str,
         price_id: str,
+        quantity: int,
         user_id: str,
         trial_period_days: Optional[int] = None,
     ) -> CheckoutSession:
-        """Create a Subscription Checkout for one unit of `price_id`, with an optional Trial."""
+        """Create a Subscription Checkout for `quantity` units of `price_id`, with an optional Trial."""
         ...
 
     async def create_portal_url(self, *, customer_id: str) -> str:
@@ -161,6 +162,7 @@ class StripeBillingGateway:
         *,
         customer_id: str,
         price_id: str,
+        quantity: int,
         user_id: str,
         trial_period_days: Optional[int] = None,
     ) -> CheckoutSession:
@@ -168,7 +170,7 @@ class StripeBillingGateway:
             "mode": "subscription",
             "customer": customer_id,
             "client_reference_id": user_id,
-            "line_items": [{"price": price_id, "quantity": 1}],
+            "line_items": [{"price": price_id, "quantity": quantity}],
             "success_url": settings.STRIPE_CHECKOUT_SUCCESS_URL,
             "cancel_url": settings.STRIPE_CHECKOUT_CANCEL_URL,
             "allow_promotion_codes": True,
@@ -232,6 +234,7 @@ class CustomerCall:
 class CheckoutCall:
     customer_id: str
     price_id: str
+    quantity: int
     user_id: str
     trial_period_days: Optional[int]
 
@@ -270,6 +273,7 @@ class FakeBillingGateway:
         *,
         customer_id: str,
         price_id: str,
+        quantity: int,
         user_id: str,
         trial_period_days: Optional[int] = None,
     ) -> CheckoutSession:
@@ -278,6 +282,7 @@ class FakeBillingGateway:
             CheckoutCall(
                 customer_id=customer_id,
                 price_id=price_id,
+                quantity=quantity,
                 user_id=user_id,
                 trial_period_days=trial_period_days,
             )

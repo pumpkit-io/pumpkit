@@ -142,6 +142,7 @@ async def create_checkout_session(
     session = await gateway.create_subscription_checkout(
         customer_id=customer_id,
         price_id=plan.price_id,
+        quantity=1,  # A Subscription is always for one seat; the client never chooses.
         user_id=user.id,
         trial_period_days=trial_period_days,
     )

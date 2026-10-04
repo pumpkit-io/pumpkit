@@ -44,7 +44,7 @@ def monthly_plan(fake_billing):
     fake_billing.plans = [MONTHLY]
 
 
-async def test_checkout_by_plan_key_creates_a_checkout_for_that_plans_price(
+async def test_checkout_by_plan_key_creates_a_checkout_for_one_unit_of_that_plans_price(
     client, db, fake_billing, user
 ):
     response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
@@ -58,6 +58,7 @@ async def test_checkout_by_plan_key_creates_a_checkout_for_that_plans_price(
         CheckoutCall(
             customer_id="cus_fake_1",
             price_id="price_monthly",
+            quantity=1,
             user_id=user.id,
             trial_period_days=14,
         )
