@@ -84,12 +84,26 @@ async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, use
     """
     Return the User's Stripe customer ID, creating the customer through the
     gateway the first time. Commits when it creates one.
+
+    Concurrent first calls for one User create one customer: the User's row is
+    locked before the ID is read, so a second request waits and then sees the
+    first one's customer. The creation also carries an idempotency key per
+    User, so a second call that still reaches the provider (say the commit
+    failed after the customer was created, or SQLite, which has no row locks)
+    gets the same customer back, for as long as Stripe keeps the key (24
+    hours). The lock is
+    held across the provider call and released by the early commit, or by the
+    end of the request's transaction when the customer already exists.
     """
+    await users_service.lock_user(db, user)
     if user.stripe_customer_id:
         return user.stripe_customer_id
 
     customer_id = await gateway.create_customer(
-        email=user.email, name=user.display_name, user_id=user.id
+        email=user.email,
+        name=user.display_name,
+        user_id=user.id,
+        idempotency_key=f"pumpkit-user-{user.id}-customer",
     )
     await users_service.set_stripe_customer_id(db, user, customer_id)
     # Sanctioned early commit: persist the new Stripe customer before the next
@@ -103,11 +117,13 @@ async def _trial_period_days_for(db: AsyncSession, user: User) -> Optional[int]:
     """
     The Trial a Checkout for this User should start with: the configured length
     for a User who has never had a Subscription, otherwise none. Each User gets
-    at most one Trial.
+    at most one Trial. An abandoned Checkout leaves no Subscription row, so it
+    doesn't use up the Trial.
 
     Subscription rows are written by the `customer.subscription.created`
-    webhook, so a second Checkout started before that webhook lands still
-    sees the User as eligible.
+    webhook, which lands after the Checkout completes. `create_checkout_session`
+    keeps a User from completing several Trial Checkouts; see its docstring for
+    the window that remains.
     """
     days = settings.BILLING_TRIAL_PERIOD_DAYS
     if days == 0:  # Trials are off; Stripe rejects a zero-day Trial.
@@ -128,6 +144,20 @@ async def create_checkout_session(
     if the User is eligible. An unknown Plan key is the client's fault (400)
     and reaches no Stripe call; a configured Plan Stripe can't resolve is a
     provider failure (502).
+
+    Only the User's newest Checkout can be completed: the User's still-open
+    Checkouts are expired before the new one is created. Without that, a User
+    with no Subscription row could open several Checkouts, each with the
+    Trial, and complete them one after another before the first
+    `customer.subscription.created` webhook lands. The User's row stays locked
+    from the eligibility check to the new Checkout, so concurrent checkouts
+    for one User run one at a time (the lock is held across the provider
+    calls and released when the request's transaction ends).
+
+    Remaining window: a Checkout completed before this one started is no
+    longer open, so nothing expires it, and until its webhook writes the
+    Subscription row the User still looks eligible. A Checkout started in
+    that window (usually seconds) gets a second Trial.
     """
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
@@ -137,11 +167,15 @@ async def create_checkout_session(
     if plan is None:
         raise BillingProviderError(f"Configured Plan {plan_key} has no active recurring price")
 
-    trial_period_days = await _trial_period_days_for(db, user)
     customer_id = await _ensure_stripe_customer(db, gateway, user)
+    # Take the User's lock again: creating the customer committed and released it.
+    await users_service.lock_user(db, user)
+    trial_period_days = await _trial_period_days_for(db, user)
+    await gateway.expire_open_checkouts(customer_id=customer_id)
     session = await gateway.create_subscription_checkout(
         customer_id=customer_id,
         price_id=plan.price_id,
+        quantity=1,  # A Subscription is always for one seat; the client never chooses.
         user_id=user.id,
         trial_period_days=trial_period_days,
     )

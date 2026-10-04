@@ -73,8 +73,14 @@ class WebhookEvent:
 
 
 class BillingGateway(Protocol):
-    async def create_customer(self, *, email: str, name: str, user_id: str) -> str:
-        """Create the provider's customer record for a User and return its ID."""
+    async def create_customer(
+        self, *, email: str, name: str, user_id: str, idempotency_key: str
+    ) -> str:
+        """
+        Create the provider's customer record for a User and return its ID.
+        Calls with the same `idempotency_key` create one customer: a repeat
+        returns the first call's customer instead of a new one.
+        """
         ...
 
     async def create_subscription_checkout(
@@ -82,10 +88,18 @@ class BillingGateway(Protocol):
         *,
         customer_id: str,
         price_id: str,
+        quantity: int,
         user_id: str,
         trial_period_days: Optional[int] = None,
     ) -> CheckoutSession:
-        """Create a Subscription Checkout for one unit of `price_id`, with an optional Trial."""
+        """Create a Subscription Checkout for `quantity` units of `price_id`, with an optional Trial."""
+        ...
+
+    async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
+        """
+        Expire every Checkout of the customer's that can still be completed, so
+        none of them can start a Subscription any more, and return their IDs.
+        """
         ...
 
     async def create_portal_url(self, *, customer_id: str) -> str:
@@ -147,11 +161,15 @@ class StripeBillingGateway:
         except stripe.StripeError as error:
             raise BillingProviderError(f"Stripe failed to {what}") from error
 
-    async def create_customer(self, *, email: str, name: str, user_id: str) -> str:
+    async def create_customer(
+        self, *, email: str, name: str, user_id: str, idempotency_key: str
+    ) -> str:
+        # Stripe replays the first response for a repeated key (for 24 hours).
         customer = await self._call(
             "create a customer",
             lambda: self._client.v1.customers.create(
-                {"email": email, "name": name, "metadata": {"user_id": user_id}}
+                {"email": email, "name": name, "metadata": {"user_id": user_id}},
+                {"idempotency_key": idempotency_key},
             ),
         )
         return customer.id
@@ -161,6 +179,7 @@ class StripeBillingGateway:
         *,
         customer_id: str,
         price_id: str,
+        quantity: int,
         user_id: str,
         trial_period_days: Optional[int] = None,
     ) -> CheckoutSession:
@@ -168,7 +187,7 @@ class StripeBillingGateway:
             "mode": "subscription",
             "customer": customer_id,
             "client_reference_id": user_id,
-            "line_items": [{"price": price_id, "quantity": 1}],
+            "line_items": [{"price": price_id, "quantity": quantity}],
             "success_url": settings.STRIPE_CHECKOUT_SUCCESS_URL,
             "cancel_url": settings.STRIPE_CHECKOUT_CANCEL_URL,
             "allow_promotion_codes": True,
@@ -181,6 +200,21 @@ class StripeBillingGateway:
         if not session.url:
             raise BillingProviderError(f"Stripe Checkout {session.id} has no URL")
         return CheckoutSession(id=session.id, url=session.url)
+
+    async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
+        def expire_all() -> list[str]:
+            sessions = self._client.v1.checkout.sessions.list(
+                {"customer": customer_id, "status": "open", "limit": 100}
+            )
+            expired: list[str] = []
+            for session in sessions.auto_paging_iter():
+                self._client.v1.checkout.sessions.expire(session.id)
+                expired.append(session.id)
+            return expired
+
+        # A session completed between the list and its expiry makes Stripe
+        # refuse the expiry: that surfaces as a provider error too.
+        return await self._call("expire open Checkouts", expire_all)
 
     async def create_portal_url(self, *, customer_id: str) -> str:
         portal = await self._call(
@@ -226,12 +260,14 @@ class CustomerCall:
     email: str
     name: str
     user_id: str
+    idempotency_key: str
 
 
 @dataclass(frozen=True)
 class CheckoutCall:
     customer_id: str
     price_id: str
+    quantity: int
     user_id: str
     trial_period_days: Optional[int]
 
@@ -241,7 +277,8 @@ class FakeBillingGateway:
     """
     A billing provider in memory. It records every call, answers with the
     configured results, and raises `BillingProviderError` from any method named
-    in `fail_on`. Sign events with `signed_event`; its `verify_webhook` accepts
+    in `fail_on`. Checkouts it creates stay open until `expire_open_checkouts`
+    expires them. Sign events with `signed_event`; its `verify_webhook` accepts
     only payloads signed with the same secret.
     """
 
@@ -255,21 +292,33 @@ class FakeBillingGateway:
     checkouts: list[CheckoutCall] = field(default_factory=list)
     portals: list[str] = field(default_factory=list)
     plan_lookups: list[list[str]] = field(default_factory=list)
+    expired_checkouts: list[str] = field(default_factory=list)
+
+    _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
+    _customers_by_idempotency_key: dict[str, str] = field(default_factory=dict, init=False)
 
     def _maybe_fail(self, method: str) -> None:
         if method in self.fail_on:
             raise BillingProviderError(f"Fake billing gateway is set to fail {method}")
 
-    async def create_customer(self, *, email: str, name: str, user_id: str) -> str:
+    async def create_customer(
+        self, *, email: str, name: str, user_id: str, idempotency_key: str
+    ) -> str:
         self._maybe_fail("create_customer")
-        self.customers_created.append(CustomerCall(email=email, name=name, user_id=user_id))
-        return f"cus_fake_{len(self.customers_created)}"
+        self.customers_created.append(
+            CustomerCall(email=email, name=name, user_id=user_id, idempotency_key=idempotency_key)
+        )
+        # Like Stripe, a repeated idempotency key returns the first customer.
+        return self._customers_by_idempotency_key.setdefault(
+            idempotency_key, f"cus_fake_{len(self._customers_by_idempotency_key) + 1}"
+        )
 
     async def create_subscription_checkout(
         self,
         *,
         customer_id: str,
         price_id: str,
+        quantity: int,
         user_id: str,
         trial_period_days: Optional[int] = None,
     ) -> CheckoutSession:
@@ -278,11 +327,22 @@ class FakeBillingGateway:
             CheckoutCall(
                 customer_id=customer_id,
                 price_id=price_id,
+                quantity=quantity,
                 user_id=user_id,
                 trial_period_days=trial_period_days,
             )
         )
-        return CheckoutSession(id=f"cs_fake_{len(self.checkouts)}", url=self.checkout_url)
+        session_id = f"cs_fake_{len(self.checkouts)}"
+        self._open_checkouts[session_id] = customer_id
+        return CheckoutSession(id=session_id, url=self.checkout_url)
+
+    async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
+        self._maybe_fail("expire_open_checkouts")
+        expired = [s for s, c in self._open_checkouts.items() if c == customer_id]
+        for session_id in expired:
+            del self._open_checkouts[session_id]
+        self.expired_checkouts.extend(expired)
+        return expired
 
     async def create_portal_url(self, *, customer_id: str) -> str:
         self._maybe_fail("create_portal_url")

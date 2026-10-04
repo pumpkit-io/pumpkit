@@ -44,7 +44,7 @@ def monthly_plan(fake_billing):
     fake_billing.plans = [MONTHLY]
 
 
-async def test_checkout_by_plan_key_creates_a_checkout_for_that_plans_price(
+async def test_checkout_by_plan_key_creates_a_checkout_for_one_unit_of_that_plans_price(
     client, db, fake_billing, user
 ):
     response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
@@ -52,12 +52,18 @@ async def test_checkout_by_plan_key_creates_a_checkout_for_that_plans_price(
     assert response.status_code == 200
     assert response.json() == {"url": fake_billing.checkout_url, "session_id": "cs_fake_1"}
     assert fake_billing.customers_created == [
-        CustomerCall(email="alice@example.com", name="Alice", user_id=user.id)
+        CustomerCall(
+            email="alice@example.com",
+            name="Alice",
+            user_id=user.id,
+            idempotency_key=f"pumpkit-user-{user.id}-customer",
+        )
     ]
     assert fake_billing.checkouts == [
         CheckoutCall(
             customer_id="cus_fake_1",
             price_id="price_monthly",
+            quantity=1,
             user_id=user.id,
             trial_period_days=14,
         )
@@ -93,6 +99,19 @@ async def test_checkout_for_a_user_who_has_had_a_subscription_includes_no_trial(
 
     assert response.status_code == 200
     assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
+
+
+async def test_a_new_checkout_expires_the_users_still_open_checkout(client, fake_billing):
+    """Otherwise a User could open several Trial Checkouts and complete each one."""
+    first = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+    assert first.status_code == 200
+    assert fake_billing.expired_checkouts == []
+
+    second = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert second.status_code == 200
+    assert second.json()["session_id"] == "cs_fake_2"
+    assert fake_billing.expired_checkouts == ["cs_fake_1"]
 
 
 async def test_a_trial_length_of_zero_turns_trials_off(client, fake_billing, monkeypatch):
