@@ -8,12 +8,14 @@ export interface SubscriptionView {
   isActive: boolean;
 }
 
-export interface Price {
-  id: string;
+/** A Plan a User can subscribe to: `amount` in minor units, every `intervalCount` `interval`s. */
+export interface Plan {
+  key: string;
+  productName: string;
+  amount: number;
   currency: string;
-  unitAmount: number | null;
-  recurring: { interval: string; intervalCount: number } | null;
-  product: { id: string; name: string | null; description: string | null } | null;
+  interval: string;
+  intervalCount: number;
 }
 
 interface SubscriptionMeApi {
@@ -24,12 +26,13 @@ interface SubscriptionMeApi {
   is_active: boolean;
 }
 
-interface PriceApi {
-  id: string;
+interface PlanApi {
+  key: string;
+  product_name: string;
+  amount: number;
   currency: string;
-  unit_amount: number | null;
-  recurring: { interval: string; interval_count: number } | null;
-  product: { id: string; name: string | null; description: string | null } | null;
+  interval: string;
+  interval_count: number;
 }
 
 export const billingService = {
@@ -44,22 +47,22 @@ export const billingService = {
     };
   },
 
-  fetchPrices: async (): Promise<Price[]> => {
-    const { data } = await apiService.get<{ data: PriceApi[] }>('/stripe/prices');
+  fetchPlans: async (): Promise<Plan[]> => {
+    const { data } = await apiService.get<{ data: PlanApi[] }>('/stripe/plans');
     return data.data.map((p) => ({
-      id: p.id,
+      key: p.key,
+      productName: p.product_name,
+      amount: p.amount,
       currency: p.currency,
-      unitAmount: p.unit_amount,
-      recurring: p.recurring
-        ? { interval: p.recurring.interval, intervalCount: p.recurring.interval_count }
-        : null,
-      product: p.product,
+      interval: p.interval,
+      intervalCount: p.interval_count,
     }));
   },
 
-  startSubscriptionCheckout: async (priceId: string): Promise<string> => {
+  /** Starts Checkout for a Plan; the server decides the price, quantity and any Trial. */
+  startSubscriptionCheckout: async (planKey: string): Promise<string> => {
     const { data } = await apiService.post<{ url: string }>('/stripe/checkout', {
-      price_id: priceId,
+      plan_key: planKey,
     });
     return data.url;
   },

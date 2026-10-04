@@ -41,9 +41,9 @@ export function BillingDialog() {
     }
   };
 
-  const onSubscribe = (priceId: string) => {
-    track('billing_subscription_checkout_started', { price_id: priceId });
-    void go(priceId, () => billingService.startSubscriptionCheckout(priceId));
+  const onSubscribe = (planKey: string) => {
+    track('billing_subscription_checkout_started', { plan_key: planKey });
+    void go(planKey, () => billingService.startSubscriptionCheckout(planKey));
   };
 
   const onManage = async () => {
@@ -99,27 +99,26 @@ export function BillingDialog() {
                     <p className="font-sans text-xs text-muted-foreground">
                       You have no active subscription.
                     </p>
-                    {data.prices.length === 0 ? (
+                    {data.plans.length === 0 ? (
                       <p className="font-sans text-xs text-muted-foreground">
                         No plans are available yet.
                       </p>
                     ) : (
                       <div className="grid gap-3 sm:grid-cols-2">
-                        {data.prices.map((price) => (
+                        {data.plans.map((plan) => (
                           <PlanCard
-                            key={price.id}
-                            title={price.product?.name ?? 'Plan'}
-                            description={price.product?.description}
+                            key={plan.key}
+                            title={plan.productName}
                             priceLabel={recurringLabel(
-                              price.unitAmount,
-                              price.currency,
-                              price.recurring!.interval,
-                              price.recurring!.intervalCount,
+                              plan.amount,
+                              plan.currency,
+                              plan.interval,
+                              plan.intervalCount,
                             )}
-                            actionLabel={pendingId === price.id ? 'Redirecting…' : 'Subscribe'}
-                            ariaLabel={`Subscribe to ${price.product?.name ?? 'plan'}`}
+                            actionLabel={pendingId === plan.key ? 'Redirecting…' : 'Subscribe'}
+                            ariaLabel={`Subscribe to ${plan.productName}`}
                             disabled={pendingId !== null}
-                            onAction={() => onSubscribe(price.id)}
+                            onAction={() => onSubscribe(plan.key)}
                           />
                         ))}
                       </div>
