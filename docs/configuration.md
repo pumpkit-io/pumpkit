@@ -30,10 +30,6 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | `JWT_ISSUER`, `JWT_AUDIENCE` | `iss` / `aud` claims of issued tokens. |
 | `COOKIE_MAX_AGE_SECONDS` | Refresh cookie lifetime (2592000 = 30 days). |
 | `FERNET_ENCRYPTION_KEY` | 32 url-safe base64-encoded bytes (generate with `Fernet.generate_key()`). |
-| `PASSWORD_RESET_TOKEN_DURATION_HOURS`, `PASSWORD_RESET_TOKEN_NUM_BYTES` | Password-reset token lifetime and size. |
-| `PASSWORD_MAX_LENGTH` | Maximum accepted password length. |
-| `EMAIL_VERIFICATION_TOKEN_DURATION_HOURS`, `EMAIL_VERIFICATION_TOKEN_NUM_BYTES` | Email-verification token lifetime and size. |
-| `EMAIL_VERIFICATION_COOKIE_DURATION_SECONDS` | Short-lived cookie holding the email address during verification. |
 | `MAGIC_LINK_TOKEN_DURATION_MINUTES`, `MAGIC_LINK_TOKEN_NUM_BYTES` | Magic-link token lifetime and size. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials. |
 | `GOOGLE_OAUTH_REDIRECT_URI` | Must match the redirect URI registered in Google Cloud. |
