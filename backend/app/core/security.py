@@ -12,7 +12,6 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.core.logger import logger
@@ -24,9 +23,6 @@ TokenType = Literal["access", "refresh"]
 # The tokenUrl is just for OpenAPI documentation - it doesn't affect the actual token extraction.
 # The tokenUrl should point to the endpoint that returns the access token in its content: {"access_token": "<token>", ...}
 oauth2_scheme: OAuth2PasswordBearer = OAuth2PasswordBearer(tokenUrl="login")
-
-# Password hashing helper
-_pwd_context: CryptContext = CryptContext(schemes=["argon2"], deprecated="auto")
 
 # Data encryption helper
 _fernet = Fernet(settings.FERNET_ENCRYPTION_KEY.encode())
@@ -111,30 +107,6 @@ def verify_token(token: str, token_hash: str) -> bool:
     Verify that the given token matches its given hash.
     """
     return hmac.compare_digest(hash_token(token), token_hash)
-
-
-####################
-# PASSWORD HASHING #
-####################
-
-
-def hash_password(plain_password: str) -> str:
-    """
-    Hash a plain-text password.
-
-    Argon2 is preferable over SHA-256 for hashing user passwords. User passwords often have
-    low entropy, making them vulnerable to brute force attacks. SHA-256 is built to be lightning fast,
-    so hackers could check billions of password hashes per second. Argon2 instead is intentionally slow
-    and memory-intensive, making it more difficult to crack via brute force attacks.
-    """
-    return _pwd_context.hash(plain_password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verify that, after being hashed, the given plain password matches the given hashed password
-    """
-    return _pwd_context.verify(plain_password, hashed_password)
 
 
 #################################
