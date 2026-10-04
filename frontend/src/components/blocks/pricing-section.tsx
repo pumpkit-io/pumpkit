@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { billingService, type Price } from '@/services/billingService';
-import { recurringLabel } from '@/features/billing/ProductCard';
+import { billingService, type Plan } from '@/services/billingService';
+import { recurringLabel } from '@/features/billing/PlanCard';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
 
-type State = { status: 'loading' } | { status: 'ready'; prices: Price[] } | { status: 'error' };
+type State = { status: 'loading' } | { status: 'ready'; plans: Plan[] } | { status: 'error' };
 
 export function PricingSection() {
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -16,18 +16,15 @@ export function PricingSection() {
   useEffect(() => {
     let cancelled = false;
     billingService
-      .fetchPrices()
-      .then(
-        (prices) =>
-          !cancelled && setState({ status: 'ready', prices: prices.filter((p) => p.recurring) }),
-      )
+      .fetchPlans()
+      .then((plans) => !cancelled && setState({ status: 'ready', plans }))
       .catch(() => !cancelled && setState({ status: 'error' }));
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const prices = state.status === 'ready' ? state.prices : [];
+  const plans = state.status === 'ready' ? state.plans : [];
 
   return (
     <section id="pricing" ref={sectionRef} className="border-t border-border bg-background py-24">
@@ -36,46 +33,36 @@ export function PricingSection() {
           Pricing
         </h2>
         <p className="mt-3 text-center font-sans text-sm text-muted-foreground">
-          Plans are loaded from your Stripe account (active recurring prices).
+          Pick a Plan, billed through Stripe. Cancel anytime from the billing portal.
         </p>
 
         {state.status === 'loading' && (
           <p className="mt-12 text-center font-sans text-sm text-muted-foreground">Loading…</p>
         )}
 
-        {(state.status === 'error' || (state.status === 'ready' && prices.length === 0)) && (
+        {(state.status === 'error' || (state.status === 'ready' && plans.length === 0)) && (
           <p className="mt-12 text-center font-sans text-sm text-muted-foreground">
             Pricing is coming soon.
           </p>
         )}
 
-        {prices.length > 0 && (
+        {plans.length > 0 && (
           <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {prices.map((price) => (
+            {plans.map((plan) => (
               <div
-                key={price.id}
+                key={plan.key}
                 className="flex flex-col rounded-2xl border border-border bg-card p-6"
               >
                 <h3 className="font-sans text-base font-semibold text-foreground">
-                  {price.product?.name ?? 'Plan'}
+                  {plan.productName}
                 </h3>
-                {price.product?.description && (
-                  <p className="mt-2 font-sans text-sm text-muted-foreground">
-                    {price.product.description}
-                  </p>
-                )}
                 <div className="mt-6 font-sans text-2xl font-semibold text-foreground">
-                  {recurringLabel(
-                    price.unitAmount,
-                    price.currency,
-                    price.recurring!.interval,
-                    price.recurring!.intervalCount,
-                  )}
+                  {recurringLabel(plan.amount, plan.currency, plan.interval, plan.intervalCount)}
                 </div>
                 <Button
                   asChild
                   className="mt-6"
-                  onClick={() => track('landing_pricing_cta_clicked', { price_id: price.id })}
+                  onClick={() => track('landing_pricing_cta_clicked', { plan_key: plan.key })}
                 >
                   <Link to="/login">Get started</Link>
                 </Button>

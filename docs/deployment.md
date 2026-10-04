@@ -88,11 +88,8 @@ then obtains certificates automatically.
 
 In the Stripe dashboard add an endpoint `https://<domain>/api/v1/stripe/webhook`
 subscribed to: `customer.subscription.created`, `customer.subscription.updated`,
-`customer.subscription.deleted`, `checkout.session.completed`,
-`checkout.session.expired`, `checkout.session.async_payment_succeeded`,
-`checkout.session.async_payment_failed`, `charge.refunded`,
-`charge.dispute.funds_withdrawn`, `charge.dispute.funds_reinstated`,
-`payment_intent.payment_failed`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
+`customer.subscription.deleted` and `checkout.session.completed`. Put its signing
+secret in `STRIPE_WEBHOOK_SECRET`.
 
 ## 7. Deploy
 

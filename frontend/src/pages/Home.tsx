@@ -18,7 +18,6 @@ import { useBootstrap } from './Home/useBootstrap';
 
 interface HomeLocationState {
   checkoutStatus?: 'success' | 'cancelled';
-  checkoutKind?: string;
   openBilling?: boolean;
 }
 
@@ -37,11 +36,11 @@ function useBillingReturn() {
     navigate('.', { replace: true, state: null });
 
     if (state.checkoutStatus === 'success') {
-      track('billing_checkout_succeeded', { kind: state.checkoutKind });
+      track('billing_checkout_succeeded');
       fireSuccessConfetti(null);
       billing.open('checkout_success');
     } else if (state.checkoutStatus === 'cancelled') {
-      track('billing_checkout_cancelled', { kind: state.checkoutKind });
+      track('billing_checkout_cancelled');
       billing.openWithError(
         'Checkout was cancelled. You have not been charged.',
         'checkout_cancelled',

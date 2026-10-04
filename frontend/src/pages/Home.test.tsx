@@ -23,9 +23,7 @@ vi.mock('@/services/billingService', () => ({
       cancelAtPeriodEnd: false,
       isActive: false,
     }),
-    fetchPrices: vi.fn().mockResolvedValue([]),
-    fetchProducts: vi.fn().mockResolvedValue([]),
-    fetchPurchases: vi.fn().mockResolvedValue([]),
+    fetchPlans: vi.fn().mockResolvedValue([]),
   },
   errorMessage: (_e: unknown, fallback: string) => fallback,
 }));
@@ -58,7 +56,7 @@ describe('Home', () => {
   });
 
   it('opens the billing dialog after a successful checkout', async () => {
-    renderHome({ checkoutStatus: 'success', checkoutKind: 'purchase' });
+    renderHome({ checkoutStatus: 'success' });
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Billing')).toBeInTheDocument();
   });

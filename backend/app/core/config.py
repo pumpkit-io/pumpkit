@@ -1,5 +1,6 @@
 from typing import Literal, Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 Environment = Literal["local", "dev", "stg", "prod"]
@@ -61,6 +62,13 @@ class Settings(BaseSettings):
     STRIPE_CHECKOUT_SUCCESS_URL: str
     STRIPE_CHECKOUT_CANCEL_URL: str
     STRIPE_BILLING_PORTAL_RETURN_URL: str
+
+    # Billing
+    # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
+    # Nothing else can be listed or bought.
+    BILLING_PLAN_KEYS: list[str]
+    # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
+    BILLING_TRIAL_PERIOD_DAYS: int = Field(ge=0)
 
     # OpenRouter (optional). When unset, app.core.openrouter raises
     # LLMNotConfiguredError on first use instead of failing at boot.

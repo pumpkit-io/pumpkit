@@ -5,11 +5,10 @@
 ```
 backend/app/
   api/routers/     HTTP endpoints only: auth deps, parsing, response shaping
-  api/mediators/   orchestration across services (webhook dispatch, purchases, Google and Magic link sign-in)
-  api/services/    one resource or capability each: DB access, Stripe, users, tokens
-  api/hooks/       extension points you implement (purchase hooks)
+  api/mediators/   orchestration across services (webhook dispatch, Google and Magic link sign-in)
+  api/services/    one resource or capability each: DB access, Subscriptions, users, tokens
   api/configs/     third-party provider configuration (Google)
-  core/            settings, security, logging, products, OpenRouter and PostHog clients
+  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer)
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
@@ -31,27 +30,15 @@ The call direction in the backend is `router -> mediator -> service`, never back
 
 ## Building your app
 
-### Sell one-time products
-
-Edit `PRODUCTS` in `backend/app/core/purchases.py`, then implement the hooks in `backend/app/api/hooks/purchases.py`:
-
-- `on_purchase_paid(db, purchase)` grants the product.
-- `on_purchase_reversed(db, purchase, reason)` revokes it; `reason` is `refunded`, `partially_refunded` or `disputed`.
-- `on_purchase_reinstated(db, purchase)` re-grants it when a dispute is won.
-
-The hooks run inside the webhook transaction: use the session you are given, never commit, and raise to make Stripe retry the event. Each status transition fires its hook once.
-
-A purchase starts `pending` and becomes `paid` when Checkout completes. A refund moves it to `refunded` (or `partially_refunded` for a partial one; a later full refund moves it on to `refunded`). A dispute marks it `disputed`; if you win, funds are reinstated and it returns to `paid` or `partially_refunded`. It becomes `failed` only when the Checkout session expires, an async payment fails, or the paid amount or currency does not match the catalog. A failed card attempt alone does not fail the purchase, since Checkout lets the customer retry with another card.
-
-Amounts assume 2-decimal currencies (minor units / 100); zero- and three-decimal currencies need extra handling.
-
-Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `charge.refunded`, `charge.dispute.funds_withdrawn`, `charge.dispute.funds_reinstated`, `payment_intent.payment_failed`.
-
 ### Subscriptions
 
-Create products with recurring prices in Stripe. They appear on the landing page and in the billing dialog automatically.
+Pumpkit bills only by Subscription (see `docs/adr/0003-subscription-only-billing.md`). Create each Plan as a recurring price in Stripe with a lookup key (for example `pumpkit_pro_monthly`), and list that key in `BILLING_PLAN_KEYS` (see `docs/configuration.md`). Only those Plans appear on the landing page and in the billing dialog (`GET /api/v1/stripe/plans`), and Checkout (`POST /api/v1/stripe/checkout`) takes nothing but a Plan key: the server resolves the price and always buys one. A User who has never had a Subscription gets a Trial of `BILLING_TRIAL_PERIOD_DAYS` days, once, through that Checkout with a card; the client can't ask for one. Starting a Checkout expires the User's other open Checkouts, so only the newest one can be completed.
 
-Cardless trials are available via `POST /api/v1/stripe/trial`, but they are not wired into the billing dialog.
+Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` and `checkout.session.completed` (logged only; the Subscription events write the rows).
+
+Every Stripe call goes through the `BillingGateway` port (`core/billing_gateway.py`): only its Stripe adapter uses the SDK, it returns plain data, and any provider failure is a `BillingProviderError`, which the global handler returns as a 502 with an `error_id`. Routers inject it with `Depends(get_billing_gateway)`; tests get `FakeBillingGateway` through the autouse `fake_billing` fixture, which also signs webhook events (`fake_billing.signed_event(...)`) to post to the endpoint.
+
+`mediators/stripe.handle_webhook` owns the webhook transaction: it records the event for deduplication, dispatches it and commits once. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it.
 
 ### Call an LLM
 

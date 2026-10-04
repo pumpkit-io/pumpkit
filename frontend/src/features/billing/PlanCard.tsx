@@ -1,9 +1,8 @@
 import { Button } from '@/components/ui/button';
 import { formatAmount } from '@/lib/money';
 
-interface ProductCardProps {
+interface PlanCardProps {
   title: string;
-  description?: string | null;
   priceLabel: string;
   actionLabel: string;
   ariaLabel: string;
@@ -11,22 +10,18 @@ interface ProductCardProps {
   onAction: () => void;
 }
 
-export function ProductCard({
+export function PlanCard({
   title,
-  description,
   priceLabel,
   actionLabel,
   ariaLabel,
   disabled,
   onAction,
-}: ProductCardProps) {
+}: PlanCardProps) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
       <div>
         <div className="font-sans text-sm font-semibold text-foreground">{title}</div>
-        {description && (
-          <div className="mt-1 font-sans text-xs text-muted-foreground">{description}</div>
-        )}
       </div>
       <div className="font-sans text-lg font-semibold text-foreground">{priceLabel}</div>
       <Button type="button" size="sm" onClick={onAction} disabled={disabled} aria-label={ariaLabel}>
@@ -36,13 +31,13 @@ export function ProductCard({
   );
 }
 
+/** A Plan's price, e.g. "€9.00 / month" or "€24.00 / 3 months". */
 export function recurringLabel(
-  unitAmount: number | null,
+  amount: number,
   currency: string,
   interval: string,
   count: number,
 ): string {
-  if (unitAmount == null) return 'Custom';
   const every = count === 1 ? interval : `${count} ${interval}s`;
-  return `${formatAmount(unitAmount, currency)} / ${every}`;
+  return `${formatAmount(amount, currency)} / ${every}`;
 }

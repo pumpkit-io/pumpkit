@@ -8,20 +8,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { billingService, errorMessage } from '@/services/billingService';
-import { formatAmount } from '@/lib/money';
 import { redirectTo } from '@/lib/navigation';
 import { track } from '@/lib/analytics';
 import { useBilling } from './useBilling';
-import { ProductCard, recurringLabel } from './ProductCard';
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  paid: 'Paid',
-  refunded: 'Refunded',
-  partially_refunded: 'Partially refunded',
-  disputed: 'Disputed',
-  failed: 'Failed',
-};
+import { PlanCard, recurringLabel } from './PlanCard';
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -51,14 +41,9 @@ export function BillingDialog() {
     }
   };
 
-  const onSubscribe = (priceId: string) => {
-    track('billing_subscription_checkout_started', { price_id: priceId });
-    void go(priceId, () => billingService.startSubscriptionCheckout(priceId));
-  };
-
-  const onBuy = (productId: string) => {
-    track('billing_purchase_checkout_started', { product_id: productId });
-    void go(productId, () => billingService.startPurchaseCheckout(productId));
+  const onSubscribe = (planKey: string) => {
+    track('billing_subscription_checkout_started', { plan_key: planKey });
+    void go(planKey, () => billingService.startSubscriptionCheckout(planKey));
   };
 
   const onManage = async () => {
@@ -72,7 +57,6 @@ export function BillingDialog() {
   };
 
   const subscription = data?.subscription;
-  const productNames = new Map((data?.products ?? []).map((p) => [p.id, p.name]));
 
   return (
     <Dialog open={isOpen} onOpenChange={(next) => (next ? null : close())}>
@@ -81,9 +65,7 @@ export function BillingDialog() {
           <DialogTitle className="font-sans text-base font-semibold tracking-tight">
             Billing
           </DialogTitle>
-          <p className="mt-1 font-sans text-xs text-muted-foreground">
-            Manage your plan and one-time purchases.
-          </p>
+          <p className="mt-1 font-sans text-xs text-muted-foreground">Manage your Subscription.</p>
         </DialogHeader>
 
         <div className="max-h-[65vh] space-y-6 overflow-y-auto px-6 pb-4">
@@ -117,74 +99,31 @@ export function BillingDialog() {
                     <p className="font-sans text-xs text-muted-foreground">
                       You have no active subscription.
                     </p>
-                    {data.prices.length === 0 ? (
+                    {data.plans.length === 0 ? (
                       <p className="font-sans text-xs text-muted-foreground">
                         No plans are available yet.
                       </p>
                     ) : (
                       <div className="grid gap-3 sm:grid-cols-2">
-                        {data.prices.map((price) => (
-                          <ProductCard
-                            key={price.id}
-                            title={price.product?.name ?? 'Plan'}
-                            description={price.product?.description}
+                        {data.plans.map((plan) => (
+                          <PlanCard
+                            key={plan.key}
+                            title={plan.productName}
                             priceLabel={recurringLabel(
-                              price.unitAmount,
-                              price.currency,
-                              price.recurring!.interval,
-                              price.recurring!.intervalCount,
+                              plan.amount,
+                              plan.currency,
+                              plan.interval,
+                              plan.intervalCount,
                             )}
-                            actionLabel={pendingId === price.id ? 'Redirecting…' : 'Subscribe'}
-                            ariaLabel={`Subscribe to ${price.product?.name ?? 'plan'}`}
+                            actionLabel={pendingId === plan.key ? 'Redirecting…' : 'Subscribe'}
+                            ariaLabel={`Subscribe to ${plan.productName}`}
                             disabled={pendingId !== null}
-                            onAction={() => onSubscribe(price.id)}
+                            onAction={() => onSubscribe(plan.key)}
                           />
                         ))}
                       </div>
                     )}
                   </>
-                )}
-              </section>
-
-              <section className="space-y-3">
-                <h3 className="font-sans text-sm font-semibold text-foreground">
-                  One-time purchases
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {data.products.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      title={product.name}
-                      description={product.description}
-                      priceLabel={formatAmount(product.amountCents, product.currency)}
-                      actionLabel={pendingId === product.id ? 'Redirecting…' : 'Buy'}
-                      ariaLabel={`Buy ${product.name}`}
-                      disabled={pendingId !== null}
-                      onAction={() => onBuy(product.id)}
-                    />
-                  ))}
-                </div>
-                {data.purchases.length > 0 && (
-                  <ul className="divide-y divide-border rounded-xl border border-border">
-                    {data.purchases.slice(0, 10).map((purchase) => (
-                      <li
-                        key={purchase.id}
-                        className="flex items-center justify-between px-4 py-2 font-sans text-xs"
-                      >
-                        <span className="text-foreground">
-                          {productNames.get(purchase.productId) ?? purchase.productId}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {formatAmount(
-                            purchase.amountTotalCents ?? purchase.amountSubtotalCents,
-                            purchase.currency,
-                          )}{' '}
-                          · {STATUS_LABEL[purchase.status] ?? purchase.status} ·{' '}
-                          {new Date(purchase.createdAt).toLocaleDateString()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
                 )}
               </section>
             </>
