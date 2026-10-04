@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     STRIPE_CHECKOUT_CANCEL_URL: str
     STRIPE_BILLING_PORTAL_RETURN_URL: str
 
+    # Billing
+    # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
+    # Nothing else can be listed or bought.
+    BILLING_PLAN_KEYS: list[str]
+
     # OpenRouter (optional). When unset, app.core.openrouter raises
     # LLMNotConfiguredError on first use instead of failing at boot.
     OPENROUTER_API_KEY: Optional[str] = None

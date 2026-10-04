@@ -17,7 +17,7 @@ export const EVENTS = {
     description: 'Landing: the pricing section scrolled into view.',
   },
   landing_pricing_cta_clicked: {
-    description: 'Landing: clicked a pricing card CTA. Props: price_id.',
+    description: 'Landing: clicked a Plan card CTA. Props: plan_key.',
   },
 
   // Login (/login) + auth callbacks
@@ -72,7 +72,7 @@ export const EVENTS = {
   billing_dialog_opened: { description: 'Billing: opened the billing dialog. Props: source.' },
   billing_dialog_closed: { description: 'Billing: closed the billing dialog.' },
   billing_subscription_checkout_started: {
-    description: 'Billing: started a subscription checkout. Props: price_id.',
+    description: 'Billing: started a Subscription checkout. Props: plan_key.',
   },
   billing_checkout_redirect_failed: {
     description: 'Billing: could not redirect to Stripe. Props: error_message.',

@@ -2,7 +2,7 @@
 
 Every setting comes from environment variables, split across three files copied from their `.env.example`: the root `.env`, `backend/.env` and `frontend/.env`.
 
-Variables marked (optional) can be left empty; the app boots without them. Only the database, auth (JWT, Fernet, Google, Resend) and Stripe variables are required.
+Variables marked (optional) can be left empty; the app boots without them. Only the database, auth (JWT, Fernet, Google, Resend), Stripe and billing variables are required.
 
 ## Root `.env`
 
@@ -42,6 +42,7 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | `STRIPE_WEBHOOK_SECRET` | Signing secret of the webhook endpoint. |
 | `STRIPE_CHECKOUT_SUCCESS_URL`, `STRIPE_CHECKOUT_CANCEL_URL` | Where Checkout returns after paying or cancelling. |
 | `STRIPE_BILLING_PORTAL_RETURN_URL` | Where the customer portal returns. |
+| `BILLING_PLAN_KEYS` | The Plans Pumpkit sells: Stripe price lookup keys as a quoted JSON list (like `CORS_ORIGINS`), in display order. Only these are listed and purchasable; each must be an active recurring price. |
 | `OPENROUTER_API_KEY` (optional) | Enables the LLM client; without it calls raise `LLMNotConfiguredError`. |
 | `POSTHOG_ENABLED` (optional) | `true` to enable server-side analytics and error tracking. |
 | `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. |

@@ -23,7 +23,7 @@ vi.mock('@/services/billingService', () => ({
       cancelAtPeriodEnd: false,
       isActive: false,
     }),
-    fetchPrices: vi.fn().mockResolvedValue([]),
+    fetchPlans: vi.fn().mockResolvedValue([]),
   },
   errorMessage: (_e: unknown, fallback: string) => fallback,
 }));

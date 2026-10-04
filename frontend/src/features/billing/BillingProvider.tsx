@@ -2,14 +2,14 @@ import { createContext, useCallback, useMemo, useState, type ReactNode } from 'r
 import {
   billingService,
   errorMessage,
-  type Price,
+  type Plan,
   type SubscriptionView,
 } from '@/services/billingService';
 import { track } from '@/lib/analytics';
 
 export interface BillingData {
   subscription: SubscriptionView;
-  prices: Price[];
+  plans: Plan[];
 }
 
 interface BillingContextValue {
@@ -34,11 +34,11 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [subscription, prices] = await Promise.all([
+      const [subscription, plans] = await Promise.all([
         billingService.fetchSubscription(),
-        billingService.fetchPrices(),
+        billingService.fetchPlans(),
       ]);
-      setData({ subscription, prices: prices.filter((p) => p.recurring) });
+      setData({ subscription, plans });
     } catch (e) {
       setError(errorMessage(e, 'Could not load billing information.'));
     } finally {

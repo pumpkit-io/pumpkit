@@ -12,7 +12,7 @@ from app.schemas.stripe import (
     BillingPortalResponse,
     CheckoutRequest,
     CheckoutResponse,
-    PricesListResponse,
+    PlansListResponse,
     SubscriptionMeResponse,
     TrialRequest,
     TrialResponse,
@@ -34,16 +34,17 @@ async def get_stripe_me(
 
 
 @router.get(
-    "/stripe/prices",
-    response_model=PricesListResponse,
+    "/stripe/plans",
+    response_model=PlansListResponse,
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("30/minute")
-async def list_stripe_prices(
+async def list_stripe_plans(
     request: Request,
     gateway: BillingGateway = Depends(get_billing_gateway),
-) -> PricesListResponse:
-    return await stripe_mediator.list_prices(gateway=gateway)
+) -> PlansListResponse:
+    # Public: the landing page lists Plans to signed-out visitors.
+    return await stripe_mediator.list_plans(gateway=gateway)
 
 
 @router.post(

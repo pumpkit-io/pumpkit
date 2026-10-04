@@ -29,36 +29,50 @@ const ACTIVE_SUBSCRIPTION = {
   is_active: true,
 };
 
-const PRICES = {
+const PLANS = {
   data: [
     {
-      id: 'price_m',
+      key: 'pumpkit_pro_monthly',
+      product_name: 'Pro',
+      amount: 900,
       currency: 'eur',
-      unit_amount: 900,
-      recurring: { interval: 'month', interval_count: 1 },
-      product: { id: 'prod_1', name: 'Pro', description: null },
+      interval: 'month',
+      interval_count: 1,
+    },
+    {
+      key: 'pumpkit_pro_yearly',
+      product_name: 'Pro yearly',
+      amount: 9000,
+      currency: 'eur',
+      interval: 'year',
+      interval_count: 1,
     },
   ],
 };
 
-/** Fakes the backend at the axios adapter and records every request as "METHOD url". */
+/**
+ * Fakes the backend at the axios adapter. Records every request as "METHOD url"
+ * and the JSON body of each request that has one.
+ */
 function fakeBackend(subscription: object) {
   const requests: string[] = [];
+  const bodies: Record<string, unknown> = {};
   const routes: Record<string, unknown> = {
     'GET /stripe/me': subscription,
-    'GET /stripe/prices': PRICES,
+    'GET /stripe/plans': PLANS,
     'POST /stripe/checkout': { url: 'https://checkout.stripe.test/s', session_id: 'cs_1' },
     'POST /stripe/billing-portal': { url: 'https://portal.stripe.test/x' },
   };
   api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
     const key = `${(config.method ?? 'get').toUpperCase()} ${config.url}`;
     requests.push(key);
+    if (config.data) bodies[key] = JSON.parse(config.data as string);
     if (!(key in routes)) {
       return { data: { detail: 'Not Found' }, status: 404, statusText: '', headers: {}, config };
     }
     return { data: routes[key], status: 200, statusText: 'OK', headers: {}, config };
   };
-  return { requests };
+  return { requests, bodies };
 }
 
 function OpenOnMount() {
@@ -87,20 +101,22 @@ describe('BillingDialog', () => {
     renderDialog();
 
     expect(await screen.findByText('Pro')).toBeInTheDocument();
+    expect(screen.getByText('Pro yearly')).toBeInTheDocument();
+    expect(screen.getByText(/€9\.00 \/ month/)).toBeInTheDocument();
     expect(screen.getByText(/no active subscription/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /subscribe to pro/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
       'Subscription',
     ]);
-    expect(backend.requests.sort()).toEqual(['GET /stripe/me', 'GET /stripe/prices']);
+    expect(backend.requests.sort()).toEqual(['GET /stripe/me', 'GET /stripe/plans']);
   });
 
-  it('starts a Subscription checkout when Subscribe is clicked', async () => {
+  it('starts Checkout with only the chosen Plan key when Subscribe is clicked', async () => {
     const backend = fakeBackend(NO_SUBSCRIPTION);
     renderDialog();
-    fireEvent.click(await screen.findByRole('button', { name: /subscribe to pro/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /subscribe to pro yearly/i }));
     await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://checkout.stripe.test/s'));
-    expect(backend.requests).toContain('POST /stripe/checkout');
+    expect(backend.bodies['POST /stripe/checkout']).toEqual({ plan_key: 'pumpkit_pro_yearly' });
   });
 
   it('shows Manage for an active Subscription', async () => {
