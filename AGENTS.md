@@ -15,12 +15,12 @@ Open-source social listening and AI reply tool for X: finds conversations worth 
 
 ## Where things are
 
-- `backend/app/api/`: HTTP layer split into `routers/` → `mediators/` → `services/`, plus `hooks/` and provider `configs/`.
+- `backend/app/api/`: HTTP layer split into `routers/` → `mediators/` → `services/`, plus provider `configs/`.
 - `backend/app/core/`: settings, security, logging, LLM client (OpenRouter), PostHog, rate limiting.
 - `backend/app/db/`, `backend/alembic/`: SQLAlchemy models, sessions, migrations.
 - `frontend/src/`: `pages/` (routes), `features/` (self-contained modules), `components/`, `services/` (API clients), `lib/`.
 - `e2e/`: Playwright smoke tests. `infra/`, `scripts/deploy.sh`, `docs/deployment.md`: single-server deploy.
-- `docs/development.md`: project layout and recipes (purchases, LLM calls, analytics events, branding).
+- `docs/development.md`: project layout and recipes (Subscriptions, LLM calls, analytics events, branding).
 
 ## Rules
 
@@ -28,7 +28,7 @@ Open-source social listening and AI reply tool for X: finds conversations worth 
 - Work on a branch and open a PR that follows `.github/pull_request_template.md`. Never push to `main`.
 - Coding standards live in `CODING_STANDARDS.md` and are checked at review time.
 - Backend call direction is `router → mediator → service`, never backwards. No DB queries in routers or mediators.
-- Stripe webhook handlers and purchase hooks never commit: `mediators/stripe.handle_webhook` owns the transaction; raise to roll back.
+- Stripe webhook handlers never commit: `mediators/stripe.handle_webhook` owns the transaction; raise to roll back.
 - Frontend: storage keys and lock names go through `src/lib/storage.ts` / `APP_SLUG`; every analytics event is declared in `EVENTS` (`src/lib/analytics.ts`); token refreshes go only through `performRefresh()` in `src/services/apiService.ts`.
 
 ## Agent skills
