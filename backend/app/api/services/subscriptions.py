@@ -1,7 +1,9 @@
+"""Persistence for Subscriptions, the local replica of what Stripe knows."""
+
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Subscription, SubscriptionStatus, User
@@ -53,20 +55,6 @@ async def get_user_by_stripe_customer_id(
     return result.scalar_one_or_none()
 
 
-async def set_user_stripe_customer_id(
-    db: AsyncSession,
-    user_id: str,
-    stripe_customer_id: str,
-) -> None:
-    """
-    Persist the Stripe customer id on a user.
-    """
-    await db.execute(
-        update(User).where(User.id == user_id).values(stripe_customer_id=stripe_customer_id)
-    )
-    await db.commit()
-
-
 async def upsert_subscription(
     db: AsyncSession,
     user_id: str,
@@ -79,7 +67,7 @@ async def upsert_subscription(
 ) -> None:
     """
     Insert or update the local Subscription replica keyed by the Stripe subscription ID.
-    Does not commit: the caller owns the transaction (webhook dispatcher or trial endpoint).
+    Does not commit: the caller owns the transaction (webhook mediator or trial endpoint).
     """
     subscription = await get_subscription_by_stripe_id(
         db=db, stripe_subscription_id=stripe_subscription_id

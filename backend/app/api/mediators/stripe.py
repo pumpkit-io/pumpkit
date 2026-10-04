@@ -1,16 +1,13 @@
-import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-import stripe
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import app.api.services.stripe as stripe_service
-import app.api.services.stripe_customers as stripe_customers_service
 import app.api.services.stripe_events as stripe_events_service
-from app.core.config import settings
+import app.api.services.subscriptions as subscriptions_service
+import app.api.services.users as users_service
+from app.core.billing_gateway import BillingGateway, WebhookEvent, WebhookSignatureError
 from app.core.logger import logger
 from app.db.models import SubscriptionStatus, User
 from app.schemas.stripe import (
@@ -26,15 +23,14 @@ from app.schemas.stripe import (
     TrialResponse,
 )
 
-# Setup the Stripe API key at the module level
-stripe.api_key = settings.STRIPE_SECRET_KEY
-
 
 async def get_subscription_me(db: AsyncSession, user: User) -> SubscriptionMeResponse:
     """
     Return the authenticated user's latest subscription view.
     """
-    subscription = await stripe_service.get_latest_subscription_for_user(db=db, user_id=user.id)
+    subscription = await subscriptions_service.get_latest_subscription_for_user(
+        db=db, user_id=user.id
+    )
 
     if subscription is None:
         # No subscription found - return the default status indicating no active subscription
@@ -51,140 +47,95 @@ async def get_subscription_me(db: AsyncSession, user: User) -> SubscriptionMeRes
         stripe_price_id=subscription.stripe_price_id,
         current_period_end=subscription.current_period_end,
         cancel_at_period_end=subscription.cancel_at_period_end,
-        is_active=stripe_service.is_subscription_active(subscription),
+        is_active=subscriptions_service.is_subscription_active(subscription),
     )
 
 
-async def list_prices() -> PricesListResponse:
+async def list_prices(gateway: BillingGateway) -> PricesListResponse:
     """
-    Return all active Stripe prices with their parent products expanded.
+    Return all active Stripe prices with their parent products.
     """
-    # Fetch the prices
-    try:
-        prices = await asyncio.to_thread(
-            stripe.Price.list,
-            active=True,
-            expand=["data.product"],
-            limit=100,
-        )
-    except stripe.StripeError:
-        logger.exception("Failed to list Stripe prices")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not load pricing information. Please try again later.",
-        )
-
-    # Parse the relevant fields of each product and price
-    data: list[PriceResponse] = []
-    for stripe_price in prices.data:
-        # stripe>=15 resources are not dicts; convert (recursively) so .get() works.
-        price = stripe_price.to_dict()
-        product_payload: Optional[PriceProduct] = None
-        product = price.get("product")
-        if isinstance(product, dict) and not product.get("deleted"):
-            product_payload = PriceProduct(
-                id=product["id"],
-                name=product.get("name"),
-                description=product.get("description"),
-            )
-
-        recurring_payload: Optional[PriceRecurring] = None
-        recurring = price.get("recurring")
-        if recurring:
-            recurring_payload = PriceRecurring(
-                interval=recurring["interval"],
-                interval_count=recurring.get("interval_count", 1),
-            )
-
-        data.append(
+    prices = await gateway.list_prices()
+    return PricesListResponse(
+        data=[
             PriceResponse(
-                id=price["id"],
-                currency=price["currency"],
-                unit_amount=price.get("unit_amount"),
-                recurring=recurring_payload,
-                product=product_payload,
+                id=price.id,
+                currency=price.currency,
+                unit_amount=price.unit_amount,
+                recurring=(
+                    PriceRecurring(interval=price.interval, interval_count=price.interval_count)
+                    if price.interval
+                    else None
+                ),
+                product=(
+                    PriceProduct(
+                        id=price.product_id,
+                        name=price.product_name,
+                        description=price.product_description,
+                    )
+                    if price.product_id
+                    else None
+                ),
             )
-        )
+            for price in prices
+        ]
+    )
 
-    return PricesListResponse(data=data)
+
+async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, user: User) -> str:
+    """
+    Return the User's Stripe customer ID, creating the customer through the
+    gateway the first time. Commits when it creates one.
+    """
+    if user.stripe_customer_id:
+        return user.stripe_customer_id
+
+    customer_id = await gateway.create_customer(
+        email=user.email, name=user.display_name, user_id=user.id
+    )
+    await users_service.set_stripe_customer_id(db, user, customer_id)
+    # Sanctioned early commit: persist the new Stripe customer before the next
+    # Stripe call, so a failure there can't lose it and a retry never creates a
+    # duplicate customer.
+    await db.commit()
+    return customer_id
 
 
 async def create_checkout_session(
     db: AsyncSession,
+    gateway: BillingGateway,
     user: User,
     checkout_request: CheckoutRequest,
 ) -> CheckoutResponse:
     """
-    Create a Stripe checkout session for a Subscription.
+    Create a Stripe Checkout for a Subscription.
     """
-    customer_id = await stripe_customers_service.ensure_stripe_customer(db=db, user=user)
-
-    # Setup the checkout session
-    session_params: dict[str, Any] = {
-        "mode": "subscription",
-        "customer": customer_id,
-        "client_reference_id": user.id,
-        "line_items": [{"price": checkout_request.price_id, "quantity": checkout_request.quantity}],
-        "success_url": settings.STRIPE_CHECKOUT_SUCCESS_URL,
-        "cancel_url": settings.STRIPE_CHECKOUT_CANCEL_URL,
-        "allow_promotion_codes": True,
-    }
-    if checkout_request.trial_period_days is not None:
-        session_params["subscription_data"] = {
-            "trial_period_days": checkout_request.trial_period_days
-        }
-
-    try:
-        session = await asyncio.to_thread(stripe.checkout.Session.create, **session_params)
-    except stripe.StripeError as exc:
-        logger.exception(
-            "Failed to create Stripe Checkout Session for user_id=%s price_id=%s",
-            user.id,
-            checkout_request.price_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=getattr(exc, "user_message", None)
-            or "Could not start checkout. Please try again.",
-        )
-
-    if not session.url:
-        logger.error("Stripe returned a checkout session without a URL (session_id=%s)", session.id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not start checkout. Please try again later.",
-        )
-
+    customer_id = await _ensure_stripe_customer(db, gateway, user)
+    session = await gateway.create_subscription_checkout(
+        customer_id=customer_id,
+        price_id=checkout_request.price_id,
+        user_id=user.id,
+        trial_period_days=checkout_request.trial_period_days,
+    )
     return CheckoutResponse(url=session.url, session_id=session.id)
 
 
 async def create_billing_portal_session(
     db: AsyncSession,
+    gateway: BillingGateway,
     user: User,
 ) -> BillingPortalResponse:
     """
     Create a Stripe billing portal session to let the user manage their subscriptions.
     """
-    customer_id = await stripe_customers_service.ensure_stripe_customer(db=db, user=user)
-
-    try:
-        portal = await asyncio.to_thread(
-            stripe.billing_portal.Session.create,
-            customer=customer_id,
-            return_url=settings.STRIPE_BILLING_PORTAL_RETURN_URL,
-        )
-    except stripe.StripeError:
-        logger.exception("Failed to create Stripe billing portal session for user_id=%s", user.id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not open the billing portal. Please try again later.",
-        )
-
-    return BillingPortalResponse(url=portal.url)
+    customer_id = await _ensure_stripe_customer(db, gateway, user)
+    url = await gateway.create_portal_url(customer_id=customer_id)
+    return BillingPortalResponse(url=url)
 
 
 async def start_trial(
     db: AsyncSession,
+    gateway: BillingGateway,
     user: User,
     trial_request: TrialRequest,
 ) -> TrialResponse:
@@ -192,35 +143,13 @@ async def start_trial(
     Start a cardless trial by creating a Stripe subscription with no payment method attached.
     When the trial ends without a card, Stripe will cancel the subscription automatically.
     """
-    customer_id = await stripe_customers_service.ensure_stripe_customer(db=db, user=user)
-
-    try:
-        created = await asyncio.to_thread(
-            stripe.Subscription.create,
-            customer=customer_id,
-            items=[{"price": trial_request.price_id}],
-            trial_period_days=trial_request.trial_period_days,
-            # If the trial ends and there's still no payment method, cancel the subscription.
-            trial_settings={"end_behavior": {"missing_payment_method": "cancel"}},
-            # Save the default payment method (if provided) on the subscription, so if the user later
-            # goes to the billing portal and adds a card, it will be attached to the subscription and the
-            # trial can convert to a paid subscription without the user having to re-enter their card details.
-            payment_settings={"save_default_payment_method": "on_subscription"},
-            metadata={"user_id": user.id},
-        )
-    except stripe.StripeError as exc:
-        logger.exception(
-            "Failed to start Stripe trial for user_id=%s price_id=%s",
-            user.id,
-            trial_request.price_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=getattr(exc, "user_message", None) or "Could not start trial. Please try again.",
-        )
-
-    # stripe>=15 objects have no .get(); convert at the boundary.
-    subscription: dict[str, Any] = created.to_dict()
+    customer_id = await _ensure_stripe_customer(db, gateway, user)
+    subscription = await gateway.create_trial_subscription(
+        customer_id=customer_id,
+        price_id=trial_request.price_id,
+        user_id=user.id,
+        trial_period_days=trial_request.trial_period_days,
+    )
 
     # The customer.subscription.created webhook will upsert the local row.
     # We still write it here so the response is immediately consistent for
@@ -247,11 +176,12 @@ async def start_trial(
 
 async def handle_webhook(
     db: AsyncSession,
+    gateway: BillingGateway,
     payload: bytes,
     signature: Optional[str],
 ) -> None:
     """
-    Verify the Stripe webhook signature, deduplicate by event id, and dispatch.
+    Verify the webhook through the gateway, deduplicate by event id, and dispatch.
 
     The `stripe_events` insert and every handler write share ONE transaction,
     committed at the end. Handlers must not commit. If a handler raises, the
@@ -265,65 +195,49 @@ async def handle_webhook(
         )
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload=payload,
-            sig_header=signature,
-            secret=settings.STRIPE_WEBHOOK_SECRET,
-        )
-    except ValueError:
-        logger.exception("Invalid Stripe webhook payload")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload.")
-    except stripe.SignatureVerificationError:
-        logger.exception("Invalid Stripe webhook signature")
+        event = gateway.verify_webhook(payload=payload, signature=signature)
+    except WebhookSignatureError:
+        logger.warning("Rejected a Stripe webhook that failed verification", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature.")
-
-    event_id: str = event["id"]
-    event_type: str = event["type"]
-    # construct_event returns a stripe.Event whose nested objects are
-    # StripeObject (attribute-style, no .get()). Handlers use plain dict
-    # semantics, so re-parse the raw payload — the signature is already
-    # verified, so the bytes are trusted.
-    data_object: dict[str, Any] = json.loads(payload)["data"]["object"]
 
     try:
         is_new = await stripe_events_service.try_record_event(
-            db, event_id=event_id, event_type=event_type
+            db, event_id=event.id, event_type=event.type
         )
         if not is_new:
-            logger.info("Ignoring replayed Stripe event %s (%s)", event_id, event_type)
+            logger.info("Ignoring replayed Stripe event %s (%s)", event.id, event.type)
             await db.rollback()
             return
-        await _dispatch_event(db, event_type=event_type, event_id=event_id, data_object=data_object)
+        await _dispatch_event(db, event)
         await db.commit()
     except Exception:
         await db.rollback()
         raise
 
 
-async def _dispatch_event(
-    db: AsyncSession,
-    *,
-    event_type: str,
-    event_id: str,
-    data_object: dict[str, Any],
-) -> None:
+async def _dispatch_event(db: AsyncSession, event: WebhookEvent) -> None:
     """Route a verified, first-seen Stripe event to its handler. Must not commit."""
-    if event_type in (
-        "customer.subscription.created",
-        "customer.subscription.updated",
-        "customer.subscription.deleted",
-    ):
-        await _handle_subscription_event(db=db, subscription=data_object, event_id=event_id)
-    elif event_type == "checkout.session.completed":
-        # The subsequent customer.subscription.created event writes the row.
-        # Log for observability.
-        logger.info(
-            "Stripe checkout.session.completed (session_id=%s, client_reference_id=%s)",
-            data_object.get("id"),
-            data_object.get("client_reference_id"),
-        )
-    else:
-        logger.info("Unhandled Stripe webhook event type: %s (event_id=%s)", event_type, event_id)
+    match event.type:
+        case (
+            "customer.subscription.created"
+            | "customer.subscription.updated"
+            | "customer.subscription.deleted"
+        ):
+            await _handle_subscription_event(
+                db=db, subscription=event.data_object, event_id=event.id
+            )
+        case "checkout.session.completed":
+            # The subsequent customer.subscription.created event writes the row.
+            # Log for observability.
+            logger.info(
+                "Stripe checkout.session.completed (session_id=%s, client_reference_id=%s)",
+                event.data_object.get("id"),
+                event.data_object.get("client_reference_id"),
+            )
+        case _:
+            logger.info(
+                "Unhandled Stripe webhook event type: %s (event_id=%s)", event.type, event.id
+            )
 
 
 async def _handle_subscription_event(
@@ -343,7 +257,7 @@ async def _handle_subscription_event(
         )
         return
 
-    user = await stripe_service.get_user_by_stripe_customer_id(
+    user = await subscriptions_service.get_user_by_stripe_customer_id(
         db=db, stripe_customer_id=customer_id
     )
     if user is None:
@@ -386,7 +300,7 @@ async def _upsert_subscription_from_stripe_object(
 
     cancel_at_period_end = bool(subscription.get("cancel_at_period_end", False))
 
-    await stripe_service.upsert_subscription(
+    await subscriptions_service.upsert_subscription(
         db=db,
         user_id=user_id,
         stripe_subscription_id=sub_id,

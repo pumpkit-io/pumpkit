@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.mediators.stripe as stripe_mediator
 from app.api.dependencies import get_current_user
+from app.core.billing_gateway import BillingGateway, get_billing_gateway
 from app.core.rate_limit import limiter
 from app.db.models import User
 from app.db.session import get_async_db
@@ -38,8 +39,11 @@ async def get_stripe_me(
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("30/minute")
-async def list_stripe_prices(request: Request) -> PricesListResponse:
-    return await stripe_mediator.list_prices()
+async def list_stripe_prices(
+    request: Request,
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PricesListResponse:
+    return await stripe_mediator.list_prices(gateway=gateway)
 
 
 @router.post(
@@ -53,9 +57,10 @@ async def create_stripe_checkout(
     checkout_request: CheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> CheckoutResponse:
     return await stripe_mediator.create_checkout_session(
-        db=db, user=current_user, checkout_request=checkout_request
+        db=db, gateway=gateway, user=current_user, checkout_request=checkout_request
     )
 
 
@@ -69,8 +74,11 @@ async def create_stripe_billing_portal(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> BillingPortalResponse:
-    return await stripe_mediator.create_billing_portal_session(db=db, user=current_user)
+    return await stripe_mediator.create_billing_portal_session(
+        db=db, gateway=gateway, user=current_user
+    )
 
 
 @router.post(
@@ -84,14 +92,18 @@ async def start_stripe_trial(
     trial_request: TrialRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> TrialResponse:
-    return await stripe_mediator.start_trial(db=db, user=current_user, trial_request=trial_request)
+    return await stripe_mediator.start_trial(
+        db=db, gateway=gateway, user=current_user, trial_request=trial_request
+    )
 
 
 @router.post("/stripe/webhook", status_code=status.HTTP_200_OK)
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> JSONResponse:
     # Signature verification requires the raw, unmodified request body.
     payload = await request.body()
@@ -100,6 +112,8 @@ async def stripe_webhook(
     # handle_webhook owns the transaction: it commits on success and rolls back
     # before re-raising, so unexpected errors reach the global handler as a 500
     # and Stripe retries the event.
-    await stripe_mediator.handle_webhook(db=db, payload=payload, signature=signature)
+    await stripe_mediator.handle_webhook(
+        db=db, gateway=gateway, payload=payload, signature=signature
+    )
 
     return JSONResponse(content={"received": True}, status_code=status.HTTP_200_OK)

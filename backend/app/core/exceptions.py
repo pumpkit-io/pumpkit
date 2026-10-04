@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.core.billing_gateway import BillingProviderError
 from app.core.logger import logger
 from app.core.posthog import posthog_client
 
@@ -75,6 +76,18 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+async def billing_provider_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    error_id = report_unexpected_exception(request, exc)
+    return JSONResponse(
+        status_code=502,
+        content={
+            "detail": "Billing is unavailable right now. Please try again later.",
+            "error_id": error_id,
+        },
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Wire global exception handlers onto the FastAPI app."""
+    app.add_exception_handler(BillingProviderError, billing_provider_error_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
