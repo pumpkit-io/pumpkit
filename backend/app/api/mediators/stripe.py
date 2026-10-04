@@ -109,9 +109,12 @@ async def _trial_period_days_for(db: AsyncSession, user: User) -> Optional[int]:
     webhook, so a second Checkout started before that webhook lands still
     sees the User as eligible.
     """
+    days = settings.BILLING_TRIAL_PERIOD_DAYS
+    if days == 0:  # Trials are off; Stripe rejects a zero-day Trial.
+        return None
     if await subscriptions_service.has_had_subscription(db, user_id=user.id):
         return None
-    return settings.BILLING_TRIAL_PERIOD_DAYS
+    return days
 
 
 async def create_checkout_session(

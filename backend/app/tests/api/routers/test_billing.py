@@ -95,6 +95,15 @@ async def test_checkout_for_a_user_who_has_had_a_subscription_includes_no_trial(
     assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
 
 
+async def test_a_trial_length_of_zero_turns_trials_off(client, fake_billing, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 0)
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
+
+
 async def test_checkout_with_an_unknown_plan_key_returns_400_without_calling_the_gateway(
     client, db, fake_billing, user
 ):
