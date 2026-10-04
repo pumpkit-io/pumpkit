@@ -3,9 +3,10 @@ The Sessions module: starts, rotates and ends a User's Sessions.
 
 Every Sign-in method starts a Session here, `/refresh-token` rotates it and
 `/logout` ends it. This module alone owns the token claims, the refresh cookie
-(name, `__Host-` prefix, attributes), the callback fragment format, and rotation
-with reuse detection. It flushes and never commits: the calling mediator commits
-once, including after a refusal, because some refusals revoke a Session.
+(name, `__Host-` prefix, attributes), the callback fragment format, rotation
+with reuse detection, and the suspension rule (`may_hold_session`). It flushes
+and never commits: the calling mediator commits once, including after a refusal,
+because some refusals revoke Sessions.
 """
 
 import enum
@@ -116,6 +117,7 @@ class RefusalReason(enum.Enum):
     MISSING = "missing"  # No refresh cookie was presented
     INVALID = "invalid"  # Unknown, expired, revoked or malformed refresh token
     REUSED = "reused"  # An already-rotated refresh token: its whole Session is revoked
+    SUSPENDED = "suspended"  # The User is Suspended: all of their Sessions are revoked
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,8 @@ class SessionRefusal:
     @property
     def code(self) -> str:
         """The machine-readable code the frontend sees."""
+        if self.reason is RefusalReason.SUSPENDED:
+            return "account_suspended"
         return "invalid_refresh_token"
 
     def as_json_response(self) -> JSONResponse:
@@ -148,10 +152,19 @@ class SessionRefusal:
 SessionResult = Union[IssuedSession, SessionRefusal]
 
 
+def may_hold_session(user: User) -> bool:
+    """The suspension rule: a User may hold a Session only if they aren't Suspended now."""
+    if user.suspended_until is None:
+        return True
+    return as_utc(user.suspended_until) <= datetime.now(timezone.utc)
+
+
 async def start(
     db: AsyncSession, *, user: User, sign_in_method: SignInMethod, client: ClientInfo
 ) -> SessionResult:
-    """Start a new Session for a User who has just proven who they are."""
+    """Start a new Session for a User who has just proven who they are, unless Suspended."""
+    if not may_hold_session(user):
+        return SessionRefusal(RefusalReason.SUSPENDED)
     issued, _ = await _issue(
         db,
         user=user,
@@ -200,6 +213,10 @@ async def rotate(
     user = await user_service.get_user_by_id(db=db, user_id=user_id)
     if user is None:
         return SessionRefusal(RefusalReason.INVALID)
+
+    if not may_hold_session(user):
+        await refresh_tokens_service.revoke_all_user_sessions(db=db, user_id=user.id)
+        return SessionRefusal(RefusalReason.SUSPENDED)
 
     issued, new_token = await _issue(
         db,
