@@ -3,6 +3,7 @@ import { apiService } from './apiService';
 import { userService } from './userService';
 
 const response = {
+  id: 'user_01HZX',
   email: 'a@example.com',
   first_name: 'Ada',
   last_name: null,
@@ -17,6 +18,7 @@ describe('userService.updateProfile', () => {
     const profile = await userService.updateProfile({ firstName: 'Ada' });
     expect(patch).toHaveBeenCalledWith('/users/me', { first_name: 'Ada' });
     expect(profile).toEqual({
+      id: 'user_01HZX',
       email: 'a@example.com',
       firstName: 'Ada',
       lastName: null,

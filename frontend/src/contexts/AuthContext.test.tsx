@@ -12,7 +12,7 @@ vi.mock('@/lib/posthog', () => ({
 }));
 
 import { hardRedirect } from '@/lib/navigation';
-import { resetPostHog } from '@/lib/posthog';
+import { identifyUser, resetPostHog } from '@/lib/posthog';
 import { session } from '@/lib/session';
 import { api } from '@/services/apiService';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -37,7 +37,13 @@ function fakeBackend(answers: Record<string, Answer> = {}) {
       url === '/users/me'
         ? {
             status: 200,
-            data: { email: 'a@example.com', first_name: null, last_name: null },
+            data: {
+              id: 'user_01HZX',
+              email: 'a@example.com',
+              first_name: 'Ada',
+              last_name: null,
+              avatar_data_url: null,
+            },
           }
         : { status: 200, data: {} };
     const answer = answers[url] ?? fallback;
@@ -67,6 +73,7 @@ beforeEach(async () => {
   sessionStorage.clear();
   vi.mocked(hardRedirect).mockClear();
   vi.mocked(resetPostHog).mockClear();
+  vi.mocked(identifyUser).mockClear();
 });
 afterEach(() => {
   api.defaults.adapter = originalAdapter;
@@ -121,6 +128,23 @@ describe('AuthProvider bootstrap', () => {
     expect(localStorage.getItem(SESSION_KEY)).toBeNull();
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login');
+  });
+});
+
+describe('AuthProvider analytics identity', () => {
+  it('identifies the person once by User ID, keeping the email as a property', async () => {
+    storeSession('t', inMinutes(60));
+    fakeBackend();
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    await waitFor(() => expect(identifyUser).toHaveBeenCalled());
+    expect(identifyUser).toHaveBeenCalledTimes(1);
+    expect(identifyUser).toHaveBeenCalledWith('user_01HZX', {
+      email: 'a@example.com',
+      first_name: 'Ada',
+      last_name: null,
+    });
   });
 });
 
