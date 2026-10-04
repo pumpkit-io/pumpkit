@@ -22,41 +22,11 @@ class TokenErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Token error boundary caught an error:', error, errorInfo);
-
-    // If it's a token-related error, handle it appropriately
-    if (this.isTokenError(error)) {
-      // Clear tokens and redirect to login
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('token_expires_at');
-      window.location.href = '/login';
-      return;
-    }
-
-    if (this.props.onError) {
-      this.props.onError(error);
-    }
-  }
-
-  private isTokenError(error: Error): boolean {
-    const tokenErrorMessages = [
-      'token expired',
-      'invalid token',
-      'unauthorized',
-      'refresh token',
-      'authentication failed',
-    ];
-
-    const errorMessage = error.message?.toLowerCase() || '';
-    return tokenErrorMessages.some((msg) => errorMessage.includes(msg));
+    console.error('Error boundary caught an error:', error, errorInfo);
+    this.props.onError?.(error);
   }
 
   render() {
-    if (this.state.hasError && this.isTokenError(this.state.error!)) {
-      // Don't render anything - user will be redirected
-      return null;
-    }
-
     if (this.state.hasError) {
       // Generic error fallback
       return (

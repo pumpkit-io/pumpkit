@@ -15,8 +15,8 @@ export function MagicLinkCallback() {
     const accessToken = params.get('access_token');
     const expiresAt = params.get('expires_at');
 
-    if (accessToken) {
-      auth.login(accessToken, expiresAt ?? undefined);
+    if (accessToken && expiresAt) {
+      auth.login(accessToken, expiresAt);
       navigate('/home');
     } else {
       navigate('/login?error=invalid_magic_link');

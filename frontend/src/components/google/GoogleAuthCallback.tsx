@@ -16,9 +16,9 @@ export function GoogleAuthCallback() {
     const accessToken = params.get('access_token');
     const expiresAt = params.get('expires_at');
 
-    if (accessToken) {
+    if (accessToken && expiresAt) {
       track('login_google_succeeded');
-      auth.login(accessToken, expiresAt ?? undefined);
+      auth.login(accessToken, expiresAt);
       navigate('/home');
     } else {
       track('login_google_failed', { error_code: 'google_token_missing' });
