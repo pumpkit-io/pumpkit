@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { CreditCard, LogOut, Palette, User as UserIcon } from 'lucide-react';
 import {
   DropdownMenu,
@@ -21,7 +20,6 @@ import { track } from '@/lib/analytics';
 
 export function UserMenu({ trigger }: { trigger: ReactNode }) {
   const { logout } = useAuth();
-  const navigate = useNavigate();
   const account = useAccount();
   const billing = useBilling();
   const { choice, setChoice } = useTheme();
@@ -68,8 +66,8 @@ export function UserMenu({ trigger }: { trigger: ReactNode }) {
         <DropdownMenuItem
           onSelect={async () => {
             track('user_menu_logout_clicked');
+            // Ending the Session routes to the sign-in page.
             await logout();
-            navigate('/');
           }}
         >
           <LogOut className="h-3.5 w-3.5" /> Log out

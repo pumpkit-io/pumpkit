@@ -26,9 +26,12 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   const page = await context.newPage();
   await page.goto(APP_ORIGIN);
   await page.evaluate((t) => {
-    localStorage.setItem('auth_token', t);
+    // The frontend Session module's storage shape (`frontend/src/lib/session/store.ts`).
     // Far-future expiry so the frontend never refreshes or signs out mid-suite.
-    localStorage.setItem('token_expires_at', '2099-01-01T00:00:00.000Z');
+    localStorage.setItem(
+      'pumpkit:session',
+      JSON.stringify({ accessToken: t, expiresAt: '2099-01-01T00:00:00.000Z' }),
+    );
   }, token);
   await context.storageState({ path: STORAGE_STATE });
   await browser.close();
