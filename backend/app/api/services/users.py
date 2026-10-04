@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import oauth2_scheme, verify_access_token
+from app.core.security import get_bearer_token, verify_access_token
 from app.db.models import User
 from app.db.session import get_async_db
 
@@ -40,7 +40,7 @@ async def create_user(
 
 
 async def get_user(
-    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_async_db)
+    token: str = Depends(get_bearer_token), db: AsyncSession = Depends(get_async_db)
 ) -> User:
     """
     Get the user from the provided JWT token
