@@ -43,6 +43,7 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | `STRIPE_CHECKOUT_SUCCESS_URL`, `STRIPE_CHECKOUT_CANCEL_URL` | Where Checkout returns after paying or cancelling. |
 | `STRIPE_BILLING_PORTAL_RETURN_URL` | Where the customer portal returns. |
 | `BILLING_PLAN_KEYS` | The Plans Pumpkit sells: Stripe price lookup keys as a quoted JSON list (like `CORS_ORIGINS`), in display order. Only these are listed and purchasable; each must be an active recurring price. |
+| `BILLING_TRIAL_PERIOD_DAYS` | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. `0` turns Trials off. |
 | `OPENROUTER_API_KEY` (optional) | Enables the LLM client; without it calls raise `LLMNotConfiguredError`. |
 | `POSTHOG_ENABLED` (optional) | `true` to enable server-side analytics and error tracking. |
 | `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. |

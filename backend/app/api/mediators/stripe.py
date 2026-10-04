@@ -23,8 +23,6 @@ from app.schemas.stripe import (
     PlanResponse,
     PlansListResponse,
     SubscriptionMeResponse,
-    TrialRequest,
-    TrialResponse,
 )
 
 
@@ -101,6 +99,24 @@ async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, use
     return customer_id
 
 
+async def _trial_period_days_for(db: AsyncSession, user: User) -> Optional[int]:
+    """
+    The Trial a Checkout for this User should start with: the configured length
+    for a User who has never had a Subscription, otherwise none. Each User gets
+    at most one Trial.
+
+    Subscription rows are written by the `customer.subscription.created`
+    webhook, so a second Checkout started before that webhook lands still
+    sees the User as eligible.
+    """
+    days = settings.BILLING_TRIAL_PERIOD_DAYS
+    if days == 0:  # Trials are off; Stripe rejects a zero-day Trial.
+        return None
+    if await subscriptions_service.has_had_subscription(db, user_id=user.id):
+        return None
+    return days
+
+
 async def create_checkout_session(
     db: AsyncSession,
     gateway: BillingGateway,
@@ -108,9 +124,10 @@ async def create_checkout_session(
     checkout_request: CheckoutRequest,
 ) -> CheckoutResponse:
     """
-    Create a Stripe Checkout for one unit of a configured Plan. An unknown
-    Plan key is the client's fault (400) and reaches no Stripe call; a
-    configured Plan Stripe can't resolve is a provider failure (502).
+    Create a Stripe Checkout for one unit of a configured Plan, with a Trial
+    if the User is eligible. An unknown Plan key is the client's fault (400)
+    and reaches no Stripe call; a configured Plan Stripe can't resolve is a
+    provider failure (502).
     """
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
@@ -120,9 +137,13 @@ async def create_checkout_session(
     if plan is None:
         raise BillingProviderError(f"Configured Plan {plan_key} has no active recurring price")
 
+    trial_period_days = await _trial_period_days_for(db, user)
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     session = await gateway.create_subscription_checkout(
-        customer_id=customer_id, price_id=plan.price_id, user_id=user.id
+        customer_id=customer_id,
+        price_id=plan.price_id,
+        user_id=user.id,
+        trial_period_days=trial_period_days,
     )
     return CheckoutResponse(url=session.url, session_id=session.id)
 
@@ -138,47 +159,6 @@ async def create_billing_portal_session(
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     url = await gateway.create_portal_url(customer_id=customer_id)
     return BillingPortalResponse(url=url)
-
-
-async def start_trial(
-    db: AsyncSession,
-    gateway: BillingGateway,
-    user: User,
-    trial_request: TrialRequest,
-) -> TrialResponse:
-    """
-    Start a cardless trial by creating a Stripe subscription with no payment method attached.
-    When the trial ends without a card, Stripe will cancel the subscription automatically.
-    """
-    customer_id = await _ensure_stripe_customer(db, gateway, user)
-    subscription = await gateway.create_trial_subscription(
-        customer_id=customer_id,
-        price_id=trial_request.price_id,
-        user_id=user.id,
-        trial_period_days=trial_request.trial_period_days,
-    )
-
-    # The customer.subscription.created webhook will upsert the local row.
-    # We still write it here so the response is immediately consistent for
-    # a frontend that reads /stripe/me right after this call.
-    await _upsert_subscription_from_stripe_object(
-        db=db,
-        user_id=user.id,
-        subscription=subscription,
-    )
-    await db.commit()
-
-    # Parse the trial end timestamp if available for the response payload
-    trial_end: Optional[datetime] = None
-    trial_end_ts = subscription.get("trial_end")
-    if trial_end_ts:
-        trial_end = datetime.fromtimestamp(trial_end_ts, tz=timezone.utc)
-
-    return TrialResponse(
-        subscription_id=subscription["id"],
-        status=subscription["status"],
-        trial_end=trial_end,
-    )
 
 
 async def handle_webhook(

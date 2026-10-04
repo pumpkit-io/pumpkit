@@ -1,5 +1,4 @@
 import pytest
-from sqlalchemy import select
 
 from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan
 from app.core.config import settings
@@ -60,11 +59,49 @@ async def test_checkout_by_plan_key_creates_a_checkout_for_that_plans_price(
             customer_id="cus_fake_1",
             price_id="price_monthly",
             user_id=user.id,
-            trial_period_days=None,
+            trial_period_days=14,
         )
     ]
     await db.refresh(user)
     assert user.stripe_customer_id == "cus_fake_1"
+
+
+async def test_checkout_for_a_user_who_never_had_a_subscription_includes_the_trial(
+    client, fake_billing
+):
+    """The test settings configure a 14-day Trial."""
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert [c.trial_period_days for c in fake_billing.checkouts] == [14]
+
+
+async def test_checkout_for_a_user_who_has_had_a_subscription_includes_no_trial(
+    client, db, fake_billing, user
+):
+    db.add(
+        Subscription(
+            user_id=user.id,
+            stripe_subscription_id="sub_old",
+            stripe_customer_id="cus_old",
+            status="canceled",
+        )
+    )
+    await db.commit()
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
+
+
+async def test_a_trial_length_of_zero_turns_trials_off(client, fake_billing, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 0)
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
 
 
 async def test_checkout_with_an_unknown_plan_key_returns_400_without_calling_the_gateway(
@@ -238,33 +275,14 @@ async def test_a_gateway_failure_listing_plans_returns_502(
     assert_reported_502(response)
 
 
-async def test_the_trial_endpoint_starts_a_trial_through_the_gateway(
-    client, db, fake_billing, user
-):
-    fake_billing.trial_subscription = {
-        "id": "sub_trial",
-        "customer": "cus_fake_1",
-        "status": "trialing",
-        "trial_end": 1_900_000_000,
-        "cancel_at_period_end": False,
-        "items": {"data": [{"price": {"id": "price_trial"}, "current_period_end": 1_900_000_000}]},
-    }
-
+async def test_the_cardless_trial_route_no_longer_exists(client, fake_billing):
+    """A Trial comes only through Checkout, with a card (spec #10)."""
     response = await client.post(
-        "/api/v1/stripe/trial", json={"price_id": "price_trial", "trial_period_days": 7}
+        "/api/v1/stripe/trial", json={"price_id": "price_monthly", "trial_period_days": 365}
     )
 
-    assert response.status_code == 200
-    assert response.json()["subscription_id"] == "sub_trial"
-    assert response.json()["status"] == "trialing"
-    assert [(t.customer_id, t.price_id, t.trial_period_days) for t in fake_billing.trials] == [
-        ("cus_fake_1", "price_trial", 7)
-    ]
-    await db.commit()
-    sub = (await db.execute(select(Subscription))).scalar_one()
-    assert sub.user_id == user.id
-    assert sub.stripe_price_id == "price_trial"
-    assert sub.current_period_end is not None
+    assert response.status_code == 404
+    assert fake_billing.customers_created == []
 
 
 async def test_billing_api_serves_only_subscription_routes(client):
@@ -282,6 +300,5 @@ async def test_billing_api_serves_only_subscription_routes(client):
         "/api/v1/stripe/plans",
         "/api/v1/stripe/checkout",
         "/api/v1/stripe/billing-portal",
-        "/api/v1/stripe/trial",
         "/api/v1/stripe/webhook",
     }

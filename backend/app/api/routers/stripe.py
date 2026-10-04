@@ -14,8 +14,6 @@ from app.schemas.stripe import (
     CheckoutResponse,
     PlansListResponse,
     SubscriptionMeResponse,
-    TrialRequest,
-    TrialResponse,
 )
 
 router = APIRouter(tags=["stripe"])
@@ -79,24 +77,6 @@ async def create_stripe_billing_portal(
 ) -> BillingPortalResponse:
     return await stripe_mediator.create_billing_portal_session(
         db=db, gateway=gateway, user=current_user
-    )
-
-
-@router.post(
-    "/stripe/trial",
-    response_model=TrialResponse,
-    status_code=status.HTTP_200_OK,
-)
-@limiter.limit("5/minute")
-async def start_stripe_trial(
-    request: Request,
-    trial_request: TrialRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db),
-    gateway: BillingGateway = Depends(get_billing_gateway),
-) -> TrialResponse:
-    return await stripe_mediator.start_trial(
-        db=db, gateway=gateway, user=current_user, trial_request=trial_request
     )
 
 

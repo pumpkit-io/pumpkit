@@ -35,25 +35,6 @@ class BillingPortalResponse(BaseModel):
     url: str
 
 
-class TrialRequest(BaseModel):
-    """
-    Request payload to start a cardless trial subscription.
-    """
-
-    price_id: str = Field(..., min_length=1)
-    trial_period_days: int = Field(default=14, ge=1, le=365)
-
-
-class TrialResponse(BaseModel):
-    """
-    Response after successfully starting a cardless trial.
-    """
-
-    subscription_id: str
-    status: SubscriptionStatus
-    trial_end: Optional[datetime]
-
-
 class SubscriptionMeResponse(BaseModel):
     """
     Current subscription view for the authenticated user.
