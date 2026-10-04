@@ -117,11 +117,13 @@ async def _trial_period_days_for(db: AsyncSession, user: User) -> Optional[int]:
     """
     The Trial a Checkout for this User should start with: the configured length
     for a User who has never had a Subscription, otherwise none. Each User gets
-    at most one Trial.
+    at most one Trial. An abandoned Checkout leaves no Subscription row, so it
+    doesn't use up the Trial.
 
     Subscription rows are written by the `customer.subscription.created`
-    webhook, so a second Checkout started before that webhook lands still
-    sees the User as eligible.
+    webhook, which lands after the Checkout completes. `create_checkout_session`
+    keeps a User from completing several Trial Checkouts; see its docstring for
+    the window that remains.
     """
     days = settings.BILLING_TRIAL_PERIOD_DAYS
     if days == 0:  # Trials are off; Stripe rejects a zero-day Trial.
@@ -142,6 +144,20 @@ async def create_checkout_session(
     if the User is eligible. An unknown Plan key is the client's fault (400)
     and reaches no Stripe call; a configured Plan Stripe can't resolve is a
     provider failure (502).
+
+    Only the User's newest Checkout can be completed: the User's still-open
+    Checkouts are expired before the new one is created. Without that, a User
+    with no Subscription row could open several Checkouts, each with the
+    Trial, and complete them one after another before the first
+    `customer.subscription.created` webhook lands. The User's row stays locked
+    from the eligibility check to the new Checkout, so concurrent checkouts
+    for one User run one at a time (the lock is held across the provider
+    calls and released when the request's transaction ends).
+
+    Remaining window: a Checkout completed before this one started is no
+    longer open, so nothing expires it, and until its webhook writes the
+    Subscription row the User still looks eligible. A Checkout started in
+    that window (usually seconds) gets a second Trial.
     """
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
@@ -151,8 +167,11 @@ async def create_checkout_session(
     if plan is None:
         raise BillingProviderError(f"Configured Plan {plan_key} has no active recurring price")
 
-    trial_period_days = await _trial_period_days_for(db, user)
     customer_id = await _ensure_stripe_customer(db, gateway, user)
+    # Take the User's lock again: creating the customer committed and released it.
+    await users_service.lock_user(db, user)
+    trial_period_days = await _trial_period_days_for(db, user)
+    await gateway.expire_open_checkouts(customer_id=customer_id)
     session = await gateway.create_subscription_checkout(
         customer_id=customer_id,
         price_id=plan.price_id,

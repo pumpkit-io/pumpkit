@@ -95,6 +95,13 @@ class BillingGateway(Protocol):
         """Create a Subscription Checkout for `quantity` units of `price_id`, with an optional Trial."""
         ...
 
+    async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
+        """
+        Expire every Checkout of the customer's that can still be completed, so
+        none of them can start a Subscription any more, and return their IDs.
+        """
+        ...
+
     async def create_portal_url(self, *, customer_id: str) -> str:
         """Create a billing-portal session for the customer and return its URL."""
         ...
@@ -194,6 +201,21 @@ class StripeBillingGateway:
             raise BillingProviderError(f"Stripe Checkout {session.id} has no URL")
         return CheckoutSession(id=session.id, url=session.url)
 
+    async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
+        def expire_all() -> list[str]:
+            sessions = self._client.v1.checkout.sessions.list(
+                {"customer": customer_id, "status": "open", "limit": 100}
+            )
+            expired: list[str] = []
+            for session in sessions.auto_paging_iter():
+                self._client.v1.checkout.sessions.expire(session.id)
+                expired.append(session.id)
+            return expired
+
+        # A session completed between the list and its expiry makes Stripe
+        # refuse the expiry: that surfaces as a provider error too.
+        return await self._call("expire open Checkouts", expire_all)
+
     async def create_portal_url(self, *, customer_id: str) -> str:
         portal = await self._call(
             "create a billing-portal session",
@@ -255,7 +277,8 @@ class FakeBillingGateway:
     """
     A billing provider in memory. It records every call, answers with the
     configured results, and raises `BillingProviderError` from any method named
-    in `fail_on`. Sign events with `signed_event`; its `verify_webhook` accepts
+    in `fail_on`. Checkouts it creates stay open until `expire_open_checkouts`
+    expires them. Sign events with `signed_event`; its `verify_webhook` accepts
     only payloads signed with the same secret.
     """
 
@@ -269,7 +292,9 @@ class FakeBillingGateway:
     checkouts: list[CheckoutCall] = field(default_factory=list)
     portals: list[str] = field(default_factory=list)
     plan_lookups: list[list[str]] = field(default_factory=list)
+    expired_checkouts: list[str] = field(default_factory=list)
 
+    _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
     _customers_by_idempotency_key: dict[str, str] = field(default_factory=dict, init=False)
 
     def _maybe_fail(self, method: str) -> None:
@@ -307,7 +332,17 @@ class FakeBillingGateway:
                 trial_period_days=trial_period_days,
             )
         )
-        return CheckoutSession(id=f"cs_fake_{len(self.checkouts)}", url=self.checkout_url)
+        session_id = f"cs_fake_{len(self.checkouts)}"
+        self._open_checkouts[session_id] = customer_id
+        return CheckoutSession(id=session_id, url=self.checkout_url)
+
+    async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
+        self._maybe_fail("expire_open_checkouts")
+        expired = [s for s, c in self._open_checkouts.items() if c == customer_id]
+        for session_id in expired:
+            del self._open_checkouts[session_id]
+        self.expired_checkouts.extend(expired)
+        return expired
 
     async def create_portal_url(self, *, customer_id: str) -> str:
         self._maybe_fail("create_portal_url")

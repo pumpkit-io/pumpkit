@@ -101,6 +101,19 @@ async def test_checkout_for_a_user_who_has_had_a_subscription_includes_no_trial(
     assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
 
 
+async def test_a_new_checkout_expires_the_users_still_open_checkout(client, fake_billing):
+    """Otherwise a User could open several Trial Checkouts and complete each one."""
+    first = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+    assert first.status_code == 200
+    assert fake_billing.expired_checkouts == []
+
+    second = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert second.status_code == 200
+    assert second.json()["session_id"] == "cs_fake_2"
+    assert fake_billing.expired_checkouts == ["cs_fake_1"]
+
+
 async def test_a_trial_length_of_zero_turns_trials_off(client, fake_billing, monkeypatch):
     monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 0)
 
