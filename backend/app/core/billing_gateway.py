@@ -73,8 +73,14 @@ class WebhookEvent:
 
 
 class BillingGateway(Protocol):
-    async def create_customer(self, *, email: str, name: str, user_id: str) -> str:
-        """Create the provider's customer record for a User and return its ID."""
+    async def create_customer(
+        self, *, email: str, name: str, user_id: str, idempotency_key: str
+    ) -> str:
+        """
+        Create the provider's customer record for a User and return its ID.
+        Calls with the same `idempotency_key` create one customer: a repeat
+        returns the first call's customer instead of a new one.
+        """
         ...
 
     async def create_subscription_checkout(
@@ -148,11 +154,15 @@ class StripeBillingGateway:
         except stripe.StripeError as error:
             raise BillingProviderError(f"Stripe failed to {what}") from error
 
-    async def create_customer(self, *, email: str, name: str, user_id: str) -> str:
+    async def create_customer(
+        self, *, email: str, name: str, user_id: str, idempotency_key: str
+    ) -> str:
+        # Stripe replays the first response for a repeated key (for 24 hours).
         customer = await self._call(
             "create a customer",
             lambda: self._client.v1.customers.create(
-                {"email": email, "name": name, "metadata": {"user_id": user_id}}
+                {"email": email, "name": name, "metadata": {"user_id": user_id}},
+                {"idempotency_key": idempotency_key},
             ),
         )
         return customer.id
@@ -228,6 +238,7 @@ class CustomerCall:
     email: str
     name: str
     user_id: str
+    idempotency_key: str
 
 
 @dataclass(frozen=True)
@@ -259,14 +270,23 @@ class FakeBillingGateway:
     portals: list[str] = field(default_factory=list)
     plan_lookups: list[list[str]] = field(default_factory=list)
 
+    _customers_by_idempotency_key: dict[str, str] = field(default_factory=dict, init=False)
+
     def _maybe_fail(self, method: str) -> None:
         if method in self.fail_on:
             raise BillingProviderError(f"Fake billing gateway is set to fail {method}")
 
-    async def create_customer(self, *, email: str, name: str, user_id: str) -> str:
+    async def create_customer(
+        self, *, email: str, name: str, user_id: str, idempotency_key: str
+    ) -> str:
         self._maybe_fail("create_customer")
-        self.customers_created.append(CustomerCall(email=email, name=name, user_id=user_id))
-        return f"cus_fake_{len(self.customers_created)}"
+        self.customers_created.append(
+            CustomerCall(email=email, name=name, user_id=user_id, idempotency_key=idempotency_key)
+        )
+        # Like Stripe, a repeated idempotency key returns the first customer.
+        return self._customers_by_idempotency_key.setdefault(
+            idempotency_key, f"cus_fake_{len(self._customers_by_idempotency_key) + 1}"
+        )
 
     async def create_subscription_checkout(
         self,

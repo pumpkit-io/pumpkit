@@ -52,7 +52,12 @@ async def test_checkout_by_plan_key_creates_a_checkout_for_one_unit_of_that_plan
     assert response.status_code == 200
     assert response.json() == {"url": fake_billing.checkout_url, "session_id": "cs_fake_1"}
     assert fake_billing.customers_created == [
-        CustomerCall(email="alice@example.com", name="Alice", user_id=user.id)
+        CustomerCall(
+            email="alice@example.com",
+            name="Alice",
+            user_id=user.id,
+            idempotency_key=f"pumpkit-user-{user.id}-customer",
+        )
     ]
     assert fake_billing.checkouts == [
         CheckoutCall(

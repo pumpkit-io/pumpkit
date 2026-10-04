@@ -84,12 +84,26 @@ async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, use
     """
     Return the User's Stripe customer ID, creating the customer through the
     gateway the first time. Commits when it creates one.
+
+    Concurrent first calls for one User create one customer: the User's row is
+    locked before the ID is read, so a second request waits and then sees the
+    first one's customer. The creation also carries an idempotency key per
+    User, so a second call that still reaches the provider (say the commit
+    failed after the customer was created, or SQLite, which has no row locks)
+    gets the same customer back, for as long as Stripe keeps the key (24
+    hours). The lock is
+    held across the provider call and released by the early commit, or by the
+    end of the request's transaction when the customer already exists.
     """
+    await users_service.lock_user(db, user)
     if user.stripe_customer_id:
         return user.stripe_customer_id
 
     customer_id = await gateway.create_customer(
-        email=user.email, name=user.display_name, user_id=user.id
+        email=user.email,
+        name=user.display_name,
+        user_id=user.id,
+        idempotency_key=f"pumpkit-user-{user.id}-customer",
     )
     await users_service.set_stripe_customer_id(db, user, customer_id)
     # Sanctioned early commit: persist the new Stripe customer before the next

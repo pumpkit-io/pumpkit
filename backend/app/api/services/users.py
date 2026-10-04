@@ -67,6 +67,22 @@ async def resolve_user_by_verified_email(
     return user
 
 
+async def lock_user(db: AsyncSession, user: User) -> None:
+    """
+    Lock the User's row (`SELECT ... FOR UPDATE`) until the transaction ends,
+    and reload its columns, so the caller sees what a request that held the
+    lock before it committed. Serializes billing steps per User. SQLite has no
+    row locks: there it only reloads.
+    """
+    query = (
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    await db.execute(query)
+
+
 async def set_stripe_customer_id(db: AsyncSession, user: User, stripe_customer_id: str) -> None:
     """Record the User's Stripe customer. Flushes, never commits."""
     user.stripe_customer_id = stripe_customer_id
