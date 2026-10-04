@@ -63,7 +63,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 from sqlalchemy.pool import NullPool  # noqa: E402
 
-import app.api.services.users as user_service  # noqa: E402
+from app.api.dependencies import get_current_user  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
 from app.db.models import User  # noqa: E402
@@ -137,7 +137,7 @@ async def client(db_session_maker, user):
         return db_user
 
     app.dependency_overrides[get_async_db] = _get_db
-    app.dependency_overrides[user_service.get_user] = _get_user
+    app.dependency_overrides[get_current_user] = _get_user
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
