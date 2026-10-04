@@ -26,13 +26,54 @@ async def get_user_by_id(
     return result.scalar_one_or_none()
 
 
-async def create_user(
+async def resolve_user_by_verified_email(
     db: AsyncSession,
-    user: User,
-) -> None:
-    """Add a new user. Flushes only: the calling mediator commits."""
-    db.add(user)
+    email: str,
+    *,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    display_name: Optional[str] = None,
+) -> User:
+    """
+    The User a Sign-in method has proven owns this email: found, or created.
+
+    Every Sign-in method resolves through here, so one email always reaches one
+    User. The name hints only fill profile fields that are still empty. Flushes,
+    never commits: the sign-in commits once with its Session.
+    """
+    normalized_email = email.strip().lower()
+    user = await get_user_by_email(db=db, email=normalized_email)
+    if user is None:
+        user = User(
+            email=normalized_email,
+            display_name=display_name or normalized_email.split("@", 1)[0],
+            first_name=first_name,
+            last_name=last_name,
+            is_admin=False,
+        )
+        db.add(user)
+        await db.flush()
+        return user
+
+    fill_empty_profile(user, first_name=first_name, last_name=last_name, display_name=display_name)
     await db.flush()
+    return user
+
+
+def fill_empty_profile(
+    user: User,
+    *,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    display_name: Optional[str] = None,
+) -> None:
+    """Fill the User's empty profile fields from name hints, never overwriting what they have."""
+    if not user.first_name and first_name:
+        user.first_name = first_name
+    if not user.last_name and last_name:
+        user.last_name = last_name
+    if not user.display_name and display_name:
+        user.display_name = display_name
 
 
 async def update_user_profile(db: AsyncSession, user: User, changes: dict[str, Any]) -> User:

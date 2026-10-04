@@ -21,7 +21,13 @@ def _redact_query(params: Mapping[str, str]) -> dict[str, str]:
     return {k: (_REDACTED if _SENSITIVE_QUERY_KEY.search(k) else v) for k, v in params.items()}
 
 
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+def report_unexpected_exception(request: Request, exc: Exception) -> str:
+    """
+    Log an unexpected exception with its redacted request and capture it in
+    PostHog. Returns the error ID that ties the log, the capture and the User's
+    report together. The global handler uses it, and so do browser flows that
+    must still land on a page instead of a JSON 500.
+    """
 
     # 8-characters ID to identify the error. We may want the user to share
     # this ID with us for support, so it's better to have a short ID.
@@ -55,6 +61,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         },
     )
 
+    return error_id
+
+
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    error_id = report_unexpected_exception(request, exc)
     return JSONResponse(
         status_code=500,
         content={

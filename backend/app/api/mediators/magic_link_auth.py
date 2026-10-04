@@ -11,7 +11,6 @@ import app.api.services.sessions as sessions
 import app.api.services.users as user_service
 from app.core.auth_mailer import AuthMailer, AuthMailerError
 from app.core.config import settings
-from app.core.ids import ulid_with_prefix
 from app.core.logger import logger
 from app.db.models import User
 from app.schemas.common import MessageResponse
@@ -86,23 +85,10 @@ async def complete_magic_link(
         logger.warning("Magic link rejected: %s", redeemed.reason.value)
         raise RejectedMagicLinkError(redeemed.reason.value)
 
-    # Resolve the user and create it in the database if it doesn't exist yet.
-    # The email used for identity resolution comes from the consumed MagicLink row,
-    # NEVER from anything in the click URL - we cannot fully trust it.
-    # Same email always maps to the same User row, regardless of how that row
-    # was originally created (e.g. Google OAuth or a prior magic link).
-    user = await user_service.get_user_by_email(db=db, email=redeemed.email)
-    if user is None:
-        local_part = redeemed.email.split("@", 1)[0]
-        user = User(
-            id=ulid_with_prefix("user"),
-            email=redeemed.email,
-            display_name=local_part,
-            first_name=None,
-            last_name=None,
-            is_admin=False,
-        )
-        await user_service.create_user(db=db, user=user)
+    # Resolve the User (found or created) from the email on the consumed Magic link row,
+    # NEVER from anything in the click URL. Every Sign-in method resolves through the
+    # same operation, so one email always reaches one User.
+    user = await user_service.resolve_user_by_verified_email(db, redeemed.email)
 
     result = await sessions.start(
         db,
