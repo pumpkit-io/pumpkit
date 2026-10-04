@@ -30,9 +30,9 @@ async def create_user(
     db: AsyncSession,
     user: User,
 ) -> None:
-    """Create a new user in the database"""
+    """Add a new user. Flushes only: the calling mediator commits."""
     db.add(user)
-    await db.commit()
+    await db.flush()
 
 
 async def update_user_profile(db: AsyncSession, user: User, changes: dict[str, Any]) -> User:
