@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.api.services.magic_links as magic_links
 import app.api.services.sessions as sessions
 import app.api.services.users as user_service
-from app.core.auth_mailer import AuthMailer, AuthMailerError
+from app.core.auth_mailer import AuthMailer, AuthMailerError, MagicLinkEmail
 from app.core.config import settings
+from app.core.exceptions import report_unexpected_exception
 from app.core.logger import logger
 from app.db.models import User
 from app.schemas.common import MessageResponse
@@ -18,10 +19,6 @@ from app.schemas.common import MessageResponse
 # Generic message returned by the request endpoint regardless of whether the
 # email is registered or rate-limited, so it never reveals which emails have accounts.
 _GENERIC_REQUEST_MESSAGE = "If an account exists for that email, we've sent you a sign-in link."
-
-
-class RejectedMagicLinkError(Exception):
-    """A Magic link that can't sign anyone in: unknown, already used or expired."""
 
 
 async def request_magic_link(
@@ -54,10 +51,12 @@ async def request_magic_link(
 
     try:
         await mailer.send_magic_link(
-            to=email,
-            display_name=user.display_name if user else "",
-            link_url=f"{settings.BACKEND_URL}/api/v1/login/magic-link?token={issued.token}",
-            expires_in_minutes=issued.expires_in_minutes,
+            MagicLinkEmail(
+                to=email,
+                display_name=user.display_name if user else "",
+                link_url=f"{settings.BACKEND_URL}/api/v1/login/magic-link?token={issued.token}",
+                expires_in_minutes=issued.expires_in_minutes,
+            )
         )
     except AuthMailerError:
         # The email never left, so the link must not hold the cool-down.
@@ -76,14 +75,30 @@ async def complete_magic_link(
     now: datetime,
 ) -> RedirectResponse:
     """
-    Redeem a Magic link, sign the user in (creating the user row in the database
-    if needed), and redirect to the frontend callback with the access token in
-    the URL fragment + the refresh token in an HTTP-only cookie.
+    Finish Magic link sign-in where the emailed link lands. It always ends on a
+    redirect: the frontend callback with a new Session, or the sign-in page with
+    `invalid_magic_link`, `account_suspended` or `sign_in_failed`. An unexpected
+    exception is reported like the global handler would, and the sign-in is
+    rolled back, so a failure halfway leaves no User behind.
     """
+    try:
+        return await _sign_in_with_magic_link(token=token, request=request, db=db, now=now)
+    except Exception as exc:
+        report_unexpected_exception(request, exc)
+        await db.rollback()
+        return sessions.sign_in_error_redirect("sign_in_failed")
+
+
+async def _sign_in_with_magic_link(
+    token: str,
+    request: Request,
+    db: AsyncSession,
+    now: datetime,
+) -> RedirectResponse:
     redeemed = await magic_links.redeem(db, token=token, now=now)
     if isinstance(redeemed, magic_links.RedemptionFailure):
         logger.warning("Magic link rejected: %s", redeemed.reason.value)
-        raise RejectedMagicLinkError(redeemed.reason.value)
+        return sessions.sign_in_error_redirect("invalid_magic_link")
 
     # Resolve the User (found or created) from the email on the consumed Magic link row,
     # NEVER from anything in the click URL. Every Sign-in method resolves through the
@@ -96,6 +111,9 @@ async def complete_magic_link(
         sign_in_method="magic_link",
         client=sessions.ClientInfo.from_request(request),
     )
+    # Commit a refusal too: the Magic link is single-use, so it stays consumed.
+    # A refused User is one that already exists (Suspended), and resolving an
+    # existing User without name hints writes nothing else.
     await db.commit()
     if isinstance(result, sessions.SessionRefusal):
         return result.as_sign_in_redirect()

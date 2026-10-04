@@ -6,7 +6,7 @@ Only the Sessions module (`api/services/sessions.py`) calls this. It flushes and
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -69,19 +69,18 @@ async def mark_rotated(db: AsyncSession, token: RefreshToken, replaced_by: Refre
 
 async def revoke_session(db: AsyncSession, session_id: str) -> None:
     """Revoke every refresh token of a Session."""
-    await db.execute(
-        update(RefreshToken)
-        .where(RefreshToken.session_id == session_id, ~RefreshToken.is_revoked)
-        .values(is_revoked=True, revoked_at=datetime.now(timezone.utc))
-    )
-    await db.flush()
+    await _revoke_where(db, RefreshToken.session_id == session_id)
 
 
 async def revoke_all_user_sessions(db: AsyncSession, user_id: str) -> None:
     """Revoke every Session of a User."""
+    await _revoke_where(db, RefreshToken.user_id == user_id)
+
+
+async def _revoke_where(db: AsyncSession, criterion: ColumnElement[bool]) -> None:
     await db.execute(
         update(RefreshToken)
-        .where(RefreshToken.user_id == user_id, ~RefreshToken.is_revoked)
+        .where(criterion, ~RefreshToken.is_revoked)
         .values(is_revoked=True, revoked_at=datetime.now(timezone.utc))
     )
     await db.flush()

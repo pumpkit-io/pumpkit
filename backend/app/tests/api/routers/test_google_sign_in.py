@@ -82,7 +82,7 @@ async def test_google_sign_in_for_a_magic_link_users_email_links_to_that_user(
     assert profile["last_name"] == "Liddell"
 
 
-async def test_a_failed_google_code_exchange_lands_on_login_with_sign_in_failed(
+async def test_a_failed_google_code_exchange_lands_on_the_sign_in_page_with_sign_in_failed(
     new_browser, sign_in_with_google, fake_google, fake_posthog
 ):
     fake_google.fail = True
@@ -97,7 +97,9 @@ async def test_a_failed_google_code_exchange_lands_on_login_with_sign_in_failed(
     fake_posthog.capture_exception.assert_not_called()
 
 
-async def test_a_cancelled_google_consent_lands_on_login_with_sign_in_failed(new_browser):
+async def test_a_cancelled_google_consent_lands_on_the_sign_in_page_with_sign_in_failed(
+    new_browser,
+):
     browser = new_browser()
     started = await browser.get("/api/v1/login/google")
     assert started.status_code == 200
@@ -110,7 +112,7 @@ async def test_a_cancelled_google_consent_lands_on_login_with_sign_in_failed(new
     assert landed.headers["location"] == SIGN_IN_FAILED
 
 
-async def test_a_google_callback_with_another_browsers_state_lands_on_login_with_sign_in_failed(
+async def test_a_google_callback_with_another_browsers_state_lands_on_the_sign_in_page_with_sign_in_failed(
     new_browser, fake_google
 ):
     fake_google.claims = ALICE_GOOGLE
@@ -128,7 +130,7 @@ async def test_a_google_callback_with_another_browsers_state_lands_on_login_with
     assert "refresh_token" not in browser.cookies
 
 
-async def test_a_suspended_user_signing_in_with_google_lands_on_login_without_a_session(
+async def test_a_suspended_user_signing_in_with_google_lands_on_the_sign_in_page_without_a_session(
     new_browser, sign_in_with_google, suspend_user
 ):
     await sign_in_with_google(new_browser(), ALICE_GOOGLE)
@@ -160,3 +162,25 @@ async def test_a_failure_before_the_session_starts_is_reported_and_leaves_no_par
     # The User and Google identity were created in the same transaction: both rolled back.
     assert (await db.execute(select(func.count()).select_from(User))).scalar_one() == 0
     assert (await db.execute(select(func.count()).select_from(GoogleIdentity))).scalar_one() == 0
+
+
+async def test_a_refused_google_sign_in_leaves_nothing_behind(
+    new_browser, sign_in_with_google, sign_in_by_magic_link, suspend_user, lift_suspension, user
+):
+    await suspend_user(user.email)
+
+    refused = await sign_in_with_google(new_browser(), ALICE_GOOGLE)
+    assert refused.headers["location"] == "http://localhost:5173/login?error=account_suspended"
+
+    await lift_suspension(user.email)
+    # Had the refused sign-in linked the Google account to Alice, this would reach her.
+    browser = new_browser()
+    later = await sign_in_with_google(browser, replace(ALICE_GOOGLE, email="a@example.org"))
+    assert (await _profile(browser, later))["email"] == "a@example.org"
+    # Nor did the refused sign-in fill Alice's empty names from Google's.
+    alice = new_browser()
+    signed_in = await sign_in_by_magic_link(alice, user.email)
+    me = await alice.get(
+        "/api/v1/users/me", headers={"Authorization": f"Bearer {signed_in.access_token}"}
+    )
+    assert me.json()["first_name"] is None

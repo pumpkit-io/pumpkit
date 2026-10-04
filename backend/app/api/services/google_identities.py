@@ -32,23 +32,12 @@ async def resolve_user(db: AsyncSession, claims: GoogleClaims) -> User:
         user = await user_service.get_user_by_id(db=db, user_id=google_identity.user_id)
         if user is None:
             raise LookupError(f"Google identity {google_identity.id} has no User")
-        user_service.fill_empty_profile(
-            user,
-            first_name=claims.given_name,
-            last_name=claims.family_name,
-            display_name=claims.name,
-        )
+        user_service.fill_empty_profile(user, _name_hints(claims))
         google_identity.profile_json = dict(claims.profile)
         await db.flush()
         return user
 
-    user = await user_service.resolve_user_by_verified_email(
-        db,
-        claims.email,
-        first_name=claims.given_name,
-        last_name=claims.family_name,
-        display_name=claims.name,
-    )
+    user = await user_service.resolve_user_by_verified_email(db, claims.email, _name_hints(claims))
     db.add(
         GoogleIdentity(
             user_id=user.id,
@@ -58,3 +47,11 @@ async def resolve_user(db: AsyncSession, claims: GoogleClaims) -> User:
     )
     await db.flush()
     return user
+
+
+def _name_hints(claims: GoogleClaims) -> user_service.NameHints:
+    return user_service.NameHints(
+        first_name=claims.given_name,
+        last_name=claims.family_name,
+        display_name=claims.name,
+    )
