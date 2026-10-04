@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { formatAmount } from '@/lib/money';
 
-interface ProductCardProps {
+interface PlanCardProps {
   title: string;
   description?: string | null;
   priceLabel: string;
@@ -11,7 +11,7 @@ interface ProductCardProps {
   onAction: () => void;
 }
 
-export function ProductCard({
+export function PlanCard({
   title,
   description,
   priceLabel,
@@ -19,7 +19,7 @@ export function ProductCard({
   ariaLabel,
   disabled,
   onAction,
-}: ProductCardProps) {
+}: PlanCardProps) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
       <div>

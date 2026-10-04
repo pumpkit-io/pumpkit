@@ -1,25 +1,23 @@
 import { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 type BillingRedirectStatus = 'success' | 'cancelled';
 
 /** Stripe return URLs: hand the outcome to /home via router state, then go there. */
 function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const kind = searchParams.get('kind') ?? 'subscription';
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      navigate('/home', { replace: true, state: { checkoutStatus: status, checkoutKind: kind } });
+      navigate('/home', { replace: true, state: { checkoutStatus: status } });
     }, 150);
     return () => window.clearTimeout(timeout);
-  }, [navigate, status, kind]);
+  }, [navigate, status]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
       <div className="font-sans text-sm text-muted-foreground">
-        {status === 'success' ? 'Confirming your purchase…' : 'Returning home…'}
+        {status === 'success' ? 'Confirming your subscription…' : 'Returning home…'}
       </div>
     </div>
   );

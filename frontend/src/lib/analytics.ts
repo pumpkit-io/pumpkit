@@ -74,17 +74,14 @@ export const EVENTS = {
   billing_subscription_checkout_started: {
     description: 'Billing: started a subscription checkout. Props: price_id.',
   },
-  billing_purchase_checkout_started: {
-    description: 'Billing: started a one-time purchase checkout. Props: product_id.',
-  },
   billing_checkout_redirect_failed: {
     description: 'Billing: could not redirect to Stripe. Props: error_message.',
   },
   billing_checkout_succeeded: {
-    description: 'Billing: returned from Stripe via the success URL. Props: kind.',
+    description: 'Billing: returned from Stripe via the success URL.',
   },
   billing_checkout_cancelled: {
-    description: 'Billing: returned from Stripe via the cancel URL. Props: kind.',
+    description: 'Billing: returned from Stripe via the cancel URL.',
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
 } as const satisfies Record<string, { description: string }>;

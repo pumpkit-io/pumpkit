@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { billingService, type Price } from '@/services/billingService';
-import { recurringLabel } from '@/features/billing/ProductCard';
+import { recurringLabel } from '@/features/billing/PlanCard';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
 

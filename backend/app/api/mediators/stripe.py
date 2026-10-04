@@ -7,7 +7,6 @@ import stripe
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import app.api.mediators.purchases as purchases_mediator
 import app.api.services.stripe as stripe_service
 import app.api.services.stripe_customers as stripe_customers_service
 import app.api.services.stripe_events as stripe_events_service
@@ -116,7 +115,7 @@ async def create_checkout_session(
     checkout_request: CheckoutRequest,
 ) -> CheckoutResponse:
     """
-    Create a Stripe checkout session for a subscription purchase.
+    Create a Stripe checkout session for a Subscription.
     """
     customer_id = await stripe_customers_service.ensure_stripe_customer(db=db, user=user)
 
@@ -316,38 +315,13 @@ async def _dispatch_event(
     ):
         await _handle_subscription_event(db=db, subscription=data_object, event_id=event_id)
     elif event_type == "checkout.session.completed":
-        if purchases_mediator.is_purchase_event(data_object):
-            await purchases_mediator.handle_checkout_completed(db, session=data_object)
-        else:
-            # Subscription checkouts: the subsequent customer.subscription.created
-            # event writes the row. Log for observability.
-            logger.info(
-                "Stripe checkout.session.completed (session_id=%s, client_reference_id=%s)",
-                data_object.get("id"),
-                data_object.get("client_reference_id"),
-            )
-    elif (
-        event_type == "checkout.session.async_payment_succeeded"
-        and purchases_mediator.is_purchase_event(data_object)
-    ):
-        await purchases_mediator.handle_checkout_async_payment_succeeded(db, session=data_object)
-    elif (
-        event_type == "checkout.session.async_payment_failed"
-        and purchases_mediator.is_purchase_event(data_object)
-    ):
-        await purchases_mediator.handle_checkout_async_payment_failed(db, session=data_object)
-    elif event_type == "checkout.session.expired" and purchases_mediator.is_purchase_event(
-        data_object
-    ):
-        await purchases_mediator.handle_checkout_session_expired(db, session=data_object)
-    elif event_type == "charge.refunded":
-        await purchases_mediator.handle_charge_refunded(db, charge=data_object)
-    elif event_type == "charge.dispute.funds_withdrawn":
-        await purchases_mediator.handle_charge_dispute_funds_withdrawn(db, dispute=data_object)
-    elif event_type == "charge.dispute.funds_reinstated":
-        await purchases_mediator.handle_charge_dispute_funds_reinstated(db, dispute=data_object)
-    elif event_type == "payment_intent.payment_failed":
-        await purchases_mediator.handle_payment_intent_failed(db, payment_intent=data_object)
+        # The subsequent customer.subscription.created event writes the row.
+        # Log for observability.
+        logger.info(
+            "Stripe checkout.session.completed (session_id=%s, client_reference_id=%s)",
+            data_object.get("id"),
+            data_object.get("client_reference_id"),
+        )
     else:
         logger.info("Unhandled Stripe webhook event type: %s (event_id=%s)", event_type, event_id)
 
