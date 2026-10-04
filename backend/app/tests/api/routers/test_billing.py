@@ -1,3 +1,22 @@
+from unittest.mock import AsyncMock
+
+import app.api.mediators.stripe as stripe_mediator
+
+
+async def test_unexpected_checkout_failure_returns_500_with_captured_error_id(
+    client, monkeypatch, assert_reported_500
+):
+    monkeypatch.setattr(
+        stripe_mediator,
+        "create_checkout_session",
+        AsyncMock(side_effect=RuntimeError("stripe exploded")),
+    )
+
+    response = await client.post("/api/v1/stripe/checkout", json={"price_id": "price_123"})
+
+    assert_reported_500(response)
+
+
 async def test_billing_api_serves_only_subscription_routes(client):
     """Pumpkit bills only by Subscription (ADR 0003): no other billing routes exist."""
     response = await client.get("/openapi.json")
