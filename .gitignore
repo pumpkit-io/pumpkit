@@ -18,3 +18,6 @@ frontend/dist/
 # Local tooling / data (never commit)
 .superpowers/
 backups/
+
+# Architecture review handoff docs (local only)
+docs/architecture-improvements/

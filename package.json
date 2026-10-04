@@ -2,7 +2,7 @@
   "name": "pumpkit",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Repo-level tooling only: the Husky pre-commit hook and lint-staged. App packages live in backend/, frontend/ and e2e/.",
+  "description": "Repo-level tooling only: the Husky pre-commit and pre-push hooks and lint-staged. App packages live in backend/, frontend/ and e2e/.",
   "scripts": {
     "prepare": "husky"
   },
