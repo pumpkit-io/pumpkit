@@ -8,7 +8,6 @@ from slowapi.errors import RateLimitExceeded
 from app.api.routers import (
     auth_sessions,
     billing,
-    first_party_auth,
     magic_link_auth,
     stripe,
     support,
@@ -47,7 +46,6 @@ app.add_middleware(
 # Add application routers
 # Having the API prefix defined here makes everything centralized and
 # keeps the routers unaware of their mount point (e.g., I could mount to /api/v2 later).
-app.include_router(first_party_auth.router, prefix="/api/v1")
 app.include_router(third_party_auth.router, prefix="/api/v1")
 app.include_router(magic_link_auth.router, prefix="/api/v1")
 app.include_router(auth_sessions.router, prefix="/api/v1")

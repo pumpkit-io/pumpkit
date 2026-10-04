@@ -27,8 +27,7 @@ from app.db.models import MagicLink, User
 from app.schemas.common import MessageResponse
 
 # Generic message returned by the request endpoint regardless of whether the
-# email is registered or rate-limited. Same enumeration-protection pattern as
-# the existing password reset flow.
+# email is registered or rate-limited, so it never reveals which emails have accounts.
 _GENERIC_REQUEST_MESSAGE = "If an account exists for that email, we've sent you a sign-in link."
 
 # In-app cool-down between consecutive requests for the same email, in seconds.
@@ -175,7 +174,7 @@ async def complete_magic_link(
     # The email used for identity resolution comes from the consumed MagicLink row,
     # NEVER from anything in the click URL - we cannot fully trust it.
     # Same email always maps to the same User row, regardless of how that row
-    # was originally created (e.g. Google OAuth, email/password, prior magic link).
+    # was originally created (e.g. Google OAuth or a prior magic link).
     user = await user_service.get_user_by_email(db=db, email=consumed.email)
     if user is None:
         local_part = consumed.email.split("@", 1)[0]
