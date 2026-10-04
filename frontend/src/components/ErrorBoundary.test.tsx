@@ -1,17 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TokenErrorBoundary } from './TokenErrorBoundary';
-
-const SESSION_KEY = 'pumpkit:session';
+import { SESSION_STORAGE_KEY } from '@/lib/session';
+import { ErrorBoundary } from './ErrorBoundary';
 
 function Boom(): never {
   throw new Error('Unauthorized: token expired');
 }
 
-describe('TokenErrorBoundary', () => {
+describe('ErrorBoundary', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ accessToken: 't', expiresAt: 'x' }));
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ accessToken: 't', expiresAt: 'x' }));
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -20,11 +19,11 @@ describe('TokenErrorBoundary', () => {
 
   it('shows the generic fallback for any error and leaves the Session alone', () => {
     render(
-      <TokenErrorBoundary>
+      <ErrorBoundary>
         <Boom />
-      </TokenErrorBoundary>,
+      </ErrorBoundary>,
     );
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
-    expect(localStorage.getItem(SESSION_KEY)).not.toBeNull();
+    expect(localStorage.getItem(SESSION_STORAGE_KEY)).not.toBeNull();
   });
 });

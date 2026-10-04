@@ -1,10 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { userService } from '../services/userService';
 import { identifyUser } from '../lib/posthog';
-import { session } from '../lib/session';
-import { storageKey } from '../lib/storage';
-
-const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
+import { POSTHOG_IDENTIFIED_KEY, session } from '../lib/session';
 
 async function identifyFromBackend(): Promise<boolean> {
   try {

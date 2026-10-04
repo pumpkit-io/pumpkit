@@ -1,14 +1,14 @@
 import type { InternalAxiosRequestConfig } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SESSION_STORAGE_KEY } from '@/lib/session/store';
 import { api, performRefresh } from './apiService';
 
-const SESSION_KEY = 'pumpkit:session';
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 const originalAdapter = api.defaults.adapter;
 
-const storedSession = () => JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null');
+const storedSession = () => JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) ?? 'null');
 const storeSession = (accessToken: string, expiresAt: string) =>
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ accessToken, expiresAt }));
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ accessToken, expiresAt }));
 
 /** Fakes HTTP at the axios adapter; /refresh-token answers with `token`. */
 function fakeRefresh(token: string) {

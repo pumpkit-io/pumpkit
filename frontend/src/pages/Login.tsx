@@ -4,24 +4,19 @@ import { Button } from '../components/ui/button';
 import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
 import { authService } from '../services/authService';
 import { track } from '../lib/analytics';
+import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
 
 function emailDomain(email: string): string {
   const at = email.lastIndexOf('@');
   return at >= 0 ? email.slice(at + 1).toLowerCase() : 'unknown';
 }
 
-/** The `?error=` codes the backend and the sign-in callbacks redirect here with. */
-type SignInErrorCode = 'invalid_magic_link' | 'account_suspended' | 'sign_in_failed';
-
 const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
-  invalid_magic_link: 'That sign-in link is invalid or has expired. Please request a new one.',
-  account_suspended: 'Your account has been suspended, so you cannot sign in.',
-  sign_in_failed: "We couldn't sign you in. Please try again.",
+  [SIGN_IN_ERROR.invalidMagicLink]:
+    'That sign-in link is invalid or has expired. Please request a new one.',
+  [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
+  [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Please try again.",
 };
-
-function isSignInErrorCode(code: string | null): code is SignInErrorCode {
-  return code !== null && Object.prototype.hasOwnProperty.call(SIGN_IN_ERROR_MESSAGES, code);
-}
 
 export function Login() {
   const location = useLocation();
@@ -34,7 +29,7 @@ export function Login() {
     const code = new URLSearchParams(location.search).get('error');
     if (!isSignInErrorCode(code)) return;
     setError(SIGN_IN_ERROR_MESSAGES[code]);
-    if (code === 'invalid_magic_link') track('login_magic_link_invalid_shown');
+    if (code === SIGN_IN_ERROR.invalidMagicLink) track('login_magic_link_invalid_shown');
     // Drop the code from the URL so a reload doesn't show the message again.
     window.history.replaceState({}, document.title, location.pathname);
   }, [location.search, location.pathname]);

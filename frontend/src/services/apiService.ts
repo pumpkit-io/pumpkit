@@ -80,7 +80,8 @@ export function performRefresh(): Promise<string> {
 
 // Add the access token to requests if there is a Session. The 401 → refresh →
 // retry response interceptor lives in the Session module (`@/lib/session`),
-// which owns the sign-out rule.
+// which owns the sign-out rule; `main.tsx` installs it with
+// `installRefreshOnUnauthorized()`.
 api.interceptors.request.use(
   (config) => {
     const session = readSession();

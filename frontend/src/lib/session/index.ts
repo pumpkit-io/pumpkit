@@ -3,6 +3,7 @@ import { hardRedirect } from '@/lib/navigation';
 import { resetPostHog } from '@/lib/posthog';
 import { storageKey } from '@/lib/storage';
 import { api, performRefresh } from '@/services/apiService';
+import { SIGN_IN_ERROR, signInPath } from './signInError';
 import {
   clearSession,
   readSession,
@@ -12,6 +13,8 @@ import {
 } from './store';
 
 export type { Session } from './store';
+export { SESSION_STORAGE_KEY } from './store';
+export { SIGN_IN_ERROR, isSignInErrorCode, signInPath, type SignInErrorCode } from './signInError';
 
 /**
  * Why a Session ended. These are the only ways a Session ends.
@@ -22,21 +25,35 @@ export type { Session } from './store';
  */
 export type EndSessionReason = 'user' | 'session_ended' | 'account_suspended' | 'other_tab';
 
-const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
+/**
+ * Why a sign-in callback's fragment could not start a Session. Each callback
+ * page turns it into a sign-in page error code.
+ * - `missing_token`: no `access_token`.
+ * - `invalid_expiry`: no `expires_at`, or one that is not a date.
+ */
+export type StartFailureReason = 'missing_token' | 'invalid_expiry';
+
+export type StartFromFragmentResult = { ok: true } | { ok: false; reason: StartFailureReason };
+
+/**
+ * The sessionStorage key (per tab) marking that analytics already identified
+ * the User in this Session. Ending a Session clears it.
+ */
+export const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
 
 /** Where the browser goes after a Session ends, per reason. */
 const ROUTE_AFTER_END: Record<EndSessionReason, string> = {
-  user: '/login',
-  session_ended: '/login',
-  account_suspended: '/login?error=account_suspended',
-  other_tab: '/login',
+  user: signInPath(),
+  session_ended: signInPath(),
+  account_suspended: signInPath(SIGN_IN_ERROR.accountSuspended),
+  other_tab: signInPath(),
 };
 
 /** The reason a refresh failure ends the Session, or null if it must not. */
 function refusalReason(error: unknown): EndSessionReason | null {
   if (!isAxiosError(error) || error.response?.status !== 401) return null;
   const detail = (error.response.data as { detail?: unknown } | undefined)?.detail;
-  return detail === 'account_suspended' ? 'account_suspended' : 'session_ended';
+  return detail === SIGN_IN_ERROR.accountSuspended ? 'account_suspended' : 'session_ended';
 }
 
 type Listener = (session: Session | null) => void;
@@ -44,14 +61,24 @@ type Listener = (session: Session | null) => void;
 const listeners = new Set<Listener>();
 // The Session this tab last saw, so a full `localStorage.clear()` in another
 // tab only ends a Session this tab actually had.
-let known: Session | null = readSession();
+let lastSeenSession: Session | null = readSession();
 
 function notify(current: Session | null): void {
-  known = current;
+  lastSeenSession = current;
   listeners.forEach((listener) => listener(current));
 }
 
-async function end(reason: EndSessionReason): Promise<void> {
+// The ending in progress, if any. Concurrent callers (several 401s meeting one
+// refused refresh, overlapping focus and periodic checks) share it, so a
+// Session ends exactly once. Starting a Session re-arms it.
+let ending: Promise<void> | null = null;
+
+function end(reason: EndSessionReason): Promise<void> {
+  ending ??= endNow(reason);
+  return ending;
+}
+
+async function endNow(reason: EndSessionReason): Promise<void> {
   if (reason === 'user') {
     try {
       await api.post('/logout');
@@ -86,26 +113,39 @@ const NO_REFRESH_PATHS = ['/login', '/refresh-token', '/logout'];
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
-// A protected request answered 401 awaits a refresh and retries once. The
-// shared refresh path de-duplicates concurrent callers, and `refresh` applies
-// the sign-out rule, so this interceptor has no queue and no rule of its own.
-api.interceptors.response.use(undefined, async (error: unknown) => {
-  if (!isAxiosError(error) || error.response?.status !== 401 || !error.config) throw error;
-  const config = error.config as RetriableConfig;
-  const url = config.url ?? '';
-  if (config._retry || NO_REFRESH_PATHS.some((path) => url.includes(path))) throw error;
-  const current = readSession();
-  if (!current) throw error;
-  config._retry = true;
-  // A 401 for a token that has since been replaced needs no new refresh.
-  const sent = config.headers?.Authorization;
-  const token =
-    sent && sent !== `Bearer ${current.accessToken}`
-      ? current.accessToken
-      : (await refresh()).accessToken;
-  config.headers.Authorization = `Bearer ${token}`;
-  return api(config);
-});
+let retryInstalled = false;
+
+/**
+ * Install the 401 -> refresh -> retry-once response interceptor on `api`. Call
+ * once at app startup (`main.tsx`); repeat calls do nothing. It lives here, not
+ * next to `api`, because it applies the Session module's sign-out rule, and
+ * `services/apiService.ts` must not import this module (import cycle).
+ *
+ * The shared refresh path de-duplicates concurrent callers, and `refresh`
+ * applies the sign-out rule, so this interceptor has no queue and no rule of
+ * its own.
+ */
+export function installRefreshOnUnauthorized(): void {
+  if (retryInstalled) return;
+  retryInstalled = true;
+  api.interceptors.response.use(undefined, async (error: unknown) => {
+    if (!isAxiosError(error) || error.response?.status !== 401 || !error.config) throw error;
+    const config = error.config as RetriableConfig;
+    const url = config.url ?? '';
+    if (config._retry || NO_REFRESH_PATHS.some((path) => url.includes(path))) throw error;
+    const current = readSession();
+    if (!current) throw error;
+    config._retry = true;
+    // A 401 for a token that has since been replaced needs no new refresh.
+    const sent = config.headers?.Authorization;
+    const token =
+      sent && sent !== `Bearer ${current.accessToken}`
+        ? current.accessToken
+        : (await refresh()).accessToken;
+    config.headers.Authorization = `Bearer ${token}`;
+    return api(config);
+  });
+}
 
 // Other tabs: a new value is a Session started or refreshed elsewhere; a
 // removed value (or a full clear) ends the Session here too. Registered once,
@@ -116,10 +156,12 @@ if (typeof window !== 'undefined') {
     if (event.key !== null && event.key !== SESSION_STORAGE_KEY) return;
     const current = readSession();
     if (current) {
+      // A Session started (or refreshed) in another tab can end here again.
+      ending = null;
       notify(current);
       return;
     }
-    const hadSession = known !== null || (event.key !== null && event.oldValue !== null);
+    const hadSession = lastSeenSession !== null || (event.key !== null && event.oldValue !== null);
     if (hadSession) void end('other_tab');
   });
 }
@@ -140,20 +182,25 @@ export const session = {
   start(accessToken: string, expiresAt: string): void {
     const current = { accessToken, expiresAt };
     writeSession(current);
+    ending = null;
     notify(current);
   },
   /**
    * Start a Session from a sign-in callback's URL fragment
-   * (`#access_token=…&token_type=Bearer&expires_at=<ISO>`). Returns false,
-   * starting nothing, when the token or a parseable expiry is missing.
+   * (`#access_token=…&token_type=Bearer&expires_at=<ISO>`). On failure it
+   * starts nothing and returns the reason, for the caller to turn into a
+   * sign-in page error.
    */
-  startFromFragment(fragment: string): boolean {
+  startFromFragment(fragment: string): StartFromFragmentResult {
     const params = new URLSearchParams(fragment.replace(/^#/, ''));
     const accessToken = params.get('access_token');
     const expiresAt = params.get('expires_at');
-    if (!accessToken || !expiresAt || Number.isNaN(Date.parse(expiresAt))) return false;
+    if (!accessToken) return { ok: false, reason: 'missing_token' };
+    if (!expiresAt || Number.isNaN(Date.parse(expiresAt))) {
+      return { ok: false, reason: 'invalid_expiry' };
+    }
     session.start(accessToken, expiresAt);
-    return true;
+    return { ok: true };
   },
   /**
    * Refresh through the single refresh path. A 401 ends the Session; any other
