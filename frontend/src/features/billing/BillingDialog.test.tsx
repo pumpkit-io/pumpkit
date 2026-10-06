@@ -161,16 +161,19 @@ describe('BillingDialog', () => {
     expect(backend.bodies['POST /billing/checkout']).toEqual({ plan_key: 'pumpkit_pro_yearly' });
   });
 
-  it.each(['trialing', 'active'])(
-    'shows a %s Subscription, its renewal date and Manage, and no Plans',
-    async (status) => {
+  it.each([
+    ['trialing', 'Trial'],
+    ['active', 'Active'],
+  ])(
+    'shows a %s Subscription as %s, its renewal date and Manage, and no Plans',
+    async (status, label) => {
       fakeBackend(holding(status, true));
       renderDialog();
 
       expect(
         await screen.findByRole('button', { name: 'Manage subscription' }),
       ).toBeInTheDocument();
-      expect(screen.getByText(status)).toBeInTheDocument();
+      expect(screen.getByText(label)).toBeInTheDocument();
       expect(screen.getByText(new RegExp(`renews ${PERIOD_END_LABEL}`))).toBeInTheDocument();
       expect(screen.queryByText(PAYMENT_FAILED)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^subscribe to/i })).not.toBeInTheDocument();
@@ -185,17 +188,17 @@ describe('BillingDialog', () => {
   });
 
   it.each([
-    ['past_due', true],
-    ['unpaid', false],
-    ['paused', false],
+    ['past_due', true, 'Past due'],
+    ['unpaid', false, 'Unpaid'],
+    ['paused', false, 'Paused'],
   ])(
     'warns that the last payment of a %s Subscription failed and offers Fix payment',
-    async (status, subscribed) => {
+    async (status, subscribed, label) => {
       fakeBackend(holding(status, subscribed));
       renderDialog();
 
       expect(await screen.findByText(PAYMENT_FAILED)).toBeInTheDocument();
-      expect(screen.getByText(status)).toBeInTheDocument();
+      expect(screen.getByText(label)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Fix payment' })).toBeInTheDocument();
       expect(
         screen.queryByRole('button', { name: /manage subscription/i }),

@@ -11,7 +11,7 @@ from app.core.billing_gateway import (
     SubscriptionState,
 )
 from app.core.config import settings
-from app.db.models import SubscriptionStatus
+from app.core.subscription_status import SubscriptionStatus
 
 CUSTOMER = "cus_alice"
 BILLING_ME = "/api/v1/billing/me"
@@ -106,6 +106,7 @@ def _subscription(sub_id: str, status: SubscriptionStatus) -> SubscriptionState:
         plan_key="pumpkit_pro_monthly",
         current_period_end=datetime(2026, 11, 6, tzinfo=timezone.utc),
         cancel_at_period_end=False,
+        created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
     )
 
 

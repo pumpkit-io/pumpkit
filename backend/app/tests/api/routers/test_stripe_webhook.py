@@ -23,6 +23,7 @@ ACTIVE = SubscriptionState(
     plan_key="pumpkit_pro_monthly",
     current_period_end=datetime(2030, 3, 17, tzinfo=timezone.utc),
     cancel_at_period_end=False,
+    created_at=datetime(2030, 2, 17, tzinfo=timezone.utc),
 )
 
 

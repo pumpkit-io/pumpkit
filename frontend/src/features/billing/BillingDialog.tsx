@@ -30,6 +30,18 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
+// How each Subscription status reads to the User. Ended ones are never shown.
+const STATUS_LABELS: Record<SubscriptionStatus, string> = {
+  trialing: 'Trial',
+  active: 'Active',
+  past_due: 'Past due',
+  unpaid: 'Unpaid',
+  paused: 'Paused',
+  incomplete: 'Incomplete',
+  incomplete_expired: 'Ended',
+  canceled: 'Ended',
+};
+
 // A Running Subscription in one of these is behind on payment, or stopped over it.
 const PAYMENT_FAILED_STATUSES: ReadonlySet<SubscriptionStatus> = new Set([
   'past_due',
@@ -57,7 +69,7 @@ function RunningSubscription({
       )}
       <div className="flex items-center justify-between gap-3">
         <div className="font-sans text-sm text-foreground">
-          Status: <span className="font-medium">{subscription.status}</span>
+          Status: <span className="font-medium">{STATUS_LABELS[subscription.status]}</span>
           {subscription.currentPeriodEnd && (
             <span className="text-muted-foreground">
               {' '}

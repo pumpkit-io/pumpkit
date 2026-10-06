@@ -17,6 +17,7 @@ RUNNING = SubscriptionState(
     plan_key="pumpkit_pro_monthly",
     current_period_end=datetime(2026, 11, 6, tzinfo=timezone.utc),
     cancel_at_period_end=False,
+    created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
 )
 ENDED = SubscriptionState(
     id="sub_old",
@@ -25,6 +26,7 @@ ENDED = SubscriptionState(
     plan_key=None,
     current_period_end=datetime(2026, 9, 1, tzinfo=timezone.utc),
     cancel_at_period_end=False,
+    created_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
 )
 
 
@@ -222,3 +224,42 @@ async def test_an_ended_subscription_is_never_the_users_subscription(db, user):
 
     assert subscription is None
     assert subscriptions_service.is_subscribed(subscription) is False
+
+
+@pytest.mark.parametrize("synced_first", ["sub_older", "sub_newer"])
+async def test_the_users_newest_incomplete_subscription_is_the_one_stripe_created_last(
+    db, user, synced_first
+):
+    """Rows synced in one transaction share a write time: only Stripe's says which is newer."""
+    older = replace(
+        RUNNING,
+        id="sub_older",
+        status="incomplete",
+        created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+    )
+    newer = replace(
+        RUNNING,
+        id="sub_newer",
+        status="incomplete",
+        created_at=datetime(2026, 10, 2, tzinfo=timezone.utc),
+    )
+    await _hold(db, user, *((older, newer) if synced_first == "sub_older" else (newer, older)))
+
+    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
+
+    assert subscription is not None
+    assert subscription.stripe_subscription_id == "sub_newer"
+
+
+async def test_incomplete_subscriptions_stripe_created_at_once_are_told_apart_by_id(db, user):
+    await _hold(
+        db,
+        user,
+        replace(RUNNING, id="sub_b", status="incomplete"),
+        replace(RUNNING, id="sub_a", status="incomplete"),
+    )
+
+    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
+
+    assert subscription is not None
+    assert subscription.stripe_subscription_id == "sub_b"

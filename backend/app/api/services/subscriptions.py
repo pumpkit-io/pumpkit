@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.billing_gateway import BillingGateway
 from app.core.config import settings
-from app.db.models import Subscription, SubscriptionStatus
+from app.core.subscription_status import SubscriptionStatus
+from app.db.models import Subscription
 
 # An Ended Subscription can never run again.
 _ENDED_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
@@ -45,15 +46,7 @@ async def get_subscription_offer(db: AsyncSession, *, user_id: str) -> Subscript
     Subscriptions can't cost a User their Trial. Reads only Pumpkit's copy:
     sync the customer first for an answer that matches the provider.
     """
-    running = await db.execute(
-        select(
-            exists().where(
-                Subscription.user_id == user_id,
-                Subscription.status.in_(_RUNNING_STATUSES),
-            )
-        )
-    )
-    if running.scalar():
+    if await _newest_subscription(db, user_id=user_id, statuses=_RUNNING_STATUSES):
         return SubscriptionOffer(may_subscribe=False, trial_days=None)
     days = settings.BILLING_TRIAL_PERIOD_DAYS
     if days == 0 or await has_had_subscription(db, user_id=user_id):
@@ -66,7 +59,7 @@ async def list_incomplete_subscriptions(db: AsyncSession, *, user_id: str) -> li
     """The User's `incomplete` Subscriptions: started, but their first payment is still pending."""
     result = await db.execute(
         select(Subscription).where(
-            Subscription.user_id == user_id, Subscription.status == "incomplete"
+            Subscription.user_id == user_id, Subscription.status.in_(_INCOMPLETE_STATUSES)
         )
     )
     return list(result.scalars())
@@ -86,17 +79,27 @@ async def get_user_subscription(db: AsyncSession, *, user_id: str) -> Optional[S
     The User's Subscription: their Running one, else their newest `incomplete`
     one, else None. Never an Ended one. Reads only Pumpkit's copy.
     """
-    for statuses in (_RUNNING_STATUSES, _INCOMPLETE_STATUSES):
-        result = await db.execute(
-            select(Subscription)
-            .where(Subscription.user_id == user_id, Subscription.status.in_(statuses))
-            .order_by(Subscription.created_at.desc())
-            .limit(1)
-        )
-        subscription = result.scalar_one_or_none()
-        if subscription is not None:
-            return subscription
-    return None
+    return await _newest_subscription(
+        db, user_id=user_id, statuses=_RUNNING_STATUSES
+    ) or await _newest_subscription(db, user_id=user_id, statuses=_INCOMPLETE_STATUSES)
+
+
+async def _newest_subscription(
+    db: AsyncSession, *, user_id: str, statuses: set[SubscriptionStatus]
+) -> Optional[Subscription]:
+    """
+    The User's Subscription in one of `statuses` that Stripe created last, or
+    None. Ordered by Stripe's creation time, not the row's: rows synced in one
+    transaction share their write time. Ties go to the greater provider ID, so
+    the answer is stable.
+    """
+    result = await db.execute(
+        select(Subscription)
+        .where(Subscription.user_id == user_id, Subscription.status.in_(statuses))
+        .order_by(Subscription.stripe_created_at.desc(), Subscription.stripe_subscription_id.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 def is_subscribed(subscription: Optional[Subscription]) -> bool:
@@ -144,4 +147,5 @@ async def sync_customer(
         subscription.status = state.status
         subscription.current_period_end = state.current_period_end
         subscription.cancel_at_period_end = state.cancel_at_period_end
+        subscription.stripe_created_at = state.created_at
     await db.flush()

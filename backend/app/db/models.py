@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.ids import ulid_with_prefix
+from app.core.subscription_status import SubscriptionStatus
 from app.db.base import Base
 
 # Notes on SQLAlchemy:
@@ -30,18 +31,6 @@ from app.db.base import Base
 SignInMethod = Literal[
     "google",
     "magic_link",
-]
-
-# All possible subscription statuses according to Stripe documentation: https://stripe.com/docs/billing/subscriptions/overview#subscription-statuses
-SubscriptionStatus = Literal[
-    "trialing",
-    "active",
-    "incomplete",
-    "incomplete_expired",
-    "past_due",
-    "canceled",
-    "unpaid",
-    "paused",
 ]
 
 
@@ -226,6 +215,9 @@ class Subscription(Base):
     )
     current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When Stripe created the Subscription: the order between a User's
+    # Subscriptions, since rows synced in one transaction share `created_at`.
+    stripe_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
