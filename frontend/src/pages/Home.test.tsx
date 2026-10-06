@@ -314,6 +314,31 @@ describe('Home', () => {
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
     });
 
+    it.each([
+      [403, 'This needs a Subscription. Subscribe to continue.'],
+      [422, 'The Brief is too long.'],
+      [429, "You've made 30 attempts at a Version in the last hour."],
+    ])('does not count a refusal with a %i as a failed Version', async (status, detail) => {
+      vi.mocked(postService.start).mockRejectedValue(apiError(status, detail));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      await waitFor(() => expect(postService.start).toHaveBeenCalled());
+      await waitFor(() => expect(area.getByLabelText('Brief')).toBeEnabled());
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
+    it('counts a failure without a response as a failed Version', async () => {
+      vi.mocked(postService.start).mockRejectedValue(new Error('Network Error'));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      expect(await area.findByRole('alert')).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+    });
+
     it('clears the screen on "New Post"', async () => {
       vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
       const area = await readyToWrite();
@@ -448,6 +473,19 @@ describe('Home', () => {
       expect(await area.findByRole('region', { name: 'Version 2' })).toBeInTheDocument();
       expect(area.queryByRole('alert')).not.toBeInTheDocument();
       expect(area.getByLabelText('Feedback')).toHaveValue('');
+    });
+
+    it.each([
+      [404, 'Post not found.'],
+      [409, 'This Post has no Version to give Feedback on.'],
+    ])('does not count a refusal with a %i as a failed Version', async (status, detail) => {
+      vi.mocked(postService.addVersion).mockRejectedValue(apiError(status, detail));
+      const area = await onFirstVersion();
+
+      sendFeedback(area, 'make it shorter');
+
+      expect(await area.findByRole('alert')).toHaveTextContent(detail);
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
     });
 
     it('says when the User can send Feedback again once they reach the hourly limit', async () => {
