@@ -84,6 +84,9 @@ export const EVENTS = {
     description: 'Home: added an Inspiration author and its posts were fetched.',
   },
   inspiration_author_removed: { description: 'Home: removed an Inspiration author.' },
+  inspiration_authors_refreshed: {
+    description: 'Home: refreshed an Inspiration author and its latest posts were fetched.',
+  },
   post_version_requested: {
     description: 'Home: asked for a Version of a Post. Props: kind (brief | feedback).',
   },

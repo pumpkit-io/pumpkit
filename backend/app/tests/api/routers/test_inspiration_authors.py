@@ -1,6 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_current_user
 from app.core.x_reader import FetchedPost
+from app.db.models import Subscription, User
+from app.db.session import get_async_db
+from app.main import app
 
 AUTHORS = "/api/v1/inspiration-authors"
 
@@ -197,3 +204,151 @@ async def test_a_twitterapi_io_failure_returns_502_and_stores_nothing(
 
     assert_reported_502(response)
     assert (await client.get(AUTHORS)).json() == {"data": []}
+
+
+def _iso(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+async def test_refreshing_an_author_stores_its_new_posts_and_updates_its_fetch_time(
+    client, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1", "2")
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(hours=2))
+    fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
+
+    response = await client.post(f"{AUTHORS}/LevelsIO/refresh")
+
+    assert response.status_code == 200
+    expected = {"handle": "levelsio", "last_fetched_at": _iso(clock()), "post_count": 3}
+    assert response.json() == expected
+    assert (await client.get(AUTHORS)).json() == {"data": [expected]}
+    assert fake_x_reader.calls == ["levelsio", "levelsio"]
+
+
+async def test_refreshing_a_handle_fetched_less_than_an_hour_ago_returns_429_with_when_to_retry(
+    client, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    fetched_at = clock()
+    clock.advance(timedelta(minutes=45))
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "detail": "@levelsio was fetched less than an hour ago.",
+        "retry_at": _iso(fetched_at + timedelta(hours=1)),
+    }
+    assert response.headers["Retry-After"] == str(15 * 60)
+    assert fake_x_reader.calls == ["levelsio"]
+
+
+async def _sign_in_as_another_subscribed_user(db) -> None:
+    other = User(email="bob@example.com", display_name="Bob")
+    db.add(other)
+    await db.flush()
+    db.add(
+        Subscription(
+            user_id=other.id,
+            stripe_subscription_id="sub_bob",
+            stripe_customer_id="cus_bob",
+            status="active",
+            stripe_created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    )
+    await db.commit()
+    other_id = other.id
+
+    async def _other(request_db: AsyncSession = Depends(get_async_db)) -> User:
+        loaded = await request_db.get(User, other_id)
+        assert loaded is not None
+        return loaded
+
+    app.dependency_overrides[get_current_user] = _other
+
+
+async def test_the_cooldown_is_per_handle_so_another_users_fetch_holds_it(
+    client, db, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(minutes=30))
+    await _sign_in_as_another_subscribed_user(db)
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(minutes=59, seconds=59))
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "1"
+    assert fake_x_reader.calls == ["levelsio", "levelsio"]
+
+
+async def test_a_handle_can_be_refreshed_again_exactly_an_hour_after_its_last_fetch(
+    client, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(hours=1))
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.status_code == 200
+    assert response.json()["last_fetched_at"] == _iso(clock())
+
+
+async def test_refreshing_a_handle_not_on_the_list_returns_404_without_fetching(
+    client, subscribed, fake_x_reader
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.status_code == 404
+    assert fake_x_reader.calls == []
+
+
+async def test_a_user_whose_subscription_ended_gets_403_when_refreshing(
+    client, db, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    subscribed.status = "canceled"
+    await db.commit()
+    clock.advance(timedelta(hours=2))
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.status_code == 403
+    assert fake_x_reader.calls == ["levelsio"]
+
+
+async def test_refreshing_without_the_twitterapi_io_key_fails_clearly(
+    client, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(hours=2))
+    fake_x_reader.not_configured = True
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.status_code == 503
+    assert "TWITTERAPI_IO_API_KEY" in response.json()["detail"]
+
+
+async def test_refreshing_a_handle_x_no_longer_knows_returns_404(
+    client, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(hours=2))
+    del fake_x_reader.posts["levelsio"]
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "@levelsio doesn't exist on X."

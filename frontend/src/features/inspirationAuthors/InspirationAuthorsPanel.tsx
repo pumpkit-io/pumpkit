@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { RefreshCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
@@ -68,12 +68,21 @@ function AddAuthorForm({
  * On a phone the list is a row of chips holding only the handle, so it doesn't push the
  * writing area off the screen; from `md` up each author is a row with its fetch details.
  */
+const ROW_ACTION =
+  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60';
+
+interface AuthorActions {
+  refreshing: string | null;
+  onRefresh: (handle: string) => void;
+  onRemove: (handle: string) => void;
+}
+
 function AuthorList({
   authors,
-  onRemove,
+  actions,
 }: {
   authors: InspirationAuthor[];
-  onRemove?: (handle: string) => void;
+  actions?: AuthorActions;
 }) {
   return (
     <ul className="flex flex-wrap gap-2 md:flex-col md:flex-nowrap md:gap-0 md:divide-y md:divide-border md:rounded-lg md:border md:border-border">
@@ -88,15 +97,34 @@ function AuthorList({
               {fetchedLabel(author)}
             </p>
           </div>
-          {onRemove ? (
-            <button
-              type="button"
-              onClick={() => onRemove(author.handle)}
-              aria-label={`Remove @${author.handle}`}
-              className="ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <X className="h-4 w-4" aria-hidden />
-            </button>
+          {actions ? (
+            <div className="ml-1 flex shrink-0">
+              <button
+                type="button"
+                onClick={() => actions.onRefresh(author.handle)}
+                disabled={actions.refreshing !== null}
+                aria-label={
+                  actions.refreshing === author.handle
+                    ? `Refreshing @${author.handle}`
+                    : `Refresh @${author.handle}`
+                }
+                title="Fetch the latest posts"
+                className={ROW_ACTION}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${actions.refreshing === author.handle ? 'animate-spin motion-reduce:animate-none' : ''}`}
+                  aria-hidden
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => actions.onRemove(author.handle)}
+                aria-label={`Remove @${author.handle}`}
+                className={ROW_ACTION}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
           ) : (
             <span className="pr-3 md:pr-2" />
           )}
@@ -108,7 +136,8 @@ function AuthorList({
 
 export function InspirationAuthorsPanel() {
   const { subscribed } = useSubscribed();
-  const { authors, loadFailed, isAdding, error, add, remove } = useInspirationAuthorsContext();
+  const { authors, loadFailed, isAdding, refreshing, error, notice, add, refresh, remove } =
+    useInspirationAuthorsContext();
 
   return (
     <section aria-labelledby="inspiration-authors-heading" className="space-y-4">
@@ -132,6 +161,14 @@ export function InspirationAuthorsPanel() {
       )}
       {subscribed === true && <AddAuthorForm isAdding={isAdding} onAdd={add} />}
       {error && <ErrorBanner message={error} />}
+      {notice && (
+        <p
+          role="status"
+          className="rounded-md border border-border bg-muted px-3 py-2 font-sans text-xs text-foreground"
+        >
+          {notice}
+        </p>
+      )}
 
       {loadFailed ? (
         <ErrorBanner message="Couldn't load your Inspiration authors. Reload the page to try again." />
@@ -147,7 +184,15 @@ export function InspirationAuthorsPanel() {
       ) : (
         <AuthorList
           authors={authors}
-          onRemove={subscribed === true ? (handle) => void remove(handle) : undefined}
+          actions={
+            subscribed === true
+              ? {
+                  refreshing,
+                  onRefresh: (handle) => void refresh(handle),
+                  onRemove: (handle) => void remove(handle),
+                }
+              : undefined
+          }
         />
       )}
     </section>

@@ -9,6 +9,13 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 
 const format = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
+const timeFormat = new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' });
+
+/** The local time of day of `date`: "3:42 PM". */
+export function timeOfDay(date: Date): string {
+  return timeFormat.format(date);
+}
+
 /** How long ago `iso` was, in the largest whole unit: "2 hours ago", "yesterday", "just now". */
 export function timeAgo(iso: string, now: Date = new Date()): string {
   // A clock running slightly behind the server's reads as "just now", not "in 10 seconds".

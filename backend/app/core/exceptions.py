@@ -1,4 +1,5 @@
 import re
+from datetime import timezone
 from typing import Mapping
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from app.core.llm import LLMError
 from app.core.logger import logger
 from app.core.openrouter import LLMNotConfiguredError
 from app.core.posthog import posthog_client
+from app.core.retry_later import RetryLaterError
 from app.core.x_reader import XReaderError, XReaderNotConfiguredError
 
 _REDACTED = "[redacted]"
@@ -98,6 +100,18 @@ async def x_reader_error_handler(request: Request, exc: Exception) -> JSONRespon
     )
 
 
+async def retry_later_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, RetryLaterError)
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": exc.detail,
+            "retry_at": exc.retry_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        },
+        headers={"Retry-After": str(exc.retry_after_seconds)},
+    )
+
+
 async def x_reader_not_configured_handler(request: Request, exc: Exception) -> JSONResponse:
     # An operator's setup gap, not a bug: the message names the missing variable.
     return JSONResponse(status_code=503, content={"detail": str(exc)})
@@ -120,6 +134,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(BillingProviderError, billing_provider_error_handler)
     app.add_exception_handler(LLMError, llm_error_handler)
     app.add_exception_handler(LLMNotConfiguredError, llm_not_configured_handler)
+    app.add_exception_handler(RetryLaterError, retry_later_handler)
     app.add_exception_handler(XReaderNotConfiguredError, x_reader_not_configured_handler)
     app.add_exception_handler(XReaderError, x_reader_error_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
