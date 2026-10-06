@@ -1,10 +1,6 @@
-"""Seed a fixed e2e test user and print a fresh access token.
+"""Seed a fixed e2e test user and print one machine-readable line, `E2E_ACCESS_TOKEN=<jwt>`.
 
-Run inside the backend container:
-    docker compose exec -T backend python - < e2e/seed/seed_user.py
-
-Prints exactly one machine-readable line:
-    E2E_ACCESS_TOKEN=<jwt>
+Run inside the backend container: `docker compose exec -T backend python - < e2e/seed/seed_user.py`.
 """
 
 import asyncio

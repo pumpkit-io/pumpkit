@@ -12,10 +12,8 @@ interface SignInCallbackOptions {
 }
 
 /**
- * The shared body of a sign-in callback page: start the Session from the URL
- * fragment once, then go to the home page, or to the sign-in page with an
- * error. Both replace the callback entry, so the URL holding the access token
- * leaves browser history and Back does not bounce through it again.
+ * Starts the Session from the URL fragment, then goes to home or to sign-in with an error.
+ * Both navigations replace the entry so the access-token URL leaves browser history.
  */
 export function useSignInCallback({ errorCodeFor, onSucceeded, onFailed }: SignInCallbackOptions) {
   const navigate = useNavigate();

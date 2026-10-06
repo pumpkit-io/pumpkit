@@ -29,7 +29,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# (old name, new name) for the constraints of refresh_tokens
+# Each pair is (old name, new name).
 _REFRESH_TOKEN_CONSTRAINTS = [
     ("pk_auth_sessions", "pk_refresh_tokens"),
     ("uq_auth_sessions_refresh_token_hash", "uq_refresh_tokens_refresh_token_hash"),
@@ -41,7 +41,6 @@ _REFRESH_TOKEN_CONSTRAINTS = [
     ("fk_auth_sessions_user_id_users", "fk_refresh_tokens_user_id_users"),
 ]
 
-# (old name, new name) for the indexes of refresh_tokens
 _REFRESH_TOKEN_INDEXES = [
     (
         "ix_auth_sessions_auth_sessions_auth_method",
@@ -52,13 +51,11 @@ _REFRESH_TOKEN_INDEXES = [
     ("ix_auth_sessions_user_id_is_revoked", "ix_refresh_tokens_user_id_is_revoked"),
 ]
 
-# (old name, new name) for the constraints of google_identities
 _GOOGLE_IDENTITY_CONSTRAINTS = [
     ("pk_third_party_auth", "pk_google_identities"),
     ("fk_third_party_auth_user_id_users", "fk_google_identities_user_id_users"),
 ]
 
-# (old name, new name) for the indexes of google_identities
 _GOOGLE_IDENTITY_INDEXES = [
     (
         "ix_third_party_auth_third_party_auth_subject",
@@ -72,11 +69,9 @@ _GOOGLE_IDENTITY_INDEXES = [
 
 
 def upgrade() -> None:
-    # users: one nullable `suspended_until` replaces `is_active` and `banned_until`
     op.alter_column("users", "banned_until", new_column_name="suspended_until")
     op.drop_column("users", "is_active")
 
-    # auth_sessions -> refresh_tokens
     op.rename_table("auth_sessions", "refresh_tokens")
     op.alter_column("refresh_tokens", "family_id", new_column_name="session_id")
     op.alter_column("refresh_tokens", "auth_method", new_column_name="sign_in_method")
@@ -84,7 +79,6 @@ def upgrade() -> None:
     _rename_constraints("refresh_tokens", _REFRESH_TOKEN_CONSTRAINTS)
     _rename_indexes(_REFRESH_TOKEN_INDEXES)
 
-    # third_party_auth -> google_identities, without the provider
     op.drop_constraint(
         "uq_third_party_auth_user_id_provider_subject", "third_party_auth", type_="unique"
     )
@@ -100,7 +94,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # google_identities -> third_party_auth, with the provider back
     op.drop_constraint("uq_google_identities_user_id_subject", "google_identities", type_="unique")
     _rename_indexes(_swap(_GOOGLE_IDENTITY_INDEXES))
     _rename_constraints("google_identities", _swap(_GOOGLE_IDENTITY_CONSTRAINTS))
@@ -128,7 +121,6 @@ def downgrade() -> None:
         ["user_id", "provider", "subject"],
     )
 
-    # refresh_tokens -> auth_sessions
     _rename_indexes(_swap(_REFRESH_TOKEN_INDEXES))
     _rename_constraints("refresh_tokens", _swap(_REFRESH_TOKEN_CONSTRAINTS))
     op.execute("ALTER TYPE sign_in_method_enum RENAME TO auth_method_enum")
@@ -136,7 +128,6 @@ def downgrade() -> None:
     op.alter_column("refresh_tokens", "session_id", new_column_name="family_id")
     op.rename_table("refresh_tokens", "auth_sessions")
 
-    # users: back to `is_active` and `banned_until`
     op.add_column(
         "users",
         sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),

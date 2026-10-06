@@ -1,9 +1,7 @@
-// Avatar pre-upload pipeline: read → decode → center-crop to square →
-// resize to 256x256 → re-encode to JPEG (quality 0.85) → return data URL.
-// Output is small enough (~30-60 KB) to store inline on the user row, and
-// matches the backend's avatar_data_url validator.
+// Avatars become a 256px square JPEG data URL (~30-60 KB), small enough to store inline
+// on the user row; the backend's avatar_data_url validator expects this shape.
 
-const MAX_SOURCE_BYTES = 8 * 1024 * 1024; // 8 MB — guard against huge uploads
+const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const TARGET_SIZE = 256;
 const JPEG_QUALITY = 0.85;
 

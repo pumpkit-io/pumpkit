@@ -41,7 +41,8 @@ export function AvatarEditor({ value, initials, onChange, onError }: AvatarEdito
       <button
         type="button"
         onClick={openPicker}
-        aria-label="Change profile picture"
+        aria-label="Change photo"
+        aria-busy={busy}
         className="group relative h-24 w-24 overflow-hidden rounded-full bg-primary-gradient-soft ring-1 ring-inset ring-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         {value ? (
@@ -65,7 +66,7 @@ export function AvatarEditor({ value, initials, onChange, onError }: AvatarEdito
         {busy && (
           <span
             aria-hidden
-            className="absolute inset-0 flex items-center justify-center bg-background/60 font-sans text-[11px] text-muted-foreground"
+            className="absolute inset-0 flex items-center justify-center bg-background/90 font-sans text-[11px] text-foreground"
           >
             Processing…
           </span>

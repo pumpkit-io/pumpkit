@@ -1,7 +1,6 @@
 /**
- * The `?error=` codes the sign-in page shows a message for. The backend, the
- * sign-in callbacks and the Session module (after an end) redirect there with
- * one of these.
+ * The `?error=` codes the sign-in page shows a message for.
+ * The backend, the sign-in callbacks and the Session module redirect there with one of these.
  */
 export const SIGN_IN_ERROR = {
   invalidMagicLink: 'invalid_magic_link',

@@ -79,18 +79,11 @@ async def list_plans(gateway: BillingGateway) -> PlansListResponse:
 
 async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, user: User) -> str:
     """
-    Return the User's Stripe customer ID, creating the customer through the
-    gateway the first time. Commits when it creates one.
+    Return the User's Stripe customer ID, creating the customer the first time; commits then.
 
-    Concurrent first calls for one User create one customer: the User's row is
-    locked before the ID is read, so a second request waits and then sees the
-    first one's customer. The creation also carries an idempotency key per
-    User, so a second call that still reaches the provider (say the commit
-    failed after the customer was created, or SQLite, which has no row locks)
-    gets the same customer back, for as long as Stripe keeps the key (24
-    hours). The lock is
-    held across the provider call and released by the early commit, or by the
-    end of the request's transaction when the customer already exists.
+    The User's row is locked across the provider call, so concurrent first calls create one
+    customer. A per-User idempotency key covers what the lock can't (a failed commit, SQLite
+    without row locks) for as long as Stripe keeps the key (24 hours).
     """
     await users_service.lock_user(db, user)
     if user.stripe_customer_id:
@@ -103,9 +96,7 @@ async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, use
         idempotency_key=f"pumpkit-user-{user.id}-customer",
     )
     await users_service.set_stripe_customer_id(db, user, customer_id)
-    # Sanctioned early commit: persist the new Stripe customer before the next
-    # Stripe call, so a failure there can't lose it and a retry never creates a
-    # duplicate customer.
+    # Sanctioned early commit: persist the customer before the next Stripe call can fail.
     await db.commit()
     return customer_id
 
@@ -117,27 +108,15 @@ async def create_checkout_session(
     checkout_request: CheckoutRequest,
 ) -> CheckoutResponse:
     """
-    Create a Stripe Checkout for one unit of a configured Plan, with a Trial
-    if the User is eligible. An unknown Plan key is the client's fault (400)
-    and reaches no Stripe call; a configured Plan Stripe can't resolve is a
-    provider failure (502).
+    Create a Stripe Checkout for one unit of a configured Plan, with a Trial if the User is eligible.
 
-    A User has at most one Running Subscription. Before deciding anything,
-    Checkout syncs the User's Subscriptions from Stripe (ADR 0004), so a
-    Subscription no webhook has reported yet still blocks the Checkout and
-    still uses up the Trial. A User with a Running Subscription gets a 409.
-    Otherwise the User's `incomplete` Subscriptions are cancelled and their
-    still-open Checkouts expired, so only the newest attempt can start a
-    Subscription. A gateway failure at any step is a 502 before a Checkout
-    exists. The synced copy is committed whether the Checkout is refused or
-    created: the refusal commits before raising its 409, because the sync is
-    Stripe's answer and Pumpkit's copy should match it whatever this request
-    decides (ADR 0004).
-
-    The User's row stays locked from the sync to the new Checkout, so
-    concurrent Checkouts for one User run one at a time (the lock is held
-    across the provider calls and released when the request's transaction
-    ends).
+    An unknown Plan key is a 400 before any Stripe call; a Plan Stripe can't resolve, or any
+    gateway failure, is a 502. A User has at most one Running Subscription, so one who holds
+    it gets a 409. The sync from Stripe runs first (ADR 0004), so a Subscription no webhook has
+    reported still blocks the Checkout and uses up the Trial. Otherwise `incomplete`
+    Subscriptions are cancelled and open Checkouts expired, so only the newest attempt can
+    start a Subscription. The User's row stays locked from the sync to the new Checkout, so
+    concurrent Checkouts for one User run one at a time.
     """
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
@@ -153,8 +132,7 @@ async def create_checkout_session(
     await subscriptions_service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
     if not offer.may_subscribe:
-        # Commit before raising, or the 409 rolls the sync back: Pumpkit's copy
-        # stays current with what Stripe just said (ADR 0004).
+        # Commit before raising, or the 409 rolls back the sync of what Stripe just said.
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -181,9 +159,6 @@ async def create_billing_portal_session(
     gateway: BillingGateway,
     user: User,
 ) -> BillingPortalResponse:
-    """
-    Create a Stripe billing portal session to let the user manage their subscriptions.
-    """
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     url = await gateway.create_portal_url(customer_id=customer_id)
     return BillingPortalResponse(url=url)
@@ -196,14 +171,11 @@ async def handle_webhook(
     signature: Optional[str],
 ) -> None:
     """
-    Verify the webhook through the gateway, deduplicate by event ID, and sync
-    the customer it nudges about (ADR 0004).
+    Verify the webhook, deduplicate by event ID, and sync the customer it nudges about (ADR 0004).
 
-    The `stripe_events` insert and the sync share ONE transaction, committed at
-    the end. Handlers must not commit. If anything raises, including the
-    gateway during the sync, the whole event rolls back (the dedup row too)
-    and the response is an error (502 for the gateway, else 500), so Stripe
-    retries it.
+    The `stripe_events` insert and the sync share one transaction, committed here; handlers
+    must not commit. Anything that raises rolls the whole event back, dedup row included, and
+    the error response (502 for the gateway, else 500) makes Stripe retry.
     """
     if not signature:
         raise HTTPException(

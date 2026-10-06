@@ -1,10 +1,4 @@
-# backend/app/api/services/stripe_events.py
-"""Per-event idempotency for Stripe webhook handlers.
-
-``try_record_event`` returns ``True`` the first time an ``event_id`` is
-seen, ``False`` afterwards. Webhook handlers must short-circuit on
-``False`` to avoid double-applying side effects.
-"""
+"""Per-event idempotency: Stripe webhook handlers short-circuit when `try_record_event` is False."""
 
 from __future__ import annotations
 
@@ -21,12 +15,11 @@ async def try_record_event(
     event_id: str,
     event_type: str,
 ) -> bool:
-    """Insert a row keyed by ``event_id``. Returns True on first insert.
+    """
+    Record `event_id`, returning True only the first time it is seen.
 
-    Performs an existence check first to keep the happy path cheap, then
-    falls back to an ``IntegrityError``-catching savepoint to handle the
-    rare race in which two concurrent webhook handlers both pass the
-    existence check and then race on the insert.
+    The existence check keeps the common path cheap; the savepoint catches two
+    concurrent handlers that both pass it and race on the insert.
     """
     existing = await db.execute(select(StripeEvent.id).where(StripeEvent.id == event_id))
     if existing.scalar_one_or_none() is not None:

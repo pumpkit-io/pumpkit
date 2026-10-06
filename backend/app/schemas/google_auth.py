@@ -1,5 +1,4 @@
 """Pydantic request/response types for Google sign-in.
 
-Currently empty — the Google OAuth flow does not use Pydantic request models
-yet. Add new types here when they arrive.
+Empty: the Google OAuth flow uses no Pydantic request models yet.
 """

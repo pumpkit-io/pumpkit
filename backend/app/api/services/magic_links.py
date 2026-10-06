@@ -1,10 +1,6 @@
 """
-The Magic link module: issues, redeems and invalidates Magic links.
-
-This module alone owns the token hashing, the expiry, the per-email cool-down
-and the handling of concurrent redemptions. Callers get the clear token (or
-"cooling down") from `issue`, and an email (or a typed failure) from `redeem`.
-It flushes and never commits: the calling mediator owns the transaction.
+Sole owner of Magic link token hashing, expiry, per-email cool-down and concurrent redemption.
+Flushes and never commits: the calling mediator owns the transaction.
 """
 
 import enum
@@ -27,7 +23,7 @@ COOLDOWN = timedelta(seconds=60)
 
 @dataclass(frozen=True)
 class IssuedMagicLink:
-    """A newly issued Magic link. The clear token exists only here and in the email."""
+    """The clear token exists only here and in the email."""
 
     token: str
     expires_in_minutes: int
@@ -104,9 +100,7 @@ async def issue(
 async def invalidate(db: AsyncSession, *, token: str) -> None:
     """
     Void a just-issued Magic link whose email could not be sent.
-
-    The row is deleted rather than marked consumed: a link that never reached
-    the User must not hold the per-email cool-down.
+    Deleted, not consumed, so a link that never reached the User doesn't hold the cool-down.
     """
     await db.execute(delete(MagicLink).where(MagicLink.token_hash == hash_token(token)))
     await db.flush()
@@ -114,11 +108,8 @@ async def invalidate(db: AsyncSession, *, token: str) -> None:
 
 async def redeem(db: AsyncSession, *, token: str, now: datetime) -> RedeemResult:
     """
-    Consume the Magic link for `token` and return the email it was issued for.
-
-    Consumption is one conditional UPDATE, so of two concurrent redemptions only
-    one wins; the loser sees the link as already consumed. It runs before any
-    read, so the database serialises the race instead of failing a stale read.
+    One conditional UPDATE before any read lets the database serialise concurrent
+    redemptions instead of failing a stale read: the loser sees ALREADY_CONSUMED.
     """
     token_hash = hash_token(token)
     result = await db.execute(

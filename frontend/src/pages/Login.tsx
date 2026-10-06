@@ -13,9 +13,9 @@ function emailDomain(email: string): string {
 
 const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
   [SIGN_IN_ERROR.invalidMagicLink]:
-    'That sign-in link is invalid or has expired. Please request a new one.',
+    'That magic link is invalid or has expired. Request a new one below.',
   [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
-  [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Please try again.",
+  [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Try again.",
 };
 
 export function Login() {
@@ -47,7 +47,7 @@ export function Login() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown';
       track('login_magic_link_requested_failed', { error_message: message });
-      setError("We couldn't send the link. Please try again in a moment.");
+      setError("We couldn't send the magic link. Try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -58,20 +58,22 @@ export function Login() {
       <div className="w-full max-w-[380px]">
         <div className="rounded-xl border border-border bg-card">
           <div className="flex flex-col space-y-1.5 p-6">
-            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">
+            <h1 className="text-3xl font-normal leading-none tracking-tight text-foreground">
               Welcome back
-            </h2>
-            <p className="text-sm text-muted-foreground">Choose your preferred sign in method</p>
+            </h1>
+            <p className="text-sm text-muted-foreground">Sign in with Google or a magic link</p>
           </div>
           <div className="p-6 pt-0">
             <div className="grid gap-6">
-              <GoogleAuthButton onError={() => {}} />
+              <GoogleAuthButton
+                onError={() => setError("We couldn't start Google sign-in. Try again.")}
+              />
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="h-px w-full shrink-0 bg-border" />
                 </div>
-                <div className="relative flex justify-center text-xs uppercase tracking-wider">
-                  <span className="bg-card px-2 text-muted-foreground normal-case">or</span>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-card px-2 text-muted-foreground">or</span>
                 </div>
               </div>
 
@@ -86,7 +88,7 @@ export function Login() {
                   <input
                     id="email"
                     type="email"
-                    placeholder="steve.jobs@gmail.com"
+                    placeholder="you@example.com"
                     autoComplete="email"
                     required
                     disabled={loading}
@@ -104,7 +106,7 @@ export function Login() {
                   </div>
                 )}
                 <Button type="submit" className="w-full" disabled={loading || !email}>
-                  {loading ? 'Sending…' : 'Sign in with email'}
+                  {loading ? 'Sending…' : 'Email me a magic link'}
                 </Button>
               </form>
             </div>

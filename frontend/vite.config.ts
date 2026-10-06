@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -14,7 +13,7 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
-    host: true, // needed for docker
+    host: true, // Docker needs the dev server on all interfaces.
     strictPort: true,
     port: 5173,
     allowedHosts: ['pumpkit.io', 'www.pumpkit.io'],

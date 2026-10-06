@@ -40,7 +40,7 @@ export function UserCard() {
           <button
             type="button"
             aria-label="User menu"
-            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <MoreVertical className="h-4 w-4" />
           </button>

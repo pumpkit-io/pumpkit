@@ -15,8 +15,8 @@ function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
   }, [navigate, status]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-      <div className="font-sans text-sm text-muted-foreground">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background text-foreground">
+      <div role="status" className="font-sans text-sm text-muted-foreground">
         {status === 'success' ? 'Confirming your subscription…' : 'Returning home…'}
       </div>
     </div>

@@ -14,9 +14,8 @@ router = APIRouter(tags=["support"])
 @limiter.limit("60/minute")
 async def support_contact(request: Request) -> RedirectResponse:
     """
-    303-redirect to a mailto: link for the support address. Browsers follow
-    Location: mailto:... transparently, so the anchor on the frontend does
-    not need to know the support address.
+    303-redirect to a mailto: link for the support address.
+    Browsers follow a mailto: Location, so the frontend never needs the address.
     """
     return RedirectResponse(
         url=f"mailto:{settings.RESEND_SUPPORT_ADDRESS}",

@@ -1,12 +1,6 @@
-"""
-The `GoogleSignIn` port: turn the authorization code Google sent back into
-verified identity claims.
+"""The `GoogleSignIn` port: turns Google's authorization code into verified identity claims.
 
-Mediators depend on the port through `get_google_sign_in`; they never call
-Google's token endpoint or the ID-token verifier. `GoogleOAuthSignIn` is the
-production adapter and `FakeGoogleSignIn` answers with configured claims
-(tests override the dependency with it). The state, nonce and PKCE cookies
-stay with the mediator.
+Mediators reach Google only through `get_google_sign_in`; tests override it with `FakeGoogleSignIn`.
 """
 
 from dataclasses import dataclass, field

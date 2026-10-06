@@ -16,7 +16,7 @@ function renderLogin(path: string) {
 
 describe('the sign-in page', () => {
   it.each([
-    ['invalid_magic_link', /sign-in link is invalid or has expired/i],
+    ['invalid_magic_link', /magic link is invalid or has expired/i],
     ['account_suspended', /account has been suspended/i],
     ['sign_in_failed', /couldn't sign you in/i],
   ])('explains the %s error', (code, message) => {

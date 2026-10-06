@@ -24,8 +24,8 @@ ReasoningEffort = Literal["low", "medium", "high"]
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 _LLM_CLIENT_TIMEOUT = httpx.Timeout(
-    600.0,  # Timeout for read operations, write operations, and acquiring connection from pool
-    connect=10.0,  # Timeout to establish a connection
+    600.0,  # Read, write and connection-pool timeout.
+    connect=10.0,
 )
 _LLM_CLIENT_MAX_RETRIES = 2
 
@@ -35,12 +35,9 @@ class LLMNotConfiguredError(RuntimeError):
 
 
 class OpenRouterClient:
-    """
-    Async wrapper around OpenRouter's OpenAI-compatible chat completions API.
+    """Async wrapper around OpenRouter's OpenAI-compatible chat completions API.
 
-    The underlying SDK client is created on first use, so the application boots
-    without OPENROUTER_API_KEY; calling any method without it raises
-    LLMNotConfiguredError.
+    The SDK client is created on first use, so the app boots without OPENROUTER_API_KEY.
     """
 
     def __init__(self) -> None:
@@ -72,13 +69,7 @@ class OpenRouterClient:
         reasoning_effort: Optional[ReasoningEffort] = None,
         extra_body: Optional[dict] = None,
     ) -> CompleteResult:
-        """
-        Non-streamed, non-structured LLM call.
-
-        Returns a `CompleteResult` carrying the generated text plus the
-        upstream model name and (when the provider returns it) token usage.
-        Callers decide what to do with those: log, trace, bill usage, etc.
-        """
+        """Non-streamed, non-structured LLM call; raises `ValueError` on an empty reply."""
         kwargs = self._build_llm_kwargs(
             model=model,
             messages=messages,
@@ -115,12 +106,9 @@ class OpenRouterClient:
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[Any] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
-        """Streamed call. Yields StreamDelta for content, ToolCallDelta per
-        fragment, AssembledToolCall once per completed tool call at round end,
-        and ModelUsage at the end if the provider reports it.
+        """Streamed call: content and tool-call fragments as they arrive, then each completed tool call.
 
-        The `include_usage` option is always set: usage capture is required
-        for cost tracking and observability and cannot be disabled by callers.
+        Usage is always requested because cost tracking depends on it; callers cannot turn it off.
         """
         kwargs = self._build_llm_kwargs(
             model=model,
@@ -185,12 +173,7 @@ class OpenRouterClient:
         reasoning_effort: Optional[ReasoningEffort] = None,
         extra_body: Optional[dict] = None,
     ) -> StructuredResult[T]:
-        """
-        Non-streamed, structured LLM call.
-
-        Returns a `StructuredResult[T]` carrying the parsed Pydantic instance,
-        the upstream model name, and (when the provider returns it) token usage.
-        """
+        """Non-streamed, structured LLM call; raises `ValueError` when nothing parses."""
         kwargs = self._build_llm_kwargs(
             model=model,
             messages=messages,
@@ -217,18 +200,11 @@ class OpenRouterClient:
 
     @staticmethod
     def _prune_none(d: dict) -> dict:
-        """Return a copy of the given dict omitting key-value pairs where the value is `None`."""
         return {k: v for k, v in d.items() if v is not None}
 
     @staticmethod
     def _extract_usage(response_or_chunk: Any) -> Optional[ModelUsage]:
-        """
-        Extract a `ModelUsage` from any OpenAI SDK object that may carry a `usage` field.
-
-        Works for both non-streamed responses (where usage is on the response object) and
-        streaming chunks (where usage is populated on the final pre-`[DONE]` chunk).
-        Returns `None` if the provider didn't include usage.
-        """
+        """Streamed usage arrives only on the final pre-`[DONE]` chunk; `None` when the provider omits it."""
         usage = getattr(response_or_chunk, "usage", None)
         if usage is None:
             return None
@@ -253,20 +229,12 @@ class OpenRouterClient:
         tools: Optional[list[dict]] = None,
         tool_choice: Optional[Any] = None,
     ) -> dict:
-        """
-        Assemble kwargs for an LLM call through the OpenAI SDK.
+        """`reasoning_effort` becomes OpenRouter's `reasoning: {effort}`; the caller's `extra_body` wins.
 
-        - `None` values are omitted from the request.
-        - `reasoning_effort` is translated to OpenRouter's unified
-          `reasoning: {effort: ...}` shape, merged into `extra_body`.
-        - Caller's `extra_body` overrides wrapper-constructed keys.
-        - `tools` is passed through when provided (non-None, non-empty).
-        - `tool_choice` (e.g. "auto", "required", or a forced-function dict) is
-          passed through when provided; only meaningful alongside `tools`.
+        `None` parameters are dropped so they don't override model defaults.
         """
         wrapper_extra: dict = {}
 
-        # Convert reasoning effort to OpenRouter's expected format.
         if reasoning_effort is not None:
             wrapper_extra["reasoning"] = {"effort": reasoning_effort}
 
@@ -279,8 +247,6 @@ class OpenRouterClient:
             if tool_choice is not None:
                 kwargs["tool_choice"] = tool_choice
 
-        # Pass optional parameters only if they are not None,
-        # so we don't override model defaults with None.
         kwargs.update(
             OpenRouterClient._prune_none(
                 {

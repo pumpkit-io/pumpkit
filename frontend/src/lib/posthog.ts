@@ -8,9 +8,8 @@ const uiHost = import.meta.env.VITE_POSTHOG_UI_HOST ?? 'https://eu.posthog.com';
 let initialised = false;
 
 /**
- * Initialise PostHog once. No-op if VITE_POSTHOG_ENABLED !== 'true' or the
- * API key is missing — keeps local dev quiet by default and prevents bogus
- * "no project" errors on environments that haven't configured the keys yet.
+ * No-op unless VITE_POSTHOG_ENABLED is 'true' and a key is set.
+ * Keeps local dev quiet and avoids "no project" errors where keys aren't configured.
  */
 export function initPostHog(): void {
   if (initialised || !enabled || !apiKey) return;
@@ -18,18 +17,14 @@ export function initPostHog(): void {
     api_host: host,
     // In prod point VITE_POSTHOG_HOST at the Caddy relay (https://<domain>/ph-relay) so events bypass adblockers; ui_host keeps dashboard links pointing at PostHog.
     ui_host: uiHost,
-    // Only create person profiles for authenticated users — cheaper and
-    // keeps anonymous traffic out of the persons table.
+    // Cheaper, and keeps anonymous traffic out of the persons table.
     person_profiles: 'identified_only',
-    // Autocapture handles clicks/inputs/form submits. We manually capture
-    // SPA pageviews via the router tracker because autocapture only fires
-    // on the initial page load.
+    // Autocapture only fires $pageview on initial load; PostHogPageviewTracker covers SPA navigations.
     capture_pageview: false,
     capture_pageleave: true,
     session_recording: {
       maskAllInputs: true,
     },
-    // PostHog auto-captures JS errors for Error Tracking.
     capture_exceptions: true,
   };
   posthog.init(apiKey, config);

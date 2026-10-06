@@ -70,8 +70,8 @@ function HomeInner() {
                   Welcome{firstName ? `, ${firstName}` : ''}
                 </h1>
                 <p className="mt-3 font-sans text-sm text-muted-foreground">
-                  This is the {APP_NAME} app shell. Build your product here — see “Building your
-                  app” in the README.
+                  This is the {APP_NAME} app shell. Build your product here. See “Building your app”
+                  in docs/development.md.
                 </p>
               </div>
             </div>

@@ -1,8 +1,6 @@
-"""Postgres connection URL construction shared by the app and Alembic.
+"""Postgres connection URLs shared by the app and Alembic.
 
-Managed Postgres in production requires TLS. psycopg2 reads `?sslmode=`,
-asyncpg reads `?ssl=`. This module has no app imports so Alembic can use it
-without loading settings.
+No app imports, so Alembic can use this without loading settings.
 """
 
 import urllib.parse
@@ -34,7 +32,7 @@ def build_database_url(
     database: str,
     env: str,
 ) -> str:
-    """Return a SQLAlchemy URL for the given driver, requiring SSL when env == 'prod'."""
+    """Require SSL when env == 'prod': managed Postgres in production requires TLS."""
     quoted_password = urllib.parse.quote_plus(password)
     ssl_query = _SSL_QUERY[driver] if env == "prod" else ""
     return f"{_SCHEMES[driver]}://{user}:{quoted_password}@{host}:{port}/{database}{ssl_query}"

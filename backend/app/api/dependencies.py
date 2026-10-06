@@ -15,21 +15,17 @@ from app.db.session import get_async_db
 async def get_current_user(
     token: str = Depends(get_bearer_token), db: AsyncSession = Depends(get_async_db)
 ) -> User:
-    """
-    Resolve the User from the request's bearer token, or raise a 401 challenge.
-    """
+    """Resolve the User from the request's bearer token, or raise a 401 challenge."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # Verify and decode the JWT token
     payload = verify_access_token(token)
     if payload is None:
         raise credentials_exception
 
-    # Extract user ID from token payload
     user_id: Optional[str] = payload.get("sub")
     if user_id is None:
         raise credentials_exception

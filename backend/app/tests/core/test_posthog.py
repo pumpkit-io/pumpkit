@@ -18,5 +18,5 @@ def test_capture_exception_swallows_sdk_errors():
     sdk = MagicMock()
     sdk.capture_exception.side_effect = RuntimeError("sdk down")
     client._client = sdk
-    client.capture_exception(ValueError("x"))  # must not raise
+    client.capture_exception(ValueError("x"))
     sdk.capture_exception.assert_called_once()

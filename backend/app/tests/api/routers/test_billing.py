@@ -518,7 +518,7 @@ async def test_billing_me_reads_only_pumpkits_copy_never_stripe(client, db, fake
 
 
 async def test_the_cardless_trial_route_no_longer_exists(client, fake_billing):
-    """A Trial comes only through Checkout, with a card (spec #10)."""
+    """A Trial comes only through Checkout, with a card."""
     response = await client.post(
         "/api/v1/stripe/trial", json={"price_id": "price_monthly", "trial_period_days": 365}
     )

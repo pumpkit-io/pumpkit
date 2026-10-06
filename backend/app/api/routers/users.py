@@ -14,8 +14,6 @@ router = APIRouter(tags=["users"])
 async def get_current_user_profile(
     current_user: User = Depends(get_current_user),
 ) -> UserProfileResponse:
-    """Return the authenticated user's profile data."""
-
     return UserProfileResponse(
         id=current_user.id,
         email=current_user.email,
@@ -31,11 +29,7 @@ async def update_current_user_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> UserProfileResponse:
-    """Patch the authenticated user's editable profile fields.
-
-    Only fields explicitly present in the request body are applied. Pass
-    ``null`` to clear a field (e.g. avatar removal).
-    """
+    """Apply only the fields present in the body; ``null`` clears a field (e.g. the avatar)."""
 
     current_user = await user_service.update_user_profile(
         db=db, user=current_user, changes=update.model_dump(exclude_unset=True)

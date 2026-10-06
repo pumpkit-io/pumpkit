@@ -1,10 +1,7 @@
 """
-The `AuthMailer` port: the email a User receives to sign in.
+The `AuthMailer` port, so mediators never see the email provider.
 
-Mediators depend on the port through `get_auth_mailer`; they never see the
-email provider. `ResendAuthMailer` is the production adapter and
-`OutboxAuthMailer` records messages in memory (tests override the dependency
-with it).
+Production uses `ResendAuthMailer`; tests override `get_auth_mailer` with `OutboxAuthMailer`.
 """
 
 import base64
@@ -26,8 +23,6 @@ class AuthMailerError(Exception):
 
 @dataclass(frozen=True)
 class MagicLinkEmail:
-    """The Magic link email a User receives: who it goes to and the link it carries."""
-
     to: str
     display_name: str
     link_url: str
@@ -47,10 +42,6 @@ _LOGO_CONTENT_ID = "app-logo"
 
 
 def resend_magic_link_params(email: MagicLinkEmail, logo_base64: str) -> resend.Emails.SendParams:
-    """
-    The Resend send parameters for a Magic link email: the rendered template,
-    with the logo attached inline and referenced from the HTML by its content ID.
-    """
     html = templates_helper.render_template(
         "emails/magic_link.html",
         display_name=email.display_name,
@@ -76,13 +67,10 @@ def resend_magic_link_params(email: MagicLinkEmail, logo_base64: str) -> resend.
 
 
 def read_logo_base64() -> str:
-    """The email logo, base64-encoded for an inline attachment."""
     return base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
 
 
 class ResendAuthMailer:
-    """Sends auth email through Resend, rendering the template with the inline logo."""
-
     def __init__(self) -> None:
         resend.api_key = settings.RESEND_API_KEY
         self._logo_base64 = read_logo_base64()
@@ -96,7 +84,7 @@ class ResendAuthMailer:
 
 @dataclass
 class OutboxAuthMailer:
-    """Records sent auth email in memory. Set `fail = True` to make sends raise `AuthMailerError`."""
+    """In-memory outbox for tests; `fail = True` makes sends raise `AuthMailerError`."""
 
     messages: list[MagicLinkEmail] = field(default_factory=list)
     fail: bool = False

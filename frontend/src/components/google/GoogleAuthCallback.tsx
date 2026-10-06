@@ -10,8 +10,8 @@ export function GoogleAuthCallback() {
   });
 
   return (
-    <div className="flex justify-center items-center h-screen">
-      <p>Processing Google login...</p>
+    <div className="flex h-screen items-center justify-center bg-background text-foreground">
+      <p role="status">Signing you in with Google...</p>
     </div>
   );
 }

@@ -1,19 +1,14 @@
 """
 The `BillingGateway` port: every call Pumpkit makes to its billing provider.
 
-Its callers are the billing mediator, which gets it through
-`get_billing_gateway`, and the Subscriptions module, which is handed it to sync
-a customer; nothing else talks to Stripe. Inputs and outputs are plain data, so
-no SDK object leaks out, and the port never touches the database: persisting
-what it returns is its callers' job. Any provider failure is a `BillingProviderError`, which the
-global error handler turns into a 502 with an `error_id`. A webhook that fails
-verification is a `WebhookSignatureError` instead: the sender's fault, not the
-provider's.
+Only the billing mediator (via `get_billing_gateway`) and the Subscriptions
+module (to sync a customer) call it. It takes and returns plain data and never
+touches the database: persisting results is the callers' job.
 
-`StripeBillingGateway` is the production adapter and the only code that uses
-the Stripe SDK. `FakeBillingGateway` records calls, returns configured results,
-can be told to fail, holds each customer's Subscriptions, and signs webhook
-payloads its own verifier accepts (tests override the dependency with it).
+A provider failure is a `BillingProviderError` (a 502 with an `error_id`); a
+webhook that fails verification is a `WebhookSignatureError`, the sender's fault.
+
+`StripeBillingGateway` is the only Stripe SDK user; tests swap in `FakeBillingGateway`.
 """
 
 import hashlib
@@ -52,9 +47,8 @@ class CheckoutSession:
 @dataclass(frozen=True)
 class Plan:
     """
-    A Plan resolved from its key (the provider's price lookup key) to the
-    provider's current price: an `amount` in the currency's minor units every
-    `interval_count` `interval`s.
+    A Plan key (the provider's price lookup key) resolved to its current price:
+    `amount` in the currency's minor units every `interval_count` `interval`s.
     """
 
     key: str
@@ -69,10 +63,8 @@ class Plan:
 @dataclass(frozen=True)
 class SubscriptionState:
     """
-    A Subscription as the provider holds it now: its provider ID, status, price,
-    Plan key (the price's lookup key, None when the price has none), the end of
-    its current period, whether it cancels at that end, and when the provider
-    created it.
+    A Subscription as the provider holds it now. `plan_key` is the price's
+    lookup key, None when the price has none.
     """
 
     id: str
@@ -87,9 +79,8 @@ class SubscriptionState:
 @dataclass(frozen=True)
 class WebhookEvent:
     """
-    A verified webhook event: its ID, its type, and the customer it is about
-    (None when its object names no customer). Webhooks are nudges (ADR 0004):
-    nothing else of the event's payload leaves the gateway.
+    A verified webhook event. Webhooks are nudges (ADR 0004): nothing else of
+    the payload leaves the gateway.
     """
 
     id: str
@@ -102,9 +93,8 @@ class BillingGateway(Protocol):
         self, *, email: str, name: str, user_id: str, idempotency_key: str
     ) -> str:
         """
-        Create the provider's customer record for a User and return its ID.
-        Calls with the same `idempotency_key` create one customer: a repeat
-        returns the first call's customer instead of a new one.
+        Create the provider's customer for a User and return its ID. A repeated
+        `idempotency_key` returns the first call's customer instead of a new one.
         """
         ...
 
@@ -116,20 +106,13 @@ class BillingGateway(Protocol):
         quantity: int,
         user_id: str,
         trial_period_days: Optional[int] = None,
-    ) -> CheckoutSession:
-        """Create a Subscription Checkout for `quantity` units of `price_id`, with an optional Trial."""
-        ...
+    ) -> CheckoutSession: ...
 
     async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
-        """
-        Expire every Checkout of the customer's that can still be completed, so
-        none of them can start a Subscription any more, and return their IDs.
-        """
+        """Expire the customer's open Checkouts so none can start a Subscription; return IDs."""
         ...
 
-    async def create_portal_url(self, *, customer_id: str) -> str:
-        """Create a billing-portal session for the customer and return its URL."""
-        ...
+    async def create_portal_url(self, *, customer_id: str) -> str: ...
 
     async def list_plans(self, keys: Sequence[str]) -> list[Plan]:
         """
@@ -139,7 +122,7 @@ class BillingGateway(Protocol):
         ...
 
     async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
-        """Every Subscription the customer has, Ended ones included, as the provider holds it now."""
+        """Every Subscription the customer has, Ended ones included."""
         ...
 
     async def cancel_subscription(self, *, subscription_id: str) -> None:
@@ -371,13 +354,8 @@ class CheckoutCall:
 @dataclass
 class FakeBillingGateway:
     """
-    A billing provider in memory. It records every call, answers with the
-    configured results, and raises `BillingProviderError` from any method named
-    in `fail_on`. Checkouts it creates stay open until `expire_open_checkouts`
-    expires them. It holds each customer's Subscriptions: set one with
-    `set_subscription` and `list_subscriptions` returns it; `cancel_subscription`
-    turns it `canceled`. Sign events with `signed_event`; its `verify_webhook`
-    accepts only payloads signed with the same secret.
+    A billing provider in memory that records every call and raises `BillingProviderError`
+    from any method in `fail_on`. It verifies only payloads signed with its own secret.
     """
 
     webhook_secret: str = "whsec_fake"
@@ -475,9 +453,8 @@ class FakeBillingGateway:
         self, *, event_id: str, event_type: str, data_object: dict[str, Any]
     ) -> tuple[bytes, str]:
         """
-        A webhook payload and the signature header the provider would send with
-        it, in Stripe's shape and signing scheme, so `StripeBillingGateway`
-        verifies it too when given the same secret.
+        A webhook payload and signature header in Stripe's shape and signing scheme,
+        so `StripeBillingGateway` verifies it too when given the same secret.
         """
         event = {"id": event_id, "object": "event", "type": event_type}
         payload = json.dumps({**event, "data": {"object": data_object}}).encode()

@@ -10,7 +10,7 @@ interface BrandProps {
   size?: 'sm' | 'md';
 }
 
-/** App logo mark + name. Replace the SVGs in src/assets/brand/ with your own. */
+/** Replace the SVGs in src/assets/brand/ with your own. */
 export function Brand({ className, showName = true, size = 'md' }: BrandProps) {
   const { resolved } = useTheme();
   const src = resolved === 'dark' ? logoDark : logoLight;

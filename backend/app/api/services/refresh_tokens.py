@@ -68,12 +68,10 @@ async def mark_rotated(db: AsyncSession, token: RefreshToken, replaced_by: Refre
 
 
 async def revoke_session(db: AsyncSession, session_id: str) -> None:
-    """Revoke every refresh token of a Session."""
     await _revoke_where(db, RefreshToken.session_id == session_id)
 
 
 async def revoke_all_user_sessions(db: AsyncSession, user_id: str) -> None:
-    """Revoke every Session of a User."""
     await _revoke_where(db, RefreshToken.user_id == user_id)
 
 

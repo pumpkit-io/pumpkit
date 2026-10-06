@@ -1,5 +1,3 @@
-"""Unit tests for OpenRouterClient."""
-
 import json
 from typing import Any, Optional
 
@@ -17,17 +15,15 @@ BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def _make_client() -> OpenRouterClient:
-    """Construct a client for tests. respx patches httpx globally, so no injection needed."""
+    """respx patches httpx globally, so the client needs no injected transport."""
     return OpenRouterClient()
 
 
 def test_singleton_exported():
-    """The module exposes a module-level instance for app-wide use."""
     assert isinstance(openrouter_client, OpenRouterClient)
 
 
 def test_client_construction_does_not_touch_network():
-    """Constructing a client must not perform any HTTP request."""
     client = _make_client()
     assert client is not None
 
@@ -71,7 +67,7 @@ async def test_llm_complete_happy_path():
     assert result.usage is None
     assert captured["body"]["model"] == "openai/gpt-5"
     assert captured["body"]["messages"] == [{"role": "user", "content": "hi"}]
-    # None-valued params must be omitted
+    # None-valued params must be omitted.
     assert "temperature" not in captured["body"]
     assert "max_tokens" not in captured["body"]
     assert "top_p" not in captured["body"]
@@ -139,7 +135,6 @@ async def test_llm_complete_extra_body_wins_on_conflict():
         extra_body={"reasoning": {"effort": "high"}, "custom_flag": True},
     )
 
-    # Caller's extra_body wins on the `reasoning` key.
     assert captured["body"]["reasoning"] == {"effort": "high"}
     assert captured["body"]["custom_flag"] is True
 
@@ -316,7 +311,7 @@ async def test_llm_stream_yields_usage_event_when_provider_includes_it():
 
 @respx.mock
 async def test_llm_stream_handles_provider_without_usage():
-    """If a provider ignores include_usage we just see deltas — no ModelUsage event."""
+    """A provider that ignores include_usage yields deltas and no ModelUsage event."""
     body = _sse_chunk("only") + _sse_chunk(None, final=True)
     respx.post(f"{BASE_URL}/chat/completions").mock(
         return_value=httpx.Response(
@@ -418,7 +413,6 @@ async def test_llm_structured_sends_json_schema_response_format():
     rf = captured["body"]["response_format"]
     assert rf["type"] == "json_schema"
     assert "json_schema" in rf
-    # Pydantic-derived schema should include the model's fields
     assert "title" in rf["json_schema"]["schema"]["properties"]
     assert "bullets" in rf["json_schema"]["schema"]["properties"]
 

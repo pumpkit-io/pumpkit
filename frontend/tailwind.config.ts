@@ -73,21 +73,10 @@ const config = {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
-        chart: {
-          '1': 'hsl(var(--chart-1))',
-          '2': 'hsl(var(--chart-2))',
-          '3': 'hsl(var(--chart-3))',
-          '4': 'hsl(var(--chart-4))',
-          '5': 'hsl(var(--chart-5))',
-        },
-        'accent-ink': 'hsl(var(--accent-ink))',
-        'accent-soft': 'hsl(var(--accent-soft))',
       },
       backgroundImage: {
         'primary-gradient': 'var(--primary-gradient)',
-        'primary-gradient-vert': 'var(--primary-gradient-vert)',
         'primary-gradient-soft': 'var(--primary-gradient-soft)',
-        'primary-radial': 'var(--primary-radial)',
         'canvas-radial': 'var(--canvas-radial)',
       },
       borderRadius: {

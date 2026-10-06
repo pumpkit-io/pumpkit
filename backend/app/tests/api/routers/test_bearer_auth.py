@@ -55,7 +55,6 @@ async def test_suspended_user_is_401(authed_client, suspend_user, user):
 
 
 async def test_user_whose_suspension_ended_authenticates(authed_client, db, user: User):
-    # A suspension that ended yesterday no longer applies.
     user.suspended_until = datetime.now(timezone.utc) - timedelta(days=1)
     db.add(user)
     await db.commit()

@@ -48,9 +48,9 @@ export function MagicLinkSent() {
           </div>
 
           <div className="flex flex-col items-center gap-4 p-6 text-center">
-            <h2 className="text-3xl font-normal leading-none tracking-tight text-foreground">
+            <h1 className="text-3xl font-normal leading-none tracking-tight text-foreground">
               Magic link sent
-            </h2>
+            </h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
               Check your inbox for <strong className="font-medium text-foreground">{email}</strong>{' '}
               and click the link to sign in.

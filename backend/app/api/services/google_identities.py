@@ -12,7 +12,6 @@ async def get_google_identity(
     db: AsyncSession,
     subject: str,
 ) -> Optional[GoogleIdentity]:
-    """Get a Google identity by its Google subject."""
     query = select(GoogleIdentity).where(GoogleIdentity.subject == subject)
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -20,11 +19,8 @@ async def get_google_identity(
 
 async def resolve_user(db: AsyncSession, claims: GoogleClaims) -> User:
     """
-    The User these verified Google claims sign in.
-
-    A Google account already linked to a User reaches that User, whatever its
-    email is now. Otherwise the User is resolved by the verified email (found or
-    created) and the Google account is linked to them. Flushes, never commits.
+    A linked Google account reaches its User whatever its email is now; otherwise the
+    User is found or created by verified email and linked. Flushes, never commits.
     """
     google_identity = await get_google_identity(db=db, subject=claims.subject)
     if google_identity is not None:

@@ -22,10 +22,10 @@ function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () 
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex h-10 w-10 items-center justify-center"
+      className="group relative flex h-10 w-10 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={label}
     >
-      <span className="flex h-full w-full items-center justify-center rounded-xl text-muted-foreground transition-all duration-150 ease-out group-hover:bg-[var(--hover)] group-hover:text-foreground">
+      <span className="flex h-full w-full items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 ease-out group-hover:bg-[var(--hover)] group-hover:text-foreground">
         <PanelLeft className="h-5 w-5" />
       </span>
     </button>
@@ -104,7 +104,7 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
                 <button
                   type="button"
                   aria-label="User menu"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs text-foreground hover:bg-muted/80"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {initials(display)}
                 </button>

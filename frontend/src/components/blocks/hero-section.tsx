@@ -8,12 +8,11 @@ import { APP_NAME } from '@/lib/app';
 
 const transitionVariants: { item: Variants } = {
   item: {
-    hidden: { opacity: 0, filter: 'blur(12px)', y: 12 },
+    hidden: { opacity: 0, y: 8 },
     visible: {
       opacity: 1,
-      filter: 'blur(0px)',
       y: 0,
-      transition: { type: 'spring', bounce: 0.3, duration: 1.5 },
+      transition: { duration: 0.4, ease: 'easeOut' },
     },
   },
 };
@@ -33,7 +32,7 @@ function HeroHeader() {
             Pricing
           </a>
           <Button asChild size="sm" onClick={() => track('landing_nav_get_started_clicked')}>
-            <Link to="/login">Get started</Link>
+            <Link to="/login">Sign in</Link>
           </Button>
         </div>
       </nav>
@@ -50,15 +49,15 @@ export function HeroSection() {
           <div className="mx-auto max-w-4xl px-6 text-center">
             <AnimatedGroup variants={transitionVariants}>
               <h1 className="text-balance text-4xl font-normal tracking-tight text-foreground md:text-6xl">
-                Your product headline goes here
+                Find conversations on X worth joining
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-balance font-sans text-lg text-muted-foreground">
-                One or two sentences that explain what {APP_NAME} does and who it is for. Edit
-                src/components/blocks/hero-section.tsx.
+                {APP_NAME} drafts a reply to each one and sends it to you on Telegram. It posts the
+                reply only after you approve it.
               </p>
               <div className="mt-10 flex items-center justify-center gap-3">
                 <Button asChild size="lg" onClick={() => track('landing_hero_cta_clicked')}>
-                  <Link to="/login">Get started</Link>
+                  <Link to="/login">Sign in to start</Link>
                 </Button>
                 <Button asChild size="lg" variant="outline">
                   <a href="#pricing">See pricing</a>

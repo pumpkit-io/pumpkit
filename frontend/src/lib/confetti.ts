@@ -1,10 +1,8 @@
 import confetti from 'canvas-confetti';
 
 /**
- * Fire a celebratory confetti burst anchored at the centre of `anchor`.
- * The burst is radial (spread: 360) so it visibly emanates from that point,
- * directing the user's gaze. Falls back to a centre-screen burst if the
- * anchor is unavailable. No-ops under prefers-reduced-motion.
+ * Radial burst from the centre of `anchor` to draw the eye there; centre-screen if it is unavailable.
+ * No-ops under prefers-reduced-motion.
  */
 export function fireSuccessConfetti(anchor: HTMLElement | null): void {
   if (typeof window === 'undefined') return;
@@ -21,9 +19,7 @@ export function fireSuccessConfetti(anchor: HTMLElement | null): void {
     }
   }
 
-  // Tight radial pop centred exactly on the anchor.
-  // Wrapped in try/catch because some browser extensions block canvas
-  // rendering, which would throw inside our rAF callback otherwise.
+  // Some browser extensions block canvas rendering, which throws inside the rAF callback.
   try {
     confetti({
       particleCount: 70,
@@ -48,7 +44,7 @@ export function fireSuccessConfetti(anchor: HTMLElement | null): void {
         origin,
       });
     } catch {
-      // Same rationale — silent fall-through.
+      // Canvas blocked; see above.
     }
   }, 220);
 }
