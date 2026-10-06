@@ -87,6 +87,13 @@ export const EVENTS = {
   inspiration_authors_refreshed: {
     description: 'Home: refreshed an Inspiration author and its latest posts were fetched.',
   },
+  post_version_requested: {
+    description: 'Home: asked for a Version of a Post. Props: kind (brief | feedback).',
+  },
+  post_version_failed: {
+    description: 'Home: writing a Version failed. Props: kind (brief | feedback).',
+  },
+  post_final_copied: { description: "Home: copied a Version's Final." },
 } as const satisfies Record<string, { description: string }>;
 
 export type EventName = keyof typeof EVENTS;

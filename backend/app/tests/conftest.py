@@ -83,6 +83,7 @@ from app.core.google_sign_in import (  # noqa: E402
     GoogleClaims,
     get_google_sign_in,
 )
+from app.core.llm import FakeLLM, get_llm  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
 from app.core.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
@@ -164,6 +165,18 @@ def fake_x_reader():
     app.dependency_overrides[get_x_reader] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_x_reader, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_llm():
+    """
+    Every test calls models through a scripted fake instead of OpenRouter. Request it by name
+    to queue `fake_llm.replies` (field dicts or exceptions) and read `fake_llm.calls`.
+    """
+    fake = FakeLLM()
+    app.dependency_overrides[get_llm] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_llm, None)
 
 
 @pytest.fixture(autouse=True)

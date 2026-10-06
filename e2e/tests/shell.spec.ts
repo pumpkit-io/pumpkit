@@ -14,10 +14,20 @@ test.describe('logged in', () => {
   const userMenu = (page: import('@playwright/test').Page) =>
     page.getByRole('button', { name: 'User menu' }).last();
 
-  test('home shows the shell greeting and the user name', async ({ page }) => {
+  test('home shows the authors panel, the Brief box and the user name', async ({ page }) => {
     await page.goto('/home');
-    await expect(page.getByRole('heading', { name: 'Welcome, E2E' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Inspiration authors' })).toBeVisible();
+    const writer = page.getByRole('region', { name: 'Write a Post' });
+    await expect(writer.getByLabel('Brief')).toBeVisible();
     await expect(page.getByText('E2E User').first()).toBeVisible();
+  });
+
+  test('writing a Post is disabled with no Inspiration authors', async ({ page }) => {
+    await page.goto('/home');
+    const writer = page.getByRole('region', { name: 'Write a Post' });
+    await expect(writer.getByText('Add an Inspiration author to write a Post.')).toBeVisible();
+    await writer.getByLabel('Brief').fill('ship small things');
+    await expect(writer.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
   });
 
   test('user menu opens Account and Billing dialogs', async ({ page }) => {

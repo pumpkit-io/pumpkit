@@ -6,7 +6,7 @@ import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { timeAgo } from '@/lib/relativeTime';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
-import { useInspirationAuthors } from './useInspirationAuthors';
+import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -137,7 +137,7 @@ function AuthorList({
 export function InspirationAuthorsPanel() {
   const { subscribed } = useSubscribed();
   const { authors, loadFailed, isAdding, refreshing, error, notice, add, refresh, remove } =
-    useInspirationAuthors();
+    useInspirationAuthorsContext();
 
   return (
     <section aria-labelledby="inspiration-authors-heading" className="space-y-4">

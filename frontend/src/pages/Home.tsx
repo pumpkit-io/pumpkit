@@ -10,9 +10,10 @@ import { Sidebar } from '@/features/sidebar/Sidebar';
 import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
 import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
 import { InspirationAuthorsPanel } from '@/features/inspirationAuthors/InspirationAuthorsPanel';
+import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
+import { PostWriter } from '@/features/posts/PostWriter';
 import { Topbar } from '@/features/topbar/Topbar';
 import { track } from '@/lib/analytics';
-import { APP_NAME } from '@/lib/app';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import { ProfileProvider } from './Home/ProfileContext';
 import { Shell } from './Home/Shell';
@@ -56,7 +57,6 @@ function useBillingReturn() {
 function HomeInner() {
   const { profile, setProfile } = useBootstrap();
   useBillingReturn();
-  const firstName = profile?.firstName?.trim();
 
   return (
     <ProfileProvider value={profile} setValue={setProfile}>
@@ -68,16 +68,10 @@ function HomeInner() {
             <Topbar title="Home" />
             <div className="flex-1 overflow-y-auto">
               <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
-                <div>
-                  <h1 className="text-3xl font-normal tracking-tight text-foreground">
-                    Welcome{firstName ? `, ${firstName}` : ''}
-                  </h1>
-                  <p className="mt-3 font-sans text-sm text-muted-foreground">
-                    This is the {APP_NAME} app shell. Build your product here. See “Building your
-                    app” in docs/development.md.
-                  </p>
-                </div>
-                <InspirationAuthorsPanel />
+                <InspirationAuthorsProvider>
+                  <InspirationAuthorsPanel />
+                  <PostWriter />
+                </InspirationAuthorsProvider>
               </div>
             </div>
           </>
