@@ -6,6 +6,7 @@ negatives: text a person typed must come out exactly as it went in.
 
 import pytest
 
+from app.writing import slop
 from app.writing.scrub import scrub
 
 # Em and en dashes
@@ -131,3 +132,9 @@ def test_text_a_person_typed_comes_through_unchanged(text):
 def test_scrubbing_twice_changes_nothing_more():
     once = scrub("one—two–x “three” … → • 3×  ​")
     assert scrub(once) == once
+
+
+def test_the_scrubbed_text_trips_none_of_the_character_tells():
+    names = dict(slop.find(scrub("it’s later—after the “questions”…")))
+    assert "em_dash" not in names
+    assert "curly_quote" not in names

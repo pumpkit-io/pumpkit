@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.api.services.posts as posts_service
 from app.core.llm import LLM
 from app.db.models import User, VersionAttempt
-from app.schemas.posts import PostResponse, VersionResponse
+from app.schemas.posts import PostResponse, TellResponse, VersionResponse
 from app.writing.constants import POST_MAX_CHARS
 from app.writing.versions import write_first_version
 
@@ -14,6 +14,7 @@ from app.writing.versions import write_first_version
 def version_response(attempt: VersionAttempt) -> VersionResponse:
     assert attempt.version_number is not None and attempt.draft is not None
     assert attempt.final is not None and attempt.final_char_count is not None
+    assert attempt.slop_tells is not None
     return VersionResponse(
         number=attempt.version_number,
         feedback=attempt.feedback,
@@ -21,6 +22,7 @@ def version_response(attempt: VersionAttempt) -> VersionResponse:
         final=attempt.final,
         final_char_count=attempt.final_char_count,
         final_char_limit=POST_MAX_CHARS,
+        tells=[TellResponse(**tell) for tell in attempt.slop_tells],
     )
 
 
