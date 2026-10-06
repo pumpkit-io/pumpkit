@@ -1,18 +1,19 @@
 """
 The `BillingGateway` port: every call Pumpkit makes to its billing provider.
 
-Mediators depend on the port through `get_billing_gateway`; nothing else talks
-to Stripe. Inputs and outputs are plain data, so no SDK object leaks out, and
-the port never touches the database: persisting what it returns is the
-mediator's job. Any provider failure is a `BillingProviderError`, which the
+Its callers are the billing mediator, which gets it through
+`get_billing_gateway`, and the Subscriptions module, which is handed it to sync
+a customer; nothing else talks to Stripe. Inputs and outputs are plain data, so
+no SDK object leaks out, and the port never touches the database: persisting
+what it returns is its callers' job. Any provider failure is a `BillingProviderError`, which the
 global error handler turns into a 502 with an `error_id`. A webhook that fails
 verification is a `WebhookSignatureError` instead: the sender's fault, not the
 provider's.
 
 `StripeBillingGateway` is the production adapter and the only code that uses
 the Stripe SDK. `FakeBillingGateway` records calls, returns configured results,
-can be told to fail, and signs webhook payloads its own verifier accepts (tests
-override the dependency with it).
+can be told to fail, holds each customer's Subscriptions, and signs webhook
+payloads its own verifier accepts (tests override the dependency with it).
 """
 
 import hashlib
@@ -20,14 +21,16 @@ import hmac
 import json
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar
+from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar, cast, get_args
 
 import stripe
 from starlette.concurrency import run_in_threadpool
 from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateParams
 
 from app.core.config import settings
+from app.db.models import SubscriptionStatus
 
 
 class BillingProviderError(Exception):
@@ -64,12 +67,32 @@ class Plan:
 
 
 @dataclass(frozen=True)
+class SubscriptionState:
+    """
+    A Subscription as the provider holds it now: its provider ID, status, price,
+    Plan key (the price's lookup key, None when the price has none), the end of
+    its current period, and whether it cancels at that end.
+    """
+
+    id: str
+    status: SubscriptionStatus
+    price_id: Optional[str]
+    plan_key: Optional[str]
+    current_period_end: Optional[datetime]
+    cancel_at_period_end: bool
+
+
+@dataclass(frozen=True)
 class WebhookEvent:
-    """A verified webhook event: its ID, its type and the object it is about."""
+    """
+    A verified webhook event: its ID, its type, and the customer it is about
+    (None when its object names no customer). Webhooks are nudges (ADR 0004):
+    nothing else of the event's payload leaves the gateway.
+    """
 
     id: str
     type: str
-    data_object: dict[str, Any]
+    customer_id: Optional[str]
 
 
 class BillingGateway(Protocol):
@@ -113,6 +136,10 @@ class BillingGateway(Protocol):
         """
         ...
 
+    async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
+        """Every Subscription the customer has, Ended ones included, as the provider holds it now."""
+        ...
+
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         """Verify a webhook payload and its signature, or raise `WebhookSignatureError`."""
         ...
@@ -137,12 +164,46 @@ def _plan(price: dict[str, Any]) -> Optional[Plan]:
     )
 
 
+def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
+    """A Stripe subscription as plain data, or `BillingProviderError` when it can't be one."""
+    status = subscription.get("status")
+    if status not in get_args(SubscriptionStatus):
+        raise BillingProviderError(f"Stripe subscription has an unknown status: {status!r}")
+    first_item = ((subscription.get("items") or {}).get("data") or [{}])[0]
+    price = first_item.get("price")
+    if not isinstance(price, dict):
+        price = {"id": price} if isinstance(price, str) else {}
+    # Current Stripe API versions put the period end on the subscription items.
+    period_end = subscription.get("current_period_end") or first_item.get("current_period_end")
+    return SubscriptionState(
+        id=subscription["id"],
+        status=cast(SubscriptionStatus, status),
+        price_id=price.get("id"),
+        plan_key=price.get("lookup_key"),
+        current_period_end=(
+            datetime.fromtimestamp(period_end, tz=timezone.utc) if period_end else None
+        ),
+        cancel_at_period_end=bool(subscription.get("cancel_at_period_end")),
+    )
+
+
+def _customer_id(customer: Any) -> Optional[str]:
+    """A Stripe `customer` field, sent as an ID or as an expanded customer, as the ID."""
+    if isinstance(customer, str):
+        return customer
+    if isinstance(customer, dict):
+        return customer.get("id")
+    return None
+
+
 def _webhook_event(event: dict[str, Any]) -> WebhookEvent:
     try:
         return WebhookEvent(
-            id=event["id"], type=event["type"], data_object=dict(event["data"]["object"])
+            id=event["id"],
+            type=event["type"],
+            customer_id=_customer_id(event["data"]["object"].get("customer")),
         )
-    except (KeyError, TypeError) as error:
+    except (KeyError, TypeError, AttributeError) as error:
         raise WebhookSignatureError("Webhook payload is not an event") from error
 
 
@@ -152,8 +213,8 @@ _T = TypeVar("_T")
 class StripeBillingGateway:
     """Calls Stripe with its own client and API key, off the event loop, and returns plain data."""
 
-    def __init__(self) -> None:
-        self._client = stripe.StripeClient(settings.STRIPE_SECRET_KEY)
+    def __init__(self, client: Optional[stripe.StripeClient] = None) -> None:
+        self._client = client or stripe.StripeClient(settings.STRIPE_SECRET_KEY)
 
     async def _call(self, what: str, call: Callable[[], _T]) -> _T:
         try:
@@ -244,6 +305,19 @@ class StripeBillingGateway:
             plans.extend(plan for price in prices.data if (plan := _plan(price.to_dict())))
         return plans
 
+    async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
+        def list_all() -> list[dict[str, Any]]:
+            # Stripe leaves cancelled Subscriptions out unless asked for all of them.
+            subscriptions = self._client.v1.subscriptions.list(
+                {"customer": customer_id, "status": "all", "limit": 100}
+            )
+            return [subscription.to_dict() for subscription in subscriptions.auto_paging_iter()]
+
+        return [
+            _subscription_state(subscription)
+            for subscription in await self._call("list Subscriptions", list_all)
+        ]
+
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         # Pure HMAC work, no network: no need to leave the event loop.
         try:
@@ -278,7 +352,8 @@ class FakeBillingGateway:
     A billing provider in memory. It records every call, answers with the
     configured results, and raises `BillingProviderError` from any method named
     in `fail_on`. Checkouts it creates stay open until `expire_open_checkouts`
-    expires them. Sign events with `signed_event`; its `verify_webhook` accepts
+    expires them. It holds each customer's Subscriptions: set one with
+    `set_subscription` and `list_subscriptions` returns it. Sign events with `signed_event`; its `verify_webhook` accepts
     only payloads signed with the same secret.
     """
 
@@ -295,6 +370,9 @@ class FakeBillingGateway:
     expired_checkouts: list[str] = field(default_factory=list)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
+    _subscriptions: dict[str, dict[str, SubscriptionState]] = field(
+        default_factory=dict, init=False
+    )
     _customers_by_idempotency_key: dict[str, str] = field(default_factory=dict, init=False)
 
     def _maybe_fail(self, method: str) -> None:
@@ -353,6 +431,14 @@ class FakeBillingGateway:
         self._maybe_fail("list_plans")
         self.plan_lookups.append(list(keys))
         return [plan for plan in self.plans if plan.key in keys]
+
+    def set_subscription(self, customer_id: str, subscription: SubscriptionState) -> None:
+        """Make `subscription` what the provider holds now, replacing any with its ID."""
+        self._subscriptions.setdefault(customer_id, {})[subscription.id] = subscription
+
+    async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
+        self._maybe_fail("list_subscriptions")
+        return list(self._subscriptions.get(customer_id, {}).values())
 
     def signed_event(
         self, *, event_id: str, event_type: str, data_object: dict[str, Any]

@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +14,7 @@ from app.core.billing_gateway import (
 )
 from app.core.config import settings
 from app.core.logger import logger
-from app.db.models import SubscriptionStatus, User
+from app.db.models import User
 from app.schemas.billing import (
     BillingPortalResponse,
     CheckoutRequest,
@@ -202,12 +201,14 @@ async def handle_webhook(
     signature: Optional[str],
 ) -> None:
     """
-    Verify the webhook through the gateway, deduplicate by event id, and dispatch.
+    Verify the webhook through the gateway, deduplicate by event ID, and sync
+    the customer it nudges about (ADR 0004).
 
-    The `stripe_events` insert and every handler write share ONE transaction,
-    committed at the end. Handlers must not commit. If a handler raises, the
-    whole event rolls back (including the dedup row) and the router returns
-    500, so Stripe retries it.
+    The `stripe_events` insert and the sync share ONE transaction, committed at
+    the end. Handlers must not commit. If anything raises, including the
+    gateway during the sync, the whole event rolls back (the dedup row too)
+    and the response is an error (502 for the gateway, else 500), so Stripe
+    retries it.
     """
     if not signature:
         raise HTTPException(
@@ -229,133 +230,46 @@ async def handle_webhook(
             logger.info("Ignoring replayed Stripe event %s (%s)", event.id, event.type)
             await db.rollback()
             return
-        await _dispatch_event(db, event)
+        await _dispatch_event(db, gateway, event)
         await db.commit()
     except Exception:
         await db.rollback()
         raise
 
 
-async def _dispatch_event(db: AsyncSession, event: WebhookEvent) -> None:
-    """Route a verified, first-seen Stripe event to its handler. Must not commit."""
-    match event.type:
-        case (
-            "customer.subscription.created"
-            | "customer.subscription.updated"
-            | "customer.subscription.deleted"
-        ):
-            await _handle_subscription_event(
-                db=db, subscription=event.data_object, event_id=event.id
-            )
-        case "checkout.session.completed":
-            # The subsequent customer.subscription.created event writes the row.
-            # Log for observability.
-            logger.info(
-                "Stripe checkout.session.completed (session_id=%s, client_reference_id=%s)",
-                event.data_object.get("id"),
-                event.data_object.get("client_reference_id"),
-            )
-        case _:
-            logger.info(
-                "Unhandled Stripe webhook event type: %s (event_id=%s)", event.type, event.id
-            )
+def _is_nudge(event: WebhookEvent) -> bool:
+    """Whether the event says a customer's Subscriptions may have changed."""
+    return event.type.startswith("customer.subscription.") or (
+        event.type == "checkout.session.completed"
+    )
 
 
-async def _handle_subscription_event(
-    db: AsyncSession,
-    subscription: dict[str, Any],
-    event_id: str,
+async def _dispatch_event(db: AsyncSession, gateway: BillingGateway, event: WebhookEvent) -> None:
+    """Act on a verified, first-seen Stripe event. Must not commit."""
+    if not _is_nudge(event):
+        logger.info("Unhandled Stripe webhook event type: %s (event_id=%s)", event.type, event.id)
+        return
+    if event.customer_id is None:
+        logger.error("Stripe %s event names no customer (event_id=%s)", event.type, event.id)
+        return
+    await _sync_customer(db, gateway, customer_id=event.customer_id, event_id=event.id)
+
+
+async def _sync_customer(
+    db: AsyncSession, gateway: BillingGateway, *, customer_id: str, event_id: str
 ) -> None:
     """
-    Upsert the local Subscription row from a Stripe subscription event payload.
+    Sync the customer's Subscriptions from Stripe. The User's row stays locked
+    across the Stripe call, so webhooks for one customer run one after another
+    and none can write an older state last.
     """
-    customer_id = _extract_customer_id(subscription)
-    if not customer_id:
-        logger.error(
-            "Stripe subscription event missing customer id (event_id=%s, sub_id=%s)",
-            event_id,
-            subscription.get("id"),
-        )
-        return
-
-    user = await subscriptions_service.get_user_by_stripe_customer_id(
-        db=db, stripe_customer_id=customer_id
-    )
+    user = await users_service.get_user_by_stripe_customer_id(db, customer_id)
     if user is None:
         logger.error(
-            "Stripe subscription event for unknown customer (event_id=%s, customer_id=%s)",
+            "Stripe webhook for unknown customer (event_id=%s, customer_id=%s)",
             event_id,
             customer_id,
         )
         return
-
-    await _upsert_subscription_from_stripe_object(
-        db=db,
-        user_id=user.id,
-        subscription=subscription,
-    )
-
-
-async def _upsert_subscription_from_stripe_object(
-    db: AsyncSession,
-    user_id: str,
-    subscription: Any,
-) -> None:
-    """
-    Extract and upsert relevant fields from a Stripe subscription object.
-    """
-    sub_id: str = subscription["id"]
-    customer_id = _extract_customer_id(subscription)
-    price_id = _extract_price_id(subscription)
-    sub_status: SubscriptionStatus = subscription["status"]
-
-    # Parse the current period end timestamp if available
-    current_period_end: Optional[datetime] = None
-    # Current Stripe API versions expose the period end on the subscription items.
-    cpe_ts = subscription.get("current_period_end")
-    if not cpe_ts:
-        first_item = ((subscription.get("items") or {}).get("data") or [None])[0] or {}
-        cpe_ts = first_item.get("current_period_end")
-    if cpe_ts:
-        current_period_end = datetime.fromtimestamp(cpe_ts, tz=timezone.utc)
-
-    cancel_at_period_end = bool(subscription.get("cancel_at_period_end", False))
-
-    await subscriptions_service.upsert_subscription(
-        db=db,
-        user_id=user_id,
-        stripe_subscription_id=sub_id,
-        stripe_customer_id=customer_id or "",
-        stripe_price_id=price_id,
-        status=sub_status,
-        current_period_end=current_period_end,
-        cancel_at_period_end=cancel_at_period_end,
-    )
-
-
-def _extract_customer_id(subscription: Any) -> Optional[str]:
-    """
-    Stripe's customer field can be a string ID or an expanded object.
-    """
-    customer = subscription.get("customer")
-    if isinstance(customer, str):
-        return customer
-    if isinstance(customer, dict):
-        return customer.get("id")
-    return None
-
-
-def _extract_price_id(subscription: Any) -> Optional[str]:
-    """
-    Pull the first line item's price ID from a Stripe subscription object.
-    """
-    items = subscription.get("items") or {}
-    data = items.get("data") or []
-    if not data:
-        return None
-    price = data[0].get("price") or {}
-    if isinstance(price, dict):
-        return price.get("id")
-    if isinstance(price, str):
-        return price
-    return None
+    await users_service.lock_user(db, user)
+    await subscriptions_service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
