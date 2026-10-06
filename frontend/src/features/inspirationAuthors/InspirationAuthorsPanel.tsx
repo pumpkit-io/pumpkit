@@ -55,10 +55,6 @@ function AddAuthorForm({
   );
 }
 
-/**
- * On a phone the list is a row of chips holding only the handle, so it doesn't push the
- * writing area off the screen; from `md` up each author is a row with its fetch details.
- */
 const ROW_ACTION =
   'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60';
 
@@ -68,6 +64,10 @@ interface AuthorActions {
   onRemove: (handle: string) => void;
 }
 
+/**
+ * On a phone the list is a row of compact chips (handle and a short fetch time), so it doesn't
+ * push the writing area off the screen; from `md` up each author is a row with its full details.
+ */
 function AuthorList({
   authors,
   actions,
