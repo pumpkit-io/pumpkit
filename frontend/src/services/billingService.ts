@@ -1,7 +1,5 @@
 import { apiService } from './apiService';
 
-export { errorMessage } from './apiErrors';
-
 /** Stripe's Subscription statuses. */
 export type SubscriptionStatus =
   | 'trialing'

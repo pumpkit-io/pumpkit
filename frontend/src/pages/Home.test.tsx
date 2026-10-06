@@ -19,7 +19,6 @@ vi.mock('@/services/billingService', () => ({
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn().mockResolvedValue([]),
   },
-  errorMessage: (_e: unknown, fallback: string) => fallback,
 }));
 vi.mock('@/services/inspirationAuthorService', () => ({
   inspirationAuthorService: {

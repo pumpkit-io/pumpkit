@@ -1,5 +1,6 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
-import { billingService, errorMessage, type BillingMe, type Plan } from '@/services/billingService';
+import { errorMessage } from '@/services/apiErrors';
+import { billingService, type BillingMe, type Plan } from '@/services/billingService';
 import { track } from '@/lib/analytics';
 
 export interface BillingData {
