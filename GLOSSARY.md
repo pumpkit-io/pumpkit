@@ -41,8 +41,20 @@ A recurring offer a User can subscribe to. Pumpkit decides which Plans exist; no
 _Avoid_: price, tier, product
 
 **Subscription**:
-A User's ongoing paid or trialling commitment to one Plan.
+A User's ongoing paid or trialling commitment to one Plan. A User has at most one Running Subscription; a User may hold several Ended ones from the past.
 _Avoid_: membership, purchase
+
+**Running**:
+A Subscription that has started and not Ended: trialling, paid up, behind on payment, or paused. A Subscription whose first payment is still waiting on the User is not yet Running.
+_Avoid_: live, active (for this broader sense)
+
+**Ended**:
+A Subscription that can never run again: it was cancelled, or its first payment never went through in time.
+_Avoid_: inactive, expired (for Subscriptions)
+
+**Subscribed**:
+A User whose Subscription currently grants access to Pumpkit: it is in its Trial, paid up, or behind on payment while the billing provider still retries the charge.
+_Avoid_: active, paying, premium
 
 **Trial**:
 The free, card-backed opening period of a User's first Subscription. Each User gets at most one.

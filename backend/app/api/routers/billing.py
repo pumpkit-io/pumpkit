@@ -2,80 +2,80 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import app.api.mediators.stripe as stripe_mediator
+import app.api.mediators.billing as billing_mediator
 from app.api.dependencies import get_current_user
 from app.core.billing_gateway import BillingGateway, get_billing_gateway
 from app.core.rate_limit import limiter
 from app.db.models import User
 from app.db.session import get_async_db
-from app.schemas.stripe import (
+from app.schemas.billing import (
+    BillingMeResponse,
     BillingPortalResponse,
     CheckoutRequest,
     CheckoutResponse,
     PlansListResponse,
-    SubscriptionMeResponse,
 )
 
-router = APIRouter(tags=["stripe"])
+router = APIRouter(tags=["billing"])
 
 
 @router.get(
-    "/stripe/me",
-    response_model=SubscriptionMeResponse,
+    "/billing/me",
+    response_model=BillingMeResponse,
     status_code=status.HTTP_200_OK,
 )
-async def get_stripe_me(
+async def get_billing_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
-) -> SubscriptionMeResponse:
-    return await stripe_mediator.get_subscription_me(db=db, user=current_user)
+) -> BillingMeResponse:
+    return await billing_mediator.get_billing_me(db=db, user=current_user)
 
 
 @router.get(
-    "/stripe/plans",
+    "/billing/plans",
     response_model=PlansListResponse,
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("30/minute")
-async def list_stripe_plans(
+async def list_billing_plans(
     request: Request,
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> PlansListResponse:
     # Public: the landing page lists Plans to signed-out visitors.
-    return await stripe_mediator.list_plans(gateway=gateway)
+    return await billing_mediator.list_plans(gateway=gateway)
 
 
 @router.post(
-    "/stripe/checkout",
+    "/billing/checkout",
     response_model=CheckoutResponse,
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("20/minute")
-async def create_stripe_checkout(
+async def create_billing_checkout(
     request: Request,
     checkout_request: CheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> CheckoutResponse:
-    return await stripe_mediator.create_checkout_session(
+    return await billing_mediator.create_checkout_session(
         db=db, gateway=gateway, user=current_user, checkout_request=checkout_request
     )
 
 
 @router.post(
-    "/stripe/billing-portal",
+    "/billing/portal",
     response_model=BillingPortalResponse,
     status_code=status.HTTP_200_OK,
 )
 @limiter.limit("20/minute")
-async def create_stripe_billing_portal(
+async def create_billing_portal(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> BillingPortalResponse:
-    return await stripe_mediator.create_billing_portal_session(
+    return await billing_mediator.create_billing_portal_session(
         db=db, gateway=gateway, user=current_user
     )
 
@@ -91,9 +91,9 @@ async def stripe_webhook(
     signature = request.headers.get("stripe-signature")
 
     # handle_webhook owns the transaction: it commits on success and rolls back
-    # before re-raising, so unexpected errors reach the global handler as a 500
-    # and Stripe retries the event.
-    await stripe_mediator.handle_webhook(
+    # before re-raising, so errors reach the global handlers (a 502 when Stripe
+    # failed during the sync, else a 500) and Stripe retries the event.
+    await billing_mediator.handle_webhook(
         db=db, gateway=gateway, payload=payload, signature=signature
     )
 

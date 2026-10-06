@@ -6,10 +6,10 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api.routers import (
+    billing,
     google_auth,
     magic_link_auth,
     sessions,
-    stripe,
     support,
     users,
 )
@@ -49,7 +49,7 @@ app.include_router(google_auth.router, prefix="/api/v1")
 app.include_router(magic_link_auth.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
-app.include_router(stripe.router, prefix="/api/v1")
+app.include_router(billing.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 
 # Set up rate limiting and ensure rate limit exceptions are properly handled

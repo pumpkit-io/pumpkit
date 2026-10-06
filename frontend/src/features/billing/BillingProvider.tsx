@@ -1,14 +1,9 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
-import {
-  billingService,
-  errorMessage,
-  type Plan,
-  type SubscriptionView,
-} from '@/services/billingService';
+import { billingService, errorMessage, type BillingMe, type Plan } from '@/services/billingService';
 import { track } from '@/lib/analytics';
 
 export interface BillingData {
-  subscription: SubscriptionView;
+  me: BillingMe;
   plans: Plan[];
 }
 
@@ -34,11 +29,11 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [subscription, plans] = await Promise.all([
-        billingService.fetchSubscription(),
+      const [me, plans] = await Promise.all([
+        billingService.fetchBillingMe(),
         billingService.fetchPlans(),
       ]);
-      setData({ subscription, plans });
+      setData({ me, plans });
     } catch (e) {
       setError(errorMessage(e, 'Could not load billing information.'));
     } finally {
