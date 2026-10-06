@@ -175,3 +175,32 @@ describe('Landing mobile menu', () => {
     expect(track).toHaveBeenCalledWith('landing_mobile_menu_closed');
   });
 });
+
+describe('Landing authors', () => {
+  it('sits between the hero and pricing under the #authors anchor', () => {
+    renderLanding();
+    const section = screen.getByRole('region', { name: 'Pick the authors whose style you want.' });
+    expect(section).toHaveAttribute('id', 'authors');
+    expect(within(section).getByText('Learn from the best on X')).toBeInTheDocument();
+    const hero = screen.getByRole('heading', { level: 1 });
+    const pricing = document.getElementById('pricing');
+    expect(hero.compareDocumentPosition(section)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(section.compareDocumentPosition(pricing!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('lists the placeholder author chips once, in order', () => {
+    renderLanding();
+    const list = screen.getByRole('list', { name: 'Authors' });
+    const chips = within(list).getAllByRole('listitem');
+    expect(chips.length).toBeGreaterThan(0);
+    chips.forEach((chip, index) => expect(chip).toHaveTextContent(`[Author ${index + 1}]`));
+  });
+
+  it('tracks the section coming into view once', () => {
+    renderLanding();
+    const calls = vi
+      .mocked(track)
+      .mock.calls.filter(([event]) => event === 'landing_authors_section_viewed');
+    expect(calls).toEqual([['landing_authors_section_viewed']]);
+  });
+});
