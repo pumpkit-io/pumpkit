@@ -91,9 +91,11 @@ class _RecordedStripe(stripe.HTTPClient):
         super().__init__()
         self._body = body
         self.urls: list[str] = []
+        self.methods: list[str] = []
 
     def request(self, method, url, headers, post_data=None, *, _usage=None):
         self.urls.append(url)
+        self.methods.append(method)
         return self._body, 200, {}
 
     def close(self) -> None:
@@ -130,3 +132,42 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
     # Stripe leaves cancelled Subscriptions out unless asked for all of them.
     assert query["status"] == ["all"]
     assert query["customer"] == ["cus_Contract"]
+
+
+async def test_the_stripe_adapter_cancels_a_subscription_now():
+    http = _RecordedStripe(
+        '{"id": "sub_1Incomplete", "object": "subscription", "status": "canceled"}'
+    )
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    await gateway.cancel_subscription(subscription_id="sub_1Incomplete")
+
+    assert http.methods == ["delete"]
+    assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1Incomplete"
+
+
+async def test_the_fake_lists_a_cancelled_subscription_as_ended():
+    gateway = FakeBillingGateway()
+    incomplete = SubscriptionState(
+        id="sub_1",
+        status="incomplete",
+        price_id="price_monthly",
+        plan_key="pumpkit_pro_monthly",
+        current_period_end=None,
+        cancel_at_period_end=False,
+    )
+    gateway.set_subscription("cus_1", incomplete)
+
+    await gateway.cancel_subscription(subscription_id="sub_1")
+
+    assert await gateway.list_subscriptions(customer_id="cus_1") == [
+        SubscriptionState(
+            id="sub_1",
+            status="canceled",
+            price_id="price_monthly",
+            plan_key="pumpkit_pro_monthly",
+            current_period_end=None,
+            cancel_at_period_end=False,
+        )
+    ]
+    assert gateway.cancelled_subscriptions == ["sub_1"]

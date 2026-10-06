@@ -1,15 +1,72 @@
 """Pumpkit's copy of each Subscription, synced from the billing provider (ADR 0004)."""
 
+from dataclasses import dataclass
 from typing import Optional
 
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.billing_gateway import BillingGateway
+from app.core.config import settings
 from app.db.models import Subscription, SubscriptionStatus
 
 # An Ended Subscription can never run again.
 _ENDED_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
+# A Running Subscription has started and not Ended. `incomplete` is neither.
+_RUNNING_STATUSES: set[SubscriptionStatus] = {
+    "trialing",
+    "active",
+    "past_due",
+    "unpaid",
+    "paused",
+}
+
+
+@dataclass(frozen=True)
+class SubscriptionOffer:
+    """
+    Whether a User may subscribe, and the Trial a Checkout for them starts with
+    (None when they get no Trial, and always None when they may not subscribe).
+    """
+
+    may_subscribe: bool
+    trial_days: Optional[int]
+
+
+async def get_subscription_offer(db: AsyncSession, *, user_id: str) -> SubscriptionOffer:
+    """
+    A User may subscribe only when they have no Running Subscription. The Trial
+    is the configured length for a User who has never had any Subscription, in
+    any status, and none when Trials are off. A Checkout with a Trial starts its
+    Subscription as trialing, never `incomplete`, so cancelling `incomplete`
+    Subscriptions can't cost a User their Trial. Reads only Pumpkit's copy:
+    sync the customer first for an answer that matches the provider.
+    """
+    running = await db.execute(
+        select(
+            exists().where(
+                Subscription.user_id == user_id,
+                Subscription.status.in_(_RUNNING_STATUSES),
+            )
+        )
+    )
+    if running.scalar():
+        return SubscriptionOffer(may_subscribe=False, trial_days=None)
+    days = settings.BILLING_TRIAL_PERIOD_DAYS
+    if days == 0 or await has_had_subscription(db, user_id=user_id):
+        # A zero length turns Trials off; Stripe rejects a zero-day Trial.
+        return SubscriptionOffer(may_subscribe=True, trial_days=None)
+    return SubscriptionOffer(may_subscribe=True, trial_days=days)
+
+
+async def list_incomplete_subscriptions(db: AsyncSession, *, user_id: str) -> list[Subscription]:
+    """The User's `incomplete` Subscriptions: started, but their first payment is still pending."""
+    result = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == user_id, Subscription.status == "incomplete"
+        )
+    )
+    return list(result.scalars())
 
 
 async def has_had_subscription(db: AsyncSession, *, user_id: str) -> bool:

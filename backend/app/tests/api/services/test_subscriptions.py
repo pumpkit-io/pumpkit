@@ -5,6 +5,8 @@ import pytest
 
 import app.api.services.subscriptions as subscriptions_service
 from app.core.billing_gateway import BillingProviderError, FakeBillingGateway, SubscriptionState
+from app.core.config import settings
+from app.db.models import User
 
 CUSTOMER = "cus_1"
 
@@ -84,3 +86,81 @@ async def test_sync_raises_when_the_provider_fails(db, user):
         await subscriptions_service.sync_customer(
             db, gateway, user_id=user.id, customer_id=CUSTOMER
         )
+
+
+async def _hold(db, user, *states: SubscriptionState) -> None:
+    """Make the User's copy hold `states`, the way a sync would."""
+    gateway = FakeBillingGateway()
+    for state in states:
+        gateway.set_subscription(CUSTOMER, state)
+    await subscriptions_service.sync_customer(db, gateway, user_id=user.id, customer_id=CUSTOMER)
+
+
+async def test_a_user_who_never_had_a_subscription_may_subscribe_with_the_trial(
+    db, user, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+
+    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+
+    assert offer == subscriptions_service.SubscriptionOffer(may_subscribe=True, trial_days=14)
+
+
+async def test_a_user_who_never_had_a_subscription_gets_no_trial_when_trials_are_off(
+    db, user, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 0)
+
+    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+
+    assert offer == subscriptions_service.SubscriptionOffer(may_subscribe=True, trial_days=None)
+
+
+@pytest.mark.parametrize("running_status", ["trialing", "active", "past_due", "unpaid", "paused"])
+async def test_a_user_with_a_running_subscription_may_not_subscribe(db, user, running_status):
+    await _hold(db, user, ENDED, replace(RUNNING, status=running_status))
+
+    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+
+    assert offer == subscriptions_service.SubscriptionOffer(may_subscribe=False, trial_days=None)
+
+
+@pytest.mark.parametrize("status", ["canceled", "incomplete_expired", "incomplete"])
+async def test_a_user_with_no_running_subscription_may_subscribe_without_a_trial(
+    db, user, status, monkeypatch
+):
+    """Ended and `incomplete` Subscriptions don't block, but they use up the Trial."""
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    await _hold(db, user, replace(RUNNING, status=status))
+
+    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+
+    assert offer == subscriptions_service.SubscriptionOffer(may_subscribe=True, trial_days=None)
+
+
+async def test_the_users_incomplete_subscriptions_are_listed(db, user):
+    await _hold(
+        db,
+        user,
+        ENDED,
+        replace(RUNNING, id="sub_a", status="incomplete"),
+        replace(RUNNING, id="sub_b", status="incomplete"),
+        replace(RUNNING, id="sub_c", status="incomplete_expired"),
+    )
+
+    incomplete = await subscriptions_service.list_incomplete_subscriptions(db, user_id=user.id)
+
+    assert sorted(s.stripe_subscription_id for s in incomplete) == ["sub_a", "sub_b"]
+
+
+async def test_another_users_subscriptions_are_not_counted_as_theirs(db, user):
+    other = User(email="bob@example.com", display_name="Bob")
+    db.add(other)
+    await db.flush()
+    gateway = FakeBillingGateway()
+    gateway.set_subscription("cus_bob", replace(RUNNING, id="sub_bob", status="incomplete"))
+    await subscriptions_service.sync_customer(db, gateway, user_id=other.id, customer_id="cus_bob")
+
+    assert await subscriptions_service.list_incomplete_subscriptions(db, user_id=user.id) == []
+    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+    assert offer.may_subscribe is True
