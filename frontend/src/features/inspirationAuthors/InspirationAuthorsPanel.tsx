@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
-import { timeAgo } from '@/lib/relativeTime';
+import { shortTimeAgo, timeAgo } from '@/lib/relativeTime';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
 
@@ -93,7 +93,15 @@ function AuthorList({
         >
           <div className="min-w-0 md:flex-1">
             <span className="font-sans text-sm font-medium text-foreground">@{author.handle}</span>
-            <p className="hidden font-sans text-xs text-muted-foreground md:block">
+            {author.lastFetchedAt && (
+              <span
+                aria-hidden
+                className="ml-1.5 font-sans text-xs text-muted-foreground md:hidden"
+              >
+                {shortTimeAgo(author.lastFetchedAt)}
+              </span>
+            )}
+            <p className="sr-only font-sans text-xs text-muted-foreground md:not-sr-only">
               {fetchedLabel(author)}
             </p>
           </div>

@@ -568,6 +568,16 @@ describe('Home', () => {
       expect(within(items[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
     });
 
+    it('shows each author chip on a phone with a short last fetched time', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
+      renderHome();
+
+      const panel = await authorsPanel();
+      const items = await panel.findAllByRole('listitem');
+      expect(within(items[0]).getByText('2h ago')).toHaveClass('md:hidden');
+      expect(within(items[1]).getByText('5m ago')).toHaveClass('md:hidden');
+    });
+
     it('says how to start when the User has no authors', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
       renderHome();
