@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Sequence
+from typing import Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.datetimes import as_utc
 from app.core.x_reader import FetchedPost
 from app.db.models import AuthorFetch, AuthorPost
 
@@ -36,6 +37,12 @@ async def store_new_posts(
     )
     await db.flush()
     return len(new)
+
+
+async def last_fetched_at(db: AsyncSession, *, handle: str) -> Optional[datetime]:
+    """When any User last fetched `handle`, or None if it never was."""
+    fetch = await db.get(AuthorFetch, handle)
+    return None if fetch is None else as_utc(fetch.last_fetched_at)
 
 
 async def record_fetch(db: AsyncSession, *, handle: str, now: datetime) -> None:
