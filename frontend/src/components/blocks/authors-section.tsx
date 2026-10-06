@@ -1,8 +1,9 @@
 import { useRef } from 'react';
+import { Eyebrow } from '@/components/blocks/eyebrow';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
 
-// Placeholders until real X accounts are cleared for use (see #49, Out of Scope).
+// Placeholders until real X accounts are cleared for use.
 const AUTHORS: readonly string[] = Array.from({ length: 10 }, (_, i) => `[Author ${i + 1}]`);
 
 // The track holds three copies and scrolls by one third, so the loop has no seam.
@@ -21,9 +22,7 @@ export function AuthorsSection() {
     >
       <div className="mx-auto max-w-5xl px-6">
         <div className="text-center">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Learn from the best on X
-          </p>
+          <Eyebrow>Learn from the best on X</Eyebrow>
           <h2
             id="authors-heading"
             className="mt-3 text-balance text-2xl font-semibold tracking-tight md:text-3xl"

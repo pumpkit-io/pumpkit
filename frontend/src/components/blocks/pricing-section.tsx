@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
-import type { Variants } from 'framer-motion';
-import { AnimatedGroup } from '@/components/ui/animated-group';
+import { CtaFrame } from '@/components/blocks/cta-frame';
+import { Eyebrow } from '@/components/blocks/eyebrow';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { billingService, type Plan } from '@/services/billingService';
@@ -14,20 +13,10 @@ type State = { status: 'loading' } | { status: 'ready'; plans: Plan[] } | { stat
 
 // Placeholder contents, the same for every Plan until real copy exists.
 const PLAN_INCLUDES = [
-  { item: '[What this Plan includes]', detail: '[How much of it]' },
-  { item: '[What this Plan includes]', detail: '[How much of it]' },
-  { item: '[What this Plan includes]', detail: '[How much of it]' },
+  '[What this Plan includes]',
+  '[What this Plan includes]',
+  '[What this Plan includes]',
 ];
-
-const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 16, filter: 'blur(8px)' },
-  visible: {
-    opacity: 1,
-    y: 0,
-    filter: 'blur(0px)',
-    transition: { type: 'spring', bounce: 0.25, duration: 1.2 },
-  },
-};
 
 function PlanTable({ plan }: { plan: Plan }) {
   const planRef = useRef<HTMLDivElement | null>(null);
@@ -44,14 +33,9 @@ function PlanTable({ plan }: { plan: Plan }) {
       </h3>
       <Table aria-labelledby={headingId}>
         <TableBody>
-          {PLAN_INCLUDES.map((row, i) => (
+          {PLAN_INCLUDES.map((item, i) => (
             <TableRow key={i} index={i}>
-              <TableCell className="w-1/2 py-5 align-top text-base md:text-lg">
-                {row.item}
-              </TableCell>
-              <TableCell className="py-5 text-right align-middle text-sm md:text-base">
-                {row.detail}
-              </TableCell>
+              <TableCell className="py-5 text-base md:text-lg">{item}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -91,14 +75,8 @@ export function PricingSection() {
         className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"
       />
       <div className="mx-auto max-w-4xl px-6">
-        <AnimatedGroup
-          variants={{
-            container: { visible: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } },
-            item: fadeUp,
-          }}
-          className="text-center"
-        >
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Pricing</p>
+        <div className="text-center">
+          <Eyebrow>Pricing</Eyebrow>
           <h2
             id={headingId}
             className="mt-3 text-balance text-4xl font-semibold tracking-tight md:text-5xl"
@@ -108,7 +86,7 @@ export function PricingSection() {
           <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground md:text-lg">
             [Pricing subline]
           </p>
-        </AnimatedGroup>
+        </div>
 
         {state.status === 'loading' && (
           <p className="mt-14 text-center text-sm text-muted-foreground">Loading…</p>
@@ -124,39 +102,23 @@ export function PricingSection() {
           <p className="mt-14 text-center text-sm text-muted-foreground">Pricing is coming soon.</p>
         )}
 
-        {/* Mounted once the Plans arrive, so the stagger runs over the tables themselves. */}
         {plans.length > 0 && (
-          <AnimatedGroup
-            variants={{
-              container: {
-                visible: { transition: { staggerChildren: 0.12, delayChildren: 0.25 } },
-              },
-              item: fadeUp,
-            }}
-            className="mt-14 flex flex-col gap-12"
-          >
+          <div className="mt-14 flex flex-col gap-12">
             {plans.map((plan) => (
               <PlanTable key={plan.key} plan={plan} />
             ))}
-          </AnimatedGroup>
+          </div>
         )}
 
-        <AnimatedGroup
-          variants={{
-            container: { visible: { transition: { delayChildren: 0.5 } } },
-            item: fadeUp,
-          }}
-          className="mt-14 flex justify-center"
-        >
-          <div className="rounded-[14px] border bg-foreground/10 p-0.5">
+        <div className="mt-14 flex justify-center">
+          <CtaFrame>
             <Button asChild size="lg" className="rounded-xl px-6 text-base">
               <Link to="/login" onClick={() => track('landing_pricing_cta_clicked')}>
-                <span>Get started</span>
-                <ArrowRight className="ml-2 size-4" strokeWidth={2.25} />
+                Get started
               </Link>
             </Button>
-          </div>
-        </AnimatedGroup>
+          </CtaFrame>
+        </div>
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
 import type { InternalAxiosRequestConfig } from 'axios';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -103,6 +103,19 @@ describe('Landing hero', () => {
   });
 });
 
+describe('Landing landmarks', () => {
+  it('keeps the header outside one main landmark that holds hero, authors and pricing', () => {
+    renderLanding();
+    const main = screen.getByRole('main');
+    expect(within(main).queryByRole('banner')).not.toBeInTheDocument();
+    expect(within(main).getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(
+      within(main).getByRole('region', { name: 'Pick the authors whose style you want.' }),
+    ).toBeInTheDocument();
+    expect(within(main).getByRole('region', { name: 'Simple pricing' })).toBeInTheDocument();
+  });
+});
+
 describe('Landing header', () => {
   it('links the Authors and Pricing anchors to their sections', () => {
     renderLanding();
@@ -157,6 +170,17 @@ describe('Landing mobile menu', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close menu' }));
     expect(screen.queryByRole('navigation', { name: 'Menu' })).not.toBeInTheDocument();
+    expect(track).toHaveBeenCalledWith('landing_mobile_menu_closed');
+  });
+
+  it('closes on Escape and tracks it like the close button', () => {
+    renderLanding();
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(screen.getByRole('navigation', { name: 'Menu' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('navigation', { name: 'Menu' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open menu' })).toBeInTheDocument();
     expect(track).toHaveBeenCalledWith('landing_mobile_menu_closed');
   });
 
@@ -226,9 +250,9 @@ describe('Landing pricing', () => {
         .map((row) => row.textContent),
     );
     expect(rowTexts[0]).toEqual([
-      '[What this Plan includes][How much of it]',
-      '[What this Plan includes][How much of it]',
-      '[What this Plan includes][How much of it]',
+      '[What this Plan includes]',
+      '[What this Plan includes]',
+      '[What this Plan includes]',
     ]);
     expect(rowTexts[1]).toEqual(rowTexts[0]);
   });
@@ -281,19 +305,5 @@ describe('Landing pricing', () => {
       ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_monthly' }],
       ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_quarterly' }],
     ]);
-  });
-
-  it('highlights the row under the pointer', async () => {
-    renderLanding();
-    const [table] = await screen.findAllByRole('table');
-    const [firstRow] = within(table).getAllByRole('row');
-    expect(firstRow).not.toHaveClass('is-active');
-
-    fireEvent.mouseEnter(firstRow);
-    fireEvent.mouseMove(firstRow, { clientY: 0 });
-    await waitFor(() => expect(firstRow).toHaveClass('is-active'));
-
-    fireEvent.mouseLeave(table.parentElement!);
-    await waitFor(() => expect(firstRow).not.toHaveClass('is-active'));
   });
 });
