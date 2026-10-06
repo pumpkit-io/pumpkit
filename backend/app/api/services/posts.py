@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.datetimes import as_utc
 from app.db.models import AuthorPost, InspirationAuthor, Post, VersionAttempt
 from app.writing import slop
 from app.writing.constants import CORPUS_POSTS_PER_AUTHOR
@@ -55,6 +56,16 @@ async def corpus_for_post(db: AsyncSession, *, post: Post) -> Corpus:
     )
     by_id = {id_: CorpusPost(post_id=id_, handle=handle, text=text) for id_, handle, text in rows}
     return group_corpus([by_id[post_id] for post_id in post.corpus_post_ids])
+
+
+async def attempt_times_since(db: AsyncSession, *, user_id: str, since: datetime) -> list[datetime]:
+    """When the User attempted a Version after `since`, failed attempts included."""
+    rows = await db.execute(
+        select(VersionAttempt.created_at)
+        .join(Post, VersionAttempt.post_id == Post.id)
+        .where(Post.user_id == user_id, VersionAttempt.created_at > since)
+    )
+    return [as_utc(created_at) for created_at in rows.scalars()]
 
 
 async def create_post(
