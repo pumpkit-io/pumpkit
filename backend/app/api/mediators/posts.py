@@ -1,14 +1,46 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.services.posts as posts_service
 from app.core.llm import LLM
+from app.core.retry_later import RetryLaterError
 from app.db.models import User, VersionAttempt
 from app.schemas.posts import PostResponse, TellResponse, VersionResponse
 from app.writing.constants import POST_MAX_CHARS
 from app.writing.versions import EarlierVersion, write_first_version, write_next_version
+
+# Starting a Post and giving Feedback share one budget per User, failed attempts included,
+# so one account can't run up an unbounded model bill.
+VERSION_ATTEMPTS_PER_WINDOW = 30
+VERSION_ATTEMPT_WINDOW = timedelta(hours=1)
+
+
+def next_attempt_at(attempted_at: list[datetime]) -> Optional[datetime]:
+    """
+    When the User may make their next attempt, given when they made those in the last window,
+    or None if they may now. The window rolls: each attempt stops counting a window after it.
+    """
+    if len(attempted_at) < VERSION_ATTEMPTS_PER_WINDOW:
+        return None
+    # Concurrent requests can store more than the limit, so skip past the surplus too.
+    surplus = len(attempted_at) - VERSION_ATTEMPTS_PER_WINDOW
+    return sorted(attempted_at)[surplus] + VERSION_ATTEMPT_WINDOW
+
+
+async def _check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) -> None:
+    attempted_at = await posts_service.attempt_times_since(
+        db, user_id=user_id, since=now - VERSION_ATTEMPT_WINDOW
+    )
+    retry_at = next_attempt_at(attempted_at)
+    if retry_at is not None:
+        raise RetryLaterError(
+            f"You've made {VERSION_ATTEMPTS_PER_WINDOW} attempts at a Version in the last hour.",
+            retry_at=retry_at,
+            now=now,
+        )
 
 
 def version_response(attempt: VersionAttempt) -> VersionResponse:
@@ -42,6 +74,7 @@ async def start_post(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Add an Inspiration author with posts before writing a Post.",
         )
+    await _check_attempt_limit(db, user_id=user_id, now=now)
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
 
@@ -87,6 +120,7 @@ async def add_version(
             status_code=status.HTTP_409_CONFLICT,
             detail="This Post has no Version to give Feedback on. Start a new Post.",
         )
+    await _check_attempt_limit(db, user_id=user.id, now=now)
     corpus = await posts_service.corpus_for_post(db, post=post)
     earlier = [EarlierVersion(feedback=v.feedback, final=v.final or "") for v in versions]
     sequence = len(post.attempts) + 1

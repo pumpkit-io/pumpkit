@@ -5,17 +5,19 @@ import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { FEEDBACK_MAX_CHARS } from '@/services/postService';
 import { ErrorBanner } from './ErrorBanner';
 import { LengthCounter } from './LengthCounter';
+import { LimitNotice } from './LimitNotice';
 
 interface FeedbackFormProps {
   subscribed: boolean | null;
   isWriting: boolean;
   error: string | null;
+  notice: string | null;
   /** Resolves true once the new Version is on screen. */
   onSend: (feedback: string) => Promise<boolean>;
 }
 
 /** Feedback on the latest Version. A failed send keeps the text, so sending again is a retry. */
-export function FeedbackForm({ subscribed, isWriting, error, onSend }: FeedbackFormProps) {
+export function FeedbackForm({ subscribed, isWriting, error, notice, onSend }: FeedbackFormProps) {
   const [feedback, setFeedback] = useState('');
   const typed = feedback.trim();
   const canSend = subscribed === true && !!typed && feedback.length <= FEEDBACK_MAX_CHARS;
@@ -49,6 +51,7 @@ export function FeedbackForm({ subscribed, isWriting, error, onSend }: FeedbackF
       </div>
 
       {error && <ErrorBanner message={error} />}
+      {notice && <LimitNotice message={notice} />}
 
       {subscribed === false ? (
         <SubscribePrompt message="Writing Posts needs a Subscription." source="home_feedback" />
