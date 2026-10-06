@@ -80,3 +80,38 @@ async def test_an_answer_that_does_not_fit_the_schema_becomes_an_llm_error():
         await OpenRouterLLM(OpenRouterClient()).structured(
             model="m", messages=[{"role": "user", "content": "x"}], response_model=_Answer
         )
+
+
+@respx.mock
+async def test_a_cache_breakpoint_reaches_openrouter_and_cached_tokens_come_back_in_usage():
+    sent: dict[str, Any] = {}
+    reported = {
+        "prompt_tokens": 1000,
+        "completion_tokens": 20,
+        "total_tokens": 1020,
+        "prompt_tokens_details": {"cached_tokens": 900, "cache_write_tokens": 0},
+        "cost": 0.0004,
+    }
+
+    def _respond(request: httpx.Request) -> httpx.Response:
+        sent.update(json.loads(request.content))
+        completion = _completion(json.dumps({"post": "hello"}))
+        completion["usage"] = reported
+        return httpx.Response(200, json=completion)
+
+    respx.post(COMPLETIONS_URL).mock(side_effect=_respond)
+    block = {
+        "type": "text",
+        "text": "be brief",
+        "cache_control": {"type": "ephemeral", "ttl": "1h"},
+    }
+    messages = [{"role": "system", "content": [block]}, {"role": "user", "content": "hi"}]
+
+    result = await OpenRouterLLM(OpenRouterClient()).structured(
+        model="m", messages=messages, response_model=_Answer
+    )
+
+    assert sent["messages"][0]["content"] == [block]
+    assert result.usage is not None
+    assert result.usage.raw["prompt_tokens_details"]["cached_tokens"] == 900
+    assert result.usage.raw["prompt_tokens_details"]["cache_write_tokens"] == 0
