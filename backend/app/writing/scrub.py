@@ -36,9 +36,8 @@ REPLACEMENTS = {
 
 _TABLE = str.maketrans(REPLACEMENTS)
 
-# An em dash touching a word on either side: "this—that" becomes
-# "this - that". Only the side that touches a word gets a space, so a dash that
-# was already spaced is not given a second one.
+# An em dash gets a space only on a side that touches a word, so a spaced dash
+# isn't spaced twice: "this—that" becomes "this - that".
 _SPACE_BEFORE = re.compile(r"(?<=\w)—")
 _SPACE_AFTER = re.compile(r"—(?=\w)")
 

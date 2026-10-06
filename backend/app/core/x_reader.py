@@ -24,9 +24,8 @@ _TIMEOUT_SECONDS = 30.0
 # X's own timestamp format, e.g. "Wed Jul 22 17:44:05 +0000 2026".
 _CREATED_AT_FORMAT = "%a %b %d %H:%M:%S %z %Y"
 
-# twitterapi.io doesn't document its answer for an unknown handle: an HTTP 404, or an error
-# body whose message says the user doesn't exist, counts as not found. An unknown handle
-# answered with an empty timeline reads as "no original posts" instead.
+# twitterapi.io doesn't document unknown handles, so a 404 or a matching error message is one.
+# An empty timeline reads as "no original posts" instead.
 _NOT_FOUND_MESSAGE = re.compile(r"not found|not exist|no such user", re.IGNORECASE)
 
 
