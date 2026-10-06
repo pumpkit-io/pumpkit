@@ -50,7 +50,7 @@ import {
   inspirationAuthorService,
   type InspirationAuthor,
 } from '@/services/inspirationAuthorService';
-import { postService, type Post } from '@/services/postService';
+import { postService, type Post, type Tell, type Version } from '@/services/postService';
 import { Home } from './Home';
 
 const NOT_SUBSCRIBED = {
@@ -113,7 +113,7 @@ async function writer() {
   return within(await screen.findByRole('region', { name: 'Write a Post' }));
 }
 
-function postWith(final: string, finalCharCount = final.length): Post {
+function postWith(final: string, finalCharCount = final.length, tells: Tell[] = []): Post {
   return {
     id: 'post_01',
     brief: 'ship small things',
@@ -125,6 +125,7 @@ function postWith(final: string, finalCharCount = final.length): Post {
         final,
         finalCharCount,
         finalCharLimit: 3000,
+        tells,
       },
     ],
   };
@@ -227,6 +228,36 @@ describe('Home', () => {
       expect(final.getByText("12 characters over X's 3,000-character limit")).toBeInTheDocument();
     });
 
+    it('lists the tells the slop check found next to the Final', async () => {
+      vi.mocked(postService.start).mockResolvedValue(
+        postWith('the unfair advantage — distribution', undefined, [
+          { name: 'em_dash', description: 'em dash' },
+          { name: 'startup_cliche', description: 'startup-commentary cliche' },
+        ]),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship');
+
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+      const tells = within(final.getByRole('list', { name: 'Machine-written tells' }));
+      expect(tells.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'em dash',
+        'startup-commentary cliche',
+      ]);
+    });
+
+    it('says the slop check found no tells when there are none', async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship');
+
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+      expect(final.getByText('No machine-written tells found.')).toBeInTheDocument();
+      expect(final.queryByRole('list', { name: 'Machine-written tells' })).not.toBeInTheDocument();
+    });
+
     it('copies the Final', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -293,13 +324,14 @@ describe('Home', () => {
   });
 
   describe('Feedback', () => {
-    const versionTwo = {
+    const versionTwo: Version = {
       number: 2,
       feedback: 'make it shorter',
       draft: 'the second draft',
       final: 'the second final',
       finalCharCount: 16,
       finalCharLimit: 3000,
+      tells: [],
     };
 
     /** A Subscribed User looking at the first Version of a Post, with the Feedback box. */

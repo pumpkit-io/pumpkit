@@ -33,6 +33,11 @@ class FeedbackRequest(BaseModel):
         return stripped
 
 
+class TellResponse(BaseModel):
+    name: str
+    description: str
+
+
 class VersionResponse(BaseModel):
     number: int
     # None for the first Version, which comes from the Brief.
@@ -42,6 +47,8 @@ class VersionResponse(BaseModel):
     # Counted by the backend the way the limit counts, which a browser's string length doesn't.
     final_char_count: int
     final_char_limit: int
+    # What the slop check found in the Final, for the User to judge.
+    tells: list[TellResponse]
 
 
 class PostResponse(BaseModel):

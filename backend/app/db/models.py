@@ -334,6 +334,10 @@ class VersionAttempt(Base):
     humanizing_usage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
+    # The slop check's tells in the Final, each {"name", "description"}, in the check's order.
+    slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
     error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

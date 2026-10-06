@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import AuthorPost, InspirationAuthor, Post, VersionAttempt
+from app.writing import slop
 from app.writing.constants import CORPUS_POSTS_PER_AUTHOR
 from app.writing.corpus import Corpus, CorpusPost, group_corpus
 from app.writing.versions import WrittenVersion
@@ -90,6 +91,10 @@ async def record_version(
         humanizing_model=written.humanizing_model,
         writing_usage=written.writing_usage,
         humanizing_usage=written.humanizing_usage,
+        slop_tells=[
+            {"name": name, "description": description}
+            for name, description in slop.find(written.final)
+        ],
         created_at=now,
     )
     db.add(attempt)

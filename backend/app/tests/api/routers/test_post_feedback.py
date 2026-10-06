@@ -55,6 +55,15 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
     assert version["final"] == "final 2"
     assert version["final_char_count"] == 7
     assert version["final_char_limit"] == 3000
+    assert version["tells"] == []
+
+
+async def test_a_feedback_version_reports_the_tells_in_its_final(client, post_id, fake_llm):
+    fake_llm.replies = [{"post": "draft 2"}, {"post": "distribution — that's it"}]
+
+    response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
+
+    assert response.json()["tells"] == [{"name": "em_dash", "description": "em dash"}]
 
 
 def _system(prompt: str) -> dict:
