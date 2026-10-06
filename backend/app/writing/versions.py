@@ -37,7 +37,7 @@ class DraftedPost(BaseModel):
     post: str
 
 
-class RefinedPost(BaseModel):
+class FinalPost(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     post: str
@@ -51,7 +51,7 @@ class RevisedPost(BaseModel):
 
 # The SDK names the structured-output schema after the class; these are v6's schema names.
 DraftedPost.__name__ = "drafted_post"
-RefinedPost.__name__ = "refined_post"
+FinalPost.__name__ = "refined_post"
 RevisedPost.__name__ = "revised_post"
 
 
@@ -152,7 +152,7 @@ async def _humanize(
     refined = await llm.structured(
         model=HUMANIZING_MODEL,
         messages=humanizer_messages(corpus, brief, draft),
-        response_model=RefinedPost,
+        response_model=FinalPost,
         max_tokens=MAX_TOKENS,
     )
     return WrittenVersion(
