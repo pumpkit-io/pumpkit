@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
+import { charCount } from '@/lib/characters';
 import { FEEDBACK_MAX_CHARS } from '@/services/postService';
 import { ErrorBanner } from './ErrorBanner';
 import { LengthCounter } from './LengthCounter';
@@ -20,7 +21,8 @@ interface FeedbackFormProps {
 export function FeedbackForm({ subscribed, isWriting, error, notice, onSend }: FeedbackFormProps) {
   const [feedback, setFeedback] = useState('');
   const typed = feedback.trim();
-  const canSend = subscribed === true && !!typed && feedback.length <= FEEDBACK_MAX_CHARS;
+  const length = charCount(feedback);
+  const canSend = subscribed === true && !!typed && length <= FEEDBACK_MAX_CHARS;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,7 +49,7 @@ export function FeedbackForm({ subscribed, isWriting, error, notice, onSend }: F
           disabled={isWriting}
           className="min-h-[5rem] resize-y leading-relaxed"
         />
-        <LengthCounter length={feedback.length} max={FEEDBACK_MAX_CHARS} />
+        <LengthCounter length={length} max={FEEDBACK_MAX_CHARS} />
       </div>
 
       {error && <ErrorBanner message={error} />}

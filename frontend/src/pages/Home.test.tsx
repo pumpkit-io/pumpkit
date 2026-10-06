@@ -366,6 +366,17 @@ describe('Home', () => {
       expect(area.getByText('5 characters over the 200,000 limit')).toBeInTheDocument();
       expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
     });
+
+    it('counts an emoji in the Brief as one character, as the backend does', async () => {
+      const area = await readyToWrite();
+
+      fireEvent.change(area.getByLabelText('Brief'), {
+        target: { value: 'a'.repeat(199_999) + '😀' },
+      });
+
+      expect(area.getByText('200,000 / 200,000 characters')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
+    });
   });
 
   describe('Feedback', () => {
@@ -521,6 +532,17 @@ describe('Home', () => {
       fireEvent.change(feedback, { target: { value: 'a'.repeat(100_003) } });
       expect(area.getByText('3 characters over the 100,000 limit')).toBeInTheDocument();
       expect(area.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
+    });
+
+    it('counts an emoji in the Feedback as one character, as the backend does', async () => {
+      const area = await onFirstVersion();
+
+      fireEvent.change(area.getByLabelText('Feedback'), {
+        target: { value: '😀'.repeat(95_000) },
+      });
+
+      expect(area.getByText('95,000 / 100,000 characters')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Send Feedback' })).toBeEnabled();
     });
   });
 
