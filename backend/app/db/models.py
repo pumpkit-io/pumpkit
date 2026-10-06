@@ -300,6 +300,8 @@ VersionAttemptStatus = Literal[
     "succeeded",
     "failed",
 ]
+ATTEMPT_SUCCEEDED: VersionAttemptStatus = "succeeded"
+ATTEMPT_FAILED: VersionAttemptStatus = "failed"
 
 
 class VersionAttempt(Base):

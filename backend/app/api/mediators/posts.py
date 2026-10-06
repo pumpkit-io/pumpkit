@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.api.services.posts as posts_service
 from app.core.llm import LLM
 from app.core.retry_later import RetryLaterError
-from app.db.models import User, VersionAttempt
+from app.db.models import ATTEMPT_SUCCEEDED, Post, User, VersionAttempt
 from app.schemas.posts import PostResponse, TellResponse, VersionResponse
 from app.writing.constants import POST_MAX_CHARS
 from app.writing.versions import EarlierVersion, write_first_version, write_next_version
@@ -41,6 +41,27 @@ async def _check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime)
             retry_at=retry_at,
             now=now,
         )
+
+
+async def _keep_failed_attempt(
+    db: AsyncSession,
+    *,
+    post: Post,
+    sequence: int,
+    feedback: Optional[str],
+    error: Exception,
+    now: datetime,
+) -> None:
+    await posts_service.record_failed_attempt(
+        db,
+        post=post,
+        sequence=sequence,
+        feedback=feedback,
+        error=f"{type(error).__name__}: {error}",
+        now=now,
+    )
+    # Commit before the caller re-raises, or the request session rolls the failed attempt back.
+    await db.commit()
 
 
 def version_response(attempt: VersionAttempt) -> VersionResponse:
@@ -84,16 +105,7 @@ async def start_post(
         post = await posts_service.create_post(
             db, user_id=user_id, brief=brief, corpus=corpus, now=now
         )
-        await posts_service.record_failed_attempt(
-            db,
-            post=post,
-            sequence=1,
-            feedback=None,
-            error=f"{type(error).__name__}: {error}",
-            now=now,
-        )
-        # Commit before raising, or the request session rolls the failed attempt back.
-        await db.commit()
+        await _keep_failed_attempt(db, post=post, sequence=1, feedback=None, error=error, now=now)
         raise
 
     post = await posts_service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
@@ -114,7 +126,7 @@ async def add_version(
     post = await posts_service.get_user_post(db, user_id=user.id, post_id=post_id)
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
-    versions = [attempt for attempt in post.attempts if attempt.status == "succeeded"]
+    versions = [attempt for attempt in post.attempts if attempt.status == ATTEMPT_SUCCEEDED]
     if not versions:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -130,16 +142,9 @@ async def add_version(
     try:
         written = await write_next_version(llm, corpus, post.brief, earlier, feedback)
     except Exception as error:
-        await posts_service.record_failed_attempt(
-            db,
-            post=post,
-            sequence=sequence,
-            feedback=feedback,
-            error=f"{type(error).__name__}: {error}",
-            now=now,
+        await _keep_failed_attempt(
+            db, post=post, sequence=sequence, feedback=feedback, error=error, now=now
         )
-        # Commit before raising, or the request session rolls the failed attempt back.
-        await db.commit()
         raise
 
     version = await posts_service.record_version(
