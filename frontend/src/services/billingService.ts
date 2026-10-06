@@ -37,7 +37,7 @@ interface PlanApi {
 
 export const billingService = {
   fetchSubscription: async (): Promise<SubscriptionView> => {
-    const { data } = await apiService.get<SubscriptionMeApi>('/stripe/me');
+    const { data } = await apiService.get<SubscriptionMeApi>('/billing/me');
     return {
       status: data.status,
       stripePriceId: data.stripe_price_id,
@@ -48,7 +48,7 @@ export const billingService = {
   },
 
   fetchPlans: async (): Promise<Plan[]> => {
-    const { data } = await apiService.get<{ data: PlanApi[] }>('/stripe/plans');
+    const { data } = await apiService.get<{ data: PlanApi[] }>('/billing/plans');
     return data.data.map((p) => ({
       key: p.key,
       productName: p.product_name,
@@ -61,14 +61,14 @@ export const billingService = {
 
   /** Starts Checkout for a Plan; the server decides the price, quantity and any Trial. */
   startSubscriptionCheckout: async (planKey: string): Promise<string> => {
-    const { data } = await apiService.post<{ url: string }>('/stripe/checkout', {
+    const { data } = await apiService.post<{ url: string }>('/billing/checkout', {
       plan_key: planKey,
     });
     return data.url;
   },
 
   openBillingPortal: async (): Promise<string> => {
-    const { data } = await apiService.post<{ url: string }>('/stripe/billing-portal');
+    const { data } = await apiService.post<{ url: string }>('/billing/portal');
     return data.url;
   },
 };

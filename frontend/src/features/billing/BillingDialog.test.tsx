@@ -58,10 +58,10 @@ function fakeBackend(subscription: object) {
   const requests: string[] = [];
   const bodies: Record<string, unknown> = {};
   const routes: Record<string, unknown> = {
-    'GET /stripe/me': subscription,
-    'GET /stripe/plans': PLANS,
-    'POST /stripe/checkout': { url: 'https://checkout.stripe.test/s', session_id: 'cs_1' },
-    'POST /stripe/billing-portal': { url: 'https://portal.stripe.test/x' },
+    'GET /billing/me': subscription,
+    'GET /billing/plans': PLANS,
+    'POST /billing/checkout': { url: 'https://checkout.stripe.test/s', session_id: 'cs_1' },
+    'POST /billing/portal': { url: 'https://portal.stripe.test/x' },
   };
   api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
     const key = `${(config.method ?? 'get').toUpperCase()} ${config.url}`;
@@ -108,7 +108,7 @@ describe('BillingDialog', () => {
     expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
       'Subscription',
     ]);
-    expect(backend.requests.sort()).toEqual(['GET /stripe/me', 'GET /stripe/plans']);
+    expect(backend.requests.sort()).toEqual(['GET /billing/me', 'GET /billing/plans']);
   });
 
   it('starts Checkout with only the chosen Plan key when Subscribe is clicked', async () => {
@@ -116,7 +116,7 @@ describe('BillingDialog', () => {
     renderDialog();
     fireEvent.click(await screen.findByRole('button', { name: /subscribe to pro yearly/i }));
     await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://checkout.stripe.test/s'));
-    expect(backend.bodies['POST /stripe/checkout']).toEqual({ plan_key: 'pumpkit_pro_yearly' });
+    expect(backend.bodies['POST /billing/checkout']).toEqual({ plan_key: 'pumpkit_pro_yearly' });
   });
 
   it('shows Manage for an active Subscription', async () => {
