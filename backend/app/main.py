@@ -8,6 +8,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api.routers import (
     billing,
     google_auth,
+    inspiration_authors,
     magic_link_auth,
     sessions,
     support,
@@ -46,6 +47,7 @@ app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
+app.include_router(inspiration_authors.router, prefix="/api/v1")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]

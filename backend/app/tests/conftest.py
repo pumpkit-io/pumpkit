@@ -84,9 +84,10 @@ from app.core.google_sign_in import (  # noqa: E402
     get_google_sign_in,
 )
 from app.core.rate_limit import limiter  # noqa: E402
+from app.core.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
-from app.db.models import MagicLink, User  # noqa: E402
+from app.db.models import MagicLink, Subscription, User  # noqa: E402
 from app.db.session import get_async_db  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -154,6 +155,18 @@ def fake_billing():
 
 
 @pytest.fixture(autouse=True)
+def fake_x_reader():
+    """
+    Every test reads X through a fake instead of twitterapi.io. Request it by name to
+    set `fake_x_reader.posts[handle]`, read `fake_x_reader.calls`, or set `fail` or `not_configured`.
+    """
+    fake = FakeXReader()
+    app.dependency_overrides[get_x_reader] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_x_reader, None)
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limits():
     """The slowapi limiter is a process-wide in-memory store; start each test with empty counters."""
     limiter.reset()
@@ -205,6 +218,21 @@ async def user(db) -> User:
     # End refresh()'s read transaction: its WAL snapshot would hide request-session commits.
     await db.commit()
     return u
+
+
+@pytest_asyncio.fixture
+async def subscribed(db, user) -> Subscription:
+    """Make `user` Subscribed by giving them an active Subscription in Pumpkit's copy."""
+    subscription = Subscription(
+        user_id=user.id,
+        stripe_subscription_id="sub_subscribed",
+        stripe_customer_id="cus_subscribed",
+        status="active",
+        stripe_created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+    )
+    db.add(subscription)
+    await db.commit()
+    return subscription
 
 
 @pytest_asyncio.fixture
