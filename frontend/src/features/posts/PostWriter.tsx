@@ -6,10 +6,10 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { charCount } from '@/lib/characters';
 import { BRIEF_MAX_CHARS } from '@/services/postService';
-import { ErrorBanner } from './ErrorBanner';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { FeedbackForm } from './FeedbackForm';
 import { LengthCounter } from './LengthCounter';
-import { LimitNotice } from './LimitNotice';
+import { LimitNotice } from '@/components/LimitNotice';
 import { NumberedVersion } from './NumberedVersion';
 import { usePostWriter } from './usePostWriter';
 

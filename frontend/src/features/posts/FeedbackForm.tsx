@@ -4,9 +4,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { charCount } from '@/lib/characters';
 import { FEEDBACK_MAX_CHARS } from '@/services/postService';
-import { ErrorBanner } from './ErrorBanner';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { LengthCounter } from './LengthCounter';
-import { LimitNotice } from './LimitNotice';
+import { LimitNotice } from '@/components/LimitNotice';
 
 interface FeedbackFormProps {
   subscribed: boolean | null;

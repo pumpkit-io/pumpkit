@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { RefreshCw, X } from 'lucide-react';
+import { ErrorBanner } from '@/components/ErrorBanner';
+import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
@@ -7,17 +9,6 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { shortTimeAgo, timeAgo } from '@/lib/relativeTime';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
-
-function ErrorBanner({ message }: { message: string }) {
-  return (
-    <div
-      role="alert"
-      className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-red-700 dark:text-red-300"
-    >
-      {message}
-    </div>
-  );
-}
 
 function fetchedLabel(author: InspirationAuthor): string {
   const posts = `${author.postCount} ${author.postCount === 1 ? 'post' : 'posts'}`;
@@ -169,14 +160,7 @@ export function InspirationAuthorsPanel() {
       )}
       {subscribed === true && <AddAuthorForm isAdding={isAdding} onAdd={add} />}
       {error && <ErrorBanner message={error} />}
-      {notice && (
-        <p
-          role="status"
-          className="rounded-md border border-border bg-muted px-3 py-2 font-sans text-xs text-foreground"
-        >
-          {notice}
-        </p>
-      )}
+      {notice && <LimitNotice message={notice} />}
 
       {loadFailed ? (
         <ErrorBanner message="Couldn't load your Inspiration authors. Reload the page to try again." />
