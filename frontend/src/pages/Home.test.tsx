@@ -33,6 +33,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
     start: vi.fn(),
+    addVersion: vi.fn(),
   },
 }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
@@ -153,6 +154,7 @@ describe('Home', () => {
     vi.mocked(inspirationAuthorService.remove).mockReset();
     vi.mocked(inspirationAuthorService.refresh).mockReset();
     vi.mocked(postService.start).mockReset();
+    vi.mocked(postService.addVersion).mockReset();
     vi.mocked(track).mockClear();
   });
 
@@ -287,6 +289,129 @@ describe('Home', () => {
       fireEvent.change(brief, { target: { value: 'a'.repeat(200_005) } });
       expect(area.getByText('5 characters over the 200,000 limit')).toBeInTheDocument();
       expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+    });
+  });
+
+  describe('Feedback', () => {
+    const versionTwo = {
+      number: 2,
+      feedback: 'make it shorter',
+      draft: 'the second draft',
+      final: 'the second final',
+      finalCharCount: 16,
+      finalCharLimit: 3000,
+    };
+
+    /** A Subscribed User looking at the first Version of a Post, with the Feedback box. */
+    async function onFirstVersion() {
+      vi.mocked(postService.start).mockResolvedValue(postWith('the first final'));
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship small things');
+      await area.findByText('the first final');
+      return area;
+    }
+
+    function sendFeedback(area: Awaited<ReturnType<typeof writer>>, feedback: string) {
+      fireEvent.change(area.getByLabelText('Feedback'), { target: { value: feedback } });
+      fireEvent.click(area.getByRole('button', { name: 'Send Feedback' }));
+    }
+
+    it('adds a Version below the first, disabling the box while it waits, then clears it', async () => {
+      let answer: (version: typeof versionTwo) => void = () => {};
+      vi.mocked(postService.addVersion).mockReturnValue(
+        new Promise((resolve) => (answer = resolve)),
+      );
+      const area = await onFirstVersion();
+
+      sendFeedback(area, '  make it shorter ');
+
+      expect(area.getByLabelText('Feedback')).toBeDisabled();
+      expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
+      expect(area.getByRole('status')).toHaveTextContent(/writing the next version/i);
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter');
+      expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'feedback' });
+
+      answer(versionTwo);
+
+      const latest = within(await area.findByRole('region', { name: 'Version 2' }));
+      expect(latest.getByText('the second final')).toBeInTheDocument();
+      expect(latest.getByText('the second draft')).toBeInTheDocument();
+      expect(latest.getByText('make it shorter')).toBeInTheDocument();
+      expect(area.getByLabelText('Feedback')).toHaveValue('');
+      expect(area.getByLabelText('Feedback')).toBeEnabled();
+    });
+
+    it('keeps earlier Versions above the latest, read-only, each with its Feedback and copy', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      vi.mocked(postService.addVersion)
+        .mockResolvedValueOnce(versionTwo)
+        .mockResolvedValueOnce({
+          ...versionTwo,
+          number: 3,
+          feedback: 'warmer',
+          final: 'the third final',
+        });
+      const area = await onFirstVersion();
+      sendFeedback(area, 'make it shorter');
+      await area.findByRole('region', { name: 'Version 2' });
+      sendFeedback(area, 'warmer');
+      await area.findByRole('region', { name: 'Version 3' });
+
+      const [first, second, third] = area.getAllByRole('region', { name: /^Version \d$/ });
+      expect(first).toHaveAccessibleName('Version 1');
+      expect(second).toHaveAccessibleName('Version 2');
+      expect(third).toHaveAccessibleName('Version 3');
+      expect(within(second!).getByText('make it shorter')).toBeInTheDocument();
+      expect(within(second!).getByText('the second final')).toBeInTheDocument();
+      expect(within(second!).queryByRole('textbox')).not.toBeInTheDocument();
+      expect(within(first!).queryByRole('textbox')).not.toBeInTheDocument();
+      expect(area.getAllByLabelText('Feedback')).toHaveLength(1);
+      expect(
+        third!.compareDocumentPosition(area.getByLabelText('Feedback')) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      fireEvent.click(within(first!).getByRole('button', { name: 'Copy Final' }));
+      expect(writeText).toHaveBeenCalledWith('the first final');
+    });
+
+    it('shows a failure and keeps the Feedback so it can be sent again', async () => {
+      vi.mocked(postService.addVersion)
+        .mockRejectedValueOnce(apiError(502, 'Writing the Post failed. Please try again.'))
+        .mockResolvedValueOnce(versionTwo);
+      const area = await onFirstVersion();
+
+      sendFeedback(area, 'make it shorter');
+
+      expect(await area.findByRole('alert')).toHaveTextContent(
+        'Writing the Post failed. Please try again.',
+      );
+      expect(area.getByLabelText('Feedback')).toHaveValue('make it shorter');
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'feedback' });
+      expect(area.queryByRole('region', { name: 'Version 2' })).not.toBeInTheDocument();
+
+      fireEvent.click(area.getByRole('button', { name: 'Send Feedback' }));
+
+      expect(await area.findByRole('region', { name: 'Version 2' })).toBeInTheDocument();
+      expect(area.queryByRole('alert')).not.toBeInTheDocument();
+      expect(area.getByLabelText('Feedback')).toHaveValue('');
+    });
+
+    it('shows a length counter only near the Feedback limit, and refuses Feedback over it', async () => {
+      const area = await onFirstVersion();
+      const feedback = area.getByLabelText('Feedback');
+
+      fireEvent.change(feedback, { target: { value: 'a'.repeat(1000) } });
+      expect(area.queryByText(/100,000/)).not.toBeInTheDocument();
+
+      fireEvent.change(feedback, { target: { value: 'a'.repeat(95_000) } });
+      expect(area.getByText('95,000 / 100,000 characters')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Send Feedback' })).toBeEnabled();
+
+      fireEvent.change(feedback, { target: { value: 'a'.repeat(100_003) } });
+      expect(area.getByText('3 characters over the 100,000 limit')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
     });
   });
 
