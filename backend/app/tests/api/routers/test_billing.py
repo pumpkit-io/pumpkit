@@ -1,9 +1,13 @@
+from datetime import datetime, timezone
+
 import pytest
 
-from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan
+import app.api.services.subscriptions as subscriptions_service
+from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan, SubscriptionState
 from app.core.config import settings
-from app.db.models import Subscription
+from app.db.models import SubscriptionStatus
 
+CUSTOMER = "cus_alice"
 CHECKOUT = "/api/v1/billing/checkout"
 CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly"}
 PORTAL = "/api/v1/billing/portal"
@@ -82,23 +86,124 @@ async def test_checkout_for_a_user_who_never_had_a_subscription_includes_the_tri
     assert [c.trial_period_days for c in fake_billing.checkouts] == [14]
 
 
-async def test_checkout_for_a_user_who_has_had_a_subscription_includes_no_trial(
+async def _with_customer(db, user, customer_id: str = CUSTOMER) -> None:
+    user.stripe_customer_id = customer_id
+    await db.commit()
+
+
+def _subscription(sub_id: str, status: SubscriptionStatus) -> SubscriptionState:
+    return SubscriptionState(
+        id=sub_id,
+        status=status,
+        price_id="price_monthly",
+        plan_key="pumpkit_pro_monthly",
+        current_period_end=datetime(2026, 11, 6, tzinfo=timezone.utc),
+        cancel_at_period_end=False,
+    )
+
+
+@pytest.mark.parametrize("running_status", ["trialing", "active", "past_due", "unpaid", "paused"])
+async def test_checkout_for_a_user_with_a_running_subscription_returns_409(
+    client, db, fake_billing, user, running_status
+):
+    """No webhook has reported it: Checkout asks Stripe itself."""
+    await _with_customer(db, user)
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_running", running_status))
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "You already have a Subscription. Manage it in the billing portal."
+    )
+    assert fake_billing.checkouts == []
+    assert fake_billing.cancelled_subscriptions == []
+
+
+async def test_a_running_subscription_blocks_checkout_even_before_its_customer_is_saved(
+    client, fake_billing
+):
+    """The customer created by this Checkout already has a Subscription in Stripe."""
+    fake_billing.set_subscription("cus_fake_1", _subscription("sub_running", "active"))
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 409
+    assert fake_billing.checkouts == []
+
+
+async def test_checkout_is_allowed_after_the_subscription_has_ended_without_a_trial(
     client, db, fake_billing, user
 ):
-    db.add(
-        Subscription(
-            user_id=user.id,
-            stripe_subscription_id="sub_old",
-            stripe_customer_id="cus_old",
-            status="canceled",
-        )
-    )
-    await db.commit()
+    """The Ended Subscription is known only to Stripe: it still uses up the Trial."""
+    await _with_customer(db, user)
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_old", "canceled"))
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_older", "incomplete_expired"))
 
     response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
 
     assert response.status_code == 200
+    assert fake_billing.checkouts == [
+        CheckoutCall(
+            customer_id=CUSTOMER,
+            price_id="price_monthly",
+            quantity=1,
+            user_id=user.id,
+            trial_period_days=None,
+        )
+    ]
+    assert fake_billing.cancelled_subscriptions == []
+
+
+async def test_checkout_cancels_the_users_incomplete_subscriptions_first(
+    client, db, fake_billing, user
+):
+    """Only the newest attempt can succeed, so a User can't end up paying twice."""
+    await _with_customer(db, user)
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_half_a", "incomplete"))
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_half_b", "incomplete"))
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_old", "canceled"))
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert sorted(fake_billing.cancelled_subscriptions) == ["sub_half_a", "sub_half_b"]
+    assert {s.status for s in await fake_billing.list_subscriptions(customer_id=CUSTOMER)} == {
+        "canceled"
+    }
     assert [c.trial_period_days for c in fake_billing.checkouts] == [None]
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_code"), [("active", 409), ("canceled", 200)], ids=["refused", "allowed"]
+)
+async def test_checkout_keeps_what_it_synced_from_stripe(
+    client, db, fake_billing, user, status, expected_code
+):
+    await _with_customer(db, user)
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_1", status))
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == expected_code
+    synced = await subscriptions_service.get_subscription_by_stripe_id(db, "sub_1")
+    assert synced is not None
+    assert (synced.user_id, synced.status) == (user.id, status)
+
+
+@pytest.mark.parametrize("failing", ["list_subscriptions", "cancel_subscription"])
+async def test_a_gateway_failure_syncing_or_cancelling_returns_502_before_any_checkout(
+    client, db, fake_billing, user, failing, assert_reported_502
+):
+    await _with_customer(db, user)
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_half", "incomplete"))
+    fake_billing.fail_on = {failing}
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert_reported_502(response)
+    assert fake_billing.expired_checkouts == []
+    assert fake_billing.checkouts == []
 
 
 async def test_a_new_checkout_expires_the_users_still_open_checkout(client, fake_billing):

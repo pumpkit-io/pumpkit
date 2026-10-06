@@ -20,7 +20,7 @@ import hashlib
 import hmac
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar, cast, get_args
@@ -138,6 +138,10 @@ class BillingGateway(Protocol):
 
     async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
         """Every Subscription the customer has, Ended ones included, as the provider holds it now."""
+        ...
+
+    async def cancel_subscription(self, *, subscription_id: str) -> None:
+        """Cancel a Subscription now, so it Ends and can never run."""
         ...
 
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
@@ -318,6 +322,12 @@ class StripeBillingGateway:
             for subscription in await self._call("list Subscriptions", list_all)
         ]
 
+    async def cancel_subscription(self, *, subscription_id: str) -> None:
+        await self._call(
+            "cancel a Subscription",
+            lambda: self._client.v1.subscriptions.cancel(subscription_id),
+        )
+
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         # Pure HMAC work, no network: no need to leave the event loop.
         try:
@@ -353,8 +363,9 @@ class FakeBillingGateway:
     configured results, and raises `BillingProviderError` from any method named
     in `fail_on`. Checkouts it creates stay open until `expire_open_checkouts`
     expires them. It holds each customer's Subscriptions: set one with
-    `set_subscription` and `list_subscriptions` returns it. Sign events with `signed_event`; its `verify_webhook` accepts
-    only payloads signed with the same secret.
+    `set_subscription` and `list_subscriptions` returns it; `cancel_subscription`
+    turns it `canceled`. Sign events with `signed_event`; its `verify_webhook`
+    accepts only payloads signed with the same secret.
     """
 
     webhook_secret: str = "whsec_fake"
@@ -368,6 +379,7 @@ class FakeBillingGateway:
     portals: list[str] = field(default_factory=list)
     plan_lookups: list[list[str]] = field(default_factory=list)
     expired_checkouts: list[str] = field(default_factory=list)
+    cancelled_subscriptions: list[str] = field(default_factory=list)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
     _subscriptions: dict[str, dict[str, SubscriptionState]] = field(
@@ -439,6 +451,13 @@ class FakeBillingGateway:
     async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
         self._maybe_fail("list_subscriptions")
         return list(self._subscriptions.get(customer_id, {}).values())
+
+    async def cancel_subscription(self, *, subscription_id: str) -> None:
+        self._maybe_fail("cancel_subscription")
+        self.cancelled_subscriptions.append(subscription_id)
+        for subscriptions in self._subscriptions.values():
+            if subscription := subscriptions.get(subscription_id):
+                subscriptions[subscription_id] = replace(subscription, status="canceled")
 
     def signed_event(
         self, *, event_id: str, event_type: str, data_object: dict[str, Any]
