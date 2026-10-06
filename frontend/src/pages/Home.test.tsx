@@ -294,6 +294,26 @@ describe('Home', () => {
       expect(area.queryByRole('alert')).not.toBeInTheDocument();
     });
 
+    it('says when the User can write again once they reach the hourly limit', async () => {
+      vi.mocked(postService.start).mockRejectedValue(
+        apiError(429, "You've made 30 attempts at a Version in the last hour.", {
+          retry_at: new Date(2026, 9, 6, 15, 42).toISOString(),
+        }),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      expect(
+        await area.findByText(
+          "You've made 30 attempts at a Version in the last hour. You can write again at 3:42 PM.",
+        ),
+      ).toHaveAttribute('role', 'status');
+      expect(area.queryByRole('alert')).not.toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+      expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
+    });
+
     it('clears the screen on "New Post"', async () => {
       vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
       const area = await readyToWrite();
@@ -428,6 +448,25 @@ describe('Home', () => {
       expect(await area.findByRole('region', { name: 'Version 2' })).toBeInTheDocument();
       expect(area.queryByRole('alert')).not.toBeInTheDocument();
       expect(area.getByLabelText('Feedback')).toHaveValue('');
+    });
+
+    it('says when the User can send Feedback again once they reach the hourly limit', async () => {
+      vi.mocked(postService.addVersion).mockRejectedValue(
+        apiError(429, "You've made 30 attempts at a Version in the last hour.", {
+          retry_at: new Date(2026, 9, 6, 15, 42).toISOString(),
+        }),
+      );
+      const area = await onFirstVersion();
+
+      sendFeedback(area, 'make it shorter');
+
+      expect(
+        await area.findByText(
+          "You've made 30 attempts at a Version in the last hour. You can write again at 3:42 PM.",
+        ),
+      ).toHaveAttribute('role', 'status');
+      expect(area.queryByRole('alert')).not.toBeInTheDocument();
+      expect(area.getByLabelText('Feedback')).toHaveValue('make it shorter');
     });
 
     it('shows a length counter only near the Feedback limit, and refuses Feedback over it', async () => {

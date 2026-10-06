@@ -8,13 +8,14 @@ import { BRIEF_MAX_CHARS } from '@/services/postService';
 import { ErrorBanner } from './ErrorBanner';
 import { FeedbackForm } from './FeedbackForm';
 import { LengthCounter } from './LengthCounter';
+import { LimitNotice } from './LimitNotice';
 import { NumberedVersion } from './NumberedVersion';
 import { usePostWriter } from './usePostWriter';
 
 export function PostWriter() {
   const { subscribed } = useSubscribed();
   const { authors } = useInspirationAuthorsContext();
-  const { post, isWriting, error, start, addFeedback, clear } = usePostWriter();
+  const { post, isWriting, error, notice, start, addFeedback, clear } = usePostWriter();
   const [brief, setBrief] = useState('');
 
   const noCorpus = authors !== null && !authors.some((a) => a.postCount > 0);
@@ -70,6 +71,7 @@ export function PostWriter() {
             subscribed={subscribed}
             isWriting={isWriting}
             error={error}
+            notice={notice}
             onSend={addFeedback}
           />
         </div>
@@ -94,6 +96,7 @@ export function PostWriter() {
           {error && (
             <ErrorBanner message={error} onRetry={typed ? () => void start(typed) : undefined} />
           )}
+          {notice && <LimitNotice message={notice} />}
 
           {subscribed === false ? (
             <SubscribePrompt
