@@ -1,0 +1,96 @@
+{
+  "status": "success",
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "pin_tweet": null,
+    "tweets": [
+      {
+        "type": "tweet",
+        "id": "1843000000000000006",
+        "url": "https://x.com/levelsio/status/1843000000000000006",
+        "text": "  shipped a new feature today, took 20 minutes  ",
+        "createdAt": "Sun Oct 05 18:02:11 +0000 2026",
+        "isReply": false,
+        "inReplyToId": null,
+        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "quoted_tweet": null,
+        "retweeted_tweet": null
+      },
+      {
+        "type": "tweet",
+        "id": "1843000000000000005",
+        "url": "https://x.com/levelsio/status/1843000000000000005",
+        "text": "this is the way",
+        "createdAt": "Sun Oct 05 12:40:00 +0000 2026",
+        "isReply": false,
+        "inReplyToId": null,
+        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "quoted_tweet": { "id": "1842000000000000001", "text": "quoted post" },
+        "retweeted_tweet": null
+      },
+      {
+        "type": "tweet",
+        "id": "1843000000000000004",
+        "url": "https://x.com/levelsio/status/1843000000000000004",
+        "text": "@someone yes exactly",
+        "createdAt": "Sun Oct 05 11:00:00 +0000 2026",
+        "isReply": true,
+        "inReplyToId": "1842999999999999999",
+        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "quoted_tweet": null,
+        "retweeted_tweet": null
+      },
+      {
+        "type": "tweet",
+        "id": "1843000000000000003",
+        "url": "https://x.com/levelsio/status/1843000000000000003",
+        "text": "RT @other: something they said",
+        "createdAt": "Sun Oct 05 10:00:00 +0000 2026",
+        "isReply": false,
+        "inReplyToId": null,
+        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "quoted_tweet": null,
+        "retweeted_tweet": { "id": "1842000000000000002", "text": "something they said" }
+      },
+      {
+        "type": "tweet",
+        "id": "1843000000000000002",
+        "url": "https://x.com/levelsio/status/1843000000000000002",
+        "text": "   ",
+        "createdAt": "Sun Oct 05 09:00:00 +0000 2026",
+        "isReply": false,
+        "inReplyToId": null,
+        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "quoted_tweet": null,
+        "retweeted_tweet": null
+      },
+      {
+        "type": "tweet",
+        "id": "1843000000000000001",
+        "url": "https://x.com/levelsio/status/1843000000000000001",
+        "text": "a post whose date can't be read",
+        "createdAt": "2026-10-05T08:00:00Z",
+        "isReply": false,
+        "inReplyToId": null,
+        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "quoted_tweet": null,
+        "retweeted_tweet": null
+      },
+      {
+        "type": "tweet",
+        "id": 1843000000000000000,
+        "url": "https://x.com/levelsio/status/1843000000000000000",
+        "text": "an id sent as a number",
+        "createdAt": "Sat Oct 04 23:59:59 +0000 2026",
+        "isReply": false,
+        "inReplyToId": null,
+        "author": { "userName": "LevelsIO", "name": "@levelsio" },
+        "quoted_tweet": null,
+        "retweeted_tweet": null
+      }
+    ]
+  },
+  "has_next_page": true,
+  "next_cursor": "DAABCgABGT"
+}

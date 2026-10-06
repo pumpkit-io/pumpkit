@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # Optional: when unset, app.core.openrouter raises LLMNotConfiguredError on use, not at boot.
     OPENROUTER_API_KEY: Optional[str] = None
 
+    # Optional: when unset, app.core.x_reader raises XReaderNotConfiguredError on use, not at boot.
+    TWITTERAPI_IO_API_KEY: Optional[str] = None
+
     # Optional: PostHog is disabled unless POSTHOG_ENABLED=true and a project key is set.
     POSTHOG_ENABLED: bool = False
     POSTHOG_PROJECT_API_KEY: Optional[str] = None

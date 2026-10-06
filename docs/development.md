@@ -8,13 +8,13 @@ backend/app/
   api/mediators/   orchestration across services (webhook dispatch, Google and Magic link sign-in)
   api/services/    one resource or capability each: DB access, Subscriptions, users, tokens
   api/configs/     third-party provider configuration (Google)
-  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer)
+  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader)
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
   tests/           pytest suite
 frontend/src/
-  features/        self-contained feature modules (account, billing, sidebar, theme, topbar)
+  features/        self-contained feature modules (account, billing, inspirationAuthors, sidebar, theme, topbar)
   components/      shared UI: auth, blocks, brand, ui primitives
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
@@ -37,6 +37,8 @@ Pumpkit bills only by Subscription (see `docs/adr/0003-subscription-only-billing
 Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` and `checkout.session.completed`. Webhooks are nudges (ADR 0004): each of these events only names the customer that changed, and Pumpkit then lists that customer's Subscriptions from Stripe and syncs its copy, ignoring the event's payload.
 
 Every Stripe call goes through the `BillingGateway` port (`core/billing_gateway.py`): only its Stripe adapter uses the SDK, it returns plain data, and any provider failure is a `BillingProviderError`, which the global handler returns as a 502 with an `error_id`. Routers inject it with `Depends(get_billing_gateway)`; tests get `FakeBillingGateway` through the autouse `fake_billing` fixture, which holds each customer's Subscriptions (`fake_billing.set_subscription(...)`) and signs webhook events (`fake_billing.signed_event(...)`) to post to the endpoint.
+
+Gate an endpoint on being Subscribed with `current_user: User = Depends(require_subscribed_user)` (`app/api/dependencies.py`): it returns a 403 to a User who isn't, reading only Pumpkit's copy. Tests make the `user` fixture Subscribed by requesting the `subscribed` fixture. On the frontend, `useSubscribed()` (inside `SubscribedProvider`) tells a screen whether to show its tools or a `SubscribePrompt` that opens the Billing dialog; treat a 403 from a write as a cue to call its `refresh()`.
 
 `mediators/billing.handle_webhook` owns the webhook transaction: it records the event for deduplication, locks the customer's User row, syncs the customer's Subscriptions from Stripe (`subscriptions.sync_customer`) and commits once. The lock is held across the Stripe call, so webhooks for one customer run one after another. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it; a webhook for an unknown customer is logged and skipped.
 
