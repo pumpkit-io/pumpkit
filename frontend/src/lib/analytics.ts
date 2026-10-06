@@ -22,6 +22,9 @@ export const EVENTS = {
   landing_hero_screenshot_viewed: {
     description: 'Landing: the hero screenshot first scrolled into view.',
   },
+  landing_authors_section_viewed: {
+    description: 'Landing: the authors section first scrolled into view.',
+  },
   landing_pricing_section_viewed: {
     description: 'Landing: the pricing section scrolled into view.',
   },
