@@ -18,6 +18,10 @@ REVISING_MODEL = "openai/gpt-5.6-luna"
 # Sent as max_tokens on every call, as in pumpkit-v6.
 MAX_TOKENS = 20000
 
+# How long the provider keeps each system prompt cached. A one-hour write costs twice the
+# normal rate and a hit about a tenth, so it pays off from the third call within the hour.
+CACHE_TTL = "1h"
+
 # Guards against abuse, not product limits.
 BRIEF_MAX_CHARS = 200_000
 FEEDBACK_MAX_CHARS = 100_000

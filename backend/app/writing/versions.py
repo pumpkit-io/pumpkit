@@ -14,7 +14,13 @@ from pydantic import BaseModel, ConfigDict
 
 from app.core.llm import LLM
 from app.schemas.openrouter import StructuredResult
-from app.writing.constants import HUMANIZING_MODEL, MAX_TOKENS, REVISING_MODEL, WRITING_MODEL
+from app.writing.constants import (
+    CACHE_TTL,
+    HUMANIZING_MODEL,
+    MAX_TOKENS,
+    REVISING_MODEL,
+    WRITING_MODEL,
+)
 from app.writing.corpus import Corpus
 from app.writing.prompts.brief import brief_message
 from app.writing.prompts.corpus import context_message
@@ -67,8 +73,12 @@ class WrittenVersion:
 
 
 def _system(prompt: str) -> dict:
-    # A list of one text block, as v6 sends it, so a cache breakpoint can be added to it.
-    return {"role": "system", "content": [{"type": "text", "text": prompt}]}
+    # The only cache breakpoint, as in v6: the system prompt is what every call of every Post shares.
+    cache_control = {"type": "ephemeral", "ttl": CACHE_TTL}
+    return {
+        "role": "system",
+        "content": [{"type": "text", "text": prompt, "cache_control": cache_control}],
+    }
 
 
 def _user(content: str) -> dict:

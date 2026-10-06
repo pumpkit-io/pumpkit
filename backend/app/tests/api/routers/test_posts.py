@@ -78,7 +78,8 @@ async def test_a_version_reports_the_tells_the_slop_check_found_in_its_final(
 
 
 def _system(prompt: str) -> dict:
-    return {"role": "system", "content": [{"type": "text", "text": prompt}]}
+    block = {"type": "text", "text": prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}
+    return {"role": "system", "content": [block]}
 
 
 def _user(content: str) -> dict:
