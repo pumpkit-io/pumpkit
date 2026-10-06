@@ -205,8 +205,8 @@ class MagicLink(Base):
 
 class Subscription(Base):
     """
-    Local replica of Stripe subscription state for fast access to important fields
-    (don't hit Stripe API for every check). Updated via Stripe webhooks.
+    Pumpkit's copy of a Subscription as Stripe holds it, so reads don't call
+    Stripe. Synced from Stripe whenever a webhook nudges (ADR 0004).
     """
 
     __tablename__ = "subscriptions"
@@ -219,6 +219,8 @@ class Subscription(Base):
     stripe_subscription_id: Mapped[str] = mapped_column(String, unique=True)
     stripe_customer_id: Mapped[str] = mapped_column(String, index=True)
     stripe_price_id: Mapped[Optional[str]] = mapped_column(String, index=True, nullable=True)
+    # The price's lookup key; None when the price has none.
+    plan_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     status: Mapped[SubscriptionStatus] = mapped_column(
         PgEnum(*get_args(SubscriptionStatus), name="subscription_status_enum"), index=True
     )

@@ -1,15 +1,15 @@
-"""Persistence for Subscriptions, the local replica of what Stripe knows."""
+"""Pumpkit's copy of each Subscription, synced from the billing provider (ADR 0004)."""
 
-from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Subscription, SubscriptionStatus, User
+from app.core.billing_gateway import BillingGateway
+from app.db.models import Subscription, SubscriptionStatus
 
-# Stripe subscription statuses that represent a terminal lifecycle state
-_TERMINAL_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
+# An Ended Subscription can never run again.
+_ENDED_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
 
 
 async def has_had_subscription(db: AsyncSession, *, user_id: str) -> bool:
@@ -52,46 +52,29 @@ async def get_subscription_by_stripe_id(
     return result.scalar_one_or_none()
 
 
-async def get_user_by_stripe_customer_id(
-    db: AsyncSession,
-    stripe_customer_id: str,
-) -> Optional[User]:
-    """
-    Look up a user by their Stripe customer id.
-    """
-    query = select(User).where(User.stripe_customer_id == stripe_customer_id)
-    result = await db.execute(query)
-    return result.scalar_one_or_none()
-
-
-async def upsert_subscription(
-    db: AsyncSession,
-    user_id: str,
-    stripe_subscription_id: str,
-    stripe_customer_id: str,
-    stripe_price_id: Optional[str],
-    status: SubscriptionStatus,
-    current_period_end: Optional[datetime],
-    cancel_at_period_end: bool,
+async def sync_customer(
+    db: AsyncSession, gateway: BillingGateway, *, user_id: str, customer_id: str
 ) -> None:
     """
-    Insert or update the local Subscription replica keyed by the Stripe subscription ID.
-    Does not commit: the caller owns the transaction (the webhook mediator).
+    Make Pumpkit's copy of the customer's Subscriptions match what the billing
+    provider holds now (ADR 0004), upserting each by its provider ID. An Ended
+    Subscription is never overwritten: that guards against bugs, it doesn't
+    order events. A provider failure raises `BillingProviderError`. Flushes,
+    never commits: the caller owns the transaction.
     """
-    subscription = await get_subscription_by_stripe_id(
-        db=db, stripe_subscription_id=stripe_subscription_id
-    )
-    if subscription is None:
-        subscription = Subscription(
-            user_id=user_id,
-            stripe_subscription_id=stripe_subscription_id,
-        )
-        db.add(subscription)
-    subscription.stripe_customer_id = stripe_customer_id
-    subscription.stripe_price_id = stripe_price_id
-    subscription.status = status
-    subscription.current_period_end = current_period_end
-    subscription.cancel_at_period_end = cancel_at_period_end
+    for state in await gateway.list_subscriptions(customer_id=customer_id):
+        subscription = await get_subscription_by_stripe_id(db, state.id)
+        if subscription is None:
+            subscription = Subscription(user_id=user_id, stripe_subscription_id=state.id)
+            db.add(subscription)
+        elif subscription.status in _ENDED_STATUSES:
+            continue
+        subscription.stripe_customer_id = customer_id
+        subscription.stripe_price_id = state.price_id
+        subscription.plan_key = state.plan_key
+        subscription.status = state.status
+        subscription.current_period_end = state.current_period_end
+        subscription.cancel_at_period_end = state.cancel_at_period_end
     await db.flush()
 
 
@@ -101,6 +84,6 @@ def is_subscription_active(subscription: Optional[Subscription]) -> bool:
     """
     if subscription is None:
         return False
-    if subscription.status in _TERMINAL_STATUSES:
+    if subscription.status in _ENDED_STATUSES:
         return False
     return subscription.status in ("active", "trialing")

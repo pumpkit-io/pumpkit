@@ -27,6 +27,16 @@ async def get_user_by_id(
     return result.scalar_one_or_none()
 
 
+async def get_user_by_stripe_customer_id(
+    db: AsyncSession,
+    stripe_customer_id: str,
+) -> Optional[User]:
+    """The User whose Stripe customer this is, if any."""
+    query = select(User).where(User.stripe_customer_id == stripe_customer_id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
 @dataclass(frozen=True)
 class NameHints:
     """Names a Sign-in method suggests for a User, used only to fill empty profile fields."""

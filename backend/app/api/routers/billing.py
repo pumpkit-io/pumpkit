@@ -91,8 +91,8 @@ async def stripe_webhook(
     signature = request.headers.get("stripe-signature")
 
     # handle_webhook owns the transaction: it commits on success and rolls back
-    # before re-raising, so unexpected errors reach the global handler as a 500
-    # and Stripe retries the event.
+    # before re-raising, so errors reach the global handlers (a 502 when Stripe
+    # failed during the sync, else a 500) and Stripe retries the event.
     await billing_mediator.handle_webhook(
         db=db, gateway=gateway, payload=payload, signature=signature
     )
