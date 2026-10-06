@@ -58,6 +58,25 @@ async def add_inspiration_author(
     )
 
 
+@router.post(
+    "/inspiration-authors/{handle}/refresh",
+    response_model=InspirationAuthorResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("20/minute")
+async def refresh_inspiration_author(
+    request: Request,
+    handle: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    reader: XReader = Depends(get_x_reader),
+    clock: Clock = Depends(get_clock),
+) -> InspirationAuthorResponse:
+    return await inspiration_authors_mediator.refresh_author(
+        db=db, reader=reader, user=current_user, handle=handle, now=clock()
+    )
+
+
 @router.delete("/inspiration-authors/{handle}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_inspiration_author(
     handle: str,

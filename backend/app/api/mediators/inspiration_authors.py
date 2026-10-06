@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -6,11 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.services.author_posts as author_posts_service
 import app.api.services.inspiration_authors as inspiration_authors_service
-from app.core.x_reader import HandleNotFoundError, XReader
+from app.core.retry_later import RetryLaterError
+from app.core.x_handles import normalize_handle
+from app.core.x_reader import FetchedPost, HandleNotFoundError, XReader
 from app.db.models import User
 from app.schemas.inspiration_authors import InspirationAuthorResponse
 
 MAX_INSPIRATION_AUTHORS = 3
+REFRESH_COOLDOWN = timedelta(hours=1)
+
+
+def next_refresh_at(last_fetched_at: Optional[datetime], *, now: datetime) -> Optional[datetime]:
+    """When a handle last fetched at `last_fetched_at` may be refreshed, or None if it may now."""
+    if last_fetched_at is None:
+        return None
+    allowed_at = last_fetched_at + REFRESH_COOLDOWN
+    return allowed_at if now < allowed_at else None
 
 
 def _already_listed(handle: str) -> HTTPException:
@@ -41,12 +53,7 @@ async def add_author(
             "Remove one to add another.",
         )
 
-    try:
-        posts = await reader.fetch_recent_posts(handle)
-    except HandleNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"@{handle} doesn't exist on X."
-        )
+    posts = await _fetch(reader, handle)
     if not posts:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -62,8 +69,58 @@ async def add_author(
         # A concurrent add of the same handle won the unique (user_id, handle) constraint.
         raise _already_listed(handle)
 
+    return await _author_response(db, user_id=user_id, handle=handle)
+
+
+async def refresh_author(
+    db: AsyncSession, reader: XReader, user: User, handle: str, now: datetime
+) -> InspirationAuthorResponse:
+    """
+    Fetch the latest posts of one of the User's Inspiration authors and store the new ones.
+
+    Fetched posts are shared across Users, so the hour between fetches is per handle.
+    """
+    user_id = user.id
+    not_listed = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="That handle isn't one of your Inspiration authors.",
+    )
+    try:
+        handle = normalize_handle(handle)
+    except ValueError:
+        raise not_listed
+    if await inspiration_authors_service.get_author(db, user_id=user_id, handle=handle) is None:
+        raise not_listed
+
+    retry_at = next_refresh_at(
+        await author_posts_service.last_fetched_at(db, handle=handle), now=now
+    )
+    if retry_at is not None:
+        raise RetryLaterError(
+            f"@{handle} was fetched less than an hour ago.", retry_at=retry_at, now=now
+        )
+
+    posts = await _fetch(reader, handle)
+    await author_posts_service.store_new_posts(db, handle=handle, posts=posts, now=now)
+    await author_posts_service.record_fetch(db, handle=handle, now=now)
+    await db.commit()
+    return await _author_response(db, user_id=user_id, handle=handle)
+
+
+async def _fetch(reader: XReader, handle: str) -> list[FetchedPost]:
+    try:
+        return await reader.fetch_recent_posts(handle)
+    except HandleNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"@{handle} doesn't exist on X."
+        )
+
+
+async def _author_response(
+    db: AsyncSession, *, user_id: str, handle: str
+) -> InspirationAuthorResponse:
     summaries = await inspiration_authors_service.list_authors(db, user_id=user_id)
-    added = next(summary for summary in summaries if summary.handle == handle)
+    author = next(summary for summary in summaries if summary.handle == handle)
     return InspirationAuthorResponse(
-        handle=added.handle, last_fetched_at=added.last_fetched_at, post_count=added.post_count
+        handle=author.handle, last_fetched_at=author.last_fetched_at, post_count=author.post_count
     )
