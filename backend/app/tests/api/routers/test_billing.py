@@ -4,10 +4,10 @@ from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan
 from app.core.config import settings
 from app.db.models import Subscription
 
-CHECKOUT = "/api/v1/stripe/checkout"
+CHECKOUT = "/api/v1/billing/checkout"
 CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly"}
-PORTAL = "/api/v1/stripe/billing-portal"
-PLANS = "/api/v1/stripe/plans"
+PORTAL = "/api/v1/billing/portal"
+PLANS = "/api/v1/billing/plans"
 
 MONTHLY = Plan(
     key="pumpkit_pro_monthly",
@@ -315,9 +315,9 @@ async def test_billing_api_serves_only_subscription_routes(client):
         if path.startswith(("/api/v1/billing", "/api/v1/stripe"))
     }
     assert billing_paths == {
-        "/api/v1/stripe/me",
-        "/api/v1/stripe/plans",
-        "/api/v1/stripe/checkout",
-        "/api/v1/stripe/billing-portal",
+        "/api/v1/billing/me",
+        "/api/v1/billing/plans",
+        "/api/v1/billing/checkout",
+        "/api/v1/billing/portal",
         "/api/v1/stripe/webhook",
     }

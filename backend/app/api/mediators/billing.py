@@ -16,7 +16,7 @@ from app.core.billing_gateway import (
 from app.core.config import settings
 from app.core.logger import logger
 from app.db.models import SubscriptionStatus, User
-from app.schemas.stripe import (
+from app.schemas.billing import (
     BillingPortalResponse,
     CheckoutRequest,
     CheckoutResponse,

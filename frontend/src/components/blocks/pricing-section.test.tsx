@@ -8,10 +8,10 @@ import { PricingSection } from './pricing-section';
 
 const originalAdapter = api.defaults.adapter;
 
-/** Fakes `GET /stripe/plans` at the axios adapter. */
+/** Fakes `GET /billing/plans` at the axios adapter. */
 function fakePlansEndpoint(status: number, data: unknown) {
   api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
-    const found = config.url === '/stripe/plans';
+    const found = config.url === '/billing/plans';
     const response = {
       data: found ? data : { detail: 'Not Found' },
       status: found ? status : 404,
