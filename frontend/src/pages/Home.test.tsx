@@ -28,6 +28,12 @@ vi.mock('@/services/inspirationAuthorService', () => ({
     remove: vi.fn(),
   },
 }));
+vi.mock('@/services/postService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/postService')>()),
+  postService: {
+    start: vi.fn(),
+  },
+}));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
@@ -42,6 +48,7 @@ import {
   inspirationAuthorService,
   type InspirationAuthor,
 } from '@/services/inspirationAuthorService';
+import { postService, type Post } from '@/services/postService';
 import { Home } from './Home';
 
 const NOT_SUBSCRIBED = {
@@ -100,19 +107,185 @@ async function authorsPanel() {
   return within(await screen.findByRole('region', { name: 'Inspiration authors' }));
 }
 
+async function writer() {
+  return within(await screen.findByRole('region', { name: 'Write a Post' }));
+}
+
+function postWith(final: string, finalCharCount = final.length): Post {
+  return {
+    id: 'post_01',
+    brief: 'ship small things',
+    versions: [
+      {
+        number: 1,
+        feedback: null,
+        draft: 'the draft text',
+        final,
+        finalCharCount,
+        finalCharLimit: 3000,
+      },
+    ],
+  };
+}
+
+/** A Subscribed User with one Inspiration author, ready to write. */
+async function readyToWrite() {
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+  vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+  renderHome();
+  await (await authorsPanel()).findByText('@levelsio');
+  const area = await writer();
+  await area.findByRole('button', { name: 'Write the Post' });
+  return area;
+}
+
+async function writeBrief(area: Awaited<ReturnType<typeof writer>>, brief: string) {
+  fireEvent.change(area.getByLabelText('Brief'), { target: { value: brief } });
+  fireEvent.click(area.getByRole('button', { name: 'Write the Post' }));
+}
+
 describe('Home', () => {
   beforeEach(() => {
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(inspirationAuthorService.add).mockReset();
     vi.mocked(inspirationAuthorService.remove).mockReset();
+    vi.mocked(postService.start).mockReset();
     vi.mocked(track).mockClear();
   });
 
-  it('greets the user by first name and shows their name in the sidebar', async () => {
+  it('shows the writing area under the authors panel and the user in the sidebar', async () => {
     renderHome();
-    expect(await screen.findByRole('heading', { name: /welcome, ada/i })).toBeInTheDocument();
+    expect(await authorsPanel()).toBeTruthy();
+    expect(await writer()).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /welcome/i })).not.toBeInTheDocument();
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+  });
+
+  describe('Writing a Post', () => {
+    it('disables writing with a prompt to add an author when the User has none', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      renderHome();
+
+      const area = await writer();
+      expect(
+        await area.findByText('Add an Inspiration author to write a Post.'),
+      ).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+    });
+
+    it('shows a User who is not Subscribed a prompt to subscribe instead of the button', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      renderHome();
+
+      const area = await writer();
+      expect(await area.findByText(/writing posts needs a subscription/i)).toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
+    });
+
+    it('writes the first Version, disabling the Brief while it waits, then shows Final and Draft', async () => {
+      let answer: (post: Post) => void = () => {};
+      vi.mocked(postService.start).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      expect(area.getByLabelText('Brief')).toBeDisabled();
+      expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
+      expect(area.getByRole('status')).toHaveTextContent(/writing your post/i);
+      expect(postService.start).toHaveBeenCalledWith('ship small things');
+      expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'brief' });
+
+      answer(postWith('the final text'));
+
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+      expect(final.getByText('the final text')).toBeInTheDocument();
+      expect(final.getByText('14 / 3,000 characters')).toBeInTheDocument();
+      expect(final.queryByText(/characters over/i)).not.toBeInTheDocument();
+      const draft = within(area.getByRole('article', { name: 'Draft' }));
+      expect(draft.getByText('the draft text')).toBeInTheDocument();
+      expect(
+        area
+          .getByRole('article', { name: 'Final' })
+          .compareDocumentPosition(area.getByRole('article', { name: 'Draft' })) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('flags a Final over 3,000 characters', async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('x'.repeat(3012)));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship');
+
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+      expect(final.getByText('3,012 / 3,000 characters')).toBeInTheDocument();
+      expect(final.getByText("12 characters over X's 3,000-character limit")).toBeInTheDocument();
+    });
+
+    it('copies the Final', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship');
+
+      fireEvent.click(await area.findByRole('button', { name: 'Copy Final' }));
+
+      expect(writeText).toHaveBeenCalledWith('the final text');
+      expect(await area.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('post_final_copied');
+    });
+
+    it('shows a failure, keeps the Brief and retries it as a new Post', async () => {
+      vi.mocked(postService.start)
+        .mockRejectedValueOnce(apiError(502, 'Writing the Post failed. Please try again.'))
+        .mockResolvedValueOnce(postWith('the final text'));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      expect(await area.findByRole('alert')).toHaveTextContent(
+        'Writing the Post failed. Please try again.',
+      );
+      expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+
+      fireEvent.click(area.getByRole('button', { name: 'Try again' }));
+
+      expect(await area.findByText('the final text')).toBeInTheDocument();
+      expect(postService.start).toHaveBeenCalledTimes(2);
+      expect(postService.start).toHaveBeenNthCalledWith(2, 'ship small things');
+      expect(area.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('clears the screen on "New Post"', async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship small things');
+      await area.findByText('the final text');
+
+      fireEvent.click(area.getByRole('button', { name: 'New Post' }));
+
+      expect(area.queryByText('the final text')).not.toBeInTheDocument();
+      expect(area.getByLabelText('Brief')).toHaveValue('');
+    });
+
+    it('shows a length counter only near the Brief limit, and refuses a Brief over it', async () => {
+      const area = await readyToWrite();
+      const brief = area.getByLabelText('Brief');
+
+      fireEvent.change(brief, { target: { value: 'a'.repeat(1000) } });
+      expect(area.queryByText(/200,000/)).not.toBeInTheDocument();
+
+      fireEvent.change(brief, { target: { value: 'a'.repeat(195_000) } });
+      expect(area.getByText('195,000 / 200,000 characters')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
+
+      fireEvent.change(brief, { target: { value: 'a'.repeat(200_005) } });
+      expect(area.getByText('5 characters over the 200,000 limit')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+    });
   });
 
   it('opens the billing dialog after a successful checkout', async () => {
