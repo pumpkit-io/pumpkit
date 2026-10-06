@@ -1,12 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.mediators.inspiration_authors as inspiration_authors_mediator
-import app.api.services.inspiration_authors as inspiration_authors_service
 from app.api.dependencies import get_current_user, require_subscribed_user
 from app.core.clock import Clock, get_clock
 from app.core.rate_limit import limiter
-from app.core.x_handles import normalize_handle
 from app.core.x_reader import XReader, get_x_reader
 from app.db.models import User
 from app.db.session import get_async_db
@@ -28,15 +26,7 @@ async def list_inspiration_authors(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> InspirationAuthorsListResponse:
-    summaries = await inspiration_authors_service.list_authors(db, user_id=current_user.id)
-    return InspirationAuthorsListResponse(
-        data=[
-            InspirationAuthorResponse(
-                handle=s.handle, last_fetched_at=s.last_fetched_at, post_count=s.post_count
-            )
-            for s in summaries
-        ]
-    )
+    return await inspiration_authors_mediator.list_authors(db=db, user=current_user)
 
 
 @router.post(
@@ -83,18 +73,4 @@ async def remove_inspiration_author(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> None:
-    not_listed = HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="That handle isn't one of your Inspiration authors.",
-    )
-    try:
-        normalized = normalize_handle(handle)
-    except ValueError:
-        raise not_listed
-    author = await inspiration_authors_service.get_author(
-        db, user_id=current_user.id, handle=normalized
-    )
-    if author is None:
-        raise not_listed
-    await inspiration_authors_service.remove_author(db, author)
-    await db.commit()
+    await inspiration_authors_mediator.remove_author(db=db, user=current_user, handle=handle)
