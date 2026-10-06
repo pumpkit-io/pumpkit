@@ -19,11 +19,6 @@ class PostStartRequest(BaseModel):
         return stripped
 
 
-class TellResponse(BaseModel):
-    name: str
-    description: str
-
-
 class FeedbackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -36,6 +31,11 @@ class FeedbackRequest(BaseModel):
         if not stripped:
             raise ValueError("Write some Feedback first.")
         return stripped
+
+
+class TellResponse(BaseModel):
+    name: str
+    description: str
 
 
 class VersionResponse(BaseModel):

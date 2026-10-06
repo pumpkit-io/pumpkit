@@ -50,7 +50,7 @@ import {
   inspirationAuthorService,
   type InspirationAuthor,
 } from '@/services/inspirationAuthorService';
-import { postService, type Post, type Tell } from '@/services/postService';
+import { postService, type Post, type Tell, type Version } from '@/services/postService';
 import { Home } from './Home';
 
 const NOT_SUBSCRIBED = {
@@ -324,7 +324,7 @@ describe('Home', () => {
   });
 
   describe('Feedback', () => {
-    const versionTwo = {
+    const versionTwo: Version = {
       number: 2,
       feedback: 'make it shorter',
       draft: 'the second draft',
