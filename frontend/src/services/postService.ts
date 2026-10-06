@@ -1,5 +1,11 @@
 import { apiService } from './apiService';
 
+/** A machine-written pattern the slop check found in a Final. */
+export interface Tell {
+  name: string;
+  description: string;
+}
+
 /** One round of a Post's text: the Draft Pumpkit wrote and the Final meant for X. */
 export interface Version {
   number: number;
@@ -10,6 +16,7 @@ export interface Version {
   /** Counted by the backend, the way the limit counts; a JS string's length disagrees on emoji. */
   finalCharCount: number;
   finalCharLimit: number;
+  tells: Tell[];
 }
 
 export interface Post {
@@ -25,6 +32,7 @@ interface VersionApi {
   final: string;
   final_char_count: number;
   final_char_limit: number;
+  tells: Tell[];
 }
 
 interface PostApi {
@@ -40,6 +48,7 @@ const toVersion = (v: VersionApi): Version => ({
   final: v.final,
   finalCharCount: v.final_char_count,
   finalCharLimit: v.final_char_limit,
+  tells: v.tells,
 });
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */

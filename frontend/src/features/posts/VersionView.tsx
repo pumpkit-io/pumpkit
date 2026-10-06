@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
+import { SlopTells } from './SlopTells';
 import type { Version } from '@/services/postService';
 
 const formatCount = (n: number) => n.toLocaleString('en-US');
@@ -70,6 +71,7 @@ export function VersionView({ version }: { version: Version }) {
             </p>
           )}
         </div>
+        <SlopTells tells={version.tells} />
       </article>
 
       <article aria-labelledby={draftId} className="space-y-2 rounded-lg bg-muted/50 p-4 sm:p-5">
