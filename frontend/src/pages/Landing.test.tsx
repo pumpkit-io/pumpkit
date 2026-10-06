@@ -1,5 +1,5 @@
 import type { InternalAxiosRequestConfig } from 'axios';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -202,5 +202,98 @@ describe('Landing authors', () => {
       .mocked(track)
       .mock.calls.filter(([event]) => event === 'landing_authors_section_viewed');
     expect(calls).toEqual([['landing_authors_section_viewed']]);
+  });
+});
+
+describe('Landing pricing', () => {
+  it('shows one table per Plan in the endpoint order, headed by its price per interval', async () => {
+    renderLanding();
+    const pricing = screen.getByRole('region', { name: 'Simple pricing' });
+    const tables = await within(pricing).findAllByRole('table');
+    expect(tables).toHaveLength(2);
+    expect(tables[0]).toBe(within(pricing).getByRole('table', { name: '€9.00 / month gets you:' }));
+    expect(tables[1]).toBe(
+      within(pricing).getByRole('table', { name: '€24.00 / 3 months gets you:' }),
+    );
+  });
+
+  it('fills every table with the same placeholder rows', async () => {
+    renderLanding();
+    const tables = await screen.findAllByRole('table');
+    const rowTexts = tables.map((table) =>
+      within(table)
+        .getAllByRole('row')
+        .map((row) => row.textContent),
+    );
+    expect(rowTexts[0]).toEqual([
+      '[What this Plan includes][How much of it]',
+      '[What this Plan includes][How much of it]',
+      '[What this Plan includes][How much of it]',
+    ]);
+    expect(rowTexts[1]).toEqual(rowTexts[0]);
+  });
+
+  it('opens with the eyebrow, heading and subline placeholder', () => {
+    renderLanding();
+    const pricing = screen.getByRole('region', { name: 'Simple pricing' });
+    expect(pricing).toHaveAttribute('id', 'pricing');
+    expect(within(pricing).getByText('Pricing')).toBeInTheDocument();
+    expect(within(pricing).getByRole('heading', { level: 2 })).toHaveTextContent('Simple pricing');
+    expect(within(pricing).getByText('[Pricing subline]')).toBeInTheDocument();
+  });
+
+  it('says so when the Plans cannot load', async () => {
+    fakePlansEndpoint(502, { detail: 'Billing is unavailable right now.', error_id: 'e' });
+    renderLanding();
+    expect(
+      await screen.findByText("Pricing couldn't load. Refresh the page to try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('shows a fallback when there are no Plans', async () => {
+    fakePlansEndpoint(200, { data: [] });
+    renderLanding();
+    expect(await screen.findByText('Pricing is coming soon.')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('ends with a Get started button to the sign-in page and no note under it', async () => {
+    renderLanding();
+    const pricing = screen.getByRole('region', { name: 'Simple pricing' });
+    await within(pricing).findAllByRole('table');
+    const cta = within(pricing).getByRole('link', { name: 'Get started' });
+    expect(cta).toHaveAttribute('href', '/login');
+    expect(pricing.textContent?.trimEnd().endsWith('Get started')).toBe(true);
+
+    fireEvent.click(cta);
+    expect(track).toHaveBeenCalledWith('landing_pricing_cta_clicked');
+  });
+
+  it('tracks the section once and each Plan table once', async () => {
+    renderLanding();
+    await screen.findAllByRole('table');
+    const calls = vi.mocked(track).mock.calls;
+    expect(calls.filter(([event]) => event === 'landing_pricing_section_viewed')).toEqual([
+      ['landing_pricing_section_viewed'],
+    ]);
+    expect(calls.filter(([event]) => event === 'landing_pricing_plan_viewed')).toEqual([
+      ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_monthly' }],
+      ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_quarterly' }],
+    ]);
+  });
+
+  it('highlights the row under the pointer', async () => {
+    renderLanding();
+    const [table] = await screen.findAllByRole('table');
+    const [firstRow] = within(table).getAllByRole('row');
+    expect(firstRow).not.toHaveClass('is-active');
+
+    fireEvent.mouseEnter(firstRow);
+    fireEvent.mouseMove(firstRow, { clientY: 0 });
+    await waitFor(() => expect(firstRow).toHaveClass('is-active'));
+
+    fireEvent.mouseLeave(table.parentElement!);
+    await waitFor(() => expect(firstRow).not.toHaveClass('is-active'));
   });
 });
