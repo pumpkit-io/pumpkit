@@ -5,6 +5,12 @@ import { timeOfDay } from '@/lib/relativeTime';
 import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
 import { postService, type Post } from '@/services/postService';
 
+/** A 4xx: the backend turned the request down before writing anything, so no Version failed. */
+function isRefusal(e: unknown): boolean {
+  const status = errorStatus(e);
+  return status !== null && status >= 400 && status < 500;
+}
+
 /** The Post on screen, which a reload doesn't restore: starting one from a Brief, then Feedback. */
 export function usePostWriter() {
   const { refresh: refreshSubscribed } = useSubscribed();
@@ -36,7 +42,7 @@ export function usePostWriter() {
       try {
         setPost(await postService.start(brief));
       } catch (e) {
-        track('post_version_failed', { kind: 'brief' });
+        if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
         fail(e, "Couldn't write the Post. Please try again.");
       } finally {
         setIsWriting(false);
@@ -62,7 +68,7 @@ export function usePostWriter() {
         );
         return true;
       } catch (e) {
-        track('post_version_failed', { kind: 'feedback' });
+        if (!isRefusal(e)) track('post_version_failed', { kind: 'feedback' });
         fail(e, "Couldn't write the next Version. Please try again.");
         return false;
       } finally {

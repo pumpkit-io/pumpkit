@@ -1,23 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { RefreshCw, X } from 'lucide-react';
+import { ErrorBanner } from '@/components/ErrorBanner';
+import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
-import { timeAgo } from '@/lib/relativeTime';
+import { shortTimeAgo, timeAgo } from '@/lib/relativeTime';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
-
-function ErrorBanner({ message }: { message: string }) {
-  return (
-    <div
-      role="alert"
-      className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-red-700 dark:text-red-300"
-    >
-      {message}
-    </div>
-  );
-}
 
 function fetchedLabel(author: InspirationAuthor): string {
   const posts = `${author.postCount} ${author.postCount === 1 ? 'post' : 'posts'}`;
@@ -64,10 +55,6 @@ function AddAuthorForm({
   );
 }
 
-/**
- * On a phone the list is a row of chips holding only the handle, so it doesn't push the
- * writing area off the screen; from `md` up each author is a row with its fetch details.
- */
 const ROW_ACTION =
   'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60';
 
@@ -77,6 +64,10 @@ interface AuthorActions {
   onRemove: (handle: string) => void;
 }
 
+/**
+ * On a phone the list is a row of compact chips (handle and a short fetch time), so it doesn't
+ * push the writing area off the screen; from `md` up each author is a row with its full details.
+ */
 function AuthorList({
   authors,
   actions,
@@ -93,7 +84,15 @@ function AuthorList({
         >
           <div className="min-w-0 md:flex-1">
             <span className="font-sans text-sm font-medium text-foreground">@{author.handle}</span>
-            <p className="hidden font-sans text-xs text-muted-foreground md:block">
+            {author.lastFetchedAt && (
+              <span
+                aria-hidden
+                className="ml-1.5 font-sans text-xs text-muted-foreground md:hidden"
+              >
+                {shortTimeAgo(author.lastFetchedAt)}
+              </span>
+            )}
+            <p className="sr-only font-sans text-xs text-muted-foreground md:not-sr-only">
               {fetchedLabel(author)}
             </p>
           </div>
@@ -161,14 +160,7 @@ export function InspirationAuthorsPanel() {
       )}
       {subscribed === true && <AddAuthorForm isAdding={isAdding} onAdd={add} />}
       {error && <ErrorBanner message={error} />}
-      {notice && (
-        <p
-          role="status"
-          className="rounded-md border border-border bg-muted px-3 py-2 font-sans text-xs text-foreground"
-        >
-          {notice}
-        </p>
-      )}
+      {notice && <LimitNotice message={notice} />}
 
       {loadFailed ? (
         <ErrorBanner message="Couldn't load your Inspiration authors. Reload the page to try again." />

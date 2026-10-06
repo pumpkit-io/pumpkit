@@ -112,7 +112,7 @@ async def retry_later_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
-async def x_reader_not_configured_handler(request: Request, exc: Exception) -> JSONResponse:
+async def not_configured_handler(request: Request, exc: Exception) -> JSONResponse:
     # An operator's setup gap, not a bug: the message names the missing variable.
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
@@ -125,16 +125,11 @@ async def llm_error_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
-async def llm_not_configured_handler(request: Request, exc: Exception) -> JSONResponse:
-    # An operator's setup gap, not a bug: the message names the missing variable.
-    return JSONResponse(status_code=503, content={"detail": str(exc)})
-
-
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(BillingProviderError, billing_provider_error_handler)
     app.add_exception_handler(LLMError, llm_error_handler)
-    app.add_exception_handler(LLMNotConfiguredError, llm_not_configured_handler)
+    app.add_exception_handler(LLMNotConfiguredError, not_configured_handler)
     app.add_exception_handler(RetryLaterError, retry_later_handler)
-    app.add_exception_handler(XReaderNotConfiguredError, x_reader_not_configured_handler)
+    app.add_exception_handler(XReaderNotConfiguredError, not_configured_handler)
     app.add_exception_handler(XReaderError, x_reader_error_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

@@ -7,9 +7,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { errorMessage } from '@/services/apiErrors';
 import {
   billingService,
-  errorMessage,
   type Subscription,
   type SubscriptionStatus,
 } from '@/services/billingService';

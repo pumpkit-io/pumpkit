@@ -6,7 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.datetimes import as_utc
-from app.db.models import AuthorPost, InspirationAuthor, Post, VersionAttempt
+from app.db.models import (
+    ATTEMPT_FAILED,
+    ATTEMPT_SUCCEEDED,
+    AuthorPost,
+    InspirationAuthor,
+    Post,
+    VersionAttempt,
+)
 from app.writing import slop
 from app.writing.constants import CORPUS_POSTS_PER_AUTHOR
 from app.writing.corpus import Corpus, CorpusPost, group_corpus
@@ -93,7 +100,7 @@ async def record_version(
         post_id=post.id,
         sequence=sequence,
         feedback=feedback,
-        status="succeeded",
+        status=ATTEMPT_SUCCEEDED,
         version_number=version_number,
         draft=written.draft,
         final=written.final,
@@ -127,7 +134,7 @@ async def record_failed_attempt(
         post_id=post.id,
         sequence=sequence,
         feedback=feedback,
-        status="failed",
+        status=ATTEMPT_FAILED,
         error=error,
         created_at=now,
     )

@@ -19,7 +19,6 @@ vi.mock('@/services/billingService', () => ({
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn().mockResolvedValue([]),
   },
-  errorMessage: (_e: unknown, fallback: string) => fallback,
 }));
 vi.mock('@/services/inspirationAuthorService', () => ({
   inspirationAuthorService: {
@@ -314,6 +313,31 @@ describe('Home', () => {
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
     });
 
+    it.each([
+      [403, 'This needs a Subscription. Subscribe to continue.'],
+      [422, 'The Brief is too long.'],
+      [429, "You've made 30 attempts at a Version in the last hour."],
+    ])('does not count a refusal with a %i as a failed Version', async (status, detail) => {
+      vi.mocked(postService.start).mockRejectedValue(apiError(status, detail));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      await waitFor(() => expect(postService.start).toHaveBeenCalled());
+      await waitFor(() => expect(area.getByLabelText('Brief')).toBeEnabled());
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
+    it('counts a failure without a response as a failed Version', async () => {
+      vi.mocked(postService.start).mockRejectedValue(new Error('Network Error'));
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      expect(await area.findByRole('alert')).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+    });
+
     it('clears the screen on "New Post"', async () => {
       vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
       const area = await readyToWrite();
@@ -340,6 +364,17 @@ describe('Home', () => {
       fireEvent.change(brief, { target: { value: 'a'.repeat(200_005) } });
       expect(area.getByText('5 characters over the 200,000 limit')).toBeInTheDocument();
       expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+    });
+
+    it('counts an emoji in the Brief as one character, as the backend does', async () => {
+      const area = await readyToWrite();
+
+      fireEvent.change(area.getByLabelText('Brief'), {
+        target: { value: 'a'.repeat(199_999) + '😀' },
+      });
+
+      expect(area.getByText('200,000 / 200,000 characters')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
     });
   });
 
@@ -450,6 +485,19 @@ describe('Home', () => {
       expect(area.getByLabelText('Feedback')).toHaveValue('');
     });
 
+    it.each([
+      [404, 'Post not found.'],
+      [409, 'This Post has no Version to give Feedback on.'],
+    ])('does not count a refusal with a %i as a failed Version', async (status, detail) => {
+      vi.mocked(postService.addVersion).mockRejectedValue(apiError(status, detail));
+      const area = await onFirstVersion();
+
+      sendFeedback(area, 'make it shorter');
+
+      expect(await area.findByRole('alert')).toHaveTextContent(detail);
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
     it('says when the User can send Feedback again once they reach the hourly limit', async () => {
       vi.mocked(postService.addVersion).mockRejectedValue(
         apiError(429, "You've made 30 attempts at a Version in the last hour.", {
@@ -484,6 +532,17 @@ describe('Home', () => {
       expect(area.getByText('3 characters over the 100,000 limit')).toBeInTheDocument();
       expect(area.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
     });
+
+    it('counts an emoji in the Feedback as one character, as the backend does', async () => {
+      const area = await onFirstVersion();
+
+      fireEvent.change(area.getByLabelText('Feedback'), {
+        target: { value: '😀'.repeat(95_000) },
+      });
+
+      expect(area.getByText('95,000 / 100,000 characters')).toBeInTheDocument();
+      expect(area.getByRole('button', { name: 'Send Feedback' })).toBeEnabled();
+    });
   });
 
   it('opens the billing dialog after a successful checkout', async () => {
@@ -506,6 +565,16 @@ describe('Home', () => {
       ]);
       expect(within(items[0]).getByText('Fetched 2 hours ago · 18 posts')).toBeInTheDocument();
       expect(within(items[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
+    });
+
+    it('shows each author chip on a phone with a short last fetched time', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
+      renderHome();
+
+      const panel = await authorsPanel();
+      const items = await panel.findAllByRole('listitem');
+      expect(within(items[0]).getByText('2h ago')).toHaveClass('md:hidden');
+      expect(within(items[1]).getByText('5m ago')).toHaveClass('md:hidden');
     });
 
     it('says how to start when the User has no authors', async () => {

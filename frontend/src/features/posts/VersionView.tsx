@@ -1,11 +1,10 @@
 import { useEffect, useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
+import { formatCount } from '@/lib/characters';
 import { cn } from '@/lib/utils';
 import { SlopTells } from './SlopTells';
 import type { Version } from '@/services/postService';
-
-const formatCount = (n: number) => n.toLocaleString('en-US');
 
 function CopyFinalButton({ final }: { final: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');

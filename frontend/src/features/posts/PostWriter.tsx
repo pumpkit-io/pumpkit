@@ -4,11 +4,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
+import { charCount } from '@/lib/characters';
 import { BRIEF_MAX_CHARS } from '@/services/postService';
-import { ErrorBanner } from './ErrorBanner';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { FeedbackForm } from './FeedbackForm';
 import { LengthCounter } from './LengthCounter';
-import { LimitNotice } from './LimitNotice';
+import { LimitNotice } from '@/components/LimitNotice';
 import { NumberedVersion } from './NumberedVersion';
 import { usePostWriter } from './usePostWriter';
 
@@ -19,7 +20,8 @@ export function PostWriter() {
   const [brief, setBrief] = useState('');
 
   const noCorpus = authors !== null && !authors.some((a) => a.postCount > 0);
-  const overLimit = brief.length > BRIEF_MAX_CHARS;
+  const briefLength = charCount(brief);
+  const overLimit = briefLength > BRIEF_MAX_CHARS;
   const canWrite = subscribed === true && !noCorpus && authors !== null && !overLimit;
   const typed = brief.trim();
 
@@ -90,7 +92,7 @@ export function PostWriter() {
               disabled={isWriting}
               className="min-h-[12rem] resize-y leading-relaxed"
             />
-            <LengthCounter length={brief.length} max={BRIEF_MAX_CHARS} />
+            <LengthCounter length={briefLength} max={BRIEF_MAX_CHARS} />
           </div>
 
           {error && (

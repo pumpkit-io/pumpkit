@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.datetimes import as_utc
@@ -37,6 +37,13 @@ async def store_new_posts(
     )
     await db.flush()
     return len(new)
+
+
+async def count_posts(db: AsyncSession, *, handle: str) -> int:
+    result = await db.execute(
+        select(func.count()).select_from(AuthorPost).where(AuthorPost.handle == handle)
+    )
+    return result.scalar_one()
 
 
 async def last_fetched_at(db: AsyncSession, *, handle: str) -> Optional[datetime]:

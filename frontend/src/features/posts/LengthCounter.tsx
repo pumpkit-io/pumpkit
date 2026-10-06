@@ -1,9 +1,8 @@
+import { formatCount } from '@/lib/characters';
 import { cn } from '@/lib/utils';
 
 // The limits guard against abuse, so the counter stays out of the way until the text nears one.
 const SHOWN_WITHIN = 10_000;
-
-const formatCount = (n: number) => n.toLocaleString('en-US');
 
 export function LengthCounter({ length, max }: { length: number; max: number }) {
   if (length < max - SHOWN_WITHIN) return null;
