@@ -26,6 +26,7 @@ vi.mock('@/services/inspirationAuthorService', () => ({
     list: vi.fn(),
     add: vi.fn(),
     remove: vi.fn(),
+    refresh: vi.fn(),
   },
 }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
@@ -74,10 +75,10 @@ const PAULG: InspirationAuthor = {
 };
 
 /** An axios-shaped rejection carrying the backend's status and `detail`. */
-function apiError(status: number, detail: string) {
+function apiError(status: number, detail: string, extra: Record<string, unknown> = {}) {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
     isAxiosError: true,
-    response: { status, data: { detail } },
+    response: { status, data: { detail, ...extra } },
   });
 }
 
@@ -106,6 +107,7 @@ describe('Home', () => {
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(inspirationAuthorService.add).mockReset();
     vi.mocked(inspirationAuthorService.remove).mockReset();
+    vi.mocked(inspirationAuthorService.refresh).mockReset();
     vi.mocked(track).mockClear();
   });
 
@@ -207,6 +209,7 @@ describe('Home', () => {
       expect(await panel.findByText(/needs a subscription/i)).toBeInTheDocument();
       expect(panel.queryByLabelText('X handle')).not.toBeInTheDocument();
       expect(panel.queryByRole('button', { name: 'Remove @levelsio' })).not.toBeInTheDocument();
+      expect(panel.queryByRole('button', { name: 'Refresh @levelsio' })).not.toBeInTheDocument();
 
       fireEvent.click(panel.getByRole('button', { name: 'Subscribe' }));
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
@@ -226,6 +229,47 @@ describe('Home', () => {
       fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
 
       expect(await panel.findByRole('button', { name: 'Subscribe' })).toBeInTheDocument();
+    });
+
+    it('refreshes an author and shows its new fetch time and post count', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
+      vi.mocked(inspirationAuthorService.refresh).mockResolvedValue({
+        handle: 'levelsio',
+        lastFetchedAt: new Date().toISOString(),
+        postCount: 21,
+      });
+      renderHome();
+
+      const panel = await authorsPanel();
+      fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
+
+      expect(await panel.findByText('Fetched just now · 21 posts')).toBeInTheDocument();
+      expect(inspirationAuthorService.refresh).toHaveBeenCalledWith('levelsio');
+      expect(track).toHaveBeenCalledWith('inspiration_authors_refreshed');
+    });
+
+    it('says when an author can be refreshed again after a refresh within the hour', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      const retryAt = new Date(2026, 9, 6, 15, 42);
+      vi.mocked(inspirationAuthorService.refresh).mockRejectedValue(
+        apiError(429, '@levelsio was fetched less than an hour ago.', {
+          retry_at: retryAt.toISOString(),
+        }),
+      );
+      renderHome();
+
+      const panel = await authorsPanel();
+      fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
+
+      expect(
+        await panel.findByText(
+          '@levelsio was fetched less than an hour ago. You can refresh it again at 3:42 PM.',
+        ),
+      ).toBeInTheDocument();
+      expect(panel.queryByRole('alert')).not.toBeInTheDocument();
+      expect(track).not.toHaveBeenCalledWith('inspiration_authors_refreshed');
     });
   });
 });

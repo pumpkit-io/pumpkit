@@ -84,6 +84,9 @@ export const EVENTS = {
     description: 'Home: added an Inspiration author and its posts were fetched.',
   },
   inspiration_author_removed: { description: 'Home: removed an Inspiration author.' },
+  inspiration_authors_refreshed: {
+    description: 'Home: refreshed an Inspiration author and its latest posts were fetched.',
+  },
 } as const satisfies Record<string, { description: string }>;
 
 export type EventName = keyof typeof EVENTS;

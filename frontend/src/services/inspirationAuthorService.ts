@@ -34,6 +34,14 @@ export const inspirationAuthorService = {
     return toAuthor(data);
   },
 
+  /** Refused with a 429 carrying `retry_at` when the handle was fetched within the hour. */
+  refresh: async (handle: string): Promise<InspirationAuthor> => {
+    const { data } = await apiService.post<InspirationAuthorApi>(
+      `/inspiration-authors/${encodeURIComponent(handle)}/refresh`,
+    );
+    return toAuthor(data);
+  },
+
   remove: async (handle: string): Promise<void> => {
     await apiService.delete(`/inspiration-authors/${encodeURIComponent(handle)}`);
   },
