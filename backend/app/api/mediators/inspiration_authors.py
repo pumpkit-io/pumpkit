@@ -38,7 +38,8 @@ async def add_author(
     """
     Fetch `handle`'s recent posts, store the new ones and add the handle to the User's list.
 
-    The list checks run first so a duplicate or a fourth author costs no twitterapi.io call.
+    The list checks run first so a duplicate or a fourth author costs no twitterapi.io call,
+    and a handle fetched less than an hour ago is added from its stored posts without one.
     A 404 for a handle X doesn't know and a 422 for one without original posts store nothing.
     """
     user_id = user.id
@@ -53,15 +54,21 @@ async def add_author(
             "Remove one to add another.",
         )
 
-    posts = await _fetch(reader, handle)
-    if not posts:
+    last_fetched_at = await author_posts_service.last_fetched_at(db, handle=handle)
+    if next_refresh_at(last_fetched_at, now=now) is None:
+        posts = await _fetch(reader, handle)
+        has_posts = bool(posts)
+        if has_posts:
+            await author_posts_service.store_new_posts(db, handle=handle, posts=posts, now=now)
+            await author_posts_service.record_fetch(db, handle=handle, now=now)
+    else:
+        has_posts = await author_posts_service.count_posts(db, handle=handle) > 0
+    if not has_posts:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"@{handle} has no original posts to learn from.",
         )
 
-    await author_posts_service.store_new_posts(db, handle=handle, posts=posts, now=now)
-    await author_posts_service.record_fetch(db, handle=handle, now=now)
     try:
         await inspiration_authors_service.add_author(db, user_id=user_id, handle=handle, now=now)
         await db.commit()
