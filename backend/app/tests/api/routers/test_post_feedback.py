@@ -67,7 +67,8 @@ async def test_a_feedback_version_reports_the_tells_in_its_final(client, post_id
 
 
 def _system(prompt: str) -> dict:
-    return {"role": "system", "content": [{"type": "text", "text": prompt}]}
+    block = {"type": "text", "text": prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}
+    return {"role": "system", "content": [block]}
 
 
 def _user(content: str) -> dict:
