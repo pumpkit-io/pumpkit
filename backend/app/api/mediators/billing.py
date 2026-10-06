@@ -16,39 +16,37 @@ from app.core.config import settings
 from app.core.logger import logger
 from app.db.models import User
 from app.schemas.billing import (
+    BillingMeResponse,
     BillingPortalResponse,
+    BillingSubscriptionResponse,
     CheckoutRequest,
     CheckoutResponse,
     PlanResponse,
     PlansListResponse,
-    SubscriptionMeResponse,
 )
 
 
-async def get_subscription_me(db: AsyncSession, user: User) -> SubscriptionMeResponse:
+async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
     """
-    Return the authenticated user's latest subscription view.
+    What the User holds and may do, from Pumpkit's copy only: never a call to
+    the billing provider, so it reflects the last sync (ADR 0004).
     """
-    subscription = await subscriptions_service.get_latest_subscription_for_user(
-        db=db, user_id=user.id
-    )
-
-    if subscription is None:
-        # No subscription found - return the default status indicating no active subscription
-        return SubscriptionMeResponse(
-            status=None,
-            stripe_price_id=None,
-            current_period_end=None,
-            cancel_at_period_end=False,
-            is_active=False,
-        )
-
-    return SubscriptionMeResponse(
-        status=subscription.status,
-        stripe_price_id=subscription.stripe_price_id,
-        current_period_end=subscription.current_period_end,
-        cancel_at_period_end=subscription.cancel_at_period_end,
-        is_active=subscriptions_service.is_subscription_active(subscription),
+    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
+    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+    return BillingMeResponse(
+        subscription=(
+            None
+            if subscription is None
+            else BillingSubscriptionResponse(
+                status=subscription.status,
+                plan_key=subscription.plan_key,
+                current_period_end=subscription.current_period_end,
+                cancel_at_period_end=subscription.cancel_at_period_end,
+            )
+        ),
+        subscribed=subscriptions_service.is_subscribed(subscription),
+        may_subscribe=offer.may_subscribe,
+        trial_days=offer.trial_days,
     )
 
 

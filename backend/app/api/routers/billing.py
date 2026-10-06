@@ -9,11 +9,11 @@ from app.core.rate_limit import limiter
 from app.db.models import User
 from app.db.session import get_async_db
 from app.schemas.billing import (
+    BillingMeResponse,
     BillingPortalResponse,
     CheckoutRequest,
     CheckoutResponse,
     PlansListResponse,
-    SubscriptionMeResponse,
 )
 
 router = APIRouter(tags=["billing"])
@@ -21,14 +21,14 @@ router = APIRouter(tags=["billing"])
 
 @router.get(
     "/billing/me",
-    response_model=SubscriptionMeResponse,
+    response_model=BillingMeResponse,
     status_code=status.HTTP_200_OK,
 )
 async def get_billing_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
-) -> SubscriptionMeResponse:
-    return await billing_mediator.get_subscription_me(db=db, user=current_user)
+) -> BillingMeResponse:
+    return await billing_mediator.get_billing_me(db=db, user=current_user)
 
 
 @router.get(
