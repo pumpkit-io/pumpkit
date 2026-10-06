@@ -35,16 +35,28 @@ class BillingPortalResponse(BaseModel):
     url: str
 
 
-class SubscriptionMeResponse(BaseModel):
+class BillingSubscriptionResponse(BaseModel):
     """
-    Current subscription view for the authenticated user.
+    The User's Subscription as Pumpkit's copy holds it.
     """
 
-    status: Optional[SubscriptionStatus]
-    stripe_price_id: Optional[str]
+    status: SubscriptionStatus
+    plan_key: Optional[str]
     current_period_end: Optional[datetime]
     cancel_at_period_end: bool
-    is_active: bool
+
+
+class BillingMeResponse(BaseModel):
+    """
+    What the authenticated User holds and may do: their Subscription (Running,
+    else `incomplete`, never Ended), whether they are Subscribed, whether they
+    may subscribe, and the Trial a Checkout would start with.
+    """
+
+    subscription: Optional[BillingSubscriptionResponse]
+    subscribed: bool
+    may_subscribe: bool
+    trial_days: Optional[int]
 
 
 class PlanResponse(BaseModel):

@@ -3,11 +3,18 @@ from datetime import datetime, timezone
 import pytest
 
 import app.api.services.subscriptions as subscriptions_service
-from app.core.billing_gateway import CheckoutCall, CustomerCall, Plan, SubscriptionState
+from app.core.billing_gateway import (
+    CheckoutCall,
+    CustomerCall,
+    FakeBillingGateway,
+    Plan,
+    SubscriptionState,
+)
 from app.core.config import settings
 from app.db.models import SubscriptionStatus
 
 CUSTOMER = "cus_alice"
+BILLING_ME = "/api/v1/billing/me"
 CHECKOUT = "/api/v1/billing/checkout"
 CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly"}
 PORTAL = "/api/v1/billing/portal"
@@ -397,6 +404,116 @@ async def test_a_gateway_failure_listing_plans_returns_502(
     response = await client.get(PLANS)
 
     assert_reported_502(response)
+
+
+async def _hold(db, user, *states: SubscriptionState) -> None:
+    """Make Pumpkit's copy of the User's Subscriptions hold `states`, as a sync would."""
+    gateway = FakeBillingGateway()
+    for state in states:
+        gateway.set_subscription(CUSTOMER, state)
+    await subscriptions_service.sync_customer(db, gateway, user_id=user.id, customer_id=CUSTOMER)
+    await db.commit()
+
+
+def _billing_subscription(status: str) -> dict:
+    return {
+        "status": status,
+        "plan_key": "pumpkit_pro_monthly",
+        # SQLite drops the time zone that Postgres keeps.
+        "current_period_end": "2026-11-06T00:00:00",
+        "cancel_at_period_end": False,
+    }
+
+
+async def test_billing_me_for_a_user_with_no_subscription_offers_the_trial(
+    client, fake_billing, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+
+    response = await client.get(BILLING_ME)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "subscription": None,
+        "subscribed": False,
+        "may_subscribe": True,
+        "trial_days": 14,
+    }
+
+
+@pytest.mark.parametrize(
+    ("status", "subscribed"),
+    [
+        ("trialing", True),
+        ("active", True),
+        ("past_due", True),
+        ("unpaid", False),
+        ("paused", False),
+    ],
+)
+async def test_billing_me_reports_the_running_subscription_and_offers_nothing(
+    client, db, fake_billing, user, status, subscribed
+):
+    await _hold(db, user, _subscription("sub_old", "canceled"), _subscription("sub_1", status))
+
+    response = await client.get(BILLING_ME)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "subscription": _billing_subscription(status),
+        "subscribed": subscribed,
+        "may_subscribe": False,
+        "trial_days": None,
+    }
+
+
+async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_one(
+    client, db, fake_billing, user, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    await _hold(db, user, _subscription("sub_1", "incomplete"))
+
+    response = await client.get(BILLING_ME)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "subscription": _billing_subscription("incomplete"),
+        "subscribed": False,
+        "may_subscribe": True,
+        "trial_days": None,
+    }
+
+
+async def test_billing_me_never_reports_an_ended_subscription(
+    client, db, fake_billing, user, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    await _hold(
+        db, user, _subscription("sub_1", "canceled"), _subscription("sub_2", "incomplete_expired")
+    )
+
+    response = await client.get(BILLING_ME)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "subscription": None,
+        "subscribed": False,
+        "may_subscribe": True,
+        "trial_days": None,
+    }
+
+
+async def test_billing_me_reads_only_pumpkits_copy_never_stripe(client, db, fake_billing, user):
+    """A Subscription only Stripe knows about isn't reported until a sync copies it."""
+    await _with_customer(db, user)
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_1", "active"))
+    fake_billing.fail_on = {"list_subscriptions"}
+
+    response = await client.get(BILLING_ME)
+
+    assert response.status_code == 200
+    assert response.json()["subscription"] is None
+    assert response.json()["subscribed"] is False
 
 
 async def test_the_cardless_trial_route_no_longer_exists(client, fake_billing):

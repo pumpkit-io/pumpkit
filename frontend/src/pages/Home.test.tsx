@@ -16,12 +16,11 @@ vi.mock('@/services/userService', () => ({
 }));
 vi.mock('@/services/billingService', () => ({
   billingService: {
-    fetchSubscription: vi.fn().mockResolvedValue({
-      status: null,
-      stripePriceId: null,
-      currentPeriodEnd: null,
-      cancelAtPeriodEnd: false,
-      isActive: false,
+    fetchBillingMe: vi.fn().mockResolvedValue({
+      subscription: null,
+      subscribed: false,
+      maySubscribe: true,
+      trialDays: null,
     }),
     fetchPlans: vi.fn().mockResolvedValue([]),
   },

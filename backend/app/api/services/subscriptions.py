@@ -20,6 +20,9 @@ _RUNNING_STATUSES: set[SubscriptionStatus] = {
     "unpaid",
     "paused",
 }
+_INCOMPLETE_STATUSES: set[SubscriptionStatus] = {"incomplete"}
+# A Subscribed User's Subscription grants access to Pumpkit.
+_SUBSCRIBED_STATUSES: set[SubscriptionStatus] = {"trialing", "active", "past_due"}
 
 
 @dataclass(frozen=True)
@@ -78,21 +81,30 @@ async def has_had_subscription(db: AsyncSession, *, user_id: str) -> bool:
     return bool(result.scalar())
 
 
-async def get_latest_subscription_for_user(
-    db: AsyncSession,
-    user_id: str,
-) -> Optional[Subscription]:
+async def get_user_subscription(db: AsyncSession, *, user_id: str) -> Optional[Subscription]:
     """
-    Return the most recently created Subscription row for a user, if any.
+    The User's Subscription: their Running one, else their newest `incomplete`
+    one, else None. Never an Ended one. Reads only Pumpkit's copy.
     """
-    query = (
-        select(Subscription)
-        .where(Subscription.user_id == user_id)
-        .order_by(Subscription.created_at.desc())
-        .limit(1)
-    )
-    result = await db.execute(query)
-    return result.scalar_one_or_none()
+    for statuses in (_RUNNING_STATUSES, _INCOMPLETE_STATUSES):
+        result = await db.execute(
+            select(Subscription)
+            .where(Subscription.user_id == user_id, Subscription.status.in_(statuses))
+            .order_by(Subscription.created_at.desc())
+            .limit(1)
+        )
+        subscription = result.scalar_one_or_none()
+        if subscription is not None:
+            return subscription
+    return None
+
+
+def is_subscribed(subscription: Optional[Subscription]) -> bool:
+    """
+    Whether a User holding `subscription` is Subscribed: it is in its Trial,
+    paid up, or behind on payment while the provider still retries the charge.
+    """
+    return subscription is not None and subscription.status in _SUBSCRIBED_STATUSES
 
 
 async def get_subscription_by_stripe_id(
@@ -133,14 +145,3 @@ async def sync_customer(
         subscription.current_period_end = state.current_period_end
         subscription.cancel_at_period_end = state.cancel_at_period_end
     await db.flush()
-
-
-def is_subscription_active(subscription: Optional[Subscription]) -> bool:
-    """
-    Return True if the given subscription is in a state that grants access.
-    """
-    if subscription is None:
-        return False
-    if subscription.status in _ENDED_STATUSES:
-        return False
-    return subscription.status in ("active", "trialing")

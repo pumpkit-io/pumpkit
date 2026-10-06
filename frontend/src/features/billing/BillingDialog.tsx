@@ -7,7 +7,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { billingService, errorMessage } from '@/services/billingService';
+import {
+  billingService,
+  errorMessage,
+  type Subscription,
+  type SubscriptionStatus,
+} from '@/services/billingService';
 import { redirectTo } from '@/lib/navigation';
 import { track } from '@/lib/analytics';
 import { useBilling } from './useBilling';
@@ -21,6 +26,50 @@ function ErrorBanner({ message }: { message: string }) {
       className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-destructive"
     >
       {message}
+    </div>
+  );
+}
+
+// A Running Subscription in one of these is behind on payment, or stopped over it.
+const PAYMENT_FAILED_STATUSES: ReadonlySet<SubscriptionStatus> = new Set([
+  'past_due',
+  'unpaid',
+  'paused',
+]);
+
+function RunningSubscription({
+  subscription,
+  onManage,
+}: {
+  subscription: Subscription;
+  onManage: () => void;
+}) {
+  const paymentFailed = PAYMENT_FAILED_STATUSES.has(subscription.status);
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+      {paymentFailed && (
+        <div
+          role="alert"
+          className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-sans text-xs text-amber-700 dark:text-amber-300"
+        >
+          Your last payment failed. Update your card to keep access.
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-sans text-sm text-foreground">
+          Status: <span className="font-medium">{subscription.status}</span>
+          {subscription.currentPeriodEnd && (
+            <span className="text-muted-foreground">
+              {' '}
+              · {subscription.cancelAtPeriodEnd ? 'ends' : 'renews'}{' '}
+              {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onManage}>
+          {paymentFailed ? 'Fix payment' : 'Manage subscription'}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -56,7 +105,7 @@ export function BillingDialog() {
     }
   };
 
-  const subscription = data?.subscription;
+  const subscription = data?.me.subscription;
 
   return (
     <Dialog open={isOpen} onOpenChange={(next) => (next ? null : close())}>
@@ -78,26 +127,10 @@ export function BillingDialog() {
             <>
               <section className="space-y-3">
                 <h3 className="font-sans text-sm font-semibold text-foreground">Subscription</h3>
-                {subscription?.isActive ? (
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
-                    <div className="font-sans text-sm text-foreground">
-                      Status: <span className="font-medium capitalize">{subscription.status}</span>
-                      {subscription.currentPeriodEnd && (
-                        <span className="text-muted-foreground">
-                          {' '}
-                          · {subscription.cancelAtPeriodEnd ? 'ends' : 'renews'}{' '}
-                          {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={onManage}>
-                      Manage subscription
-                    </Button>
-                  </div>
-                ) : (
+                {data.me.maySubscribe ? (
                   <>
                     <p className="font-sans text-xs text-muted-foreground">
-                      You have no active subscription.
+                      Choose a Plan to subscribe.
                     </p>
                     {data.plans.length === 0 ? (
                       <p className="font-sans text-xs text-muted-foreground">
@@ -115,6 +148,11 @@ export function BillingDialog() {
                               plan.interval,
                               plan.intervalCount,
                             )}
+                            note={
+                              data.me.trialDays === null
+                                ? undefined
+                                : `${data.me.trialDays}-day free Trial`
+                            }
                             actionLabel={pendingId === plan.key ? 'Redirecting…' : 'Subscribe'}
                             ariaLabel={`Subscribe to ${plan.productName}`}
                             disabled={pendingId !== null}
@@ -124,6 +162,10 @@ export function BillingDialog() {
                       </div>
                     )}
                   </>
+                ) : (
+                  subscription && (
+                    <RunningSubscription subscription={subscription} onManage={onManage} />
+                  )
                 )}
               </section>
             </>

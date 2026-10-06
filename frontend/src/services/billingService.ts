@@ -1,11 +1,31 @@
 import { apiService } from './apiService';
 
-export interface SubscriptionView {
-  status: string | null;
-  stripePriceId: string | null;
+/** Stripe's Subscription statuses. */
+export type SubscriptionStatus =
+  | 'trialing'
+  | 'active'
+  | 'incomplete'
+  | 'incomplete_expired'
+  | 'past_due'
+  | 'canceled'
+  | 'unpaid'
+  | 'paused';
+
+/** The User's Subscription: their Running one, else an `incomplete` one. */
+export interface Subscription {
+  status: SubscriptionStatus;
+  planKey: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  isActive: boolean;
+}
+
+/** What the backend says the User holds and may do. */
+export interface BillingMe {
+  subscription: Subscription | null;
+  subscribed: boolean;
+  maySubscribe: boolean;
+  /** The Trial a Checkout would start with; set only when the User may subscribe. */
+  trialDays: number | null;
 }
 
 /** A Plan a User can subscribe to: `amount` in minor units, every `intervalCount` `interval`s. */
@@ -18,12 +38,16 @@ export interface Plan {
   intervalCount: number;
 }
 
-interface SubscriptionMeApi {
-  status: string | null;
-  stripe_price_id: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean;
-  is_active: boolean;
+interface BillingMeApi {
+  subscription: {
+    status: SubscriptionStatus;
+    plan_key: string | null;
+    current_period_end: string | null;
+    cancel_at_period_end: boolean;
+  } | null;
+  subscribed: boolean;
+  may_subscribe: boolean;
+  trial_days: number | null;
 }
 
 interface PlanApi {
@@ -36,14 +60,19 @@ interface PlanApi {
 }
 
 export const billingService = {
-  fetchSubscription: async (): Promise<SubscriptionView> => {
-    const { data } = await apiService.get<SubscriptionMeApi>('/billing/me');
+  fetchBillingMe: async (): Promise<BillingMe> => {
+    const { data } = await apiService.get<BillingMeApi>('/billing/me');
+    const s = data.subscription;
     return {
-      status: data.status,
-      stripePriceId: data.stripe_price_id,
-      currentPeriodEnd: data.current_period_end,
-      cancelAtPeriodEnd: data.cancel_at_period_end,
-      isActive: data.is_active,
+      subscription: s && {
+        status: s.status,
+        planKey: s.plan_key,
+        currentPeriodEnd: s.current_period_end,
+        cancelAtPeriodEnd: s.cancel_at_period_end,
+      },
+      subscribed: data.subscribed,
+      maySubscribe: data.may_subscribe,
+      trialDays: data.trial_days,
     };
   },
 

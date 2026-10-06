@@ -4,6 +4,8 @@ import { formatAmount } from '@/lib/money';
 interface PlanCardProps {
   title: string;
   priceLabel: string;
+  /** A short line under the price, e.g. the free Trial. */
+  note?: string;
   actionLabel: string;
   ariaLabel: string;
   disabled?: boolean;
@@ -13,6 +15,7 @@ interface PlanCardProps {
 export function PlanCard({
   title,
   priceLabel,
+  note,
   actionLabel,
   ariaLabel,
   disabled,
@@ -24,6 +27,7 @@ export function PlanCard({
         <div className="font-sans text-sm font-semibold text-foreground">{title}</div>
       </div>
       <div className="font-sans text-lg font-semibold text-foreground">{priceLabel}</div>
+      {note && <div className="font-sans text-xs text-muted-foreground">{note}</div>}
       <Button type="button" size="sm" onClick={onAction} disabled={disabled} aria-label={ariaLabel}>
         {actionLabel}
       </Button>

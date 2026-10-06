@@ -164,3 +164,61 @@ async def test_another_users_subscriptions_are_not_counted_as_theirs(db, user):
     assert await subscriptions_service.list_incomplete_subscriptions(db, user_id=user.id) == []
     offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
     assert offer.may_subscribe is True
+
+
+async def test_a_user_with_no_subscription_has_none_and_is_not_subscribed(db, user):
+    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
+
+    assert subscription is None
+    assert subscriptions_service.is_subscribed(subscription) is False
+
+
+@pytest.mark.parametrize(
+    ("status", "subscribed"),
+    [
+        ("trialing", True),
+        ("active", True),
+        ("past_due", True),
+        ("unpaid", False),
+        ("paused", False),
+        ("incomplete", False),
+    ],
+)
+async def test_the_user_is_subscribed_only_while_trialing_active_or_past_due(
+    db, user, status, subscribed
+):
+    await _hold(db, user, replace(RUNNING, status=status))
+
+    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
+
+    assert subscription is not None
+    assert subscription.status == status
+    assert subscriptions_service.is_subscribed(subscription) is subscribed
+
+
+async def test_the_users_running_subscription_beats_an_incomplete_one(db, user):
+    await _hold(
+        db,
+        user,
+        replace(RUNNING, id="sub_running", status="past_due"),
+        replace(RUNNING, id="sub_incomplete", status="incomplete"),
+    )
+
+    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
+
+    assert subscription is not None
+    assert subscription.stripe_subscription_id == "sub_running"
+
+
+async def test_an_ended_subscription_is_never_the_users_subscription(db, user):
+    await _hold(
+        db,
+        user,
+        ENDED,
+        replace(RUNNING, id="sub_expired", status="incomplete_expired"),
+    )
+
+    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
+
+    assert subscription is None
+    assert subscriptions_service.is_subscribed(subscription) is False
