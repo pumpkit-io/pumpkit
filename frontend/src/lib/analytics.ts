@@ -25,8 +25,11 @@ export const EVENTS = {
   landing_pricing_section_viewed: {
     description: 'Landing: the pricing section scrolled into view.',
   },
+  landing_pricing_plan_viewed: {
+    description: "Landing: a Plan's pricing table first scrolled into view. Props: plan_key.",
+  },
   landing_pricing_cta_clicked: {
-    description: 'Landing: clicked a Plan card CTA. Props: plan_key.',
+    description: 'Landing: clicked the "Get started" button at the end of the pricing section.',
   },
 
   // Login (/login) + auth callbacks
