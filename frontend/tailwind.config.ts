@@ -24,6 +24,7 @@ const config = {
           'sans-serif',
         ],
         mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        wordmark: ['"Google Sans Code"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       keyframes: {
         'accordion-down': {
