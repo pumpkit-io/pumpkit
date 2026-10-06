@@ -87,10 +87,11 @@ class FakeLLM:
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
+        usage = {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
         return StructuredResult(
             parsed=response_model.model_validate(reply),
             model=model,
-            usage=ModelUsage(prompt_tokens=100, completion_tokens=20, total_tokens=120),
+            usage=ModelUsage(**usage, raw=usage),
         )
 
 
