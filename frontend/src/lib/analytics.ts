@@ -78,6 +78,12 @@ export const EVENTS = {
     description: 'Billing: returned from Stripe via the cancel URL.',
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
+
+  // Home: writing
+  inspiration_author_added: {
+    description: 'Home: added an Inspiration author and its posts were fetched.',
+  },
+  inspiration_author_removed: { description: 'Home: removed an Inspiration author.' },
 } as const satisfies Record<string, { description: string }>;
 
 export type EventName = keyof typeof EVENTS;

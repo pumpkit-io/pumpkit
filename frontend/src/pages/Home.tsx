@@ -4,10 +4,12 @@ import { AccountDialog } from '@/features/account/AccountDialog';
 import { AccountProvider } from '@/features/account/AccountProvider';
 import { BillingDialog } from '@/features/billing/BillingDialog';
 import { BillingProvider } from '@/features/billing/BillingProvider';
+import { SubscribedProvider } from '@/features/billing/SubscribedProvider';
 import { useBilling } from '@/features/billing/useBilling';
 import { Sidebar } from '@/features/sidebar/Sidebar';
 import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
 import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
+import { InspirationAuthorsPanel } from '@/features/inspirationAuthors/InspirationAuthorsPanel';
 import { Topbar } from '@/features/topbar/Topbar';
 import { track } from '@/lib/analytics';
 import { APP_NAME } from '@/lib/app';
@@ -64,15 +66,18 @@ function HomeInner() {
         main={
           <>
             <Topbar title="Home" />
-            <div className="flex flex-1 items-center justify-center px-6">
-              <div className="max-w-md text-center">
-                <h1 className="text-3xl font-normal tracking-tight text-foreground">
-                  Welcome{firstName ? `, ${firstName}` : ''}
-                </h1>
-                <p className="mt-3 font-sans text-sm text-muted-foreground">
-                  This is the {APP_NAME} app shell. Build your product here. See “Building your app”
-                  in docs/development.md.
-                </p>
+            <div className="flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
+                <div>
+                  <h1 className="text-3xl font-normal tracking-tight text-foreground">
+                    Welcome{firstName ? `, ${firstName}` : ''}
+                  </h1>
+                  <p className="mt-3 font-sans text-sm text-muted-foreground">
+                    This is the {APP_NAME} app shell. Build your product here. See “Building your
+                    app” in docs/development.md.
+                  </p>
+                </div>
+                <InspirationAuthorsPanel />
               </div>
             </div>
           </>
@@ -88,9 +93,11 @@ export function Home() {
   return (
     <SidebarProvider>
       <BillingProvider>
-        <AccountProvider>
-          <HomeInner />
-        </AccountProvider>
+        <SubscribedProvider>
+          <AccountProvider>
+            <HomeInner />
+          </AccountProvider>
+        </SubscribedProvider>
       </BillingProvider>
     </SidebarProvider>
   );
