@@ -53,13 +53,13 @@ The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, 
 
 ### Call an LLM
 
-Set `OPENROUTER_API_KEY`. Mediators reach models through the `LLM` port (`core/llm.py`): inject it with `llm: LLM = Depends(get_llm)` and call `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
+Set `OPENROUTER_API_KEY`. Mediators reach models through the `LLM` port (`core/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
 
 The port wraps `openrouter_client` (`core/openrouter.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
 
 ### Add a page to the shell
 
-Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx` and render your feature in the main area of `frontend/src/pages/Home.tsx`, beside the writing tools,, or add a protected route in `frontend/src/App.tsx`.
+Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx` and render your feature in the main area of `frontend/src/pages/Home.tsx`, beside the writing tools, or add a protected route in `frontend/src/App.tsx`.
 
 ### Edit the user profile
 
