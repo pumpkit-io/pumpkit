@@ -3,15 +3,13 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, field_validator
 
-# Cap base64 payload roughly to 200 KB of encoded text. Client-side resize
-# targets 256x256 JPEG quality 0.85 → typically 30-60 KB encoded; this leaves
-# headroom for PNG/webp inputs while bounding row size.
+# About 200 KB of base64: client-resized 256x256 JPEGs are 30-60 KB, so PNG/webp still fit.
 _MAX_AVATAR_DATA_URL_LEN = 220_000
 _AVATAR_DATA_URL_PATTERN = re.compile(r"data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+")
 
 
 class UserProfileResponse(BaseModel):
-    """Response payload containing the current user's basic profile information."""
+    """The current User's basic profile."""
 
     id: str
     email: EmailStr
@@ -25,11 +23,9 @@ class UserProfileResponse(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
-    """Partial update for the current user's editable profile fields.
+    """Partial update of the current User's editable profile fields.
 
-    All fields are optional; only fields explicitly set in the request body
-    (``model_dump(exclude_unset=True)``) are applied. Pass ``null`` to clear
-    a field (e.g. avatar removal).
+    Only fields set in the request body are applied; ``null`` clears a field (e.g. the avatar).
     """
 
     first_name: Optional[str] = None

@@ -16,8 +16,7 @@ from app.core.logger import logger
 from app.db.models import User
 from app.schemas.common import MessageResponse
 
-# Generic message returned by the request endpoint regardless of whether the
-# email is registered or rate-limited, so it never reveals which emails have accounts.
+# Same message whether the email is registered or cooling down, so it never reveals accounts.
 _GENERIC_REQUEST_MESSAGE = "If an account exists for that email, we've sent you a sign-in link."
 
 
@@ -29,9 +28,7 @@ async def request_magic_link(
     now: datetime,
 ) -> MessageResponse:
     """
-    Issue a one-time Magic link and email it to the User.
-
-    Always returns a generic message to avoid disclosing account existence.
+    Always returns a generic message, to avoid disclosing account existence.
     If the email can't be sent, the link is invalidated so an immediate retry
     sends a new one, and `AuthMailerError` reaches the global handler.
     """
@@ -75,11 +72,9 @@ async def complete_magic_link(
     now: datetime,
 ) -> RedirectResponse:
     """
-    Finish Magic link sign-in where the emailed link lands. It always ends on a
-    redirect: the frontend callback with a new Session, or the sign-in page with
-    `invalid_magic_link`, `account_suspended` or `sign_in_failed`. An unexpected
-    exception is reported like the global handler would, and the sign-in is
-    rolled back, so a failure halfway leaves no User behind.
+    Always redirect: to the frontend callback with a new Session, or to the sign-in page with
+    `invalid_magic_link`, `account_suspended` or `sign_in_failed`. An unexpected exception is
+    reported and rolled back, so a failure halfway leaves no User behind.
     """
     try:
         return await _sign_in_with_magic_link(token=token, request=request, db=db, now=now)
@@ -100,9 +95,8 @@ async def _sign_in_with_magic_link(
         logger.warning("Magic link rejected: %s", redeemed.reason.value)
         return sessions.sign_in_error_redirect("invalid_magic_link")
 
-    # Resolve the User (found or created) from the email on the consumed Magic link row,
-    # NEVER from anything in the click URL. Every Sign-in method resolves through the
-    # same operation, so one email always reaches one User.
+    # Trust only the email on the consumed Magic link row, never the click URL.
+    # Every Sign-in method resolves through this operation, so one email reaches one User.
     user = await user_service.resolve_user_by_verified_email(db, redeemed.email)
 
     result = await sessions.start(
@@ -111,9 +105,8 @@ async def _sign_in_with_magic_link(
         sign_in_method="magic_link",
         client=sessions.ClientInfo.from_request(request),
     )
-    # Commit a refusal too: the Magic link is single-use, so it stays consumed.
-    # A refused User is one that already exists (Suspended), and resolving an
-    # existing User without name hints writes nothing else.
+    # Commit a refusal too, so the single-use Magic link stays consumed.
+    # A refused User already exists (Suspended), so resolving them wrote nothing else.
     await db.commit()
     if isinstance(result, sessions.SessionRefusal):
         return result.as_sign_in_redirect()
@@ -121,10 +114,7 @@ async def _sign_in_with_magic_link(
 
 
 def build_inbox_redirect_response() -> RedirectResponse:
-    """
-    303-redirect the browser to a Gmail search URL filtered by our
-    magic-link sender.
-    """
+    """Open Gmail filtered to the Magic link sender."""
     query = f"from:{settings.RESEND_NOREPLY_ADDRESS}"
     target = f"https://mail.google.com/mail/u/0/#search/{quote(query, safe='')}"
     return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)

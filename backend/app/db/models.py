@@ -22,12 +22,10 @@ from app.core.ids import ulid_with_prefix
 from app.core.subscription_status import SubscriptionStatus
 from app.db.base import Base
 
-# Notes on SQLAlchemy:
-# - An index is automatically created for each unique/primary key column (no need to set index=True)
-# - The naming conventions SQLAlchemy will follow when creating DB indexes and constraints are defined in backend/app/db/base.py
+# Unique and primary key columns are indexed automatically, so they don't set index=True.
 
 
-# The ways a User can sign in (see docs/adr/0002-google-and-magic-link-only.md)
+# See docs/adr/0002-google-and-magic-link-only.md.
 SignInMethod = Literal[
     "google",
     "magic_link",
@@ -35,24 +33,18 @@ SignInMethod = Literal[
 
 
 class User(Base):
-    """
-    Users data
-    """
-
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: ulid_with_prefix("user")
     )
 
-    # User
     email: Mapped[str] = mapped_column(String, unique=True)
     display_name: Mapped[str] = mapped_column(String)
     first_name: Mapped[Optional[str]] = mapped_column(String)
     last_name: Mapped[Optional[str]] = mapped_column(String)
     avatar_data_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # Account
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -63,10 +55,8 @@ class User(Base):
     # (a permanent suspension uses a far-future date)
     suspended_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
-    # Stripe
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True)
 
-    # Relationships
     google_identities: Mapped[list["GoogleIdentity"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -94,7 +84,6 @@ class GoogleIdentity(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
 
     # OAuth response
-    # A Google account links to at most one User
     subject: Mapped[str] = mapped_column(String, unique=True)
     id_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     # JSONB on Postgres; JSON variant lets the SQLite test DB create the table.
@@ -104,7 +93,6 @@ class GoogleIdentity(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # Relationships
     user: Mapped["User"] = relationship(back_populates="google_identities")
 
 
@@ -126,7 +114,6 @@ class RefreshToken(Base):
         PgEnum(*get_args(SignInMethod), name="sign_in_method_enum"), index=True
     )
 
-    # Session membership and rotation
     session_id: Mapped[str] = mapped_column(String, index=True)
     refresh_token_hash: Mapped[str] = mapped_column(String, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -134,9 +121,8 @@ class RefreshToken(Base):
     rotated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     replaced_by: Mapped[Optional[str]] = mapped_column(
         ForeignKey("refresh_tokens.id", ondelete="SET NULL")
-    )  # ID of the newer refresh token that replaced this one
+    )
 
-    # Refresh token status
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
@@ -144,23 +130,19 @@ class RefreshToken(Base):
     ip: Mapped[Optional[str]] = mapped_column(String)
     user_agent: Mapped[Optional[str]] = mapped_column(String)
 
-    # Relationships
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
 
     __table_args__ = (
         # Helps housekeeping queries
         Index("ix_refresh_tokens_user_id_is_revoked", "user_id", "is_revoked"),
-        # Sanity check on expiration timestamp
         CheckConstraint("expires_at > created_at", name="expires_at_gt_created_at"),
     )
 
 
 class MagicLink(Base):
     """
-    One-time token used to sign a user in via magic link.
-
-    A MagicLink can exist before the User exists: a request for an unknown email creates a
-    row with user_id=NULL, and the User is created on consume.
+    One-time sign-in token. It can exist before its User: a request for an unknown
+    email stores user_id=NULL, and the User is created on consume.
     """
 
     __tablename__ = "magic_links"
@@ -172,11 +154,10 @@ class MagicLink(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
 
-    # The email the link was requested for. We trust THIS email at consume time,
-    # not anything from the click URL. Lowercased at request time.
+    # Consume trusts this email, never anything from the click URL.
+    # Lowercased at request time.
     email: Mapped[str] = mapped_column(String, index=True)
 
-    # Token information
     token_hash: Mapped[str] = mapped_column(String, unique=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -186,7 +167,6 @@ class MagicLink(Base):
     requester_ip: Mapped[Optional[str]] = mapped_column(String)
     requester_user_agent: Mapped[Optional[str]] = mapped_column(String)
 
-    # Relationships
     user: Mapped[Optional["User"]] = relationship(back_populates="magic_links")
 
     __table_args__ = (CheckConstraint("expires_at > sent_at", name="expires_at_gt_sent_at"),)
@@ -223,15 +203,13 @@ class Subscription(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # Relationships
     user: Mapped["User"] = relationship(back_populates="subscriptions")
 
 
 class StripeEvent(Base):
-    """Idempotency log for processed Stripe webhook events.
-
-    Insert succeeds only the first time a given ``event.id`` is seen; the
-    webhook dispatcher uses this to short-circuit replays.
+    """
+    Idempotency log: the insert succeeds only for an unseen ``event.id``,
+    so the webhook dispatcher skips replays.
     """
 
     __tablename__ = "stripe_events"

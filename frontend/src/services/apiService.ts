@@ -2,7 +2,6 @@ import axios, { AxiosResponse } from 'axios';
 import { APP_SLUG } from '@/lib/app';
 import { readSession, writeSession } from '@/lib/session/store';
 
-// Create a shared axios instance with token refresh functionality
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: {
@@ -11,30 +10,8 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// =============================================================================
-// Refresh-token coordination
-//
-// The backend implements refresh-token rotation with theft detection: two
-// parallel /refresh-token calls using the same cookie value will cause the
-// second to be flagged as token replay and revoke the whole Session.
-// To make refresh correct regardless of timing/frequency/tab count, we serialize
-// refresh attempts on three levels:
-//
-//   1. In-flight promise dedup (this module): collapses repeat callers in the
-//      SAME tab to a single network request.
-//   2. Cross-tab Web Lock (`navigator.locks`): serializes refreshes across all
-//      tabs of the same origin. Only one tab refreshes at a time.
-//   3. Inside the lock, re-check whether refresh is still needed. The token
-//      stored when performRefresh was first called is remembered; if by the
-//      time we hold the lock the stored token is different (and still fresh
-//      for 30s), another tab just refreshed, so we use it and skip the network
-//      call. A token that is merely unexpired is NOT proof of a refresh, so
-//      proactive and post-401 refreshes still reach /refresh-token.
-//
-// The Session module (`@/lib/session`) delegates every refresh (bootstrap,
-// periodic, focus and the 401 interceptor) to performRefresh — there is
-// exactly one path to /refresh-token.
-// =============================================================================
+// Refresh-token rotation revokes the Session when two calls reuse one cookie, so refreshes are
+// deduped within a tab and serialized across tabs; every refresh goes through performRefresh.
 
 const REFRESH_LOCK_NAME = `${APP_SLUG}:refresh-token`;
 
@@ -61,9 +38,8 @@ export function performRefresh(): Promise<string> {
   if (refreshInFlight) return refreshInFlight;
   const observed = readSession()?.accessToken ?? null;
   refreshInFlight = withRefreshLock(async () => {
-    // Another tab may have refreshed while we were waiting. If so, skip the
-    // network call — the cookie has already been rotated and storage has the
-    // new access token.
+    // Another tab may have rotated the cookie while we waited. A merely unexpired token is not
+    // proof of that, so only a changed token counts.
     const stored = readSession()?.accessToken ?? null;
     if (stored && stored !== observed && tokenStillFreshFor(30)) {
       return stored;
@@ -78,10 +54,7 @@ export function performRefresh(): Promise<string> {
   return refreshInFlight;
 }
 
-// Add the access token to requests if there is a Session. The 401 → refresh →
-// retry response interceptor lives in the Session module (`@/lib/session`),
-// which owns the sign-out rule; `main.tsx` installs it with
-// `installRefreshOnUnauthorized()`.
+// The 401 → refresh → retry interceptor lives in `@/lib/session`, installed from `main.tsx`.
 api.interceptors.request.use(
   (config) => {
     const session = readSession();
@@ -95,10 +68,8 @@ api.interceptors.request.use(
   },
 );
 
-// Export the configured axios instance
 export { api };
 
-// Export a convenient service object
 export const apiService = {
   get: <T = any>(url: string, config?: any): Promise<AxiosResponse<T>> => api.get(url, config),
   post: <T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> =>

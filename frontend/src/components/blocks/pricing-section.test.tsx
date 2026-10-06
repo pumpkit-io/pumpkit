@@ -70,8 +70,14 @@ describe('PricingSection', () => {
     expect(screen.getByText(/€24\.00 \/ 3 months/)).toBeInTheDocument();
   });
 
-  it('shows a fallback when the Plans cannot load', async () => {
+  it('says so when the Plans cannot load', async () => {
     fakePlansEndpoint(502, { detail: 'Billing is unavailable right now.', error_id: 'e' });
+    renderSection();
+    expect(await screen.findByText(/pricing couldn't load/i)).toBeInTheDocument();
+  });
+
+  it('shows a fallback when there are no Plans', async () => {
+    fakePlansEndpoint(200, { data: [] });
     renderSection();
     expect(await screen.findByText(/pricing is coming soon/i)).toBeInTheDocument();
   });

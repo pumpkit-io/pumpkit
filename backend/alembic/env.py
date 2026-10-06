@@ -10,7 +10,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-# Ensure the application package is importable when running Alembic commands
+# Make the `app` package importable when Alembic runs.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 load_dotenv()
@@ -51,7 +51,7 @@ def process_revision_directives(context, revision, directives) -> None:
         return
     script = directives[0]
 
-    # Find the highest existing sequential revision number and increment
+    # Revision IDs are sequential four-digit numbers instead of Alembic's random hashes.
     versions_dir = os.path.join(os.path.dirname(__file__), "versions")
     max_num = 0
     for filename in os.listdir(versions_dir):

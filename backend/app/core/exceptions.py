@@ -24,14 +24,12 @@ def _redact_query(params: Mapping[str, str]) -> dict[str, str]:
 
 def report_unexpected_exception(request: Request, exc: Exception) -> str:
     """
-    Log an unexpected exception with its redacted request and capture it in
-    PostHog. Returns the error ID that ties the log, the capture and the User's
-    report together. The global handler uses it, and so do browser flows that
-    must still land on a page instead of a JSON 500.
+    Log and capture an unexpected exception; return the error ID a User reports to support.
+
+    Browser flows that must land on a page instead of a JSON 500 call this directly.
     """
 
-    # 8-characters ID to identify the error. We may want the user to share
-    # this ID with us for support, so it's better to have a short ID.
+    # Short, so a User can read it out to support.
     error_id = uuid4().hex[:8]
 
     logger.error(
@@ -48,11 +46,10 @@ def report_unexpected_exception(request: Request, exc: Exception) -> str:
             "path_params": request.path_params,
             "query_params": _redact_query(request.query_params),
         },
-        exc_info=exc,  # Log full traceback
+        exc_info=exc,
     )
 
-    # Forward to PostHog Error Tracking. Tagging with the same error_id makes
-    # support correlation possible: user shares the ID, we find the trace.
+    # The shared error_id lets support find the trace from the ID a User reports.
     posthog_client.capture_exception(
         exc,
         properties={
@@ -71,7 +68,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         status_code=500,
         content={
             "detail": "Something went wrong. Please try again later or contact us for support.",
-            "error_id": error_id,  # Share the error ID with the client - do not leak the error details
+            "error_id": error_id,  # Never leak the error details to the client.
         },
     )
 
@@ -88,6 +85,5 @@ async def billing_provider_error_handler(request: Request, exc: Exception) -> JS
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """Wire global exception handlers onto the FastAPI app."""
     app.add_exception_handler(BillingProviderError, billing_provider_error_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

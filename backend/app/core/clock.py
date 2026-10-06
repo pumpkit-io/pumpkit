@@ -1,8 +1,7 @@
 """
 The wall clock, behind a FastAPI dependency so tests can control time.
 
-Endpoints whose rules depend on the current time (Magic link cool-down and
-expiry) take a `Clock` from `get_clock` and read it once per request.
+Time-dependent rules (Magic link cool-down and expiry) read the `Clock` once per request.
 """
 
 from datetime import datetime, timezone
@@ -12,7 +11,6 @@ Clock = Callable[[], datetime]
 
 
 def system_clock() -> datetime:
-    """The current time, timezone-aware UTC."""
     return datetime.now(timezone.utc)
 
 

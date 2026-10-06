@@ -10,8 +10,8 @@ export function MagicLinkCallback() {
   });
 
   return (
-    <div className="flex justify-center items-center h-screen bg-[#18181B] text-slate-100">
-      <p>Signing you in...</p>
+    <div className="flex h-screen items-center justify-center bg-background text-foreground">
+      <p role="status">Signing you in…</p>
     </div>
   );
 }

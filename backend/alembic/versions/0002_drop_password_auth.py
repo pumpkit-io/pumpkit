@@ -35,8 +35,8 @@ def upgrade() -> None:
 
     op.drop_table("first_party_auth")
 
-    # Postgres can't drop a value from an enum type, so swap in a new type.
     # Sessions opened with a password can no longer be refreshed, so drop them.
+    # Postgres can't drop a value from an enum type, so swap in a new type.
     op.execute("DELETE FROM auth_sessions WHERE auth_method = 'local'")
     _replace_auth_method_enum(("google", "magic_link"))
 

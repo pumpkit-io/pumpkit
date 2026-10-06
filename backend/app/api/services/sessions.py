@@ -1,12 +1,9 @@
 """
 The Sessions module: starts, rotates and ends a User's Sessions.
 
-Every Sign-in method starts a Session here, `/refresh-token` rotates it and
-`/logout` ends it. This module alone owns the token claims, the refresh cookie
-(name, `__Host-` prefix, attributes), the callback fragment format, rotation
-with reuse detection, and the suspension rule (`may_hold_session`). It flushes
-and never commits: the calling mediator commits once, including after a refused
-Rotate, because those refusals revoke Sessions.
+It alone owns the token claims, the refresh cookie, the callback fragment format,
+rotation with reuse detection and the suspension rule (`may_hold_session`).
+Flushes, never commits: the mediator commits even after a refused Rotate, which revokes Sessions.
 """
 
 import enum
@@ -70,13 +67,12 @@ class ClientInfo:
 
 
 def read_refresh_cookie(request: Request) -> Optional[str]:
-    """The refresh cookie this browser presents, if any."""
     return request.cookies.get(_refresh_cookie_name())
 
 
 @dataclass(frozen=True)
 class IssuedSession:
-    """A Session's fresh credentials. It renders itself as a JSON body or a callback redirect."""
+    """A Session's fresh credentials."""
 
     access_token: str
     access_token_expires_at: datetime
@@ -119,8 +115,6 @@ class IssuedSession:
 
 
 class RefusalReason(enum.Enum):
-    """Why the Sessions module refused to issue a Session."""
-
     MISSING = "missing"  # No refresh cookie was presented
     INVALID = "invalid"  # Unknown, expired, revoked or malformed refresh token
     REUSED = "reused"  # An already-rotated refresh token: its whole Session is revoked

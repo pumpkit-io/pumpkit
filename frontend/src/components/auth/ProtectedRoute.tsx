@@ -13,7 +13,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <div className="font-sans text-sm text-muted-foreground">Loading…</div>
+        <p role="status" className="font-sans text-sm text-muted-foreground">
+          Loading…
+        </p>
       </div>
     );
   }

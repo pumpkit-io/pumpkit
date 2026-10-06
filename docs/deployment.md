@@ -39,9 +39,9 @@ Give the server read access to the repo with a deploy key (`ssh-keygen` as
 `pumpkit`, add the public key to the repository's deploy keys).
 
 Create, as `pumpkit`:
-- `/home/pumpkit/app/.env` — from `.env.example`, with `ENV=prod`, real `POSTGRES_*`, `BACKEND_URL`/`FRONTEND_URL` = `https://<domain>`, `CORS_ORIGINS='["https://<domain>"]'`.
-- `/home/pumpkit/app/backend/.env` — from `backend/.env.example`, with production secrets and `https://<domain>/billing/...` Stripe URLs.
-- `/home/pumpkit/app/frontend/.env` — `VITE_API_URL=https://<domain>/api/v1`, `VITE_APP_NAME`, optional PostHog (`VITE_POSTHOG_HOST=https://<domain>/ph-relay`).
+- `/home/pumpkit/app/.env`: from `.env.example`, with `ENV=prod`, real `POSTGRES_*`, `BACKEND_URL`/`FRONTEND_URL` = `https://<domain>`, `CORS_ORIGINS='["https://<domain>"]'`.
+- `/home/pumpkit/app/backend/.env`: from `backend/.env.example`, with production secrets and `https://<domain>/billing/...` Stripe URLs.
+- `/home/pumpkit/app/frontend/.env`: `VITE_API_URL=https://<domain>/api/v1`, `VITE_APP_NAME`, optional PostHog (`VITE_POSTHOG_HOST=https://<domain>/ph-relay`).
 
 ## 4. Backend service
 

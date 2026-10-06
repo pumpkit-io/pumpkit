@@ -68,7 +68,7 @@ Add it to `EVENTS` in `frontend/src/lib/analytics.ts`, then call `track('my_even
 
 ### Branding
 
-`APP_NAME` and `VITE_APP_NAME`, the meta tags in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, `frontend/public/*.png`, `backend/app/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
+To rebrand, change `APP_NAME` and `VITE_APP_NAME`, the meta tags in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, `frontend/public/*.png`, `backend/app/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
 
 ## Testing
 

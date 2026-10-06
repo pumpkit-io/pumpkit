@@ -8,8 +8,6 @@ LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
-
     # Environment
     ENV: Environment
     LOG_LEVEL: LoggingLevel = "INFO"
@@ -22,7 +20,6 @@ class Settings(BaseSettings):
     FRONTEND_PORT: int
     CORS_ORIGINS: list[str]
 
-    # Database
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_HOST: str
@@ -41,7 +38,6 @@ class Settings(BaseSettings):
     MAGIC_LINK_TOKEN_DURATION_MINUTES: int
     MAGIC_LINK_TOKEN_NUM_BYTES: int
 
-    # Google
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_OAUTH_REDIRECT_URI: str
@@ -50,12 +46,10 @@ class Settings(BaseSettings):
     GOOGLE_COOKIE_MAX_AGE_SECONDS: int
     GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS: int
 
-    # Resend
     RESEND_API_KEY: str
     RESEND_NOREPLY_ADDRESS: str
     RESEND_SUPPORT_ADDRESS: str
 
-    # Stripe
     STRIPE_SECRET_KEY: str
     STRIPE_PUBLISHABLE_KEY: str
     STRIPE_WEBHOOK_SECRET: str
@@ -63,18 +57,16 @@ class Settings(BaseSettings):
     STRIPE_CHECKOUT_CANCEL_URL: str
     STRIPE_BILLING_PORTAL_RETURN_URL: str
 
-    # Billing
     # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
     # Nothing else can be listed or bought.
     BILLING_PLAN_KEYS: list[str]
     # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
     BILLING_TRIAL_PERIOD_DAYS: int = Field(ge=0)
 
-    # OpenRouter (optional). When unset, app.core.openrouter raises
-    # LLMNotConfiguredError on first use instead of failing at boot.
+    # Optional: when unset, app.core.openrouter raises LLMNotConfiguredError on use, not at boot.
     OPENROUTER_API_KEY: Optional[str] = None
 
-    # PostHog (optional). Disabled unless POSTHOG_ENABLED=true and a project key is set.
+    # Optional: PostHog is disabled unless POSTHOG_ENABLED=true and a project key is set.
     POSTHOG_ENABLED: bool = False
     POSTHOG_PROJECT_API_KEY: Optional[str] = None
     POSTHOG_PERSONAL_API_KEY: Optional[str] = None

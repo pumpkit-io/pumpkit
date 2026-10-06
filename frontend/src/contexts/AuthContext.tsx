@@ -15,8 +15,7 @@ async function identifyFromBackend(): Promise<boolean> {
     });
     return true;
   } catch {
-    // Identify is best-effort — if /users/me fails (network, 401 from a
-    // stale token, etc.) we let the next login/refresh retry.
+    // Best-effort: if /users/me fails, the next login or refresh retries.
     return false;
   }
 }
@@ -31,9 +30,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Dev-only escape hatch: render auth-protected pages without a real session.
-// Active only when the dev server is running AND VITE_BYPASS_AUTH=true. The
-// `import.meta.env.DEV` guard means production builds dead-code-eliminate this.
+// Dev-only: with VITE_BYPASS_AUTH=true, protected pages render without a real Session.
+// The `import.meta.env.DEV` guard strips this from production builds.
 export const BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true';
 if (BYPASS_AUTH) {
   console.warn('[auth] VITE_BYPASS_AUTH is ON — all routes treated as authenticated. Dev only.');
@@ -50,10 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Bootstrap on mount. No Session → signed out, with no network call. A
-  // Session near or past expiry is refreshed first. The Session module decides
-  // whether a failed refresh ends the Session (only a 401 does); otherwise the
-  // Session stays and refresh is retried on the next 401, focus or interval.
+  // No Session means signed out with no network call; one near expiry is refreshed first.
+  // Only a 401 ends the Session; other failures retry on the next 401, focus or interval.
   useEffect(() => {
     if (BYPASS_AUTH) return;
     let cancelled = false;
@@ -81,7 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Periodic refresh while authenticated.
   useEffect(() => {
     if (status !== 'authenticated') return;
     const interval = setInterval(() => {
@@ -90,11 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [status, checkTokenRefresh]);
 
-  // Identify the PostHog person whenever we become authenticated. Gated by
-  // a session-scoped flag so we don't fire a `$set` event on every page
-  // reload (PostHog re-emits $set for property updates even when the
-  // distinct_id is unchanged). The Session module clears the flag whenever a
-  // Session ends, and AccountDialog clears it after a profile save.
+  // The flag avoids a `$set` on every reload: PostHog re-emits it even for an unchanged distinct_id.
+  // Ending a Session clears the flag; AccountDialog re-identifies itself after a profile save.
   useEffect(() => {
     if (BYPASS_AUTH) return;
     if (status !== 'authenticated') return;
@@ -113,8 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('focus', onFocus);
   }, [checkTokenRefresh]);
 
-  // Ending a Session clears storage, resets the analytics identity and routes
-  // to the sign-in page.
+  // Ending a Session clears storage, resets the analytics identity and routes to sign-in.
   const logout = () => session.end('user');
 
   const value: AuthContextType = {

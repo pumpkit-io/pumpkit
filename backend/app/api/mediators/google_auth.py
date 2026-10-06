@@ -37,10 +37,9 @@ _GOOGLE_COOKIES = (GOOGLE_SIGN_IN_STATE_COOKIE, GOOGLE_NONCE_COOKIE, GOOGLE_CODE
 
 async def start_google_sign_in() -> JSONResponse:
     """
-    Start Google sign-in by generating and returning the authorization URL.
-    The returned response includes cookies with PKCE and CSRF protection state.
+    Return Google's authorization URL.
+    The response sets the state, nonce and PKCE verifier cookies the callback checks.
     """
-    # Generate the state and nonce
     state_payload = {
         "flow": _SIGN_IN_FLOW,
         "nonce": generate_token(num_bytes=settings.GOOGLE_NONCE_TOKEN_NUM_BYTES),
@@ -49,14 +48,12 @@ async def start_google_sign_in() -> JSONResponse:
     nonce = generate_token(num_bytes=settings.GOOGLE_NONCE_TOKEN_NUM_BYTES)
     code_verifier = generate_token(num_bytes=settings.GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES)
 
-    # Generate the code challenge
     code_challenge = (
         base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
         .rstrip(b"=")
         .decode()
     )
 
-    # Craft the query parameters for the authorization URL
     query_params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_OAUTH_REDIRECT_URI,
@@ -71,12 +68,10 @@ async def start_google_sign_in() -> JSONResponse:
         "prompt": "consent",
     }
 
-    # Create the response with the authorization URL
     authorization_url = f"{GOOGLE_AUTHORIZATION_ENDPOINT}?{urlencode(query_params)}"
 
     response = JSONResponse(content={"url": authorization_url})
 
-    # Set the cookies
     for key, value in zip(_GOOGLE_COOKIES, (state, nonce, code_verifier), strict=True):
         response.set_cookie(
             value=value,
@@ -96,11 +91,9 @@ async def oauth_google_callback(
     error: Optional[str],
 ) -> RedirectResponse:
     """
-    Finish Google sign-in where Google sends the browser back. It always ends on
-    a redirect: the frontend callback with a new Session, or the sign-in page
-    with `sign_in_failed` or `account_suspended`. An unexpected exception is
-    reported like the global handler would, and the sign-in is rolled back, so
-    a failure halfway leaves no User or Google identity behind.
+    Always redirect: to the frontend callback with a new Session, or to the sign-in page
+    with `sign_in_failed` or `account_suspended`. An unexpected exception is reported and
+    rolled back, so a failure halfway leaves no User or Google identity behind.
     """
     try:
         response = await _sign_in_with_google(

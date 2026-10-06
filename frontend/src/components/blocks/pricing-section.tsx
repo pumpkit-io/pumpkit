@@ -40,18 +40,24 @@ export function PricingSection() {
           <p className="mt-12 text-center font-sans text-sm text-muted-foreground">Loading…</p>
         )}
 
-        {(state.status === 'error' || (state.status === 'ready' && plans.length === 0)) && (
+        {state.status === 'error' && (
+          <p className="mt-12 text-center font-sans text-sm text-muted-foreground">
+            Pricing couldn't load. Refresh the page to try again.
+          </p>
+        )}
+
+        {state.status === 'ready' && plans.length === 0 && (
           <p className="mt-12 text-center font-sans text-sm text-muted-foreground">
             Pricing is coming soon.
           </p>
         )}
 
         {plans.length > 0 && (
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="mt-12 flex flex-wrap justify-center gap-6">
             {plans.map((plan) => (
               <div
                 key={plan.key}
-                className="flex flex-col rounded-2xl border border-border bg-card p-6"
+                className="flex w-full flex-col rounded-2xl border border-border bg-card p-6 md:w-72"
               >
                 <h3 className="font-sans text-base font-semibold text-foreground">
                   {plan.productName}
@@ -64,7 +70,7 @@ export function PricingSection() {
                   className="mt-6"
                   onClick={() => track('landing_pricing_cta_clicked', { plan_key: plan.key })}
                 >
-                  <Link to="/login">Get started</Link>
+                  <Link to="/login">Sign in to subscribe</Link>
                 </Button>
               </div>
             ))}

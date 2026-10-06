@@ -17,7 +17,7 @@ export { SESSION_STORAGE_KEY } from './store';
 export { SIGN_IN_ERROR, isSignInErrorCode, signInPath, type SignInErrorCode } from './signInError';
 
 /**
- * Why a Session ended. These are the only ways a Session ends.
+ * Why a Session ended.
  * - `user`: the User signed out (also calls backend logout).
  * - `session_ended`: the refresh endpoint answered 401.
  * - `account_suspended`: the refresh endpoint answered 401 because the User is Suspended.
@@ -26,8 +26,7 @@ export { SIGN_IN_ERROR, isSignInErrorCode, signInPath, type SignInErrorCode } fr
 export type EndSessionReason = 'user' | 'session_ended' | 'account_suspended' | 'other_tab';
 
 /**
- * Why a sign-in callback's fragment could not start a Session. Each callback
- * page turns it into a sign-in page error code.
+ * Why a sign-in callback's fragment could not start a Session; the callback page maps it to an error code.
  * - `missing_token`: no `access_token`.
  * - `invalid_expiry`: no `expires_at`, or one that is not a date.
  */
@@ -41,7 +40,6 @@ export type StartFromFragmentResult = { ok: true } | { ok: false; reason: StartF
  */
 export const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
 
-/** Where the browser goes after a Session ends, per reason. */
 const ROUTE_AFTER_END: Record<EndSessionReason, string> = {
   user: signInPath(),
   session_ended: signInPath(),
@@ -68,9 +66,8 @@ function notify(current: Session | null): void {
   listeners.forEach((listener) => listener(current));
 }
 
-// The ending in progress, if any. Concurrent callers (several 401s meeting one
-// refused refresh, overlapping focus and periodic checks) share it, so a
-// Session ends exactly once. Starting a Session re-arms it.
+// Shared by concurrent callers (several 401s, overlapping focus and periodic checks)
+// so a Session ends exactly once. Starting a Session re-arms it.
 let ending: Promise<void> | null = null;
 
 function end(reason: EndSessionReason): Promise<void> {
@@ -116,14 +113,8 @@ type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 let retryInstalled = false;
 
 /**
- * Install the 401 -> refresh -> retry-once response interceptor on `api`. Call
- * once at app startup (`main.tsx`); repeat calls do nothing. It lives here, not
- * next to `api`, because it applies the Session module's sign-out rule, and
- * `services/apiService.ts` must not import this module (import cycle).
- *
- * The shared refresh path de-duplicates concurrent callers, and `refresh`
- * applies the sign-out rule, so this interceptor has no queue and no rule of
- * its own.
+ * Install the 401 -> refresh -> retry-once interceptor on `api`; call once from `main.tsx`.
+ * Lives here because `services/apiService.ts` must not import this module; no queue, as the refresh path de-duplicates.
  */
 export function installRefreshOnUnauthorized(): void {
   if (retryInstalled) return;
@@ -147,9 +138,8 @@ export function installRefreshOnUnauthorized(): void {
   });
 }
 
-// Other tabs: a new value is a Session started or refreshed elsewhere; a
-// removed value (or a full clear) ends the Session here too. Registered once,
-// so the analytics identity is reset even if nothing has subscribed.
+// Other tabs: a new value is a Session started or refreshed there; a removal or full clear ends it here.
+// Registered at module load so the analytics identity resets even with no subscribers.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if (event.storageArea && event.storageArea !== window.localStorage) return;
@@ -170,7 +160,6 @@ if (typeof window !== 'undefined') {
 const PROACTIVE_REFRESH_MS = 10 * 60 * 1000;
 
 export const session = {
-  /** The current Session, or null when signed out. */
   get: readSession,
   /** True when there is a Session whose access token is near or past expiry. */
   needsRefresh(): boolean {
@@ -186,10 +175,8 @@ export const session = {
     notify(current);
   },
   /**
-   * Start a Session from a sign-in callback's URL fragment
-   * (`#access_token=…&token_type=Bearer&expires_at=<ISO>`). On failure it
-   * starts nothing and returns the reason, for the caller to turn into a
-   * sign-in page error.
+   * Start a Session from a callback fragment (`#access_token=…&token_type=Bearer&expires_at=<ISO>`).
+   * On failure it starts nothing and returns the reason for a sign-in page error.
    */
   startFromFragment(fragment: string): StartFromFragmentResult {
     const params = new URLSearchParams(fragment.replace(/^#/, ''));

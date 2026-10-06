@@ -2,15 +2,11 @@ import { posthog } from './posthog';
 
 const enabled = import.meta.env.VITE_POSTHOG_ENABLED === 'true';
 
-/**
- * Registry of every tracked event. Adding an event here is the only way to
- * make it trackable (track() is typed against these keys), which keeps the
- * PostHog event list documented.
- */
+// track() is typed against these keys, so an event must be declared here to be trackable.
 export const EVENTS = {
   // Landing (/)
   landing_nav_get_started_clicked: {
-    description: 'Landing: clicked the top-right "Get started" CTA.',
+    description: 'Landing: clicked the top-right "Sign in" button.',
   },
   landing_hero_cta_clicked: { description: 'Landing: clicked the primary hero CTA.' },
   landing_pricing_section_viewed: {
@@ -56,9 +52,8 @@ export const EVENTS = {
   user_menu_theme_changed: {
     description: 'User menu: changed the theme. Props: theme (system/light/dark).',
   },
-  user_menu_logout_clicked: { description: 'User menu: clicked "Log out".' },
+  user_menu_logout_clicked: { description: 'User menu: clicked "Sign out".' },
 
-  // Account dialog
   account_dialog_opened: { description: 'Account: opened the account dialog.' },
   account_dialog_closed: {
     description: 'Account: closed the account dialog. Props: unsaved_changes.',
@@ -68,7 +63,6 @@ export const EVENTS = {
     description: 'Account: profile save failed. Props: error_message.',
   },
 
-  // Billing dialog
   billing_dialog_opened: { description: 'Billing: opened the billing dialog. Props: source.' },
   billing_dialog_closed: { description: 'Billing: closed the billing dialog.' },
   billing_subscription_checkout_started: {

@@ -1,17 +1,5 @@
 #!/usr/bin/env bash
-#
-# scripts/deploy.sh — deploy the app to a single server over SSH
-#
-# Usage: bash scripts/deploy.sh   (reads ./deploy.env; see deploy.env.example)
-#
-# Steps:
-#   - Local sanity checks (clean tree, on $BRANCH, in sync with origin/$BRANCH)
-#   - On the server: git reset to origin/$BRANCH, sync + validate + reload the
-#     Caddyfile, uv sync, npm ci + build, restart $SERVICE_NAME (Alembic runs in
-#     the unit's ExecStartPre), wait for the backend port
-#   - Public smoke test against $PUBLIC_URL
-#   - Optional PostHog deploy annotation
-#
+# Usage: bash scripts/deploy.sh (reads ./deploy.env; see deploy.env.example)
 # One-time server provisioning: docs/deployment.md
 
 set -euo pipefail

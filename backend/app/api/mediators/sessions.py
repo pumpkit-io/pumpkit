@@ -22,9 +22,8 @@ async def refresh_token(request: Request, db: AsyncSession) -> JSONResponse:
 
 async def logout(request: Request, db: AsyncSession) -> JSONResponse:
     """
-    End the Session of the presented refresh cookie, and only that one.
-    Signing out always succeeds; anything that fails while revoking is unexpected
-    and reaches the global handler.
+    End only the Session of the presented refresh cookie. Signing out always succeeds;
+    a failure while revoking is unexpected and reaches the global handler.
     """
     await sessions.end(db, refresh_cookie=sessions.read_refresh_cookie(request))
     await db.commit()

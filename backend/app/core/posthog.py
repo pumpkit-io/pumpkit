@@ -9,15 +9,9 @@ from app.core.logger import logger
 
 
 class PostHogClient:
-    """
-    Async-safe wrapper around the PostHog Python SDK.
+    """Async-safe wrapper around the PostHog Python SDK.
 
-    The Personal API Key enables *local evaluation* of feature flags — the SDK
-    polls flag definitions in the background, so `feature_enabled()` never blocks
-    on a network round-trip from a request handler.
-
-    All events are auto-tagged with `env=settings.ENV` so a single PostHog project
-    can host local/dev/staging/prod data without polluting product metrics.
+    The Personal API Key enables local flag evaluation, so `feature_enabled()` never blocks on the network.
     """
 
     def __init__(self) -> None:
@@ -33,7 +27,7 @@ class PostHogClient:
             host=settings.POSTHOG_HOST,
             personal_api_key=settings.POSTHOG_PERSONAL_API_KEY or None,
         )
-        # Stamp every event server-side so we can slice by environment in PostHog.
+        # One PostHog project hosts every environment; the tag keeps product metrics apart.
         client.super_properties = {"env": settings.ENV}
         self._client = client
 
@@ -64,13 +58,9 @@ class PostHogClient:
         distinct_id: str,
         properties: Optional[Mapping[str, Any]] = None,
     ) -> None:
-        """Set/update person properties for a known user.
+        """Set person properties for a known user.
 
-        SDK v7 removed `identify()` in favour of `set()`/`set_once()` —
-        the semantics differ from posthog-js (which still merges anonymous
-        sessions on identify). On the server we don't have anonymous
-        sessions, so `set()` is the right primitive for "this is who they
-        are" attribution.
+        SDK v7 removed `identify()`; `set()` suffices because the server has no anonymous sessions to merge.
         """
         if not self._client:
             return

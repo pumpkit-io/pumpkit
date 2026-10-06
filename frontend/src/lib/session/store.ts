@@ -1,10 +1,8 @@
 import { storage, storageKey } from '@/lib/storage';
 
 /**
- * Persistence for the Session module. This is the only code that reads or
- * writes the access token in storage. It imports nothing from the HTTP layer,
- * so `services/apiService.ts` can use it (bearer header, refresh write)
- * without an import cycle. Everything else goes through `@/lib/session`.
+ * The only code that reads or writes the access token in storage; everything else uses `@/lib/session`.
+ * Imports nothing from the HTTP layer so `services/apiService.ts` can use it without an import cycle.
  */
 
 export interface Session {

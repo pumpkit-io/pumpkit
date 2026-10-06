@@ -54,8 +54,7 @@ export function AccountDialog() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const prevOpenRef = useRef(false);
 
-  // Seed the form whenever the dialog flips open so a stale draft doesn't
-  // leak between open/close cycles.
+  // Reseed on every open so a stale draft doesn't carry over.
   useEffect(() => {
     if (isOpen && profile) {
       setForm(formFromProfile(profile));
@@ -105,8 +104,7 @@ export function AccountDialog() {
         avatarUrl: form.avatarUrl,
       });
       setProfile(next);
-      // Refresh the PostHog person profile so updated name lands server-side
-      // without waiting for the next browser session.
+      // Update the PostHog person now rather than at the next browser session.
       identifyUser(next.id, {
         email: next.email,
         first_name: next.firstName,
@@ -164,7 +162,7 @@ export function AccountDialog() {
             <div
               role="alert"
               aria-live="polite"
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-destructive"
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-red-700 dark:text-red-300"
             >
               {error}
             </div>

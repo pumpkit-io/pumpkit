@@ -23,7 +23,7 @@ function ErrorBanner({ message }: { message: string }) {
     <div
       role="alert"
       aria-live="polite"
-      className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-destructive"
+      className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-red-700 dark:text-red-300"
     >
       {message}
     </div>
@@ -132,7 +132,9 @@ export function BillingDialog() {
         <div className="max-h-[65vh] space-y-6 overflow-y-auto px-6 pb-4">
           {error && <ErrorBanner message={error} />}
           {isLoading && !data && (
-            <div className="py-6 font-sans text-sm text-muted-foreground">Loading…</div>
+            <div role="status" className="py-6 font-sans text-sm text-muted-foreground">
+              Loading…
+            </div>
           )}
 
           {data && (
@@ -146,7 +148,7 @@ export function BillingDialog() {
                     </p>
                     {data.plans.length === 0 ? (
                       <p className="font-sans text-xs text-muted-foreground">
-                        No plans are available yet.
+                        No Plans are available yet.
                       </p>
                     ) : (
                       <div className="grid gap-3 sm:grid-cols-2">

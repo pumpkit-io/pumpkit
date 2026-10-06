@@ -17,7 +17,6 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    // Update state so the next render will show the fallback UI
     return { hasError: true, error };
   }
 
@@ -28,19 +27,19 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      // Generic error fallback
       return (
-        <div className="flex min-h-screen items-center justify-center bg-background">
-          <div className="text-center">
-            <h2 className="text-2xl font-semibold mb-4">Something went wrong</h2>
+        <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+          <div role="alert" className="max-w-md text-center">
+            <h1 className="mb-4 text-2xl font-semibold">Something went wrong</h1>
             <p className="text-muted-foreground mb-4">
-              An unexpected error occurred. Please try refreshing the page.
+              An unexpected error occurred. Refresh the page to try again.
             </p>
             <button
+              type="button"
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              Refresh Page
+              Refresh page
             </button>
           </div>
         </div>

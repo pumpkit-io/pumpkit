@@ -39,12 +39,9 @@ class SubscriptionOffer:
 
 async def get_subscription_offer(db: AsyncSession, *, user_id: str) -> SubscriptionOffer:
     """
-    A User may subscribe only when they have no Running Subscription. The Trial
-    is the configured length for a User who has never had any Subscription, in
-    any status, and none when Trials are off. A Checkout with a Trial starts its
-    Subscription as trialing, never `incomplete`, so cancelling `incomplete`
-    Subscriptions can't cost a User their Trial. Reads only Pumpkit's copy:
-    sync the customer first for an answer that matches the provider.
+    A User may subscribe only with no Running Subscription; only one who never had any gets a Trial.
+    A Trial Checkout starts trialing, never `incomplete`, so cancelling `incomplete` costs no Trial.
+    Reads only Pumpkit's copy: sync the customer first to match the provider.
     """
     if await _newest_subscription(db, user_id=user_id, statuses=_RUNNING_STATUSES):
         return SubscriptionOffer(may_subscribe=False, trial_days=None)
@@ -66,10 +63,7 @@ async def list_incomplete_subscriptions(db: AsyncSession, *, user_id: str) -> li
 
 
 async def has_had_subscription(db: AsyncSession, *, user_id: str) -> bool:
-    """
-    Whether the User has ever had a Subscription, in any status. Only such a
-    User has used up their Trial.
-    """
+    """Whether the User ever had a Subscription in any status, which uses up their Trial."""
     result = await db.execute(select(exists().where(Subscription.user_id == user_id)))
     return bool(result.scalar())
 
@@ -88,10 +82,8 @@ async def _newest_subscription(
     db: AsyncSession, *, user_id: str, statuses: set[SubscriptionStatus]
 ) -> Optional[Subscription]:
     """
-    The User's Subscription in one of `statuses` that Stripe created last, or
-    None. Ordered by Stripe's creation time, not the row's: rows synced in one
-    transaction share their write time. Ties go to the greater provider ID, so
-    the answer is stable.
+    Ordered by Stripe's creation time, not the row's: rows synced in one transaction share it.
+    Ties go to the greater provider ID so the answer is stable.
     """
     result = await db.execute(
         select(Subscription)
@@ -114,9 +106,6 @@ async def get_subscription_by_stripe_id(
     db: AsyncSession,
     stripe_subscription_id: str,
 ) -> Optional[Subscription]:
-    """
-    Fetch a local subscription row by its Stripe subscription id.
-    """
     query = select(Subscription).where(
         Subscription.stripe_subscription_id == stripe_subscription_id
     )
@@ -128,11 +117,8 @@ async def sync_customer(
     db: AsyncSession, gateway: BillingGateway, *, user_id: str, customer_id: str
 ) -> None:
     """
-    Make Pumpkit's copy of the customer's Subscriptions match what the billing
-    provider holds now (ADR 0004), upserting each by its provider ID. An Ended
-    Subscription is never overwritten: that guards against bugs, it doesn't
-    order events. A provider failure raises `BillingProviderError`. Flushes,
-    never commits: the caller owns the transaction.
+    Make Pumpkit's copy of the customer's Subscriptions match the provider's now (ADR 0004).
+    Never overwrites an Ended one: a guard against bugs, not event ordering. Flushes, never commits.
     """
     for state in await gateway.list_subscriptions(customer_id=customer_id):
         subscription = await get_subscription_by_stripe_id(db, state.id)

@@ -7,14 +7,13 @@
 {$DOMAIN} {
     encode zstd gzip
 
-    # Backend API: anything under /api/* goes to FastAPI
+    # FastAPI backend.
     handle /api/* {
         reverse_proxy 127.0.0.1:8000
     }
 
-    # PostHog reverse proxy — a first-party path bypasses adblockers. Keep the
-    # prefix non-obvious (lists match names like /ingest or /analytics) and set
-    # VITE_POSTHOG_HOST=https://<domain>/ph-relay in frontend/.env.
+    # First-party PostHog relay dodges adblockers; blocklists match names like /ingest or /analytics.
+    # frontend/.env must set VITE_POSTHOG_HOST=https://<domain>/ph-relay.
     @ph_static path /ph-relay/static/*
     @ph_general path /ph-relay/*
 
@@ -32,7 +31,7 @@
         }
     }
 
-    # SPA: serve the built frontend, fall back to index.html for client routes
+    # SPA: fall back to index.html for client routes.
     handle {
         root * {$APP_DIR}/frontend/dist
 
@@ -49,7 +48,6 @@
     }
 }
 
-# www -> apex permanent redirect
 www.{$DOMAIN} {
     redir https://{$DOMAIN}{uri} permanent
 }

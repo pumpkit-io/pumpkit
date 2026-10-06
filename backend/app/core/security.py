@@ -18,19 +18,15 @@ from app.core.logger import logger
 TokenType = Literal["access", "refresh"]
 
 
-# Extracts the access token from an "Authorization: Bearer <token>" header. Access tokens are
-# issued by the magic-link and OAuth sign-in flows, so this is a plain bearer scheme rather than
-# an OAuth2 password grant. auto_error=False lets us raise the 401 + "WWW-Authenticate: Bearer"
-# challenge ourselves, independent of the installed FastAPI version's HTTPBearer default.
+# Plain bearer scheme: access tokens come from magic-link and OAuth sign-in, not a password grant.
+# auto_error=False so we raise the 401 and Bearer challenge ourselves, whatever FastAPI's default.
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_bearer_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
 ) -> str:
-    """
-    FastAPI dependency returning the raw bearer token, or raising 401 if it is missing or malformed.
-    """
+    """FastAPI dependency: the raw bearer token, or 401 if it is missing or malformed."""
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,28 +36,17 @@ async def get_bearer_token(
     return credentials.credentials
 
 
-# Data encryption helper
 _fernet = Fernet(settings.FERNET_ENCRYPTION_KEY.encode())
 
 
-#############################
-# ENCRYPTION AND DECRYPTION #
-#############################
-
-
 def encrypt(s: str) -> str:
-    """
-    Encrypt the given string.
-    """
     if not s:
         return s
     return _fernet.encrypt(s.encode()).decode()
 
 
 def decrypt(s: str) -> str:
-    """
-    Decrypt the given string.
-    """
+    """Return "" on an invalid token rather than raise, so bad ciphertext never fails a request."""
     if not s:
         return s
     try:
@@ -74,22 +59,13 @@ def decrypt(s: str) -> str:
 
 
 def encrypt_bytes(data: bytes) -> bytes:
-    """Encrypt the given binary blob with the same Fernet key used for text fields.
-
-    Returns the raw Fernet token bytes. Empty input passes through unchanged so
-    callers don't have to special-case ``b""``.
-    """
     if not data:
         return data
     return _fernet.encrypt(data)
 
 
 def decrypt_bytes(token: bytes) -> bytes:
-    """Decrypt a Fernet token produced by ``encrypt_bytes``.
-
-    Mirrors the loud-failure-becomes-soft-failure contract of ``decrypt``: on
-    ``InvalidToken`` we log and return ``b""`` rather than crashing the request.
-    """
+    """Binary counterpart of ``decrypt``, with the same return-empty-on-invalid-token contract."""
     if not token:
         return token
     try:
@@ -99,41 +75,19 @@ def decrypt_bytes(token: bytes) -> bytes:
         return b""
 
 
-#######################################
-# RANDOM TOKEN GENERATION AND HASHING #
-#######################################
-
-
 def generate_token(num_bytes: Optional[int] = 64) -> str:
-    """
-    Generate a secure, random token of the given number of bytes.
-    """
     return secrets.token_urlsafe(num_bytes)
 
 
 def hash_token(token: str) -> str:
-    """
-    Hash the given token for secure storage.
-    """
     return hashlib.sha256(token.encode()).hexdigest()
 
 
 def verify_token(token: str, token_hash: str) -> bool:
-    """
-    Verify that the given token matches its given hash.
-    """
     return hmac.compare_digest(hash_token(token), token_hash)
 
 
-#################################
-# JWT CREATION AND VERIFICATION #
-#################################
-
-
 def create_access_token(data: dict) -> str:
-    """
-    Create an access token whose payload contains the given data.
-    """
     return _create_auth_token(
         data,
         expires_in=timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -142,9 +96,6 @@ def create_access_token(data: dict) -> str:
 
 
 def create_refresh_token(data: dict) -> str:
-    """
-    Create a refresh token whose payload contains the given data.
-    """
     return _create_auth_token(
         data,
         expires_in=timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
@@ -153,9 +104,6 @@ def create_refresh_token(data: dict) -> str:
 
 
 def _create_auth_token(data: dict, expires_in: timedelta, token_type: TokenType) -> str:
-    """
-    Create a JWT token of the given type, expires in the given amount of time, and whose payload contains the given data.
-    """
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
 
@@ -177,9 +125,6 @@ def _create_auth_token(data: dict, expires_in: timedelta, token_type: TokenType)
 
 
 def verify_access_token(token: str) -> Optional[dict]:
-    """
-    Verify and decode the given access token. Returns the payload if the token is valid, otherwise returns None.
-    """
     return _verify_auth_token(
         token=token,
         expected_type="access",
@@ -187,9 +132,6 @@ def verify_access_token(token: str) -> Optional[dict]:
 
 
 def verify_refresh_token(token: str) -> Optional[dict]:
-    """
-    Verify and decode the given refresh token. Returns the payload if the token is valid, otherwise returns None.
-    """
     return _verify_auth_token(
         token=token,
         expected_type="refresh",
@@ -197,16 +139,12 @@ def verify_refresh_token(token: str) -> Optional[dict]:
 
 
 def _verify_auth_token(token: str, expected_type: TokenType) -> Optional[dict]:
-    """
-    Verify and decode the given JWT token with proper claim validation. Returns the payload if the token is valid, otherwise returns None.
-    """
     try:
-        # Decode with explicit algorithm validation to prevent algorithm confusion attacks
+        # An explicit algorithm list prevents algorithm-confusion attacks.
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
-            # Validate standard claims
             options={
                 "require": ["exp", "iat", "nbf", "iss", "aud", "jti", "typ"],
                 "verify_exp": True,
@@ -219,7 +157,6 @@ def _verify_auth_token(token: str, expected_type: TokenType) -> Optional[dict]:
             audience=settings.JWT_AUDIENCE,
         )
 
-        # Validate token type
         if payload.get("typ") != expected_type:
             return None
 
@@ -230,24 +167,13 @@ def _verify_auth_token(token: str, expected_type: TokenType) -> Optional[dict]:
         return None
 
 
-#################################
-# PAYLOAD ENCODING AND DECODING #
-#################################
-
-
 def encode_payload(payload: dict[str, Any]) -> str:
-    """
-    Encode a dict-like payload as a URL-safe base64 string without padding.
-    """
     data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     encoded = base64.urlsafe_b64encode(data).decode("utf-8")
     return encoded.rstrip("=")
 
 
 def decode_payload(value: str) -> dict[str, Any]:
-    """
-    Decode a base64-encoded dict-like payload.
-    """
     padding = 4 - (len(value) % 4)
     if padding and padding != 4:
         value += "=" * padding

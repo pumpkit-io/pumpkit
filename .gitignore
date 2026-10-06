@@ -11,13 +11,13 @@ node_modules/
 __pycache__/
 .worktrees/
 
-# Build outputs (generated, not tracked)
+# Build outputs
 frontend/dist/
 *.tsbuildinfo
 
-# Local tooling / data (never commit)
+# Local tooling and data
 .superpowers/
 backups/
 
-# Architecture review handoff docs (local only)
+# Architecture review handoff docs
 docs/architecture-improvements/

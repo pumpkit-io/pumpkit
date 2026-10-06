@@ -1,12 +1,8 @@
 """store the Plan key and Stripe's creation time of each Subscription
 
-Pumpkit's copy of a Subscription is synced from Stripe (see
-docs/adr/0004-billing-webhooks-are-nudges.md) and now keeps the price's lookup
-key, the Plan key, beside the price ID, and when Stripe created the
-Subscription. The Plan key is nullable: a price may have no lookup key. The
-creation time orders a User's Subscriptions: rows synced in one transaction
-share their own `created_at`. No deployment holds real data, so nothing is
-back-filled.
+The Plan key is the price's lookup key, nullable because a price may have none.
+Rows synced in one transaction share `created_at`, so Stripe's creation time
+orders a User's Subscriptions. No deployment holds real data, so nothing is back-filled.
 
 Revision ID: 0006
 Revises: 0005
@@ -20,7 +16,6 @@ import sqlalchemy as sa
 
 from alembic import op
 
-# revision identifiers, used by Alembic.
 revision: str = "0006"
 down_revision: Union[str, None] = "0005"
 branch_labels: Union[str, Sequence[str], None] = None

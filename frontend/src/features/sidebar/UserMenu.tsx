@@ -70,7 +70,7 @@ export function UserMenu({ trigger }: { trigger: ReactNode }) {
             await logout();
           }}
         >
-          <LogOut className="h-3.5 w-3.5" /> Log out
+          <LogOut className="h-3.5 w-3.5" /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

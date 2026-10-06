@@ -9,7 +9,7 @@ class TemplatesHelper:
         self._templates_dir = Path(__file__).resolve().parent.parent / "templates"
         self._template_env = Environment(
             loader=FileSystemLoader(self._templates_dir),
-            autoescape=select_autoescape(["html", "xml"]),  # Make user inputs safe from XSS attacks
+            autoescape=select_autoescape(["html", "xml"]),  # Escape user input against XSS
         )
 
     def render_template(self, template_name: str, **context: Any) -> str:

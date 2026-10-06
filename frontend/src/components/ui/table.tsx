@@ -14,13 +14,11 @@ import {
   type ThHTMLAttributes,
   type RefObject,
 } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 const springs = { fast: { type: 'spring' as const, duration: 0.08, bounce: 0 } };
 const fontWeights = { normal: "'wght' 400", semibold: "'wght' 550" };
-
-// ─── useProximityHover ──────────────────────────────────────────────────────
 
 interface ItemRect {
   top: number;
@@ -120,16 +118,12 @@ function useProximityHover<T extends HTMLElement>(containerRef: RefObject<T | nu
   };
 }
 
-// ─── Table Context ──────────────────────────────────────────────────────────
-
 interface TableContextValue {
   registerItem: (index: number, element: HTMLElement | null) => void;
   activeIndex: number | null;
 }
 
 const TableContext = createContext<TableContextValue | null>(null);
-
-// ─── Table ──────────────────────────────────────────────────────────────────
 
 interface TableProps extends HTMLAttributes<HTMLTableElement> {
   children: ReactNode;
@@ -145,6 +139,7 @@ const Table = forwardRef<HTMLTableElement, TableProps>(({ children, className, .
   }, [measureItems, children]);
 
   const activeRect = activeIndex !== null ? itemRects[activeIndex] : null;
+  const reduceMotion = useReducedMotion();
 
   return (
     <TableContext.Provider value={{ registerItem, activeIndex }}>
@@ -168,8 +163,10 @@ const Table = forwardRef<HTMLTableElement, TableProps>(({ children, className, .
                 width: activeRect.width,
                 height: activeRect.height,
               }}
-              exit={{ opacity: 0, transition: { duration: 0.06 } }}
-              transition={{ ...springs.fast, opacity: { duration: 0.08 } }}
+              exit={{ opacity: 0, transition: { duration: reduceMotion ? 0 : 0.06 } }}
+              transition={
+                reduceMotion ? { duration: 0 } : { ...springs.fast, opacity: { duration: 0.08 } }
+              }
             />
           )}
         </AnimatePresence>
@@ -186,21 +183,15 @@ const Table = forwardRef<HTMLTableElement, TableProps>(({ children, className, .
 });
 Table.displayName = 'Table';
 
-// ─── TableHeader ────────────────────────────────────────────────────────────
-
 const TableHeader = forwardRef<HTMLTableSectionElement, HTMLAttributes<HTMLTableSectionElement>>(
   ({ className, ...props }, ref) => <thead ref={ref} className={cn('', className)} {...props} />,
 );
 TableHeader.displayName = 'TableHeader';
 
-// ─── TableBody ──────────────────────────────────────────────────────────────
-
 const TableBody = forwardRef<HTMLTableSectionElement, HTMLAttributes<HTMLTableSectionElement>>(
   ({ className, ...props }, ref) => <tbody ref={ref} className={cn('', className)} {...props} />,
 );
 TableBody.displayName = 'TableBody';
-
-// ─── TableRow ───────────────────────────────────────────────────────────────
 
 interface TableRowProps extends HTMLAttributes<HTMLTableRowElement> {
   index?: number;
@@ -233,7 +224,7 @@ const TableRow = forwardRef<HTMLTableRowElement, TableRowProps>(
         }}
         data-proximity-index={index}
         className={cn(
-          'group/row relative z-10 border-b transition-[border-color] duration-80',
+          'group/row relative z-10 border-b transition-[border-color] duration-75 motion-reduce:transition-none',
           hideBorder ? 'border-transparent' : 'border-border/40',
           isBodyRow && activeIdx === index && 'is-active',
           className,
@@ -249,8 +240,6 @@ const TableRow = forwardRef<HTMLTableRowElement, TableRowProps>(
 );
 TableRow.displayName = 'TableRow';
 
-// ─── TableHead ──────────────────────────────────────────────────────────────
-
 const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
     <th ref={ref} className={cn('px-3 py-2 text-left text-foreground', className)} {...props} />
@@ -258,14 +247,12 @@ const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCel
 );
 TableHead.displayName = 'TableHead';
 
-// ─── TableCell ──────────────────────────────────────────────────────────────
-
 const TableCell = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
     <td
       ref={ref}
       className={cn(
-        'px-3 py-2 text-muted-foreground transition-colors duration-80 group-[.is-active]/row:text-foreground',
+        'px-3 py-2 text-muted-foreground transition-colors duration-75 motion-reduce:transition-none group-[.is-active]/row:text-foreground',
         className,
       )}
       {...props}
