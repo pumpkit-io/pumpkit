@@ -117,6 +117,7 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
             plan_key="pumpkit_pro_monthly",
             current_period_end=datetime(2025, 11, 6, tzinfo=timezone.utc),
             cancel_at_period_end=True,
+            created_at=datetime(2025, 10, 6, tzinfo=timezone.utc),
         ),
         SubscriptionState(
             id="sub_1QaEnded",
@@ -125,6 +126,7 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
             plan_key=None,
             current_period_end=datetime(2025, 9, 1, tzinfo=timezone.utc),
             cancel_at_period_end=False,
+            created_at=datetime(2025, 8, 1, tzinfo=timezone.utc),
         ),
     ]
     [url] = http.urls
@@ -155,6 +157,7 @@ async def test_the_fake_lists_a_cancelled_subscription_as_ended():
         plan_key="pumpkit_pro_monthly",
         current_period_end=None,
         cancel_at_period_end=False,
+        created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
     )
     gateway.set_subscription("cus_1", incomplete)
 
@@ -168,6 +171,7 @@ async def test_the_fake_lists_a_cancelled_subscription_as_ended():
             plan_key="pumpkit_pro_monthly",
             current_period_end=None,
             cancel_at_period_end=False,
+            created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
         )
     ]
     assert gateway.cancelled_subscriptions == ["sub_1"]

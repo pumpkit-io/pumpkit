@@ -130,7 +130,9 @@ async def create_checkout_session(
     still-open Checkouts expired, so only the newest attempt can start a
     Subscription. A gateway failure at any step is a 502 before a Checkout
     exists. The synced copy is committed whether the Checkout is refused or
-    created.
+    created: the refusal commits before raising its 409, because the sync is
+    Stripe's answer and Pumpkit's copy should match it whatever this request
+    decides (ADR 0004).
 
     The User's row stays locked from the sync to the new Checkout, so
     concurrent Checkouts for one User run one at a time (the lock is held
@@ -151,7 +153,9 @@ async def create_checkout_session(
     await subscriptions_service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
     if not offer.may_subscribe:
-        await db.commit()  # Keep the synced copy: it is Stripe's truth either way.
+        # Commit before raising, or the 409 rolls the sync back: Pumpkit's copy
+        # stays current with what Stripe just said (ADR 0004).
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already have a Subscription. Manage it in the billing portal.",

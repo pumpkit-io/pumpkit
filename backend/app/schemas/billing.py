@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.db.models import SubscriptionStatus
+from app.core.subscription_status import SubscriptionStatus
 
 
 class CheckoutRequest(BaseModel):

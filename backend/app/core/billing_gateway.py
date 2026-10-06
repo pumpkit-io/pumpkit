@@ -30,7 +30,7 @@ from starlette.concurrency import run_in_threadpool
 from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateParams
 
 from app.core.config import settings
-from app.db.models import SubscriptionStatus
+from app.core.subscription_status import SubscriptionStatus
 
 
 class BillingProviderError(Exception):
@@ -71,7 +71,8 @@ class SubscriptionState:
     """
     A Subscription as the provider holds it now: its provider ID, status, price,
     Plan key (the price's lookup key, None when the price has none), the end of
-    its current period, and whether it cancels at that end.
+    its current period, whether it cancels at that end, and when the provider
+    created it.
     """
 
     id: str
@@ -80,6 +81,7 @@ class SubscriptionState:
     plan_key: Optional[str]
     current_period_end: Optional[datetime]
     cancel_at_period_end: bool
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -168,12 +170,23 @@ def _plan(price: dict[str, Any]) -> Optional[Plan]:
     )
 
 
+def _first_item(subscription: dict[str, Any]) -> dict[str, Any]:
+    """A Stripe subscription's first item, or an empty one when it has none."""
+    items = (subscription.get("items") or {}).get("data") or []
+    return items[0] if items else {}
+
+
+def _timestamp(seconds: int) -> datetime:
+    """A Stripe timestamp (Unix seconds) as an aware UTC datetime."""
+    return datetime.fromtimestamp(seconds, tz=timezone.utc)
+
+
 def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
     """A Stripe subscription as plain data, or `BillingProviderError` when it can't be one."""
     status = subscription.get("status")
     if status not in get_args(SubscriptionStatus):
         raise BillingProviderError(f"Stripe subscription has an unknown status: {status!r}")
-    first_item = ((subscription.get("items") or {}).get("data") or [{}])[0]
+    first_item = _first_item(subscription)
     price = first_item.get("price")
     if not isinstance(price, dict):
         price = {"id": price} if isinstance(price, str) else {}
@@ -184,10 +197,9 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         status=cast(SubscriptionStatus, status),
         price_id=price.get("id"),
         plan_key=price.get("lookup_key"),
-        current_period_end=(
-            datetime.fromtimestamp(period_end, tz=timezone.utc) if period_end else None
-        ),
+        current_period_end=_timestamp(period_end) if period_end else None,
         cancel_at_period_end=bool(subscription.get("cancel_at_period_end")),
+        created_at=_timestamp(subscription["created"]),
     )
 
 
