@@ -84,6 +84,10 @@ Point the domain's A/AAAA records (and `www`) at the server. The first deploy
 copies `infra/Caddyfile` to `/etc/caddy/Caddyfile` and reloads Caddy, which
 then obtains certificates automatically.
 
+Writing a Version answers only after two model calls, which can take a couple of
+minutes, so the Caddyfile lets the backend take up to 5 minutes to respond. Uvicorn
+and the frontend's API client set no request timeout of their own.
+
 ## 6. Stripe webhook
 
 In the Stripe dashboard add an endpoint `https://<domain>/api/v1/stripe/webhook`

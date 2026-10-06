@@ -9,7 +9,13 @@
 
     # FastAPI backend.
     handle /api/* {
-        reverse_proxy 127.0.0.1:8000
+        reverse_proxy 127.0.0.1:8000 {
+            # Writing a Version is two model calls answered in one response; allow minutes.
+            transport http {
+                response_header_timeout 5m
+                read_timeout 5m
+            }
+        }
     }
 
     # First-party PostHog relay dodges adblockers; blocklists match names like /ingest or /analytics.

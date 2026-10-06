@@ -1,6 +1,6 @@
 # Pumpkit
 
-Open-source social listening and AI reply tool for X: finds conversations worth joining, drafts replies, and sends them to you on Telegram for approval before posting.
+Open-source AI writing tool for X: turns a brief into a post written in the style of X authors you choose, then revises it with your feedback.
 
 ## Language
 
@@ -30,10 +30,6 @@ _Avoid_: auth session, token family, login
 A User who may not sign in or keep any Session until the suspension ends; a permanent suspension has no practical end.
 _Avoid_: banned, inactive, deactivated
 
-**Connected X account**:
-An X account a User has authorised Pumpkit to act on, for example to post approved replies. It is never a Sign-in method.
-_Avoid_: X login, X identity
-
 ### Billing
 
 **Plan**:
@@ -59,3 +55,33 @@ _Avoid_: active, paying, premium
 **Trial**:
 The free, card-backed opening period of a User's first Subscription. Each User gets at most one.
 _Avoid_: free tier, cardless trial
+
+### Writing
+
+**Inspiration author**:
+An X account whose recent posts set the writing style of a User's posts, and never their content. Each User picks their own, up to three.
+_Avoid_: creator, voice, style source
+
+**Brief**:
+What a User writes to say what a Post is about and what they think about it. It is the Post's content, and the Inspiration authors are only its form.
+_Avoid_: prompt, topic, input
+
+**Post**:
+One piece of writing made from one Brief, with every Version it has been through.
+_Avoid_: tweet, run, thread
+
+**Version**:
+One round of a Post's text. The first comes from the Brief, and each later one comes from a piece of Feedback on the one before.
+_Avoid_: revision, iteration, round
+
+**Draft**:
+The text Pumpkit writes first in a Version, before it is rewritten to sound like a person typed it.
+_Avoid_: first pass, raw output
+
+**Final**:
+The rewritten text of a Version, the one meant to be pasted into X.
+_Avoid_: humanized post, output, refined post
+
+**Feedback**:
+What a User tells Pumpkit to change about the latest Version of a Post.
+_Avoid_: revision request, comment, instruction

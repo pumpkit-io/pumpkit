@@ -8,13 +8,14 @@ backend/app/
   api/mediators/   orchestration across services (webhook dispatch, Google and Magic link sign-in)
   api/services/    one resource or capability each: DB access, Subscriptions, users, tokens
   api/configs/     third-party provider configuration (Google)
-  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer)
+  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, LLM)
+  writing/         the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
   tests/           pytest suite
 frontend/src/
-  features/        self-contained feature modules (account, billing, sidebar, theme, topbar)
+  features/        self-contained feature modules (account, billing, inspirationAuthors, posts, sidebar, theme, topbar)
   components/      shared UI: auth, blocks, brand, ui primitives
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
@@ -28,7 +29,7 @@ docs/              deployment guide
 
 The call direction in the backend is `router -> mediator -> service`, never backwards, and no DB queries in routers or mediators.
 
-## Building your app
+## Recipes
 
 ### Subscriptions
 
@@ -38,25 +39,27 @@ Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subs
 
 Every Stripe call goes through the `BillingGateway` port (`core/billing_gateway.py`): only its Stripe adapter uses the SDK, it returns plain data, and any provider failure is a `BillingProviderError`, which the global handler returns as a 502 with an `error_id`. Routers inject it with `Depends(get_billing_gateway)`; tests get `FakeBillingGateway` through the autouse `fake_billing` fixture, which holds each customer's Subscriptions (`fake_billing.set_subscription(...)`) and signs webhook events (`fake_billing.signed_event(...)`) to post to the endpoint.
 
+Gate an endpoint on being Subscribed with `current_user: User = Depends(require_subscribed_user)` (`app/api/dependencies.py`): it returns a 403 to a User who isn't, reading only Pumpkit's copy. Tests make the `user` fixture Subscribed by requesting the `subscribed` fixture. On the frontend, `useSubscribed()` (inside `SubscribedProvider`) tells a screen whether to show its tools or a `SubscribePrompt` that opens the Billing dialog; treat a 403 from a write as a cue to call its `refresh()`.
+
 `mediators/billing.handle_webhook` owns the webhook transaction: it records the event for deduplication, locks the customer's User row, syncs the customer's Subscriptions from Stripe (`subscriptions.sync_customer`) and commits once. The lock is held across the Stripe call, so webhooks for one customer run one after another. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it; a webhook for an unknown customer is logged and skipped.
+
+### Write a Post
+
+Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answers with the Post and its first Version once both model calls are done, which can take a minute or two (the Caddyfile allows it). `mediators/posts.start_post` reads the corpus (the newest 20 stored posts of each of the User's Inspiration authors, in list order) through `services/posts`, ends the read transaction, writes the Version with `app/writing/versions.py`, and only then stores the Post with its corpus post ids and the attempt, succeeded or failed. A failed attempt is committed before the error is re-raised, so it survives the request's rollback.
+
+`POST /api/v1/posts/{id}/versions` takes Feedback and answers with the next Version. `mediators/posts.add_version` reads the Post's stored corpus (not the User's current Inspiration authors) and its Versions, then runs the revision call: the draft prompt, the corpus, the Brief, each Final as an assistant turn after the Feedback that produced it, and the new Feedback last. Drafts and failed attempts stay out of that conversation. A Post with no Version (its first attempt failed) answers 409.
+
+The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included: change them only on purpose, as a prompt change. The writing, humanizing and revising models are constants in `app/writing/constants.py`.
 
 ### Call an LLM
 
-Set `OPENROUTER_API_KEY`, then from a mediator:
+Set `OPENROUTER_API_KEY`. Mediators reach models through the `LLM` port (`core/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
 
-```python
-from app.core.openrouter import openrouter_client
-
-result = await openrouter_client.llm_complete(
-    model="openai/gpt-5", messages=[{"role": "user", "content": "Hi"}]
-)
-```
-
-There is also `llm_stream(...)`, which yields `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`, and `llm_structured(..., response_model=MyPydanticModel)`.
+The port wraps `openrouter_client` (`core/openrouter.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
 
 ### Add a page to the shell
 
-Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx` and render your feature in the main area of `frontend/src/pages/Home.tsx`, or add a protected route in `frontend/src/App.tsx`.
+Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx` and render your feature in the main area of `frontend/src/pages/Home.tsx`, beside the writing tools, or add a protected route in `frontend/src/App.tsx`.
 
 ### Edit the user profile
 

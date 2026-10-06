@@ -78,6 +78,22 @@ export const EVENTS = {
     description: 'Billing: returned from Stripe via the cancel URL.',
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
+
+  // Home: writing
+  inspiration_author_added: {
+    description: 'Home: added an Inspiration author and its posts were fetched.',
+  },
+  inspiration_author_removed: { description: 'Home: removed an Inspiration author.' },
+  inspiration_authors_refreshed: {
+    description: 'Home: refreshed an Inspiration author and its latest posts were fetched.',
+  },
+  post_version_requested: {
+    description: 'Home: asked for a Version of a Post. Props: kind (brief | feedback).',
+  },
+  post_version_failed: {
+    description: 'Home: writing a Version failed. Props: kind (brief | feedback).',
+  },
+  post_final_copied: { description: "Home: copied a Version's Final." },
 } as const satisfies Record<string, { description: string }>;
 
 export type EventName = keyof typeof EVENTS;

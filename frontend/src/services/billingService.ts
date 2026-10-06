@@ -101,10 +101,3 @@ export const billingService = {
     return data.url;
   },
 };
-
-export function errorMessage(e: unknown, fallback: string): string {
-  const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (e instanceof Error && e.message) return e.message;
-  return fallback;
-}
