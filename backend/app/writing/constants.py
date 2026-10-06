@@ -20,3 +20,4 @@ MAX_TOKENS = 20000
 
 # Guards against abuse, not product limits.
 BRIEF_MAX_CHARS = 200_000
+FEEDBACK_MAX_CHARS = 100_000

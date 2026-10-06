@@ -4,59 +4,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
-import { cn } from '@/lib/utils';
 import { BRIEF_MAX_CHARS } from '@/services/postService';
+import { ErrorBanner } from './ErrorBanner';
+import { FeedbackForm } from './FeedbackForm';
+import { LengthCounter } from './LengthCounter';
+import { NumberedVersion } from './NumberedVersion';
 import { usePostWriter } from './usePostWriter';
-import { VersionView } from './VersionView';
-
-// The limit guards against abuse, so the counter stays out of the way until a Brief nears it.
-const COUNTER_FROM = BRIEF_MAX_CHARS - 10_000;
-
-const formatCount = (n: number) => n.toLocaleString('en-US');
-
-function BriefCounter({ length }: { length: number }) {
-  if (length < COUNTER_FROM) return null;
-  const over = length - BRIEF_MAX_CHARS;
-  return (
-    <p
-      className={cn(
-        'font-sans text-xs tabular-nums',
-        over > 0 ? 'font-medium text-red-700 dark:text-red-300' : 'text-muted-foreground',
-      )}
-    >
-      {over > 0
-        ? `${formatCount(over)} characters over the ${formatCount(BRIEF_MAX_CHARS)} limit`
-        : `${formatCount(length)} / ${formatCount(BRIEF_MAX_CHARS)} characters`}
-    </p>
-  );
-}
-
-function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
-  return (
-    <div
-      role="alert"
-      className="flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-xs text-red-700 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between"
-    >
-      <span>{message}</span>
-      {onRetry && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-10 shrink-0"
-          onClick={onRetry}
-        >
-          Try again
-        </Button>
-      )}
-    </div>
-  );
-}
 
 export function PostWriter() {
   const { subscribed } = useSubscribed();
   const { authors } = useInspirationAuthorsContext();
-  const { post, isWriting, error, start, clear } = usePostWriter();
+  const { post, isWriting, error, start, addFeedback, clear } = usePostWriter();
   const [brief, setBrief] = useState('');
 
   const noCorpus = authors !== null && !authors.some((a) => a.postCount > 0);
@@ -105,8 +63,15 @@ export function PostWriter() {
             </p>
           </div>
           {post.versions.map((version) => (
-            <VersionView key={version.number} version={version} />
+            <NumberedVersion key={version.number} version={version} />
           ))}
+          <FeedbackForm
+            key={post.id}
+            subscribed={subscribed}
+            isWriting={isWriting}
+            error={error}
+            onSend={addFeedback}
+          />
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-3">
@@ -123,7 +88,7 @@ export function PostWriter() {
               disabled={isWriting}
               className="min-h-[12rem] resize-y leading-relaxed"
             />
-            <BriefCounter length={brief.length} />
+            <LengthCounter length={brief.length} max={BRIEF_MAX_CHARS} />
           </div>
 
           {error && (

@@ -47,6 +47,8 @@ Gate an endpoint on being Subscribed with `current_user: User = Depends(require_
 
 Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answers with the Post and its first Version once both model calls are done, which can take a minute or two (the Caddyfile allows it). `mediators/posts.start_post` reads the corpus (the newest 20 stored posts of each of the User's Inspiration authors, in list order) through `services/posts`, ends the read transaction, writes the Version with `app/writing/versions.py`, and only then stores the Post with its corpus post ids and the attempt, succeeded or failed. A failed attempt is committed before the error is re-raised, so it survives the request's rollback.
 
+`POST /api/v1/posts/{id}/versions` takes Feedback and answers with the next Version. `mediators/posts.add_version` reads the Post's stored corpus (not the User's current Inspiration authors) and its Versions, then runs the revision call: the draft prompt, the corpus, the Brief, each Final as an assistant turn after the Feedback that produced it, and the new Feedback last. Drafts and failed attempts stay out of that conversation. A Post with no Version (its first attempt failed) answers 409.
+
 The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included: change them only on purpose, as a prompt change. The writing, humanizing and revising models are constants in `app/writing/constants.py`.
 
 ### Call an LLM

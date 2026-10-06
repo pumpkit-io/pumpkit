@@ -53,11 +53,18 @@ const toVersion = (v: VersionApi): Version => ({
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
 export const BRIEF_MAX_CHARS = 200_000;
+/** The backend refuses longer Feedback; the UI shows a counter as it gets close. */
+export const FEEDBACK_MAX_CHARS = 100_000;
 
 export const postService = {
   /** Writes the first Version before answering, which can take a minute or two. */
   start: async (brief: string): Promise<Post> => {
     const { data } = await apiService.post<PostApi>('/posts', { brief });
     return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
+  },
+  /** Writes the next Version from Feedback before answering, which can take a minute or two. */
+  addVersion: async (postId: string, feedback: string): Promise<Version> => {
+    const { data } = await apiService.post<VersionApi>(`/posts/${postId}/versions`, { feedback });
+    return toVersion(data);
   },
 };

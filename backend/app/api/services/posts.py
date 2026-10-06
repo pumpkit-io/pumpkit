@@ -3,6 +3,7 @@ from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.models import AuthorPost, InspirationAuthor, Post, VersionAttempt
 from app.writing import slop
@@ -33,6 +34,27 @@ async def corpus_for_user(db: AsyncSession, *, user_id: str) -> Corpus:
         )
         posts.extend(CorpusPost(post_id=id_, handle=handle, text=text) for id_, text in rows.all())
     return group_corpus(posts)
+
+
+async def get_user_post(db: AsyncSession, *, user_id: str, post_id: str) -> Optional[Post]:
+    """The User's Post with its attempts in order, or None when it isn't theirs."""
+    result = await db.execute(
+        select(Post)
+        .where(Post.id == post_id, Post.user_id == user_id)
+        .options(selectinload(Post.attempts))
+    )
+    return result.scalar_one_or_none()
+
+
+async def corpus_for_post(db: AsyncSession, *, post: Post) -> Corpus:
+    """The corpus the Post started with, whatever the User's Inspiration authors are now."""
+    rows = await db.execute(
+        select(AuthorPost.id, AuthorPost.handle, AuthorPost.text).where(
+            AuthorPost.id.in_(post.corpus_post_ids)
+        )
+    )
+    by_id = {id_: CorpusPost(post_id=id_, handle=handle, text=text) for id_, handle, text in rows}
+    return group_corpus([by_id[post_id] for post_id in post.corpus_post_ids])
 
 
 async def create_post(

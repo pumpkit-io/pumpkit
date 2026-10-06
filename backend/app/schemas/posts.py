@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.writing.constants import BRIEF_MAX_CHARS
+from app.writing.constants import BRIEF_MAX_CHARS, FEEDBACK_MAX_CHARS
 
 
 class PostStartRequest(BaseModel):
@@ -22,6 +22,20 @@ class PostStartRequest(BaseModel):
 class TellResponse(BaseModel):
     name: str
     description: str
+
+
+class FeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: str = Field(..., max_length=FEEDBACK_MAX_CHARS)
+
+    @field_validator("feedback")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Write some Feedback first.")
+        return stripped
 
 
 class VersionResponse(BaseModel):
