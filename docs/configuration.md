@@ -45,6 +45,7 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | `BILLING_PLAN_KEYS` | The Plans Pumpkit sells: Stripe price lookup keys as a quoted JSON list (like `CORS_ORIGINS`), in display order. Only these are listed and purchasable; each must be an active recurring price. |
 | `BILLING_TRIAL_PERIOD_DAYS` | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. `0` turns Trials off. |
 | `OPENROUTER_API_KEY` (optional) | Enables the LLM client; without it calls raise `LLMNotConfiguredError`. |
+| `TWITTERAPI_IO_API_KEY` (optional) | Reads Inspiration authors' posts from twitterapi.io (ADR 0005). The app boots without it; adding an author then fails with a 503 naming the variable. |
 | `POSTHOG_ENABLED` (optional) | `true` to enable server-side analytics and error tracking. |
 | `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. |
 | `POSTHOG_PERSONAL_API_KEY` (optional) | Personal key, used by `scripts/deploy.sh` for deploy annotations. |
