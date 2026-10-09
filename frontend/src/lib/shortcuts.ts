@@ -5,6 +5,11 @@ export const IS_MAC =
 
 export const MOD_LABEL = IS_MAC ? '⌘' : 'Ctrl';
 
+export const NEW_POST_KEYS = { key: 'o', label: `${MOD_LABEL}⇧O` };
+
+const isNewPost = (e: KeyboardEvent) =>
+  (IS_MAC ? e.metaKey : e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === NEW_POST_KEYS.key;
+
 export interface ShortcutHandlers {
   onNewPost: () => void;
   onEscape: () => void;
@@ -14,10 +19,10 @@ export interface ShortcutHandlers {
 export function useShortcuts({ onNewPost, onEscape }: ShortcutHandlers): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = IS_MAC ? e.metaKey : e.ctrlKey;
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'o') {
+      if (isNewPost(e)) {
         e.preventDefault();
-        onNewPost();
+        // An open dialog hides the writer, so a New Post there would clear it out of sight.
+        if (!e.repeat && !document.querySelector('[role="dialog"]')) onNewPost();
       } else if (e.key === 'Escape') {
         onEscape();
       }

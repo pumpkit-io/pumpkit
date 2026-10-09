@@ -5,7 +5,7 @@ import { useSidebar } from './useSidebar';
 
 export type NewPostSource = 'sidebar' | 'rail' | 'shortcut';
 
-/** New Post from the sidebar or the shortcut; refused while a Version is on its way. */
+/** New Post from the sidebar row, the rail or the shortcut; refused while a Version is on its way. */
 export function useNewPost() {
   const { isWriting, newPost } = usePostWriterContext();
   const { setMobileOpen } = useSidebar();

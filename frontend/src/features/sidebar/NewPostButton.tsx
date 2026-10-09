@@ -1,5 +1,5 @@
 import { SquarePen } from 'lucide-react';
-import { MOD_LABEL } from '@/lib/shortcuts';
+import { NEW_POST_KEYS } from '@/lib/shortcuts';
 import { SidebarRowButton } from './SidebarRowButton';
 import { useNewPost } from './useNewPost';
 
@@ -17,7 +17,7 @@ export function NewPostButton() {
             aria-hidden
             className="hidden font-sans text-xs tracking-wide text-muted-foreground/60 sm:inline"
           >
-            {MOD_LABEL}⇧O
+            {NEW_POST_KEYS.label}
           </kbd>
         }
       />

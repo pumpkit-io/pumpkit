@@ -593,6 +593,30 @@ describe('Home', () => {
       expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'shortcut' });
     });
 
+    it('starts one New Post when the shortcut is held down', async () => {
+      await readyToWrite();
+
+      newPostShortcut();
+      fireEvent.keyDown(window, { key: 'O', ctrlKey: true, shiftKey: true, repeat: true });
+
+      expect(
+        vi.mocked(track).mock.calls.filter(([event]) => event === 'sidebar_new_post_clicked'),
+      ).toHaveLength(1);
+    });
+
+    it('leaves the Brief alone when the shortcut is pressed over a dialog', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      renderHome();
+      const area = await writer();
+      fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'half a thought' } });
+      fireEvent.click(await area.findByRole('button', { name: /subscribe/i }));
+      await screen.findByRole('dialog');
+
+      newPostShortcut();
+
+      expect(area.getByLabelText('Brief')).toHaveValue('half a thought');
+    });
+
     it('refuses a New Post while a Version is being written', async () => {
       vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
       const area = await readyToWrite();
