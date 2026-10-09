@@ -91,6 +91,37 @@ test.describe('logged in', () => {
     }
   });
 
+  test('a closed sidebar shows the logo, with the toggle in the New Post column', async ({
+    page,
+  }) => {
+    await page.goto('/home');
+    const aside = page.locator('aside').first();
+    const logo = aside.locator('img').first();
+    await expect(logo).toBeVisible();
+
+    await page.getByRole('button', { name: 'Close sidebar' }).click();
+    await page.mouse.move(900, 400);
+
+    const toggle = aside.getByRole('button', { name: 'Open sidebar' });
+    const opacity = (l: typeof logo) =>
+      l.evaluate((el) => {
+        let op = 1;
+        for (let e: Element | null = el; e && e.tagName !== 'ASIDE'; e = e.parentElement)
+          op *= parseFloat(getComputedStyle(e).opacity);
+        return op;
+      });
+    await expect.poll(() => opacity(logo)).toBe(1);
+    await expect.poll(() => opacity(toggle)).toBe(0);
+
+    const centre = async (l: typeof logo) => {
+      const b = (await l.boundingBox())!;
+      return b.x + b.width / 2;
+    };
+    const newPost = await centre(aside.getByRole('button', { name: 'New Post' }).first());
+    expect(await centre(toggle)).toBe(newPost);
+    expect(await centre(logo)).toBe(newPost);
+  });
+
   test('the sidebar avatar stays put and visible while the sidebar opens and closes', async ({
     page,
   }) => {

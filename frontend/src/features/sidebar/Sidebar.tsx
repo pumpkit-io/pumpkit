@@ -55,7 +55,7 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           className={cn(
             'absolute inset-y-0 left-0 flex items-center',
             SLIDE_AND_FADE,
-            isExpanded ? 'pl-3' : 'pl-1',
+            isExpanded ? 'pl-3' : 'pl-2',
           )}
           style={{ opacity: brandVisible ? 1 : 0, pointerEvents: brandVisible ? 'auto' : 'none' }}
           aria-hidden={!brandVisible}
@@ -66,10 +66,12 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           className={cn(
             'absolute inset-y-0 right-0 flex items-center',
             SLIDE_AND_FADE,
-            isExpanded ? 'pr-3' : 'pr-1',
+            // 7px: the aside's 1px border sits inside its 56px, and the rail's icons centre on 28px.
+            isExpanded ? 'pr-3' : 'pr-[7px]',
           )}
           style={{ opacity: toggleVisible ? 1 : 0, pointerEvents: toggleVisible ? 'auto' : 'none' }}
-          onFocus={() => setToggleFocused(true)}
+          // A click also focuses the toggle; only keyboard focus should keep it over the logo.
+          onFocus={(e) => setToggleFocused(e.target.matches(':focus-visible'))}
           onBlur={() => setToggleFocused(false)}
         >
           <ToggleButton collapsed={!isExpanded} onClick={toggleCollapsed} />
