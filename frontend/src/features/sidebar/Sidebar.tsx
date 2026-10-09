@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { House, PanelLeft } from 'lucide-react';
+import { PanelLeft, SquarePen } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
 import { useProfile } from '@/pages/Home/ProfileContext';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './useSidebar';
-import { SidebarRowButton } from './SidebarRowButton';
+import { NewPostButton } from './NewPostButton';
+import { RailTooltip } from './RailTooltip';
+import { useNewPost } from './useNewPost';
 import { UserCard } from './UserCard';
 import { UserMenu } from './UserMenu';
 
@@ -22,12 +24,13 @@ function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () 
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex h-10 w-10 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group relative flex h-10 w-10 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={label}
     >
-      <span className="flex h-full w-full items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 ease-out group-hover:bg-[var(--hover)] group-hover:text-foreground">
+      <span className="flex h-full w-full items-center justify-center rounded-xl bg-transparent text-muted-foreground transition-all duration-150 ease-out group-hover:bg-[var(--hover)] group-hover:text-foreground">
         <PanelLeft className="h-5 w-5" />
       </span>
+      <RailTooltip label={label} />
     </button>
   );
 }
@@ -35,7 +38,9 @@ function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () 
 export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } = {}) {
   const { collapsed, toggleCollapsed } = useSidebar();
   const profile = useProfile();
+  const newPost = useNewPost();
   const [hovered, setHovered] = useState(false);
+  const [toggleFocused, setToggleFocused] = useState(false);
   const prefersReducedMotion = useReducedMotion();
   const collapsedRailRef = useRef<HTMLDivElement>(null);
   const expandedBodyRef = useRef<HTMLDivElement>(null);
@@ -47,8 +52,9 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
   const fade = prefersReducedMotion
     ? { duration: 0 }
     : { duration: 0.15, ease: 'easeOut' as const };
-  const brandVisible = isExpanded || !hovered;
-  const toggleVisible = isExpanded || hovered;
+  // On the collapsed rail the toggle takes the logo's place on hover or keyboard focus.
+  const brandVisible = isExpanded || (!hovered && !toggleFocused);
+  const toggleVisible = isExpanded || hovered || toggleFocused;
 
   useEffect(() => {
     collapsedRailRef.current?.toggleAttribute('inert', isExpanded);
@@ -65,7 +71,7 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
         <motion.div
           className={cn(
             'absolute inset-y-0 left-0 flex items-center',
-            isExpanded ? 'pl-3' : 'pl-2',
+            isExpanded ? 'pl-3' : 'pl-1',
           )}
           initial={false}
           animate={{ opacity: brandVisible ? 1 : 0 }}
@@ -73,17 +79,19 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           style={{ pointerEvents: brandVisible ? 'auto' : 'none' }}
           aria-hidden={!brandVisible}
         >
-          <Brand size="sm" showName={isExpanded} />
+          <Brand showName={isExpanded} />
         </motion.div>
         <motion.div
           className={cn(
             'absolute inset-y-0 right-0 flex items-center',
-            isExpanded ? 'pr-3' : 'pr-2',
+            isExpanded ? 'pr-3' : 'pr-1',
           )}
           initial={false}
           animate={{ opacity: toggleVisible ? 1 : 0 }}
           transition={fade}
           style={{ pointerEvents: toggleVisible ? 'auto' : 'none' }}
+          onFocus={() => setToggleFocused(true)}
+          onBlur={() => setToggleFocused(false)}
         >
           <ToggleButton collapsed={!isExpanded} onClick={toggleCollapsed} />
         </motion.div>
@@ -98,6 +106,18 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           transition={fade}
           style={{ pointerEvents: isExpanded ? 'none' : 'auto' }}
         >
+          <nav aria-label="Sidebar rail">
+            <button
+              type="button"
+              onClick={() => newPost.start('rail')}
+              disabled={newPost.disabled}
+              className="group relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+              aria-label="New Post"
+            >
+              <SquarePen className="h-5 w-5" />
+              <RailTooltip label="New Post" />
+            </button>
+          </nav>
           <div className="mt-auto">
             <UserMenu
               trigger={
@@ -121,13 +141,8 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           transition={fade}
           style={{ pointerEvents: isExpanded ? 'auto' : 'none' }}
         >
-          {/* Add your app's navigation here. */}
-          <nav className="flex-1 py-2" aria-label="Main">
-            <SidebarRowButton
-              icon={<House className="h-4 w-4" />}
-              label="Home"
-              aria-current="page"
-            />
+          <nav className="flex-1" aria-label="Main">
+            <NewPostButton />
           </nav>
           <UserCard />
         </motion.div>

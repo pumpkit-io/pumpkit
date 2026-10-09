@@ -12,6 +12,7 @@ import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
 import { InspirationAuthorsPanel } from '@/features/inspirationAuthors/InspirationAuthorsPanel';
 import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
 import { PostWriter } from '@/features/posts/PostWriter';
+import { PostWriterProvider } from '@/features/posts/PostWriterProvider';
 import { Topbar } from '@/features/topbar/Topbar';
 import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
@@ -60,23 +61,25 @@ function HomeInner() {
 
   return (
     <ProfileProvider value={profile} setValue={setProfile}>
-      <Shell
-        sidebar={<Sidebar />}
-        sidebarDrawer={<SidebarMobileDrawer />}
-        main={
-          <>
-            <Topbar title="Home" />
-            <div className="flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
-                <InspirationAuthorsProvider>
-                  <InspirationAuthorsPanel />
-                  <PostWriter />
-                </InspirationAuthorsProvider>
+      <PostWriterProvider>
+        <Shell
+          sidebar={<Sidebar />}
+          sidebarDrawer={<SidebarMobileDrawer />}
+          main={
+            <>
+              <Topbar title="Home" />
+              <div className="flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
+                  <InspirationAuthorsProvider>
+                    <InspirationAuthorsPanel />
+                    <PostWriter />
+                  </InspirationAuthorsProvider>
+                </div>
               </div>
-            </div>
-          </>
-        }
-      />
+            </>
+          }
+        />
+      </PostWriterProvider>
       <AccountDialog />
       <BillingDialog />
     </ProfileProvider>

@@ -148,6 +148,7 @@ async function writeBrief(area: Awaited<ReturnType<typeof writer>>, brief: strin
 
 describe('Home', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(inspirationAuthorService.add).mockReset();
@@ -542,6 +543,90 @@ describe('Home', () => {
 
       expect(area.getByText('95,000 / 100,000 characters')).toBeInTheDocument();
       expect(area.getByRole('button', { name: 'Send Feedback' })).toBeEnabled();
+    });
+  });
+
+  describe('Sidebar', () => {
+    async function withPostOnScreen() {
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship small things');
+      await area.findByText('the final text');
+      return area;
+    }
+
+    function newPostShortcut(target: Element | Window = window) {
+      fireEvent.keyDown(target, { key: 'O', ctrlKey: true, shiftKey: true });
+    }
+
+    it('starts a New Post from the sidebar and puts the cursor in the Brief', async () => {
+      const area = await withPostOnScreen();
+
+      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+      fireEvent.click(nav.getByRole('button', { name: /new post/i }));
+
+      expect(area.queryByText('the final text')).not.toBeInTheDocument();
+      expect(area.getByLabelText('Brief')).toHaveValue('');
+      expect(area.getByLabelText('Brief')).toHaveFocus();
+      expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'sidebar' });
+    });
+
+    it('starts a New Post from the collapsed rail', async () => {
+      const area = await withPostOnScreen();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close sidebar' }));
+      const rail = within(screen.getByRole('navigation', { name: 'Sidebar rail' }));
+      fireEvent.click(rail.getByRole('button', { name: 'New Post' }));
+
+      expect(area.queryByText('the final text')).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'rail' });
+    });
+
+    it('starts a New Post on Ctrl+Shift+O, even while typing a Brief', async () => {
+      const area = await readyToWrite();
+      const brief = area.getByLabelText('Brief');
+      fireEvent.change(brief, { target: { value: 'half a thought' } });
+
+      newPostShortcut(brief);
+
+      expect(brief).toHaveValue('');
+      expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'shortcut' });
+    });
+
+    it('refuses a New Post while a Version is being written', async () => {
+      vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship small things');
+
+      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+      expect(nav.getByRole('button', { name: /new post/i })).toBeDisabled();
+      newPostShortcut();
+
+      expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
+      expect(track).not.toHaveBeenCalledWith('sidebar_new_post_clicked', expect.anything());
+    });
+
+    it('closes the mobile drawer after a New Post', async () => {
+      await withPostOnScreen();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }));
+      const drawerNav = screen.getAllByRole('navigation', { name: 'Main' }).at(-1)!;
+      fireEvent.click(within(drawerNav).getByRole('button', { name: /new post/i }));
+
+      await waitFor(() =>
+        expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1),
+      );
+    });
+
+    it('remembers a collapsed sidebar across visits', async () => {
+      const first = renderHome();
+      fireEvent.click(await screen.findByRole('button', { name: 'Close sidebar' }));
+      first.unmount();
+
+      renderHome();
+
+      await authorsPanel();
+      expect(screen.queryByRole('button', { name: 'Close sidebar' })).not.toBeInTheDocument();
     });
   });
 
