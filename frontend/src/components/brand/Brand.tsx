@@ -7,11 +7,13 @@ import logoDark from '@/assets/brand/logo-dark.svg';
 interface BrandProps {
   className?: string;
   showName?: boolean;
+  /** Fades the name out but keeps its place, so a sidebar closing doesn't make it pop. */
+  nameHidden?: boolean;
   size?: 'sm' | 'md';
 }
 
 /** Replace the SVGs in src/assets/brand/ with your own. */
-export function Brand({ className, showName = true, size = 'md' }: BrandProps) {
+export function Brand({ className, showName = true, nameHidden = false, size = 'md' }: BrandProps) {
   const { resolved } = useTheme();
   const src = resolved === 'dark' ? logoDark : logoLight;
   return (
@@ -23,7 +25,14 @@ export function Brand({ className, showName = true, size = 'md' }: BrandProps) {
         draggable={false}
       />
       {showName && (
-        <span className="font-wordmark text-lg font-semibold leading-none tracking-[-0.02em] text-foreground">
+        <span
+          aria-hidden={nameHidden || undefined}
+          className={cn(
+            'font-wordmark text-lg font-semibold leading-none tracking-[-0.02em] text-foreground',
+            'transition-opacity duration-150 ease-out motion-reduce:transition-none',
+            nameHidden && 'opacity-0',
+          )}
+        >
           {APP_NAME}
         </span>
       )}

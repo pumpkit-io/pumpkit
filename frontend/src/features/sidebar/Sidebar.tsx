@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { PanelLeft, SquarePen } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
 import { useProfile } from '@/pages/Home/ProfileContext';
@@ -17,6 +16,12 @@ function initials(name: string): string {
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
   return (first + last).toUpperCase() || '•';
 }
+
+// CSS transitions, not framer-motion: its hardware-accelerated opacity fade shows the old value for a frame when it ends.
+const FADE = 'transition-opacity duration-150 ease-out motion-reduce:transition-none';
+// Padding slides with the aside's 200ms width so the logo and toggle never jump.
+const SLIDE_AND_FADE =
+  '[transition:opacity_150ms_ease-out,padding_200ms] motion-reduce:[transition:none]';
 
 function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () => void }) {
   const label = collapsed ? 'Open sidebar' : 'Close sidebar';
@@ -41,7 +46,6 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
   const newPost = useNewPost();
   const [hovered, setHovered] = useState(false);
   const [toggleFocused, setToggleFocused] = useState(false);
-  const prefersReducedMotion = useReducedMotion();
   const collapsedRailRef = useRef<HTMLDivElement>(null);
   const expandedBodyRef = useRef<HTMLDivElement>(null);
 
@@ -49,9 +53,6 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
   const display = profile
     ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email
     : '•';
-  const fade = prefersReducedMotion
-    ? { duration: 0 }
-    : { duration: 0.15, ease: 'easeOut' as const };
   // On the collapsed rail the toggle takes the logo's place on hover or keyboard focus.
   const brandVisible = isExpanded || (!hovered && !toggleFocused);
   const toggleVisible = isExpanded || hovered || toggleFocused;
@@ -68,43 +69,39 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
       onMouseLeave={() => setHovered(false)}
     >
       <div className="relative mt-1 h-14 overflow-hidden">
-        <motion.div
+        <div
           className={cn(
             'absolute inset-y-0 left-0 flex items-center',
+            SLIDE_AND_FADE,
             isExpanded ? 'pl-3' : 'pl-1',
           )}
-          initial={false}
-          animate={{ opacity: brandVisible ? 1 : 0 }}
-          transition={fade}
-          style={{ pointerEvents: brandVisible ? 'auto' : 'none' }}
+          style={{ opacity: brandVisible ? 1 : 0, pointerEvents: brandVisible ? 'auto' : 'none' }}
           aria-hidden={!brandVisible}
         >
-          <Brand showName={isExpanded} />
-        </motion.div>
-        <motion.div
+          <Brand nameHidden={!isExpanded} />
+        </div>
+        <div
           className={cn(
             'absolute inset-y-0 right-0 flex items-center',
+            SLIDE_AND_FADE,
             isExpanded ? 'pr-3' : 'pr-1',
           )}
-          initial={false}
-          animate={{ opacity: toggleVisible ? 1 : 0 }}
-          transition={fade}
-          style={{ pointerEvents: toggleVisible ? 'auto' : 'none' }}
+          style={{ opacity: toggleVisible ? 1 : 0, pointerEvents: toggleVisible ? 'auto' : 'none' }}
           onFocus={() => setToggleFocused(true)}
           onBlur={() => setToggleFocused(false)}
         >
           <ToggleButton collapsed={!isExpanded} onClick={toggleCollapsed} />
-        </motion.div>
+        </div>
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <motion.div
+        <div
           ref={collapsedRailRef}
-          className="absolute inset-y-0 left-0 flex w-14 flex-col items-center gap-1 pb-2 pt-1"
-          initial={false}
-          animate={{ opacity: isExpanded ? 0 : 1 }}
-          transition={fade}
-          style={{ pointerEvents: isExpanded ? 'none' : 'auto' }}
+          className={cn(
+            'absolute inset-y-0 left-0 flex w-14 flex-col items-center gap-1 pb-2 pt-1',
+            FADE,
+          )}
+          style={{ opacity: isExpanded ? 0 : 1, pointerEvents: isExpanded ? 'none' : 'auto' }}
         >
           <nav aria-label="Sidebar rail">
             <button
@@ -131,21 +128,18 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
               }
             />
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
+        <div
           ref={expandedBodyRef}
-          className="absolute inset-0 flex flex-col"
-          initial={false}
-          animate={{ opacity: isExpanded ? 1 : 0 }}
-          transition={fade}
-          style={{ pointerEvents: isExpanded ? 'auto' : 'none' }}
+          className={cn('absolute inset-0 flex flex-col', FADE)}
+          style={{ opacity: isExpanded ? 1 : 0, pointerEvents: isExpanded ? 'auto' : 'none' }}
         >
           <nav className="flex-1" aria-label="Main">
             <NewPostButton />
           </nav>
           <UserCard />
-        </motion.div>
+        </div>
       </div>
     </div>
   );
