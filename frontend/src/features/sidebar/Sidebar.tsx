@@ -1,27 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanelLeft, SquarePen } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
-import { useProfile } from '@/pages/Home/ProfileContext';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './useSidebar';
 import { NewPostButton } from './NewPostButton';
 import { RailTooltip } from './RailTooltip';
 import { useNewPost } from './useNewPost';
+import { FADE, SLIDE_AND_FADE } from './transitions';
 import { UserCard } from './UserCard';
-import { UserMenu } from './UserMenu';
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase() || '•';
-}
-
-// CSS transitions, not framer-motion: its hardware-accelerated opacity fade shows the old value for a frame when it ends.
-const FADE = 'transition-opacity duration-150 ease-out motion-reduce:transition-none';
-// Padding slides with the aside's 200ms width so the logo and toggle never jump.
-const SLIDE_AND_FADE =
-  '[transition:opacity_150ms_ease-out,padding_200ms] motion-reduce:[transition:none]';
 
 function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () => void }) {
   const label = collapsed ? 'Open sidebar' : 'Close sidebar';
@@ -42,7 +28,6 @@ function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () 
 
 export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } = {}) {
   const { collapsed, toggleCollapsed } = useSidebar();
-  const profile = useProfile();
   const newPost = useNewPost();
   const [hovered, setHovered] = useState(false);
   const [toggleFocused, setToggleFocused] = useState(false);
@@ -50,9 +35,6 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
   const expandedBodyRef = useRef<HTMLDivElement>(null);
 
   const isExpanded = forceExpanded || !collapsed;
-  const display = profile
-    ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email
-    : '•';
   // On the collapsed rail the toggle takes the logo's place on hover or keyboard focus.
   const brandVisible = isExpanded || (!hovered && !toggleFocused);
   const toggleVisible = isExpanded || hovered || toggleFocused;
@@ -115,19 +97,6 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
               <RailTooltip label="New Post" />
             </button>
           </nav>
-          <div className="mt-auto">
-            <UserMenu
-              trigger={
-                <button
-                  type="button"
-                  aria-label="User menu"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {initials(display)}
-                </button>
-              }
-            />
-          </div>
         </div>
 
         <div
@@ -138,9 +107,10 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           <nav className="flex-1" aria-label="Main">
             <NewPostButton />
           </nav>
-          <UserCard />
         </div>
       </div>
+
+      <UserCard expanded={isExpanded} />
     </div>
   );
 }
