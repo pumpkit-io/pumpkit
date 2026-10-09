@@ -59,7 +59,7 @@ The port wraps `openrouter_client` (`core/openrouter.py`), which also has `llm_c
 
 ### Add a page to the shell
 
-Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx` and render your feature in the main area of `frontend/src/pages/Home.tsx`, beside the writing tools, or add a protected route in `frontend/src/App.tsx`.
+Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx`, each with a matching icon button on the collapsed rail. Render your feature in the main area of `frontend/src/pages/Home.tsx`, beside the writing tools, or add a protected route in `frontend/src/App.tsx`.
 
 ### Edit the user profile
 

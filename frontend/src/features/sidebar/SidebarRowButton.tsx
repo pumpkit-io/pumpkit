@@ -17,7 +17,7 @@ export const SidebarRowButton = forwardRef<HTMLButtonElement, SidebarRowButtonPr
         className={cn(
           'group mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-2.5 rounded-lg px-2.5',
           'font-sans text-sm text-foreground transition-colors',
-          'hover:bg-[var(--hover)]',
+          'hover:bg-[var(--hover)] disabled:pointer-events-none disabled:opacity-50',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0',
           className,
         )}

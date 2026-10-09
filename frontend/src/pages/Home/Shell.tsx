@@ -1,5 +1,7 @@
-import { useEffect, type ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
+import { useNewPost } from '@/features/sidebar/useNewPost';
 import { useSidebar } from '@/features/sidebar/useSidebar';
+import { useShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 
 interface ShellProps {
@@ -10,14 +12,12 @@ interface ShellProps {
 
 export function Shell({ sidebar, sidebarDrawer, main }: ShellProps) {
   const { collapsed, setMobileOpen } = useSidebar();
+  const { start: startNewPost } = useNewPost();
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMobileOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [setMobileOpen]);
+  useShortcuts({
+    onNewPost: useCallback(() => startNewPost('shortcut'), [startNewPost]),
+    onEscape: useCallback(() => setMobileOpen(false), [setMobileOpen]),
+  });
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground">

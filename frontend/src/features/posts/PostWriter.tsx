@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import type { FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
@@ -11,13 +11,13 @@ import { FeedbackForm } from './FeedbackForm';
 import { LengthCounter } from './LengthCounter';
 import { LimitNotice } from '@/components/LimitNotice';
 import { NumberedVersion } from './NumberedVersion';
-import { usePostWriter } from './usePostWriter';
+import { usePostWriterContext } from './usePostWriterContext';
 
 export function PostWriter() {
   const { subscribed } = useSubscribed();
   const { authors } = useInspirationAuthorsContext();
-  const { post, isWriting, error, notice, start, addFeedback, clear } = usePostWriter();
-  const [brief, setBrief] = useState('');
+  const { post, isWriting, error, notice, start, addFeedback, brief, setBrief, briefRef, newPost } =
+    usePostWriterContext();
 
   const noCorpus = authors !== null && !authors.some((a) => a.postCount > 0);
   const briefLength = charCount(brief);
@@ -28,11 +28,6 @@ export function PostWriter() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (canWrite && typed && !isWriting) void start(typed);
-  };
-
-  const newPost = () => {
-    clear();
-    setBrief('');
   };
 
   return (
@@ -84,6 +79,7 @@ export function PostWriter() {
               Brief
             </label>
             <Textarea
+              ref={briefRef}
               id="post-brief"
               value={brief}
               onChange={(e) => setBrief(e.target.value)}

@@ -30,6 +30,154 @@ test.describe('logged in', () => {
     await expect(writer.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
   });
 
+  test('the sidebar logo slides and fades without a jump or flash', async ({ page }) => {
+    await page.goto('/home');
+    const aside = page.locator('aside').first();
+    await expect(aside.locator('img').first()).toBeVisible();
+    const box = (await aside.boundingBox())!;
+
+    // Samples the logo every frame: position, the opacity it renders at, and the wordmark's.
+    const framesWhile = async (toggle: () => Promise<void>) => {
+      await page.evaluate(() => {
+        const aside = document.querySelector('aside')!;
+        const img = aside.querySelector('img')!;
+        const frames: { x: number; op: number; name: number }[] = [];
+        (window as unknown as { frames_: typeof frames }).frames_ = frames;
+        const t0 = performance.now();
+        const tick = () => {
+          let op = 1;
+          for (let el: Element | null = img; el && el !== aside; el = el.parentElement)
+            op *= parseFloat(getComputedStyle(el).opacity);
+          const name = img.nextElementSibling;
+          frames.push({
+            x: img.getBoundingClientRect().x,
+            op,
+            name: name ? parseFloat(getComputedStyle(name).opacity) : 0,
+          });
+          if (performance.now() - t0 < 600) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      await toggle();
+      await page.waitForTimeout(700);
+      return page.evaluate(
+        () => (window as unknown as { frames_: { x: number; op: number; name: number }[] }).frames_,
+      );
+    };
+
+    await page.mouse.move(box.x + 100, box.y + 300);
+    const closing = await framesWhile(() =>
+      page.getByRole('button', { name: 'Close sidebar' }).click(),
+    );
+    await page.mouse.move(box.x + 28, box.y + 300);
+    const opening = await framesWhile(() =>
+      aside.getByRole('button', { name: 'Open sidebar' }).click(),
+    );
+
+    for (const frames of [closing, opening]) {
+      for (let i = 1; i < frames.length; i++) {
+        const [prev, cur] = [frames[i - 1], frames[i]];
+        if (prev.op > 0.05) expect(Math.abs(cur.x - prev.x)).toBeLessThanOrEqual(2);
+        if (cur.op > 0.05) expect(prev.name - cur.name).toBeLessThanOrEqual(0.5);
+        const next = frames[i + 1];
+        if (next) {
+          const flash =
+            Math.abs(cur.op - prev.op) > 0.3 &&
+            Math.abs(next.op - cur.op) > 0.3 &&
+            Math.sign(cur.op - prev.op) !== Math.sign(next.op - cur.op);
+          expect(flash).toBe(false);
+        }
+      }
+    }
+  });
+
+  test('a closed sidebar shows the logo, with the toggle in the New Post column', async ({
+    page,
+  }) => {
+    await page.goto('/home');
+    const aside = page.locator('aside').first();
+    const logo = aside.locator('img').first();
+    await expect(logo).toBeVisible();
+
+    await page.getByRole('button', { name: 'Close sidebar' }).click();
+    await page.mouse.move(900, 400);
+
+    const toggle = aside.getByRole('button', { name: 'Open sidebar' });
+    const opacity = (l: typeof logo) =>
+      l.evaluate((el) => {
+        let op = 1;
+        for (let e: Element | null = el; e && e.tagName !== 'ASIDE'; e = e.parentElement)
+          op *= parseFloat(getComputedStyle(e).opacity);
+        return op;
+      });
+    await expect.poll(() => opacity(logo)).toBe(1);
+    await expect.poll(() => opacity(toggle)).toBe(0);
+
+    const centre = async (l: typeof logo) => {
+      const b = (await l.boundingBox())!;
+      return b.x + b.width / 2;
+    };
+    const newPost = await centre(aside.getByRole('button', { name: 'New Post' }).first());
+    expect(await centre(toggle)).toBe(newPost);
+    expect(await centre(logo)).toBe(newPost);
+  });
+
+  test('the sidebar avatar stays put and visible while the sidebar opens and closes', async ({
+    page,
+  }) => {
+    await page.goto('/home');
+    const aside = page.locator('aside').first();
+    await expect(aside.locator('[data-avatar]').first()).toBeVisible();
+    const box = (await aside.boundingBox())!;
+
+    type Avatar = { x: number; y: number; op: number };
+    // Samples every avatar in the aside each frame, with the opacity it renders at.
+    const framesWhile = async (toggle: () => Promise<void>) => {
+      await page.evaluate(() => {
+        const aside = document.querySelector('aside')!;
+        const frames: Avatar[][] = [];
+        (window as unknown as { avatars_: typeof frames }).avatars_ = frames;
+        const t0 = performance.now();
+        const tick = () => {
+          frames.push(
+            Array.from(aside.querySelectorAll('[data-avatar]')).map((el) => {
+              let op = 1;
+              for (let e: Element | null = el; e && e !== aside; e = e.parentElement)
+                op *= parseFloat(getComputedStyle(e).opacity);
+              const r = el.getBoundingClientRect();
+              return { x: r.x, y: r.y, op };
+            }),
+          );
+          if (performance.now() - t0 < 600) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      await toggle();
+      await page.waitForTimeout(700);
+      return page.evaluate(() => (window as unknown as { avatars_: Avatar[][] }).avatars_);
+    };
+
+    await page.mouse.move(box.x + 100, box.y + 300);
+    const closing = await framesWhile(() =>
+      page.getByRole('button', { name: 'Close sidebar' }).click(),
+    );
+    await page.mouse.move(box.x + 28, box.y + 300);
+    const opening = await framesWhile(() =>
+      aside.getByRole('button', { name: 'Open sidebar' }).click(),
+    );
+
+    for (const frames of [closing, opening]) {
+      const [start] = frames[0].filter((a) => a.op > 0.95);
+      for (const frame of frames) {
+        const shown = frame.filter((a) => a.op > 0.05);
+        expect(shown).toHaveLength(1);
+        expect(shown[0].op).toBeGreaterThan(0.95);
+        expect(Math.abs(shown[0].x - start.x)).toBeLessThanOrEqual(1);
+        expect(Math.abs(shown[0].y - start.y)).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
   test('user menu opens Account and Billing dialogs', async ({ page }) => {
     await page.goto('/home');
     await userMenu(page).click();
