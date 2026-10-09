@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     BILLING_PLAN_KEYS: list[str]
     # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
     BILLING_TRIAL_PERIOD_DAYS: int = Field(ge=0)
+    # When false, every signed-in User may write as if Subscribed; billing still works.
+    SUBSCRIPTION_REQUIRED: bool = False
 
     # Optional: when unset, app.core.openrouter raises LLMNotConfiguredError on use, not at boot.
     OPENROUTER_API_KEY: Optional[str] = None

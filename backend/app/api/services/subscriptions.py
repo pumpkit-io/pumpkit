@@ -94,6 +94,14 @@ async def _newest_subscription(
     return result.scalar_one_or_none()
 
 
+def grants_access(subscription: Optional[Subscription]) -> bool:
+    """
+    Whether a User holding `subscription` may use Pumpkit's writing tools: they
+    are Subscribed, or SUBSCRIPTION_REQUIRED is off.
+    """
+    return not settings.SUBSCRIPTION_REQUIRED or is_subscribed(subscription)
+
+
 def is_subscribed(subscription: Optional[Subscription]) -> bool:
     """
     Whether a User holding `subscription` is Subscribed: it is in its Trial,

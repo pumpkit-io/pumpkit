@@ -44,7 +44,7 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
                 cancel_at_period_end=subscription.cancel_at_period_end,
             )
         ),
-        subscribed=subscriptions_service.is_subscribed(subscription),
+        subscribed=subscriptions_service.grants_access(subscription),
         may_subscribe=offer.may_subscribe,
         trial_days=offer.trial_days,
     )

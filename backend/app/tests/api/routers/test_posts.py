@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.datetimes import as_utc
 from app.core.llm import LLMError
 from app.core.openrouter import LLMNotConfiguredError
@@ -238,6 +239,19 @@ async def test_a_user_who_is_not_subscribed_gets_403(client, fake_llm):
 
     assert response.status_code == 403
     assert fake_llm.calls == []
+
+
+async def test_a_user_who_is_not_subscribed_writes_while_subscriptions_are_not_required(
+    client, fake_x_reader, fake_llm, monkeypatch
+):
+    monkeypatch.setattr(settings, "SUBSCRIPTION_REQUIRED", False)
+    fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
+    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
+    fake_llm.replies = [{"post": "draft"}, {"post": "final"}]
+
+    response = await client.post(POSTS, json={"brief": "ship"})
+
+    assert response.status_code == 201
 
 
 async def _stored_posts(db) -> list[Post]:

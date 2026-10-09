@@ -48,6 +48,7 @@ _TEST_ENV = {
     "STRIPE_BILLING_PORTAL_RETURN_URL": "http://localhost:5173/billing",
     "BILLING_PLAN_KEYS": '["pumpkit_pro_monthly"]',
     "BILLING_TRIAL_PERIOD_DAYS": "14",
+    "SUBSCRIPTION_REQUIRED": "true",
     "OPENROUTER_API_KEY": "sk-or-test",
     "POSTHOG_ENABLED": "false",
 }

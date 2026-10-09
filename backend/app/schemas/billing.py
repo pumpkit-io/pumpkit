@@ -43,6 +43,7 @@ class BillingMeResponse(BaseModel):
     """
     What the authenticated User holds and may do.
     `subscription` is the Running one, else `incomplete`, never Ended; `trial_days` is the Trial a Checkout would start with.
+    `subscribed` is whether the User may write: always true while SUBSCRIPTION_REQUIRED is off.
     """
 
     subscription: Optional[BillingSubscriptionResponse]

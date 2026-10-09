@@ -517,6 +517,18 @@ async def test_billing_me_reads_only_pumpkits_copy_never_stripe(client, db, fake
     assert response.json()["subscribed"] is False
 
 
+async def test_billing_me_reports_subscribed_while_subscriptions_are_not_required(
+    client, fake_billing, monkeypatch
+):
+    monkeypatch.setattr(settings, "SUBSCRIPTION_REQUIRED", False)
+
+    response = await client.get(BILLING_ME)
+
+    assert response.status_code == 200
+    assert response.json()["subscription"] is None
+    assert response.json()["subscribed"] is True
+
+
 async def test_the_cardless_trial_route_no_longer_exists(client, fake_billing):
     """A Trial comes only through Checkout, with a card."""
     response = await client.post(

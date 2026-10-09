@@ -4,6 +4,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
+from app.core.config import settings
 from app.core.x_reader import FetchedPost
 from app.db.models import Subscription, User
 from app.db.session import get_async_db
@@ -134,6 +135,17 @@ async def test_a_user_who_is_not_subscribed_gets_403_when_adding(client, fake_x_
     assert response.status_code == 403
     assert response.json()["detail"] == "This needs a Subscription. Subscribe to continue."
     assert fake_x_reader.calls == []
+
+
+async def test_a_user_who_is_not_subscribed_may_add_while_subscriptions_are_not_required(
+    client, fake_x_reader, monkeypatch
+):
+    monkeypatch.setattr(settings, "SUBSCRIPTION_REQUIRED", False)
+    fake_x_reader.posts["levelsio"] = _posts("1")
+
+    response = await client.post(AUTHORS, json={"handle": "levelsio"})
+
+    assert response.status_code == 201
 
 
 async def test_a_user_whose_subscription_ended_gets_403_when_removing(
