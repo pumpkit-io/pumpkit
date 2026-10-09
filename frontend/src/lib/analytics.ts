@@ -5,15 +5,34 @@ const enabled = import.meta.env.VITE_POSTHOG_ENABLED === 'true';
 // track() is typed against these keys, so an event must be declared here to be trackable.
 export const EVENTS = {
   // Landing (/)
-  landing_nav_get_started_clicked: {
-    description: 'Landing: clicked the top-right "Sign in" button.',
+  landing_nav_logo_clicked: { description: 'Landing: clicked the logo in the header.' },
+  landing_nav_authors_clicked: {
+    description: 'Landing: clicked the "Authors" header link. Props: surface (desktop | mobile).',
   },
-  landing_hero_cta_clicked: { description: 'Landing: clicked the primary hero CTA.' },
+  landing_nav_pricing_clicked: {
+    description: 'Landing: clicked the "Pricing" header link. Props: surface (desktop | mobile).',
+  },
+  landing_nav_get_started_clicked: {
+    description:
+      'Landing: clicked the "Get started" header button. Props: surface (desktop | mobile).',
+  },
+  landing_mobile_menu_opened: { description: 'Landing: opened the mobile header menu.' },
+  landing_mobile_menu_closed: { description: 'Landing: closed the mobile header menu.' },
+  landing_hero_cta_clicked: { description: 'Landing: clicked the "Start writing" hero button.' },
+  landing_hero_screenshot_viewed: {
+    description: 'Landing: the hero screenshot first scrolled into view.',
+  },
+  landing_authors_section_viewed: {
+    description: 'Landing: the authors section first scrolled into view.',
+  },
   landing_pricing_section_viewed: {
     description: 'Landing: the pricing section scrolled into view.',
   },
+  landing_pricing_plan_viewed: {
+    description: "Landing: a Plan's pricing table first scrolled into view. Props: plan_key.",
+  },
   landing_pricing_cta_clicked: {
-    description: 'Landing: clicked a Plan card CTA. Props: plan_key.',
+    description: 'Landing: clicked the "Get started" button at the end of the pricing section.',
   },
 
   // Login (/login) + auth callbacks

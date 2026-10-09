@@ -23,7 +23,7 @@ export function Brand({ className, showName = true, size = 'md' }: BrandProps) {
         draggable={false}
       />
       {showName && (
-        <span className="text-lg font-semibold leading-none tracking-tight text-foreground">
+        <span className="font-wordmark text-lg font-semibold leading-none tracking-[-0.02em] text-foreground">
           {APP_NAME}
         </span>
       )}
