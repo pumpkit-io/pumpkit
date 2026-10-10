@@ -85,3 +85,21 @@ _Avoid_: humanized post, output, refined post
 **Feedback**:
 What a User tells Pumpkit to change about the latest Version of a Post.
 _Avoid_: revision request, comment, instruction
+
+### Publishing
+
+**X connection**:
+A User's permission for Pumpkit to publish on one X account they own. Each User has at most one, and an X account belongs to at most one User. It is never a Sign-in method.
+_Avoid_: X login, X identity, linked account, X auth
+
+**Scheduled post**:
+A text a User has set to be published on the X account of their X connection at a chosen time, either typed by the User or copied from a Version's Final. It keeps its own copy of the text and stays a Scheduled post after it is Published or Failed.
+_Avoid_: queued tweet, publication, scheduled tweet
+
+**Published**:
+A Scheduled post that X has accepted and shows on the User's X account. It can no longer change.
+_Avoid_: posted, sent, live
+
+**Failed**:
+A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it.
+_Avoid_: errored, rejected, dead
