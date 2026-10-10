@@ -53,7 +53,7 @@ export function useScheduledPosts() {
                 : "Couldn't schedule the post. Please try again.",
             ),
           );
-          // A 409 means the X connection changed elsewhere: show its current state.
+          // A 409 may mean the X connection changed elsewhere: show its current state.
           if (errorStatus(e) === 409) void reloadXConnection();
         }
         return false;

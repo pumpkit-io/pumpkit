@@ -194,6 +194,30 @@ async def count_waiting(db: AsyncSession, *, user_id: str, x_user_id: str) -> in
     return result.scalar_one()
 
 
+async def count_publishing_between(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    start: datetime,
+    end: datetime,
+    excluding_id: Optional[str] = None,
+) -> int:
+    """The User's Scheduled posts in any state with `start <= publish_at < end`."""
+    query = (
+        select(func.count())
+        .select_from(ScheduledPost)
+        .where(
+            ScheduledPost.user_id == user_id,
+            ScheduledPost.publish_at >= start,
+            ScheduledPost.publish_at < end,
+        )
+    )
+    if excluding_id is not None:
+        query = query.where(ScheduledPost.id != excluding_id)
+    result = await db.execute(query)
+    return result.scalar_one()
+
+
 async def release_for_retry(
     db: AsyncSession, scheduled_post: ScheduledPost, *, next_attempt_at: datetime, now: datetime
 ) -> None:
