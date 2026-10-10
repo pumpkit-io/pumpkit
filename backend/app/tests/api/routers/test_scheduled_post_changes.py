@@ -53,6 +53,19 @@ async def test_editing_the_text_of_a_scheduled_post_saves_it(
     assert await _listed(client) == [edited]
 
 
+async def test_an_x_premium_account_edits_in_a_text_over_280_characters(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type="Premium")
+    await _connect_x(client)
+    scheduled = await _schedule(client, "2026-10-10T14:00:00Z")
+
+    response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"text": "a" * 281})
+
+    assert response.status_code == 200, response.text
+    assert await _listed(client) == [{**scheduled, "text": "a" * 281}]
+
+
 async def test_moving_a_scheduled_post_saves_the_new_time_in_utc_and_lists_it_in_order(
     client, subscribed, fake_x_publisher, fixed_clock
 ):

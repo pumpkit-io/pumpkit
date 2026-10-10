@@ -7,9 +7,12 @@ Emoji are matched by code point ranges, punycode is skipped, and a domain has at
 import re
 import unicodedata
 from pathlib import Path
+from typing import Optional
 
-# TODO(#66): raise the limit for X Premium accounts once the long-post spike (#67) settles it.
 X_POST_MAX_CHARS = 280
+# The API's limit for X Premium accounts, measured by the #67 spike. Basic stays at 280: unconfirmed.
+X_LONG_POST_MAX_CHARS = 25_000
+_LONG_POST_SUBSCRIPTION_TYPES = frozenset({"Premium", "PremiumPlus"})
 
 URL_LENGTH = 23
 _SCALE = 100
@@ -90,6 +93,13 @@ _EMOJI = re.compile(
     "|\U0001f3f4[\U000e0020-\U000e007e]+\U000e007f"
     f"|{_EMOJI_BASE}{_EMOJI_MODIFIER}*(?:‍{_EMOJI_BASE}{_EMOJI_MODIFIER}*)*"
 )
+
+
+def x_post_max_chars(subscription_type: Optional[str]) -> int:
+    """The post limit for an X account with this `subscription_type`, as read from `users/me`."""
+    if subscription_type in _LONG_POST_SUBSCRIPTION_TYPES:
+        return X_LONG_POST_MAX_CHARS
+    return X_POST_MAX_CHARS
 
 
 def x_weighted_length(text: str) -> int:

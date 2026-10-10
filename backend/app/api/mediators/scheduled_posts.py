@@ -14,6 +14,7 @@ from app.core.datetimes import as_utc
 from app.core.x_publisher import XPublisher
 from app.db.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState, User, XConnection
 from app.publishing.rules import MonthFull, RuleBroken
+from app.publishing.x_length import x_post_max_chars
 from app.schemas.scheduled_posts import ScheduledPostResponse, ScheduledPostsListResponse
 
 
@@ -91,7 +92,7 @@ async def create_scheduled_post(
     """With `publish_now`, published within the request: Published, Failed, or back in scheduled."""
     connection = await connection_to_publish_on(db, user_id=user.id)
     try:
-        rules.check_length(text)
+        rules.check_length(text, limit=x_post_max_chars(connection.subscription_type))
         publish_at = now if publish_now else rules.check_publish_at(publish_at, now=now)
         await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
     except RuleBroken as rule:
@@ -179,10 +180,15 @@ async def edit_scheduled_post(
         raise _publishing_started()
     reschedule = None
     try:
+        connection = (
+            await connection_to_publish_on(db, user_id=user.id)
+            if publish_at is not None
+            else await x_connections_service.get_connection(db, user_id=user.id)
+        )
         if text is not None:
-            rules.check_length(text)
-        if publish_at is not None:
-            connection = await connection_to_publish_on(db, user_id=user.id)
+            subscription_type = connection.subscription_type if connection else None
+            rules.check_length(text, limit=x_post_max_chars(subscription_type))
+        if connection is not None and publish_at is not None:
             new_publish_at = rules.check_publish_at(publish_at, now=now)
             await check_monthly_cap(
                 db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id

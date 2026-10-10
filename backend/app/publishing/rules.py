@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app.publishing.x_length import X_POST_MAX_CHARS, x_weighted_length
+from app.publishing.x_length import x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
 MIN_LEAD_TIME = timedelta(minutes=1)
@@ -20,12 +20,12 @@ class MonthFull(RuleBroken):
     pass
 
 
-def check_length(text: str) -> None:
+def check_length(text: str, *, limit: int) -> None:
     """By X's own count."""
     length = x_weighted_length(text)
-    if length > X_POST_MAX_CHARS:
+    if length > limit:
         raise RuleBroken(
-            f"This post is {length} characters by X's count, over the {X_POST_MAX_CHARS} limit."
+            f"This post is {length:,} characters by X's count, over the {limit:,} limit."
         )
 
 

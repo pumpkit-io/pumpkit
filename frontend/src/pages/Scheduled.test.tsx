@@ -347,6 +347,25 @@ describe('Scheduled', () => {
       expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
     });
 
+    it('allows an X Premium account up to 25,000 by X count', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, charLimit: 25_000 });
+      renderScheduled();
+
+      const box = await composer();
+      const text = await box.findByLabelText('Post text');
+      fireEvent.change(text, {
+        target: { value: 'a'.repeat(24_976) + ' https://example.com/' + 'x'.repeat(80) },
+      });
+
+      expect(box.getByText('25,000 / 25,000')).toBeInTheDocument();
+      expect(box.getByRole('button', { name: 'Post now' })).toBeEnabled();
+
+      fireEvent.change(text, { target: { value: 'a'.repeat(24_990) + ' 日本語のテ' } });
+
+      expect(box.getByText('1 character over the 25,000 limit')).toBeInTheDocument();
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+    });
+
     it('lists a Post now that failed with its reason', async () => {
       vi.mocked(scheduledPostService.postNow).mockResolvedValue(FAILED);
       renderScheduled();
