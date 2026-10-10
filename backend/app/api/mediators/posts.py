@@ -69,6 +69,7 @@ def version_response(attempt: VersionAttempt) -> VersionResponse:
     assert attempt.final is not None and attempt.final_char_count is not None
     assert attempt.slop_tells is not None
     return VersionResponse(
+        id=attempt.id,
         number=attempt.version_number,
         feedback=attempt.feedback,
         draft=attempt.draft,

@@ -44,8 +44,10 @@ async def test_starting_a_post_returns_it_with_its_first_version(client, with_au
     body = response.json()
     assert body["id"].startswith("post_")
     assert body["brief"] == "ship small things"
+    assert body["versions"][0]["id"].startswith("version_attempt_")
     assert body["versions"] == [
         {
+            "id": body["versions"][0]["id"],
             "number": 1,
             "feedback": None,
             "draft": "the draft - with a dash",

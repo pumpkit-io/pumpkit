@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.api.services.posts as posts_service
 import app.api.services.scheduled_posts as scheduled_posts_service
 import app.api.services.x_connections as x_connections_service
 from app.core.datetimes import as_utc
@@ -26,6 +27,7 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         # X redirects this to the post under the account's current handle.
         x_post_url=f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None,
         failed_reason=scheduled_post.failed_reason,
+        source_version_id=scheduled_post.source_version_id,
         created_at=as_utc(scheduled_post.created_at),
     )
 
@@ -96,6 +98,7 @@ async def create_scheduled_post(
     text: str,
     publish_at: Optional[datetime],
     now: datetime,
+    source_version_id: Optional[str] = None,
 ) -> ScheduledPostResponse:
     """
     A Scheduled post on the User's X connection: for `publish_at`, left for the publisher, or
@@ -103,8 +106,10 @@ async def create_scheduled_post(
     """
     connection = await connection_to_publish_on(db, user_id=user.id)
     check_length(text)
+    if source_version_id is not None:
+        await _check_source_version(db, user_id=user.id, version_id=source_version_id)
     if publish_at is None:
-        return await _post_now(db, publisher, user, connection, text, now)
+        return await _post_now(db, publisher, user, connection, text, now, source_version_id)
 
     scheduled_post = await scheduled_posts_service.create(
         db,
@@ -113,9 +118,17 @@ async def create_scheduled_post(
         text=text,
         publish_at=check_publish_at(publish_at, now=now),
         now=now,
+        source_version_id=source_version_id,
     )
     await db.commit()
     return scheduled_post_response(scheduled_post)
+
+
+async def _check_source_version(db: AsyncSession, *, user_id: str, version_id: str) -> None:
+    """A 404 unless the source Version is one of the User's."""
+    version = await posts_service.get_user_version(db, user_id=user_id, version_id=version_id)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found.")
 
 
 async def _post_now(
@@ -125,6 +138,7 @@ async def _post_now(
     connection: XConnection,
     text: str,
     now: datetime,
+    source_version_id: Optional[str],
 ) -> ScheduledPostResponse:
     scheduled_post = await scheduled_posts_service.create(
         db,
@@ -133,6 +147,7 @@ async def _post_now(
         text=text,
         publish_at=now.replace(second=0, microsecond=0),
         now=now,
+        source_version_id=source_version_id,
     )
     scheduled_post_id = scheduled_post.id
     # Publishing owns the transaction from here: it commits the new row along with its claim.

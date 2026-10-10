@@ -16,6 +16,8 @@ class ScheduledPostCreateRequest(BaseModel):
     # Exactly one of the two: a time with its UTC offset, or publish within the request.
     publish_at: Optional[AwareDatetime] = None
     publish_now: bool = False
+    # The Version whose Final the text copies; None for a typed post.
+    source_version_id: Optional[str] = None
 
     @field_validator("text")
     @classmethod
@@ -42,6 +44,8 @@ class ScheduledPostResponse(BaseModel):
     x_post_url: Optional[str]
     # Why it Failed, in words for the User.
     failed_reason: Optional[str]
+    # The Version whose Final it copied; None when typed or when that Version is gone.
+    source_version_id: Optional[str]
     created_at: datetime
 
 

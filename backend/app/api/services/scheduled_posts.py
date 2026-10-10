@@ -20,6 +20,7 @@ async def create(
     text: str,
     publish_at: datetime,
     now: datetime,
+    source_version_id: Optional[str] = None,
 ) -> ScheduledPost:
     """A new Scheduled post in scheduled. Flushes."""
     scheduled_post = ScheduledPost(
@@ -27,6 +28,7 @@ async def create(
         x_user_id=x_user_id,
         text=text,
         publish_at=publish_at,
+        source_version_id=source_version_id,
         state=SCHEDULED,
         retry_count=0,
         created_at=now,
