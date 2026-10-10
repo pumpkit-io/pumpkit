@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     # Optional: when unset, app.core.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None
 
+    # Optional: when unset, app.core.x_publisher raises XPublisherNotConfiguredError on use.
+    X_CLIENT_ID: Optional[str] = None
+    X_CLIENT_SECRET: Optional[str] = None
+    # The frontend's X callback route, registered on the X developer app.
+    X_REDIRECT_URI: Optional[str] = None
+
     # Optional: PostHog is disabled unless POSTHOG_ENABLED=true and a project key is set.
     POSTHOG_ENABLED: bool = False
     POSTHOG_PROJECT_API_KEY: Optional[str] = None
