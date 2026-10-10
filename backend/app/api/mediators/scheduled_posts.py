@@ -218,8 +218,12 @@ async def edit_scheduled_post(
     reschedule = None
     if publish_at is not None:
         connection = await connection_to_publish_on(db, user_id=user.id)
+        new_publish_at = check_publish_at(publish_at, now=now)
+        await check_monthly_cap(
+            db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id
+        )
         reschedule = scheduled_posts_service.Reschedule(
-            publish_at=check_publish_at(publish_at, now=now), x_user_id=connection.x_user_id
+            publish_at=new_publish_at, x_user_id=connection.x_user_id
         )
     if not await scheduled_posts_service.edit(
         db, scheduled_post_id=scheduled_post_id, text=text, reschedule=reschedule, now=now

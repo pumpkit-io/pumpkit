@@ -7,6 +7,7 @@ import pytest
 from httpx import AsyncClient
 
 import app.api.services.scheduled_posts as scheduled_posts_service
+from app.core.config import settings
 from app.core.x_publisher import XAccount, XRateLimitedError
 from app.publishing.publisher import run_pass
 
@@ -283,3 +284,60 @@ async def test_a_user_who_is_not_subscribed_cannot_edit(client, fake_x_publisher
     )
 
     assert response.status_code == 403
+
+
+@pytest.fixture
+def cap_of_two(monkeypatch):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+
+
+OCTOBER_FULL = (
+    "You have 2 Scheduled posts in October 2026, the most for one month. "
+    "The cap resets on November 1, 2026."
+)
+
+
+async def test_rescheduling_into_a_full_month_is_refused_with_the_date_the_cap_resets(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-11T09:00:00Z", "First")
+    await _schedule(client, "2026-10-12T09:00:00Z", "Second")
+    november = await _schedule(client, "2026-11-02T09:00:00Z", "November")
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{november['id']}", json={"publish_at": "2026-10-13T09:00:00Z"}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == OCTOBER_FULL
+    assert [p["publish_at"] for p in await _listed(client)][-1] == "2026-11-02T09:00:00Z"
+
+
+async def test_moving_a_post_within_its_full_month_is_allowed(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-11T09:00:00Z", "First")
+    second = await _schedule(client, "2026-10-12T09:00:00Z", "Second")
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{second['id']}", json={"publish_at": "2026-10-20T09:00:00Z"}
+    )
+
+    assert response.status_code == 200, response.text
+
+
+async def test_cancelling_frees_a_place_in_a_full_month(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    first = await _schedule(client, "2026-10-11T09:00:00Z", "First")
+    await _schedule(client, "2026-10-12T09:00:00Z", "Second")
+
+    await client.delete(f"{SCHEDULED_POSTS}/{first['id']}")
+    response = await client.post(
+        SCHEDULED_POSTS, json={"text": "Third", "publish_at": "2026-10-13T09:00:00Z"}
+    )
+
+    assert response.status_code == 201, response.text
