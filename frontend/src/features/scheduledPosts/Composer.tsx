@@ -7,15 +7,8 @@ import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { xWeightedLength } from '@/lib/xLength';
+import { earliestInputValue, TIME_ZONE } from './localTime';
 import { XLengthCounter } from './XLengthCounter';
-
-const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-/** A local time as a datetime-local input writes it: 2026-10-12T09:00. */
-function localInputValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 /**
  * Where the User types a text and either schedules it for a date and time in the browser's
@@ -93,7 +86,7 @@ export function Composer({
             id="composer-when"
             type="datetime-local"
             value={when}
-            min={localInputValue(new Date(Date.now() + 60_000))}
+            min={earliestInputValue()}
             onChange={(e) => setWhen(e.target.value)}
             disabled={posting}
             className="sm:w-64"

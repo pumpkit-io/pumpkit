@@ -44,8 +44,13 @@ vi.mock('@/services/xConnectionService', () => ({
   },
 }));
 vi.mock('@/services/scheduledPostService', () => ({
-  scheduledPostService: { list: vi.fn().mockResolvedValue([]), postNow: vi.fn() },
+  scheduledPostService: {
+    list: vi.fn().mockResolvedValue([]),
+    postNow: vi.fn(),
+    schedule: vi.fn(),
+  },
 }));
+vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
@@ -55,13 +60,15 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { track } from '@/lib/analytics';
+import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import {
   inspirationAuthorService,
   type InspirationAuthor,
 } from '@/services/inspirationAuthorService';
 import { postService, type Post, type Tell, type Version } from '@/services/postService';
-import { xConnectionService } from '@/services/xConnectionService';
+import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
+import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { AppLayout } from './AppLayout';
 import { Home } from './Home';
 import { Scheduled } from './Scheduled';
@@ -137,6 +144,7 @@ function postWith(final: string, finalCharCount = final.length, tells: Tell[] = 
     brief: 'ship small things',
     versions: [
       {
+        id: 'version_attempt_01',
         number: 1,
         feedback: null,
         draft: 'the draft text',
@@ -399,8 +407,209 @@ describe('Home', () => {
     });
   });
 
+  describe('Sending a Final to X', () => {
+    const CONNECTED: XConnection = {
+      handle: 'ada',
+      charLimit: 280,
+      needsReconnect: false,
+      scheduledPostsWaiting: 0,
+    };
+    // The tests run in Europe/Rome (vitest.config.ts), two hours ahead of UTC in October.
+    const SCHEDULED: ScheduledPost = {
+      id: 'scheduled_post_01',
+      text: 'the final text',
+      state: 'scheduled',
+      publishAt: '2026-10-12T07:00:00Z',
+      publishedAt: null,
+      xPostUrl: null,
+      failedReason: null,
+      createdAt: '2026-10-10T12:00:00Z',
+    };
+
+    beforeEach(() => {
+      vi.mocked(scheduledPostService.schedule).mockReset();
+      vi.mocked(scheduledPostService.postNow).mockReset();
+      vi.mocked(xConnectionService.startAuthorization).mockReset();
+      vi.mocked(redirectTo).mockReset();
+    });
+
+    async function finalWritten(final = 'the final text') {
+      vi.mocked(postService.start).mockResolvedValue(postWith(final));
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship');
+      return within(await area.findByRole('article', { name: 'Final' }));
+    }
+
+    it("schedules the Final for a time in the User's timezone, recording its Version", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+      const final = await finalWritten();
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
+      expect(dialog.getByText('the final text')).toBeInTheDocument();
+      expect(dialog.getByText('14 / 280')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Schedule' })).toBeDisabled();
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
+
+      expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        'the final text',
+        '2026-10-12T07:00:00.000Z',
+        'version_attempt_01',
+      );
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        source: 'final',
+        post_now: false,
+      });
+      expect(dialog.getByRole('link', { name: 'See Scheduled posts' })).toHaveAttribute(
+        'href',
+        '/scheduled',
+      );
+    });
+
+    it('shows why scheduling was refused and keeps the dialog open', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.schedule).mockRejectedValue(
+        apiError(422, 'Pick a time at least a minute from now.'),
+      );
+      const final = await finalWritten();
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
+
+      expect(
+        await dialog.findByText('Pick a time at least a minute from now.'),
+      ).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Schedule' })).toBeEnabled();
+    });
+
+    it('posts the Final now after a confirmation and links to it on X', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...SCHEDULED,
+        state: 'published',
+        publishedAt: '2026-10-10T12:00:14Z',
+        xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+      });
+      const final = await finalWritten();
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      expect(dialog.getByText(/goes out on @ada straight away/i)).toBeInTheDocument();
+      expect(scheduledPostService.postNow).not.toHaveBeenCalled();
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      expect(await dialog.findByText('Published on X.')).toBeInTheDocument();
+      expect(dialog.getByRole('link', { name: 'View on X' })).toHaveAttribute(
+        'href',
+        'https://x.com/i/web/status/1890000000000000001',
+      );
+      expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+        'the final text',
+        'version_attempt_01',
+      );
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        source: 'final',
+        post_now: true,
+      });
+    });
+
+    it('shows the reason when posting the Final now Failed', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...SCHEDULED,
+        state: 'failed',
+        failedReason: 'X refused the post: duplicate content.',
+      });
+      const final = await finalWritten();
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      expect(await dialog.findByText('X refused the post: duplicate content.')).toBeInTheDocument();
+      expect(dialog.queryByRole('link', { name: 'View on X' })).not.toBeInTheDocument();
+    });
+
+    it("refuses a Final over X's limit by X's count", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      const final = await finalWritten('a'.repeat(290));
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      expect(dialog.getByText('10 characters over the 280 limit')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
+    });
+
+    it.each(['Schedule', 'Post now'])(
+      'sends the User to connect X first when %s is pressed without an X connection',
+      async (action) => {
+        vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
+          'https://x.com/i/oauth2/authorize?state=s',
+        );
+        const final = await finalWritten();
+
+        fireEvent.click(final.getByRole('button', { name: action }));
+
+        const dialog = within(await screen.findByRole('dialog'));
+        expect(dialog.getByText('Connect your X account to post this Final.')).toBeInTheDocument();
+        expect(dialog.queryByLabelText('Date and time')).not.toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Connect X' }));
+        await waitFor(() =>
+          expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
+        );
+        expect(scheduledPostService.schedule).not.toHaveBeenCalled();
+        expect(scheduledPostService.postNow).not.toHaveBeenCalled();
+      },
+    );
+
+    it('asks the User to reconnect X when X no longer accepts its access', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, needsReconnect: true });
+      const final = await finalWritten();
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+
+      const dialog = within(await screen.findByRole('dialog'));
+      expect(dialog.getByText('Reconnect X to post this Final.')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Reconnect X' })).toBeInTheDocument();
+    });
+
+    it('points a User who is no longer Subscribed to Billing', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.postNow).mockRejectedValue(apiError(403, 'Subscribe first.'));
+      const final = await finalWritten();
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+      const confirm = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      fireEvent.click(confirm.getByRole('button', { name: 'Post now' }));
+
+      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+
+      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Schedule this Final' })).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('billing_dialog_opened', { source: 'final_schedule' });
+    });
+  });
+
   describe('Feedback', () => {
     const versionTwo: Version = {
+      id: 'version_attempt_02',
       number: 2,
       feedback: 'make it shorter',
       draft: 'the second draft',
@@ -456,6 +665,7 @@ describe('Home', () => {
         .mockResolvedValueOnce(versionTwo)
         .mockResolvedValueOnce({
           ...versionTwo,
+          id: 'version_attempt_03',
           number: 3,
           feedback: 'warmer',
           final: 'the third final',

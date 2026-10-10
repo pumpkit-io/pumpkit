@@ -56,6 +56,8 @@ The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, 
 
 A Subscribed User connects X on the Scheduled page (`x_connection` router; the X publisher port in `core/x_publisher.py`). `POST /api/v1/scheduled-posts` takes a text and either `publish_at` or `publish_now`. `mediators/scheduled_posts` checks every new Scheduled post in one place: `connection_to_publish_on` (an X connection that doesn't need reconnecting), `check_length` (X's weighted count) and `check_publish_at` (a whole minute, one minute to a year ahead, stored in UTC). Reuse them for anything that creates or moves a Scheduled post.
 
+A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send the Final's text with `source_version_id`, the Version's id. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so Home and Scheduled share it.
+
 A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m app.publishing`, the `publisher` service in `docker-compose.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
 
 1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "check your X profile" (a publisher died mid-call);

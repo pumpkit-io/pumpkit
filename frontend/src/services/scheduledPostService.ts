@@ -45,20 +45,29 @@ export const scheduledPostService = {
     return data.data.map(toScheduledPost);
   },
 
-  /** Publishes on X before answering: it comes back Published or Failed. */
-  postNow: async (text: string): Promise<ScheduledPost> => {
+  /**
+   * Publishes on X before answering: it comes back Published or Failed. `sourceVersionId` is
+   * the Version whose Final the text is, when it is one.
+   */
+  postNow: async (text: string, sourceVersionId?: string): Promise<ScheduledPost> => {
     const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
       text,
       publish_now: true,
+      source_version_id: sourceVersionId,
     });
     return toScheduledPost(data);
   },
 
   /** `publishAt` is an ISO instant on a whole minute; it comes back scheduled. */
-  schedule: async (text: string, publishAt: string): Promise<ScheduledPost> => {
+  schedule: async (
+    text: string,
+    publishAt: string,
+    sourceVersionId?: string,
+  ): Promise<ScheduledPost> => {
     const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
       text,
       publish_at: publishAt,
+      source_version_id: sourceVersionId,
     });
     return toScheduledPost(data);
   },
