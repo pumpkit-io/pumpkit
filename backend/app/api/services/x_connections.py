@@ -45,6 +45,44 @@ async def save_connection(
     return connection
 
 
+async def lock_connection(db: AsyncSession, *, user_id: str) -> Optional[XConnection]:
+    """
+    The User's X connection, locked and reloaded until the transaction ends, so only one
+    process refreshes its rotating refresh token. SQLite has no row locks: there it only reloads.
+    """
+    result = await db.execute(
+        select(XConnection)
+        .where(XConnection.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def save_tokens(
+    db: AsyncSession, connection: XConnection, *, tokens: XTokens, now: datetime
+) -> None:
+    """Keep refreshed tokens: X has already retired the old refresh token. Flushes."""
+    connection.access_token_encrypted = encrypt(tokens.access_token)
+    connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
+    connection.access_token_expires_at = tokens.expires_at
+    connection.scopes = tokens.scope
+    connection.updated_at = now
+    await db.flush()
+
+
+async def flag_needs_reconnect(db: AsyncSession, connection: XConnection, *, now: datetime) -> None:
+    """X refuses the connection's tokens for good. Flushes."""
+    connection.needs_reconnect = True
+    connection.updated_at = now
+    await db.flush()
+
+
+def access_token(connection: XConnection) -> str:
+    """The clear access token; "" when it can't be decrypted."""
+    return decrypt(connection.access_token_encrypted)
+
+
 def refresh_token(connection: XConnection) -> str:
     """The clear refresh token; "" when it can't be decrypted."""
     return decrypt(connection.refresh_token_encrypted)

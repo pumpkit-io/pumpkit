@@ -11,6 +11,7 @@ from app.api.routers import (
     inspiration_authors,
     magic_link_auth,
     posts,
+    scheduled_posts,
     sessions,
     support,
     users,
@@ -52,6 +53,7 @@ app.include_router(support.router, prefix="/api/v1")
 app.include_router(inspiration_authors.router, prefix="/api/v1")
 app.include_router(posts.router, prefix="/api/v1")
 app.include_router(x_connection.router, prefix="/api/v1")
+app.include_router(scheduled_posts.router, prefix="/api/v1")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]

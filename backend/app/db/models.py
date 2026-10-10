@@ -78,6 +78,9 @@ class User(Base):
     x_connection: Mapped[Optional["XConnection"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    scheduled_posts: Mapped[list["ScheduledPost"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class GoogleIdentity(Base):
@@ -401,3 +404,56 @@ class PendingXAuthorization(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     __table_args__ = (CheckConstraint("expires_at > created_at", name="expires_at_gt_created_at"),)
+
+
+ScheduledPostState = Literal[
+    "scheduled",
+    "publishing",
+    "published",
+    "failed",
+]
+SCHEDULED: ScheduledPostState = "scheduled"
+PUBLISHING: ScheduledPostState = "publishing"
+PUBLISHED: ScheduledPostState = "published"
+FAILED: ScheduledPostState = "failed"
+
+
+class ScheduledPost(Base):
+    """
+    A text a User set to be published on X at a time, with its own copy of the text. It is
+    claimed into publishing before X is called, so X is called at most once (ADR 0007).
+    """
+
+    __tablename__ = "scheduled_posts"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("scheduled_post")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # The X account it goes out on, from the X connection when it was created or rescheduled.
+    x_user_id: Mapped[str] = mapped_column(String)
+    text: Mapped[str] = mapped_column(Text)
+    # UTC, whole minutes.
+    publish_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    state: Mapped[ScheduledPostState] = mapped_column(
+        PgEnum(*get_args(ScheduledPostState), name="scheduled_post_state_enum")
+    )
+    failed_reason: Mapped[Optional[str]] = mapped_column(Text)
+    x_post_id: Mapped[Optional[str]] = mapped_column(String)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # The Version whose Final it copied: None when typed, and set to None if the Version goes.
+    source_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("version_attempts.id", ondelete="SET NULL")
+    )
+    # 429 backoff: the attempts so far and when the publisher may try again.
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # When it was claimed, so a publisher that crashed mid-call can be recovered from.
+    publishing_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship(back_populates="scheduled_posts")
+
+    # The publisher looks up due Scheduled posts by state and time.
+    __table_args__ = (Index("ix_scheduled_posts_state_publish_at", "state", "publish_at"),)
