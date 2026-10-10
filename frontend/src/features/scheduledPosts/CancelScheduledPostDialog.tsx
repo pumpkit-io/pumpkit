@@ -12,9 +12,11 @@ import {
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
 function CancelBody({
+  failed,
   onClose,
   onConfirm,
 }: {
+  failed: boolean;
   onClose: () => void;
   onConfirm: () => Promise<string | null>;
 }) {
@@ -34,10 +36,12 @@ function CancelBody({
     <>
       <DialogHeader>
         <DialogTitle className="font-sans text-base font-semibold tracking-tight">
-          Cancel this Scheduled post?
+          {failed ? 'Remove this Failed post?' : 'Cancel this Scheduled post?'}
         </DialogTitle>
         <DialogDescription className="font-sans">
-          It won&apos;t go out on X, and it is removed from your list.
+          {failed
+            ? 'It is removed from your list.'
+            : "It won't go out on X, and it is removed from your list."}
         </DialogDescription>
       </DialogHeader>
       {error && (
@@ -50,14 +54,14 @@ function CancelBody({
           Keep it
         </Button>
         <Button className="h-10" disabled={cancelling} onClick={() => void confirm()}>
-          Cancel post
+          {failed ? 'Remove' : 'Cancel post'}
         </Button>
       </DialogFooter>
     </>
   );
 }
 
-/** Asks before cancelling a scheduled Scheduled post. */
+/** Asks before cancelling a scheduled Scheduled post or removing a Failed one. */
 export function CancelScheduledPostDialog({
   post,
   onClose,
@@ -71,7 +75,14 @@ export function CancelScheduledPostDialog({
   return (
     <Dialog open={post !== null} onOpenChange={(next) => (next ? null : onClose())}>
       <DialogContent className="max-w-[480px] max-sm:h-auto">
-        {post && <CancelBody key={post.id} onClose={onClose} onConfirm={onConfirm} />}
+        {post && (
+          <CancelBody
+            key={post.id}
+            failed={post.state === 'failed'}
+            onClose={onClose}
+            onConfirm={onConfirm}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -46,8 +46,8 @@ export const scheduledPostService = {
   },
 
   /**
-   * Publishes on X before answering: it comes back Published or Failed. `sourceVersionId` is
-   * the Version whose Final the text is, when it is one.
+   * Publishes on X before answering: it comes back Published, Failed, or scheduled when X was
+   * busy and the publisher will retry. `sourceVersionId` is the Version whose Final the text is.
    */
   postNow: async (text: string, sourceVersionId?: string): Promise<ScheduledPost> => {
     const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
@@ -87,7 +87,7 @@ export const scheduledPostService = {
     return toScheduledPost(data);
   },
 
-  /** Deletes one still waiting to go out. */
+  /** Deletes a scheduled or Failed one. */
   cancel: async (id: string): Promise<void> => {
     await apiService.delete(`/scheduled-posts/${encodeURIComponent(id)}`);
   },

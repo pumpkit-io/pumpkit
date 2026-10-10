@@ -109,11 +109,18 @@ export function ScheduledPostLists({
                 <p className="font-sans text-xs text-red-700 dark:text-red-300">
                   {post.failedReason}
                 </p>
-                {onEdit && (
+                {(onEdit || onCancel) && (
                   <ItemActions>
-                    <Button variant="outline" size="sm" onClick={() => onEdit(post)}>
-                      Reschedule
-                    </Button>
+                    {onEdit && (
+                      <Button variant="outline" size="sm" onClick={() => onEdit(post)}>
+                        Reschedule
+                      </Button>
+                    )}
+                    {onCancel && (
+                      <Button variant="outline" size="sm" onClick={() => onCancel(post)}>
+                        Remove
+                      </Button>
+                    )}
                   </ItemActions>
                 )}
               </li>

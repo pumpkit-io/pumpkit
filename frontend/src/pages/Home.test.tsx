@@ -538,7 +538,24 @@ describe('Home', () => {
       fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
 
       expect(await dialog.findByText('X refused the post: duplicate content.')).toBeInTheDocument();
+      expect(dialog.getByText('This Scheduled post Failed.')).toBeInTheDocument();
+      expect(dialog.queryByText(/sent to x/i)).not.toBeInTheDocument();
       expect(dialog.queryByRole('link', { name: 'View on X' })).not.toBeInTheDocument();
+    });
+
+    it('says Pumpkit will retry when X was busy for a Final posted now', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue(SCHEDULED);
+      const final = await finalWritten();
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      expect(
+        await dialog.findByText('X was busy. Pumpkit will keep trying for the next 15 minutes.'),
+      ).toBeInTheDocument();
+      expect(dialog.getByRole('link', { name: 'See Scheduled posts' })).toBeInTheDocument();
     });
 
     it("refuses a Final over X's limit by X's count", async () => {

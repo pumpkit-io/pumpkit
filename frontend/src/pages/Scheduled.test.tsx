@@ -315,6 +315,7 @@ describe('Scheduled', () => {
       );
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
         'Shipping the new onboarding today.',
+        undefined,
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
@@ -360,6 +361,30 @@ describe('Scheduled', () => {
       expect(await failed.findByText('Shipping again.')).toBeInTheDocument();
       expect(failed.getByText(FAILED.failedReason!)).toBeInTheDocument();
       expect(box.getByLabelText('Post text')).toHaveValue('Shipping again.');
+    });
+
+    it('says Pumpkit will retry when X was busy and lists it as upcoming', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...PUBLISHED,
+        state: 'scheduled',
+        publishedAt: null,
+        xPostUrl: null,
+      });
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), {
+        target: { value: 'Shipping the new onboarding today.' },
+      });
+      fireEvent.click(box.getByRole('button', { name: 'Post now' }));
+
+      expect(await box.findByRole('status')).toHaveTextContent(
+        'X was busy. Pumpkit will keep trying for the next 15 minutes.',
+      );
+      expect(
+        await (await upcomingList()).findByText('Shipping the new onboarding today.'),
+      ).toBeInTheDocument();
+      expect(box.getByLabelText('Post text')).toHaveValue('');
     });
 
     it('shows why Post now was refused and keeps the text', async () => {
@@ -463,6 +488,7 @@ describe('Scheduled', () => {
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
         'Monday morning.',
         '2026-10-12T07:00:00.000Z',
+        undefined,
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(box.getByLabelText('Date and time')).toHaveValue('');
@@ -709,7 +735,6 @@ describe('Scheduled', () => {
       const upcoming = await upcomingList();
       expect(upcoming.queryByText('Monday morning.')).not.toBeInTheDocument();
       expect(upcoming.getByText('Wednesday morning.')).toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('scheduled_post_cancelled');
     });
 
     it('keeps an upcoming one when the User changes their mind', async () => {
@@ -764,7 +789,23 @@ describe('Scheduled', () => {
         publishAt: '2026-10-12T07:00:00.000Z',
       });
       expect(screen.queryByRole('region', { name: 'Failed' })).not.toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('scheduled_post_edited', { rescheduled: true });
+    });
+
+    it('removes a Failed one once the User confirms', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED]);
+      vi.mocked(scheduledPostService.cancel).mockResolvedValue(undefined);
+      renderScheduled();
+
+      const failed = within(await screen.findByRole('region', { name: 'Failed' }));
+      fireEvent.click(await failed.findByRole('button', { name: 'Remove' }));
+      const dialog = within(
+        await screen.findByRole('dialog', { name: 'Remove this Failed post?' }),
+      );
+      fireEvent.click(dialog.getByRole('button', { name: 'Remove' }));
+
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(scheduledPostService.cancel).toHaveBeenCalledWith(FAILED.id);
+      expect(screen.queryByRole('region', { name: 'Failed' })).not.toBeInTheDocument();
     });
 
     it('offers no changes to a User who is not Subscribed', async () => {

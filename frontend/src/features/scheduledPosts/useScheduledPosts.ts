@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
-import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
+import {
+  useCreateScheduledPost,
+  X_BUSY_NOTICE,
+  type NewScheduledPost,
+} from './useCreateScheduledPost';
 
 /** The User's Scheduled posts, loaded on mount, with Post now, Schedule, edit and cancel. */
 export function useScheduledPosts() {
   const { refresh: refreshSubscribed } = useSubscribed();
   const { reload: reloadXConnection } = useXConnectionContext();
+  const { sending: posting, error, create } = useCreateScheduledPost();
   /** Undefined while loading. */
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[] | undefined>(undefined);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [posting, setPosting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,53 +31,28 @@ export function useScheduledPosts() {
   }, []);
 
   /**
-   * Sends a new Scheduled post and lists it. Resolves to whether it went the way the User
-   * asked (Published, or scheduled), so the composer knows to clear itself.
+   * Sends a new Scheduled post and lists it. Resolves to whether it is on its way (Published,
+   * or scheduled), so the composer knows to clear itself.
    */
-  const create = useCallback(
-    async (postNow: boolean, send: () => Promise<ScheduledPost>): Promise<boolean> => {
-      setPosting(true);
-      setError(null);
-      try {
-        const created = await send();
-        track('scheduled_post_created', { source: 'typed', post_now: postNow });
-        setScheduledPosts((current) => [created, ...(current ?? [])]);
-        // A Failed one may have flagged the X connection for reconnecting.
-        if (created.state === 'failed') void reloadXConnection();
-        return created.state !== 'failed';
-      } catch (e) {
-        if (errorStatus(e) === 403) {
-          refreshSubscribed();
-        } else {
-          setError(
-            errorMessage(
-              e,
-              postNow
-                ? "Couldn't post to X. Please try again."
-                : "Couldn't schedule the post. Please try again.",
-            ),
-          );
-          // A 409 may mean the X connection changed elsewhere: show its current state.
-          if (errorStatus(e) === 409) void reloadXConnection();
-        }
-        return false;
-      } finally {
-        setPosting(false);
-      }
+  const add = useCallback(
+    async (request: NewScheduledPost): Promise<boolean> => {
+      setNotice(null);
+      const outcome = await create(request);
+      if (outcome.kind !== 'created') return false;
+      const created = outcome.scheduledPost;
+      setScheduledPosts((current) => [created, ...(current ?? [])]);
+      if (request.postNow && created.state === 'scheduled') setNotice(X_BUSY_NOTICE);
+      return created.state !== 'failed';
     },
-    [refreshSubscribed, reloadXConnection],
-  );
-
-  const postNow = useCallback(
-    (text: string) => create(true, () => scheduledPostService.postNow(text)),
     [create],
   );
+
+  const postNow = useCallback((text: string) => add({ text, postNow: true }), [add]);
 
   /** `publishAt` is an ISO instant on a whole minute. */
   const schedule = useCallback(
-    (text: string, publishAt: string) =>
-      create(false, () => scheduledPostService.schedule(text, publishAt)),
-    [create],
+    (text: string, publishAt: string) => add({ text, postNow: false, publishAt }),
+    [add],
   );
 
   /**
@@ -104,21 +83,20 @@ export function useScheduledPosts() {
     (id: string, changes: { text?: string; publishAt?: string }) =>
       change(async () => {
         const edited = await scheduledPostService.edit(id, changes);
-        track('scheduled_post_edited', { rescheduled: changes.publishAt !== undefined });
         setScheduledPosts((current) => current?.map((p) => (p.id === id ? edited : p)));
       }, "Couldn't save the changes. Please try again."),
     [change],
   );
 
+  /** Cancels a scheduled one, or removes a Failed one. */
   const cancel = useCallback(
     (id: string) =>
       change(async () => {
         await scheduledPostService.cancel(id);
-        track('scheduled_post_cancelled');
         setScheduledPosts((current) => current?.filter((p) => p.id !== id));
-      }, "Couldn't cancel the post. Please try again."),
+      }, "Couldn't remove the post. Please try again."),
     [change],
   );
 
-  return { scheduledPosts, loadFailed, posting, error, postNow, schedule, edit, cancel };
+  return { scheduledPosts, loadFailed, posting, error, notice, postNow, schedule, edit, cancel };
 }

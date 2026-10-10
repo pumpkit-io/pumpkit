@@ -124,18 +124,13 @@ export const EVENTS = {
     description:
       'Scheduled: created a Scheduled post. Props: source (typed | final), post_now (boolean).',
   },
-  scheduled_post_edited: {
-    description:
-      'Scheduled: saved a change to a scheduled or Failed Scheduled post. Props: rescheduled (boolean, a new time).',
-  },
-  scheduled_post_cancelled: { description: 'Scheduled: cancelled a Scheduled post.' },
   // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
   scheduled_post_published: {
     description: 'Scheduled: X published a Scheduled post. Props: source (typed | final).',
   },
   scheduled_post_failed: {
     description:
-      'Scheduled: a Scheduled post Failed. Props: reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | rejected | outcome_unknown).',
+      'Scheduled: a Scheduled post Failed. Props: reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown).',
   },
 } as const satisfies Record<string, { description: string }>;
 

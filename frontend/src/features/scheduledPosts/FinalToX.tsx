@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
@@ -10,16 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { useBilling } from '@/features/billing/useBilling';
 import { useSubscribed } from '@/features/billing/useSubscribed';
+import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
-import { track } from '@/lib/analytics';
 import { xWeightedLength } from '@/lib/xLength';
-import { errorMessage, errorStatus } from '@/services/apiErrors';
 import type { Version } from '@/services/postService';
-import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
-import { earliestInputValue, TIME_ZONE } from './localTime';
+import type { ScheduledPost } from '@/services/scheduledPostService';
+import { PublishTimeField } from './PublishTimeField';
+import { useCreateScheduledPost, X_BUSY_NOTICE } from './useCreateScheduledPost';
 import { XLengthCounter } from './XLengthCounter';
 
 type Action = 'schedule' | 'postNow';
@@ -33,8 +32,15 @@ const dateTime = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle:
 
 const LINK = 'font-medium text-foreground underline underline-offset-2';
 
+/** The dialog's description once the Final is sent, by where the Scheduled post ended up. */
+function outcomeDescription(created: ScheduledPost, postNow: boolean): string {
+  if (created.state === 'published') return 'Published on X.';
+  if (created.state === 'failed') return 'This Scheduled post Failed.';
+  return postNow ? X_BUSY_NOTICE : 'Pumpkit publishes it at that time.';
+}
+
 /** What came of sending the Final, in place of the form. */
-function Outcome({ created }: { created: ScheduledPost }) {
+function Outcome({ created, postNow }: { created: ScheduledPost; postNow: boolean }) {
   if (created.state === 'failed') {
     return (
       <p className="font-sans text-sm text-red-700 dark:text-red-300">{created.failedReason}</p>
@@ -42,19 +48,16 @@ function Outcome({ created }: { created: ScheduledPost }) {
   }
   if (created.state === 'published') {
     return (
-      <p className="flex flex-wrap gap-x-3 font-sans text-sm text-foreground">
-        <span>Published on X.</span>
-        {created.xPostUrl && (
-          <a href={created.xPostUrl} target="_blank" rel="noreferrer" className={LINK}>
-            View on X
-          </a>
-        )}
-      </p>
+      created.xPostUrl && (
+        <a href={created.xPostUrl} target="_blank" rel="noreferrer" className={LINK}>
+          View on X
+        </a>
+      )
     );
   }
   return (
     <p className="flex flex-wrap gap-x-3 font-sans text-sm text-foreground">
-      <span>Scheduled for {dateTime.format(new Date(created.publishAt))}.</span>
+      {!postNow && <span>Scheduled for {dateTime.format(new Date(created.publishAt))}.</span>}
       <Link to="/scheduled" className={LINK}>
         See Scheduled posts
       </Link>
@@ -75,60 +78,32 @@ function FinalToXDialog({
   version: Version;
   onClose: () => void;
 }) {
-  const { refresh: refreshSubscribed } = useSubscribed();
   const billing = useBilling();
-  const {
-    connection,
-    busy: connecting,
-    error: connectError,
-    connect,
-    reload: reloadXConnection,
-  } = useXConnectionContext();
-  const whenId = useId();
+  const { connection } = useXConnectionContext();
+  const { sending, error, create } = useCreateScheduledPost();
   /** The picked time as the input holds it, in the browser's timezone; '' when none. */
   const [when, setWhen] = useState('');
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<ScheduledPost | null>(null);
   const length = useMemo(() => xWeightedLength(version.final), [version.final]);
   const postNow = action === 'postNow';
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
-    setSending(true);
-    setError(null);
-    try {
-      const result = postNow
-        ? await scheduledPostService.postNow(version.final, version.id)
-        : // A datetime-local value without an offset parses as local time.
-          await scheduledPostService.schedule(
-            version.final,
-            new Date(when).toISOString(),
-            version.id,
-          );
-      track('scheduled_post_created', { source: 'final', post_now: postNow });
-      setCreated(result);
-      // A Failed one may have flagged the X connection for reconnecting.
-      if (result.state === 'failed') void reloadXConnection();
-    } catch (e) {
-      if (errorStatus(e) === 403) {
-        refreshSubscribed();
-        onClose();
-        billing.open(BILLING_SOURCE[action]);
-        return;
-      }
-      setError(
-        errorMessage(
-          e,
-          postNow
-            ? "Couldn't post to X. Please try again."
-            : "Couldn't schedule the post. Please try again.",
-        ),
-      );
-      // A 409 means the X connection changed elsewhere: show its current state.
-      if (errorStatus(e) === 409) void reloadXConnection();
-    } finally {
-      setSending(false);
+    const outcome = await create(
+      postNow
+        ? { text: version.final, sourceVersionId: version.id, postNow: true }
+        : {
+            text: version.final,
+            sourceVersionId: version.id,
+            postNow: false,
+            // A datetime-local value without an offset parses as local time.
+            publishAt: new Date(when).toISOString(),
+          },
+    );
+    if (outcome.kind === 'created') setCreated(outcome.scheduledPost);
+    if (outcome.kind === 'notSubscribed') {
+      onClose();
+      billing.open(BILLING_SOURCE[action]);
     }
   };
 
@@ -139,8 +114,8 @@ function FinalToXDialog({
   let body;
   let footer;
   if (created) {
-    description = postNow ? 'Sent to X.' : 'Pumpkit publishes it at that time.';
-    body = <Outcome created={created} />;
+    description = outcomeDescription(created, postNow);
+    body = <Outcome created={created} postNow={postNow} />;
     footer = (
       <Button type="button" className="h-10" onClick={onClose}>
         Close
@@ -149,19 +124,12 @@ function FinalToXDialog({
   } else if (connection === undefined) {
     description = 'Checking your X connection…';
   } else if (!ready) {
-    description = connection
-      ? 'Reconnect X to post this Final.'
-      : 'Connect your X account to post this Final.';
-    body = connectError && <ErrorBanner message={connectError} />;
+    description = 'Pumpkit publishes on the X account you connect.';
+    body = <ConnectXPrompt what="this Final" showError />;
     footer = (
-      <>
-        <Button type="button" variant="outline" className="h-10" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="button" className="h-10" disabled={connecting} onClick={() => void connect()}>
-          {connection ? 'Reconnect X' : 'Connect X'}
-        </Button>
-      </>
+      <Button type="button" variant="outline" className="h-10" onClick={onClose}>
+        Cancel
+      </Button>
     );
   } else {
     description = postNow
@@ -175,25 +143,7 @@ function FinalToXDialog({
           </p>
           <XLengthCounter length={length} limit={connection.charLimit} />
         </div>
-        {!postNow && (
-          <div className="space-y-1.5">
-            <label htmlFor={whenId} className="block font-sans text-sm font-medium text-foreground">
-              Date and time
-            </label>
-            <Input
-              id={whenId}
-              type="datetime-local"
-              value={when}
-              min={earliestInputValue()}
-              onChange={(e) => setWhen(e.target.value)}
-              disabled={sending}
-              className="sm:w-64"
-            />
-            <p className="font-sans text-xs text-muted-foreground">
-              Times are in your timezone, {TIME_ZONE}.
-            </p>
-          </div>
-        )}
+        {!postNow && <PublishTimeField value={when} onChange={setWhen} disabled={sending} />}
         {error && <ErrorBanner message={error} />}
       </>
     );

@@ -10,7 +10,7 @@ import { useScheduledPosts } from './useScheduledPosts';
 
 /** The composer and the lists it adds to. Needs an XConnectionProvider above it. */
 export function ScheduledPosts() {
-  const { scheduledPosts, loadFailed, posting, error, postNow, schedule, edit, cancel } =
+  const { scheduledPosts, loadFailed, posting, error, notice, postNow, schedule, edit, cancel } =
     useScheduledPosts();
   const { subscribed } = useSubscribed();
   const { connection } = useXConnectionContext();
@@ -21,7 +21,13 @@ export function ScheduledPosts() {
 
   return (
     <>
-      <Composer posting={posting} error={error} onPostNow={postNow} onSchedule={schedule} />
+      <Composer
+        posting={posting}
+        error={error}
+        notice={notice}
+        onPostNow={postNow}
+        onSchedule={schedule}
+      />
       <ScheduledPostLists
         scheduledPosts={scheduledPosts}
         loadFailed={loadFailed}

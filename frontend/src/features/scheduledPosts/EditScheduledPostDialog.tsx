@@ -9,11 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { xWeightedLength } from '@/lib/xLength';
 import type { ScheduledPost } from '@/services/scheduledPostService';
-import { earliestInputValue, localInputValue, TIME_ZONE } from './localTime';
+import { localInputValue } from './localTime';
+import { PublishTimeField } from './PublishTimeField';
 import { XLengthCounter } from './XLengthCounter';
 
 export type ScheduledPostChanges = { text?: string; publishAt?: string };
@@ -78,26 +78,7 @@ function EditForm({
           disabled={saving}
         />
         <XLengthCounter length={length} limit={charLimit} />
-        <div className="space-y-1.5">
-          <label
-            htmlFor="edit-scheduled-post-when"
-            className="block font-sans text-sm font-medium text-foreground"
-          >
-            Date and time
-          </label>
-          <Input
-            id="edit-scheduled-post-when"
-            type="datetime-local"
-            value={when}
-            min={earliestInputValue()}
-            onChange={(e) => setWhen(e.target.value)}
-            disabled={saving}
-            className="sm:w-64"
-          />
-          <p className="font-sans text-xs text-muted-foreground">
-            Times are in your timezone, {TIME_ZONE}.
-          </p>
-        </div>
+        <PublishTimeField value={when} onChange={setWhen} disabled={saving} />
         {error && <ErrorBanner message={error} />}
       </div>
       <DialogFooter className="justify-end gap-2">

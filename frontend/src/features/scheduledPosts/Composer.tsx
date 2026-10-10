@@ -1,13 +1,13 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
+import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { xWeightedLength } from '@/lib/xLength';
-import { earliestInputValue, TIME_ZONE } from './localTime';
+import { PublishTimeField } from './PublishTimeField';
 import { XLengthCounter } from './XLengthCounter';
 
 /**
@@ -17,16 +17,19 @@ import { XLengthCounter } from './XLengthCounter';
 export function Composer({
   posting,
   error,
+  notice,
   onPostNow,
   onSchedule,
 }: {
   posting: boolean;
   error: string | null;
+  /** What came of the last send, when it needs saying. */
+  notice: string | null;
   onPostNow: (text: string) => Promise<boolean>;
   onSchedule: (text: string, publishAt: string) => Promise<boolean>;
 }) {
   const { subscribed } = useSubscribed();
-  const { connection, busy: connecting, connect } = useXConnectionContext();
+  const { connection } = useXConnectionContext();
   const [text, setText] = useState('');
   /** The picked time as the input holds it, in the browser's timezone; '' when none. */
   const [when, setWhen] = useState('');
@@ -55,46 +58,12 @@ export function Composer({
   } else if (connection === undefined || subscribed === null) {
     action = null;
   } else if (connection === null || connection.needsReconnect) {
-    action = (
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-sans text-sm text-foreground">
-          {connection ? 'Reconnect X to post.' : 'Connect your X account to post.'}
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          className="h-10 shrink-0"
-          disabled={connecting}
-          onClick={() => void connect()}
-        >
-          {connection ? 'Reconnect X' : 'Connect X'}
-        </Button>
-      </div>
-    );
+    action = <ConnectXPrompt />;
   } else {
     const unsendable = posting || length > connection.charLimit || !text.trim();
     action = (
       <div className="space-y-3">
-        <div className="space-y-1.5">
-          <label
-            htmlFor="composer-when"
-            className="block font-sans text-sm font-medium text-foreground"
-          >
-            Date and time
-          </label>
-          <Input
-            id="composer-when"
-            type="datetime-local"
-            value={when}
-            min={earliestInputValue()}
-            onChange={(e) => setWhen(e.target.value)}
-            disabled={posting}
-            className="sm:w-64"
-          />
-          <p className="font-sans text-xs text-muted-foreground">
-            Times are in your timezone, {TIME_ZONE}.
-          </p>
-        </div>
+        <PublishTimeField value={when} onChange={setWhen} disabled={posting} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <XLengthCounter length={length} limit={connection.charLimit} />
           <div className="flex gap-2">
@@ -134,6 +103,11 @@ export function Composer({
           disabled={posting}
         />
         {error && <ErrorBanner message={error} />}
+        {notice && (
+          <p role="status" className="font-sans text-sm text-foreground">
+            {notice}
+          </p>
+        )}
         {action}
       </form>
     </section>
