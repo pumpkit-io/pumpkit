@@ -64,5 +64,14 @@ export function useXConnection() {
     }
   }, [fail]);
 
-  return { connection, loadFailed, busy, error, connect, disconnect };
+  /** Picks up a change the backend made, such as flagging the X connection for reconnecting. */
+  const reload = useCallback(async () => {
+    try {
+      setConnection(await xConnectionService.get());
+    } catch {
+      // The X connection on screen stays; the next page load tries again.
+    }
+  }, []);
+
+  return { connection, loadFailed, busy, error, connect, disconnect, reload };
 }

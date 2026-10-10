@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Topbar } from '@/features/topbar/Topbar';
+import { ScheduledPosts } from '@/features/scheduledPosts/ScheduledPosts';
 import { XConnectionPanel } from '@/features/xConnection/XConnectionPanel';
+import { XConnectionProvider } from '@/features/xConnection/XConnectionProvider';
 
 /** What the X callback route leaves in the location state for this page. */
 export interface ScheduledLocationState {
@@ -32,7 +34,10 @@ export function Scheduled() {
       <Topbar title="Scheduled" />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
-          <XConnectionPanel notice={notice} />
+          <XConnectionProvider>
+            <XConnectionPanel notice={notice} />
+            <ScheduledPosts />
+          </XConnectionProvider>
         </div>
       </div>
     </>

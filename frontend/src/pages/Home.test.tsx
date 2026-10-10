@@ -43,6 +43,9 @@ vi.mock('@/services/xConnectionService', () => ({
     disconnect: vi.fn(),
   },
 }));
+vi.mock('@/services/scheduledPostService', () => ({
+  scheduledPostService: { list: vi.fn().mockResolvedValue([]), postNow: vi.fn() },
+}));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),

@@ -3,12 +3,12 @@ import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
-import { useXConnection } from './useXConnection';
+import { useXConnectionContext } from './useXConnectionContext';
 
 /** The X account Scheduled posts go out on, with connect and disconnect. */
 export function XConnectionPanel({ notice }: { notice: string | null }) {
   const { subscribed } = useSubscribed();
-  const { connection, loadFailed, busy, error, connect, disconnect } = useXConnection();
+  const { connection, loadFailed, busy, error, connect, disconnect } = useXConnectionContext();
 
   return (
     <section aria-labelledby="x-connection-heading" className="space-y-4">
@@ -32,19 +32,32 @@ export function XConnectionPanel({ notice }: { notice: string | null }) {
           Loading your X connection…
         </p>
       ) : connection ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-2">
-          <span className="font-sans text-sm font-medium text-foreground">
-            @{connection.handle}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-10 shrink-0"
-            disabled={busy}
-            onClick={() => void disconnect()}
-          >
-            Disconnect
-          </Button>
+        <div className="space-y-3 rounded-lg border border-border px-4 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-sans text-sm font-medium text-foreground">
+              @{connection.handle}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 shrink-0"
+              disabled={busy}
+              onClick={() => void disconnect()}
+            >
+              Disconnect
+            </Button>
+          </div>
+          {connection.needsReconnect && (
+            <div className="flex flex-col gap-3 border-t border-border pt-3 pb-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-sans text-sm text-red-700 dark:text-red-300">
+                X no longer accepts Pumpkit&apos;s access to @{connection.handle}. Reconnect it to
+                keep posting.
+              </p>
+              <Button className="h-10 shrink-0" disabled={busy} onClick={() => void connect()}>
+                {busy ? 'Opening X…' : 'Reconnect X'}
+              </Button>
+            </div>
+          )}
         </div>
       ) : subscribed === false ? (
         <SubscribePrompt

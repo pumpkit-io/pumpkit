@@ -120,6 +120,18 @@ export const EVENTS = {
   // Scheduled (/scheduled) + the X callback
   x_connected: { description: 'Scheduled: connected an X account through X consent screen.' },
   x_disconnected: { description: 'Scheduled: disconnected the X account.' },
+  scheduled_post_created: {
+    description:
+      'Scheduled: created a Scheduled post. Props: source (typed | final), post_now (boolean).',
+  },
+  // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
+  scheduled_post_published: {
+    description: 'Scheduled: X published a Scheduled post. Props: source (typed | final).',
+  },
+  scheduled_post_failed: {
+    description:
+      'Scheduled: a Scheduled post Failed. Props: reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | rejected | outcome_unknown).',
+  },
 } as const satisfies Record<string, { description: string }>;
 
 export type EventName = keyof typeof EVENTS;
