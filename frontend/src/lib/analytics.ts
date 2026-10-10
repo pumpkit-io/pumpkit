@@ -124,6 +124,11 @@ export const EVENTS = {
     description:
       'Scheduled: created a Scheduled post. Props: source (typed | final), post_now (boolean).',
   },
+  scheduled_post_edited: {
+    description:
+      'Scheduled: saved a change to a scheduled or Failed Scheduled post. Props: rescheduled (boolean, a new time).',
+  },
+  scheduled_post_cancelled: { description: 'Scheduled: cancelled a Scheduled post.' },
   // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
   scheduled_post_published: {
     description: 'Scheduled: X published a Scheduled post. Props: source (typed | final).',

@@ -62,4 +62,24 @@ export const scheduledPostService = {
     });
     return toScheduledPost(data);
   },
+
+  /**
+   * For a scheduled or Failed one. A new `publishAt` reschedules it on the X account connected
+   * now and puts a Failed one back in scheduled.
+   */
+  edit: async (
+    id: string,
+    changes: { text?: string; publishAt?: string },
+  ): Promise<ScheduledPost> => {
+    const { data } = await apiService.patch<ScheduledPostApi>(
+      `/scheduled-posts/${encodeURIComponent(id)}`,
+      { text: changes.text, publish_at: changes.publishAt },
+    );
+    return toScheduledPost(data);
+  },
+
+  /** Deletes one still waiting to go out. */
+  cancel: async (id: string): Promise<void> => {
+    await apiService.delete(`/scheduled-posts/${encodeURIComponent(id)}`);
+  },
 };

@@ -29,7 +29,13 @@ vi.mock('@/services/xConnectionService', () => ({
   },
 }));
 vi.mock('@/services/scheduledPostService', () => ({
-  scheduledPostService: { list: vi.fn(), postNow: vi.fn(), schedule: vi.fn() },
+  scheduledPostService: {
+    list: vi.fn(),
+    postNow: vi.fn(),
+    schedule: vi.fn(),
+    edit: vi.fn(),
+    cancel: vi.fn(),
+  },
 }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
@@ -161,6 +167,8 @@ describe('Scheduled', () => {
     vi.mocked(scheduledPostService.list).mockReset().mockResolvedValue([]);
     vi.mocked(scheduledPostService.postNow).mockReset();
     vi.mocked(scheduledPostService.schedule).mockReset();
+    vi.mocked(scheduledPostService.edit).mockReset();
+    vi.mocked(scheduledPostService.cancel).mockReset();
     vi.mocked(redirectTo).mockReset();
     vi.mocked(track).mockClear();
   });
@@ -561,6 +569,193 @@ describe('Scheduled', () => {
       expect(await upcoming.findByRole('alert')).toHaveTextContent(
         /couldn't load your scheduled posts/i,
       );
+    });
+  });
+
+  describe('edit, reschedule and cancel', () => {
+    beforeEach(() => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    });
+
+    async function upcomingItem(text: string) {
+      const upcoming = await upcomingList();
+      return within((await upcoming.findByText(text)).closest('li')!);
+    }
+
+    it('edits the text and time of an upcoming one', async () => {
+      const moved = { ...MONDAY, text: 'Tuesday morning.', publishAt: '2026-10-13T08:00:00Z' };
+      vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY, WEDNESDAY]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue(moved);
+      renderScheduled();
+
+      fireEvent.click(
+        (await upcomingItem('Monday morning.')).getByRole('button', { name: 'Edit' }),
+      );
+      const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
+      expect(dialog.getByLabelText('Post text')).toHaveValue('Monday morning.');
+      expect(dialog.getByLabelText('Date and time')).toHaveValue('2026-10-12T09:00');
+      fireEvent.change(dialog.getByLabelText('Post text'), {
+        target: { value: 'Tuesday morning.' },
+      });
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-13T10:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, {
+        text: 'Tuesday morning.',
+        publishAt: '2026-10-13T08:00:00.000Z',
+      });
+      const items = (await upcomingList()).getAllByRole('listitem');
+      expect(items.map((item) => item.textContent)).toEqual([
+        expect.stringMatching(/^Tuesday morning\..*Oct 13, 2026, 10:00/),
+        expect.stringMatching(/^Wednesday morning\./),
+      ]);
+    });
+
+    it('sends only the text when the time is left as it was', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({ ...MONDAY, text: 'Fixed.' });
+      renderScheduled();
+
+      fireEvent.click(
+        (await upcomingItem('Monday morning.')).getByRole('button', { name: 'Edit' }),
+      );
+      const dialog = within(await screen.findByRole('dialog'));
+      fireEvent.change(dialog.getByLabelText('Post text'), { target: { value: 'Fixed.' } });
+      fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+      expect(await (await upcomingList()).findByText('Fixed.')).toBeInTheDocument();
+      expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { text: 'Fixed.' });
+    });
+
+    it('holds back a text over the limit by X count', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY]);
+      renderScheduled();
+
+      fireEvent.click(
+        (await upcomingItem('Monday morning.')).getByRole('button', { name: 'Edit' }),
+      );
+      const dialog = within(await screen.findByRole('dialog'));
+      fireEvent.change(dialog.getByLabelText('Post text'), {
+        target: { value: 'a'.repeat(281) },
+      });
+
+      expect(dialog.getByText('1 character over the 280 limit')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+
+    it('shows why an edit was refused and reloads the list', async () => {
+      const publishing = { ...MONDAY, state: 'publishing' as const };
+      vi.mocked(scheduledPostService.list)
+        .mockResolvedValueOnce([MONDAY])
+        .mockResolvedValueOnce([publishing]);
+      vi.mocked(scheduledPostService.edit).mockRejectedValue(
+        apiError(409, 'Publishing has started, so this Scheduled post can no longer change.'),
+      );
+      renderScheduled();
+
+      fireEvent.click(
+        (await upcomingItem('Monday morning.')).getByRole('button', { name: 'Edit' }),
+      );
+      const dialog = within(await screen.findByRole('dialog'));
+      fireEvent.change(dialog.getByLabelText('Post text'), { target: { value: 'Too late.' } });
+      fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+      expect(await dialog.findByRole('alert')).toHaveTextContent(
+        'Publishing has started, so this Scheduled post can no longer change.',
+      );
+      expect(dialog.getByLabelText('Post text')).toHaveValue('Too late.');
+      fireEvent.click(dialog.getByRole('button', { name: 'Back' }));
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(await (await upcomingList()).findByText('Publishing now')).toBeInTheDocument();
+    });
+
+    it('cancels an upcoming one once the User confirms', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY, WEDNESDAY]);
+      vi.mocked(scheduledPostService.cancel).mockResolvedValue(undefined);
+      renderScheduled();
+
+      fireEvent.click(
+        (await upcomingItem('Monday morning.')).getByRole('button', { name: 'Cancel' }),
+      );
+      const dialog = within(
+        await screen.findByRole('dialog', { name: 'Cancel this Scheduled post?' }),
+      );
+      fireEvent.click(dialog.getByRole('button', { name: 'Cancel post' }));
+
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(scheduledPostService.cancel).toHaveBeenCalledWith(MONDAY.id);
+      const upcoming = await upcomingList();
+      expect(upcoming.queryByText('Monday morning.')).not.toBeInTheDocument();
+      expect(upcoming.getByText('Wednesday morning.')).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('scheduled_post_cancelled');
+    });
+
+    it('keeps an upcoming one when the User changes their mind', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY]);
+      renderScheduled();
+
+      fireEvent.click(
+        (await upcomingItem('Monday morning.')).getByRole('button', { name: 'Cancel' }),
+      );
+      fireEvent.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Keep it' }),
+      );
+
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(scheduledPostService.cancel).not.toHaveBeenCalled();
+      expect((await upcomingList()).getByText('Monday morning.')).toBeInTheDocument();
+    });
+
+    it('offers no changes to one that is publishing', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([{ ...MONDAY, state: 'publishing' }]);
+      renderScheduled();
+
+      const item = await upcomingItem('Monday morning.');
+      expect(item.getByText('Publishing now')).toBeInTheDocument();
+      expect(item.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('reschedules a Failed one, which moves back to upcoming', async () => {
+      const rescheduled = {
+        ...FAILED,
+        state: 'scheduled' as const,
+        failedReason: null,
+        publishAt: '2026-10-12T07:00:00Z',
+      };
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue(rescheduled);
+      renderScheduled();
+
+      const failed = within(await screen.findByRole('region', { name: 'Failed' }));
+      fireEvent.click(await failed.findByRole('button', { name: 'Reschedule' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
+      expect(dialog.getByLabelText('Post text')).toHaveValue(FAILED.text);
+      expect(dialog.getByLabelText('Date and time')).toHaveValue('');
+      expect(dialog.getByRole('button', { name: 'Reschedule' })).toBeDisabled();
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
+
+      expect(await (await upcomingList()).findByText(FAILED.text)).toBeInTheDocument();
+      expect(scheduledPostService.edit).toHaveBeenCalledWith(FAILED.id, {
+        publishAt: '2026-10-12T07:00:00.000Z',
+      });
+      expect(screen.queryByRole('region', { name: 'Failed' })).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('scheduled_post_edited', { rescheduled: true });
+    });
+
+    it('offers no changes to a User who is not Subscribed', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+      vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY, FAILED]);
+      renderScheduled();
+
+      expect((await upcomingItem('Monday morning.')).queryByRole('button')).not.toBeInTheDocument();
+      const failed = within(await screen.findByRole('region', { name: 'Failed' }));
+      expect(failed.queryByRole('button')).not.toBeInTheDocument();
     });
   });
 });

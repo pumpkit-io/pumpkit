@@ -1,4 +1,5 @@
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { Button } from '@/components/ui/button';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
 const dateTime = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' });
@@ -28,19 +29,27 @@ function PostText({ text }: { text: string }) {
   );
 }
 
+function ItemActions({ children }: { children: React.ReactNode }) {
+  return <div className="flex gap-2 pt-1">{children}</div>;
+}
+
 const LIST = 'divide-y divide-border rounded-lg border border-border';
 const ITEM = 'space-y-1.5 px-4 py-3';
 
 /**
  * Upcoming Scheduled posts soonest first, Failed ones with their reason, and Published ones
- * with a link to X.
+ * with a link to X. Without `onEdit` or `onCancel`, the lists offer no such control.
  */
 export function ScheduledPostLists({
   scheduledPosts,
   loadFailed,
+  onEdit,
+  onCancel,
 }: {
   scheduledPosts: ScheduledPost[] | undefined;
   loadFailed: boolean;
+  onEdit?: (post: ScheduledPost) => void;
+  onCancel?: (post: ScheduledPost) => void;
 }) {
   const published = (scheduledPosts ?? []).filter((p) => p.state === 'published');
   const failed = (scheduledPosts ?? []).filter((p) => p.state === 'failed');
@@ -72,6 +81,20 @@ export function ScheduledPostLists({
                     ? 'Publishing now'
                     : dateTime.format(new Date(post.publishAt))}
                 </p>
+                {post.state === 'scheduled' && (onEdit || onCancel) && (
+                  <ItemActions>
+                    {onEdit && (
+                      <Button variant="outline" size="sm" onClick={() => onEdit(post)}>
+                        Edit
+                      </Button>
+                    )}
+                    {onCancel && (
+                      <Button variant="outline" size="sm" onClick={() => onCancel(post)}>
+                        Cancel
+                      </Button>
+                    )}
+                  </ItemActions>
+                )}
               </li>
             ))}
           </ul>
@@ -86,6 +109,13 @@ export function ScheduledPostLists({
                 <p className="font-sans text-xs text-red-700 dark:text-red-300">
                   {post.failedReason}
                 </p>
+                {onEdit && (
+                  <ItemActions>
+                    <Button variant="outline" size="sm" onClick={() => onEdit(post)}>
+                      Reschedule
+                    </Button>
+                  </ItemActions>
+                )}
               </li>
             ))}
           </ul>
