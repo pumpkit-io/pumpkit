@@ -6,7 +6,7 @@ import { useNewPost } from './useNewPost';
 export function NewPostButton() {
   const { start, disabled } = useNewPost();
   return (
-    <div className="mb-1 mt-1">
+    <div className="mt-1">
       <SidebarRowButton
         icon={<SquarePen className="h-5 w-5" />}
         label="New Post"

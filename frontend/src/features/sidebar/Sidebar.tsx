@@ -96,7 +96,7 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           )}
           style={{ opacity: isExpanded ? 0 : 1, pointerEvents: isExpanded ? 'none' : 'auto' }}
         >
-          <nav aria-label="Sidebar rail">
+          <nav className="flex flex-col items-center gap-1" aria-label="Sidebar rail">
             <button
               type="button"
               onClick={() => newPost.start('rail')}
@@ -128,7 +128,7 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
           className={cn('absolute inset-0 flex flex-col', FADE)}
           style={{ opacity: isExpanded ? 1 : 0, pointerEvents: isExpanded ? 'auto' : 'none' }}
         >
-          <nav className="flex-1" aria-label="Main">
+          <nav className="flex flex-1 flex-col gap-1" aria-label="Main">
             <NewPostButton />
             {SIDEBAR_PAGES.map(({ path, label, icon: Icon }) => (
               <SidebarRowButton
