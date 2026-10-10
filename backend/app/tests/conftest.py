@@ -85,6 +85,7 @@ from app.core.google_sign_in import (  # noqa: E402
 )
 from app.core.llm import FakeLLM, get_llm  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
+from app.core.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
 from app.core.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from app.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from app.db.base import Base  # noqa: E402
@@ -165,6 +166,18 @@ def fake_x_reader():
     app.dependency_overrides[get_x_reader] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_x_reader, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_x_publisher():
+    """
+    Every test calls the X API through a fake. Request it by name to set
+    `fake_x_publisher.account`, read `exchanges` and `revoked`, or set a failure.
+    """
+    fake = FakeXPublisher()
+    app.dependency_overrides[get_x_publisher] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_x_publisher, None)
 
 
 @pytest.fixture(autouse=True)

@@ -14,6 +14,7 @@ from app.api.routers import (
     sessions,
     support,
     users,
+    x_connection,
 )
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -50,6 +51,7 @@ app.include_router(billing.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 app.include_router(inspiration_authors.router, prefix="/api/v1")
 app.include_router(posts.router, prefix="/api/v1")
+app.include_router(x_connection.router, prefix="/api/v1")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
