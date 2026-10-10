@@ -118,8 +118,9 @@ test.describe('logged in', () => {
       return b.x + b.width / 2;
     };
     const newPost = await centre(aside.getByRole('button', { name: 'New Post' }).first());
-    expect(await centre(toggle)).toBe(newPost);
-    expect(await centre(logo)).toBe(newPost);
+    // The toggle and logo slide into the rail, so wait for them to settle.
+    await expect.poll(() => centre(toggle)).toBe(newPost);
+    await expect.poll(() => centre(logo)).toBe(newPost);
   });
 
   test('sidebar icons share one column, evenly spaced, at the same height open and closed', async ({
@@ -135,9 +136,11 @@ test.describe('logged in', () => {
       aside.getByRole('navigation', { name: nav }).evaluate((el) =>
         Array.from(el.querySelectorAll('button')).map((button) => {
           const r = button.querySelector('svg')!.getBoundingClientRect();
-          const label = button.getAttribute('aria-label') ?? button.textContent!.trim();
+          // A row's text without its aria-hidden shortcut hint, which differs per platform.
+          const visible = button.cloneNode(true) as HTMLElement;
+          visible.querySelectorAll('[aria-hidden="true"]').forEach((hint) => hint.remove());
           return {
-            label: label.split(/[^\w ]/)[0].trim(),
+            label: button.getAttribute('aria-label') ?? visible.textContent!.trim(),
             x: r.x + r.width / 2,
             y: r.y + r.height / 2,
           };
