@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -509,6 +509,12 @@ describe('Scheduled', () => {
     });
 
     it('shows why a time was refused and keeps the text and time', async () => {
+      // The picker's min follows the clock, so a real one would block this time once it passed.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-10T12:00'));
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
       vi.mocked(scheduledPostService.schedule).mockRejectedValue(
         apiError(422, 'Pick a time at least a minute from now.'),
       );
