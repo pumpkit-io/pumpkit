@@ -46,6 +46,11 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | `BILLING_TRIAL_PERIOD_DAYS` | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. `0` turns Trials off. |
 | `OPENROUTER_API_KEY` (optional) | Enables the LLM client; without it calls raise `LLMNotConfiguredError`. |
 | `TWITTERAPI_IO_API_KEY` (optional) | Reads Inspiration authors' posts from twitterapi.io (ADR 0005). The app boots without it; adding an author then fails with a 503 naming the variable. |
+| `X_CLIENT_ID` (optional) | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the three X settings; connecting an X account then fails with a 503 naming them. |
+| `X_CLIENT_SECRET` (optional) | That X app's client secret. Pumpkit calls X as a confidential client. |
+| `X_REDIRECT_URI` (optional) | The frontend's `/oauth/x/callback` route, e.g. `http://localhost:5173/oauth/x/callback`. Register the same URL as a callback on the X app. |
+| `PUBLISHER_POLL_INTERVAL_SECONDS` (optional) | How often the publisher process looks for due Scheduled posts. Defaults to 30, so a Scheduled post goes out within about 30 seconds of its time. |
+| `SCHEDULED_POSTS_MONTHLY_CAP` (optional) | Most Scheduled posts a User may have whose publish time falls in one UTC calendar month, counting Published, waiting and Failed ones (a cancelled one frees its place). Creating, Post now or rescheduling into a full month is refused with the date the cap resets. Defaults to 100. It bounds what Pumpkit's X app pays for publishing (ADR 0006). `0` turns scheduling off. |
 | `POSTHOG_ENABLED` (optional) | `true` to enable server-side analytics and error tracking. |
 | `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. |
 | `POSTHOG_PERSONAL_API_KEY` (optional) | Personal key, used by `scripts/deploy.sh` for deploy annotations. |

@@ -66,6 +66,37 @@ jobs:
           cache-dependency-path: e2e/package-lock.json
       - run: npm ci
       - run: npm run format:check
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write env files
+        run: |
+          cp .env.example .env
+          sed -i 's|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=e2e|' .env
+          cp frontend/.env.example frontend/.env
+          cp backend/.env.example backend/.env
+          sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$(openssl rand -hex 32)|" backend/.env
+          sed -i "s|^FERNET_ENCRYPTION_KEY=.*|FERNET_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')|" backend/.env
+      - run: docker compose up -d --build
+      - name: Wait for the backend and frontend
+        run: |
+          for url in http://localhost:8000/docs http://localhost:5173; do
+            timeout 180 bash -c "until curl -s -o /dev/null $url; do sleep 2; done"
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+        working-directory: e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: npm test
+        working-directory: e2e
+      - if: failure()
+        run: docker compose logs --tail 100
   e2e-typecheck:
     runs-on: ubuntu-latest
     defaults:

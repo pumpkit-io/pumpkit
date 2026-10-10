@@ -1,0 +1,232 @@
+[
+  {
+    "note": "Plain ASCII counts one per character",
+    "text": "Shipping the new onboarding today.",
+    "length": 34
+  },
+  {
+    "note": "An empty text",
+    "text": "",
+    "length": 0
+  },
+  {
+    "note": "Newlines and tabs count one each",
+    "text": "line one\nline two\tend",
+    "length": 21
+  },
+  {
+    "note": "Latin accents are in the weight-1 range",
+    "text": "Café, naïve, jalapeño",
+    "length": 21
+  },
+  {
+    "note": "A decomposed accent is NFC-normalized first",
+    "text": "café",
+    "length": 4
+  },
+  {
+    "note": "Greek and Cyrillic are in the weight-1 range",
+    "text": "Ωμέγα и привет",
+    "length": 14
+  },
+  {
+    "note": "CJK characters count two each",
+    "text": "日本語のテキスト",
+    "length": 16
+  },
+  {
+    "note": "Korean counts two each",
+    "text": "안녕하세요",
+    "length": 10
+  },
+  {
+    "note": "Curly quotes and dashes are in the weight-1 ranges",
+    "text": "“quoted” — dash – ok",
+    "length": 20
+  },
+  {
+    "note": "An ellipsis character counts two",
+    "text": "wait…",
+    "length": 6
+  },
+  {
+    "note": "A trademark sign counts two",
+    "text": "Pumpkit™",
+    "length": 9
+  },
+  {
+    "note": "Copyright and registered signs alone count one",
+    "text": "© 2026 ®",
+    "length": 8
+  },
+  {
+    "note": "A zero-width joiner between letters counts one",
+    "text": "a‍b",
+    "length": 3
+  },
+  {
+    "note": "A simple emoji counts two",
+    "text": "Done 😀",
+    "length": 7
+  },
+  {
+    "note": "Two emoji count two each",
+    "text": "😀😀",
+    "length": 4
+  },
+  {
+    "note": "An emoji with a skin tone counts two",
+    "text": "👍🏽",
+    "length": 2
+  },
+  {
+    "note": "A family ZWJ sequence counts two",
+    "text": "👨‍👩‍👧‍👦",
+    "length": 2
+  },
+  {
+    "note": "A flag counts two",
+    "text": "🇮🇹",
+    "length": 2
+  },
+  {
+    "note": "A subdivision flag counts two",
+    "text": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+    "length": 2
+  },
+  {
+    "note": "A keycap counts two",
+    "text": "1️⃣",
+    "length": 2
+  },
+  {
+    "note": "A heart with a variation selector counts two",
+    "text": "❤️",
+    "length": 2
+  },
+  {
+    "note": "A rainbow flag counts two",
+    "text": "🏳️‍🌈",
+    "length": 2
+  },
+  {
+    "note": "Copyright with a variation selector is an emoji",
+    "text": "©️",
+    "length": 2
+  },
+  {
+    "note": "An https URL counts 23",
+    "text": "Read https://example.com/blog/a-very-long-path-that-goes-on-and-on?ref=x",
+    "length": 28
+  },
+  {
+    "note": "A short http URL still counts 23",
+    "text": "http://a.co",
+    "length": 23
+  },
+  {
+    "note": "A bare domain counts 23",
+    "text": "see pumpkit.io",
+    "length": 27
+  },
+  {
+    "note": "A bare domain with a path counts 23",
+    "text": "pumpkit.io/pricing",
+    "length": 23
+  },
+  {
+    "note": "A www domain counts 23",
+    "text": "www.google.com",
+    "length": 23
+  },
+  {
+    "note": "A subdomain counts 23",
+    "text": "news.ycombinator.com",
+    "length": 23
+  },
+  {
+    "note": "A new gTLD counts 23",
+    "text": "my.dev and you.app",
+    "length": 51
+  },
+  {
+    "note": "Uppercase domains count 23",
+    "text": "EXAMPLE.COM",
+    "length": 23
+  },
+  {
+    "note": "A trailing period is not part of the URL",
+    "text": "Go to example.com.",
+    "length": 30
+  },
+  {
+    "note": "Trailing punctuation after a path stays out",
+    "text": "github.com/x?y=1#z.",
+    "length": 24
+  },
+  {
+    "note": "Balanced parens stay in the URL",
+    "text": "https://en.wikipedia.org/wiki/Primer_(film)",
+    "length": 23
+  },
+  {
+    "note": "A URL in parentheses leaves the closing one out",
+    "text": "(see https://x.com/a)",
+    "length": 29
+  },
+  {
+    "note": "Two URLs separated by a comma",
+    "text": "x.com,y.com",
+    "length": 47
+  },
+  {
+    "note": "An unknown TLD is not a URL",
+    "text": "https://a.b and foo.c",
+    "length": 21
+  },
+  {
+    "note": "localhost is not a URL",
+    "text": "http://localhost:3000",
+    "length": 21
+  },
+  {
+    "note": "An email address is not a URL",
+    "text": "mail foo@bar.com",
+    "length": 16
+  },
+  {
+    "note": "A domain after a slash is not a URL",
+    "text": "ftp://x.com",
+    "length": 11
+  },
+  {
+    "note": "A query without a path is not part of a bare domain",
+    "text": "example.com?a=b",
+    "length": 27
+  },
+  {
+    "note": "Decimal numbers are not URLs",
+    "text": "Version 1.5 and e.g. this",
+    "length": 25
+  },
+  {
+    "note": "A hashtag and a mention count as text",
+    "text": "#buildinpublic @pumpkit",
+    "length": 23
+  },
+  {
+    "note": "An IDN domain with a protocol counts 23",
+    "text": "http://例え.jp",
+    "length": 23
+  },
+  {
+    "note": "A URL then an emoji",
+    "text": "Launch https://pumpkit.io 🚀",
+    "length": 33
+  },
+  {
+    "note": "Mixed text, URL, CJK and emoji",
+    "text": "New post: pumpkit.io/blog 日本 👍🏽 done",
+    "length": 46
+  }
+]

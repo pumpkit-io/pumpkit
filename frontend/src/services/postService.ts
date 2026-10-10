@@ -8,6 +8,8 @@ export interface Tell {
 
 /** One round of a Post's text: the Draft Pumpkit wrote and the Final meant for X. */
 export interface Version {
+  /** What a Scheduled post made from this Version's Final records as its source. */
+  id: string;
   number: number;
   /** Null for the first Version, which comes from the Brief. */
   feedback: string | null;
@@ -26,6 +28,7 @@ export interface Post {
 }
 
 interface VersionApi {
+  id: string;
   number: number;
   feedback: string | null;
   draft: string;
@@ -42,6 +45,7 @@ interface PostApi {
 }
 
 const toVersion = (v: VersionApi): Version => ({
+  id: v.id,
   number: v.number,
   feedback: v.feedback,
   draft: v.draft,

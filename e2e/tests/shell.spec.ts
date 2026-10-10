@@ -118,8 +118,59 @@ test.describe('logged in', () => {
       return b.x + b.width / 2;
     };
     const newPost = await centre(aside.getByRole('button', { name: 'New Post' }).first());
-    expect(await centre(toggle)).toBe(newPost);
-    expect(await centre(logo)).toBe(newPost);
+    // The toggle and logo slide into the rail, so wait for them to settle.
+    await expect.poll(() => centre(toggle)).toBe(newPost);
+    await expect.poll(() => centre(logo)).toBe(newPost);
+  });
+
+  test('sidebar icons share one column, evenly spaced, at the same height open and closed', async ({
+    page,
+  }) => {
+    await page.goto('/home');
+    const aside = page.locator('aside').first();
+    await expect(aside.locator('img').first()).toBeVisible();
+
+    type Icon = { label: string; x: number; y: number };
+    // Every icon in a sidebar nav, by its button's label, with its centre.
+    const icons = (nav: string) =>
+      aside.getByRole('navigation', { name: nav }).evaluate((el) =>
+        Array.from(el.querySelectorAll('button')).map((button) => {
+          const r = button.querySelector('svg')!.getBoundingClientRect();
+          // A row's text without its aria-hidden shortcut hint, which differs per platform.
+          const visible = button.cloneNode(true) as HTMLElement;
+          visible.querySelectorAll('[aria-hidden="true"]').forEach((hint) => hint.remove());
+          return {
+            label: button.getAttribute('aria-label') ?? visible.textContent!.trim(),
+            x: r.x + r.width / 2,
+            y: r.y + r.height / 2,
+          };
+        }),
+      );
+    const expectOneEvenColumn = (column: Icon[]) => {
+      expect(column.length).toBeGreaterThan(1);
+      for (const icon of column) expect(icon.x).toBe(column[0].x);
+      const gaps = column.slice(1).map((icon, i) => icon.y - column[i].y);
+      for (const gap of gaps) expect(gap).toBe(gaps[0]);
+    };
+
+    const open = await icons('Main');
+    expectOneEvenColumn(open);
+
+    await page.getByRole('button', { name: 'Close sidebar' }).click();
+    await page.mouse.move(900, 400);
+    const closed = await icons('Sidebar rail');
+    expectOneEvenColumn(closed);
+    // The logo slides into the rail, so wait for it to settle.
+    await expect
+      .poll(async () => {
+        const logo = (await aside.locator('img').first().boundingBox())!;
+        return logo.x + logo.width / 2;
+      })
+      .toBe(closed[0].x);
+
+    // The two navs cross-fade, so each icon has to sit where its row was.
+    expect(closed.map((icon) => icon.label)).toEqual(open.map((icon) => icon.label));
+    for (const [i, icon] of closed.entries()) expect(icon.y).toBe(open[i].y);
   });
 
   test('the sidebar avatar stays put and visible while the sidebar opens and closes', async ({

@@ -1,5 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AppLayout } from './pages/AppLayout';
 import { Home } from './pages/Home';
+import { Scheduled } from './pages/Scheduled';
+import { XConnectionCallback } from './pages/XConnectionCallback';
 import { Login } from './pages/Login';
 import { Landing } from './pages/Landing';
 import { GoogleAuthCallback } from './components/google/GoogleAuthCallback';
@@ -35,10 +38,20 @@ function AppRoutes() {
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
       <Route
-        path="/home"
         element={
           <ProtectedRoute>
-            <Home />
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/home" element={<Home />} />
+        <Route path="/scheduled" element={<Scheduled />} />
+      </Route>
+      <Route
+        path="/oauth/x/callback"
+        element={
+          <ProtectedRoute>
+            <XConnectionCallback />
           </ProtectedRoute>
         }
       />

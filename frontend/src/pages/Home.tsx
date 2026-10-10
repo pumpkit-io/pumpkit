@@ -1,24 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AccountDialog } from '@/features/account/AccountDialog';
-import { AccountProvider } from '@/features/account/AccountProvider';
-import { BillingDialog } from '@/features/billing/BillingDialog';
-import { BillingProvider } from '@/features/billing/BillingProvider';
-import { SubscribedProvider } from '@/features/billing/SubscribedProvider';
 import { useBilling } from '@/features/billing/useBilling';
-import { Sidebar } from '@/features/sidebar/Sidebar';
-import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
-import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
 import { InspirationAuthorsPanel } from '@/features/inspirationAuthors/InspirationAuthorsPanel';
 import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
 import { PostWriter } from '@/features/posts/PostWriter';
-import { PostWriterProvider } from '@/features/posts/PostWriterProvider';
 import { Topbar } from '@/features/topbar/Topbar';
 import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
-import { ProfileProvider } from './Home/ProfileContext';
-import { Shell } from './Home/Shell';
-import { useBootstrap } from './Home/useBootstrap';
 
 interface HomeLocationState {
   checkoutStatus?: 'success' | 'cancelled';
@@ -55,47 +43,21 @@ function useBillingReturn() {
   }, [location.state, navigate, billing]);
 }
 
-function HomeInner() {
-  const { profile, setProfile } = useBootstrap();
+/** Rendered inside AppLayout, which holds the shell and the Post. */
+export function Home() {
   useBillingReturn();
 
   return (
-    <ProfileProvider value={profile} setValue={setProfile}>
-      <PostWriterProvider>
-        <Shell
-          sidebar={<Sidebar />}
-          sidebarDrawer={<SidebarMobileDrawer />}
-          main={
-            <>
-              <Topbar title="Home" />
-              <div className="flex-1 overflow-y-auto">
-                <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
-                  <InspirationAuthorsProvider>
-                    <InspirationAuthorsPanel />
-                    <PostWriter />
-                  </InspirationAuthorsProvider>
-                </div>
-              </div>
-            </>
-          }
-        />
-      </PostWriterProvider>
-      <AccountDialog />
-      <BillingDialog />
-    </ProfileProvider>
-  );
-}
-
-export function Home() {
-  return (
-    <SidebarProvider>
-      <BillingProvider>
-        <SubscribedProvider>
-          <AccountProvider>
-            <HomeInner />
-          </AccountProvider>
-        </SubscribedProvider>
-      </BillingProvider>
-    </SidebarProvider>
+    <>
+      <Topbar title="Home" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
+          <InspirationAuthorsProvider>
+            <InspirationAuthorsPanel />
+            <PostWriter />
+          </InspirationAuthorsProvider>
+        </div>
+      </div>
+    </>
   );
 }

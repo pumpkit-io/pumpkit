@@ -1,0 +1,19 @@
+# Publishes due Scheduled posts on X (ADR 0007). Install: docs/deployment.md, section 4.
+[Unit]
+Description=Pumpkit publisher
+After=network-online.target pumpkit-backend.service
+
+[Service]
+User=pumpkit
+WorkingDirectory=/home/pumpkit/app/backend
+EnvironmentFile=/home/pumpkit/app/.env
+EnvironmentFile=/home/pumpkit/app/backend/.env
+# No migrations here: the backend unit runs them before it starts.
+ExecStart=/home/pumpkit/.local/bin/uv run python -m app.publishing
+# SIGTERM lets it finish the Scheduled post in hand; a call to X takes at most a few seconds.
+TimeoutStopSec=60
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -54,6 +54,22 @@ async def get_user_post(db: AsyncSession, *, user_id: str, post_id: str) -> Opti
     return result.scalar_one_or_none()
 
 
+async def get_user_version(
+    db: AsyncSession, *, user_id: str, version_id: str
+) -> Optional[VersionAttempt]:
+    """The User's Version, or None when it isn't theirs or is a failed attempt."""
+    result = await db.execute(
+        select(VersionAttempt)
+        .join(Post, VersionAttempt.post_id == Post.id)
+        .where(
+            VersionAttempt.id == version_id,
+            VersionAttempt.status == ATTEMPT_SUCCEEDED,
+            Post.user_id == user_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def corpus_for_post(db: AsyncSession, *, post: Post) -> Corpus:
     """The corpus the Post started with, whatever the User's Inspiration authors are now."""
     rows = await db.execute(

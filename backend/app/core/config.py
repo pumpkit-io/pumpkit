@@ -69,6 +69,17 @@ class Settings(BaseSettings):
     # Optional: when unset, app.core.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None
 
+    # Optional: when unset, app.core.x_publisher raises XPublisherNotConfiguredError on use.
+    X_CLIENT_ID: Optional[str] = None
+    X_CLIENT_SECRET: Optional[str] = None
+    # The frontend's X callback route, registered on the X developer app.
+    X_REDIRECT_URI: Optional[str] = None
+
+    # How often the publisher process looks for due Scheduled posts.
+    PUBLISHER_POLL_INTERVAL_SECONDS: int = Field(default=30, ge=1)
+    # Each User's Scheduled posts per UTC calendar month of publish time (ADR 0006).
+    SCHEDULED_POSTS_MONTHLY_CAP: int = Field(default=100, ge=0)
+
     # Optional: PostHog is disabled unless POSTHOG_ENABLED=true and a project key is set.
     POSTHOG_ENABLED: bool = False
     POSTHOG_PROJECT_API_KEY: Optional[str] = None

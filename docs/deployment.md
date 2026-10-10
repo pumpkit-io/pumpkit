@@ -69,6 +69,24 @@ WantedBy=multi-user.target
 systemctl daemon-reload && systemctl enable pumpkit-backend
 ```
 
+### Publisher
+
+The publisher publishes due Scheduled posts on X. It runs as its own unit, so API
+deploys and restarts don't interrupt it (ADR 0007). Its unit is
+`infra/pumpkit-publisher.service`: same user, directory and environment files as the
+backend, no migrations, `uv run python -m app.publishing`. `scripts/deploy.sh` copies
+it to `/etc/systemd/system/`, enables it and restarts it after the backend, so there's
+nothing to install by hand. To start it before the first deploy:
+
+```bash
+cp /home/pumpkit/app/infra/pumpkit-publisher.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now pumpkit-publisher
+```
+
+It looks for due Scheduled posts every `PUBLISHER_POLL_INTERVAL_SECONDS` (30 by
+default). Check it with `journalctl -u pumpkit-publisher`. One publisher is enough;
+a second one wouldn't publish anything twice, but it wouldn't speed anything up.
+
 ## 5. Caddy
 
 Give Caddy the values `infra/Caddyfile` reads:
@@ -95,7 +113,14 @@ subscribed to: `customer.subscription.created`, `customer.subscription.updated`,
 `customer.subscription.deleted` and `checkout.session.completed`. Put its signing
 secret in `STRIPE_WEBHOOK_SECRET`.
 
-## 7. Deploy
+## 7. X app
+
+Scheduled posts publish through the X app whose `X_CLIENT_ID` and `X_CLIENT_SECRET`
+are in `backend/.env`. In the X developer portal, add
+`https://<domain>/oauth/x/callback` to the app's callback URLs and set the same value
+as `X_REDIRECT_URI`.
+
+## 8. Deploy
 
 On your machine: `cp deploy.env.example deploy.env`, fill it in (the SSH host
 alias must log in as root or a sudoer), then:
