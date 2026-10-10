@@ -1,5 +1,5 @@
 """
-The publishing module as the publisher will call it: for a Scheduled post it didn't just
+Publishing as the publisher will call it: for a Scheduled post it didn't just
 create, in a session of its own. Outcomes are checked through the HTTP API.
 """
 
@@ -8,8 +8,8 @@ from urllib.parse import parse_qs, urlsplit
 from httpx import AsyncClient
 
 import app.api.services.scheduled_posts as scheduled_posts_service
+from app.api.mediators.publishing import publish_scheduled_post
 from app.core.x_publisher import XAccount
-from app.publishing.publish import publish_scheduled_post
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 

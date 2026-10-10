@@ -1,6 +1,6 @@
 """
 Scheduled posts and their moves between states.
-Flushes and never commits: the mediator or the publishing module owns the transaction.
+Flushes and never commits: the calling mediator owns the transaction.
 """
 
 from dataclasses import dataclass

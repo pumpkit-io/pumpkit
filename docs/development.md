@@ -60,11 +60,11 @@ A Final goes to X through the same endpoint: the Schedule and Post now dialogs o
 
 A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m app.publishing`, the `publisher` service in `docker-compose.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
 
-1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "Check your X profile" (`publish.fail_stuck`: a publisher died mid-call);
-2. claims and publishes the soonest due one (`publish.publish_next_due`, which claims through `services/scheduled_posts.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere);
+1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "Check your X profile" (`mediators/publishing.fail_stuck`: a publisher died mid-call);
+2. claims and publishes the soonest due one (`mediators/publishing.publish_next_due`, which claims through `services/scheduled_posts.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere);
 3. repeats until nothing is due.
 
-`publishing/publish.py` owns the transaction for a publish: it commits the claim before calling X, and calls X once and records Published or Failed. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so it goes back in `scheduled` with a doubling backoff from one minute for the publisher to retry, and becomes Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same module; when X doesn't take it, the request returns it in `scheduled` and the publisher retries it like any other.
+`mediators/publishing` owns every commit of a publish: it commits the claim and any rotated refresh token before calling X, calls X once, and commits Published or Failed. Its steps live in `publishing/publish.py`, which flushes and never commits. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so it goes back in `scheduled` with a doubling backoff from one minute for the publisher to retry, and becomes Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same mediator; when X doesn't take it, the request returns it in `scheduled` and the publisher retries it like any other.
 
 Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clock)` directly and checking outcomes through `GET /api/v1/scheduled-posts` (see `tests/publishing/test_publisher.py`). The `fixed_clock` fixture freezes time at a known instant for tests that write out dates. Under SQLite the row lock is a no-op, so tests of concurrent passes exercise the conditional claim.
 

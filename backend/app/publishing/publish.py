@@ -1,6 +1,6 @@
 """
-Publishing a Scheduled post on X, for Post now and the publisher (ADR 0007).
-Owns the transaction: it commits the claim and any rotated tokens before calling X.
+The steps of publishing a Scheduled post on X (ADR 0007), sequenced by `mediators/publishing`.
+Flushes and never commits: the mediator commits the claim and any rotated tokens before X.
 """
 
 from dataclasses import dataclass
@@ -61,151 +61,59 @@ STUCK_AFTER = timedelta(minutes=10)
 
 
 @dataclass
-class _Failed(Exception):
+class Failed(Exception):
     category: FailureCategory
     reason: str
 
 
-async def publish_scheduled_post(
-    db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
-) -> bool:
-    """Post now. False when it wasn't scheduled, for instance because another caller claimed it."""
-    claimed = await scheduled_posts_service.claim(db, scheduled_post_id=scheduled_post_id, now=now)
-    # Commit the claim before calling X: from here on, no other caller can publish it.
-    await db.commit()
-    if not claimed:
-        return False
-    await _publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
-    return True
-
-
-async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: datetime) -> bool:
-    """The publisher's step. False when nothing is due."""
-    scheduled_post_id = await scheduled_posts_service.claim_next_due(db, now=now)
-    # Commit the claim before calling X: from here on, no other pass can publish it.
-    await db.commit()
-    if scheduled_post_id is None:
-        return False
-    await _publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
-    return True
-
-
-async def fail_stuck(db: AsyncSession, *, now: datetime) -> None:
+async def fail_stuck(db: AsyncSession, *, now: datetime) -> list[str]:
     """Fail Scheduled posts a crashed publisher left in publishing: X may have taken them."""
-    user_ids = await scheduled_posts_service.fail_stuck(
+    return await scheduled_posts_service.fail_stuck(
         db, publishing_since=now - STUCK_AFTER, reason=OUTCOME_UNKNOWN_REASON, now=now
     )
-    await db.commit()
-    for user_id in user_ids:
-        posthog_client.capture(
-            "scheduled_post_failed", distinct_id=user_id, properties={"reason": "outcome_unknown"}
-        )
 
 
-async def _publish_claimed(
-    db: AsyncSession,
-    publisher: XPublisher,
-    *,
-    scheduled_post_id: str,
-    now: datetime,
-) -> None:
-    """One X never took goes back to scheduled with a backoff until `RETRY_WINDOW` is over."""
-    scheduled_post = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
-    assert scheduled_post is not None
-
-    try:
-        x_post_id = await _publish(db, publisher, scheduled_post, now=now)
-    except _Failed as failed:
-        next_attempt_at = _next_attempt_at(scheduled_post, now=now)
-        if failed.category == "x_unavailable" and next_attempt_at:
-            await scheduled_posts_service.release_for_retry(
-                db, scheduled_post, next_attempt_at=next_attempt_at, now=now
-            )
-            await db.commit()
-            return
-        await scheduled_posts_service.record_failed(
-            db, scheduled_post, reason=failed.reason, now=now
-        )
-        await db.commit()
-        posthog_client.capture(
-            "scheduled_post_failed",
-            distinct_id=scheduled_post.user_id,
-            properties={"reason": failed.category},
-        )
-        return
-
-    await scheduled_posts_service.record_published(db, scheduled_post, x_post_id=x_post_id, now=now)
-    await db.commit()
-    posthog_client.capture(
-        "scheduled_post_published",
-        distinct_id=scheduled_post.user_id,
-        properties={"source": "final" if scheduled_post.source_version_id else "typed"},
-    )
-
-
-def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optional[datetime]:
-    """Doubling from `FIRST_BACKOFF`, with one last try at the deadline; None after it."""
-    deadline = as_utc(scheduled_post.publish_at) + RETRY_WINDOW
-    if now >= deadline:
-        return None
-    return min(now + FIRST_BACKOFF * 2**scheduled_post.retry_count, deadline)
-
-
-async def _publish(
-    db: AsyncSession, publisher: XPublisher, scheduled_post: ScheduledPost, *, now: datetime
-) -> str:
-    """X's post id, or `_Failed`. The caller commits whatever it flushed, either way."""
+async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPost) -> XConnection:
+    """The X connection, row-locked until the next commit, or `Failed`."""
     subscription = await subscriptions_service.get_user_subscription(
         db, user_id=scheduled_post.user_id
     )
     if not subscriptions_service.is_subscribed(subscription):
-        raise _Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
+        raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
 
     connection = await x_connections_service.lock_connection(db, user_id=scheduled_post.user_id)
     if connection is None or connection.x_user_id != scheduled_post.x_user_id:
-        raise _Failed("x_account_changed", X_ACCOUNT_CHANGED_REASON)
+        raise Failed("x_account_changed", X_ACCOUNT_CHANGED_REASON)
     if connection.needs_reconnect:
-        raise _Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
-
-    access_token = await _fresh_access_token(db, publisher, connection, now=now)
-    # Commit the rotated tokens, or end the read, before the call to X: it releases the lock.
-    await db.commit()
-
-    try:
-        return await publisher.publish(access_token=access_token, text=scheduled_post.text)
-    except XReconnectNeededError:
-        await x_connections_service.flag_needs_reconnect(db, connection, now=now)
-        raise _Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
-    except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
-        raise _Failed("x_unavailable", X_UNAVAILABLE_REASON)
-    except XPostRejectedError as rejected:
-        raise _Failed("refused_by_x", f"X refused the post: {rejected.message}")
-    except XPublisherError:
-        raise _Failed("outcome_unknown", OUTCOME_UNKNOWN_REASON)
+        raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
+    return connection
 
 
-async def _fresh_access_token(
+async def fresh_access_token(
     db: AsyncSession, publisher: XPublisher, connection: XConnection, *, now: datetime
 ) -> str:
-    """Refreshed under the X connection's row lock when near expiry. Flushes the rotated tokens."""
+    """
+    Refreshed when near expiry. Flushes the rotated tokens, or the needs-reconnect flag before
+    raising `Failed`; call it under the X connection's row lock.
+    """
     if as_utc(connection.access_token_expires_at) - now > REFRESH_MARGIN:
         access_token = x_connections_service.access_token(connection)
         if not access_token:
             await x_connections_service.flag_needs_reconnect(db, connection, now=now)
-            raise _Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
+            raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
         return access_token
 
     refresh_token = x_connections_service.refresh_token(connection)
     if not refresh_token:
         await x_connections_service.flag_needs_reconnect(db, connection, now=now)
-        raise _Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
+        raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
     try:
         tokens = await publisher.refresh(refresh_token=refresh_token, now=now)
     except XReconnectNeededError:
         await x_connections_service.flag_needs_reconnect(db, connection, now=now)
-        raise _Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
+        raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
     except XPublisherError:
-        raise _Failed("x_unavailable", X_UNAVAILABLE_REASON)
+        raise Failed("x_unavailable", X_UNAVAILABLE_REASON)
     await x_connections_service.save_tokens(db, connection, tokens=tokens, now=now)
     try:
         account = await publisher.fetch_account(access_token=tokens.access_token)
@@ -216,3 +124,56 @@ async def _fresh_access_token(
         db, connection, subscription_type=account.subscription_type, now=now
     )
     return tokens.access_token
+
+
+async def call_x(publisher: XPublisher, *, access_token: str, text: str) -> str:
+    """X's post id, or `Failed`. A "reconnect_needed" one means X refused the access token."""
+    try:
+        return await publisher.publish(access_token=access_token, text=text)
+    except XReconnectNeededError:
+        raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
+    except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
+        raise Failed("x_unavailable", X_UNAVAILABLE_REASON)
+    except XPostRejectedError as rejected:
+        raise Failed("refused_by_x", f"X refused the post: {rejected.message}")
+    except XPublisherError:
+        raise Failed("outcome_unknown", OUTCOME_UNKNOWN_REASON)
+
+
+async def record_failure(
+    db: AsyncSession, scheduled_post: ScheduledPost, failed: Failed, *, now: datetime
+) -> bool:
+    """
+    Flushes Failed, or, for one X never took, back to scheduled with a backoff until
+    `RETRY_WINDOW` is over. True when it became Failed.
+    """
+    next_attempt_at = _next_attempt_at(scheduled_post, now=now)
+    if failed.category == "x_unavailable" and next_attempt_at:
+        await scheduled_posts_service.release_for_retry(
+            db, scheduled_post, next_attempt_at=next_attempt_at, now=now
+        )
+        return False
+    await scheduled_posts_service.record_failed(db, scheduled_post, reason=failed.reason, now=now)
+    return True
+
+
+def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optional[datetime]:
+    """Doubling from `FIRST_BACKOFF`, with one last try at the deadline; None after it."""
+    deadline = as_utc(scheduled_post.publish_at) + RETRY_WINDOW
+    if now >= deadline:
+        return None
+    return min(now + FIRST_BACKOFF * 2**scheduled_post.retry_count, deadline)
+
+
+def capture_published(scheduled_post: ScheduledPost) -> None:
+    posthog_client.capture(
+        "scheduled_post_published",
+        distinct_id=scheduled_post.user_id,
+        properties={"source": "final" if scheduled_post.source_version_id else "typed"},
+    )
+
+
+def capture_failed(user_id: str, category: FailureCategory) -> None:
+    posthog_client.capture(
+        "scheduled_post_failed", distinct_id=user_id, properties={"reason": category}
+    )

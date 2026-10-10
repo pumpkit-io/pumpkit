@@ -6,10 +6,10 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.mediators.publishing import fail_stuck, publish_next_due
 from app.core.clock import Clock
 from app.core.logger import logger
 from app.core.x_publisher import XPublisher
-from app.publishing.publish import fail_stuck, publish_next_due
 
 
 async def run_pass(
@@ -22,7 +22,7 @@ async def run_pass(
     async with session_maker() as db:
         await fail_stuck(db, now=clock())
     while stop is None or not stop.is_set():
-        # A session per Scheduled post: publishing commits as it goes.
+        # A session per Scheduled post: the mediator commits as it goes.
         async with session_maker() as db:
             if not await publish_next_due(db, publisher, now=clock()):
                 return

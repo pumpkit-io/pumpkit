@@ -8,11 +8,11 @@ import app.api.services.posts as posts_service
 import app.api.services.scheduled_posts as scheduled_posts_service
 import app.api.services.x_connections as x_connections_service
 import app.publishing.rules as rules
+from app.api.mediators.publishing import publish_scheduled_post
 from app.core.config import settings
 from app.core.datetimes import as_utc
 from app.core.x_publisher import XPublisher
 from app.db.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState, User, XConnection
-from app.publishing.publish import publish_scheduled_post
 from app.publishing.rules import MonthFull, RuleBroken
 from app.schemas.scheduled_posts import ScheduledPostResponse, ScheduledPostsListResponse
 
@@ -139,7 +139,7 @@ async def _post_now(
         source_version_id=source_version_id,
     )
     scheduled_post_id = scheduled_post.id
-    # Publishing owns the transaction from here: it commits the new row along with its claim.
+    # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     published = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
     assert published is not None
