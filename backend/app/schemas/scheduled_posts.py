@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.db.models import ScheduledPostState
 
@@ -13,8 +13,9 @@ class ScheduledPostCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(..., max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
-    # TODO(#62): take a publish time instead; until then a Scheduled post is published now.
-    publish_now: Literal[True]
+    # Exactly one of the two: a time with its UTC offset, or publish within the request.
+    publish_at: Optional[AwareDatetime] = None
+    publish_now: bool = False
 
     @field_validator("text")
     @classmethod
@@ -23,6 +24,12 @@ class ScheduledPostCreateRequest(BaseModel):
         if not stripped:
             raise ValueError("Write the post first.")
         return stripped
+
+    @model_validator(mode="after")
+    def _one_time(self) -> "ScheduledPostCreateRequest":
+        if (self.publish_at is None) == (not self.publish_now):
+            raise ValueError("Give either a publish time or publish now, not both.")
+        return self
 
 
 class ScheduledPostResponse(BaseModel):

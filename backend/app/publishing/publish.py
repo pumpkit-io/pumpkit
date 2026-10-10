@@ -1,16 +1,17 @@
 """
 Publishing one Scheduled post on X, shared by Post now and the publisher (ADR 0007).
 
-`publish_scheduled_post` claims the Scheduled post into publishing and commits that before
-anything reaches X, so X is called at most once for it; then it refreshes the X connection's
-access token if needed, checks the User is Subscribed and still connected to the X account
-the Scheduled post targets, calls X once, and records Published or Failed. It commits as
-it goes, so it takes a session no other work shares.
+The caller claims the Scheduled post into publishing and commits that before anything
+reaches X, so X is called at most once for it. `publish_claimed` then refreshes the X
+connection's access token if needed, checks the User is Subscribed and still connected to
+the X account the Scheduled post targets, calls X once, and records Published or Failed (or,
+for the publisher, puts one X never took back in scheduled). It commits as it goes, so it
+takes a session no other work shares.
 """
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Literal, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,11 @@ from app.db.models import ScheduledPost, XConnection
 
 # Refresh an access token this close to expiry, so it can't lapse during the call to X.
 REFRESH_MARGIN = timedelta(minutes=5)
+
+# A Scheduled post X never took (429, refused connection) is retried this long after its
+# publish time, then Failed. Calling X again is safe only because X surely didn't publish it.
+RETRY_WINDOW = timedelta(minutes=15)
+FIRST_BACKOFF = timedelta(minutes=1)
 
 # The analytics reason category of a Failed Scheduled post.
 FailureCategory = Literal[
@@ -67,20 +73,47 @@ async def publish_scheduled_post(
     db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
 ) -> bool:
     """
-    Publish the Scheduled post if it is scheduled, recording Published or Failed. False when
-    it wasn't scheduled, for instance because another caller claimed it first.
+    Post now: publish the Scheduled post if it is scheduled, recording Published or Failed,
+    without retrying. False when it wasn't scheduled, for instance because another caller
+    claimed it first.
     """
     claimed = await scheduled_posts_service.claim(db, scheduled_post_id=scheduled_post_id, now=now)
     # Commit the claim before calling X: from here on, no other caller can publish it.
     await db.commit()
     if not claimed:
         return False
+    await publish_claimed(
+        db, publisher, scheduled_post_id=scheduled_post_id, now=now, retry_unavailable=False
+    )
+    return True
+
+
+async def publish_claimed(
+    db: AsyncSession,
+    publisher: XPublisher,
+    *,
+    scheduled_post_id: str,
+    now: datetime,
+    retry_unavailable: bool,
+) -> None:
+    """
+    Publish a Scheduled post the caller claimed into publishing and committed. With
+    `retry_unavailable`, one X never took goes back to scheduled with a backoff until
+    `RETRY_WINDOW` after its publish time; otherwise, and after that, it is Failed.
+    """
     scheduled_post = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
     assert scheduled_post is not None
 
     try:
         x_post_id = await _publish(db, publisher, scheduled_post, now=now)
     except _Failed as failed:
+        next_attempt_at = _next_attempt_at(scheduled_post, now=now)
+        if retry_unavailable and failed.category == "x_unavailable" and next_attempt_at:
+            await scheduled_posts_service.release_for_retry(
+                db, scheduled_post, next_attempt_at=next_attempt_at, now=now
+            )
+            await db.commit()
+            return
         await scheduled_posts_service.record_failed(
             db, scheduled_post, reason=failed.reason, now=now
         )
@@ -90,7 +123,7 @@ async def publish_scheduled_post(
             distinct_id=scheduled_post.user_id,
             properties={"reason": failed.category},
         )
-        return True
+        return
 
     await scheduled_posts_service.record_published(db, scheduled_post, x_post_id=x_post_id, now=now)
     await db.commit()
@@ -99,7 +132,17 @@ async def publish_scheduled_post(
         distinct_id=scheduled_post.user_id,
         properties={"source": "final" if scheduled_post.source_version_id else "typed"},
     )
-    return True
+
+
+def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optional[datetime]:
+    """
+    When to try again after X didn't take it: doubling from `FIRST_BACKOFF`, with one last try
+    at the end of the retry window. None once the window is over.
+    """
+    deadline = as_utc(scheduled_post.publish_at) + RETRY_WINDOW
+    if now >= deadline:
+        return None
+    return min(now + FIRST_BACKOFF * 2**scheduled_post.retry_count, deadline)
 
 
 async def _publish(
@@ -128,7 +171,6 @@ async def _publish(
         await x_connections_service.flag_needs_reconnect(db, connection, now=now)
         raise _Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
     except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
-        # TODO(#62): the publisher puts these back in scheduled with a backoff instead.
         raise _Failed("x_unavailable", X_UNAVAILABLE_REASON)
     except XPostRejectedError as rejected:
         raise _Failed("rejected", f"X refused the post: {rejected.message}")

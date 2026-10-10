@@ -52,7 +52,12 @@ async def test_a_subscribed_user_connects_and_then_sees_their_handle(
     completed = await client.post(COMPLETE, json={"code": "the-code", "state": query["state"]})
 
     assert completed.status_code == 200
-    expected = {"handle": "ada", "char_limit": 280, "needs_reconnect": False}
+    expected = {
+        "handle": "ada",
+        "char_limit": 280,
+        "needs_reconnect": False,
+        "scheduled_posts_waiting": 0,
+    }
     assert completed.json() == expected
     assert (await client.get(X_CONNECTION)).json() == expected
     [(code, verifier)] = fake_x_publisher.exchanges
@@ -216,6 +221,35 @@ async def test_disconnecting_removes_the_x_connection_and_revokes_its_grant(
     assert response.status_code == 204
     assert (await client.get(X_CONNECTION)).status_code == 404
     assert fake_x_publisher.revoked == ["refresh-1001-1"]
+
+
+async def test_the_x_connection_counts_the_scheduled_posts_waiting_to_go_out_on_it(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect(client)
+    for text in ("One", "Two"):
+        await client.post(
+            "/api/v1/scheduled-posts", json={"text": text, "publish_at": "2026-10-11T09:00:00Z"}
+        )
+    await client.post("/api/v1/scheduled-posts", json={"text": "Gone", "publish_now": True})
+
+    response = await client.get(X_CONNECTION)
+
+    assert response.json()["scheduled_posts_waiting"] == 2
+
+
+async def test_scheduled_posts_waiting_for_another_x_account_are_not_counted(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect(client)
+    await client.post(
+        "/api/v1/scheduled-posts", json={"text": "For ada", "publish_at": "2026-10-11T09:00:00Z"}
+    )
+    fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
+
+    connected = await _connect(client)
+
+    assert connected.json()["scheduled_posts_waiting"] == 0
 
 
 async def test_disconnecting_succeeds_when_x_fails_to_revoke(

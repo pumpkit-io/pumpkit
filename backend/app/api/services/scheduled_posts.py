@@ -6,7 +6,7 @@ Flushes and never commits: the mediator or the publishing module owns the transa
 from datetime import datetime
 from typing import Optional, cast
 
-from sqlalchemy import CursorResult, case, select, update
+from sqlalchemy import CursorResult, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import FAILED, PUBLISHED, PUBLISHING, SCHEDULED, ScheduledPost
@@ -75,6 +75,80 @@ async def claim(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> b
         .values(state=PUBLISHING, publishing_started_at=now, updated_at=now)
     )
     return cast(CursorResult, result).rowcount == 1
+
+
+async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
+    """
+    Move the soonest due Scheduled post from scheduled to publishing and return its id; None
+    when nothing is due. Concurrent callers skip each other's rows on Postgres, and the state
+    check in the update keeps a claim single on databases without row locks.
+    """
+    due = (
+        select(ScheduledPost.id)
+        .where(
+            ScheduledPost.state == SCHEDULED,
+            ScheduledPost.publish_at <= now,
+            or_(ScheduledPost.next_attempt_at.is_(None), ScheduledPost.next_attempt_at <= now),
+        )
+        .order_by(ScheduledPost.publish_at, ScheduledPost.id)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+        .scalar_subquery()
+    )
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(ScheduledPost.id == due, ScheduledPost.state == SCHEDULED)
+        .values(state=PUBLISHING, publishing_started_at=now, updated_at=now)
+        .returning(ScheduledPost.id)
+        .execution_options(synchronize_session=False)
+    )
+    return result.scalar_one_or_none()
+
+
+async def fail_stuck(
+    db: AsyncSession, *, publishing_since: datetime, reason: str, now: datetime
+) -> list[str]:
+    """
+    Move every Scheduled post in publishing since before `publishing_since` to Failed, and
+    return their Users' ids, one per Scheduled post.
+    """
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(
+            ScheduledPost.state == PUBLISHING,
+            ScheduledPost.publishing_started_at < publishing_since,
+        )
+        .values(state=FAILED, failed_reason=reason, updated_at=now)
+        .returning(ScheduledPost.user_id)
+        .execution_options(synchronize_session=False)
+    )
+    return list(result.scalars())
+
+
+async def count_waiting(db: AsyncSession, *, user_id: str, x_user_id: str) -> int:
+    """The User's Scheduled posts still in scheduled for the X account."""
+    result = await db.execute(
+        select(func.count())
+        .select_from(ScheduledPost)
+        .where(
+            ScheduledPost.user_id == user_id,
+            ScheduledPost.x_user_id == x_user_id,
+            ScheduledPost.state == SCHEDULED,
+        )
+    )
+    return result.scalar_one()
+
+
+async def release_for_retry(
+    db: AsyncSession, scheduled_post: ScheduledPost, *, next_attempt_at: datetime, now: datetime
+) -> None:
+    """Back from publishing to scheduled, due again at `next_attempt_at`. Flushes."""
+    scheduled_post.state = SCHEDULED
+    scheduled_post.retry_count += 1
+    scheduled_post.next_attempt_at = next_attempt_at
+    scheduled_post.publishing_started_at = None
+    scheduled_post.updated_at = now
+    await db.flush()
 
 
 async def record_published(

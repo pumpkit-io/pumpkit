@@ -44,7 +44,12 @@ async def create_scheduled_post(
     publisher: XPublisher = Depends(get_x_publisher),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
-    """Publishes on X before answering: the Scheduled post comes back Published or Failed."""
-    return await scheduled_posts_mediator.post_now(
-        db=db, publisher=publisher, user=current_user, text=create_request.text, now=clock()
+    """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
+    return await scheduled_posts_mediator.create_scheduled_post(
+        db=db,
+        publisher=publisher,
+        user=current_user,
+        text=create_request.text,
+        publish_at=create_request.publish_at,
+        now=clock(),
     )

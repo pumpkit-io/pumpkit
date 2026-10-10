@@ -131,6 +131,19 @@ def clock() -> Iterator[FrozenClock]:
     app.dependency_overrides.pop(get_clock, None)
 
 
+# Half a minute past a whole minute, so whole-minute and one-minute-ahead rules both bite.
+FIXED_NOW = datetime(2026, 10, 10, 12, 0, 30, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def fixed_clock() -> Iterator[FrozenClock]:
+    """Like `clock`, frozen at `FIXED_NOW` for tests that write out dates."""
+    frozen = FrozenClock(FIXED_NOW)
+    app.dependency_overrides[get_clock] = lambda: frozen
+    yield frozen
+    app.dependency_overrides.pop(get_clock, None)
+
+
 @pytest.fixture(autouse=True)
 def fake_google():
     """

@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.api.services.scheduled_posts as scheduled_posts_service
 import app.api.services.x_authorizations as x_authorizations_service
 import app.api.services.x_connections as x_connections_service
 from app.core.logger import logger
@@ -18,11 +19,14 @@ from app.publishing.x_length import X_POST_MAX_CHARS
 from app.schemas.x_connection import XAuthorizationStartResponse, XConnectionResponse
 
 
-def _response(connection: XConnection) -> XConnectionResponse:
+async def _response(db: AsyncSession, connection: XConnection) -> XConnectionResponse:
     return XConnectionResponse(
         handle=connection.handle,
         char_limit=X_POST_MAX_CHARS,
         needs_reconnect=connection.needs_reconnect,
+        scheduled_posts_waiting=await scheduled_posts_service.count_waiting(
+            db, user_id=connection.user_id, x_user_id=connection.x_user_id
+        ),
     )
 
 
@@ -43,7 +47,7 @@ async def _connection_or_404(db: AsyncSession, *, user_id: str) -> XConnection:
 
 
 async def get_connection(db: AsyncSession, user: User) -> XConnectionResponse:
-    return _response(await _connection_or_404(db, user_id=user.id))
+    return await _response(db, await _connection_or_404(db, user_id=user.id))
 
 
 async def start_authorization(
@@ -100,7 +104,7 @@ async def complete_authorization(
     except IntegrityError:
         # Another User connected the same X account between the check and the save.
         raise _owned_elsewhere(account.handle)
-    return _response(connection)
+    return await _response(db, connection)
 
 
 async def disconnect(db: AsyncSession, publisher: XPublisher, user: User) -> None:

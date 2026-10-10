@@ -273,3 +273,121 @@ async def test_published_and_failed_are_tracked_for_analytics(
     published, failed = captured.capture.call_args_list
     assert published.kwargs["properties"] == {"source": "typed"}
     assert failed.kwargs["properties"] == {"reason": "outcome_unknown"}
+
+
+async def _schedule(client: AsyncClient, publish_at: str, text: str = "Later today."):
+    return await client.post(SCHEDULED_POSTS, json={"text": text, "publish_at": publish_at})
+
+
+async def test_a_post_scheduled_for_later_is_listed_as_upcoming_and_not_published(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+
+    response = await _schedule(client, "2026-10-10T14:00:00Z", "Launch day.")
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["state"] == "scheduled"
+    assert body["text"] == "Launch day."
+    assert body["publish_at"] == "2026-10-10T14:00:00Z"
+    assert body["published_at"] is None and body["x_post_url"] is None
+    assert fake_x_publisher.published == []
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [body]
+
+
+async def test_a_publish_time_in_the_browser_s_timezone_is_stored_in_utc(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+
+    response = await _schedule(client, "2026-10-10T16:00:00+02:00")
+
+    assert response.json()["publish_at"] == "2026-10-10T14:00:00Z"
+
+
+async def test_upcoming_scheduled_posts_are_listed_soonest_first(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-12T09:00:00Z", "Monday")
+    await _schedule(client, "2026-10-11T09:00:00Z", "Sunday")
+    await _schedule(client, "2026-10-13T09:00:00Z", "Tuesday")
+
+    listed = (await client.get(SCHEDULED_POSTS)).json()["data"]
+
+    assert [p["text"] for p in listed] == ["Sunday", "Monday", "Tuesday"]
+
+
+# A minute and a half, and a year less half a minute, after the frozen 12:00:30.
+@pytest.mark.parametrize("publish_at", ["2026-10-10T12:02:00Z", "2027-10-10T12:00:00Z"])
+async def test_times_at_the_edges_of_the_window_are_accepted(
+    client, subscribed, fake_x_publisher, fixed_clock, publish_at
+):
+    await _connect_x(client)
+
+    response = await _schedule(client, publish_at)
+
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.parametrize(
+    ("publish_at", "detail"),
+    [
+        ("2026-10-10T12:01:00Z", "Pick a time at least a minute from now."),
+        ("2026-10-10T11:00:00Z", "Pick a time at least a minute from now."),
+        ("2027-10-10T12:01:00Z", "Pick a time within a year from now."),
+        ("2026-10-10T14:00:30Z", "Pick a time on a whole minute."),
+    ],
+)
+async def test_times_outside_the_window_or_off_the_minute_are_refused(
+    client, subscribed, fake_x_publisher, fixed_clock, publish_at, detail
+):
+    await _connect_x(client)
+
+    response = await _schedule(client, publish_at)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == detail
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"text": "Both", "publish_at": "2026-10-10T14:00:00Z", "publish_now": True},
+        {"text": "Neither"},
+        {"text": "No timezone", "publish_at": "2026-10-10T14:00:00"},
+    ],
+)
+async def test_a_request_needs_either_a_publish_time_with_a_timezone_or_publish_now(
+    client, subscribed, fake_x_publisher, fixed_clock, payload
+):
+    await _connect_x(client)
+
+    response = await client.post(SCHEDULED_POSTS, json=payload)
+
+    assert response.status_code == 422
+    assert fake_x_publisher.published == []
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+
+
+async def test_scheduling_follows_the_same_x_connection_and_length_rules_as_post_now(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    unconnected = await _schedule(client, "2026-10-10T14:00:00Z")
+    await _connect_x(client)
+    too_long = await _schedule(client, "2026-10-10T14:00:00Z", "a" * 281)
+
+    assert unconnected.status_code == 409
+    assert unconnected.json()["detail"] == "Connect your X account first."
+    assert too_long.status_code == 422
+    assert too_long.json()["detail"] == (
+        "This post is 281 characters by X's count, over the 280 limit."
+    )
+
+
+async def test_a_user_who_is_not_subscribed_cannot_schedule(client, fake_x_publisher, fixed_clock):
+    response = await _schedule(client, "2026-10-10T14:00:00Z")
+
+    assert response.status_code == 403
