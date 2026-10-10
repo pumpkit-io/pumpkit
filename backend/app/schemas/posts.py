@@ -39,6 +39,7 @@ class TellResponse(BaseModel):
 
 
 class VersionResponse(BaseModel):
+    id: str
     number: int
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]

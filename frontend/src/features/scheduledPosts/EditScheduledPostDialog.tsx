@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { xWeightedLength } from '@/lib/xLength';
 import type { ScheduledPost } from '@/services/scheduledPostService';
-import { localInputValue, TIME_ZONE } from './localTime';
+import { earliestInputValue, localInputValue, TIME_ZONE } from './localTime';
 import { XLengthCounter } from './XLengthCounter';
 
 export type ScheduledPostChanges = { text?: string; publishAt?: string };
@@ -89,7 +89,7 @@ function EditForm({
             id="edit-scheduled-post-when"
             type="datetime-local"
             value={when}
-            min={localInputValue(new Date(Date.now() + 60_000))}
+            min={earliestInputValue()}
             onChange={(e) => setWhen(e.target.value)}
             disabled={saving}
             className="sm:w-64"

@@ -7,7 +7,7 @@ import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { xWeightedLength } from '@/lib/xLength';
-import { localInputValue, TIME_ZONE } from './localTime';
+import { earliestInputValue, TIME_ZONE } from './localTime';
 import { XLengthCounter } from './XLengthCounter';
 
 /**
@@ -86,7 +86,7 @@ export function Composer({
             id="composer-when"
             type="datetime-local"
             value={when}
-            min={localInputValue(new Date(Date.now() + 60_000))}
+            min={earliestInputValue()}
             onChange={(e) => setWhen(e.target.value)}
             disabled={posting}
             className="sm:w-64"

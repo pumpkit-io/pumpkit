@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlsplit
 
@@ -14,6 +14,7 @@ from app.core.x_publisher import (
     XRateLimitedError,
     XReconnectNeededError,
 )
+from app.core.x_reader import FetchedPost
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 RECONNECT_REASON = (
@@ -392,6 +393,120 @@ async def test_a_user_who_is_not_subscribed_cannot_schedule(client, fake_x_publi
     response = await _schedule(client, "2026-10-10T14:00:00Z")
 
     assert response.status_code == 403
+
+
+@pytest.fixture
+async def final(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """The first Version of a new Post, whose Final is "The final, version one."."""
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(
+            post_id="levelsio-0",
+            text="levelsio post",
+            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    ]
+    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    assert added.status_code == 201, added.text
+    fake_llm.replies = [{"post": "draft one"}, {"post": "The final, version one."}]
+    started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
+    assert started.status_code == 201, started.text
+    post = started.json()
+    return {"post_id": post["id"], **post["versions"][0]}
+
+
+async def test_scheduling_a_final_records_its_text_time_and_source_version(
+    client, final, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "text": final["final"],
+            "publish_at": "2026-10-10T14:00:00Z",
+            "source_version_id": final["id"],
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["text"] == "The final, version one."
+    assert body["publish_at"] == "2026-10-10T14:00:00Z"
+    assert body["source_version_id"] == final["id"]
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [body]
+
+
+async def test_feedback_on_the_post_afterwards_leaves_the_scheduled_post_s_text_alone(
+    client, final, fake_llm, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "text": final["final"],
+            "publish_at": "2026-10-10T14:00:00Z",
+            "source_version_id": final["id"],
+        },
+    )
+    fake_llm.replies = [{"post": "draft two"}, {"post": "The final, version two."}]
+
+    revised = await client.post(
+        f"/api/v1/posts/{final['post_id']}/versions", json={"feedback": "punchier"}
+    )
+
+    assert revised.status_code == 201, revised.text
+    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    assert listed["text"] == "The final, version one."
+    assert listed["source_version_id"] == final["id"]
+
+
+async def test_post_now_on_a_final_publishes_it_and_tracks_it_as_from_a_final(
+    client, final, fake_x_publisher, clock, monkeypatch
+):
+    captured = MagicMock()
+    monkeypatch.setattr(publish_module, "posthog_client", captured)
+    await _connect_x(client)
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={"text": final["final"], "publish_now": True, "source_version_id": final["id"]},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["state"] == "published"
+    assert response.json()["source_version_id"] == final["id"]
+    assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
+    [published] = captured.capture.call_args_list
+    assert published.kwargs["properties"] == {"source": "final"}
+
+
+async def test_a_typed_scheduled_post_has_no_source_version(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+
+    response = await _schedule(client, "2026-10-10T14:00:00Z")
+
+    assert response.json()["source_version_id"] is None
+
+
+async def test_a_source_version_that_is_not_one_of_the_user_s_versions_is_refused(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "text": "Not mine.",
+            "publish_at": "2026-10-10T14:00:00Z",
+            "source_version_id": "version_attempt_someone_else",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Version not found."
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
 
 
 @pytest.fixture

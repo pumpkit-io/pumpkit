@@ -8,6 +8,7 @@ import { PostWriterProvider } from '@/features/posts/PostWriterProvider';
 import { Sidebar } from '@/features/sidebar/Sidebar';
 import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
 import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
+import { XConnectionProvider } from '@/features/xConnection/XConnectionProvider';
 import { ProfileProvider } from './Home/ProfileContext';
 import { Shell } from './Home/Shell';
 import { useBootstrap } from './Home/useBootstrap';
@@ -17,9 +18,11 @@ function AppLayoutInner() {
 
   return (
     <ProfileProvider value={profile} setValue={setProfile}>
-      <PostWriterProvider>
-        <Shell sidebar={<Sidebar />} sidebarDrawer={<SidebarMobileDrawer />} main={<Outlet />} />
-      </PostWriterProvider>
+      <XConnectionProvider>
+        <PostWriterProvider>
+          <Shell sidebar={<Sidebar />} sidebarDrawer={<SidebarMobileDrawer />} main={<Outlet />} />
+        </PostWriterProvider>
+      </XConnectionProvider>
       <AccountDialog />
       <BillingDialog />
     </ProfileProvider>
@@ -28,7 +31,8 @@ function AppLayoutInner() {
 
 /**
  * The signed-in shell shared by Home and Scheduled. The Post lives in its PostWriterProvider,
- * so it stays on screen while the User visits another page and comes back.
+ * so it stays on screen while the User visits another page and comes back. Home posts Finals
+ * through the same X connection that Scheduled manages.
  */
 export function AppLayout() {
   return (
