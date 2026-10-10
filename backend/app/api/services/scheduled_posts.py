@@ -10,7 +10,14 @@ from typing import Optional, cast
 from sqlalchemy import CursorResult, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import FAILED, PUBLISHED, PUBLISHING, SCHEDULED, ScheduledPost
+from app.db.models import (
+    FAILED,
+    PUBLISHED,
+    PUBLISHING,
+    SCHEDULED,
+    ScheduledPost,
+    ScheduledPostState,
+)
 
 
 async def create(
@@ -40,13 +47,16 @@ async def create(
     return scheduled_post
 
 
-async def list_for_user(db: AsyncSession, *, user_id: str) -> list[ScheduledPost]:
+async def list_for_user(
+    db: AsyncSession, *, user_id: str, state: Optional[ScheduledPostState] = None
+) -> list[ScheduledPost]:
     """Waiting ones first, soonest first; then Published and Failed ones, newest first."""
     waiting = ScheduledPost.state.in_([SCHEDULED, PUBLISHING])
+    query = select(ScheduledPost).where(ScheduledPost.user_id == user_id)
+    if state is not None:
+        query = query.where(ScheduledPost.state == state)
     result = await db.execute(
-        select(ScheduledPost)
-        .where(ScheduledPost.user_id == user_id)
-        .order_by(
+        query.order_by(
             case((waiting, 0), else_=1),
             case((waiting, ScheduledPost.publish_at)),
             ScheduledPost.publish_at.desc(),
@@ -112,10 +122,13 @@ async def edit(
 
 
 async def cancel(db: AsyncSession, *, scheduled_post_id: str) -> bool:
-    """Delete a Scheduled post still in scheduled; False if it wasn't, like a claim's check."""
+    """Delete a scheduled or Failed Scheduled post; False if it was in neither, like a claim's check."""
     result = await db.execute(
         delete(ScheduledPost)
-        .where(ScheduledPost.id == scheduled_post_id, ScheduledPost.state == SCHEDULED)
+        .where(
+            ScheduledPost.id == scheduled_post_id,
+            ScheduledPost.state.in_([SCHEDULED, FAILED]),
+        )
         .execution_options(synchronize_session=False)
     )
     return cast(CursorResult, result).rowcount == 1

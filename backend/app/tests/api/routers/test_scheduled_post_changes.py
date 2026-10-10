@@ -8,7 +8,7 @@ from httpx import AsyncClient
 
 import app.api.services.scheduled_posts as scheduled_posts_service
 from app.core.config import settings
-from app.core.x_publisher import XAccount, XRateLimitedError
+from app.core.x_publisher import XAccount, XPostRejectedError, XRateLimitedError
 from app.publishing.publisher import run_pass
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -253,18 +253,18 @@ async def test_a_publishing_or_published_scheduled_post_cannot_be_cancelled(
     assert len(await _listed(client)) == 2
 
 
-async def test_a_failed_scheduled_post_stays_in_the_history_instead_of_being_cancelled(
+async def test_a_failed_scheduled_post_can_be_removed(
     client, subscribed, fake_x_publisher, fixed_clock
 ):
     await _connect_x(client)
-    fake_x_publisher.fail_publish = XRateLimitedError("429")
-    failed = (await client.post(SCHEDULED_POSTS, json={"text": "Busy", "publish_now": True})).json()
+    fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
+    failed = (await client.post(SCHEDULED_POSTS, json={"text": "Dup", "publish_now": True})).json()
+    assert failed["state"] == "failed"
 
     response = await client.delete(f"{SCHEDULED_POSTS}/{failed['id']}")
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Only a Scheduled post still waiting can be cancelled."
-    assert await _listed(client) == [failed]
+    assert response.status_code == 204
+    assert await _listed(client) == []
 
 
 async def test_another_user_s_scheduled_post_is_not_found(

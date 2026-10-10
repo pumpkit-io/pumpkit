@@ -10,7 +10,7 @@ import app.api.services.x_connections as x_connections_service
 from app.core.config import settings
 from app.core.datetimes import as_utc
 from app.core.x_publisher import XPublisher
-from app.db.models import FAILED, SCHEDULED, ScheduledPost, User, XConnection
+from app.db.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState, User, XConnection
 from app.publishing.publish import publish_scheduled_post
 from app.publishing.x_length import X_POST_MAX_CHARS, x_weighted_length
 from app.schemas.scheduled_posts import ScheduledPostResponse, ScheduledPostsListResponse
@@ -33,8 +33,10 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
     )
 
 
-async def list_scheduled_posts(db: AsyncSession, user: User) -> ScheduledPostsListResponse:
-    scheduled_posts = await scheduled_posts_service.list_for_user(db, user_id=user.id)
+async def list_scheduled_posts(
+    db: AsyncSession, user: User, state: Optional[ScheduledPostState]
+) -> ScheduledPostsListResponse:
+    scheduled_posts = await scheduled_posts_service.list_for_user(db, user_id=user.id, state=state)
     return ScheduledPostsListResponse(data=[scheduled_post_response(s) for s in scheduled_posts])
 
 
@@ -249,13 +251,8 @@ async def edit_scheduled_post(
 
 
 async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:
-    """Delete a Scheduled post still waiting. A Failed one stays, to be rescheduled or kept."""
-    scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
-    if scheduled_post.state == FAILED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Only a Scheduled post still waiting can be cancelled.",
-        )
+    """Delete a scheduled or Failed Scheduled post."""
+    await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if not await scheduled_posts_service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()

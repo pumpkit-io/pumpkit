@@ -55,7 +55,6 @@ async def run_pass(
                 publisher,
                 scheduled_post_id=scheduled_post_id,
                 now=now,
-                retry_unavailable=True,
             )
 
 

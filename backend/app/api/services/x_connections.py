@@ -71,6 +71,15 @@ async def save_tokens(
     await db.flush()
 
 
+async def save_subscription_type(
+    db: AsyncSession, connection: XConnection, *, subscription_type: Optional[str], now: datetime
+) -> None:
+    """Flushes."""
+    connection.subscription_type = subscription_type
+    connection.updated_at = now
+    await db.flush()
+
+
 async def flag_needs_reconnect(db: AsyncSession, connection: XConnection, *, now: datetime) -> None:
     """X refuses the connection's tokens for good. Flushes."""
     connection.needs_reconnect = True

@@ -4,10 +4,12 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 import app.publishing.publish as publish_module
 from app.core.config import settings
 from app.core.x_publisher import (
+    XAccount,
     XNotReceivedError,
     XOutcomeUnknownError,
     XPostRejectedError,
@@ -15,6 +17,8 @@ from app.core.x_publisher import (
     XReconnectNeededError,
 )
 from app.core.x_reader import FetchedPost
+from app.db.models import XConnection
+from app.publishing.publisher import run_pass
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 RECONNECT_REASON = (
@@ -85,6 +89,36 @@ async def test_a_token_near_expiry_is_refreshed_and_the_rotated_refresh_token_ke
     assert first.json()["state"] == second.json()["state"] == "published"
     assert fake_x_publisher.refreshes == ["refresh-1001-1", "refresh-1001-2"]
     assert fake_x_publisher.published == [("access-1001-2", "First"), ("access-1001-3", "Second")]
+
+
+async def test_a_token_refresh_rereads_the_x_account_s_subscription_type(
+    client, db, user, subscribed, fake_x_publisher, clock
+):
+    await _connect_x(client)
+    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type="Premium")
+    clock.advance(timedelta(hours=1, minutes=56))
+
+    await _post_now(client)
+
+    connection = (
+        await db.execute(select(XConnection).where(XConnection.user_id == user.id))
+    ).scalar_one()
+    assert connection.subscription_type == "Premium"
+
+
+async def test_a_failed_subscription_type_read_keeps_the_refreshed_tokens_and_publishes(
+    client, subscribed, fake_x_publisher, clock
+):
+    await _connect_x(client)
+    fake_x_publisher.fail_fetch_account = XNotReceivedError("ConnectError")
+    clock.advance(timedelta(hours=1, minutes=56))
+
+    first = await _post_now(client, "First")
+    clock.advance(timedelta(hours=1, minutes=56))
+    second = await _post_now(client, "Second")
+
+    assert first.json()["state"] == second.json()["state"] == "published"
+    assert fake_x_publisher.refreshes == ["refresh-1001-1", "refresh-1001-2"]
 
 
 async def test_post_now_without_an_x_connection_is_refused(
@@ -178,19 +212,42 @@ async def test_a_post_whose_outcome_is_unknown_fails_telling_the_user_to_check_x
 
 
 @pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
-async def test_a_post_x_never_took_fails_saying_nothing_was_published(
-    client, subscribed, fake_x_publisher, clock, error
+async def test_a_post_now_x_never_took_goes_back_to_scheduled_for_the_publisher_to_retry(
+    client, db_session_maker, subscribed, fake_x_publisher, clock, error
 ):
     await _connect_x(client)
     fake_x_publisher.fail_publish = error
 
     response = await _post_now(client)
 
-    assert response.json()["state"] == "failed"
-    assert response.json()["failed_reason"] == (
+    assert response.status_code == 201
+    body = response.json()
+    assert body["state"] == "scheduled"
+    assert body["failed_reason"] is None
+    fake_x_publisher.fail_publish = None
+    clock.advance(timedelta(minutes=1))
+    await run_pass(db_session_maker, fake_x_publisher, clock)
+    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    assert listed["state"] == "published"
+    assert len(fake_x_publisher.published) == 2
+
+
+async def test_a_post_now_x_keeps_refusing_fails_15_minutes_after_it_was_asked_for(
+    client, db_session_maker, subscribed, fake_x_publisher, clock
+):
+    await _connect_x(client)
+    fake_x_publisher.fail_publish = XRateLimitedError("429")
+    await _post_now(client)
+
+    for _ in range(32):
+        clock.advance(timedelta(seconds=30))
+        await run_pass(db_session_maker, fake_x_publisher, clock)
+
+    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    assert listed["state"] == "failed"
+    assert listed["failed_reason"] == (
         "Not published: X was busy or unreachable. Try again in a few minutes."
     )
-    assert len(fake_x_publisher.published) == 1
 
 
 async def test_revoked_access_fails_the_post_and_asks_the_user_to_reconnect(
@@ -627,3 +684,29 @@ async def test_post_now_works_again_once_the_utc_month_turns(
     assert after.status_code == 201, after.text
     assert after.json()["publish_at"] == "2026-11-01T00:00:00Z"
     assert after.json()["state"] == "published"
+
+
+async def test_scheduled_posts_can_be_listed_by_state_in_the_same_order(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-12T09:00:00Z", "Monday")
+    await _schedule(client, "2026-10-11T09:00:00Z", "Sunday")
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    await _post_now(client, "Refused")
+    fake_x_publisher.fail_publish = None
+    await _post_now(client, "Went out")
+
+    scheduled = (await client.get(SCHEDULED_POSTS, params={"state": "scheduled"})).json()["data"]
+    failed = (await client.get(SCHEDULED_POSTS, params={"state": "failed"})).json()["data"]
+    published = (await client.get(SCHEDULED_POSTS, params={"state": "published"})).json()["data"]
+
+    assert [p["text"] for p in scheduled] == ["Sunday", "Monday"]
+    assert [p["text"] for p in failed] == ["Refused"]
+    assert [p["text"] for p in published] == ["Went out"]
+
+
+async def test_listing_by_an_unknown_state_is_refused(client, subscribed):
+    response = await client.get(SCHEDULED_POSTS, params={"state": "posted"})
+
+    assert response.status_code == 422

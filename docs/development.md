@@ -54,7 +54,7 @@ The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, 
 
 ### Schedule a post
 
-A Subscribed User connects X on the Scheduled page (`x_connection` router; the X publisher port in `core/x_publisher.py`). `POST /api/v1/scheduled-posts` takes a text and either `publish_at` or `publish_now`. `mediators/scheduled_posts` checks every new Scheduled post in one place: `connection_to_publish_on` (an X connection that doesn't need reconnecting), `check_length` (X's weighted count) and `check_publish_at` (a whole minute, one minute to a year ahead, stored in UTC). Reuse them for anything that creates or moves a Scheduled post.
+A Subscribed User connects X on the Scheduled page (`x_connection` router; the X publisher port in `core/x_publisher.py`). `POST /api/v1/scheduled-posts` takes a text and either `publish_at` or `publish_now`. `GET /api/v1/scheduled-posts` takes an optional `state` to list only Scheduled posts in that state. `DELETE` removes a scheduled or Failed one. `mediators/scheduled_posts` checks every new Scheduled post in one place: `connection_to_publish_on` (an X connection that doesn't need reconnecting), `check_length` (X's weighted count) and `check_publish_at` (a whole minute, one minute to a year ahead, stored in UTC). Reuse them for anything that creates or moves a Scheduled post.
 
 A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send the Final's text with `source_version_id`, the Version's id. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so Home and Scheduled share it.
 
@@ -64,7 +64,7 @@ A Scheduled post for later waits in `scheduled` until the publisher picks it up.
 2. claims the soonest due one (`services/scheduled_posts.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere), commits, and hands it to `publish.publish_claimed`;
 3. repeats until nothing is due.
 
-`publish_claimed` calls X once and records Published or Failed. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so the publisher puts it back in `scheduled` with a doubling backoff from one minute, and makes it Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same module and doesn't retry: the User is waiting.
+`publish_claimed` calls X once and records Published or Failed. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so it goes back in `scheduled` with a doubling backoff from one minute for the publisher to retry, and becomes Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same module; when X doesn't take it, the request returns it in `scheduled` and the publisher retries it like any other.
 
 Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clock)` directly and checking outcomes through `GET /api/v1/scheduled-posts` (see `tests/publishing/test_publisher.py`). The `fixed_clock` fixture freezes time at a known instant for tests that write out dates. Under SQLite the row lock is a no-op, so tests of concurrent passes exercise the conditional claim.
 

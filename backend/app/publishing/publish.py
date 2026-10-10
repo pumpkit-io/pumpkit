@@ -82,9 +82,7 @@ async def publish_scheduled_post(
     await db.commit()
     if not claimed:
         return False
-    await publish_claimed(
-        db, publisher, scheduled_post_id=scheduled_post_id, now=now, retry_unavailable=False
-    )
+    await publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     return True
 
 
@@ -94,13 +92,8 @@ async def publish_claimed(
     *,
     scheduled_post_id: str,
     now: datetime,
-    retry_unavailable: bool,
 ) -> None:
-    """
-    Publish a Scheduled post the caller claimed into publishing and committed. With
-    `retry_unavailable`, one X never took goes back to scheduled with a backoff until
-    `RETRY_WINDOW` after its publish time; otherwise, and after that, it is Failed.
-    """
+    """One X never took goes back to scheduled with a backoff until `RETRY_WINDOW` is over."""
     scheduled_post = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
     assert scheduled_post is not None
 
@@ -108,7 +101,7 @@ async def publish_claimed(
         x_post_id = await _publish(db, publisher, scheduled_post, now=now)
     except _Failed as failed:
         next_attempt_at = _next_attempt_at(scheduled_post, now=now)
-        if retry_unavailable and failed.category == "x_unavailable" and next_attempt_at:
+        if failed.category == "x_unavailable" and next_attempt_at:
             await scheduled_posts_service.release_for_retry(
                 db, scheduled_post, next_attempt_at=next_attempt_at, now=now
             )
@@ -204,4 +197,12 @@ async def _fresh_access_token(
     except XPublisherError:
         raise _Failed("x_unavailable", X_UNAVAILABLE_REASON)
     await x_connections_service.save_tokens(db, connection, tokens=tokens, now=now)
+    try:
+        account = await publisher.fetch_account(access_token=tokens.access_token)
+    except XPublisherError:
+        # The last-read subscription_type stands until the next refresh; the publish goes on.
+        return tokens.access_token
+    await x_connections_service.save_subscription_type(
+        db, connection, subscription_type=account.subscription_type, now=now
+    )
     return tokens.access_token

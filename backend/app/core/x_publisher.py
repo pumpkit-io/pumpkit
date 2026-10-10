@@ -337,8 +337,8 @@ class FakeXPublisher:
     `refresh-<id>-<n>` for `account`, n counting issues, valid for two hours; the authorize
     URL carries its query like X's. Records `exchanges` (code, verifier), `refreshes`
     (refresh tokens sent), `published` (access token, text) and `revoked` tokens. Set
-    `fail_exchange`, `fail_refresh` or `fail_publish` to an error to raise it, `fail_revoke`
-    or `not_configured` to raise.
+    `fail_exchange`, `fail_refresh`, `fail_fetch_account` or `fail_publish` to an error to
+    raise it, `fail_revoke` or `not_configured` to raise.
     """
 
     account: XAccount = field(
@@ -351,6 +351,7 @@ class FakeXPublisher:
     fail_exchange: Optional[XPublisherError] = None
     fail_refresh: Optional[XPublisherError] = None
     fail_publish: Optional[XPublisherError] = None
+    fail_fetch_account: Optional[XPublisherError] = None
     fail_revoke: bool = False
     not_configured: bool = False
     issued: int = 0
@@ -374,6 +375,8 @@ class FakeXPublisher:
         return self._issue(now)
 
     async def fetch_account(self, *, access_token: str) -> XAccount:
+        if self.fail_fetch_account is not None:
+            raise self.fail_fetch_account
         return self.account
 
     async def publish(self, *, access_token: str, text: str) -> str:
