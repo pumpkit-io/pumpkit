@@ -8,7 +8,7 @@ import app.api.services.scheduled_posts as scheduled_posts_service
 import app.api.services.x_connections as x_connections_service
 from app.core.datetimes import as_utc
 from app.core.x_publisher import XPublisher
-from app.db.models import ScheduledPost, User, XConnection
+from app.db.models import FAILED, SCHEDULED, ScheduledPost, User, XConnection
 from app.publishing.publish import publish_scheduled_post
 from app.publishing.x_length import X_POST_MAX_CHARS, x_weighted_length
 from app.schemas.scheduled_posts import ScheduledPostResponse, ScheduledPostsListResponse
@@ -140,3 +140,63 @@ async def _post_now(
     published = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
     assert published is not None
     return scheduled_post_response(published)
+
+
+async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> ScheduledPost:
+    scheduled_post = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
+    if scheduled_post is None or scheduled_post.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled post not found."
+        )
+    return scheduled_post
+
+
+def _publishing_started() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Publishing has started, so this Scheduled post can no longer change.",
+    )
+
+
+async def edit_scheduled_post(
+    db: AsyncSession,
+    user: User,
+    scheduled_post_id: str,
+    text: Optional[str],
+    publish_at: Optional[datetime],
+    now: datetime,
+) -> ScheduledPostResponse:
+    """
+    New text, a new publish time, or both, for a scheduled or Failed Scheduled post. A new time
+    reschedules it on the X account connected now, so a Failed one gets another try.
+    """
+    scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
+    if scheduled_post.state not in (SCHEDULED, FAILED):
+        raise _publishing_started()
+    if text is not None:
+        check_length(text)
+    reschedule = None
+    if publish_at is not None:
+        connection = await connection_to_publish_on(db, user_id=user.id)
+        reschedule = scheduled_posts_service.Reschedule(
+            publish_at=check_publish_at(publish_at, now=now), x_user_id=connection.x_user_id
+        )
+    if not await scheduled_posts_service.edit(
+        db, scheduled_post_id=scheduled_post_id, text=text, reschedule=reschedule, now=now
+    ):
+        raise _publishing_started()
+    await db.commit()
+    return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
+
+
+async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:
+    """Delete a Scheduled post still waiting. A Failed one stays, to be rescheduled or kept."""
+    scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
+    if scheduled_post.state == FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only a Scheduled post still waiting can be cancelled.",
+        )
+    if not await scheduled_posts_service.cancel(db, scheduled_post_id=scheduled_post_id):
+        raise _publishing_started()
+    await db.commit()

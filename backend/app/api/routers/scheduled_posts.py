@@ -12,6 +12,7 @@ from app.schemas.scheduled_posts import (
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
+    ScheduledPostUpdateRequest,
 )
 
 router = APIRouter(tags=["scheduled-posts"])
@@ -52,4 +53,40 @@ async def create_scheduled_post(
         text=create_request.text,
         publish_at=create_request.publish_at,
         now=clock(),
+    )
+
+
+@router.patch(
+    "/scheduled-posts/{scheduled_post_id}",
+    response_model=ScheduledPostResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def edit_scheduled_post(
+    scheduled_post_id: str,
+    update_request: ScheduledPostUpdateRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> ScheduledPostResponse:
+    return await scheduled_posts_mediator.edit_scheduled_post(
+        db=db,
+        user=current_user,
+        scheduled_post_id=scheduled_post_id,
+        text=update_request.text,
+        publish_at=update_request.publish_at,
+        now=clock(),
+    )
+
+
+@router.delete(
+    "/scheduled-posts/{scheduled_post_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def cancel_scheduled_post(
+    scheduled_post_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> None:
+    await scheduled_posts_mediator.cancel_scheduled_post(
+        db=db, user=current_user, scheduled_post_id=scheduled_post_id
     )

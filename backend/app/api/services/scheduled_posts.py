@@ -3,10 +3,11 @@ Scheduled posts and their moves between states.
 Flushes and never commits: the mediator or the publishing module owns the transaction.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, cast
 
-from sqlalchemy import CursorResult, case, func, or_, select, update
+from sqlalchemy import CursorResult, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import FAILED, PUBLISHED, PUBLISHING, SCHEDULED, ScheduledPost
@@ -62,6 +63,60 @@ async def get(db: AsyncSession, *, scheduled_post_id: str) -> Optional[Scheduled
         .execution_options(populate_existing=True)
     )
     return result.scalar_one_or_none()
+
+
+@dataclass(frozen=True)
+class Reschedule:
+    publish_at: datetime
+    x_user_id: str
+
+
+async def edit(
+    db: AsyncSession,
+    *,
+    scheduled_post_id: str,
+    text: Optional[str],
+    reschedule: Optional[Reschedule],
+    now: datetime,
+) -> bool:
+    """
+    Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
+    back in scheduled for the new time and X account, as if it had never been tried. The state
+    check in the update keeps a claim by the publisher between the User's read and this write safe.
+    """
+    values: dict[str, object] = {"updated_at": now}
+    if text is not None:
+        values["text"] = text
+    if reschedule is not None:
+        values.update(
+            state=SCHEDULED,
+            publish_at=reschedule.publish_at,
+            x_user_id=reschedule.x_user_id,
+            failed_reason=None,
+            retry_count=0,
+            next_attempt_at=None,
+            publishing_started_at=None,
+        )
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(
+            ScheduledPost.id == scheduled_post_id,
+            ScheduledPost.state.in_([SCHEDULED, FAILED]),
+        )
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    return cast(CursorResult, result).rowcount == 1
+
+
+async def cancel(db: AsyncSession, *, scheduled_post_id: str) -> bool:
+    """Delete a Scheduled post still in scheduled; False if it wasn't, like a claim's check."""
+    result = await db.execute(
+        delete(ScheduledPost)
+        .where(ScheduledPost.id == scheduled_post_id, ScheduledPost.state == SCHEDULED)
+        .execution_options(synchronize_session=False)
+    )
+    return cast(CursorResult, result).rowcount == 1
 
 
 async def claim(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> bool:

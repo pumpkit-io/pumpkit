@@ -47,3 +47,27 @@ class ScheduledPostResponse(BaseModel):
 
 class ScheduledPostsListResponse(BaseModel):
     data: list[ScheduledPostResponse]
+
+
+class ScheduledPostUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: Optional[str] = Field(None, max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
+    # A new time reschedules the Scheduled post on the X account connected now.
+    publish_at: Optional[AwareDatetime] = None
+
+    @field_validator("text")
+    @classmethod
+    def _strip(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Write the post first.")
+        return stripped
+
+    @model_validator(mode="after")
+    def _something_to_change(self) -> "ScheduledPostUpdateRequest":
+        if self.text is None and self.publish_at is None:
+            raise ValueError("Give a new text, a new publish time, or both.")
+        return self
