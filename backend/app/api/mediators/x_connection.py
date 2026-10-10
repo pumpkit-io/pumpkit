@@ -14,10 +14,8 @@ from app.core.x_publisher import (
     code_challenge_for,
 )
 from app.db.models import User, XConnection
+from app.publishing.x_length import X_POST_MAX_CHARS
 from app.schemas.x_connection import XAuthorizationStartResponse, XConnectionResponse
-
-# TODO(#66): raise the limit for X Premium accounts once the long-post spike (#67) settles it.
-X_POST_MAX_CHARS = 280
 
 
 def _response(connection: XConnection) -> XConnectionResponse:
