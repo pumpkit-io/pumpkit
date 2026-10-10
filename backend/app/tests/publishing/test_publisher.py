@@ -13,7 +13,6 @@ from httpx import AsyncClient
 
 import app.api.services.scheduled_posts as scheduled_posts_service
 import app.publishing.publish as publish_module
-import app.publishing.publisher as publisher_module
 from app.core.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
@@ -22,7 +21,7 @@ from app.core.x_publisher import (
 from app.publishing.publisher import run, run_pass
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
-CHECK_X_REASON = "X didn't confirm this post. It may have been published, check your X profile."
+CHECK_X_REASON = "X didn't confirm this post. It may have been published. Check your X profile."
 X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a few minutes."
 
 
@@ -215,7 +214,7 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
     client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, monkeypatch
 ):
     captured = MagicMock()
-    monkeypatch.setattr(publisher_module, "posthog_client", captured)
+    monkeypatch.setattr(publish_module, "posthog_client", captured)
     await _connect_x(client)
     scheduled_post_id = await _schedule(client, "2026-10-10T12:02:00Z", "Stuck")
     fixed_clock.advance(timedelta(minutes=2))

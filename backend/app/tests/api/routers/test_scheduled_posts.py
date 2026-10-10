@@ -206,7 +206,7 @@ async def test_a_post_whose_outcome_is_unknown_fails_telling_the_user_to_check_x
 
     assert response.json()["state"] == "failed"
     assert response.json()["failed_reason"] == (
-        "X didn't confirm this post. It may have been published, check your X profile."
+        "X didn't confirm this post. It may have been published. Check your X profile."
     )
     assert len(fake_x_publisher.published) == 1
 
@@ -332,6 +332,23 @@ async def test_published_and_failed_are_tracked_for_analytics(
     published, failed = captured.capture.call_args_list
     assert published.kwargs["properties"] == {"source": "typed"}
     assert failed.kwargs["properties"] == {"reason": "outcome_unknown"}
+
+
+async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
+    client, subscribed, fake_x_publisher, clock, monkeypatch
+):
+    captured = MagicMock()
+    monkeypatch.setattr(publish_module, "posthog_client", captured)
+    await _connect_x(client)
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+
+    await _post_now(client)
+
+    captured.capture.assert_called_once_with(
+        "scheduled_post_failed",
+        distinct_id=subscribed.user_id,
+        properties={"reason": "refused_by_x"},
+    )
 
 
 async def _schedule(client: AsyncClient, publish_at: str, text: str = "Later today."):

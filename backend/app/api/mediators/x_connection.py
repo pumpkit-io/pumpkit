@@ -65,11 +65,7 @@ async def start_authorization(
 async def complete_authorization(
     db: AsyncSession, publisher: XPublisher, user: User, code: str, state: str, now: datetime
 ) -> XConnectionResponse:
-    """
-    Trade X's code for tokens and make the account the User's X connection, replacing the
-    one they had. Refused when the state isn't a live one of theirs, or the account is
-    another User's.
-    """
+    """Replaces the User's X connection, whichever X account it was for."""
     user_id = user.id
     code_verifier = await x_authorizations_service.consume(
         db, user_id=user_id, state=state, now=now

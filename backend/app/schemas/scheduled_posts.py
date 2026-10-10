@@ -9,6 +9,15 @@ from app.db.models import ScheduledPostState
 SCHEDULED_POST_TEXT_MAX_CHARS = 25_000
 
 
+def _strip_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("Write the post first.")
+    return stripped
+
+
 class ScheduledPostCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -19,13 +28,7 @@ class ScheduledPostCreateRequest(BaseModel):
     # The Version whose Final the text copies; None for a typed post.
     source_version_id: Optional[str] = None
 
-    @field_validator("text")
-    @classmethod
-    def _strip(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Write the post first.")
-        return stripped
+    _strip = field_validator("text")(_strip_text)
 
     @model_validator(mode="after")
     def _one_time(self) -> "ScheduledPostCreateRequest":
@@ -60,15 +63,7 @@ class ScheduledPostUpdateRequest(BaseModel):
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
 
-    @field_validator("text")
-    @classmethod
-    def _strip(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Write the post first.")
-        return stripped
+    _strip = field_validator("text")(_strip_text)
 
     @model_validator(mode="after")
     def _something_to_change(self) -> "ScheduledPostUpdateRequest":

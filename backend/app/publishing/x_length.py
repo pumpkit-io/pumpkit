@@ -1,13 +1,7 @@
 """
-A text's length the way X counts it: twitter-text 3.1.0's v3 weighting, hand-ported because
-its Python port is archived. `frontend/src/lib/xLength.ts` is the same port; both are tested
-against one set of strings, so the composer's counter agrees with the backend.
-
-After NFC normalization, a URL counts 23, an emoji sequence 2, a code point in the ranges
-below 1, and any other code point 2. URL matching follows twitter-text's extractUrl regex and
-TLD list (Copyright 2018 Twitter, Inc., Apache License 2.0). Three simplifications: emoji
-sequences are matched by code point ranges rather than twemoji's list, a URL's length check
-skips punycode encoding, and a domain has at most 127 labels, which keeps matching fast.
+X's weighted length, hand-ported from twitter-text 3.1.0 (Copyright 2018 Twitter, Inc., Apache
+License 2.0); `frontend/src/lib/xLength.ts` is the same port, tested against the same strings.
+Emoji are matched by code point ranges, punycode is skipped, and a domain has at most 127 labels.
 """
 
 import re

@@ -1,12 +1,6 @@
 """
-Publishing one Scheduled post on X, shared by Post now and the publisher (ADR 0007).
-
-The caller claims the Scheduled post into publishing and commits that before anything
-reaches X, so X is called at most once for it. `publish_claimed` then refreshes the X
-connection's access token if needed, checks the User is Subscribed and still connected to
-the X account the Scheduled post targets, calls X once, and records Published or Failed (or,
-for the publisher, puts one X never took back in scheduled). It commits as it goes, so it
-takes a session no other work shares.
+Publishing a Scheduled post on X, for Post now and the publisher (ADR 0007).
+Owns the transaction: it commits the claim and any rotated tokens before calling X.
 """
 
 from dataclasses import dataclass
@@ -45,7 +39,7 @@ FailureCategory = Literal[
     "x_account_changed",
     "reconnect_needed",
     "x_unavailable",
-    "rejected",
+    "refused_by_x",
     "outcome_unknown",
 ]
 
@@ -59,8 +53,11 @@ RECONNECT_NEEDED_REASON = (
 )
 X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a few minutes."
 OUTCOME_UNKNOWN_REASON = (
-    "X didn't confirm this post. It may have been published, check your X profile."
+    "X didn't confirm this post. It may have been published. Check your X profile."
 )
+
+# Far longer than one call to X takes: a Scheduled post publishing this long lost its publisher.
+STUCK_AFTER = timedelta(minutes=10)
 
 
 @dataclass
@@ -72,21 +69,40 @@ class _Failed(Exception):
 async def publish_scheduled_post(
     db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
 ) -> bool:
-    """
-    Post now: publish the Scheduled post if it is scheduled, recording Published or Failed,
-    without retrying. False when it wasn't scheduled, for instance because another caller
-    claimed it first.
-    """
+    """Post now. False when it wasn't scheduled, for instance because another caller claimed it."""
     claimed = await scheduled_posts_service.claim(db, scheduled_post_id=scheduled_post_id, now=now)
     # Commit the claim before calling X: from here on, no other caller can publish it.
     await db.commit()
     if not claimed:
         return False
-    await publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
+    await _publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     return True
 
 
-async def publish_claimed(
+async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: datetime) -> bool:
+    """The publisher's step. False when nothing is due."""
+    scheduled_post_id = await scheduled_posts_service.claim_next_due(db, now=now)
+    # Commit the claim before calling X: from here on, no other pass can publish it.
+    await db.commit()
+    if scheduled_post_id is None:
+        return False
+    await _publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
+    return True
+
+
+async def fail_stuck(db: AsyncSession, *, now: datetime) -> None:
+    """Fail Scheduled posts a crashed publisher left in publishing: X may have taken them."""
+    user_ids = await scheduled_posts_service.fail_stuck(
+        db, publishing_since=now - STUCK_AFTER, reason=OUTCOME_UNKNOWN_REASON, now=now
+    )
+    await db.commit()
+    for user_id in user_ids:
+        posthog_client.capture(
+            "scheduled_post_failed", distinct_id=user_id, properties={"reason": "outcome_unknown"}
+        )
+
+
+async def _publish_claimed(
     db: AsyncSession,
     publisher: XPublisher,
     *,
@@ -128,10 +144,7 @@ async def publish_claimed(
 
 
 def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optional[datetime]:
-    """
-    When to try again after X didn't take it: doubling from `FIRST_BACKOFF`, with one last try
-    at the end of the retry window. None once the window is over.
-    """
+    """Doubling from `FIRST_BACKOFF`, with one last try at the deadline; None after it."""
     deadline = as_utc(scheduled_post.publish_at) + RETRY_WINDOW
     if now >= deadline:
         return None
@@ -166,7 +179,7 @@ async def _publish(
     except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
         raise _Failed("x_unavailable", X_UNAVAILABLE_REASON)
     except XPostRejectedError as rejected:
-        raise _Failed("rejected", f"X refused the post: {rejected.message}")
+        raise _Failed("refused_by_x", f"X refused the post: {rejected.message}")
     except XPublisherError:
         raise _Failed("outcome_unknown", OUTCOME_UNKNOWN_REASON)
 
@@ -174,10 +187,7 @@ async def _publish(
 async def _fresh_access_token(
     db: AsyncSession, publisher: XPublisher, connection: XConnection, *, now: datetime
 ) -> str:
-    """
-    An access token good for the call to X, refreshed under the X connection's row lock when
-    it is near expiry. The rotated tokens are flushed for the caller to commit before use.
-    """
+    """Refreshed under the X connection's row lock when near expiry. Flushes the rotated tokens."""
     if as_utc(connection.access_token_expires_at) - now > REFRESH_MARGIN:
         access_token = x_connections_service.access_token(connection)
         if not access_token:

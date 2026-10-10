@@ -57,6 +57,7 @@ async def create_scheduled_post(
         user=current_user,
         text=create_request.text,
         publish_at=create_request.publish_at,
+        publish_now=create_request.publish_now,
         source_version_id=create_request.source_version_id,
         now=clock(),
     )
