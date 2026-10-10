@@ -494,6 +494,25 @@ describe('Scheduled', () => {
       expect(box.getByLabelText('Date and time')).toHaveValue('2026-10-10T14:00');
     });
 
+    it('says when the monthly cap resets once a month is full', async () => {
+      const full =
+        'You have 100 Scheduled posts in October 2026, the most for one month. ' +
+        'The cap resets on November 1, 2026.';
+      vi.mocked(scheduledPostService.schedule).mockRejectedValue(apiError(409, full));
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'Hello' } });
+      fireEvent.change(box.getByLabelText('Date and time'), {
+        target: { value: '2026-10-20T14:00' },
+      });
+      fireEvent.click(box.getByRole('button', { name: 'Schedule' }));
+
+      expect(await box.findByRole('alert')).toHaveTextContent(full);
+      expect(box.getByLabelText('Post text')).toHaveValue('Hello');
+      expect(box.getByRole('button', { name: 'Schedule' })).toBeEnabled();
+    });
+
     it('holds back scheduling a text over the limit by X count', async () => {
       renderScheduled();
 

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.services.scheduled_posts as scheduled_posts_service
 import app.api.services.x_connections as x_connections_service
+from app.core.config import settings
 from app.core.datetimes import as_utc
 from app.core.x_publisher import XPublisher
 from app.db.models import ScheduledPost, User, XConnection
@@ -89,6 +90,42 @@ def check_publish_at(publish_at: datetime, *, now: datetime) -> datetime:
     return publish_at
 
 
+def _month_bounds(moment: datetime) -> tuple[datetime, datetime]:
+    """The start of the UTC calendar month holding `moment`, and the start of the next one."""
+    start = moment.astimezone(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    if start.month == 12:
+        return start, start.replace(year=start.year + 1, month=1)
+    return start, start.replace(month=start.month + 1)
+
+
+async def check_monthly_cap(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    publish_at: datetime,
+    excluding_id: Optional[str] = None,
+) -> None:
+    """
+    A 409 with the reset date when the User's Scheduled posts in the UTC month of `publish_at`
+    are at the cap. Pass `excluding_id` when moving an existing one, so it doesn't count itself.
+    """
+    start, end = _month_bounds(publish_at)
+    cap = settings.SCHEDULED_POSTS_MONTHLY_CAP
+    count = await scheduled_posts_service.count_publishing_between(
+        db, user_id=user_id, start=start, end=end, excluding_id=excluding_id
+    )
+    if count >= cap:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"You have {cap} Scheduled posts in {start:%B %Y}, the most for one month. "
+                f"The cap resets on {end:%B} {end.day}, {end.year}."
+            ),
+        )
+
+
 async def create_scheduled_post(
     db: AsyncSession,
     publisher: XPublisher,
@@ -104,14 +141,17 @@ async def create_scheduled_post(
     connection = await connection_to_publish_on(db, user_id=user.id)
     check_length(text)
     if publish_at is None:
+        await check_monthly_cap(db, user_id=user.id, publish_at=now)
         return await _post_now(db, publisher, user, connection, text, now)
 
+    publish_at = check_publish_at(publish_at, now=now)
+    await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
     scheduled_post = await scheduled_posts_service.create(
         db,
         user_id=user.id,
         x_user_id=connection.x_user_id,
         text=text,
-        publish_at=check_publish_at(publish_at, now=now),
+        publish_at=publish_at,
         now=now,
     )
     await db.commit()
