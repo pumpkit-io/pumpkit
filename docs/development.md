@@ -8,21 +8,22 @@ backend/app/
   api/mediators/   orchestration across services (webhook dispatch, Google and Magic link sign-in)
   api/services/    one resource or capability each: DB access, Subscriptions, users, tokens
   api/configs/     third-party provider configuration (Google)
-  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, LLM)
+  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, X publisher, LLM)
   writing/         the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
+  publishing/      publishing Scheduled posts on X (claim, refresh, checks, outcome), the publisher process and X's length count
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
   tests/           pytest suite
 frontend/src/
-  features/        self-contained feature modules (account, billing, inspirationAuthors, posts, sidebar, theme, topbar)
+  features/        self-contained feature modules (account, billing, inspirationAuthors, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
   pages/           route-level pages
   contexts/        auth context
 e2e/               Playwright tests run against docker compose
-infra/             Caddyfile
+infra/             Caddyfile, publisher systemd unit
 scripts/           deploy.sh
 docs/              deployment guide
 ```
@@ -51,6 +52,22 @@ Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answer
 
 The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included: change them only on purpose, as a prompt change. The writing, humanizing and revising models are constants in `app/writing/constants.py`.
 
+### Schedule a post
+
+A Subscribed User connects X on the Scheduled page (`x_connection` router; the X publisher port in `core/x_publisher.py`). `POST /api/v1/scheduled-posts` takes a text and either `publish_at` or `publish_now`. `GET /api/v1/scheduled-posts` takes an optional `state` to list only Scheduled posts in that state. `DELETE` removes a scheduled or Failed one. `mediators/scheduled_posts` checks every new Scheduled post in one place: `connection_to_publish_on` (an X connection that doesn't need reconnecting) and `check_monthly_cap`, plus the pure rules in `publishing/rules.py`: `check_length` (X's weighted count) and `check_publish_at` (a whole minute, one minute to a year ahead, stored in UTC). Reuse them for anything that creates or moves a Scheduled post.
+
+A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send the Final's text with `source_version_id`, the Version's id. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so Home and Scheduled share it.
+
+A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m app.publishing`, the `publisher` service in `docker-compose.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
+
+1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "Check your X profile" (`publish.fail_stuck`: a publisher died mid-call);
+2. claims and publishes the soonest due one (`publish.publish_next_due`, which claims through `services/scheduled_posts.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere);
+3. repeats until nothing is due.
+
+`publishing/publish.py` owns the transaction for a publish: it commits the claim before calling X, and calls X once and records Published or Failed. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so it goes back in `scheduled` with a doubling backoff from one minute for the publisher to retry, and becomes Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same module; when X doesn't take it, the request returns it in `scheduled` and the publisher retries it like any other.
+
+Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clock)` directly and checking outcomes through `GET /api/v1/scheduled-posts` (see `tests/publishing/test_publisher.py`). The `fixed_clock` fixture freezes time at a known instant for tests that write out dates. Under SQLite the row lock is a no-op, so tests of concurrent passes exercise the conditional claim.
+
 ### Call an LLM
 
 Set `OPENROUTER_API_KEY`. Mediators reach models through the `LLM` port (`core/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
@@ -59,7 +76,7 @@ The port wraps `openrouter_client` (`core/openrouter.py`), which also has `llm_c
 
 ### Add a page to the shell
 
-Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx`, each with a matching icon button on the collapsed rail. Render your feature in the main area of `frontend/src/pages/Home.tsx`, beside the writing tools, or add a protected route in `frontend/src/App.tsx`.
+Add the page to `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`, which gives it an expanded row and a matching icon on the collapsed rail, and add its route under the `AppLayout` route in `frontend/src/App.tsx`. `frontend/src/pages/AppLayout.tsx` holds the shell and the Post, so the Post stays on screen while the User is on another page.
 
 ### Edit the user profile
 

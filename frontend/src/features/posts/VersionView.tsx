@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { FinalToXActions } from '@/features/scheduledPosts/FinalToX';
 import { track } from '@/lib/analytics';
 import { formatCount } from '@/lib/characters';
 import { cn } from '@/lib/utils';
@@ -51,11 +52,14 @@ export function VersionView({ version }: { version: Version }) {
         aria-labelledby={finalId}
         className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 id={finalId} className="font-sans text-sm font-semibold text-foreground">
             Final
           </h3>
-          <CopyFinalButton final={version.final} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <FinalToXActions version={version} />
+            <CopyFinalButton final={version.final} />
+          </div>
         </div>
         <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-foreground">
           {version.final}

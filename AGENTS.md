@@ -16,12 +16,13 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 ## Where things are
 
 - `backend/app/api/`: HTTP layer split into `routers/` → `mediators/` → `services/`, plus provider `configs/`.
-- `backend/app/core/`: settings, security, logging, LLM client (OpenRouter), PostHog, rate limiting, and the ports mediators reach providers through: the billing gateway (the only Stripe SDK user), the X reader (`x_reader.py`, twitterapi.io, ADR 0005) and the LLM port (`llm.py`, OpenRouter structured calls).
+- `backend/app/core/`: settings, security, logging, LLM client (OpenRouter), PostHog, rate limiting, and the ports mediators reach providers through: the billing gateway (the only Stripe SDK user), the X reader (`x_reader.py`, twitterapi.io, ADR 0005), the X publisher (`x_publisher.py`, X's own API for connecting accounts and publishing, ADR 0006) and the LLM port (`llm.py`, OpenRouter structured calls).
 - Writing: `backend/app/writing/` holds the pumpkit-v6 workflow (prompts as plain text, corpus framing, scrub, and writing a Version: draft call, scrub, humanizer call). Inspiration authors and Posts are served by the `inspiration_authors` and `posts` routers, mediators and services; on the frontend they live in `features/inspirationAuthors/` and `features/posts/`, composed on Home.
+- Publishing: `backend/app/publishing/` publishes Scheduled posts at most once (ADR 0007). `publish.py` is shared by Post now and the publisher; `publisher.py` is the publisher process's pass and loop, run as `python -m app.publishing` (its own docker-compose service and systemd unit). The `x_connection` and `scheduled_posts` routers serve it; the frontend has `features/xConnection/` and `features/scheduledPosts/` on the Scheduled page.
 - `backend/app/db/`, `backend/alembic/`: SQLAlchemy models, sessions, migrations.
 - `frontend/src/`: `pages/` (routes), `features/` (self-contained modules), `components/`, `services/` (API clients), `lib/`.
 - `e2e/`: Playwright smoke tests. `infra/`, `scripts/deploy.sh`, `docs/deployment.md`: single-server deploy.
-- `docs/development.md`: project layout and recipes (Subscriptions, LLM calls, analytics events, branding).
+- `docs/development.md`: project layout and recipes (Subscriptions, Scheduled posts, LLM calls, analytics events, branding).
 
 ## Rules
 

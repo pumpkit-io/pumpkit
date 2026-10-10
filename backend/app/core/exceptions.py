@@ -12,6 +12,7 @@ from app.core.logger import logger
 from app.core.openrouter import LLMNotConfiguredError
 from app.core.posthog import posthog_client
 from app.core.retry_later import RetryLaterError
+from app.core.x_publisher import XPublisherError, XPublisherNotConfiguredError
 from app.core.x_reader import XReaderError, XReaderNotConfiguredError
 
 _REDACTED = "[redacted]"
@@ -100,6 +101,17 @@ async def x_reader_error_handler(request: Request, exc: Exception) -> JSONRespon
     )
 
 
+async def x_publisher_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    error_id = report_unexpected_exception(request, exc)
+    return JSONResponse(
+        status_code=502,
+        content={
+            "detail": "X isn't answering right now. Please try again later.",
+            "error_id": error_id,
+        },
+    )
+
+
 async def retry_later_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, RetryLaterError)
     return JSONResponse(
@@ -132,4 +144,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RetryLaterError, retry_later_handler)
     app.add_exception_handler(XReaderNotConfiguredError, not_configured_handler)
     app.add_exception_handler(XReaderError, x_reader_error_handler)
+    app.add_exception_handler(XPublisherNotConfiguredError, not_configured_handler)
+    app.add_exception_handler(XPublisherError, x_publisher_error_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

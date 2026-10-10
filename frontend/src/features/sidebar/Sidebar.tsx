@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PanelLeft, SquarePen } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './useSidebar';
 import { NewPostButton } from './NewPostButton';
+import { SIDEBAR_PAGES } from './pages';
 import { RailTooltip } from './RailTooltip';
+import { SidebarRowButton } from './SidebarRowButton';
 import { useNewPost } from './useNewPost';
 import { FADE, SLIDE_AND_FADE } from './transitions';
 import { UserCard } from './UserCard';
@@ -27,8 +30,14 @@ function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () 
 }
 
 export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } = {}) {
-  const { collapsed, toggleCollapsed } = useSidebar();
+  const { collapsed, toggleCollapsed, setMobileOpen } = useSidebar();
   const newPost = useNewPost();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const goTo = (path: string) => {
+    navigate(path);
+    setMobileOpen(false);
+  };
   const [hovered, setHovered] = useState(false);
   const [toggleFocused, setToggleFocused] = useState(false);
   const collapsedRailRef = useRef<HTMLDivElement>(null);
@@ -98,6 +107,19 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
               <SquarePen className="h-5 w-5" />
               <RailTooltip label="New Post" />
             </button>
+            {SIDEBAR_PAGES.map(({ path, label, icon: Icon }) => (
+              <button
+                key={path}
+                type="button"
+                onClick={() => goTo(path)}
+                aria-current={pathname === path ? 'page' : undefined}
+                className="group relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-[var(--hover)] aria-[current=page]:text-foreground"
+                aria-label={label}
+              >
+                <Icon className="h-5 w-5" />
+                <RailTooltip label={label} />
+              </button>
+            ))}
           </nav>
         </div>
 
@@ -108,6 +130,16 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
         >
           <nav className="flex-1" aria-label="Main">
             <NewPostButton />
+            {SIDEBAR_PAGES.map(({ path, label, icon: Icon }) => (
+              <SidebarRowButton
+                key={path}
+                icon={<Icon className="h-5 w-5" />}
+                label={label}
+                onClick={() => goTo(path)}
+                aria-current={pathname === path ? 'page' : undefined}
+                className="aria-[current=page]:bg-[var(--hover)]"
+              />
+            ))}
           </nav>
         </div>
       </div>
