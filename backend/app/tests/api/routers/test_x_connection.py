@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 from urllib.parse import parse_qs, urlsplit
 
+import pytest
 from fastapi import Depends
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -63,6 +64,30 @@ async def test_a_subscribed_user_connects_and_then_sees_their_handle(
     [(code, verifier)] = fake_x_publisher.exchanges
     assert code == "the-code"
     assert code_challenge_for(verifier) == query["code_challenge"]
+
+
+@pytest.mark.parametrize(
+    ("subscription_type", "char_limit"),
+    [
+        ("Premium", 25_000),
+        ("PremiumPlus", 25_000),
+        ("None", 280),
+        ("Basic", 280),
+        ("SomethingNew", 280),
+        (None, 280),
+    ],
+)
+async def test_the_x_connection_reports_the_limit_for_the_x_account_s_subscription_type(
+    client, subscribed, fake_x_publisher, clock, subscription_type, char_limit
+):
+    fake_x_publisher.account = XAccount(
+        user_id="1001", handle="ada", subscription_type=subscription_type
+    )
+
+    completed = await _connect(client)
+
+    assert completed.json()["char_limit"] == char_limit
+    assert (await client.get(X_CONNECTION)).json()["char_limit"] == char_limit
 
 
 async def test_the_x_connection_outlives_the_session_it_was_made_in(

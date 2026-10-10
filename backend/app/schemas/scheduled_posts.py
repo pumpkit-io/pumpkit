@@ -5,8 +5,8 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from app.db.models import ScheduledPostState
 
-# Far above any limit X applies by its own count; it bounds the work of counting.
-SCHEDULED_POST_TEXT_MAX_CHARS = 25_000
+# Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
+SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
 
 
 def _strip_text(value: Optional[str]) -> Optional[str]:

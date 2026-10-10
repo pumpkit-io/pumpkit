@@ -15,14 +15,14 @@ from app.core.x_publisher import (
     code_challenge_for,
 )
 from app.db.models import User, XConnection
-from app.publishing.x_length import X_POST_MAX_CHARS
+from app.publishing.x_length import x_post_max_chars
 from app.schemas.x_connection import XAuthorizationStartResponse, XConnectionResponse
 
 
 async def _response(db: AsyncSession, connection: XConnection) -> XConnectionResponse:
     return XConnectionResponse(
         handle=connection.handle,
-        char_limit=X_POST_MAX_CHARS,
+        char_limit=x_post_max_chars(connection.subscription_type),
         needs_reconnect=connection.needs_reconnect,
         scheduled_posts_waiting=await scheduled_posts_service.count_waiting(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id

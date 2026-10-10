@@ -569,6 +569,17 @@ describe('Home', () => {
       expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
     });
 
+    it('lets a Final over 280 go to an X Premium account', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, charLimit: 25_000 });
+      const final = await finalWritten('a'.repeat(290));
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      expect(dialog.getByText('290 / 25,000')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Post now' })).toBeEnabled();
+    });
+
     it.each(['Schedule', 'Post now'])(
       'sends the User to connect X first when %s is pressed without an X connection',
       async (action) => {

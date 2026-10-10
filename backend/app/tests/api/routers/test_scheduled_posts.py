@@ -4,7 +4,6 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 
 import app.publishing.publish as publish_module
 from app.core.config import settings
@@ -17,10 +16,10 @@ from app.core.x_publisher import (
     XReconnectNeededError,
 )
 from app.core.x_reader import FetchedPost
-from app.db.models import XConnection
 from app.publishing.publisher import run_pass
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
+X_CONNECTION = "/api/v1/x-connection"
 RECONNECT_REASON = (
     "Not published: X no longer accepts Pumpkit's access to your account. Reconnect X, then "
     "reschedule it."
@@ -91,19 +90,21 @@ async def test_a_token_near_expiry_is_refreshed_and_the_rotated_refresh_token_ke
     assert fake_x_publisher.published == [("access-1001-2", "First"), ("access-1001-3", "Second")]
 
 
-async def test_a_token_refresh_rereads_the_x_account_s_subscription_type(
-    client, db, user, subscribed, fake_x_publisher, clock
+@pytest.mark.parametrize(
+    ("before", "after", "char_limit"),
+    [("None", "Premium", 25_000), ("PremiumPlus", "None", 280)],
+)
+async def test_buying_or_dropping_x_premium_changes_the_limit_at_the_next_token_refresh(
+    client, subscribed, fake_x_publisher, clock, before, after, char_limit
 ):
+    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type=before)
     await _connect_x(client)
-    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type="Premium")
+    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type=after)
     clock.advance(timedelta(hours=1, minutes=56))
 
     await _post_now(client)
 
-    connection = (
-        await db.execute(select(XConnection).where(XConnection.user_id == user.id))
-    ).scalar_one()
-    assert connection.subscription_type == "Premium"
+    assert (await client.get(X_CONNECTION)).json()["char_limit"] == char_limit
 
 
 async def test_a_failed_subscription_type_read_keeps_the_refreshed_tokens_and_publishes(
@@ -158,6 +159,29 @@ async def test_a_text_at_the_limit_by_x_s_count_is_published_however_long_its_ur
 
     assert response.status_code == 201
     assert response.json()["state"] == "published"
+
+
+@pytest.mark.parametrize("subscription_type", ["Premium", "PremiumPlus"])
+async def test_an_x_premium_account_publishes_up_to_25_000_characters_by_x_s_count(
+    client, subscribed, fake_x_publisher, clock, subscription_type
+):
+    fake_x_publisher.account = XAccount(
+        user_id="1001", handle="ada", subscription_type=subscription_type
+    )
+    await _connect_x(client)
+    # 25,077 code points, but the URL counts 23: 25,000 by X's count.
+    at_limit = "a" * 24_976 + " https://example.com/" + "x" * 80
+
+    accepted = await _post_now(client, at_limit)
+    refused = await _post_now(client, "a" * 24_990 + " 日本語のテ")
+
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["state"] == "published"
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == (
+        "This post is 25,001 characters by X's count, over the 25,000 limit."
+    )
+    assert fake_x_publisher.published == [("access-1001-1", at_limit)]
 
 
 async def test_a_blank_text_is_refused(client, subscribed, fake_x_publisher, clock):
