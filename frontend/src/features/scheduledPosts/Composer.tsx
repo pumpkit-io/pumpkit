@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
@@ -8,24 +9,49 @@ import { useXConnectionContext } from '@/features/xConnection/useXConnectionCont
 import { xWeightedLength } from '@/lib/xLength';
 import { XLengthCounter } from './XLengthCounter';
 
-/** Where the User types a text and posts it on their X account straight away. */
+const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** A local time as a datetime-local input writes it: 2026-10-12T09:00. */
+function localInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * Where the User types a text and either schedules it for a date and time in the browser's
+ * timezone or posts it on their X account straight away.
+ */
 export function Composer({
   posting,
   error,
   onPostNow,
+  onSchedule,
 }: {
   posting: boolean;
   error: string | null;
   onPostNow: (text: string) => Promise<boolean>;
+  onSchedule: (text: string, publishAt: string) => Promise<boolean>;
 }) {
   const { subscribed } = useSubscribed();
   const { connection, busy: connecting, connect } = useXConnectionContext();
   const [text, setText] = useState('');
+  /** The picked time as the input holds it, in the browser's timezone; '' when none. */
+  const [when, setWhen] = useState('');
   const length = useMemo(() => xWeightedLength(text), [text]);
 
-  const submit = async (e: FormEvent) => {
+  const clear = () => {
+    setText('');
+    setWhen('');
+  };
+
+  const schedule = async (e: FormEvent) => {
     e.preventDefault();
-    if (await onPostNow(text)) setText('');
+    // A datetime-local value without an offset parses as local time.
+    if (await onSchedule(text, new Date(when).toISOString())) clear();
+  };
+
+  const postNow = async () => {
+    if (await onPostNow(text)) clear();
   };
 
   let action;
@@ -53,13 +79,46 @@ export function Composer({
       </div>
     );
   } else {
-    const over = length > connection.charLimit;
+    const unsendable = posting || length > connection.charLimit || !text.trim();
     action = (
-      <div className="flex items-center justify-between gap-3">
-        <XLengthCounter length={length} limit={connection.charLimit} />
-        <Button type="submit" className="h-10" disabled={posting || over || !text.trim()}>
-          {posting ? 'Posting…' : 'Post now'}
-        </Button>
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="composer-when"
+            className="block font-sans text-sm font-medium text-foreground"
+          >
+            Date and time
+          </label>
+          <Input
+            id="composer-when"
+            type="datetime-local"
+            value={when}
+            min={localInputValue(new Date(Date.now() + 60_000))}
+            onChange={(e) => setWhen(e.target.value)}
+            disabled={posting}
+            className="sm:w-64"
+          />
+          <p className="font-sans text-xs text-muted-foreground">
+            Times are in your timezone, {TIME_ZONE}.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <XLengthCounter length={length} limit={connection.charLimit} />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10"
+              disabled={unsendable}
+              onClick={() => void postNow()}
+            >
+              Post now
+            </Button>
+            <Button type="submit" className="h-10" disabled={unsendable || !when}>
+              Schedule
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -69,7 +128,7 @@ export function Composer({
       <h2 id="composer-heading" className="font-sans text-base font-semibold text-foreground">
         Post to X
       </h2>
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={schedule} className="space-y-3">
         <label htmlFor="composer-text" className="sr-only">
           Post text
         </label>

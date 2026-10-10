@@ -1,14 +1,32 @@
+import { useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
+import { DisconnectXDialog } from './DisconnectXDialog';
 import { useXConnectionContext } from './useXConnectionContext';
 
 /** The X account Scheduled posts go out on, with connect and disconnect. */
 export function XConnectionPanel({ notice }: { notice: string | null }) {
   const { subscribed } = useSubscribed();
-  const { connection, loadFailed, busy, error, connect, disconnect } = useXConnectionContext();
+  const { connection, loadFailed, busy, error, connect, disconnect, reload } =
+    useXConnectionContext();
+  const [confirming, setConfirming] = useState(false);
+  /** False while the waiting count is refreshed: it may have changed since the page loaded. */
+  const [counted, setCounted] = useState(false);
+
+  const askToDisconnect = async () => {
+    setConfirming(true);
+    setCounted(false);
+    await reload();
+    setCounted(true);
+  };
+
+  const confirmDisconnect = () => {
+    setConfirming(false);
+    void disconnect();
+  };
 
   return (
     <section aria-labelledby="x-connection-heading" className="space-y-4">
@@ -42,11 +60,18 @@ export function XConnectionPanel({ notice }: { notice: string | null }) {
               size="sm"
               className="h-10 shrink-0"
               disabled={busy}
-              onClick={() => void disconnect()}
+              onClick={() => void askToDisconnect()}
             >
               Disconnect
             </Button>
           </div>
+          <DisconnectXDialog
+            open={confirming}
+            handle={connection.handle}
+            waiting={counted ? connection.scheduledPostsWaiting : undefined}
+            onCancel={() => setConfirming(false)}
+            onConfirm={confirmDisconnect}
+          />
           {connection.needsReconnect && (
             <div className="flex flex-col gap-3 border-t border-border pt-3 pb-1 sm:flex-row sm:items-center sm:justify-between">
               <p className="font-sans text-sm text-red-700 dark:text-red-300">

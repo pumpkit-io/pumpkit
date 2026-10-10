@@ -62,6 +62,7 @@ describe('the X callback', () => {
       handle: 'ada',
       charLimit: 280,
       needsReconnect: false,
+      scheduledPostsWaiting: 0,
     });
 
     renderCallback('?state=the-state&code=the-code');

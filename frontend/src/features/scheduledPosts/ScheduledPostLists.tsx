@@ -31,7 +31,10 @@ function PostText({ text }: { text: string }) {
 const LIST = 'divide-y divide-border rounded-lg border border-border';
 const ITEM = 'space-y-1.5 px-4 py-3';
 
-/** Published Scheduled posts with a link to X, and Failed ones with their reason. */
+/**
+ * Upcoming Scheduled posts soonest first, Failed ones with their reason, and Published ones
+ * with a link to X.
+ */
 export function ScheduledPostLists({
   scheduledPosts,
   loadFailed,
@@ -41,9 +44,39 @@ export function ScheduledPostLists({
 }) {
   const published = (scheduledPosts ?? []).filter((p) => p.state === 'published');
   const failed = (scheduledPosts ?? []).filter((p) => p.state === 'failed');
+  // ISO instants in UTC sort as strings.
+  const upcoming = (scheduledPosts ?? [])
+    .filter((p) => p.state === 'scheduled' || p.state === 'publishing')
+    .sort((a, b) => a.publishAt.localeCompare(b.publishAt));
 
   return (
     <>
+      <ListSection id="upcoming-heading" title="Upcoming">
+        {loadFailed ? (
+          <ErrorBanner message="Couldn't load your Scheduled posts. Reload the page to try again." />
+        ) : scheduledPosts === undefined ? (
+          <p role="status" className="font-sans text-sm text-muted-foreground">
+            Loading your Scheduled posts…
+          </p>
+        ) : upcoming.length === 0 ? (
+          <p className="font-sans text-sm text-muted-foreground">
+            Nothing scheduled. Pick a date and time above to line up a post.
+          </p>
+        ) : (
+          <ul className={LIST}>
+            {upcoming.map((post) => (
+              <li key={post.id} className={ITEM}>
+                <PostText text={post.text} />
+                <p className="font-sans text-xs text-muted-foreground">
+                  {post.state === 'publishing'
+                    ? 'Publishing now'
+                    : dateTime.format(new Date(post.publishAt))}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </ListSection>
       {failed.length > 0 && (
         <ListSection id="failed-heading" title="Failed">
           <ul className={LIST}>
@@ -59,13 +92,7 @@ export function ScheduledPostLists({
         </ListSection>
       )}
       <ListSection id="published-heading" title="Published">
-        {loadFailed ? (
-          <ErrorBanner message="Couldn't load your Scheduled posts. Reload the page to try again." />
-        ) : scheduledPosts === undefined ? (
-          <p role="status" className="font-sans text-sm text-muted-foreground">
-            Loading your Scheduled posts…
-          </p>
-        ) : published.length === 0 ? (
+        {loadFailed || scheduledPosts === undefined ? null : published.length === 0 ? (
           <p className="font-sans text-sm text-muted-foreground">
             Nothing published yet. Posts you publish show up here with a link to X.
           </p>

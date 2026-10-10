@@ -53,4 +53,13 @@ export const scheduledPostService = {
     });
     return toScheduledPost(data);
   },
+
+  /** `publishAt` is an ISO instant on a whole minute; it comes back scheduled. */
+  schedule: async (text: string, publishAt: string): Promise<ScheduledPost> => {
+    const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
+      text,
+      publish_at: publishAt,
+    });
+    return toScheduledPost(data);
+  },
 };
