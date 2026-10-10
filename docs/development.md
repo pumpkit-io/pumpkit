@@ -10,12 +10,13 @@ backend/app/
   api/configs/     third-party provider configuration (Google)
   core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, X publisher, LLM)
   writing/         the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
+  publishing/      publishing a Scheduled post on X (claim, refresh, checks, outcome) and X's length count
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
   tests/           pytest suite
 frontend/src/
-  features/        self-contained feature modules (account, billing, inspirationAuthors, posts, sidebar, theme, topbar, xConnection)
+  features/        self-contained feature modules (account, billing, inspirationAuthors, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
