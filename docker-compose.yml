@@ -38,6 +38,27 @@ services:
       db:
         condition: service_healthy
 
+  # Publishes due Scheduled posts (ADR 0007). The backend runs the migrations.
+  publisher:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: app_publisher
+    command: python -m app.publishing
+    env_file:
+      - .env
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    networks:
+      - app_network
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
   frontend:
     build: 
       context: ./frontend

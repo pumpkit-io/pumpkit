@@ -10,7 +10,7 @@ backend/app/
   api/configs/     third-party provider configuration (Google)
   core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, X publisher, LLM)
   writing/         the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
-  publishing/      publishing a Scheduled post on X (claim, refresh, checks, outcome) and X's length count
+  publishing/      publishing Scheduled posts on X (claim, refresh, checks, outcome), the publisher process and X's length count
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
@@ -23,7 +23,7 @@ frontend/src/
   pages/           route-level pages
   contexts/        auth context
 e2e/               Playwright tests run against docker compose
-infra/             Caddyfile
+infra/             Caddyfile, publisher systemd unit
 scripts/           deploy.sh
 docs/              deployment guide
 ```
@@ -51,6 +51,20 @@ Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answer
 `POST /api/v1/posts/{id}/versions` takes Feedback and answers with the next Version. `mediators/posts.add_version` reads the Post's stored corpus (not the User's current Inspiration authors) and its Versions, then runs the revision call: the draft prompt, the corpus, the Brief, each Final as an assistant turn after the Feedback that produced it, and the new Feedback last. Drafts and failed attempts stay out of that conversation. A Post with no Version (its first attempt failed) answers 409.
 
 The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included: change them only on purpose, as a prompt change. The writing, humanizing and revising models are constants in `app/writing/constants.py`.
+
+### Schedule a post
+
+A Subscribed User connects X on the Scheduled page (`x_connection` router; the X publisher port in `core/x_publisher.py`). `POST /api/v1/scheduled-posts` takes a text and either `publish_at` or `publish_now`. `mediators/scheduled_posts` checks every new Scheduled post in one place: `connection_to_publish_on` (an X connection that doesn't need reconnecting), `check_length` (X's weighted count) and `check_publish_at` (a whole minute, one minute to a year ahead, stored in UTC). Reuse them for anything that creates or moves a Scheduled post.
+
+A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m app.publishing`, the `publisher` service in `docker-compose.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
+
+1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "check your X profile" (a publisher died mid-call);
+2. claims the soonest due one (`services/scheduled_posts.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere), commits, and hands it to `publish.publish_claimed`;
+3. repeats until nothing is due.
+
+`publish_claimed` calls X once and records Published or Failed. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so the publisher puts it back in `scheduled` with a doubling backoff from one minute, and makes it Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same module and doesn't retry: the User is waiting.
+
+Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clock)` directly and checking outcomes through `GET /api/v1/scheduled-posts` (see `tests/publishing/test_publisher.py`). The `fixed_clock` fixture freezes time at a known instant for tests that write out dates. Under SQLite the row lock is a no-op, so tests of concurrent passes exercise the conditional claim.
 
 ### Call an LLM
 

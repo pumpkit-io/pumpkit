@@ -1,7 +1,8 @@
 """Seed a fixed e2e test user and print one machine-readable line, `E2E_ACCESS_TOKEN=<jwt>`.
 
 The user is Subscribed through a Subscription written straight into Pumpkit's copy, and has
-no Inspiration authors, so Home shows the writing tools without calling any provider.
+no Inspiration authors, X connection or Scheduled posts, so Home and Scheduled show their
+tools without calling any provider.
 
 Run inside the backend container: `docker compose exec -T backend python - < e2e/seed/seed_user.py`.
 """
@@ -12,7 +13,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select
 
 from app.core.security import create_access_token
-from app.db.models import InspirationAuthor, Subscription, User
+from app.db.models import InspirationAuthor, ScheduledPost, Subscription, User, XConnection
 from app.db.session import _db_session_handler
 
 # Not a `.test`/`.example` TLD: those are special-use and rejected by the
@@ -34,6 +35,8 @@ async def main() -> None:
         await db.flush()
 
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))
+        await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
+        await db.execute(delete(ScheduledPost).where(ScheduledPost.user_id == user.id))
         held = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
         if held.first() is None:
             db.add(

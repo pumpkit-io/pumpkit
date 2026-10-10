@@ -14,7 +14,7 @@ fi
 # shellcheck disable=SC1091
 source deploy.env
 
-for v in PUBLIC_URL DOMAIN ACME_EMAIL SSH_HOST BRANCH APP_USER APP_DIR SERVICE_NAME; do
+for v in PUBLIC_URL DOMAIN ACME_EMAIL SSH_HOST BRANCH APP_USER APP_DIR SERVICE_NAME PUBLISHER_SERVICE_NAME; do
   if [[ -z "${!v:-}" ]]; then
     echo "✗ $v is not set in deploy.env" >&2
     exit 1
@@ -71,7 +71,7 @@ ok "SSH OK"
 
 log "Updating server"
 ssh "$SSH_HOST" \
-  "APP_USER='$APP_USER' APP_DIR='$APP_DIR' SERVICE_NAME='$SERVICE_NAME' BRANCH='$BRANCH' DOMAIN='$DOMAIN' ACME_EMAIL='$ACME_EMAIL' bash -s" <<'REMOTE'
+  "APP_USER='$APP_USER' APP_DIR='$APP_DIR' SERVICE_NAME='$SERVICE_NAME' PUBLISHER_SERVICE_NAME='$PUBLISHER_SERVICE_NAME' BRANCH='$BRANCH' DOMAIN='$DOMAIN' ACME_EMAIL='$ACME_EMAIL' bash -s" <<'REMOTE'
 set -euo pipefail
 
 echo "▶ Ensuring $APP_DIR is owned by $APP_USER"
@@ -92,6 +92,17 @@ else
   cp "$APP_DIR/infra/Caddyfile" /etc/caddy/Caddyfile
   systemctl reload caddy
   echo "   ✓ Caddyfile updated and reloaded (backup: /etc/caddy/Caddyfile.${ts}.bak)"
+fi
+
+PUBLISHER_UNIT="/etc/systemd/system/$PUBLISHER_SERVICE_NAME"
+echo "▶ Syncing publisher unit ($APP_DIR/infra/pumpkit-publisher.service -> $PUBLISHER_UNIT)"
+if diff -q "$APP_DIR/infra/pumpkit-publisher.service" "$PUBLISHER_UNIT" > /dev/null 2>&1; then
+  echo "   ✓ Publisher unit unchanged"
+else
+  cp "$APP_DIR/infra/pumpkit-publisher.service" "$PUBLISHER_UNIT"
+  systemctl daemon-reload
+  systemctl enable "$PUBLISHER_SERVICE_NAME"
+  echo "   ✓ Publisher unit installed and enabled"
 fi
 
 echo "▶ Syncing Python deps (uv sync)"
@@ -123,6 +134,17 @@ if ! ss -lntp 2>/dev/null | grep -q ":8000\b"; then
 fi
 systemctl is-active --quiet "$SERVICE_NAME" || { echo "✗ $SERVICE_NAME is not active"; exit 1; }
 echo "✓ Backend active and listening on 8000"
+
+# After the backend, whose ExecStartPre has migrated the schema the publisher reads.
+echo "▶ Restarting $PUBLISHER_SERVICE_NAME"
+systemctl restart "$PUBLISHER_SERVICE_NAME"
+sleep 3
+if ! systemctl is-active --quiet "$PUBLISHER_SERVICE_NAME"; then
+  echo "✗ $PUBLISHER_SERVICE_NAME is not active"
+  journalctl -u "$PUBLISHER_SERVICE_NAME" --no-pager -n 40
+  exit 1
+fi
+echo "✓ Publisher active"
 REMOTE
 
 log "Public smoke test"
