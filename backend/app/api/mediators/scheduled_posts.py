@@ -180,12 +180,15 @@ async def edit_scheduled_post(
         raise _publishing_started()
     reschedule = None
     try:
+        connection = (
+            await connection_to_publish_on(db, user_id=user.id)
+            if publish_at is not None
+            else await x_connections_service.get_connection(db, user_id=user.id)
+        )
         if text is not None:
-            connection = await x_connections_service.get_connection(db, user_id=user.id)
             subscription_type = connection.subscription_type if connection else None
             rules.check_length(text, limit=x_post_max_chars(subscription_type))
-        if publish_at is not None:
-            connection = await connection_to_publish_on(db, user_id=user.id)
+        if connection is not None and publish_at is not None:
             new_publish_at = rules.check_publish_at(publish_at, now=now)
             await check_monthly_cap(
                 db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id
