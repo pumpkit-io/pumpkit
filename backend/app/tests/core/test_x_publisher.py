@@ -1,4 +1,5 @@
 import base64
+import json
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
 
@@ -11,11 +12,16 @@ from app.core.x_publisher import (
     X_AUTHORIZE_URL,
     X_REVOKE_URL,
     X_TOKEN_URL,
+    X_TWEETS_URL,
     X_USERS_ME_URL,
     OfficialXPublisher,
     XAccount,
+    XNotReceivedError,
+    XOutcomeUnknownError,
+    XPostRejectedError,
     XPublisherError,
     XPublisherNotConfiguredError,
+    XRateLimitedError,
     XReconnectNeededError,
     XTokens,
     code_challenge_for,
@@ -256,3 +262,142 @@ async def test_a_failed_revoke_is_an_error(mock):
 
     with pytest.raises(XPublisherError):
         await OfficialXPublisher().revoke(token="refresh-1", token_type_hint="refresh_token")
+
+
+@respx.mock
+async def test_refreshing_sends_the_refresh_token_as_a_confidential_client():
+    route = respx.post(X_TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200, json=_token_body(access_token="access-2", refresh_token="refresh-2")
+        )
+    )
+
+    tokens = await OfficialXPublisher().refresh(refresh_token="refresh-1", now=NOW)
+
+    assert tokens == XTokens(
+        access_token="access-2",
+        refresh_token="refresh-2",
+        expires_at=NOW + timedelta(seconds=7200),
+        scope="tweet.read tweet.write users.read offline.access",
+    )
+    request = route.calls.last.request
+    assert request.headers["Authorization"] == BASIC
+    assert _form(request) == {"grant_type": "refresh_token", "refresh_token": "refresh-1"}
+
+
+@respx.mock
+async def test_a_refresh_that_leaves_out_the_refresh_token_keeps_the_old_one():
+    respx.post(X_TOKEN_URL).mock(
+        return_value=httpx.Response(200, json=_token_body(refresh_token=None))
+    )
+
+    tokens = await OfficialXPublisher().refresh(refresh_token="refresh-1", now=NOW)
+
+    assert tokens.refresh_token == "refresh-1"
+
+
+@respx.mock
+async def test_a_dead_refresh_token_needs_a_reconnect():
+    respx.post(X_TOKEN_URL).mock(return_value=httpx.Response(400, json={"error": "invalid_grant"}))
+
+    with pytest.raises(XReconnectNeededError):
+        await OfficialXPublisher().refresh(refresh_token="refresh-1", now=NOW)
+
+
+@respx.mock
+async def test_a_server_side_refresh_failure_is_an_ordinary_error():
+    respx.post(X_TOKEN_URL).mock(return_value=httpx.Response(503, text="down"))
+
+    with pytest.raises(XPublisherError) as raised:
+        await OfficialXPublisher().refresh(refresh_token="refresh-1", now=NOW)
+
+    assert not isinstance(raised.value, XReconnectNeededError)
+
+
+@respx.mock
+async def test_publishing_sends_the_text_with_the_access_token_and_returns_the_post_id():
+    route = respx.post(X_TWEETS_URL).mock(
+        return_value=httpx.Response(201, json={"data": {"id": "1890", "text": "Hello X"}})
+    )
+
+    post_id = await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
+
+    assert post_id == "1890"
+    request = route.calls.last.request
+    assert request.headers["Authorization"] == "Bearer access-1"
+    assert json.loads(request.content) == {"text": "Hello X"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"detail": "You are not allowed to create a Tweet with duplicate content."},
+        {"errors": [{"message": "You are not allowed to create a Tweet with duplicate content."}]},
+    ],
+)
+@respx.mock
+async def test_a_refused_post_carries_x_s_own_words(body):
+    respx.post(X_TWEETS_URL).mock(return_value=httpx.Response(403, json=body))
+
+    with pytest.raises(XPostRejectedError) as raised:
+        await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
+
+    assert raised.value.message == "You are not allowed to create a Tweet with duplicate content."
+
+
+@respx.mock
+async def test_a_refusal_without_a_readable_body_still_says_what_x_answered():
+    respx.post(X_TWEETS_URL).mock(return_value=httpx.Response(400, text="Bad Request"))
+
+    with pytest.raises(XPostRejectedError) as raised:
+        await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
+
+    assert raised.value.message == "Bad Request"
+
+
+@respx.mock
+async def test_an_unauthorized_post_needs_a_reconnect():
+    respx.post(X_TWEETS_URL).mock(return_value=httpx.Response(401, json={"title": "Unauthorized"}))
+
+    with pytest.raises(XReconnectNeededError):
+        await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
+
+
+@respx.mock
+async def test_a_rate_limit_is_reported_and_not_retried():
+    route = respx.post(X_TWEETS_URL).mock(return_value=httpx.Response(429, json={}))
+
+    with pytest.raises(XRateLimitedError):
+        await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
+
+    assert route.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "error", [httpx.ConnectError("refused"), httpx.ConnectTimeout("slow"), httpx.PoolTimeout("")]
+)
+@respx.mock
+async def test_a_request_that_never_reached_x_is_reported_as_not_received(error):
+    respx.post(X_TWEETS_URL).mock(side_effect=error)
+
+    with pytest.raises(XNotReceivedError):
+        await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
+
+
+@pytest.mark.parametrize(
+    "mock",
+    [
+        {"side_effect": httpx.ReadTimeout("slow")},
+        {"side_effect": httpx.RemoteProtocolError("dropped")},
+        {"return_value": httpx.Response(500, text="oops")},
+        {"return_value": httpx.Response(503, text="over capacity")},
+        {"return_value": httpx.Response(201, json={"data": {}})},
+        {"return_value": httpx.Response(200, text="not json")},
+    ],
+)
+@respx.mock
+async def test_a_post_x_may_have_taken_is_reported_as_outcome_unknown(mock):
+    respx.post(X_TWEETS_URL).mock(**mock)
+
+    with pytest.raises(XOutcomeUnknownError):
+        await OfficialXPublisher().publish(access_token="access-1", text="Hello X")

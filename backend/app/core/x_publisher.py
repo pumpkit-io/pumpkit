@@ -5,7 +5,8 @@ connection (ADR 0006). Ported from pumpkit-v5's X client, made async and statele
 It returns plain data and never touches the database: storing and encrypting tokens is
 the callers' job. Tokens X refuses for good raise `XReconnectNeededError`; any other
 failure is an `XPublisherError` (a 502 with an `error_id`), and missing X app settings an
-`XPublisherNotConfiguredError`.
+`XPublisherNotConfiguredError`. Publishing raises one subclass per outcome the caller must
+tell apart (ADR 0007): rate limited, not received, outcome unknown, and rejected.
 
 Mediators reach X only through `get_x_publisher`; tests override it with `FakeXPublisher`.
 """
@@ -27,10 +28,13 @@ X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize"
 X_TOKEN_URL = "https://api.x.com/2/oauth2/token"
 X_REVOKE_URL = "https://api.x.com/2/oauth2/revoke"
 X_USERS_ME_URL = "https://api.x.com/2/users/me"
+X_TWEETS_URL = "https://api.x.com/2/tweets"
 X_SCOPES = "tweet.read tweet.write users.read offline.access"
 _TIMEOUT_SECONDS = 30.0
 # X's documented access token lifetime, used when a token response leaves out expires_in.
 _DEFAULT_EXPIRES_IN_SECONDS = 7200
+# X's refusals are shown to the User; this keeps a runaway body readable.
+_MAX_DETAIL_CHARS = 300
 # OAuth errors no retry fixes: the code or refresh token is spent or revoked, or the app is wrong.
 _PERMANENT_TOKEN_ERRORS = {"invalid_grant", "invalid_client"}
 
@@ -53,6 +57,26 @@ class XPublisherNotConfiguredError(XPublisherError):
 
 class XReconnectNeededError(XPublisherError):
     """X refuses these tokens for good: only the User going through X's consent screen again helps."""
+
+
+class XRateLimitedError(XPublisherError):
+    """X answered 429: nothing was published."""
+
+
+class XNotReceivedError(XPublisherError):
+    """The request never reached X (no connection was made), so nothing was published."""
+
+
+class XOutcomeUnknownError(XPublisherError):
+    """X may have published the post: it timed out, failed with a 5xx, or gave no post id."""
+
+
+class XPostRejectedError(XPublisherError):
+    """X refused the post; `message` is X's own words, fit to show the User."""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(f"X refused the post with HTTP {status_code}")
+        self.message = message
 
 
 @dataclass(frozen=True)
@@ -96,8 +120,19 @@ class XPublisher(Protocol):
         """
         ...
 
+    async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
+        """
+        New tokens for a refresh token. X rotates the refresh token: the old one stops
+        working, so the caller must store the new one before anything else.
+        """
+        ...
+
     async def fetch_account(self, *, access_token: str) -> XAccount:
         """The X account the token acts for; a refused token raises `XReconnectNeededError`."""
+        ...
+
+    async def publish(self, *, access_token: str, text: str) -> str:
+        """Publish `text` and return X's post id. Never retried: a retry could post it twice."""
         ...
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
@@ -134,25 +169,19 @@ class OfficialXPublisher:
                 "code_verifier": code_verifier,
             },
         )
-        access_token = body.get("access_token")
-        if not isinstance(access_token, str) or not access_token:
-            raise XPublisherError("X's token response carried no access token")
-        refresh_token = body.get("refresh_token")
-        if not isinstance(refresh_token, str) or not refresh_token:
+        tokens = _tokens_from(body, now=now, previous_refresh_token="")
+        if not tokens.refresh_token:
             raise XReconnectNeededError(
                 "X returned no refresh token: the authorization is missing the offline.access "
                 "scope, so it would stop working within two hours."
             )
-        expires_in = body.get("expires_in")
-        if not isinstance(expires_in, int):
-            expires_in = _DEFAULT_EXPIRES_IN_SECONDS
-        scope = body.get("scope")
-        return XTokens(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=now + timedelta(seconds=expires_in),
-            scope=scope if isinstance(scope, str) else "",
+        return tokens
+
+    async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
+        body = await _token_call(
+            X_TOKEN_URL, {"grant_type": "refresh_token", "refresh_token": refresh_token}
         )
+        return _tokens_from(body, now=now, previous_refresh_token=refresh_token)
 
     async def fetch_account(self, *, access_token: str) -> XAccount:
         try:
@@ -184,6 +213,74 @@ class OfficialXPublisher:
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
         await _token_call(X_REVOKE_URL, {"token": token, "token_type_hint": token_type_hint})
+
+    async def publish(self, *, access_token: str, text: str) -> str:
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    X_TWEETS_URL,
+                    json={"text": text},
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as error:
+            raise XNotReceivedError(f"X unreachable: {type(error).__name__}") from error
+        except httpx.HTTPError as error:
+            # The request may have reached X before the connection failed.
+            raise XOutcomeUnknownError(f"X didn't answer: {type(error).__name__}") from error
+
+        status = response.status_code
+        if status in (200, 201):
+            body = _json_or_none(response)
+            data = body.get("data") if isinstance(body, dict) else None
+            post_id = data.get("id") if isinstance(data, dict) else None
+            if not isinstance(post_id, str) or not post_id:
+                raise XOutcomeUnknownError(f"X answered HTTP {status} without a post id")
+            return post_id
+        if status == 401:
+            raise XReconnectNeededError("X refused the access token publishing a post")
+        if status == 429:
+            raise XRateLimitedError("X rate limited publishing a post")
+        if status >= 500:
+            raise XOutcomeUnknownError(f"X answered HTTP {status} publishing a post")
+        raise XPostRejectedError(status, _detail(response))
+
+
+def _tokens_from(body: dict[str, Any], *, now: datetime, previous_refresh_token: str) -> XTokens:
+    """Tokens from a token response; a response without a refresh token keeps the previous one."""
+    access_token = body.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        raise XPublisherError("X's token response carried no access token")
+    refresh_token = body.get("refresh_token")
+    if not isinstance(refresh_token, str) or not refresh_token:
+        refresh_token = previous_refresh_token
+    expires_in = body.get("expires_in")
+    if not isinstance(expires_in, int):
+        expires_in = _DEFAULT_EXPIRES_IN_SECONDS
+    scope = body.get("scope")
+    return XTokens(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_at=now + timedelta(seconds=expires_in),
+        scope=scope if isinstance(scope, str) else "",
+    )
+
+
+def _detail(response: httpx.Response) -> str:
+    """X's own words for a refusal: "duplicate content" says what to do, a status code doesn't."""
+    body = _json_or_none(response)
+    if isinstance(body, dict):
+        # A validation error's own message is more precise than the body's generic detail.
+        errors = body.get("errors")
+        if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+            message = errors[0].get("message") or errors[0].get("detail")
+            if isinstance(message, str) and message:
+                return message[:_MAX_DETAIL_CHARS]
+        for key in ("detail", "title", "error_description", "error"):
+            value = body.get(key)
+            if isinstance(value, str) and value:
+                return value[:_MAX_DETAIL_CHARS]
+    text = response.text.strip().replace("\n", " ")
+    return text[:_MAX_DETAIL_CHARS] or f"HTTP {response.status_code}"
 
 
 def _x_app() -> tuple[str, str, str]:
@@ -236,20 +333,27 @@ def _json_or_none(response: httpx.Response) -> Any:
 @dataclass
 class FakeXPublisher:
     """
-    X in memory: every code exchanges for fresh tokens acting for `account`, and the
-    authorize URL carries its query like X's. Records `exchanges` (code, verifier) and
-    `revoked` tokens. Set `fail_exchange` to an error to raise it, `fail_revoke` or
-    `not_configured` to raise.
+    X in memory. Every code exchange and refresh issues tokens `access-<id>-<n>` and
+    `refresh-<id>-<n>` for `account`, n counting issues, valid for two hours; the authorize
+    URL carries its query like X's. Records `exchanges` (code, verifier), `refreshes`
+    (refresh tokens sent), `published` (access token, text) and `revoked` tokens. Set
+    `fail_exchange`, `fail_refresh` or `fail_publish` to an error to raise it, `fail_revoke`
+    or `not_configured` to raise.
     """
 
     account: XAccount = field(
         default_factory=lambda: XAccount(user_id="1001", handle="ada", subscription_type="None")
     )
     exchanges: list[tuple[str, str]] = field(default_factory=list)
+    refreshes: list[str] = field(default_factory=list)
+    published: list[tuple[str, str]] = field(default_factory=list)
     revoked: list[str] = field(default_factory=list)
     fail_exchange: Optional[XPublisherError] = None
+    fail_refresh: Optional[XPublisherError] = None
+    fail_publish: Optional[XPublisherError] = None
     fail_revoke: bool = False
     not_configured: bool = False
+    issued: int = 0
 
     def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
         if self.not_configured:
@@ -261,21 +365,36 @@ class FakeXPublisher:
         self.exchanges.append((code, code_verifier))
         if self.fail_exchange is not None:
             raise self.fail_exchange
-        issued = len(self.exchanges)
-        return XTokens(
-            access_token=f"access-{self.account.user_id}-{issued}",
-            refresh_token=f"refresh-{self.account.user_id}-{issued}",
-            expires_at=now + timedelta(seconds=_DEFAULT_EXPIRES_IN_SECONDS),
-            scope=X_SCOPES,
-        )
+        return self._issue(now)
+
+    async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
+        self.refreshes.append(refresh_token)
+        if self.fail_refresh is not None:
+            raise self.fail_refresh
+        return self._issue(now)
 
     async def fetch_account(self, *, access_token: str) -> XAccount:
         return self.account
+
+    async def publish(self, *, access_token: str, text: str) -> str:
+        self.published.append((access_token, text))
+        if self.fail_publish is not None:
+            raise self.fail_publish
+        return str(1_890_000_000_000_000_000 + len(self.published))
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
         self.revoked.append(token)
         if self.fail_revoke:
             raise XPublisherError("Fake X publisher is set to fail revoking")
+
+    def _issue(self, now: datetime) -> XTokens:
+        self.issued += 1
+        return XTokens(
+            access_token=f"access-{self.account.user_id}-{self.issued}",
+            refresh_token=f"refresh-{self.account.user_id}-{self.issued}",
+            expires_at=now + timedelta(seconds=_DEFAULT_EXPIRES_IN_SECONDS),
+            scope=X_SCOPES,
+        )
 
 
 @lru_cache

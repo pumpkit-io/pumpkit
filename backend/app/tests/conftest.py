@@ -172,7 +172,8 @@ def fake_x_reader():
 def fake_x_publisher():
     """
     Every test calls the X API through a fake. Request it by name to set
-    `fake_x_publisher.account`, read `exchanges` and `revoked`, or set a failure.
+    `fake_x_publisher.account`, read `exchanges`, `refreshes`, `published` and `revoked`,
+    or set a failure.
     """
     fake = FakeXPublisher()
     app.dependency_overrides[get_x_publisher] = lambda: fake
