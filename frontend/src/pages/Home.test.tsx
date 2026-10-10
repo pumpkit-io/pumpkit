@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -35,6 +35,14 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     addVersion: vi.fn(),
   },
 }));
+vi.mock('@/services/xConnectionService', () => ({
+  xConnectionService: {
+    get: vi.fn(),
+    startAuthorization: vi.fn(),
+    complete: vi.fn(),
+    disconnect: vi.fn(),
+  },
+}));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
@@ -50,7 +58,10 @@ import {
   type InspirationAuthor,
 } from '@/services/inspirationAuthorService';
 import { postService, type Post, type Tell, type Version } from '@/services/postService';
+import { xConnectionService } from '@/services/xConnectionService';
+import { AppLayout } from './AppLayout';
 import { Home } from './Home';
+import { Scheduled } from './Scheduled';
 
 const NOT_SUBSCRIBED = {
   subscription: null,
@@ -97,7 +108,12 @@ function renderHome(state?: unknown) {
           initialEntries={[{ pathname: '/home', state }]}
           future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
         >
-          <Home />
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/home" element={<Home />} />
+              <Route path="/scheduled" element={<Scheduled />} />
+            </Route>
+          </Routes>
         </MemoryRouter>
       </ThemeProvider>
     </AuthProvider>,
@@ -156,6 +172,7 @@ describe('Home', () => {
     vi.mocked(inspirationAuthorService.refresh).mockReset();
     vi.mocked(postService.start).mockReset();
     vi.mocked(postService.addVersion).mockReset();
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(track).mockClear();
   });
 
@@ -569,6 +586,34 @@ describe('Home', () => {
       expect(area.getByLabelText('Brief')).toHaveValue('');
       expect(area.getByLabelText('Brief')).toHaveFocus();
       expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'sidebar' });
+    });
+
+    it('keeps the Post on screen after a visit to the Scheduled page', async () => {
+      await withPostOnScreen();
+
+      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+      fireEvent.click(nav.getByRole('button', { name: 'Scheduled' }));
+      expect(await screen.findByRole('region', { name: 'X connection' })).toBeInTheDocument();
+      expect(nav.getByRole('button', { name: 'Scheduled' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      fireEvent.click(nav.getByRole('button', { name: 'Home' }));
+
+      expect(await (await writer()).findByText('the final text')).toBeInTheDocument();
+    });
+
+    it('starts a New Post from the Scheduled page back on Home', async () => {
+      await withPostOnScreen();
+      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+      fireEvent.click(nav.getByRole('button', { name: 'Scheduled' }));
+      await screen.findByRole('region', { name: 'X connection' });
+
+      fireEvent.click(nav.getByRole('button', { name: /new post/i }));
+
+      const area = await writer();
+      expect(area.queryByText('the final text')).not.toBeInTheDocument();
+      expect(area.getByLabelText('Brief')).toHaveValue('');
     });
 
     it('starts a New Post from the collapsed rail', async () => {

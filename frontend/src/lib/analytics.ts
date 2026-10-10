@@ -116,6 +116,10 @@ export const EVENTS = {
     description: 'Home: writing a Version failed. Props: kind (brief | feedback).',
   },
   post_final_copied: { description: "Home: copied a Version's Final." },
+
+  // Scheduled (/scheduled) + the X callback
+  x_connected: { description: 'Scheduled: connected an X account through X consent screen.' },
+  x_disconnected: { description: 'Scheduled: disconnected the X account.' },
 } as const satisfies Record<string, { description: string }>;
 
 export type EventName = keyof typeof EVENTS;

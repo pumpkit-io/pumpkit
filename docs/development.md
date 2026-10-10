@@ -8,14 +8,14 @@ backend/app/
   api/mediators/   orchestration across services (webhook dispatch, Google and Magic link sign-in)
   api/services/    one resource or capability each: DB access, Subscriptions, users, tokens
   api/configs/     third-party provider configuration (Google)
-  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, LLM)
+  core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, X publisher, LLM)
   writing/         the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
   tests/           pytest suite
 frontend/src/
-  features/        self-contained feature modules (account, billing, inspirationAuthors, posts, sidebar, theme, topbar)
+  features/        self-contained feature modules (account, billing, inspirationAuthors, posts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
@@ -59,7 +59,7 @@ The port wraps `openrouter_client` (`core/openrouter.py`), which also has `llm_c
 
 ### Add a page to the shell
 
-Add navigation rows in `frontend/src/features/sidebar/Sidebar.tsx`, each with a matching icon button on the collapsed rail. Render your feature in the main area of `frontend/src/pages/Home.tsx`, beside the writing tools, or add a protected route in `frontend/src/App.tsx`.
+Add the page to `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`, which gives it an expanded row and a matching icon on the collapsed rail, and add its route under the `AppLayout` route in `frontend/src/App.tsx`. `frontend/src/pages/AppLayout.tsx` holds the shell and the Post, so the Post stays on screen while the User is on another page.
 
 ### Edit the user profile
 
