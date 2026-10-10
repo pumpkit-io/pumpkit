@@ -6,6 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 import app.publishing.publish as publish_module
+from app.core.config import settings
 from app.core.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
@@ -506,3 +507,123 @@ async def test_a_source_version_that_is_not_one_of_the_user_s_versions_is_refuse
     assert response.status_code == 404
     assert response.json()["detail"] == "Version not found."
     assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+
+
+@pytest.fixture
+def cap_of_two(monkeypatch):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+
+
+OCTOBER_FULL = (
+    "You have 2 Scheduled posts in October 2026, the most for one month. "
+    "The cap resets on November 1, 2026."
+)
+
+
+async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_resets(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-11T09:00:00Z", "First")
+    await _schedule(client, "2026-10-30T09:00:00Z", "Second")
+
+    response = await _schedule(client, "2026-10-12T09:00:00Z", "Third")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == OCTOBER_FULL
+    listed = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    assert [p["text"] for p in listed] == ["First", "Second"]
+
+
+async def test_post_now_in_a_full_month_is_refused_and_nothing_is_published(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-11T09:00:00Z", "First")
+    await _schedule(client, "2026-10-12T09:00:00Z", "Second")
+
+    response = await _post_now(client)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == OCTOBER_FULL
+    assert fake_x_publisher.published == []
+
+
+async def test_published_and_failed_scheduled_posts_count_towards_the_cap(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    published = await _post_now(client, "Out")
+    fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
+    failed = await _post_now(client, "Refused")
+
+    response = await _schedule(client, "2026-10-11T09:00:00Z")
+
+    assert published.json()["state"] == "published"
+    assert failed.json()["state"] == "failed"
+    assert response.status_code == 409
+    assert response.json()["detail"] == OCTOBER_FULL
+
+
+async def test_a_scheduled_post_for_next_month_is_accepted_while_this_month_is_full(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-11T09:00:00Z")
+    await _schedule(client, "2026-10-12T09:00:00Z")
+
+    response = await _schedule(client, "2026-11-01T00:00:00Z")
+
+    assert response.status_code == 201, response.text
+
+
+async def test_months_are_counted_in_utc(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-11T09:00:00Z")
+    await _schedule(client, "2026-10-31T23:59:00Z")
+
+    # November 1 in Rome, still October 31 in UTC.
+    rome_november = await _schedule(client, "2026-11-01T00:30:00+01:00")
+    new_york_october = await _schedule(client, "2026-10-31T20:00:00-04:00")
+
+    assert rome_november.status_code == 409
+    assert rome_november.json()["detail"] == OCTOBER_FULL
+    assert new_york_october.status_code == 201, new_york_october.text
+    assert new_york_october.json()["publish_at"] == "2026-11-01T00:00:00Z"
+
+
+async def test_a_full_december_resets_on_january_1(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-12-01T00:00:00Z")
+    await _schedule(client, "2026-12-31T23:59:00Z")
+
+    response = await _schedule(client, "2026-12-15T09:00:00Z")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "You have 2 Scheduled posts in December 2026, the most for one month. "
+        "The cap resets on January 1, 2027."
+    )
+
+
+async def test_post_now_works_again_once_the_utc_month_turns(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-11T09:00:00Z")
+    await _schedule(client, "2026-10-12T09:00:00Z")
+    # To 2026-10-31 23:59:30 UTC.
+    fixed_clock.advance(timedelta(days=21, hours=11, minutes=59))
+    before = await _post_now(client)
+    fixed_clock.advance(timedelta(minutes=1))
+
+    after = await _post_now(client)
+
+    assert before.status_code == 409
+    assert after.status_code == 201, after.text
+    assert after.json()["publish_at"] == "2026-11-01T00:00:00Z"
+    assert after.json()["state"] == "published"
