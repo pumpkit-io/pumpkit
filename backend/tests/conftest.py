@@ -46,7 +46,7 @@ _TEST_ENV = {
     "STRIPE_BILLING_PORTAL_RETURN_URL": "http://localhost:5173/billing",
     "BILLING_PLAN_KEYS": '["pumpkit_pro_monthly"]',
     "BILLING_TRIAL_PERIOD_DAYS": "14",
-    "OPENROUTER_API_KEY": "sk-or-test",
+    "LLM_API_KEY": "sk-test",
     "POSTHOG_ENABLED": "false",
 }
 for _key, _value in _TEST_ENV.items():
@@ -196,7 +196,7 @@ def fake_x_publisher():
 @pytest.fixture(autouse=True)
 def fake_llm():
     """
-    Every test calls models through a scripted fake instead of OpenRouter. Request it by name
+    Every test calls models through a scripted fake instead of a real endpoint. Request it by name
     to queue `fake_llm.replies` (field dicts or exceptions) and read `fake_llm.calls`.
     """
     fake = FakeLLM()

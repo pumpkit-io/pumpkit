@@ -12,15 +12,10 @@ from typing import Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
+from pumpkit.core.config import settings
 from pumpkit.posts.llm import LLM
-from pumpkit.posts.openrouter_schemas import StructuredResult
-from pumpkit.posts.writing.constants import (
-    CACHE_TTL,
-    HUMANIZING_MODEL,
-    MAX_TOKENS,
-    REVISING_MODEL,
-    WRITING_MODEL,
-)
+from pumpkit.posts.llm_schemas import StructuredResult
+from pumpkit.posts.writing.constants import CACHE_TTL, MAX_TOKENS
 from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
@@ -123,7 +118,7 @@ def _usage(result: StructuredResult) -> Optional[dict]:
 async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVersion:
     """Raises whatever the LLM port raises; nothing is stored here."""
     drafted = await llm.structured(
-        model=WRITING_MODEL,
+        model=settings.LLM_DRAFTING_MODEL,
         messages=draft_messages(corpus, brief),
         response_model=DraftedPost,
         max_tokens=MAX_TOKENS,
@@ -137,7 +132,7 @@ async def write_next_version(
 ) -> WrittenVersion:
     """Raises whatever the LLM port raises; nothing is stored here."""
     revised = await llm.structured(
-        model=REVISING_MODEL,
+        model=settings.LLM_REVISING_MODEL,
         messages=revision_messages(corpus, brief, earlier, feedback),
         response_model=RevisedPost,
         max_tokens=MAX_TOKENS,
@@ -150,7 +145,7 @@ async def _humanize(
     llm: LLM, corpus: Corpus, brief: str, draft: str, written: StructuredResult
 ) -> WrittenVersion:
     refined = await llm.structured(
-        model=HUMANIZING_MODEL,
+        model=settings.LLM_HUMANIZING_MODEL,
         messages=humanizer_messages(corpus, brief, draft),
         response_model=FinalPost,
         max_tokens=MAX_TOKENS,

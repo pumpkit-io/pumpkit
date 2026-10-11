@@ -6,15 +6,17 @@ from sqlalchemy.orm import selectinload
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.core.config import settings
 from pumpkit.core.time import as_utc
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.constants import HUMANIZING_MODEL, REVISING_MODEL
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
+# The model the prompts were tuned against, used for every call unless a setting says otherwise.
+DEFAULT_MODEL = "openai/gpt-5.6-luna"
 
 
 def _versions_url(post_id: str) -> str:
@@ -114,7 +116,7 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     await client.post(_versions_url(post_id), json={"feedback": "  warmer\n"})
 
     first_revision, _, second_revision, _ = fake_llm.calls
-    assert first_revision.model == REVISING_MODEL
+    assert first_revision.model == DEFAULT_MODEL
     assert first_revision.response_model.__name__ == "revised_post"
     assert first_revision.messages == [
         _system(DRAFT_POST_PROMPT),
@@ -134,6 +136,15 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     ]
 
 
+async def test_the_revision_call_uses_the_configured_model(client, post_id, fake_llm, monkeypatch):
+    monkeypatch.setattr(settings, "LLM_REVISING_MODEL", "llama3.3")
+    fake_llm.replies = [{"post": "draft 2"}, {"post": "final 2"}]
+
+    await client.post(_versions_url(post_id), json={"feedback": "shorter"})
+
+    assert fake_llm.calls[0].model == "llama3.3"
+
+
 async def test_the_humanizer_gets_the_original_brief_and_the_scrubbed_revision(
     client, post_id, fake_llm
 ):
@@ -142,7 +153,7 @@ async def test_the_humanizer_gets_the_original_brief_and_the_scrubbed_revision(
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
     humanizer_call = fake_llm.calls[1]
-    assert humanizer_call.model == HUMANIZING_MODEL
+    assert humanizer_call.model == DEFAULT_MODEL
     assert humanizer_call.messages[0] == _system(HUMANIZER_PROMPT)
     assert humanizer_call.messages[1] == _user(LEVELSIO_CORPUS)
     assert "<brief>\nship small things\n</brief>" in humanizer_call.messages[2]["content"]
@@ -285,5 +296,5 @@ async def test_a_version_stores_its_feedback_models_and_usage(client, db, post_i
     post = await _stored_post(db, post_id)
     version = post.attempts[1]
     assert (version.feedback, version.draft, version.final) == ("shorter", "draft 2", "final 2")
-    assert (version.writing_model, version.humanizing_model) == (REVISING_MODEL, HUMANIZING_MODEL)
+    assert (version.writing_model, version.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
     assert version.writing_usage is not None and version.humanizing_usage is not None
