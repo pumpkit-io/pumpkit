@@ -1,6 +1,5 @@
 from datetime import datetime
 
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
@@ -29,9 +28,7 @@ async def disconnect(db: AsyncSession, publisher: XPublisher, user: User) -> Non
     """
     connection = await service.get_connection(db, user_id=user.id)
     if connection is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="You haven't connected an X account."
-        )
+        raise service.XConnectionNotFoundError()
     refresh_token = service.refresh_token(connection)
     await service.delete_connection(db, connection)
     await db.commit()

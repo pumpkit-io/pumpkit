@@ -11,12 +11,18 @@ from typing import Optional
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.core.errors import AppError
 from pumpkit.core.security import decrypt, encrypt, generate_token, hash_token
 from pumpkit.core.time import as_utc
 from pumpkit.x_connection.models import PendingXAuthorization, XConnection
 from pumpkit.x_connection.x_publisher import XAccount, XTokens, new_code_verifier
 
 LIFETIME = timedelta(minutes=10)
+
+
+class XConnectionNotFoundError(AppError):
+    status_code = 404
+    public_detail = "You haven't connected an X account."
 
 
 async def get_connection(db: AsyncSession, *, user_id: str) -> Optional[XConnection]:

@@ -241,9 +241,7 @@ def _owned_elsewhere(handle: str) -> HTTPException:
 async def get_x_connection(db: AsyncSession, user: User) -> XConnectionResponse:
     connection = await x_connections_service.get_connection(db, user_id=user.id)
     if connection is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="You haven't connected an X account."
-        )
+        raise x_connections_service.XConnectionNotFoundError()
     return await _x_connection_response(db, connection)
 
 
