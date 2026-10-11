@@ -31,6 +31,7 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | `COOKIE_MAX_AGE_SECONDS` | Refresh cookie lifetime (2592000 = 30 days). |
 | `FERNET_ENCRYPTION_KEY` | 32 url-safe base64-encoded bytes (generate with `Fernet.generate_key()`). |
 | `MAGIC_LINK_TOKEN_DURATION_MINUTES`, `MAGIC_LINK_TOKEN_NUM_BYTES` | Magic-link token lifetime and size. |
+| `SIGN_UP_ALLOWLIST` (optional) | The Sign-up allowlist: comma-separated email addresses and `@domain` entries (e.g. `me@example.com,@team.example`), matched ignoring case. Checked when a Magic link is requested or completed and when Google sign-in completes; an open Session keeps refreshing until it expires, so Suspend a User to cut them off at once. Empty lets anyone sign in. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials. |
 | `GOOGLE_OAUTH_REDIRECT_URI` | Must match the redirect URI registered in Google Cloud. |
 | `GOOGLE_NONCE_TOKEN_NUM_BYTES`, `GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES` | Size of the OAuth nonce and PKCE verifier. |
