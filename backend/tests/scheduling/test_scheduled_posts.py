@@ -8,6 +8,7 @@ from httpx import AsyncClient
 import pumpkit.scheduling.publish as publish_module
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
+from pumpkit.core.rate_limit import limiter
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import (
     XAccount,
@@ -725,6 +726,43 @@ async def test_post_now_works_again_once_the_utc_month_turns(
     assert after.status_code == 201, after.text
     assert after.json()["publish_at"] == "2026-11-01T00:00:00Z"
     assert after.json()["state"] == "published"
+
+
+@pytest.fixture
+def no_cap(monkeypatch):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", None)
+    # Filling a month past 100 would otherwise trip the per-minute limit on creating.
+    monkeypatch.setattr(limiter, "enabled", False)
+
+
+async def test_with_no_cap_a_user_can_schedule_and_post_now_past_100_in_a_month(
+    client, subscribed, fake_x_publisher, fixed_clock, no_cap
+):
+    await _connect_x(client)
+    for day in range(11, 31):
+        for hour in range(9, 14):
+            await _schedule(client, f"2026-10-{day}T{hour:02}:00:00Z")
+
+    hundred_and_first = await _schedule(client, "2026-10-31T09:00:00Z")
+    posted_now = await _post_now(client)
+
+    assert hundred_and_first.status_code == 201, hundred_and_first.text
+    assert posted_now.status_code == 201, posted_now.text
+    assert posted_now.json()["state"] == "published"
+
+
+async def test_with_a_cap_of_0_nothing_can_be_scheduled_or_posted_now(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch
+):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 0)
+    await _connect_x(client)
+
+    scheduled = await _schedule(client, "2026-10-11T09:00:00Z")
+    posted_now = await _post_now(client)
+
+    assert scheduled.status_code == posted_now.status_code == 409
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert fake_x_publisher.published == []
 
 
 async def test_scheduled_posts_can_be_listed_by_state_in_the_same_order(
