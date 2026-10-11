@@ -51,7 +51,8 @@ import { billingService } from '@/services/billingService';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
-import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { AppLayout } from './AppLayout';
 import { Scheduled } from './Scheduled';
 
@@ -124,7 +125,7 @@ function apiError(status: number, detail: string) {
   });
 }
 
-function renderScheduled(state?: unknown, instance: Instance = DEFAULT_INSTANCE) {
+function renderScheduled(state?: unknown, instance: Instance = SELLS_PLANS) {
   return render(
     <InstanceProvider instance={instance}>
       <AuthProvider>
@@ -278,7 +279,7 @@ describe('Scheduled', () => {
   });
 
   describe('On an Instance that sells no Plans', () => {
-    const NO_PLANS: Instance = { ...DEFAULT_INSTANCE, sells_plans: false };
+    const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
 
     beforeEach(() => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);

@@ -1,7 +1,8 @@
 import { createContext, type ReactNode } from 'react';
 import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 
-// Defaults to today's Instance so components rendered without a provider, as in tests, still work.
+// Without a provider, as in tests, components see DEFAULT_INSTANCE: the Magic link only,
+// with no Plans, Operator details or analytics.
 export const InstanceContext = createContext<Instance>(DEFAULT_INSTANCE);
 
 /** Holds the Instance response that main.tsx fetched before rendering. */

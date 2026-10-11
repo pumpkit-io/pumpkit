@@ -4,14 +4,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { Login } from './Login';
 import { authService } from '@/services/authService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
-import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
-import { WITH_OPERATOR } from '@/features/instance/testInstances';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 
 vi.mock('@/services/authService', () => ({
   authService: { requestMagicLink: vi.fn(), getGoogleLoginUrl: vi.fn() },
 }));
 
-function renderLogin(path: string, instance: Instance = DEFAULT_INSTANCE) {
+function renderLogin(path: string, instance: Instance = SELLS_PLANS) {
   render(
     <InstanceProvider instance={instance}>
       <MemoryRouter
@@ -93,14 +93,14 @@ describe('the sign-in page', () => {
   });
 
   it('offers Google next to the magic link when the Instance has Google sign-in', () => {
-    renderLogin('/login', { ...DEFAULT_INSTANCE, sign_in_methods: ['magic_link', 'google'] });
+    renderLogin('/login', { ...SELLS_PLANS, sign_in_methods: ['magic_link', 'google'] });
 
     expect(screen.getByRole('button', { name: /google/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
   });
 
   it('offers only the magic link when the Instance has no Google sign-in', () => {
-    renderLogin('/login', { ...DEFAULT_INSTANCE, sign_in_methods: ['magic_link'] });
+    renderLogin('/login', { ...SELLS_PLANS, sign_in_methods: ['magic_link'] });
 
     expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/google/i)).not.toBeInTheDocument();

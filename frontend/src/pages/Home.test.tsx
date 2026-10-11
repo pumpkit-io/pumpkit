@@ -60,8 +60,8 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
-import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
-import { WITH_OPERATOR } from '@/features/instance/testInstances';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
@@ -114,7 +114,7 @@ function apiError(status: number, detail: string, extra: Record<string, unknown>
 }
 
 const WITH_ANALYTICS: Instance = {
-  ...DEFAULT_INSTANCE,
+  ...SELLS_PLANS,
   analytics: {
     key: 'phc_test',
     host: 'https://eu.i.posthog.com',
@@ -122,7 +122,7 @@ const WITH_ANALYTICS: Instance = {
   },
 };
 
-function renderHome(state?: unknown, instance: Instance = DEFAULT_INSTANCE) {
+function renderHome(state?: unknown, instance: Instance = SELLS_PLANS) {
   return render(
     <InstanceProvider instance={instance}>
       <AuthProvider>
@@ -1006,7 +1006,7 @@ describe('Home', () => {
   });
 
   describe('On an Instance that sells no Plans', () => {
-    const NO_PLANS: Instance = { ...DEFAULT_INSTANCE, sells_plans: false };
+    const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
 
     it('lets a User without a Subscription add authors and write, with no prompt to subscribe', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);

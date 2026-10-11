@@ -26,17 +26,18 @@ export interface Instance {
   analytics: AnalyticsSettings | null;
 }
 
+// Offers only what needs no provider, since without /instance nothing says which are configured.
 export const DEFAULT_INSTANCE: Instance = {
   app_name: 'Pumpkit',
-  sells_plans: true,
-  sign_in_methods: ['magic_link', 'google'],
+  sells_plans: false,
+  sign_in_methods: ['magic_link'],
   operator: null,
   analytics: null,
 };
 
 /**
  * Plain fetch, not the api client: apiService builds its lock name from the app slug at import.
- * An unreachable backend falls back to the default, which loads no analytics.
+ * An unreachable backend or an error answer falls back to DEFAULT_INSTANCE.
  */
 export async function fetchInstance(): Promise<Instance> {
   try {
