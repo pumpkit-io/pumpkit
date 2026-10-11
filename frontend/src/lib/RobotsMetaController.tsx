@@ -1,8 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-const PUBLIC_PATHS = new Set<string>(['/']);
-
 function setRobotsMeta(content: string) {
   let tag = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
   if (!tag) {
@@ -13,13 +11,13 @@ function setRobotsMeta(content: string) {
   tag.setAttribute('content', content);
 }
 
-export function RobotsMetaController() {
+/** Lets search engines index the given public paths and keeps every other page out. */
+export function RobotsMetaController({ indexablePaths }: { indexablePaths: ReadonlySet<string> }) {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    const isPublic = PUBLIC_PATHS.has(pathname);
-    setRobotsMeta(isPublic ? 'index,follow' : 'noindex,nofollow');
-  }, [pathname]);
+    setRobotsMeta(indexablePaths.has(pathname) ? 'index,follow' : 'noindex,nofollow');
+  }, [pathname, indexablePaths]);
 
   return null;
 }

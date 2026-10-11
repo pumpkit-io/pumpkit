@@ -12,8 +12,12 @@ import { BillingCancelledRedirect, BillingSuccessRedirect } from './pages/Billin
 import { AuthProvider, BYPASS_AUTH, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ThemeProvider } from './features/theme/ThemeProvider';
+import { LEGAL_DOCUMENTS } from './features/legal/documents';
+import { legalRoutes } from './features/legal/legalRoutes';
 import { PostHogPageviewTracker } from './lib/PostHogPageviewTracker';
 import { RobotsMetaController } from './lib/RobotsMetaController';
+
+const INDEXABLE_PATHS = new Set(['/', ...LEGAL_DOCUMENTS.map((doc) => doc.path)]);
 
 function FullPageLoading() {
   return (
@@ -37,6 +41,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
+      {legalRoutes}
       <Route
         element={
           <ProtectedRoute>
@@ -92,7 +97,7 @@ function App() {
       <ThemeProvider>
         <Router>
           <PostHogPageviewTracker />
-          <RobotsMetaController />
+          <RobotsMetaController indexablePaths={INDEXABLE_PATHS} />
           <AppRoutes />
         </Router>
       </ThemeProvider>
