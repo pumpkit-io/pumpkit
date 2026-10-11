@@ -74,10 +74,10 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 import pumpkit.core.errors as errors_module  # noqa: E402
+import pumpkit.models  # noqa: E402,F401  (registers every table on Base.metadata)
 from pumpkit.api.dependencies import get_current_user  # noqa: E402
 from pumpkit.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
 from pumpkit.core.billing_gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
-from pumpkit.core.db import models  # noqa: E402,F401  (registers every table on Base.metadata)
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.models import MagicLink, Subscription, User  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402

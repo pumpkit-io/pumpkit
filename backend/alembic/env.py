@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 load_dotenv()
 
-from pumpkit.core.db import models  # noqa: F401,E402
+import pumpkit.models  # noqa: F401,E402
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.urls import build_database_url  # noqa: E402
 
