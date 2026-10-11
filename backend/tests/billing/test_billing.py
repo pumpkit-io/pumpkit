@@ -13,6 +13,7 @@ from pumpkit.billing.gateway import (
 )
 from pumpkit.billing.models import TermsAcceptance
 from pumpkit.billing.subscription_status import SubscriptionStatus
+from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
 
 CUSTOMER = "cus_alice"
@@ -20,8 +21,6 @@ BILLING_ME = "/api/v1/billing/me"
 CHECKOUT = "/api/v1/billing/checkout"
 PORTAL = "/api/v1/billing/portal"
 PLANS = "/api/v1/billing/plans"
-# The English Terms' "Last updated" date.
-TERMS_VERSION = "2026-10-11"
 ACCEPTANCE = {
     "terms_version": TERMS_VERSION,
     "accepted_terms": True,
@@ -351,7 +350,7 @@ async def test_a_checkout_records_the_users_acceptance_of_the_terms(client, db, 
         acceptance.accepted_terms,
         acceptance.requested_immediate_start,
         acceptance.approved_specific_clauses,
-    ) == (user.id, "2026-10-11", True, True, True)
+    ) == (user.id, TERMS_VERSION, True, True, True)
     assert acceptance.accepted_at is not None
 
 

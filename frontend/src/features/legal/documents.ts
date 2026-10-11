@@ -10,7 +10,7 @@ export interface LegalDocument {
   language: LegalLanguage;
   /** The page heading, also used for the browser title. */
   title: string;
-  /** ISO date shown as "Last updated"; bump it with every change to the text. */
+  /** ISO date shown as "Last updated". */
   lastUpdated: string;
   markdown: string;
   /** Path of the same document in the other language. */
@@ -22,13 +22,18 @@ export const TERMS_PATH = '/terms';
 const PRIVACY_IT_PATH = '/it/privacy';
 const TERMS_IT_PATH = '/it/terms';
 
+// Bump with every change to a document's text; both languages share the date.
+// TERMS_LAST_UPDATED must equal the backend's TERMS_VERSION.
+const PRIVACY_LAST_UPDATED = '2026-10-11';
+const TERMS_LAST_UPDATED = '2026-10-11';
+
 /** Every legal document, served at its own public route: a new document is a Markdown file plus an entry here. */
 export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     path: PRIVACY_PATH,
     language: 'en',
     title: 'Privacy Policy',
-    lastUpdated: '2026-10-11',
+    lastUpdated: PRIVACY_LAST_UPDATED,
     markdown: privacyEn,
     alternatePath: PRIVACY_IT_PATH,
   },
@@ -36,7 +41,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
     path: TERMS_PATH,
     language: 'en',
     title: 'Terms',
-    lastUpdated: '2026-10-11',
+    lastUpdated: TERMS_LAST_UPDATED,
     markdown: termsEn,
     alternatePath: TERMS_IT_PATH,
   },
@@ -44,7 +49,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
     path: PRIVACY_IT_PATH,
     language: 'it',
     title: 'Informativa sulla privacy',
-    lastUpdated: '2026-10-11',
+    lastUpdated: PRIVACY_LAST_UPDATED,
     markdown: privacyIt,
     alternatePath: PRIVACY_PATH,
   },
@@ -52,7 +57,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
     path: TERMS_IT_PATH,
     language: 'it',
     title: 'Termini',
-    lastUpdated: '2026-10-11',
+    lastUpdated: TERMS_LAST_UPDATED,
     markdown: termsIt,
     alternatePath: TERMS_PATH,
   },
