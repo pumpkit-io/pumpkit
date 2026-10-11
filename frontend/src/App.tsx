@@ -12,6 +12,7 @@ import { BillingCancelledRedirect, BillingSuccessRedirect } from './pages/Billin
 import { AuthProvider, BYPASS_AUTH, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ThemeProvider } from './features/theme/ThemeProvider';
+import { ConsentBanner } from './features/analyticsConsent/ConsentBanner';
 import { LEGAL_DOCUMENTS } from './features/legal/documents';
 import { legalRoutes } from './features/legal/legalRoutes';
 import { PostHogPageviewTracker } from './lib/PostHogPageviewTracker';
@@ -99,6 +100,7 @@ function App() {
           <PostHogPageviewTracker />
           <RobotsMetaController indexablePaths={INDEXABLE_PATHS} />
           <AppRoutes />
+          <ConsentBanner />
         </Router>
       </ThemeProvider>
     </AuthProvider>

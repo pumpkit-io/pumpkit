@@ -13,7 +13,7 @@ import { useProfile, useProfileMutator } from '@/pages/Home/ProfileContext';
 import { userService } from '@/services/userService';
 import { AvatarEditor } from './AvatarEditor';
 import { track } from '@/lib/analytics';
-import { identifyUser } from '@/lib/posthog';
+import { identifyUser } from '@/lib/analyticsConsent';
 import { APP_NAME } from '@/lib/app';
 
 interface FormState {

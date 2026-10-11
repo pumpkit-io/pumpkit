@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('./posthog', () => ({ posthog: { capture: vi.fn(), register: vi.fn() } }));
+vi.mock('posthog-js', () => ({
+  default: { __loaded: false, capture: vi.fn(), register: vi.fn() },
+}));
 
-import { posthog } from './posthog';
+import posthog from 'posthog-js';
 import { EVENTS, registerSuperProperties, track } from './analytics';
 
-describe('analytics (disabled by default)', () => {
-  it('does not call PostHog when disabled', () => {
+describe('analytics without Analytics consent', () => {
+  it('does not call PostHog', () => {
     track('login_google_clicked');
     registerSuperProperties({ theme: 'light' });
     expect(posthog.capture).not.toHaveBeenCalled();
