@@ -103,3 +103,21 @@ _Avoid_: posted, sent, live
 **Failed**:
 A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it.
 _Avoid_: errored, rejected, dead
+
+### Legal
+
+**Operator**:
+The company that runs the hosted Pumpkit at pumpkit.io and is the other party to the Terms: INCEPTIONAL S.R.L. People who self-host Pumpkit's open-source code are not covered by the Operator's Terms or Privacy Policy.
+_Avoid_: we (in docs), owner, provider, Pumpkit (for the company)
+
+**Terms**:
+The contract between the Operator and a User for using the hosted Pumpkit, in English and Italian with both versions equally valid. A User accepts them before every checkout, so each Subscription has its own acceptance (see ADR 0010).
+_Avoid_: ToS, terms and conditions, EULA, user agreement
+
+**Privacy Policy**:
+The Operator's notice of which personal data the hosted Pumpkit processes, why, with whom, for how long, and how people exercise their rights over it.
+_Avoid_: privacy notice, data policy, cookie policy (it covers cookies too)
+
+**Analytics consent**:
+A visitor's choice to allow or refuse product analytics and session recording in their browser. Until they allow it, Pumpkit sends nothing to the analytics provider.
+_Avoid_: cookie consent, tracking consent, GDPR consent

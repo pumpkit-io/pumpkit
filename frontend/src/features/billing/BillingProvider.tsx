@@ -6,6 +6,7 @@ import { track } from '@/lib/analytics';
 export interface BillingData {
   me: BillingMe;
   plans: Plan[];
+  termsVersion: string;
 }
 
 interface BillingContextValue {
@@ -30,11 +31,11 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [me, plans] = await Promise.all([
+      const [me, { plans, termsVersion }] = await Promise.all([
         billingService.fetchBillingMe(),
         billingService.fetchPlans(),
       ]);
-      setData({ me, plans });
+      setData({ me, plans, termsVersion });
     } catch (e) {
       setError(errorMessage(e, 'Could not load billing information.'));
     } finally {

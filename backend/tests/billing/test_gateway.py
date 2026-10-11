@@ -92,10 +92,12 @@ class _RecordedStripe(stripe.HTTPClient):
         self._body = body
         self.urls: list[str] = []
         self.methods: list[str] = []
+        self.forms: list[dict[str, list[str]]] = []
 
     def request(self, method, url, headers, post_data=None, *, _usage=None):
         self.urls.append(url)
         self.methods.append(method)
+        self.forms.append(parse_qs(post_data or ""))
         return self._body, 200, {}
 
     def close(self) -> None:
@@ -146,6 +148,25 @@ async def test_the_stripe_adapter_cancels_a_subscription_now():
 
     assert http.methods == ["delete"]
     assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1Incomplete"
+
+
+async def test_the_stripe_checkout_charges_vat_and_collects_vat_ids():
+    http = _RecordedStripe(
+        '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'
+    )
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    await gateway.create_subscription_checkout(
+        customer_id="cus_1", price_id="price_1Monthly", quantity=1, user_id="user_1"
+    )
+
+    [form] = http.forms
+    assert form["automatic_tax[enabled]"] == ["true"]
+    assert form["tax_id_collection[enabled]"] == ["true"]
+    # Stripe refuses tax ID collection for an existing customer unless Checkout may save
+    # the address and business name it collects onto that customer.
+    assert form["customer_update[address]"] == ["auto"]
+    assert form["customer_update[name]"] == ["auto"]
 
 
 async def test_the_fake_lists_a_cancelled_subscription_as_ended():

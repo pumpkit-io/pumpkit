@@ -2,22 +2,15 @@ import { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
-vi.mock('@/lib/posthog', () => ({
-  identifyUser: vi.fn(),
+vi.mock('@/lib/analyticsConsent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analyticsConsent')>()),
   resetPostHog: vi.fn(),
-  capturePageview: vi.fn(),
-  posthog: { capture: vi.fn(), register: vi.fn() },
 }));
 
 import { hardRedirect } from '@/lib/navigation';
-import { resetPostHog } from '@/lib/posthog';
+import { POSTHOG_IDENTIFIED_KEY, resetPostHog } from '@/lib/analyticsConsent';
 import { api } from '@/services/apiService';
-import {
-  installRefreshOnUnauthorized,
-  POSTHOG_IDENTIFIED_KEY,
-  SESSION_STORAGE_KEY,
-  session,
-} from '@/lib/session';
+import { installRefreshOnUnauthorized, SESSION_STORAGE_KEY, session } from '@/lib/session';
 
 installRefreshOnUnauthorized();
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();

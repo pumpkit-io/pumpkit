@@ -14,6 +14,15 @@ test.describe('logged in', () => {
   const userMenu = (page: import('@playwright/test').Page) =>
     page.getByRole('button', { name: 'User menu' }).last();
 
+  // The Analytics consent banner sits over the bottom of the page; the choice persists for the test.
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/home');
+    await page
+      .getByRole('region', { name: 'Analytics consent' })
+      .getByRole('button', { name: 'Reject' })
+      .click();
+  });
+
   test('home shows the authors panel, the Brief box and the user name', async ({ page }) => {
     await page.goto('/home');
     await expect(page.getByRole('region', { name: 'Inspiration authors' })).toBeVisible();

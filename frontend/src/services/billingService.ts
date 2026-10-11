@@ -24,7 +24,7 @@ export interface BillingMe {
   subscription: Subscription | null;
   subscribed: boolean;
   maySubscribe: boolean;
-  /** The Trial a Checkout would start with; set only when the User may subscribe. */
+  /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
 }
 
@@ -36,6 +36,20 @@ export interface Plan {
   currency: string;
   interval: string;
   intervalCount: number;
+}
+
+/** The three boxes a User ticks before every checkout (ADR 0010). */
+export interface TermsAcceptance {
+  acceptedTerms: boolean;
+  requestedImmediateStart: boolean;
+  approvedSpecificClauses: boolean;
+}
+
+/** The Plans on sale and the Terms version a checkout must accept. */
+export interface PlanCatalog {
+  plans: Plan[];
+  /** The current Terms' "Last updated" date, in ISO form. */
+  termsVersion: string;
 }
 
 interface BillingMeApi {
@@ -76,22 +90,39 @@ export const billingService = {
     };
   },
 
-  fetchPlans: async (): Promise<Plan[]> => {
-    const { data } = await apiService.get<{ data: PlanApi[] }>('/billing/plans');
-    return data.data.map((p) => ({
-      key: p.key,
-      productName: p.product_name,
-      amount: p.amount,
-      currency: p.currency,
-      interval: p.interval,
-      intervalCount: p.interval_count,
-    }));
+  fetchPlans: async (): Promise<PlanCatalog> => {
+    const { data } = await apiService.get<{ data: PlanApi[]; terms_version: string }>(
+      '/billing/plans',
+    );
+    return {
+      plans: data.data.map((p) => ({
+        key: p.key,
+        productName: p.product_name,
+        amount: p.amount,
+        currency: p.currency,
+        interval: p.interval,
+        intervalCount: p.interval_count,
+      })),
+      termsVersion: data.terms_version,
+    };
   },
 
-  /** Starts Checkout for a Plan; the server decides the price, quantity and any Trial. */
-  startSubscriptionCheckout: async (planKey: string): Promise<string> => {
+  /**
+   * Starts Stripe Checkout for a Plan with the User's acceptance of `termsVersion` (ADR 0010).
+   * The server decides the price, quantity and any Trial, refuses an acceptance missing a box,
+   * and refuses with a 409 when `termsVersion` is no longer current.
+   */
+  startSubscriptionCheckout: async (
+    planKey: string,
+    termsVersion: string,
+    acceptance: TermsAcceptance,
+  ): Promise<string> => {
     const { data } = await apiService.post<{ url: string }>('/billing/checkout', {
       plan_key: planKey,
+      terms_version: termsVersion,
+      accepted_terms: acceptance.acceptedTerms,
+      requested_immediate_start: acceptance.requestedImmediateStart,
+      approved_specific_clauses: acceptance.approvedSpecificClauses,
     });
     return data.url;
   },

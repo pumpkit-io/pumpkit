@@ -1,4 +1,5 @@
 import { useSignInCallback } from '@/components/auth/useSignInCallback';
+import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { SIGN_IN_ERROR } from '@/lib/session';
 import { track } from '@/lib/analytics';
 
@@ -10,8 +11,11 @@ export function MagicLinkCallback() {
   });
 
   return (
-    <div className="flex h-screen items-center justify-center bg-background text-foreground">
-      <p role="status">Signing you in…</p>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <main className="flex flex-1 items-center justify-center">
+        <p role="status">Signing you in…</p>
+      </main>
+      <CompanyFooter />
     </div>
   );
 }

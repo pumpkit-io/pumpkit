@@ -1,7 +1,6 @@
 import { isAxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { hardRedirect } from '@/lib/navigation';
-import { resetPostHog } from '@/lib/posthog';
-import { storageKey } from '@/lib/storage';
+import { POSTHOG_IDENTIFIED_KEY, resetPostHog } from '@/lib/analyticsConsent';
 import { api, performRefresh } from '@/services/apiService';
 import { SIGN_IN_ERROR, signInPath } from './signInError';
 import {
@@ -33,12 +32,6 @@ export type EndSessionReason = 'user' | 'session_ended' | 'account_suspended' | 
 export type StartFailureReason = 'missing_token' | 'invalid_expiry';
 
 export type StartFromFragmentResult = { ok: true } | { ok: false; reason: StartFailureReason };
-
-/**
- * The sessionStorage key (per tab) marking that analytics already identified
- * the User in this Session. Ending a Session clears it.
- */
-export const POSTHOG_IDENTIFIED_KEY = storageKey('posthog-identified');
 
 const ROUTE_AFTER_END: Record<EndSessionReason, string> = {
   user: signInPath(),

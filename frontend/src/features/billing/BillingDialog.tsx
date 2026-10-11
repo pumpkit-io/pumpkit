@@ -12,11 +12,15 @@ import {
   billingService,
   type Subscription,
   type SubscriptionStatus,
+  type TermsAcceptance,
 } from '@/services/billingService';
 import { redirectTo } from '@/lib/navigation';
 import { track } from '@/lib/analytics';
 import { useBilling } from './useBilling';
+import type { BillingData } from './BillingProvider';
 import { PlanCard, recurringLabel } from './PlanCard';
+import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
+import { TermsAcceptanceFields } from './TermsAcceptanceFields';
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -86,6 +90,54 @@ function RunningSubscription({
   );
 }
 
+/**
+ * The acceptance boxes and the Plans, for a User who may subscribe. Mounted only while the
+ * dialog is open, so every checkout starts with the boxes unticked.
+ */
+function SubscribeOffer({
+  data,
+  pendingId,
+  onSubscribe,
+}: {
+  data: BillingData;
+  pendingId: string | null;
+  onSubscribe: (planKey: string, acceptance: TermsAcceptance) => void;
+}) {
+  const [acceptance, setAcceptance] = useState<TermsAcceptance>(NOTHING_ACCEPTED);
+  const accepted = acceptsAll(acceptance);
+
+  if (data.plans.length === 0) {
+    return <p className="font-sans text-xs text-muted-foreground">No Plans are available yet.</p>;
+  }
+  return (
+    <>
+      <p className="font-sans text-xs text-muted-foreground">
+        Tick the three boxes, then choose a Plan.
+      </p>
+      <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {data.plans.map((plan) => (
+          <PlanCard
+            key={plan.key}
+            title={plan.productName}
+            priceLabel={recurringLabel(
+              plan.amount,
+              plan.currency,
+              plan.interval,
+              plan.intervalCount,
+            )}
+            note={data.me.trialDays === null ? undefined : `${data.me.trialDays}-day free Trial`}
+            actionLabel={pendingId === plan.key ? 'Redirecting…' : 'Subscribe'}
+            ariaLabel={`Subscribe to ${plan.productName}`}
+            disabled={!accepted || pendingId !== null}
+            onAction={() => onSubscribe(plan.key, acceptance)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function BillingDialog() {
   const { isOpen, close, error, openWithError, data, isLoading } = useBilling();
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -102,9 +154,11 @@ export function BillingDialog() {
     }
   };
 
-  const onSubscribe = (planKey: string) => {
+  const onSubscribe = (planKey: string, termsVersion: string, acceptance: TermsAcceptance) => {
     track('billing_subscription_checkout_started', { plan_key: planKey });
-    void go(planKey, () => billingService.startSubscriptionCheckout(planKey));
+    void go(planKey, () =>
+      billingService.startSubscriptionCheckout(planKey, termsVersion, acceptance),
+    );
   };
 
   const onManage = async () => {
@@ -142,40 +196,15 @@ export function BillingDialog() {
               <section className="space-y-3">
                 <h3 className="font-sans text-sm font-semibold text-foreground">Subscription</h3>
                 {data.me.maySubscribe ? (
-                  <>
-                    <p className="font-sans text-xs text-muted-foreground">
-                      Choose a Plan to subscribe.
-                    </p>
-                    {data.plans.length === 0 ? (
-                      <p className="font-sans text-xs text-muted-foreground">
-                        No Plans are available yet.
-                      </p>
-                    ) : (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {data.plans.map((plan) => (
-                          <PlanCard
-                            key={plan.key}
-                            title={plan.productName}
-                            priceLabel={recurringLabel(
-                              plan.amount,
-                              plan.currency,
-                              plan.interval,
-                              plan.intervalCount,
-                            )}
-                            note={
-                              data.me.trialDays === null
-                                ? undefined
-                                : `${data.me.trialDays}-day free Trial`
-                            }
-                            actionLabel={pendingId === plan.key ? 'Redirecting…' : 'Subscribe'}
-                            ariaLabel={`Subscribe to ${plan.productName}`}
-                            disabled={pendingId !== null}
-                            onAction={() => onSubscribe(plan.key)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
+                  <SubscribeOffer
+                    // A new Terms version must be accepted afresh.
+                    key={data.termsVersion}
+                    data={data}
+                    pendingId={pendingId}
+                    onSubscribe={(planKey, acceptance) =>
+                      onSubscribe(planKey, data.termsVersion, acceptance)
+                    }
+                  />
                 ) : (
                   subscription && (
                     <RunningSubscription subscription={subscription} onManage={onManage} />

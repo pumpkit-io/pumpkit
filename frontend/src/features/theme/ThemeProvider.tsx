@@ -1,6 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { storage } from '@/lib/storage';
-import { registerSuperProperties } from '@/lib/analytics';
+import { registerSuperProperties } from '@/lib/analyticsConsent';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';

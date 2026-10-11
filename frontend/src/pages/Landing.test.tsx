@@ -229,6 +229,43 @@ describe('Landing authors', () => {
   });
 });
 
+describe('Landing footer', () => {
+  it('names the Operator with its company details', () => {
+    renderLanding();
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByText('INCEPTIONAL S.R.L.')).toBeInTheDocument();
+    expect(
+      within(footer).getByText('Via Eugenio Curiel, 34, Fano (PU), Italy'),
+    ).toBeInTheDocument();
+    expect(
+      within(footer).getByText(
+        'VAT ID IT02853580419 · REA PS-307481 · Share capital €1 fully paid in',
+      ),
+    ).toBeInTheDocument();
+    expect(within(footer).getByText('PEC inceptional@pec.it')).toBeInTheDocument();
+  });
+
+  it('offers Cookie settings', () => {
+    renderLanding();
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+  });
+
+  it('links to the Privacy Policy, the Terms and the support address', () => {
+    renderLanding();
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
+    expect(within(footer).getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms');
+    expect(within(footer).getByRole('link', { name: 'support@pumpkit.io' })).toHaveAttribute(
+      'href',
+      'mailto:support@pumpkit.io',
+    );
+  });
+});
+
 describe('Landing pricing', () => {
   it('shows one table per Plan in the endpoint order, headed by its price per interval', async () => {
     renderLanding();

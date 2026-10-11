@@ -54,7 +54,7 @@ export function PricingSection() {
     let cancelled = false;
     billingService
       .fetchPlans()
-      .then((plans) => !cancelled && setState({ status: 'ready', plans }))
+      .then(({ plans }) => !cancelled && setState({ status: 'ready', plans }))
       .catch(() => !cancelled && setState({ status: 'error' }));
     return () => {
       cancelled = true;

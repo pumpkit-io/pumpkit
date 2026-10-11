@@ -62,3 +62,24 @@ class StripeEvent(Base):
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class TermsAcceptance(Base):
+    """
+    A User's acceptance of one Terms version before a checkout (ADR 0010), as evidence of
+    what they agreed to and when. One row per checkout request, kept even if the checkout fails.
+    """
+
+    __tablename__ = "terms_acceptances"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("terms_acceptance")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    terms_version: Mapped[str] = mapped_column(String)
+    accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    accepted_terms: Mapped[bool] = mapped_column(Boolean)
+    requested_immediate_start: Mapped[bool] = mapped_column(Boolean)
+    approved_specific_clauses: Mapped[bool] = mapped_column(Boolean)

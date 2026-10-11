@@ -15,7 +15,7 @@ const config = {
     extend: {
       fontFamily: {
         sans: [
-          'Inter',
+          '"Inter Variable"',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
@@ -24,7 +24,13 @@ const config = {
           'sans-serif',
         ],
         mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-        wordmark: ['"Google Sans Code"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        wordmark: [
+          '"Google Sans Code Variable"',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'monospace',
+        ],
       },
       keyframes: {
         'accordion-down': {

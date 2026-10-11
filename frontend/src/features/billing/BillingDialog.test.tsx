@@ -72,13 +72,26 @@ const PLANS = {
       interval_count: 1,
     },
   ],
+  terms_version: '2026-10-11',
 };
+
+const ACCEPTANCE_BOXES = [
+  /I accept the Terms/,
+  /I ask for the service to start immediately/,
+  /I specifically approve these clauses/,
+];
+
+const TERMS_CHANGED =
+  'The Terms have changed. Please review the current Terms and accept them again.';
 
 /**
  * Fakes the backend at the axios adapter. Records every request as "METHOD url"
  * and the JSON body of each request that has one.
  */
-function fakeBackend(me: object) {
+function fakeBackend(
+  me: object,
+  failures: Record<string, { status: number; detail: string }> = {},
+) {
   const requests: string[] = [];
   const bodies: Record<string, unknown> = {};
   const routes: Record<string, unknown> = {
@@ -91,6 +104,14 @@ function fakeBackend(me: object) {
     const key = `${(config.method ?? 'get').toUpperCase()} ${config.url}`;
     requests.push(key);
     if (config.data) bodies[key] = JSON.parse(config.data as string);
+    if (key in failures) {
+      const { status, detail } = failures[key];
+      throw Object.assign(new Error(`Request failed with status code ${status}`), {
+        isAxiosError: true,
+        config,
+        response: { data: { detail }, status, statusText: '', headers: {}, config },
+      });
+    }
     if (!(key in routes)) {
       return { data: { detail: 'Not Found' }, status: 404, statusText: '', headers: {}, config };
     }
@@ -153,12 +174,69 @@ describe('BillingDialog', () => {
     expect(screen.queryByText(PAYMENT_FAILED)).not.toBeInTheDocument();
   });
 
-  it('starts Checkout with only the chosen Plan key when Subscribe is clicked', async () => {
+  it('keeps Subscribe disabled until all three acceptance boxes are ticked', async () => {
+    fakeBackend(MAY_SUBSCRIBE_WITH_TRIAL);
+    renderDialog();
+    const subscribe = await screen.findByRole('button', { name: 'Subscribe to Pro' });
+
+    for (const box of ACCEPTANCE_BOXES) {
+      expect(subscribe).toBeDisabled();
+      fireEvent.click(screen.getByRole('checkbox', { name: box }));
+    }
+
+    expect(subscribe).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Subscribe to Pro yearly' })).toBeEnabled();
+  });
+
+  it('links each acceptance box to what it refers to in the Terms', async () => {
+    fakeBackend(MAY_SUBSCRIBE_WITH_TRIAL);
+    renderDialog();
+    await screen.findByRole('button', { name: 'Subscribe to Pro' });
+
+    const href = (name: RegExp) => screen.getByRole('link', { name }).getAttribute('href');
+    expect(href(/^Terms$/)).toBe('/terms');
+    expect(href(/^Privacy Policy$/)).toBe('/privacy');
+    expect(href(/withdrawal/i)).toBe('/terms#withdrawal');
+    expect(href(/9\. Suspension and termination by the Operator/)).toBe('/terms#suspension');
+    expect(href(/11\. Automatic renewal and cancellation/)).toBe('/terms#renewal');
+    expect(href(/13\. No refunds/)).toBe('/terms#refunds');
+    expect(href(/15\. Limitation of liability/)).toBe('/terms#liability');
+    expect(href(/18\. Changes to these Terms/)).toBe('/terms#changes');
+    expect(href(/20\. Competent court/)).toBe('/terms#courts');
+  });
+
+  it('starts checkout with the chosen Plan key, the Terms version and the three acceptances', async () => {
     const backend = fakeBackend(MAY_SUBSCRIBE_WITH_TRIAL);
     renderDialog();
-    fireEvent.click(await screen.findByRole('button', { name: /subscribe to pro yearly/i }));
+    await screen.findByRole('button', { name: 'Subscribe to Pro' });
+    for (const box of ACCEPTANCE_BOXES)
+      fireEvent.click(screen.getByRole('checkbox', { name: box }));
+
+    fireEvent.click(screen.getByRole('button', { name: /subscribe to pro yearly/i }));
+
     await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://checkout.stripe.test/s'));
-    expect(backend.bodies['POST /billing/checkout']).toEqual({ plan_key: 'pumpkit_pro_yearly' });
+    expect(backend.bodies['POST /billing/checkout']).toEqual({
+      plan_key: 'pumpkit_pro_yearly',
+      terms_version: '2026-10-11',
+      accepted_terms: true,
+      requested_immediate_start: true,
+      approved_specific_clauses: true,
+    });
+  });
+
+  it('asks the User to review the Terms when checkout says they have changed', async () => {
+    fakeBackend(MAY_SUBSCRIBE_WITH_TRIAL, {
+      'POST /billing/checkout': { status: 409, detail: TERMS_CHANGED },
+    });
+    renderDialog();
+    await screen.findByRole('button', { name: 'Subscribe to Pro' });
+    for (const box of ACCEPTANCE_BOXES)
+      fireEvent.click(screen.getByRole('checkbox', { name: box }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(TERMS_CHANGED);
+    expect(redirectTo).not.toHaveBeenCalled();
   });
 
   it.each([

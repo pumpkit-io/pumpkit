@@ -1,13 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { PostHogProvider } from 'posthog-js/react';
 import App from './App';
+import '@fontsource-variable/inter/wght.css';
+import '@fontsource-variable/google-sans-code/wght.css';
+import '@fontsource/geist-mono/400.css';
+import '@fontsource/geist-mono/500.css';
 import './index.css';
-import { initPostHog, posthog } from './lib/posthog';
-import { registerSuperProperties } from './lib/analytics';
+import { registerSuperProperties, startAnalytics } from './lib/analyticsConsent';
 import { installRefreshOnUnauthorized } from './lib/session';
 
-initPostHog();
+startAnalytics();
 installRefreshOnUnauthorized();
 registerSuperProperties({
   environment: import.meta.env.MODE,
@@ -16,8 +18,6 @@ registerSuperProperties({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <PostHogProvider client={posthog}>
-      <App />
-    </PostHogProvider>
+    <App />
   </React.StrictMode>,
 );

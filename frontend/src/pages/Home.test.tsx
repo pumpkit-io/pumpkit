@@ -17,7 +17,7 @@ vi.mock('@/services/userService', () => ({
 vi.mock('@/services/billingService', () => ({
   billingService: {
     fetchBillingMe: vi.fn(),
-    fetchPlans: vi.fn().mockResolvedValue([]),
+    fetchPlans: vi.fn().mockResolvedValue({ plans: [], termsVersion: '2026-10-11' }),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', () => ({
@@ -926,6 +926,26 @@ describe('Home', () => {
       await waitFor(() =>
         expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1),
       );
+    });
+
+    it('links to the Privacy Policy and the Terms at the bottom, in a new tab', async () => {
+      renderHome();
+      await authorsPanel();
+
+      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
+      const privacy = legal.getByRole('link', { name: 'Privacy Policy' });
+      const terms = legal.getByRole('link', { name: 'Terms' });
+      expect(privacy).toHaveAttribute('href', '/privacy');
+      expect(terms).toHaveAttribute('href', '/terms');
+      for (const link of [privacy, terms]) expect(link).toHaveAttribute('target', '_blank');
+    });
+
+    it('offers Cookie settings next to the legal links', async () => {
+      renderHome();
+      await authorsPanel();
+
+      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
+      expect(legal.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
     });
 
     it('remembers a collapsed sidebar across visits', async () => {
