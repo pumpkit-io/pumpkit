@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.refresh_tokens as refresh_tokens_service
+import pumpkit.auth.service.retention as retention
 import pumpkit.auth.service.users as user_service
 from pumpkit.auth.models import RefreshToken, SignInMethod, User
 from pumpkit.auth.tokens import create_access_token, create_refresh_token, verify_refresh_token
@@ -173,6 +174,7 @@ async def start(
     """Start a new Session for a User who has just proven who they are, unless Suspended."""
     if not may_hold_session(user):
         return SessionRefusal(RefusalReason.SUSPENDED)
+    await retention.purge_expired(db, now=datetime.now(timezone.utc))
     issued, _ = await _issue(
         db,
         user=user,
