@@ -7,7 +7,9 @@ from httpx import AsyncClient
 
 import pumpkit.publishing.publish as publish_module
 from pumpkit.core.config import settings
-from pumpkit.core.x_publisher import (
+from pumpkit.core.x_reader import FetchedPost
+from pumpkit.publishing.publisher import run_pass
+from pumpkit.x_connection.x_publisher import (
     XAccount,
     XNotReceivedError,
     XOutcomeUnknownError,
@@ -15,8 +17,6 @@ from pumpkit.core.x_publisher import (
     XRateLimitedError,
     XReconnectNeededError,
 )
-from pumpkit.core.x_reader import FetchedPost
-from pumpkit.publishing.publisher import run_pass
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 X_CONNECTION = "/api/v1/x-connection"

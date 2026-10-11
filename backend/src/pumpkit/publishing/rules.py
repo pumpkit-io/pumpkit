@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from pumpkit.publishing.x_length import x_weighted_length
+from pumpkit.x_connection.x_length import x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
 MIN_LEAD_TIME = timedelta(minutes=1)

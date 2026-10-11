@@ -1,17 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class XConnectionResponse(BaseModel):
-    """The User's X connection. Tokens never leave the backend."""
-
-    handle: str
-    # The longest Scheduled post X accepts from this account, in X's weighted characters.
-    char_limit: int
-    needs_reconnect: bool
-    # Scheduled posts for this X account not yet published; disconnecting makes them fail.
-    scheduled_posts_waiting: int
-
-
 class XAuthorizationStartResponse(BaseModel):
     """X's consent screen, to send the browser to."""
 

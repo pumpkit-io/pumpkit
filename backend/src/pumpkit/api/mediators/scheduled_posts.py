@@ -2,21 +2,27 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.posts as posts_service
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
-import pumpkit.api.services.x_connections as x_connections_service
 import pumpkit.publishing.rules as rules
+import pumpkit.x_connection.service as x_connections_service
 from pumpkit.api.mediators.publishing import publish_scheduled_post
 from pumpkit.auth.models import User
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState, XConnection
+from pumpkit.core.db.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
 from pumpkit.core.time import as_utc
-from pumpkit.core.x_publisher import XPublisher
 from pumpkit.publishing.rules import MonthFull, RuleBroken
-from pumpkit.publishing.x_length import x_post_max_chars
-from pumpkit.schemas.scheduled_posts import ScheduledPostResponse, ScheduledPostsListResponse
+from pumpkit.schemas.scheduled_posts import (
+    ScheduledPostResponse,
+    ScheduledPostsListResponse,
+    XConnectionResponse,
+)
+from pumpkit.x_connection.models import XConnection
+from pumpkit.x_connection.x_length import x_post_max_chars
+from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
 
 def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostResponse:
@@ -213,3 +219,69 @@ async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id:
     if not await scheduled_posts_service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()
+
+
+async def _x_connection_response(db: AsyncSession, connection: XConnection) -> XConnectionResponse:
+    return XConnectionResponse(
+        handle=connection.handle,
+        char_limit=x_post_max_chars(connection.subscription_type),
+        needs_reconnect=connection.needs_reconnect,
+        scheduled_posts_waiting=await scheduled_posts_service.count_waiting(
+            db, user_id=connection.user_id, x_user_id=connection.x_user_id
+        ),
+    )
+
+
+def _owned_elsewhere(handle: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"@{handle} is already connected to another Pumpkit account.",
+    )
+
+
+async def get_x_connection(db: AsyncSession, user: User) -> XConnectionResponse:
+    connection = await x_connections_service.get_connection(db, user_id=user.id)
+    if connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="You haven't connected an X account."
+        )
+    return await _x_connection_response(db, connection)
+
+
+async def complete_x_authorization(
+    db: AsyncSession, publisher: XPublisher, user: User, code: str, state: str, now: datetime
+) -> XConnectionResponse:
+    """Replaces the User's X connection, whichever X account it was for."""
+    user_id = user.id
+    code_verifier = await x_connections_service.consume(db, user_id=user_id, state=state, now=now)
+    # Commit the delete before calling X: the state is then spent even if X fails, and no
+    # transaction stays open across X's calls.
+    await db.commit()
+    if code_verifier is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This X authorization expired or was already used. Connect X again.",
+        )
+
+    try:
+        tokens = await publisher.exchange_code(code=code, code_verifier=code_verifier, now=now)
+        account = await publisher.fetch_account(access_token=tokens.access_token)
+    except XReconnectNeededError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X didn't give Pumpkit access to your account. Connect X again.",
+        )
+
+    # The grant isn't revoked here: X may scope revocation to the account, cutting off its owner.
+    owner = await x_connections_service.get_connection_by_x_user_id(db, x_user_id=account.user_id)
+    if owner is not None and owner.user_id != user_id:
+        raise _owned_elsewhere(account.handle)
+    try:
+        connection = await x_connections_service.save_connection(
+            db, user_id=user_id, account=account, tokens=tokens, now=now
+        )
+        await db.commit()
+    except IntegrityError:
+        # Another User connected the same X account between the check and the save.
+        raise _owned_elsewhere(account.handle)
+    return await _x_connection_response(db, connection)

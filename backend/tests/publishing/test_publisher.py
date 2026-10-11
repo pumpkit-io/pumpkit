@@ -13,12 +13,12 @@ from httpx import AsyncClient
 
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.publishing.publish as publish_module
-from pumpkit.core.x_publisher import (
+from pumpkit.publishing.publisher import run, run_pass
+from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
     XRateLimitedError,
 )
-from pumpkit.publishing.publisher import run, run_pass
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 CHECK_X_REASON = "X didn't confirm this post. It may have been published. Check your X profile."

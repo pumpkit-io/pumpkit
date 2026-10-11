@@ -10,7 +10,6 @@ from pumpkit.api.routers import (
     posts,
     scheduled_posts,
     support,
-    x_connection,
 )
 from pumpkit.auth.router import router as auth_router
 from pumpkit.billing.router import router as billing_router
@@ -19,6 +18,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import limiter
+from pumpkit.x_connection.router import router as x_connection_router
 
 
 @asynccontextmanager
@@ -46,7 +46,9 @@ app.include_router(billing_router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 app.include_router(inspiration_authors.router, prefix="/api/v1")
 app.include_router(posts.router, prefix="/api/v1")
-app.include_router(x_connection.router, prefix="/api/v1")
+app.include_router(scheduled_posts.x_connection_router, prefix="/api/v1")
+app.include_router(x_connection_router, prefix="/api/v1")
+app.include_router(scheduled_posts.x_authorization_router, prefix="/api/v1")
 app.include_router(scheduled_posts.router, prefix="/api/v1")
 
 app.state.limiter = limiter

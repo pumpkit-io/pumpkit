@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # Optional: when unset, pumpkit.core.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None
 
-    # Optional: when unset, pumpkit.core.x_publisher raises XPublisherNotConfiguredError on use.
+    # Optional: when unset, pumpkit.x_connection.x_publisher raises XPublisherNotConfiguredError on use.
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
     # The frontend's X callback route, registered on the X developer app.
