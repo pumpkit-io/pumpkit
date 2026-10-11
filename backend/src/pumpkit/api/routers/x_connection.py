@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.mediators.x_connection as x_connection_mediator
-from pumpkit.api.dependencies import get_current_user, require_subscribed_user
-from pumpkit.core.db.models import User
+from pumpkit.api.dependencies import require_subscribed_user
+from pumpkit.auth.dependencies import get_current_user
+from pumpkit.auth.models import User
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock

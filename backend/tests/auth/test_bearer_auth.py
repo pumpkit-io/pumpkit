@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from pumpkit.core.db.models import User
+from pumpkit.auth.models import User
 
 
 @pytest.mark.parametrize(

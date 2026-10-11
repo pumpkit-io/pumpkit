@@ -9,15 +9,9 @@ import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.api.services.x_connections as x_connections_service
 import pumpkit.publishing.rules as rules
 from pumpkit.api.mediators.publishing import publish_scheduled_post
+from pumpkit.auth.models import User
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import (
-    FAILED,
-    SCHEDULED,
-    ScheduledPost,
-    ScheduledPostState,
-    User,
-    XConnection,
-)
+from pumpkit.core.db.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState, XConnection
 from pumpkit.core.time import as_utc
 from pumpkit.core.x_publisher import XPublisher
 from pumpkit.publishing.rules import MonthFull, RuleBroken

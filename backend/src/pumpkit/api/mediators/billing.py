@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.stripe_events as stripe_events_service
 import pumpkit.api.services.subscriptions as subscriptions_service
-import pumpkit.api.services.users as users_service
+import pumpkit.auth.service.users as users_service
+from pumpkit.auth.models import User
 from pumpkit.core.billing_gateway import (
     BillingGateway,
     BillingProviderError,
@@ -13,7 +14,6 @@ from pumpkit.core.billing_gateway import (
     WebhookSignatureError,
 )
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import User
 from pumpkit.core.logging import logger
 from pumpkit.schemas.billing import (
     BillingMeResponse,

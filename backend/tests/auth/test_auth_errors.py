@@ -3,11 +3,10 @@ import re
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 
-import pumpkit.api.mediators.magic_link_auth as magic_link_auth_mediator
-import pumpkit.api.mediators.sessions as sessions_mediator
-import pumpkit.api.services.refresh_tokens as refresh_tokens_service
-import pumpkit.api.services.sessions as sessions
-from pumpkit.core.db.models import User
+import pumpkit.auth.mediator as auth_mediator
+import pumpkit.auth.service.refresh_tokens as refresh_tokens_service
+import pumpkit.auth.service.sessions as sessions
+from pumpkit.auth.models import User
 from tests.conftest import magic_link_token
 
 
@@ -18,7 +17,7 @@ async def _boom(*_args, **_kwargs):
 async def test_unexpected_auth_error_returns_500_with_error_id_captured_once(
     client, monkeypatch, assert_reported_500
 ):
-    monkeypatch.setattr(sessions_mediator, "refresh_token", _boom)
+    monkeypatch.setattr(auth_mediator, "refresh_token", _boom)
 
     response = await client.post("/api/v1/refresh-token")
 
@@ -33,7 +32,7 @@ async def test_intentional_http_exception_passes_through_uncaptured(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing"
         )
 
-    monkeypatch.setattr(sessions_mediator, "refresh_token", _unauthorized)
+    monkeypatch.setattr(auth_mediator, "refresh_token", _unauthorized)
 
     response = await client.post("/api/v1/refresh-token")
 
@@ -76,7 +75,7 @@ async def test_other_http_exception_on_magic_link_is_not_turned_into_a_redirect(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Try again later"
         )
 
-    monkeypatch.setattr(magic_link_auth_mediator, "complete_magic_link", _unavailable)
+    monkeypatch.setattr(auth_mediator, "complete_magic_link", _unavailable)
 
     response = await client.get("/api/v1/login/magic-link", params={"token": "whatever"})
 

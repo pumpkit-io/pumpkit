@@ -54,3 +54,13 @@ class UserProfileUpdate(BaseModel):
                 "must be a base64-encoded data URL of type image/jpeg, image/png or image/webp"
             )
         return v
+
+
+class MagicLinkRequest(BaseModel):
+    """Request payload to initiate a magic-link sign-in."""
+
+    email: EmailStr
+
+    @field_validator("email", mode="after")
+    def lowercase_email(cls, v: str) -> str:
+        return v.lower()

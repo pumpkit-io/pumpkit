@@ -5,7 +5,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.posts as posts_service
-from pumpkit.core.db.models import ATTEMPT_SUCCEEDED, Post, User, VersionAttempt
+from pumpkit.auth.models import User
+from pumpkit.core.db.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.core.errors import RetryLaterError
 from pumpkit.core.llm import LLM
 from pumpkit.schemas.posts import PostResponse, TellResponse, VersionResponse

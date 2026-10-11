@@ -3,9 +3,9 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.users as user_service
-from pumpkit.core.db.models import GoogleIdentity, User
-from pumpkit.core.google_sign_in import GoogleClaims
+import pumpkit.auth.service.users as user_service
+from pumpkit.auth.google_sign_in import GoogleClaims
+from pumpkit.auth.models import GoogleIdentity, User
 
 
 async def get_google_identity(

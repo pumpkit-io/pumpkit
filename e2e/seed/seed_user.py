@@ -12,9 +12,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
 
-from pumpkit.core.db.models import InspirationAuthor, ScheduledPost, Subscription, User, XConnection
+from pumpkit.auth.models import User
+from pumpkit.auth.tokens import create_access_token
+from pumpkit.core.db.models import InspirationAuthor, ScheduledPost, Subscription, XConnection
 from pumpkit.core.db.session import _db_session_handler
-from pumpkit.core.security import create_access_token
 
 # Not a `.test`/`.example` TLD: those are special-use and rejected by the
 # EmailStr validation in UserProfileResponse.

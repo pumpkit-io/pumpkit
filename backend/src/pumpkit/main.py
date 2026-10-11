@@ -7,16 +7,13 @@ from slowapi.errors import RateLimitExceeded
 
 from pumpkit.api.routers import (
     billing,
-    google_auth,
     inspiration_authors,
-    magic_link_auth,
     posts,
     scheduled_posts,
-    sessions,
     support,
-    users,
     x_connection,
 )
+from pumpkit.auth.router import router as auth_router
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
@@ -44,10 +41,7 @@ app.add_middleware(
 )
 
 # The prefix lives here so routers stay unaware of their mount point.
-app.include_router(google_auth.router, prefix="/api/v1")
-app.include_router(magic_link_auth.router, prefix="/api/v1")
-app.include_router(sessions.router, prefix="/api/v1")
-app.include_router(users.router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 app.include_router(inspiration_authors.router, prefix="/api/v1")

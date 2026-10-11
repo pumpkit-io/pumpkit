@@ -2,7 +2,7 @@
 
 from typing import Any, cast
 
-from pumpkit.core.auth_mailer import MagicLinkEmail, read_logo_base64, resend_magic_link_params
+from pumpkit.auth.mailer import MagicLinkEmail, read_logo_base64, resend_magic_link_params
 
 EMAIL = MagicLinkEmail(
     to="alice@example.com",

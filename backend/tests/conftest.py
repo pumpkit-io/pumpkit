@@ -75,17 +75,18 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 
 import pumpkit.core.errors as errors_module  # noqa: E402
 import pumpkit.models  # noqa: E402,F401  (registers every table on Base.metadata)
-from pumpkit.api.dependencies import get_current_user  # noqa: E402
-from pumpkit.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
-from pumpkit.core.billing_gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
-from pumpkit.core.db.base import Base  # noqa: E402
-from pumpkit.core.db.models import MagicLink, Subscription, User  # noqa: E402
-from pumpkit.core.db.session import get_async_db  # noqa: E402
-from pumpkit.core.google_sign_in import (  # noqa: E402
+from pumpkit.auth.dependencies import get_current_user  # noqa: E402
+from pumpkit.auth.google_sign_in import (  # noqa: E402
     FakeGoogleSignIn,
     GoogleClaims,
     get_google_sign_in,
 )
+from pumpkit.auth.mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
+from pumpkit.auth.models import MagicLink, User  # noqa: E402
+from pumpkit.core.billing_gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
+from pumpkit.core.db.base import Base  # noqa: E402
+from pumpkit.core.db.models import Subscription  # noqa: E402
+from pumpkit.core.db.session import get_async_db  # noqa: E402
 from pumpkit.core.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402

@@ -11,9 +11,9 @@ from typing import Optional, Union
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.api.services.sessions import ClientInfo
+from pumpkit.auth.models import MagicLink
+from pumpkit.auth.service.sessions import ClientInfo
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import MagicLink
 from pumpkit.core.security import generate_token, hash_token
 from pumpkit.core.time import as_utc
 

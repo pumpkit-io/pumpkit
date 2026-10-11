@@ -8,8 +8,9 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.api.dependencies import get_current_user
-from pumpkit.core.db.models import Subscription, User, XConnection
+from pumpkit.auth.dependencies import get_current_user
+from pumpkit.auth.models import User
+from pumpkit.core.db.models import Subscription, XConnection
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.security import decrypt
 from pumpkit.core.x_publisher import (

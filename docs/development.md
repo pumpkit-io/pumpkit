@@ -80,7 +80,7 @@ Add the page to `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`, whi
 
 ### Edit the user profile
 
-Profile fields are saved through `PATCH` on the users router; the logic lives in `backend/src/pumpkit/api/services/users.py::update_user_profile` (router to service). The UI is `frontend/src/features/account/`.
+Profile fields are saved through `PATCH` on the users router; the logic lives in `backend/src/pumpkit/auth/service/users.py::update_user_profile` (router to service). The UI is `frontend/src/features/account/`.
 
 ### Track an event
 
@@ -88,7 +88,7 @@ Add it to `EVENTS` in `frontend/src/lib/analytics.ts`, then call `track('my_even
 
 ### Branding
 
-To rebrand, change `APP_NAME` and `VITE_APP_NAME`, the meta tags and JSON-LD graph in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, the wordmark font (Google Sans Code, loaded in `frontend/index.html` and declared as `fontFamily.wordmark` in `frontend/tailwind.config.ts`), `frontend/public/*.png`, `backend/src/pumpkit/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
+To rebrand, change `APP_NAME` and `VITE_APP_NAME`, the meta tags and JSON-LD graph in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, the wordmark font (Google Sans Code, loaded in `frontend/index.html` and declared as `fontFamily.wordmark` in `frontend/tailwind.config.ts`), `frontend/public/*.png`, `backend/src/pumpkit/auth/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
 
 ## Testing
 

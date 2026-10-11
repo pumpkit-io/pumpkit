@@ -1,6 +1,6 @@
 from sqlalchemy import inspect
 
-from pumpkit.core.db.models import User
+from pumpkit.auth.models import User
 
 
 async def test_all_tables_create_on_sqlite(db_engine):

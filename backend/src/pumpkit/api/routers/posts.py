@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.mediators.posts as posts_mediator
 from pumpkit.api.dependencies import require_subscribed_user
-from pumpkit.core.db.models import User
+from pumpkit.auth.models import User
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.rate_limit import limiter

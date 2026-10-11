@@ -13,7 +13,7 @@ from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import id_token
 from starlette.concurrency import run_in_threadpool
 
-from pumpkit.api.configs.google import GOOGLE_JWKS_REQUEST, GOOGLE_TOKEN_ENDPOINT
+from pumpkit.auth.google_config import GOOGLE_JWKS_REQUEST, GOOGLE_TOKEN_ENDPOINT
 from pumpkit.core.config import settings
 
 

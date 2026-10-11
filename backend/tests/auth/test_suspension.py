@@ -2,7 +2,7 @@
 A Suspended User can't sign in or keep a Session, over HTTP with real token verification.
 """
 
-from tests.api.routers.test_magic_link_request import GENERIC_MESSAGE
+from tests.auth.test_magic_link_request import GENERIC_MESSAGE
 from tests.conftest import magic_link_token
 
 

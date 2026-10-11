@@ -8,9 +8,9 @@ from urllib.parse import parse_qs, urlsplit
 from httpx import AsyncClient, Response
 from sqlalchemy import func, select
 
-import pumpkit.api.services.sessions as sessions
-from pumpkit.core.db.models import GoogleIdentity, User
-from pumpkit.core.google_sign_in import GoogleClaims
+import pumpkit.auth.service.sessions as sessions
+from pumpkit.auth.google_sign_in import GoogleClaims
+from pumpkit.auth.models import GoogleIdentity, User
 from tests.conftest import callback_fragment
 
 SIGN_IN_FAILED = "http://localhost:5173/login?error=sign_in_failed"

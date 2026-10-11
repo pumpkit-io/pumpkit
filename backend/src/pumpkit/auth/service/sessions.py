@@ -16,18 +16,14 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.refresh_tokens as refresh_tokens_service
-import pumpkit.api.services.users as user_service
+import pumpkit.auth.service.refresh_tokens as refresh_tokens_service
+import pumpkit.auth.service.users as user_service
+from pumpkit.auth.models import RefreshToken, SignInMethod, User
+from pumpkit.auth.tokens import create_access_token, create_refresh_token, verify_refresh_token
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import RefreshToken, SignInMethod, User
 from pumpkit.core.ids import ulid_with_prefix
 from pumpkit.core.logging import logger
-from pumpkit.core.security import (
-    create_access_token,
-    create_refresh_token,
-    hash_token,
-    verify_refresh_token,
-)
+from pumpkit.core.security import hash_token
 from pumpkit.core.time import as_utc
 
 # Responses that carry credentials must not be cached (OAuth 2.0, RFC 6749 §5.1).

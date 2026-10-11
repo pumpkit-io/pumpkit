@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Protocol
 
 import resend
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from resend.exceptions import ResendError
 
 from pumpkit.core.config import settings
-from pumpkit.core.templates import templates_helper
+
+_TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 
 class AuthMailerError(Exception):
@@ -36,14 +38,19 @@ class AuthMailer(Protocol):
 
 
 # Logo embedded inline in the Magic link email via CID. Replace
-# templates/emails/assets/logo.png with your own logo.
-_LOGO_PATH = Path(__file__).resolve().parent.parent / "templates" / "emails" / "assets" / "logo.png"
+# auth/templates/emails/assets/logo.png with your own logo.
+_LOGO_PATH = _TEMPLATES_DIR / "emails" / "assets" / "logo.png"
 _LOGO_CONTENT_ID = "app-logo"
 
 
+_email_templates = Environment(
+    loader=FileSystemLoader(_TEMPLATES_DIR),
+    autoescape=select_autoescape(["html", "xml"]),  # Escape user input against XSS
+)
+
+
 def resend_magic_link_params(email: MagicLinkEmail, logo_base64: str) -> resend.Emails.SendParams:
-    html = templates_helper.render_template(
-        "emails/magic_link.html",
+    html = _email_templates.get_template("emails/magic_link.html").render(
         display_name=email.display_name,
         magic_url=email.link_url,
         expires_in_minutes=email.expires_in_minutes,

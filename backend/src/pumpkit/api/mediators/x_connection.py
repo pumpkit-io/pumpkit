@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.api.services.x_authorizations as x_authorizations_service
 import pumpkit.api.services.x_connections as x_connections_service
-from pumpkit.core.db.models import User, XConnection
+from pumpkit.auth.models import User
+from pumpkit.core.db.models import XConnection
 from pumpkit.core.logging import logger
 from pumpkit.core.x_publisher import (
     XPublisher,

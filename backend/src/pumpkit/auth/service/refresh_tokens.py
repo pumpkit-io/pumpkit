@@ -1,6 +1,6 @@
 """
 Storage of refresh tokens. A Session is the set of refresh tokens sharing a `session_id`.
-Only the Sessions module (`api/services/sessions.py`) calls this. It flushes and never commits.
+Only the Sessions module (`auth/service/sessions.py`) calls this. It flushes and never commits.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -9,8 +9,8 @@ from typing import Optional
 from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.auth.models import RefreshToken, SignInMethod
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import RefreshToken, SignInMethod
 from pumpkit.core.security import hash_token
 
 
