@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
+import { CookieSettingsButton } from '@/features/analyticsConsent/CookieSettingsButton';
 import { cn } from '@/lib/utils';
 import { PRIVACY_PATH, TERMS_PATH } from './documents';
 import { OPERATOR } from './operator';
 
 const LINK_CLASS = 'text-foreground underline-offset-4 transition-colors hover:underline';
 
-/** The Operator's company details and the legal links, at the foot of every public page. */
+/** The Operator's company details, the legal links and Cookie settings, at the foot of every public page. */
 export function CompanyFooter({ className }: { className?: string }) {
   return (
     <footer
@@ -31,6 +32,9 @@ export function CompanyFooter({ className }: { className?: string }) {
               <Link to={TERMS_PATH} className={LINK_CLASS}>
                 Terms
               </Link>
+            </li>
+            <li>
+              <CookieSettingsButton className={LINK_CLASS} />
             </li>
             <li>
               <a href={`mailto:${OPERATOR.supportEmail}`} className={LINK_CLASS}>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PanelLeft, SquarePen } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
+import { CookieSettingsButton } from '@/features/analyticsConsent/CookieSettingsButton';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './useSidebar';
@@ -35,23 +36,24 @@ const LEGAL_LINKS = [
   { href: TERMS_PATH, label: 'Terms' },
 ];
 
+const LEGAL_LINK_CLASS =
+  'rounded-sm underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
 function LegalLinks() {
   return (
     <nav aria-label="Legal" className="px-4 pb-3">
-      <ul className="flex gap-4 text-xs text-muted-foreground">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         {LEGAL_LINKS.map(({ href, label }) => (
           <li key={href}>
             {/* A new tab, because leaving the signed-in layout would drop the Post on screen. */}
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener"
-              className="rounded-sm underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <a href={href} target="_blank" rel="noopener" className={LEGAL_LINK_CLASS}>
               {label}
             </a>
           </li>
         ))}
+        <li>
+          <CookieSettingsButton className={LEGAL_LINK_CLASS} />
+        </li>
       </ul>
     </nav>
   );

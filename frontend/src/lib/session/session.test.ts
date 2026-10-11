@@ -2,15 +2,13 @@ import { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
-vi.mock('@/lib/posthog', () => ({
-  identifyUser: vi.fn(),
+vi.mock('@/lib/analyticsConsent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analyticsConsent')>()),
   resetPostHog: vi.fn(),
-  capturePageview: vi.fn(),
-  posthog: { capture: vi.fn(), register: vi.fn() },
 }));
 
 import { hardRedirect } from '@/lib/navigation';
-import { resetPostHog } from '@/lib/posthog';
+import { resetPostHog } from '@/lib/analyticsConsent';
 import { api } from '@/services/apiService';
 import {
   installRefreshOnUnauthorized,

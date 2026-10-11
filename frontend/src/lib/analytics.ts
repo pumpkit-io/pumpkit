@@ -1,6 +1,6 @@
-import { posthog } from './posthog';
+import { captureEvent } from './analyticsConsent';
 
-const enabled = import.meta.env.VITE_POSTHOG_ENABLED === 'true';
+export { registerSuperProperties } from './analyticsConsent';
 
 // track() is typed against these keys, so an event must be declared here to be trackable.
 export const EVENTS = {
@@ -137,11 +137,5 @@ export const EVENTS = {
 export type EventName = keyof typeof EVENTS;
 
 export function track<E extends EventName>(event: E, properties?: Record<string, unknown>): void {
-  if (!enabled) return;
-  posthog.capture(event, properties);
-}
-
-export function registerSuperProperties(props: Record<string, unknown>): void {
-  if (!enabled) return;
-  posthog.register(props);
+  captureEvent(event, properties);
 }

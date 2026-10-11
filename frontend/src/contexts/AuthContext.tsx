@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { userService } from '../services/userService';
-import { identifyUser } from '../lib/posthog';
-import { POSTHOG_IDENTIFIED_KEY, session } from '../lib/session';
+import { POSTHOG_IDENTIFIED_KEY, identifyUser, useAnalyticsConsent } from '../lib/analyticsConsent';
+import { session } from '../lib/session';
 
 async function identifyFromBackend(): Promise<boolean> {
   try {
@@ -86,15 +86,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [status, checkTokenRefresh]);
 
   // The flag avoids a `$set` on every reload: PostHog re-emits it even for an unchanged distinct_id.
-  // Ending a Session clears the flag; AccountDialog re-identifies itself after a profile save.
+  // Ending a Session or withdrawing consent clears the flag; AccountDialog re-identifies after a profile save.
+  // Without Analytics consent the User is never identified (ADR 0009).
+  const analyticsConsent = useAnalyticsConsent();
   useEffect(() => {
     if (BYPASS_AUTH) return;
-    if (status !== 'authenticated') return;
+    if (status !== 'authenticated' || analyticsConsent !== 'granted') return;
     if (sessionStorage.getItem(POSTHOG_IDENTIFIED_KEY) === '1') return;
     void identifyFromBackend().then((ok) => {
       if (ok) sessionStorage.setItem(POSTHOG_IDENTIFIED_KEY, '1');
     });
-  }, [status]);
+  }, [status, analyticsConsent]);
 
   // Refresh on focus. Cross-tab changes reach us through the subscription.
   useEffect(() => {

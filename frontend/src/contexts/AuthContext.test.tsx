@@ -4,15 +4,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
-vi.mock('@/lib/posthog', () => ({
-  identifyUser: vi.fn(),
+vi.mock('posthog-js', () => {
+  const posthog = {
+    __loaded: false,
+    init: vi.fn(() => {
+      posthog.__loaded = true;
+    }),
+    opt_in_capturing: vi.fn(),
+    // Records whether PostHog was initialised at the moment of each identification.
+    identify: vi.fn(() => posthog.__loaded),
+    register: vi.fn(),
+    capture: vi.fn(),
+    reset: vi.fn(),
+  };
+  return { default: posthog };
+});
+vi.mock('@/lib/analyticsConsent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analyticsConsent')>()),
   resetPostHog: vi.fn(),
-  capturePageview: vi.fn(),
-  posthog: { capture: vi.fn(), register: vi.fn() },
 }));
 
 import { hardRedirect } from '@/lib/navigation';
-import { identifyUser, resetPostHog } from '@/lib/posthog';
+import posthog from 'posthog-js';
+import { grantAnalyticsConsent, resetPostHog, startAnalytics } from '@/lib/analyticsConsent';
 import { SESSION_STORAGE_KEY, session } from '@/lib/session';
 import { api } from '@/services/apiService';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -69,10 +83,15 @@ beforeEach(async () => {
   sessionStorage.clear();
   vi.mocked(hardRedirect).mockClear();
   vi.mocked(resetPostHog).mockClear();
-  vi.mocked(identifyUser).mockClear();
+  vi.mocked(posthog.identify).mockClear();
+  vi.mocked(posthog.init).mockClear();
+  (posthog as unknown as { __loaded: boolean }).__loaded = false;
+  vi.stubEnv('VITE_POSTHOG_ENABLED', 'true');
+  vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test');
 });
 afterEach(() => {
   api.defaults.adapter = originalAdapter;
+  vi.unstubAllEnvs();
 });
 
 describe('AuthProvider bootstrap', () => {
@@ -128,19 +147,45 @@ describe('AuthProvider bootstrap', () => {
 });
 
 describe('AuthProvider analytics identity', () => {
-  it('identifies the person once by User ID, keeping the email as a property', async () => {
+  it('never identifies a signed-in User without Analytics consent', async () => {
+    session.start('t', inMinutes(60));
+    const backend = fakeBackend();
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    expect(backend.calls('/users/me')).toBe(0);
+    expect(posthog.identify).not.toHaveBeenCalled();
+  });
+
+  it('identifies the person once by User ID after PostHog starts with stored consent', async () => {
+    localStorage.setItem('pumpkit:analytics-consent', '"granted"');
+    startAnalytics();
     session.start('t', inMinutes(60));
     fakeBackend();
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
 
-    await waitFor(() => expect(identifyUser).toHaveBeenCalled());
-    expect(identifyUser).toHaveBeenCalledTimes(1);
-    expect(identifyUser).toHaveBeenCalledWith('user_01HZX', {
+    await waitFor(() => expect(posthog.identify).toHaveBeenCalled());
+    expect(posthog.identify).toHaveBeenCalledTimes(1);
+    expect(posthog.identify).toHaveBeenCalledWith('user_01HZX', {
       email: 'a@example.com',
       first_name: 'Ada',
       last_name: null,
     });
+    expect(vi.mocked(posthog.identify).mock.results[0].value).toBe(true);
+  });
+
+  it('identifies a signed-in User once they accept analytics', async () => {
+    session.start('t', inMinutes(60));
+    fakeBackend();
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(posthog.identify).not.toHaveBeenCalled();
+
+    act(() => grantAnalyticsConsent());
+
+    await waitFor(() => expect(posthog.identify).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(posthog.identify).mock.results[0].value).toBe(true);
   });
 });
 

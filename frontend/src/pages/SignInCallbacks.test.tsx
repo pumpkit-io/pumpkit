@@ -4,11 +4,9 @@ import type { ReactElement } from 'react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
-vi.mock('@/lib/posthog', () => ({
-  identifyUser: vi.fn(),
+vi.mock('@/lib/analyticsConsent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analyticsConsent')>()),
   resetPostHog: vi.fn(),
-  capturePageview: vi.fn(),
-  posthog: { capture: vi.fn(), register: vi.fn() },
 }));
 
 import { session } from '@/lib/session';
