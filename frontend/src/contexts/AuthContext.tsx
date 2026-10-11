@@ -86,8 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [status, checkTokenRefresh]);
 
   // The flag avoids a `$set` on every reload: PostHog re-emits it even for an unchanged distinct_id.
-  // Ending a Session or withdrawing consent clears the flag; AccountDialog re-identifies after a profile save.
-  // Without Analytics consent the User is never identified (ADR 0009).
+  // Ending a Session or withdrawing consent clears it; AccountDialog re-identifies after a profile save.
   const analyticsConsent = useAnalyticsConsent();
   useEffect(() => {
     if (BYPASS_AUTH) return;

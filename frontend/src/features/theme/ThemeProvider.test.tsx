@@ -5,8 +5,8 @@ import { ThemeProvider } from './ThemeProvider';
 import { useTheme } from './useTheme';
 import { storage } from '@/lib/storage';
 
-vi.mock('@/lib/analytics', () => ({ registerSuperProperties: vi.fn() }));
-import { registerSuperProperties } from '@/lib/analytics';
+vi.mock('@/lib/analyticsConsent', () => ({ registerSuperProperties: vi.fn() }));
+import { registerSuperProperties } from '@/lib/analyticsConsent';
 
 function wrapper({ children }: { children: ReactNode }) {
   return <ThemeProvider>{children}</ThemeProvider>;

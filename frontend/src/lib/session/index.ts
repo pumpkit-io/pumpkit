@@ -33,8 +33,6 @@ export type StartFailureReason = 'missing_token' | 'invalid_expiry';
 
 export type StartFromFragmentResult = { ok: true } | { ok: false; reason: StartFailureReason };
 
-export { POSTHOG_IDENTIFIED_KEY };
-
 const ROUTE_AFTER_END: Record<EndSessionReason, string> = {
   user: signInPath(),
   session_ended: signInPath(),
