@@ -36,7 +36,11 @@ function useScrollToHash() {
   const { hash } = useLocation();
   useEffect(() => {
     if (!hash) return;
-    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+    // Instant, overriding the page's smooth scrolling: a long smooth scroll aims at where the
+    // heading was when it started, and the page still shifts under it, so it stops short.
+    document
+      .getElementById(decodeURIComponent(hash.slice(1)))
+      ?.scrollIntoView({ behavior: 'instant' });
   }, [hash]);
 }
 

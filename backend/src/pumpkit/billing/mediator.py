@@ -21,6 +21,7 @@ from pumpkit.billing.schemas import (
     PlanResponse,
     PlansListResponse,
 )
+from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
 
@@ -72,7 +73,8 @@ async def list_plans(gateway: BillingGateway) -> PlansListResponse:
             )
             for key in keys
             if (plan := resolved.get(key))
-        ]
+        ],
+        terms_version=TERMS_VERSION,
     )
 
 
@@ -109,7 +111,9 @@ async def create_checkout_session(
     """
     Create a Stripe Checkout for one unit of a configured Plan, with a Trial if the User is eligible.
 
-    An unknown Plan key is a 400 before any Stripe call; a Plan Stripe can't resolve, or any
+    A Terms version other than the current one is a 409 and an unknown Plan key a 400, both
+    before any Stripe call. Otherwise the User's acceptance of the Terms is recorded and
+    committed first, so it stands whatever Stripe does next (ADR 0010). A Plan Stripe can't resolve, or any
     gateway failure, is a 502. A User has at most one Running Subscription, so one who holds
     it gets a 409. The sync from Stripe runs first (ADR 0004), so a Subscription no webhook has
     reported still blocks the Checkout and uses up the Trial. Otherwise `incomplete`
@@ -117,9 +121,25 @@ async def create_checkout_session(
     start a Subscription. The User's row stays locked from the sync to the new Checkout, so
     concurrent Checkouts for one User run one at a time.
     """
+    if checkout_request.terms_version != TERMS_VERSION:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The Terms have changed. Please review the current Terms and accept them again.",
+        )
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Plan.")
+
+    await service.record_terms_acceptance(
+        db,
+        user_id=user.id,
+        terms_version=checkout_request.terms_version,
+        accepted_terms=checkout_request.accepted_terms,
+        requested_immediate_start=checkout_request.requested_immediate_start,
+        approved_specific_clauses=checkout_request.approved_specific_clauses,
+    )
+    # Sanctioned early commit: the acceptance is evidence and must outlive a failed Stripe call.
+    await db.commit()
 
     plan = next((p for p in await gateway.list_plans([plan_key]) if p.key == plan_key), None)
     if plan is None:

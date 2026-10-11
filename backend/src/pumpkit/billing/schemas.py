@@ -1,20 +1,37 @@
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool
 
 from pumpkit.billing.subscription_status import SubscriptionStatus
 
 
+def _require_true(value: bool) -> bool:
+    if not value:
+        raise ValueError("must be true")
+    return value
+
+
+# A ticked box: JSON `true` only, never `false`, `1` or a string.
+Accepted = Annotated[StrictBool, AfterValidator(_require_true)]
+
+
 class CheckoutRequest(BaseModel):
     """
-    Request to create a Stripe checkout session for a Plan, by key only.
-    The server decides the price, the quantity and any Trial, so any other field is rejected.
+    Request to create a Stripe checkout session for a Plan, by key, with the User's acceptance
+    of the Terms (ADR 0010). The server decides the price, the quantity and any Trial, so any
+    other field is rejected.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     plan_key: str = Field(..., min_length=1)
+    terms_version: str
+    accepted_terms: Accepted
+    # Waives the consumer's 14-day withdrawal right once the paid period starts.
+    requested_immediate_start: Accepted
+    # Approves the onerous clauses under arts. 1341 and 1342 of the Italian Civil Code.
+    approved_specific_clauses: Accepted
 
 
 class CheckoutResponse(BaseModel):
@@ -63,6 +80,7 @@ class PlanResponse(BaseModel):
 
 
 class PlansListResponse(BaseModel):
-    """The Plans Pumpkit sells, in display order."""
+    """The Plans Pumpkit sells, in display order, and the Terms version a Checkout must accept."""
 
     data: list[PlanResponse]
+    terms_version: str

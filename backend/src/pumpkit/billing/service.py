@@ -1,6 +1,6 @@
 """
 Pumpkit's copy of each Subscription, synced from the billing provider (ADR 0004),
-and the Stripe event log that makes webhooks idempotent.
+the Stripe event log that makes webhooks idempotent, and Users' acceptances of the Terms.
 """
 
 from dataclasses import dataclass
@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.billing.gateway import BillingGateway
-from pumpkit.billing.models import StripeEvent, Subscription
+from pumpkit.billing.models import StripeEvent, Subscription, TermsAcceptance
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 
@@ -139,6 +139,28 @@ async def sync_customer(
         subscription.cancel_at_period_end = state.cancel_at_period_end
         subscription.stripe_created_at = state.created_at
     await db.flush()
+
+
+async def record_terms_acceptance(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    terms_version: str,
+    accepted_terms: bool,
+    requested_immediate_start: bool,
+    approved_specific_clauses: bool,
+) -> TermsAcceptance:
+    """Record that the User accepted `terms_version` with these boxes ticked. Flushes, never commits."""
+    acceptance = TermsAcceptance(
+        user_id=user_id,
+        terms_version=terms_version,
+        accepted_terms=accepted_terms,
+        requested_immediate_start=requested_immediate_start,
+        approved_specific_clauses=approved_specific_clauses,
+    )
+    db.add(acceptance)
+    await db.flush()
+    return acceptance
 
 
 async def try_record_event(
