@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
+import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
 import { authService } from '../services/authService';
 import { track } from '../lib/analytics';
 import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
@@ -11,6 +12,8 @@ function emailDomain(email: string): string {
   const at = email.lastIndexOf('@');
   return at >= 0 ? email.slice(at + 1).toLowerCase() : 'unknown';
 }
+
+const NOTICE_LINK_CLASS = 'text-foreground underline underline-offset-4 hover:opacity-70';
 
 const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
   [SIGN_IN_ERROR.invalidMagicLink]:
@@ -111,6 +114,18 @@ export function Login() {
                     {loading ? 'Sending…' : 'Email me a magic link'}
                   </Button>
                 </form>
+                {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}
+                <p className="text-center text-xs leading-5 text-muted-foreground">
+                  By continuing, you agree to the{' '}
+                  <Link to={TERMS_PATH} className={NOTICE_LINK_CLASS}>
+                    Terms
+                  </Link>{' '}
+                  and acknowledge the{' '}
+                  <Link to={PRIVACY_PATH} className={NOTICE_LINK_CLASS}>
+                    Privacy Policy
+                  </Link>
+                  .
+                </p>
               </div>
             </div>
           </div>
