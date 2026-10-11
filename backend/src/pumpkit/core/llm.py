@@ -14,14 +14,19 @@ from typing import Any, Optional, Protocol, TypeVar, Union
 from openai import OpenAIError
 from pydantic import BaseModel
 
+from pumpkit.core.errors import AppError
 from pumpkit.core.openrouter import OpenRouterClient, openrouter_client
 from pumpkit.schemas.openrouter import ModelUsage, StructuredResult
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class LLMError(Exception):
+class LLMError(AppError):
     """A model call failed: network, provider error, or an answer that can't be read."""
+
+    status_code = 502
+    public_detail = "Writing the Post failed. Please try again."
+    reported = True
 
 
 class LLM(Protocol):

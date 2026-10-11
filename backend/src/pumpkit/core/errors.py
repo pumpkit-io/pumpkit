@@ -1,26 +1,44 @@
 import math
 import re
 from datetime import datetime, timezone
-from typing import Mapping
+from typing import Any, ClassVar, Mapping
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from pumpkit.core.analytics import posthog_client
-from pumpkit.core.billing_gateway import BillingProviderError
-from pumpkit.core.llm import LLMError
 from pumpkit.core.logging import logger
-from pumpkit.core.openrouter import LLMNotConfiguredError
-from pumpkit.core.x_publisher import XPublisherError, XPublisherNotConfiguredError
-from pumpkit.core.x_reader import XReaderError, XReaderNotConfiguredError
 
 
-class RetryLaterError(Exception):
+class AppError(Exception):
+    """
+    An error a client gets as its own HTTP response, from the one handler the app registers.
+
+    Subclasses set `status_code`, `public_detail` and `reported`, and override
+    `response_body` or `response_headers` when the response carries more.
+    """
+
+    status_code: ClassVar[int] = 500
+    # What the client reads as `detail`; None shows `str(error)`, so it must hold no secrets.
+    public_detail: ClassVar[str | None] = None
+    # Log and capture the error in PostHog, and add the `error_id` a User reports to support.
+    reported: ClassVar[bool] = False
+
+    def response_body(self) -> dict[str, Any]:
+        return {"detail": self.public_detail if self.public_detail is not None else str(self)}
+
+    def response_headers(self) -> dict[str, str] | None:
+        return None
+
+
+class RetryLaterError(AppError):
     """
     A request refused until `retry_at`. Answered as a 429 whose body carries `detail` and
     `retry_at`, with a `Retry-After` header in whole seconds.
     """
+
+    status_code = 429
 
     def __init__(self, detail: str, *, retry_at: datetime, now: datetime) -> None:
         super().__init__(detail)
@@ -28,6 +46,24 @@ class RetryLaterError(Exception):
         self.retry_at = retry_at
         # Rounded up, so a client that waits exactly this long is not refused again.
         self.retry_after_seconds = max(1, math.ceil((retry_at - now).total_seconds()))
+
+    def response_body(self) -> dict[str, Any]:
+        return {
+            "detail": self.detail,
+            "retry_at": self.retry_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    def response_headers(self) -> dict[str, str]:
+        return {"Retry-After": str(self.retry_after_seconds)}
+
+
+class NotConfiguredError(AppError):
+    """An operator's setup gap, not a bug: the message names the missing variable."""
+
+    # All three are set so they win over the adapter error listed after this in a subclass's bases.
+    status_code = 503
+    public_detail = None
+    reported = False
 
 
 _REDACTED = "[redacted]"
@@ -94,71 +130,17 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-async def billing_provider_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    error_id = report_unexpected_exception(request, exc)
+async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, AppError)
+    content = exc.response_body()
+    if exc.reported:
+        content["error_id"] = report_unexpected_exception(request, exc)
     return JSONResponse(
-        status_code=502,
-        content={
-            "detail": "Billing is unavailable right now. Please try again later.",
-            "error_id": error_id,
-        },
-    )
-
-
-async def x_reader_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    error_id = report_unexpected_exception(request, exc)
-    return JSONResponse(
-        status_code=502,
-        content={
-            "detail": "X can't be read right now. Please try again later.",
-            "error_id": error_id,
-        },
-    )
-
-
-async def x_publisher_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    error_id = report_unexpected_exception(request, exc)
-    return JSONResponse(
-        status_code=502,
-        content={
-            "detail": "X isn't answering right now. Please try again later.",
-            "error_id": error_id,
-        },
-    )
-
-
-async def retry_later_handler(request: Request, exc: Exception) -> JSONResponse:
-    assert isinstance(exc, RetryLaterError)
-    return JSONResponse(
-        status_code=429,
-        content={
-            "detail": exc.detail,
-            "retry_at": exc.retry_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-        },
-        headers={"Retry-After": str(exc.retry_after_seconds)},
-    )
-
-
-async def not_configured_handler(request: Request, exc: Exception) -> JSONResponse:
-    # An operator's setup gap, not a bug: the message names the missing variable.
-    return JSONResponse(status_code=503, content={"detail": str(exc)})
-
-
-async def llm_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    error_id = report_unexpected_exception(request, exc)
-    return JSONResponse(
-        status_code=502,
-        content={"detail": "Writing the Post failed. Please try again.", "error_id": error_id},
+        status_code=exc.status_code, content=content, headers=exc.response_headers()
     )
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    app.add_exception_handler(BillingProviderError, billing_provider_error_handler)
-    app.add_exception_handler(LLMError, llm_error_handler)
-    app.add_exception_handler(LLMNotConfiguredError, not_configured_handler)
-    app.add_exception_handler(RetryLaterError, retry_later_handler)
-    app.add_exception_handler(XReaderNotConfiguredError, not_configured_handler)
-    app.add_exception_handler(XReaderError, x_reader_error_handler)
-    app.add_exception_handler(XPublisherNotConfiguredError, not_configured_handler)
-    app.add_exception_handler(XPublisherError, x_publisher_error_handler)
+    app.add_exception_handler(AppError, app_error_handler)
+    # Starlette runs this one in ServerErrorMiddleware, which re-raises after responding.
     app.add_exception_handler(Exception, unhandled_exception_handler)

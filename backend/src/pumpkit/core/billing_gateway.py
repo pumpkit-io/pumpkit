@@ -25,11 +25,16 @@ from starlette.concurrency import run_in_threadpool
 from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateParams
 
 from pumpkit.core.config import settings
+from pumpkit.core.errors import AppError
 from pumpkit.core.subscription_status import SubscriptionStatus
 
 
-class BillingProviderError(Exception):
+class BillingProviderError(AppError):
     """The billing provider failed or answered with something unusable."""
+
+    status_code = 502
+    public_detail = "Billing is unavailable right now. Please try again later."
+    reported = True
 
 
 class WebhookSignatureError(Exception):

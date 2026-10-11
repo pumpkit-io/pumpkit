@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from pumpkit.core.config import settings
+from pumpkit.core.errors import NotConfiguredError
 from pumpkit.schemas.openrouter import (
     AssembledToolCall,
     CompleteResult,
@@ -30,7 +31,7 @@ _LLM_CLIENT_TIMEOUT = httpx.Timeout(
 _LLM_CLIENT_MAX_RETRIES = 2
 
 
-class LLMNotConfiguredError(RuntimeError):
+class LLMNotConfiguredError(NotConfiguredError):
     """Raised when an LLM call is attempted without OPENROUTER_API_KEY configured."""
 
 

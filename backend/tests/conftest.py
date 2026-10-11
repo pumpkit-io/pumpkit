@@ -73,7 +73,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 from sqlalchemy.pool import NullPool  # noqa: E402
 
-import pumpkit.core.errors as exceptions_module  # noqa: E402
+import pumpkit.core.errors as errors_module  # noqa: E402
 from pumpkit.api.dependencies import get_current_user  # noqa: E402
 from pumpkit.core.auth_mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
 from pumpkit.core.billing_gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
@@ -432,7 +432,7 @@ def lift_suspension(db) -> Callable[[str], Awaitable[None]]:
 def fake_posthog(monkeypatch) -> MagicMock:
     """Replace the PostHog client the global handler captures exceptions with."""
     fake = MagicMock()
-    monkeypatch.setattr(exceptions_module, "posthog_client", fake)
+    monkeypatch.setattr(errors_module, "posthog_client", fake)
     return fake
 
 

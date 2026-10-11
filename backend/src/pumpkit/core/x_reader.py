@@ -17,6 +17,7 @@ from typing import Any, Optional, Protocol
 import httpx
 
 from pumpkit.core.config import settings
+from pumpkit.core.errors import AppError, NotConfiguredError
 
 TWITTERAPI_IO_LAST_TWEETS_URL = "https://api.twitterapi.io/twitter/user/last_tweets"
 _TIMEOUT_SECONDS = 30.0
@@ -29,11 +30,15 @@ _CREATED_AT_FORMAT = "%a %b %d %H:%M:%S %z %Y"
 _NOT_FOUND_MESSAGE = re.compile(r"not found|not exist|no such user", re.IGNORECASE)
 
 
-class XReaderError(Exception):
+class XReaderError(AppError):
     """Reading from X failed: network, HTTP, or a response that can't be read."""
 
+    status_code = 502
+    public_detail = "X can't be read right now. Please try again later."
+    reported = True
 
-class XReaderNotConfiguredError(XReaderError):
+
+class XReaderNotConfiguredError(NotConfiguredError, XReaderError):
     """Raised when X is read without TWITTERAPI_IO_API_KEY configured."""
 
     def __init__(self) -> None:

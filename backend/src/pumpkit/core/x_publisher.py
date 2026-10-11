@@ -23,6 +23,7 @@ from urllib.parse import urlencode
 import httpx
 
 from pumpkit.core.config import settings
+from pumpkit.core.errors import AppError, NotConfiguredError
 
 X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize"
 X_TOKEN_URL = "https://api.x.com/2/oauth2/token"
@@ -41,11 +42,15 @@ _PERMANENT_TOKEN_ERRORS = {"invalid_grant", "invalid_client"}
 TokenTypeHint = Literal["access_token", "refresh_token"]
 
 
-class XPublisherError(Exception):
+class XPublisherError(AppError):
     """A call to X failed: network, HTTP, or a response that can't be read."""
 
+    status_code = 502
+    public_detail = "X isn't answering right now. Please try again later."
+    reported = True
 
-class XPublisherNotConfiguredError(XPublisherError):
+
+class XPublisherNotConfiguredError(NotConfiguredError, XPublisherError):
     """Raised when X is called without the X app settings."""
 
     def __init__(self) -> None:
