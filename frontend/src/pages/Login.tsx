@@ -6,6 +6,7 @@ import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
 import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
 import { authService } from '../services/authService';
+import { errorMessage, errorStatus } from '../services/apiErrors';
 import { track } from '../lib/analytics';
 import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
 
@@ -19,7 +20,13 @@ const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
     'That magic link is invalid or has expired. Request a new one below.',
   [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
   [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Try again.",
+  [SIGN_IN_ERROR.emailNotAllowed]: "This instance doesn't accept sign-ins from that email.",
 };
+
+/** The 403 the backend answers when the Sign-up allowlist refuses the email. */
+function isEmailNotAllowed(err: unknown): boolean {
+  return errorStatus(err) === 403 && errorMessage(err, '') === SIGN_IN_ERROR.emailNotAllowed;
+}
 
 export function Login() {
   const location = useLocation();
@@ -50,7 +57,11 @@ export function Login() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown';
       track('login_magic_link_requested_failed', { error_message: message });
-      setError("We couldn't send the magic link. Try again in a moment.");
+      setError(
+        isEmailNotAllowed(err)
+          ? SIGN_IN_ERROR_MESSAGES[SIGN_IN_ERROR.emailNotAllowed]
+          : "We couldn't send the magic link. Try again in a moment.",
+      );
     } finally {
       setLoading(false);
     }

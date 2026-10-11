@@ -6,6 +6,7 @@ export const SIGN_IN_ERROR = {
   invalidMagicLink: 'invalid_magic_link',
   accountSuspended: 'account_suspended',
   signInFailed: 'sign_in_failed',
+  emailNotAllowed: 'email_not_allowed',
 } as const;
 
 export type SignInErrorCode = (typeof SIGN_IN_ERROR)[keyof typeof SIGN_IN_ERROR];
