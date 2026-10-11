@@ -21,7 +21,7 @@ const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
     'That magic link is invalid or has expired. Request a new one below.',
   [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
   [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Try again.",
-  [SIGN_IN_ERROR.emailNotAllowed]: "This instance doesn't accept sign-ins from that email.",
+  [SIGN_IN_ERROR.emailNotAllowed]: "This site doesn't accept sign-ins from that email address.",
 };
 
 /** The 403 the backend answers when the Sign-up allowlist refuses the email. */

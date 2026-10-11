@@ -29,7 +29,7 @@ describe('the sign-in page', () => {
     ['invalid_magic_link', /magic link is invalid or has expired/i],
     ['account_suspended', /account has been suspended/i],
     ['sign_in_failed', /couldn't sign you in/i],
-    ['email_not_allowed', /doesn't accept sign-ins from that email/i],
+    ['email_not_allowed', /^This site doesn't accept sign-ins from that email address\.$/i],
   ])('explains the %s error', (code, message) => {
     renderLogin(`/login?error=${code}`);
 
@@ -107,7 +107,7 @@ describe('the sign-in page', () => {
     expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
   });
 
-  it('says the Instance does not accept an email the Sign-up allowlist refuses', async () => {
+  it('says the site does not accept an email the Sign-up allowlist refuses', async () => {
     vi.mocked(authService.requestMagicLink).mockRejectedValueOnce({
       response: { status: 403, data: { detail: 'email_not_allowed' } },
     });
@@ -117,7 +117,7 @@ describe('the sign-in page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Email me a magic link' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /doesn't accept sign-ins from that email/i,
+      /^This site doesn't accept sign-ins from that email address\.$/i,
     );
   });
 });
