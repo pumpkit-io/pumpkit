@@ -14,7 +14,7 @@ from pumpkit.billing.gateway import BillingProviderError
 from pumpkit.core.errors import AppError, RetryLaterError
 from pumpkit.main import app as main_app
 from pumpkit.posts.llm import LLMError
-from pumpkit.posts.openrouter import LLMNotConfiguredError
+from pumpkit.posts.llm_client import LLMNotConfiguredError
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,

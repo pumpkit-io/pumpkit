@@ -13,7 +13,7 @@ from typing import Optional, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.posts.llm import LLM
-from pumpkit.posts.openrouter_schemas import StructuredResult
+from pumpkit.posts.llm_schemas import StructuredResult
 from pumpkit.posts.writing.constants import (
     CACHE_TTL,
     HUMANIZING_MODEL,

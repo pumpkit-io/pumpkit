@@ -15,8 +15,8 @@ from openai import OpenAIError
 from pydantic import BaseModel
 
 from pumpkit.core.errors import AppError
-from pumpkit.posts.openrouter import OpenRouterClient, openrouter_client
-from pumpkit.posts.openrouter_schemas import ModelUsage, StructuredResult
+from pumpkit.posts.llm_client import LLMClient, llm_client
+from pumpkit.posts.llm_schemas import ModelUsage, StructuredResult
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -40,8 +40,8 @@ class LLM(Protocol):
     ) -> StructuredResult[T]: ...
 
 
-class OpenRouterLLM:
-    def __init__(self, client: OpenRouterClient) -> None:
+class OpenAICompatibleLLM:
+    def __init__(self, client: LLMClient) -> None:
         self._client = client
 
     async def structured(
@@ -103,4 +103,4 @@ class FakeLLM:
 @lru_cache
 def get_llm() -> LLM:
     """FastAPI dependency for the `LLM` port."""
-    return OpenRouterLLM(openrouter_client)
+    return OpenAICompatibleLLM(llm_client)

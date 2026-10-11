@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import NotConfiguredError
-from pumpkit.posts.openrouter_schemas import (
+from pumpkit.posts.llm_schemas import (
     AssembledToolCall,
     CompleteResult,
     ModelUsage,
@@ -35,7 +35,7 @@ class LLMNotConfiguredError(NotConfiguredError):
     """Raised when an LLM call is attempted without OPENROUTER_API_KEY configured."""
 
 
-class OpenRouterClient:
+class LLMClient:
     """Async wrapper around OpenRouter's OpenAI-compatible chat completions API.
 
     The SDK client is created on first use, so the app boots without OPENROUTER_API_KEY.
@@ -249,7 +249,7 @@ class OpenRouterClient:
                 kwargs["tool_choice"] = tool_choice
 
         kwargs.update(
-            OpenRouterClient._prune_none(
+            LLMClient._prune_none(
                 {
                     "temperature": temperature,
                     "max_tokens": max_tokens,
@@ -264,4 +264,4 @@ class OpenRouterClient:
         return kwargs
 
 
-openrouter_client = OpenRouterClient()
+llm_client = LLMClient()

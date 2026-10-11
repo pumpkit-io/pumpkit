@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
     BILLING_TRIAL_PERIOD_DAYS: int = Field(ge=0)
 
-    # Optional: when unset, pumpkit.posts.openrouter raises LLMNotConfiguredError on use, not at boot.
+    # Optional: when unset, pumpkit.posts.llm_client raises LLMNotConfiguredError on use, not at boot.
     OPENROUTER_API_KEY: Optional[str] = None
 
     # Optional: when unset, pumpkit.authors.x_reader raises XReaderNotConfiguredError on use, not at boot.
