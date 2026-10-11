@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     FERNET_ENCRYPTION_KEY: str
     MAGIC_LINK_TOKEN_DURATION_MINUTES: int
     MAGIC_LINK_TOKEN_NUM_BYTES: int
+    # Comma-separated addresses and `@domain` entries that may sign in; empty lets anyone in.
+    SIGN_UP_ALLOWLIST: str = ""
 
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
