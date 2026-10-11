@@ -19,19 +19,19 @@ Accepted = Annotated[StrictBool, AfterValidator(_require_true)]
 class CheckoutRequest(BaseModel):
     """
     Request to create a Stripe checkout session for a Plan, by key, with the User's acceptance
-    of the Terms (ADR 0010). The server decides the price, the quantity and any Trial, so any
-    other field is rejected.
+    of the Terms (ADR 0010) where the Instance has Terms (ADR 0011). The server decides the
+    price, the quantity and any Trial, so any other field is rejected.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     plan_key: str = Field(..., min_length=1)
-    terms_version: str
-    accepted_terms: Accepted
+    terms_version: Optional[str] = None
+    accepted_terms: Optional[Accepted] = None
     # Waives the consumer's 14-day withdrawal right once the paid period starts.
-    requested_immediate_start: Accepted
+    requested_immediate_start: Optional[Accepted] = None
     # Approves the onerous clauses under arts. 1341 and 1342 of the Italian Civil Code.
-    approved_specific_clauses: Accepted
+    approved_specific_clauses: Optional[Accepted] = None
 
 
 class CheckoutResponse(BaseModel):
@@ -80,7 +80,10 @@ class PlanResponse(BaseModel):
 
 
 class PlansListResponse(BaseModel):
-    """The Plans Pumpkit sells, in display order, and the Terms version a checkout must accept."""
+    """
+    The Plans Pumpkit sells, in display order, and the Terms version a checkout must accept.
+    `terms_version` is None where the Instance has no Operator details, so no Terms to accept.
+    """
 
     data: list[PlanResponse]
-    terms_version: str
+    terms_version: Optional[str]

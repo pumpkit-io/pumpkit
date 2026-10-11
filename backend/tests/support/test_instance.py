@@ -21,7 +21,9 @@ def posthog_on(monkeypatch):
     monkeypatch.setattr(settings, "POSTHOG_UI_HOST", "https://eu.posthog.com")
 
 
-async def test_instance_without_posthog_has_no_analytics(client, posthog_off, monkeypatch):
+async def test_instance_without_posthog_has_no_analytics(
+    client, posthog_off, no_operator_details, monkeypatch
+):
     monkeypatch.setattr(settings, "APP_NAME", "acmeWriter")
 
     response = await client.get("/api/v1/instance")
@@ -76,3 +78,29 @@ async def test_instance_with_google_offers_both_sign_in_methods(client):
     response = await client.get("/api/v1/instance")
 
     assert response.json()["sign_in_methods"] == ["magic_link", "google"]
+
+
+async def test_instance_without_operator_details_has_no_operator(client, no_operator_details):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["operator"] is None
+
+
+async def test_instance_with_operator_details_carries_them(client, monkeypatch):
+    monkeypatch.setattr(settings, "OPERATOR_NAME", "Example S.R.L.")
+    monkeypatch.setattr(settings, "OPERATOR_ADDRESS", "Via Roma 1, Milano, Italy")
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", "help@example.org")
+    monkeypatch.setattr(settings, "OPERATOR_VAT_ID", "IT01234567890")
+    monkeypatch.setattr(settings, "OPERATOR_PEC", "example@pec.it")
+
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["operator"] == {
+        "name": "Example S.R.L.",
+        "address": "Via Roma 1, Milano, Italy",
+        "vat_id": "IT01234567890",
+        "rea": None,
+        "share_capital": None,
+        "pec": "example@pec.it",
+        "support_email": "help@example.org",
+    }

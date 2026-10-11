@@ -10,3 +10,9 @@ async def test_contact_redirects_to_support_mailto():
     response = await transport.handle_async_request(request)
     assert response.status_code == 303
     assert response.headers["location"] == "mailto:support@example.com"
+
+
+async def test_contact_answers_404_without_operator_details(client, no_operator_details):
+    response = await client.get("/api/v1/support/contact")
+
+    assert response.status_code == 404
