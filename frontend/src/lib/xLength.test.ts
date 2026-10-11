@@ -4,12 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { xWeightedLength } from './xLength';
 import { X_TLDS } from './xTlds';
 
-const backendPublishing = path.resolve(__dirname, '../../../backend/app/publishing');
+const backendXConnection = path.resolve(__dirname, '../../../backend/src/pumpkit/x_connection');
 
 // The backend's cases, so the composer's counter and the backend's check agree.
 const CASES: { note: string; text: string; length: number }[] = JSON.parse(
   readFileSync(
-    path.resolve(__dirname, '../../../backend/app/tests/publishing/x_weighted_length_cases.json'),
+    path.resolve(__dirname, '../../../backend/tests/x_connection/x_weighted_length_cases.json'),
     'utf8',
   ),
 );
@@ -24,7 +24,7 @@ describe('xWeightedLength', () => {
   });
 
   it('knows the same TLDs as the backend', () => {
-    const backend = readFileSync(path.join(backendPublishing, 'x_tlds.txt'), 'utf8')
+    const backend = readFileSync(path.join(backendXConnection, 'x_tlds.txt'), 'utf8')
       .split('\n')
       .filter((line) => line && !line.startsWith('#'));
     expect(X_TLDS).toEqual(backend);

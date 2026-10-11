@@ -1,12 +1,12 @@
 [project]
 name = "pumpkit-backend"
 version = "0.1.0"
-description = ""
+description = "Backend for Pumpkit, an open-source AI writing tool for X that writes Posts in the style of chosen X authors and publishes them on schedule."
 license = "AGPL-3.0-only"
 authors = [
     {name = "Francesco Paoli Leonardi", email = "fpaolileonardi@gmail.com"}
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.109.0",
     "uvicorn>=0.27.0",
@@ -45,10 +45,11 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "respx>=0.23.0",
     "aiosqlite>=0.21.0",
+    "import-linter>=2.15",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
+packages = ["src/pumpkit"]
 
 [tool.ruff]
 line-length = 100
@@ -70,6 +71,9 @@ exclude = [
     "dist",
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["pumpkit"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
@@ -77,14 +81,109 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pyright]
-include = ["app"]
+include = ["src", "tests"]
 typeCheckingMode = "standard"
 pythonVersion = "3.13"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["app/tests"]
+testpaths = ["tests"]
+
+# ADR 0008's import rules. pumpkit.main and pumpkit.models wire every area together, so they
+# sit outside the layers.
+[tool.importlinter]
+root_packages = ["pumpkit"]
+
+[[tool.importlinter.contracts]]
+name = "Areas import only the areas below them"
+type = "layers"
+layers = [
+    "pumpkit.scheduling",
+    "pumpkit.posts",
+    "pumpkit.authors | pumpkit.x_connection | pumpkit.support",
+    "pumpkit.billing",
+    "pumpkit.auth",
+    "pumpkit.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "core imports no area"
+type = "forbidden"
+source_modules = ["pumpkit.core"]
+forbidden_modules = [
+    "pumpkit.auth",
+    "pumpkit.billing",
+    "pumpkit.authors",
+    "pumpkit.x_connection",
+    "pumpkit.support",
+    "pumpkit.posts",
+    "pumpkit.scheduling",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only auth and pumpkit.main import auth.router or auth.mediator"
+type = "protected"
+protected_modules = ["pumpkit.auth.router", "pumpkit.auth.mediator"]
+allowed_importers = ["pumpkit.auth", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Only billing and pumpkit.main import billing.router or billing.mediator"
+type = "protected"
+protected_modules = ["pumpkit.billing.router", "pumpkit.billing.mediator"]
+allowed_importers = ["pumpkit.billing", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Only authors and pumpkit.main import authors.router or authors.mediator"
+type = "protected"
+protected_modules = ["pumpkit.authors.router", "pumpkit.authors.mediator"]
+allowed_importers = ["pumpkit.authors", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Only x_connection and pumpkit.main import x_connection.router or x_connection.mediator"
+type = "protected"
+protected_modules = ["pumpkit.x_connection.router", "pumpkit.x_connection.mediator"]
+allowed_importers = ["pumpkit.x_connection", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Only support and pumpkit.main import support.router"
+type = "protected"
+protected_modules = ["pumpkit.support.router"]
+allowed_importers = ["pumpkit.support", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Only posts and pumpkit.main import posts.router or posts.mediator"
+type = "protected"
+protected_modules = ["pumpkit.posts.router", "pumpkit.posts.mediator"]
+allowed_importers = ["pumpkit.posts", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Only scheduling and pumpkit.main import scheduling.router or scheduling.mediator"
+type = "protected"
+protected_modules = ["pumpkit.scheduling.router", "pumpkit.scheduling.mediator"]
+allowed_importers = ["pumpkit.scheduling", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Router, then mediator, then service inside each area"
+type = "layers"
+containers = [
+    "pumpkit.auth",
+    "pumpkit.billing",
+    "pumpkit.authors",
+    "pumpkit.x_connection",
+    "pumpkit.support",
+    "pumpkit.posts",
+    "pumpkit.scheduling",
+]
+# Scheduling's publisher process sits beside the mediator: both hand a publish to publishing,
+# which commits it over publish's flush-only steps.
+layers = [
+    "router",
+    "(mediator) | (publisher)",
+    "(publishing)",
+    "(publish)",
+    "(service)",
+]
 
 [build-system]
 requires = ["hatchling"]
