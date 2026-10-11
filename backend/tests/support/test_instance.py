@@ -9,6 +9,12 @@ def posthog_off(monkeypatch):
 
 
 @pytest.fixture
+def google_off(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", None)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", None)
+
+
+@pytest.fixture
 def posthog_on(monkeypatch):
     monkeypatch.setattr(settings, "POSTHOG_PROJECT_API_KEY", "phc_test")
     monkeypatch.setattr(settings, "POSTHOG_HOST", "https://pumpkit.example/ph-relay")
@@ -46,3 +52,15 @@ async def test_instance_answers_without_a_session(new_browser, posthog_off):
 
     assert response.status_code == 200
     assert response.json()["app_name"] == settings.APP_NAME
+
+
+async def test_instance_without_google_offers_only_the_magic_link(client, google_off):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["sign_in_methods"] == ["magic_link"]
+
+
+async def test_instance_with_google_offers_both_sign_in_methods(client):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["sign_in_methods"] == ["magic_link", "google"]

@@ -3,19 +3,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Login } from './Login';
 import { authService } from '@/services/authService';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 
 vi.mock('@/services/authService', () => ({
   authService: { requestMagicLink: vi.fn(), getGoogleLoginUrl: vi.fn() },
 }));
 
-function renderLogin(path: string) {
+function renderLogin(path: string, instance: Instance = DEFAULT_INSTANCE) {
   render(
-    <MemoryRouter
-      initialEntries={[path]}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
-      <Login />
-    </MemoryRouter>,
+    <InstanceProvider instance={instance}>
+      <MemoryRouter
+        initialEntries={[path]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Login />
+      </MemoryRouter>
+    </InstanceProvider>,
   );
 }
 
@@ -77,6 +81,21 @@ describe('the sign-in page', () => {
       'href',
       '/privacy',
     );
+  });
+
+  it('offers Google next to the magic link when the Instance has Google sign-in', () => {
+    renderLogin('/login', { ...DEFAULT_INSTANCE, sign_in_methods: ['magic_link', 'google'] });
+
+    expect(screen.getByRole('button', { name: /google/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
+  });
+
+  it('offers only the magic link when the Instance has no Google sign-in', () => {
+    renderLogin('/login', { ...DEFAULT_INSTANCE, sign_in_methods: ['magic_link'] });
+
+    expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/google/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
   });
 
   it('says the Instance does not accept an email the Sign-up allowlist refuses', async () => {

@@ -8,7 +8,7 @@ from functools import lru_cache
 from typing import Any, Optional, Protocol
 
 import requests
-from fastapi import status
+from fastapi import HTTPException, status
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import id_token
 from starlette.concurrency import run_in_threadpool
@@ -120,3 +120,9 @@ class FakeGoogleSignIn:
 def get_google_sign_in() -> GoogleSignIn:
     """FastAPI dependency for the `GoogleSignIn` port."""
     return GoogleOAuthSignIn()
+
+
+def require_google_sign_in() -> None:
+    """FastAPI dependency: 404 on an Instance without the Google settings (ADR 0011)."""
+    if not settings.is_google_configured():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
