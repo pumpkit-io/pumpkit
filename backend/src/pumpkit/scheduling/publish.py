@@ -1,6 +1,6 @@
 """
-The steps of publishing a Scheduled post on X (ADR 0007), sequenced by `mediators/publishing`.
-Flushes and never commits: the mediator commits the claim and any rotated tokens before X.
+The steps of publishing a Scheduled post on X (ADR 0007), sequenced by `publishing`.
+Flushes and never commits: `publishing` commits the claim and any rotated tokens before X.
 """
 
 from dataclasses import dataclass
@@ -9,12 +9,12 @@ from typing import Literal, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.billing.service as subscriptions_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.analytics import posthog_client
-from pumpkit.core.db.models import ScheduledPost
 from pumpkit.core.time import as_utc
+from pumpkit.scheduling import service
+from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
@@ -69,7 +69,7 @@ class Failed(Exception):
 
 async def fail_stuck(db: AsyncSession, *, now: datetime) -> list[str]:
     """Fail Scheduled posts a crashed publisher left in publishing: X may have taken them."""
-    return await scheduled_posts_service.fail_stuck(
+    return await service.fail_stuck(
         db, publishing_since=now - STUCK_AFTER, reason=OUTCOME_UNKNOWN_REASON, now=now
     )
 
@@ -150,11 +150,11 @@ async def record_failure(
     """
     next_attempt_at = _next_attempt_at(scheduled_post, now=now)
     if failed.category == "x_unavailable" and next_attempt_at:
-        await scheduled_posts_service.release_for_retry(
+        await service.release_for_retry(
             db, scheduled_post, next_attempt_at=next_attempt_at, now=now
         )
         return False
-    await scheduled_posts_service.record_failed(db, scheduled_post, reason=failed.reason, now=now)
+    await service.record_failed(db, scheduled_post, reason=failed.reason, now=now)
     return True
 
 

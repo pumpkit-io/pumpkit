@@ -5,17 +5,16 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.posts.service as posts_service
-import pumpkit.publishing.rules as rules
 import pumpkit.x_connection.service as x_connections_service
-from pumpkit.api.mediators.publishing import publish_scheduled_post
 from pumpkit.auth.models import User
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
 from pumpkit.core.time import as_utc
-from pumpkit.publishing.rules import MonthFull, RuleBroken
-from pumpkit.schemas.scheduled_posts import (
+from pumpkit.scheduling import rules, service
+from pumpkit.scheduling.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
+from pumpkit.scheduling.publishing import publish_scheduled_post
+from pumpkit.scheduling.rules import MonthFull, RuleBroken
+from pumpkit.scheduling.schemas import (
     ScheduledPostResponse,
     ScheduledPostsListResponse,
     XConnectionResponse,
@@ -45,7 +44,7 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
 async def list_scheduled_posts(
     db: AsyncSession, user: User, state: Optional[ScheduledPostState]
 ) -> ScheduledPostsListResponse:
-    scheduled_posts = await scheduled_posts_service.list_for_user(db, user_id=user.id, state=state)
+    scheduled_posts = await service.list_for_user(db, user_id=user.id, state=state)
     return ScheduledPostsListResponse(data=[scheduled_post_response(s) for s in scheduled_posts])
 
 
@@ -80,7 +79,7 @@ async def check_monthly_cap(
 ) -> None:
     """Pass `excluding_id` when moving an existing one, so it doesn't count itself."""
     start, end = rules.month_bounds(publish_at)
-    count = await scheduled_posts_service.count_publishing_between(
+    count = await service.count_publishing_between(
         db, user_id=user_id, start=start, end=end, excluding_id=excluding_id
     )
     rules.check_month_has_room(count, cap=settings.SCHEDULED_POSTS_MONTHLY_CAP, moment=publish_at)
@@ -108,7 +107,7 @@ async def create_scheduled_post(
         await _check_source_version(db, user_id=user.id, version_id=source_version_id)
     if publish_now:
         return await _post_now(db, publisher, user, connection, text, now, source_version_id)
-    scheduled_post = await scheduled_posts_service.create(
+    scheduled_post = await service.create(
         db,
         user_id=user.id,
         x_user_id=connection.x_user_id,
@@ -137,7 +136,7 @@ async def _post_now(
     now: datetime,
     source_version_id: Optional[str],
 ) -> ScheduledPostResponse:
-    scheduled_post = await scheduled_posts_service.create(
+    scheduled_post = await service.create(
         db,
         user_id=user.id,
         x_user_id=connection.x_user_id,
@@ -149,13 +148,13 @@ async def _post_now(
     scheduled_post_id = scheduled_post.id
     # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
-    published = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
+    published = await service.get(db, scheduled_post_id=scheduled_post_id)
     assert published is not None
     return scheduled_post_response(published)
 
 
 async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> ScheduledPost:
-    scheduled_post = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
+    scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
     if scheduled_post is None or scheduled_post.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled post not found."
@@ -200,12 +199,12 @@ async def edit_scheduled_post(
             await check_monthly_cap(
                 db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id
             )
-            reschedule = scheduled_posts_service.Reschedule(
+            reschedule = service.Reschedule(
                 publish_at=new_publish_at, x_user_id=connection.x_user_id
             )
     except RuleBroken as rule:
         raise _refused(rule) from None
-    if not await scheduled_posts_service.edit(
+    if not await service.edit(
         db, scheduled_post_id=scheduled_post_id, text=text, reschedule=reschedule, now=now
     ):
         raise _publishing_started()
@@ -216,7 +215,7 @@ async def edit_scheduled_post(
 async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:
     """Delete a scheduled or Failed Scheduled post."""
     await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
-    if not await scheduled_posts_service.cancel(db, scheduled_post_id=scheduled_post_id):
+    if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()
 
@@ -226,7 +225,7 @@ async def _x_connection_response(db: AsyncSession, connection: XConnection) -> X
         handle=connection.handle,
         char_limit=x_post_max_chars(connection.subscription_type),
         needs_reconnect=connection.needs_reconnect,
-        scheduled_posts_waiting=await scheduled_posts_service.count_waiting(
+        scheduled_posts_waiting=await service.count_waiting(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id
         ),
     )

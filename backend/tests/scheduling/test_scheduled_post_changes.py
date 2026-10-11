@@ -6,9 +6,9 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from httpx import AsyncClient
 
-import pumpkit.api.services.scheduled_posts as scheduled_posts_service
+import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.core.config import settings
-from pumpkit.publishing.publisher import run_pass
+from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import XAccount, XPostRejectedError, XRateLimitedError
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"

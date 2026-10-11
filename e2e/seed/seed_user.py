@@ -16,8 +16,8 @@ from pumpkit.auth.models import User
 from pumpkit.auth.tokens import create_access_token
 from pumpkit.authors.models import InspirationAuthor
 from pumpkit.billing.models import Subscription
-from pumpkit.core.db.models import ScheduledPost
 from pumpkit.core.db.session import _db_session_handler
+from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.models import XConnection
 
 # Not a `.test`/`.example` TLD: those are special-use and rejected by the

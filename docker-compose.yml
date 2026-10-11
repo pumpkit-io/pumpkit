@@ -44,7 +44,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: app_publisher
-    command: python -m pumpkit.publishing
+    command: python -m pumpkit.scheduling.publisher
     env_file:
       - .env
       - ./backend/.env

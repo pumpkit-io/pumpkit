@@ -11,9 +11,9 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from httpx import AsyncClient
 
-import pumpkit.api.services.scheduled_posts as scheduled_posts_service
-import pumpkit.publishing.publish as publish_module
-from pumpkit.publishing.publisher import run, run_pass
+import pumpkit.scheduling.publish as publish_module
+import pumpkit.scheduling.service as scheduled_posts_service
+from pumpkit.scheduling.publisher import run, run_pass
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,

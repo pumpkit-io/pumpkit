@@ -7,10 +7,9 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.scheduled_posts as scheduled_posts_service
-import pumpkit.publishing.publish as publish
 import pumpkit.x_connection.service as x_connections_service
-from pumpkit.core.db.models import ScheduledPost
+from pumpkit.scheduling import publish, service
+from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.x_publisher import XPublisher
 
 
@@ -18,7 +17,7 @@ async def publish_scheduled_post(
     db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
 ) -> bool:
     """Post now. False when it wasn't scheduled, for instance because another caller claimed it."""
-    claimed = await scheduled_posts_service.claim(db, scheduled_post_id=scheduled_post_id, now=now)
+    claimed = await service.claim(db, scheduled_post_id=scheduled_post_id, now=now)
     # Commit the claim before calling X: from here on, no other caller can publish it.
     await db.commit()
     if not claimed:
@@ -29,7 +28,7 @@ async def publish_scheduled_post(
 
 async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: datetime) -> bool:
     """The publisher's step. False when nothing is due."""
-    scheduled_post_id = await scheduled_posts_service.claim_next_due(db, now=now)
+    scheduled_post_id = await service.claim_next_due(db, now=now)
     # Commit the claim before calling X: from here on, no other pass can publish it.
     await db.commit()
     if scheduled_post_id is None:
@@ -48,7 +47,7 @@ async def fail_stuck(db: AsyncSession, *, now: datetime) -> None:
 async def _publish_claimed(
     db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
 ) -> None:
-    scheduled_post = await scheduled_posts_service.get(db, scheduled_post_id=scheduled_post_id)
+    scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
     assert scheduled_post is not None
 
     try:
@@ -60,7 +59,7 @@ async def _publish_claimed(
             publish.capture_failed(scheduled_post.user_id, failed.category)
         return
 
-    await scheduled_posts_service.record_published(db, scheduled_post, x_post_id=x_post_id, now=now)
+    await service.record_published(db, scheduled_post, x_post_id=x_post_id, now=now)
     await db.commit()
     publish.capture_published(scheduled_post)
 

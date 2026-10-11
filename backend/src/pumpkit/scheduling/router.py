@@ -3,15 +3,15 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.mediators.scheduled_posts as scheduled_posts_mediator
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
 from pumpkit.billing.dependencies import require_subscribed_user
-from pumpkit.core.db.models import ScheduledPostState
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
-from pumpkit.schemas.scheduled_posts import (
+from pumpkit.scheduling import mediator
+from pumpkit.scheduling.models import ScheduledPostState
+from pumpkit.scheduling.schemas import (
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
@@ -35,7 +35,7 @@ async def get_x_connection(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> XConnectionResponse:
-    return await scheduled_posts_mediator.get_x_connection(db=db, user=current_user)
+    return await mediator.get_x_connection(db=db, user=current_user)
 
 
 @x_authorization_router.post(
@@ -52,7 +52,7 @@ async def complete_x_authorization(
     publisher: XPublisher = Depends(get_x_publisher),
     clock: Clock = Depends(get_clock),
 ) -> XConnectionResponse:
-    return await scheduled_posts_mediator.complete_x_authorization(
+    return await mediator.complete_x_authorization(
         db=db,
         publisher=publisher,
         user=current_user,
@@ -73,9 +73,7 @@ async def list_scheduled_posts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> ScheduledPostsListResponse:
-    return await scheduled_posts_mediator.list_scheduled_posts(
-        db=db, user=current_user, state=state
-    )
+    return await mediator.list_scheduled_posts(db=db, user=current_user, state=state)
 
 
 @router.post(
@@ -93,7 +91,7 @@ async def create_scheduled_post(
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
     """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
-    return await scheduled_posts_mediator.create_scheduled_post(
+    return await mediator.create_scheduled_post(
         db=db,
         publisher=publisher,
         user=current_user,
@@ -117,7 +115,7 @@ async def edit_scheduled_post(
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
-    return await scheduled_posts_mediator.edit_scheduled_post(
+    return await mediator.edit_scheduled_post(
         db=db,
         user=current_user,
         scheduled_post_id=scheduled_post_id,
@@ -136,6 +134,6 @@ async def cancel_scheduled_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> None:
-    await scheduled_posts_mediator.cancel_scheduled_post(
+    await mediator.cancel_scheduled_post(
         db=db, user=current_user, scheduled_post_id=scheduled_post_id
     )

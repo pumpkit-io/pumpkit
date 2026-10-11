@@ -9,7 +9,7 @@ WorkingDirectory=/home/pumpkit/app/backend
 EnvironmentFile=/home/pumpkit/app/.env
 EnvironmentFile=/home/pumpkit/app/backend/.env
 # No migrations here: the backend unit runs them before it starts.
-ExecStart=/home/pumpkit/.local/bin/uv run python -m pumpkit.publishing
+ExecStart=/home/pumpkit/.local/bin/uv run python -m pumpkit.scheduling.publisher
 # SIGTERM lets it finish the Scheduled post in hand; a call to X takes at most a few seconds.
 TimeoutStopSec=60
 Restart=always

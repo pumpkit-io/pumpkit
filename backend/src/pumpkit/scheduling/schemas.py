@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from pumpkit.core.db.models import ScheduledPostState
+from pumpkit.scheduling.models import ScheduledPostState
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000

@@ -7,8 +7,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from httpx import AsyncClient
 
-import pumpkit.api.services.scheduled_posts as scheduled_posts_service
-from pumpkit.api.mediators.publishing import publish_scheduled_post
+import pumpkit.scheduling.service as scheduled_posts_service
+from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.x_connection.x_publisher import XAccount
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"

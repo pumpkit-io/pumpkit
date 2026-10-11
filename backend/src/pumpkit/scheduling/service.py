@@ -1,6 +1,6 @@
 """
 Scheduled posts and their moves between states.
-Flushes and never commits: the calling mediator owns the transaction.
+Flushes and never commits: the caller (the mediator or `publishing`) owns the transaction.
 """
 
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ from typing import Optional, cast
 from sqlalchemy import CursorResult, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.core.db.models import (
+from pumpkit.scheduling.models import (
     FAILED,
     PUBLISHED,
     PUBLISHING,
