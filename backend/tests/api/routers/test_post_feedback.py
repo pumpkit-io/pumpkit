@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from pumpkit.auth.models import User
+from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.db.models import Post
 from pumpkit.core.llm import LLMError
 from pumpkit.core.time import as_utc
-from pumpkit.core.x_reader import FetchedPost
 from pumpkit.writing.constants import HUMANIZING_MODEL, REVISING_MODEL
 from pumpkit.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.writing.prompts.humanizer import HUMANIZER_PROMPT

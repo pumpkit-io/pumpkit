@@ -5,17 +5,16 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.author_posts as author_posts_service
-import pumpkit.api.services.inspiration_authors as inspiration_authors_service
 from pumpkit.auth.models import User
-from pumpkit.core.db.models import InspirationAuthor
-from pumpkit.core.errors import RetryLaterError
-from pumpkit.core.x_handles import normalize_handle
-from pumpkit.core.x_reader import FetchedPost, HandleNotFoundError, XReader
-from pumpkit.schemas.inspiration_authors import (
+from pumpkit.authors import service
+from pumpkit.authors.handles import normalize_handle
+from pumpkit.authors.models import InspirationAuthor
+from pumpkit.authors.schemas import (
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
 )
+from pumpkit.authors.x_reader import FetchedPost, HandleNotFoundError, XReader
+from pumpkit.core.errors import RetryLaterError
 
 MAX_INSPIRATION_AUTHORS = 3
 REFRESH_COOLDOWN = timedelta(hours=1)
@@ -39,13 +38,13 @@ async def _listed_author(db: AsyncSession, *, user_id: str, handle: str) -> Insp
         handle = normalize_handle(handle)
     except ValueError:
         raise not_listed
-    author = await inspiration_authors_service.get_author(db, user_id=user_id, handle=handle)
+    author = await service.get_author(db, user_id=user_id, handle=handle)
     if author is None:
         raise not_listed
     return author
 
 
-def _response(summary: inspiration_authors_service.AuthorSummary) -> InspirationAuthorResponse:
+def _response(summary: service.AuthorSummary) -> InspirationAuthorResponse:
     return InspirationAuthorResponse(
         handle=summary.handle,
         last_fetched_at=summary.last_fetched_at,
@@ -54,7 +53,7 @@ def _response(summary: inspiration_authors_service.AuthorSummary) -> Inspiration
 
 
 async def list_authors(db: AsyncSession, user: User) -> InspirationAuthorsListResponse:
-    summaries = await inspiration_authors_service.list_authors(db, user_id=user.id)
+    summaries = await service.list_authors(db, user_id=user.id)
     return InspirationAuthorsListResponse(data=[_response(summary) for summary in summaries])
 
 
@@ -76,26 +75,24 @@ async def add_author(
     A 404 for a handle X doesn't know and a 422 for one without original posts store nothing.
     """
     user_id = user.id
-    if await inspiration_authors_service.get_author(db, user_id=user_id, handle=handle):
+    if await service.get_author(db, user_id=user_id, handle=handle):
         raise _already_listed(handle)
-    if await inspiration_authors_service.count_authors(db, user_id=user_id) >= (
-        MAX_INSPIRATION_AUTHORS
-    ):
+    if await service.count_authors(db, user_id=user_id) >= MAX_INSPIRATION_AUTHORS:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"You can have up to {MAX_INSPIRATION_AUTHORS} Inspiration authors. "
             "Remove one to add another.",
         )
 
-    last_fetched_at = await author_posts_service.last_fetched_at(db, handle=handle)
+    last_fetched_at = await service.last_fetched_at(db, handle=handle)
     if next_refresh_at(last_fetched_at, now=now) is None:
         posts = await _fetch(reader, handle)
         has_posts = bool(posts)
         if has_posts:
-            await author_posts_service.store_new_posts(db, handle=handle, posts=posts, now=now)
-            await author_posts_service.record_fetch(db, handle=handle, now=now)
+            await service.store_new_posts(db, handle=handle, posts=posts, now=now)
+            await service.record_fetch(db, handle=handle, now=now)
     else:
-        has_posts = await author_posts_service.count_posts(db, handle=handle) > 0
+        has_posts = await service.count_posts(db, handle=handle) > 0
     if not has_posts:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -103,7 +100,7 @@ async def add_author(
         )
 
     try:
-        await inspiration_authors_service.add_author(db, user_id=user_id, handle=handle, now=now)
+        await service.add_author(db, user_id=user_id, handle=handle, now=now)
         await db.commit()
     except IntegrityError:
         # A concurrent add of the same handle won the unique (user_id, handle) constraint.
@@ -123,17 +120,15 @@ async def refresh_author(
     user_id = user.id
     handle = (await _listed_author(db, user_id=user_id, handle=handle)).handle
 
-    retry_at = next_refresh_at(
-        await author_posts_service.last_fetched_at(db, handle=handle), now=now
-    )
+    retry_at = next_refresh_at(await service.last_fetched_at(db, handle=handle), now=now)
     if retry_at is not None:
         raise RetryLaterError(
             f"@{handle} was fetched less than an hour ago.", retry_at=retry_at, now=now
         )
 
     posts = await _fetch(reader, handle)
-    await author_posts_service.store_new_posts(db, handle=handle, posts=posts, now=now)
-    await author_posts_service.record_fetch(db, handle=handle, now=now)
+    await service.store_new_posts(db, handle=handle, posts=posts, now=now)
+    await service.record_fetch(db, handle=handle, now=now)
     await db.commit()
     return await _author_response(db, user_id=user_id, handle=handle)
 
@@ -150,12 +145,12 @@ async def _fetch(reader: XReader, handle: str) -> list[FetchedPost]:
 async def remove_author(db: AsyncSession, user: User, handle: str) -> None:
     """Take `handle` off the User's list; its fetched posts stay for other Users."""
     author = await _listed_author(db, user_id=user.id, handle=handle)
-    await inspiration_authors_service.remove_author(db, author)
+    await service.remove_author(db, author)
     await db.commit()
 
 
 async def _author_response(
     db: AsyncSession, *, user_id: str, handle: str
 ) -> InspirationAuthorResponse:
-    summaries = await inspiration_authors_service.list_authors(db, user_id=user_id)
+    summaries = await service.list_authors(db, user_id=user_id)
     return _response(next(summary for summary in summaries if summary.handle == handle))

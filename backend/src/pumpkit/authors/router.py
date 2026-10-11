@@ -1,19 +1,19 @@
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.mediators.inspiration_authors as inspiration_authors_mediator
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
-from pumpkit.billing.dependencies import require_subscribed_user
-from pumpkit.core.db.session import get_async_db
-from pumpkit.core.rate_limit import limiter
-from pumpkit.core.time import Clock, get_clock
-from pumpkit.core.x_reader import XReader, get_x_reader
-from pumpkit.schemas.inspiration_authors import (
+from pumpkit.authors import mediator
+from pumpkit.authors.schemas import (
     InspirationAuthorAddRequest,
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
 )
+from pumpkit.authors.x_reader import XReader, get_x_reader
+from pumpkit.billing.dependencies import require_subscribed_user
+from pumpkit.core.db.session import get_async_db
+from pumpkit.core.rate_limit import limiter
+from pumpkit.core.time import Clock, get_clock
 
 router = APIRouter(tags=["inspiration-authors"])
 
@@ -27,7 +27,7 @@ async def list_inspiration_authors(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> InspirationAuthorsListResponse:
-    return await inspiration_authors_mediator.list_authors(db=db, user=current_user)
+    return await mediator.list_authors(db=db, user=current_user)
 
 
 @router.post(
@@ -44,7 +44,7 @@ async def add_inspiration_author(
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> InspirationAuthorResponse:
-    return await inspiration_authors_mediator.add_author(
+    return await mediator.add_author(
         db=db, reader=reader, user=current_user, handle=add_request.handle, now=clock()
     )
 
@@ -63,7 +63,7 @@ async def refresh_inspiration_author(
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> InspirationAuthorResponse:
-    return await inspiration_authors_mediator.refresh_author(
+    return await mediator.refresh_author(
         db=db, reader=reader, user=current_user, handle=handle, now=clock()
     )
 
@@ -74,4 +74,4 @@ async def remove_inspiration_author(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> None:
-    await inspiration_authors_mediator.remove_author(db=db, user=current_user, handle=handle)
+    await mediator.remove_author(db=db, user=current_user, handle=handle)

@@ -15,7 +15,8 @@ from sqlalchemy import delete, select
 from pumpkit.auth.models import User
 from pumpkit.auth.tokens import create_access_token
 from pumpkit.billing.models import Subscription
-from pumpkit.core.db.models import InspirationAuthor, ScheduledPost, XConnection
+from pumpkit.authors.models import InspirationAuthor
+from pumpkit.core.db.models import ScheduledPost, XConnection
 from pumpkit.core.db.session import _db_session_handler
 
 # Not a `.test`/`.example` TLD: those are special-use and rejected by the
