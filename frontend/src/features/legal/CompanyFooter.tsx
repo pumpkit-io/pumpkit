@@ -1,9 +1,7 @@
-import { Link } from 'react-router-dom';
-import { CookieSettingsButton } from '@/features/analyticsConsent/CookieSettingsButton';
 import { useInstance } from '@/features/instance/useInstance';
 import type { OperatorDetails } from '@/lib/instance';
 import { cn } from '@/lib/utils';
-import { LEGAL_LINKS } from './documents';
+import { LegalLinks } from './LegalLinks';
 
 const LINK_CLASS = 'text-foreground underline-offset-4 transition-colors hover:underline';
 
@@ -43,30 +41,15 @@ export function CompanyFooter({ className }: { className?: string }) {
             {operator.pec && <p>PEC {operator.pec}</p>}
           </address>
         )}
-        <nav aria-label={operator ? 'Legal' : 'Cookies'}>
-          <ul className="flex flex-wrap gap-x-5 gap-y-2">
-            {operator &&
-              LEGAL_LINKS.map(({ path, label }) => (
-                <li key={path}>
-                  <Link to={path} className={LINK_CLASS}>
-                    {label}
-                  </Link>
-                </li>
-              ))}
-            {analytics && (
-              <li>
-                <CookieSettingsButton className={LINK_CLASS} />
-              </li>
-            )}
-            {operator && (
-              <li>
-                <a href={`mailto:${operator.support_email}`} className={LINK_CLASS}>
-                  {operator.support_email}
-                </a>
-              </li>
-            )}
-          </ul>
-        </nav>
+        <LegalLinks listClassName="flex flex-wrap gap-x-5 gap-y-2" linkClassName={LINK_CLASS}>
+          {operator && (
+            <li>
+              <a href={`mailto:${operator.support_email}`} className={LINK_CLASS}>
+                {operator.support_email}
+              </a>
+            </li>
+          )}
+        </LegalLinks>
       </div>
     </footer>
   );
