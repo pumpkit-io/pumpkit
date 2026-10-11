@@ -69,7 +69,6 @@ class GoogleIdentity(Base):
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
 
-    # OAuth response
     subject: Mapped[str] = mapped_column(String, unique=True)
     id_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     # JSONB on Postgres; JSON variant lets the SQLite test DB create the table.
@@ -112,7 +111,6 @@ class RefreshToken(Base):
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
-    # Audit
     ip: Mapped[Optional[str]] = mapped_column(String)
     user_agent: Mapped[Optional[str]] = mapped_column(String)
 
@@ -149,7 +147,6 @@ class MagicLink(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
-    # Audit
     requester_ip: Mapped[Optional[str]] = mapped_column(String)
     requester_user_agent: Mapped[Optional[str]] = mapped_column(String)
 

@@ -27,8 +27,7 @@ with create_engine(sys.argv[1]).connect() as connection:
 
 def _import_every_pumpkit_module() -> None:
     for module in pkgutil.walk_packages(pumpkit.__path__, prefix="pumpkit."):
-        if not module.name.endswith("__main__"):
-            importlib.import_module(module.name)
+        importlib.import_module(module.name)
 
 
 def test_autogenerate_against_pumpkit_models_reports_no_changes(tmp_path):

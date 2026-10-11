@@ -31,16 +31,15 @@ def _create_auth_token(data: dict, expires_in: timedelta, token_type: TokenType)
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
 
-    # Standard JWT claims for security
     to_encode.update(
         {
-            "exp": now + expires_in,  # Expiration time
-            "iat": now,  # Issued at
-            "nbf": now,  # Not before
-            "iss": settings.JWT_ISSUER,  # Issuer
-            "aud": settings.JWT_AUDIENCE,  # Audience
-            "jti": str(uuid.uuid4()),  # JWT ID (unique identifier)
-            "typ": token_type,  # Token type
+            "exp": now + expires_in,
+            "iat": now,
+            "nbf": now,
+            "iss": settings.JWT_ISSUER,
+            "aud": settings.JWT_AUDIENCE,
+            "jti": str(uuid.uuid4()),
+            "typ": token_type,
         }
     )
 

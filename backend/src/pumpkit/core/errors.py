@@ -1,7 +1,7 @@
 import math
 import re
 from datetime import datetime, timezone
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar, Mapping, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -21,14 +21,14 @@ class AppError(Exception):
 
     status_code: ClassVar[int] = 500
     # What the client reads as `detail`; None shows `str(error)`, so it must hold no secrets.
-    public_detail: ClassVar[str | None] = None
+    public_detail: ClassVar[Optional[str]] = None
     # Log and capture the error in PostHog, and add the `error_id` a User reports to support.
     reported: ClassVar[bool] = False
 
     def response_body(self) -> dict[str, Any]:
         return {"detail": self.public_detail if self.public_detail is not None else str(self)}
 
-    def response_headers(self) -> dict[str, str] | None:
+    def response_headers(self) -> Optional[dict[str, str]]:
         return None
 
 
@@ -60,7 +60,7 @@ class RetryLaterError(AppError):
 class NotConfiguredError(AppError):
     """An operator's setup gap, not a bug: the message names the missing variable."""
 
-    # All three are set so they win over the adapter error listed after this in a subclass's bases.
+    # Set here so they override the adapter error a subclass lists after this class.
     status_code = 503
     public_detail = None
     reported = False

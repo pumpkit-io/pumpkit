@@ -1,7 +1,7 @@
 """Shared pytest configuration for backend tests.
 
 `pumpkit.core.config.settings` is instantiated at import time, so a deterministic
-test environment is injected into `os.environ` *before* any `app.*` import.
+test environment is injected into `os.environ` *before* any `pumpkit.*` import.
 Real env vars win (setdefault), which lets CI override individual values.
 """
 
