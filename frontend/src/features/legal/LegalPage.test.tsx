@@ -2,20 +2,25 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { WITH_OPERATOR } from '@/features/instance/testInstances';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
+import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 import { legalRoutes } from './legalRoutes';
 
 /** Renders a legal route as a signed-out visitor opening it directly. */
-function renderLegalRoute(path: string) {
+function renderLegalRoute(path: string, instance: Instance = WITH_OPERATOR) {
   return render(
-    <ThemeProvider>
-      <MemoryRouter
-        initialEntries={[path]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <Routes>{legalRoutes}</Routes>
-      </MemoryRouter>
-    </ThemeProvider>,
+    <InstanceProvider instance={instance}>
+      <ThemeProvider>
+        <MemoryRouter
+          initialEntries={[path]}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <Routes>{legalRoutes(instance.operator)}</Routes>
+        </MemoryRouter>
+      </ThemeProvider>
+    </InstanceProvider>,
   );
 }
 
@@ -61,7 +66,7 @@ describe('Privacy Policy at /privacy', () => {
   it('ends with the company footer', () => {
     renderLegalRoute('/privacy');
     const footer = screen.getByRole('contentinfo');
-    expect(within(footer).getByText(/INCEPTIONAL S\.R\.L\./)).toBeInTheDocument();
+    expect(within(footer).getByText('Example S.R.L.')).toBeInTheDocument();
   });
 });
 
@@ -185,4 +190,12 @@ describe('every legal document', () => {
       for (const heading of headings) expect(heading.id, heading.textContent ?? '').not.toBe('');
     },
   );
+});
+
+describe('an Instance without Operator details', () => {
+  it.each(['/privacy', '/terms', '/it/privacy', '/it/terms'])('has no page at %s', (path) => {
+    renderLegalRoute(path, DEFAULT_INSTANCE);
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  });
 });

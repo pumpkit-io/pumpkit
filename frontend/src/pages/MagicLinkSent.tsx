@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Brand } from '@/components/brand/Brand';
+import { useInstance } from '@/features/instance/useInstance';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { isGmailAddress } from '../lib/gmailSearch';
 
@@ -17,6 +18,7 @@ export function MagicLinkSent() {
   const location = useLocation();
   const state = (location.state ?? {}) as MagicLinkSentState;
   const email = typeof state.email === 'string' ? state.email : '';
+  const { operator } = useInstance();
 
   useEffect(() => {
     if (!email) {
@@ -71,14 +73,21 @@ export function MagicLinkSent() {
           </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Can't find it? Check your spam folder. Still need help?{' '}
-            <a
-              href={SUPPORT_CONTACT_URL}
-              className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity"
-            >
-              Contact support
-            </a>
-            .
+            Can't find it? Check your spam folder.
+            {/* The support address is part of the Operator details, so only they offer it. */}
+            {operator && (
+              <>
+                {' '}
+                Still need help?{' '}
+                <a
+                  href={SUPPORT_CONTACT_URL}
+                  className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity"
+                >
+                  Contact support
+                </a>
+                .
+              </>
+            )}
           </p>
         </div>
       </main>

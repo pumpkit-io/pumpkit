@@ -5,6 +5,7 @@ import { Login } from './Login';
 import { authService } from '@/services/authService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
+import { WITH_OPERATOR } from '@/features/instance/testInstances';
 
 vi.mock('@/services/authService', () => ({
   authService: { requestMagicLink: vi.fn(), getGoogleLoginUrl: vi.fn() },
@@ -70,7 +71,7 @@ describe('the sign-in page', () => {
   });
 
   it('tells people that continuing means agreeing to the Terms, with links to both documents', () => {
-    renderLogin('/login');
+    renderLogin('/login', WITH_OPERATOR);
 
     const notice = screen.getByText(/^By continuing, you agree to the/);
     expect(notice).toHaveTextContent(
@@ -81,6 +82,14 @@ describe('the sign-in page', () => {
       'href',
       '/privacy',
     );
+  });
+
+  it('shows no Terms notice or company footer on an Instance without Operator details', () => {
+    renderLogin('/login');
+
+    expect(screen.queryByText(/you agree to the/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
   });
 
   it('offers Google next to the magic link when the Instance has Google sign-in', () => {

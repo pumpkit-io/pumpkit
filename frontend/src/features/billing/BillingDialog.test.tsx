@@ -91,12 +91,13 @@ const TERMS_CHANGED =
 function fakeBackend(
   me: object,
   failures: Record<string, { status: number; detail: string }> = {},
+  plans: object = PLANS,
 ) {
   const requests: string[] = [];
   const bodies: Record<string, unknown> = {};
   const routes: Record<string, unknown> = {
     'GET /billing/me': me,
-    'GET /billing/plans': PLANS,
+    'GET /billing/plans': plans,
     'POST /billing/checkout': { url: 'https://checkout.stripe.test/s', session_id: 'cs_1' },
     'POST /billing/portal': { url: 'https://portal.stripe.test/x' },
   };
@@ -222,6 +223,22 @@ describe('BillingDialog', () => {
       requested_immediate_start: true,
       approved_specific_clauses: true,
     });
+  });
+
+  it('starts checkout with only the Plan key where the Instance has no Terms', async () => {
+    const backend = fakeBackend(MAY_SUBSCRIBE_WITH_TRIAL, {}, { ...PLANS, terms_version: null });
+    renderDialog();
+    const subscribe = await screen.findByRole('button', { name: 'Subscribe to Pro' });
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Terms$/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tick the three boxes/)).not.toBeInTheDocument();
+    expect(subscribe).toBeEnabled();
+
+    fireEvent.click(subscribe);
+
+    await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://checkout.stripe.test/s'));
+    expect(backend.bodies['POST /billing/checkout']).toEqual({ plan_key: 'pumpkit_pro_monthly' });
   });
 
   it('asks the User to review the Terms when checkout says they have changed', async () => {
