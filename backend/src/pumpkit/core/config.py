@@ -1,7 +1,8 @@
-from typing import Literal, Optional, Self
+import json
+from typing import Annotated, Literal, Optional, Self
 
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode
 
 Environment = Literal["local", "dev", "stg", "prod"]
 LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
 
     # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
     # Nothing else can be listed or bought.
-    BILLING_PLAN_KEYS: list[str] = []
+    BILLING_PLAN_KEYS: Annotated[list[str], NoDecode] = []
     # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
     BILLING_TRIAL_PERIOD_DAYS: int = Field(default=14, ge=0)
 
@@ -81,8 +82,8 @@ class Settings(BaseSettings):
 
     # How often the publisher process looks for due Scheduled posts.
     PUBLISHER_POLL_INTERVAL_SECONDS: int = Field(default=30, ge=1)
-    # Each User's Scheduled posts per UTC calendar month of publish time (ADR 0006).
-    SCHEDULED_POSTS_MONTHLY_CAP: int = Field(default=100, ge=0)
+    # Each User's Scheduled posts per UTC calendar month of publish time (ADR 0006); None is no cap.
+    SCHEDULED_POSTS_MONTHLY_CAP: Optional[int] = Field(default=100, ge=0)
 
     # Optional: PostHog is disabled unless POSTHOG_ENABLED=true and a project key is set.
     POSTHOG_ENABLED: bool = False
@@ -142,6 +143,20 @@ class Settings(BaseSettings):
 
     def is_posthog_configured(self) -> bool:
         return self._is_configured("PostHog")
+
+    @field_validator("BILLING_PLAN_KEYS", mode="before")
+    @classmethod
+    def _parse_plan_keys(cls, value: object) -> object:
+        # Decoded here, not by pydantic-settings, so an empty `.env` line means no Plans.
+        if isinstance(value, str):
+            return json.loads(value) if value.strip() else []
+        return value
+
+    @field_validator("SCHEDULED_POSTS_MONTHLY_CAP", mode="before")
+    @classmethod
+    def _empty_cap_is_no_cap(cls, value: object) -> object:
+        # Pydantic would reject the empty string an `.env` line leaves for an int.
+        return None if value == "" else value
 
     def is_env_local(self) -> bool:
         return self.ENV == "local"

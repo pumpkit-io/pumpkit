@@ -99,6 +99,16 @@ def test_providers_are_off_when_none_of_their_settings_are_set(instance_env):
     assert s.is_posthog_configured() is False
 
 
+def test_providers_are_off_when_their_settings_are_left_empty(instance_env):
+    empty = {key: "" for key in (*_STRIPE_ENV, *_GOOGLE_ENV, "POSTHOG_PROJECT_API_KEY")}
+
+    s = instance_env(**empty)
+
+    assert s.is_stripe_billing_configured() is False
+    assert s.is_google_configured() is False
+    assert s.is_posthog_configured() is False
+
+
 def test_providers_are_on_when_all_their_settings_are_set(instance_env):
     s = instance_env(**_STRIPE_ENV, **_GOOGLE_ENV, POSTHOG_PROJECT_API_KEY="phc_test")
 
@@ -149,3 +159,15 @@ def test_settings_boot_without_optional_providers(monkeypatch):
     assert s.POSTHOG_ENABLED is False
     assert s.POSTHOG_PROJECT_API_KEY is None
     assert s.POSTHOG_HOST == "https://eu.i.posthog.com"
+
+
+def test_an_empty_scheduled_posts_cap_means_no_cap(monkeypatch):
+    monkeypatch.setenv("SCHEDULED_POSTS_MONTHLY_CAP", "")
+    s = Settings()  # pyright: ignore[reportCallIssue]
+    assert s.SCHEDULED_POSTS_MONTHLY_CAP is None
+
+
+def test_an_unset_scheduled_posts_cap_defaults_to_100(monkeypatch):
+    monkeypatch.delenv("SCHEDULED_POSTS_MONTHLY_CAP", raising=False)
+    s = Settings()  # pyright: ignore[reportCallIssue]
+    assert s.SCHEDULED_POSTS_MONTHLY_CAP == 100
