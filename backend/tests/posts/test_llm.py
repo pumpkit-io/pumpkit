@@ -139,3 +139,30 @@ async def test_a_call_goes_to_the_configured_endpoint_with_the_configured_key(mo
     assert result.parsed == _Answer(post="hello")
     assert sent["authorization"] == "Bearer local-key"
     assert sent["model"] == "llama3.3"
+
+
+@respx.mock
+async def test_cache_hints_are_left_out_for_an_endpoint_other_than_openrouter(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_BASE_URL", LOCAL_BASE_URL)
+    sent: dict[str, Any] = {}
+
+    def _respond(request: httpx.Request) -> httpx.Response:
+        sent.update(json.loads(request.content))
+        return httpx.Response(200, json=_completion(json.dumps({"post": "hello"})))
+
+    respx.post(f"{LOCAL_BASE_URL}/chat/completions").mock(side_effect=_respond)
+    block = {
+        "type": "text",
+        "text": "be brief",
+        "cache_control": {"type": "ephemeral", "ttl": "1h"},
+    }
+    messages = [{"role": "system", "content": [block]}, {"role": "user", "content": "hi"}]
+
+    await OpenAICompatibleLLM(LLMClient()).structured(
+        model="m", messages=messages, response_model=_Answer
+    )
+
+    assert sent["messages"] == [
+        {"role": "system", "content": [{"type": "text", "text": "be brief"}]},
+        {"role": "user", "content": "hi"},
+    ]

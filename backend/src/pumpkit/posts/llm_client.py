@@ -57,6 +57,10 @@ class LLMClient:
             )
         return self._client
 
+    def _sends_cache_hints(self) -> bool:
+        """Only OpenRouter takes `cache_control` on message blocks; strict endpoints reject it."""
+        return self._llm_client.base_url.host == "openrouter.ai"
+
     async def llm_complete(
         self,
         *,
@@ -216,7 +220,22 @@ class LLMClient:
         )
 
     @staticmethod
+    def _without_cache_hints(messages: list[dict]) -> list[dict]:
+        return [
+            {
+                **message,
+                "content": [
+                    {k: v for k, v in block.items() if k != "cache_control"}
+                    for block in message["content"]
+                ],
+            }
+            if isinstance(message.get("content"), list)
+            else message
+            for message in messages
+        ]
+
     def _build_llm_kwargs(
+        self,
         *,
         model: str,
         messages: list[dict],
@@ -238,6 +257,9 @@ class LLMClient:
             wrapper_extra["reasoning"] = {"effort": reasoning_effort}
 
         merged_extra = {**wrapper_extra, **(extra_body or {})}
+
+        if not self._sends_cache_hints():
+            messages = self._without_cache_hints(messages)
 
         kwargs: dict = {"model": model, "messages": messages}
 
