@@ -1,12 +1,12 @@
 [project]
 name = "pumpkit-backend"
 version = "0.1.0"
-description = ""
+description = "Backend for Pumpkit, an open-source AI writing tool for X that writes Posts in the style of chosen X authors and publishes them on schedule."
 license = "AGPL-3.0-only"
 authors = [
     {name = "Francesco Paoli Leonardi", email = "fpaolileonardi@gmail.com"}
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.109.0",
     "uvicorn>=0.27.0",
@@ -48,7 +48,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
+packages = ["src/pumpkit"]
 
 [tool.ruff]
 line-length = 100
@@ -70,6 +70,9 @@ exclude = [
     "dist",
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["pumpkit"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
@@ -77,14 +80,14 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pyright]
-include = ["app"]
+include = ["src", "tests"]
 typeCheckingMode = "standard"
 pythonVersion = "3.13"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["app/tests"]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["hatchling"]

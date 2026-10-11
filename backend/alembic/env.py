@@ -10,14 +10,14 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-# Make the `app` package importable when Alembic runs.
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Make the `pumpkit` package importable when Alembic runs without the project installed.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 load_dotenv()
 
-from app.db import models  # noqa: F401,E402
-from app.db.base import Base  # noqa: E402
-from app.db.urls import build_database_url  # noqa: E402
+from pumpkit.db import models  # noqa: F401,E402
+from pumpkit.db.base import Base  # noqa: E402
+from pumpkit.db.urls import build_database_url  # noqa: E402
 
 config = context.config
 

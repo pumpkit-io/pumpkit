@@ -58,7 +58,7 @@ WorkingDirectory=/home/pumpkit/app/backend
 EnvironmentFile=/home/pumpkit/app/.env
 EnvironmentFile=/home/pumpkit/app/backend/.env
 ExecStartPre=/home/pumpkit/.local/bin/uv run alembic upgrade head
-ExecStart=/home/pumpkit/.local/bin/uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+ExecStart=/home/pumpkit/.local/bin/uv run uvicorn pumpkit.main:app --host 127.0.0.1 --port 8000 --workers 2
 Restart=always
 
 [Install]
@@ -74,7 +74,7 @@ systemctl daemon-reload && systemctl enable pumpkit-backend
 The publisher publishes due Scheduled posts on X. It runs as its own unit, so API
 deploys and restarts don't interrupt it (ADR 0007). Its unit is
 `infra/pumpkit-publisher.service`: same user, directory and environment files as the
-backend, no migrations, `uv run python -m app.publishing`. `scripts/deploy.sh` copies
+backend, no migrations, `uv run python -m pumpkit.publishing`. `scripts/deploy.sh` copies
 it to `/etc/systemd/system/`, enables it and restarts it after the backend, so there's
 nothing to install by hand. To start it before the first deploy:
 

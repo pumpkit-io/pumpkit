@@ -1,6 +1,6 @@
 /**
  * A text's length the way X counts it: the same hand port of twitter-text 3.1.0's v3
- * weighting as backend/app/publishing/x_length.py, which is authoritative. Both are tested
+ * weighting as backend/src/pumpkit/publishing/x_length.py, which is authoritative. Both are tested
  * against the backend's shared cases.
  *
  * After NFC normalization, a URL counts 23, an emoji sequence 2, a code point in the light
