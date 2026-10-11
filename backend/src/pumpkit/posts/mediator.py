@@ -4,14 +4,14 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.posts as posts_service
 from pumpkit.auth.models import User
-from pumpkit.core.db.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.core.errors import RetryLaterError
-from pumpkit.core.llm import LLM
-from pumpkit.schemas.posts import PostResponse, TellResponse, VersionResponse
-from pumpkit.writing.constants import POST_MAX_CHARS
-from pumpkit.writing.versions import EarlierVersion, write_first_version, write_next_version
+from pumpkit.posts import service
+from pumpkit.posts.llm import LLM
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.posts.schemas import PostResponse, TellResponse, VersionResponse
+from pumpkit.posts.writing.constants import POST_MAX_CHARS
+from pumpkit.posts.writing.versions import EarlierVersion, write_first_version, write_next_version
 
 # Starting a Post and giving Feedback share one budget per User, failed attempts included,
 # so one account can't run up an unbounded model bill.
@@ -32,7 +32,7 @@ def next_attempt_at(attempted_at: list[datetime]) -> Optional[datetime]:
 
 
 async def _check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) -> None:
-    attempted_at = await posts_service.attempt_times_since(
+    attempted_at = await service.attempt_times_since(
         db, user_id=user_id, since=now - VERSION_ATTEMPT_WINDOW
     )
     retry_at = next_attempt_at(attempted_at)
@@ -53,7 +53,7 @@ async def _keep_failed_attempt(
     error: Exception,
     now: datetime,
 ) -> None:
-    await posts_service.record_failed_attempt(
+    await service.record_failed_attempt(
         db,
         post=post,
         sequence=sequence,
@@ -91,7 +91,7 @@ async def start_post(
     across them; a failure is stored as a failed attempt before the error is re-raised.
     """
     user_id = user.id
-    corpus = await posts_service.corpus_for_user(db, user_id=user_id)
+    corpus = await service.corpus_for_user(db, user_id=user_id)
     if not corpus.post_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -104,14 +104,12 @@ async def start_post(
     try:
         written = await write_first_version(llm, corpus, brief)
     except Exception as error:
-        post = await posts_service.create_post(
-            db, user_id=user_id, brief=brief, corpus=corpus, now=now
-        )
+        post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
         await _keep_failed_attempt(db, post=post, sequence=1, feedback=None, error=error, now=now)
         raise
 
-    post = await posts_service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
-    version = await posts_service.record_version(
+    post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
+    version = await service.record_version(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now
     )
     await db.commit()
@@ -125,7 +123,7 @@ async def add_version(
     Write the next Version of the User's Post from Feedback, with the corpus the Post started
     with. Stored after the calls like `start_post`, and a failure likewise.
     """
-    post = await posts_service.get_user_post(db, user_id=user.id, post_id=post_id)
+    post = await service.get_user_post(db, user_id=user.id, post_id=post_id)
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
     versions = [attempt for attempt in post.attempts if attempt.status == ATTEMPT_SUCCEEDED]
@@ -135,7 +133,7 @@ async def add_version(
             detail="This Post has no Version to give Feedback on. Start a new Post.",
         )
     await _check_attempt_limit(db, user_id=user.id, now=now)
-    corpus = await posts_service.corpus_for_post(db, post=post)
+    corpus = await service.corpus_for_post(db, post=post)
     earlier = [EarlierVersion(feedback=v.feedback, final=v.final or "") for v in versions]
     sequence = len(post.attempts) + 1
     # Ends the read transaction before the calls, which can take minutes.
@@ -149,7 +147,7 @@ async def add_version(
         )
         raise
 
-    version = await posts_service.record_version(
+    version = await service.record_version(
         db,
         post=post,
         sequence=sequence,

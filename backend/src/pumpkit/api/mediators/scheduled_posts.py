@@ -4,9 +4,9 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.posts as posts_service
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.api.services.x_connections as x_connections_service
+import pumpkit.posts.service as posts_service
 import pumpkit.publishing.rules as rules
 from pumpkit.api.mediators.publishing import publish_scheduled_post
 from pumpkit.auth.models import User

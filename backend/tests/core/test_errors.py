@@ -12,8 +12,6 @@ import pumpkit.core.errors as errors_module
 from pumpkit.authors.x_reader import HandleNotFoundError, XReaderError, XReaderNotConfiguredError
 from pumpkit.billing.gateway import BillingProviderError
 from pumpkit.core.errors import AppError, RetryLaterError
-from pumpkit.core.llm import LLMError
-from pumpkit.core.openrouter import LLMNotConfiguredError
 from pumpkit.core.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
@@ -24,6 +22,8 @@ from pumpkit.core.x_publisher import (
     XReconnectNeededError,
 )
 from pumpkit.main import app as main_app
+from pumpkit.posts.llm import LLMError
+from pumpkit.posts.openrouter import LLMNotConfiguredError
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 ERROR_ID = re.compile(rb'"error_id":"([0-9a-f]{8})"')

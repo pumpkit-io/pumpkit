@@ -4,7 +4,7 @@ The corpus as the user message both calls are handed, word for word from pumpkit
 The `<creator>` tag is v6's markup, kept because the prompts were tuned on it.
 """
 
-from pumpkit.writing.corpus import Corpus
+from pumpkit.posts.writing.corpus import Corpus
 
 
 def escape(text: str) -> str:

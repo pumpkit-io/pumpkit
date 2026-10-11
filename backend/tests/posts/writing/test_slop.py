@@ -10,7 +10,7 @@ produced. The negative cases are from the user's own writing samples, which are
 the definition of what must not be flagged.
 """
 
-from pumpkit.writing import slop
+from pumpkit.posts.writing import slop
 
 # The tells, on text that really had them
 

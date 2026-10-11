@@ -1,7 +1,7 @@
 import pytest
 
-from pumpkit.core.openrouter import openrouter_client
-from pumpkit.schemas.openrouter import AssembledToolCall
+from pumpkit.posts.openrouter import openrouter_client
+from pumpkit.posts.openrouter_schemas import AssembledToolCall
 
 
 class _Delta:

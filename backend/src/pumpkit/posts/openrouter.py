@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import NotConfiguredError
-from pumpkit.schemas.openrouter import (
+from pumpkit.posts.openrouter_schemas import (
     AssembledToolCall,
     CompleteResult,
     ModelUsage,

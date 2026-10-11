@@ -6,8 +6,8 @@ import pytest
 import respx
 from pydantic import BaseModel, ConfigDict
 
-from pumpkit.core.llm import LLMError, OpenRouterLLM
-from pumpkit.core.openrouter import OpenRouterClient
+from pumpkit.posts.llm import LLMError, OpenRouterLLM
+from pumpkit.posts.openrouter import OpenRouterClient
 
 COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 

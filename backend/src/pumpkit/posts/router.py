@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.mediators.posts as posts_mediator
 from pumpkit.auth.models import User
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
-from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
-from pumpkit.schemas.posts import FeedbackRequest, PostResponse, PostStartRequest, VersionResponse
+from pumpkit.posts import mediator
+from pumpkit.posts.llm import LLM, get_llm
+from pumpkit.posts.schemas import FeedbackRequest, PostResponse, PostStartRequest, VersionResponse
 
 router = APIRouter(tags=["posts"])
 
@@ -24,7 +24,7 @@ async def start_post(
     clock: Clock = Depends(get_clock),
 ) -> PostResponse:
     """Writes the first Version before answering, which takes two model calls."""
-    return await posts_mediator.start_post(
+    return await mediator.start_post(
         db=db, llm=llm, user=current_user, brief=start_request.brief, now=clock()
     )
 
@@ -45,7 +45,7 @@ async def add_version(
     clock: Clock = Depends(get_clock),
 ) -> VersionResponse:
     """Writes the Version before answering, which takes two model calls."""
-    return await posts_mediator.add_version(
+    return await mediator.add_version(
         db=db,
         llm=llm,
         user=current_user,

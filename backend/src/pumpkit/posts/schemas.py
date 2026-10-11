@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pumpkit.writing.constants import BRIEF_MAX_CHARS, FEEDBACK_MAX_CHARS
+from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS, FEEDBACK_MAX_CHARS
 
 
 class PostStartRequest(BaseModel):

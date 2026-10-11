@@ -1,8 +1,8 @@
 """The prompts ported from pumpkit-v6: what they interpolate, and that the corpus stays out."""
 
-from pumpkit.writing.constants import POST_MAX_CHARS
-from pumpkit.writing.prompts.draft_post import DRAFT_POST_PROMPT
-from pumpkit.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.posts.writing.constants import POST_MAX_CHARS
+from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 
 
 def test_the_length_limit_reaches_the_draft_prompt():

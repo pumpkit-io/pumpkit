@@ -15,8 +15,8 @@ from openai import OpenAIError
 from pydantic import BaseModel
 
 from pumpkit.core.errors import AppError
-from pumpkit.core.openrouter import OpenRouterClient, openrouter_client
-from pumpkit.schemas.openrouter import ModelUsage, StructuredResult
+from pumpkit.posts.openrouter import OpenRouterClient, openrouter_client
+from pumpkit.posts.openrouter_schemas import ModelUsage, StructuredResult
 
 T = TypeVar("T", bound=BaseModel)
 

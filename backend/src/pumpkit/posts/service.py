@@ -6,17 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.models import AuthorPost, InspirationAuthor
-from pumpkit.core.db.models import (
+from pumpkit.core.time import as_utc
+from pumpkit.posts.models import (
     ATTEMPT_FAILED,
     ATTEMPT_SUCCEEDED,
     Post,
     VersionAttempt,
 )
-from pumpkit.core.time import as_utc
-from pumpkit.writing import slop
-from pumpkit.writing.constants import CORPUS_POSTS_PER_AUTHOR
-from pumpkit.writing.corpus import Corpus, CorpusPost, group_corpus
-from pumpkit.writing.versions import WrittenVersion
+from pumpkit.posts.writing import slop
+from pumpkit.posts.writing.constants import CORPUS_POSTS_PER_AUTHOR
+from pumpkit.posts.writing.corpus import Corpus, CorpusPost, group_corpus
+from pumpkit.posts.writing.versions import WrittenVersion
 
 
 async def corpus_for_user(db: AsyncSession, *, user_id: str) -> Corpus:

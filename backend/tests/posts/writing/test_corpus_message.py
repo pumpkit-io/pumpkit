@@ -1,7 +1,7 @@
 """Turning a Post's corpus into the message both calls are handed, as pumpkit-v6 does."""
 
-from pumpkit.writing.corpus import CorpusPost, group_corpus
-from pumpkit.writing.prompts.corpus import context_message, render
+from pumpkit.posts.writing.corpus import CorpusPost, group_corpus
+from pumpkit.posts.writing.prompts.corpus import context_message, render
 
 
 def _corpus(*posts: tuple[str, str]):

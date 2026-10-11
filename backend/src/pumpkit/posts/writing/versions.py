@@ -12,22 +12,22 @@ from typing import Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
-from pumpkit.core.llm import LLM
-from pumpkit.schemas.openrouter import StructuredResult
-from pumpkit.writing.constants import (
+from pumpkit.posts.llm import LLM
+from pumpkit.posts.openrouter_schemas import StructuredResult
+from pumpkit.posts.writing.constants import (
     CACHE_TTL,
     HUMANIZING_MODEL,
     MAX_TOKENS,
     REVISING_MODEL,
     WRITING_MODEL,
 )
-from pumpkit.writing.corpus import Corpus
-from pumpkit.writing.prompts.brief import brief_message
-from pumpkit.writing.prompts.corpus import context_message
-from pumpkit.writing.prompts.draft_post import DRAFT_POST_PROMPT
-from pumpkit.writing.prompts.feedback import feedback_message
-from pumpkit.writing.prompts.humanizer import HUMANIZER_PROMPT
-from pumpkit.writing.scrub import scrub
+from pumpkit.posts.writing.corpus import Corpus
+from pumpkit.posts.writing.prompts.brief import brief_message
+from pumpkit.posts.writing.prompts.corpus import context_message
+from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.feedback import feedback_message
+from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.posts.writing.scrub import scrub
 
 
 class DraftedPost(BaseModel):

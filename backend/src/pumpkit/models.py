@@ -4,3 +4,4 @@ import pumpkit.auth.models  # noqa: F401
 import pumpkit.authors.models  # noqa: F401
 import pumpkit.billing.models  # noqa: F401
 import pumpkit.core.db.models  # noqa: F401
+import pumpkit.posts.models  # noqa: F401

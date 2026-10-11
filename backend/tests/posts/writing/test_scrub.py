@@ -6,8 +6,8 @@ negatives: text a person typed must come out exactly as it went in.
 
 import pytest
 
-from pumpkit.writing import slop
-from pumpkit.writing.scrub import scrub
+from pumpkit.posts.writing import slop
+from pumpkit.posts.writing.scrub import scrub
 
 # Em and en dashes
 

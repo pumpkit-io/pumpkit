@@ -4,7 +4,7 @@ The system prompt of the draft call (and of the revision call), word for word fr
 It holds only instructions: the corpus changes per Post, so it travels in a user message.
 """
 
-from pumpkit.writing.constants import POST_MAX_CHARS
+from pumpkit.posts.writing.constants import POST_MAX_CHARS
 
 DRAFT_POST_PROMPT = f"""\
 # Role

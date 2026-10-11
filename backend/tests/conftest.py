@@ -88,11 +88,11 @@ from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # n
 from pumpkit.billing.models import Subscription  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402
-from pumpkit.core.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.core.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
 from pumpkit.main import app  # noqa: E402
+from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
