@@ -205,7 +205,7 @@ describe('BillingDialog', () => {
     expect(href(/20\. Competent court/)).toBe('/terms#courts');
   });
 
-  it('starts Checkout with the chosen Plan key, the Terms version and the three acceptances', async () => {
+  it('starts checkout with the chosen Plan key, the Terms version and the three acceptances', async () => {
     const backend = fakeBackend(MAY_SUBSCRIBE_WITH_TRIAL);
     renderDialog();
     await screen.findByRole('button', { name: 'Subscribe to Pro' });

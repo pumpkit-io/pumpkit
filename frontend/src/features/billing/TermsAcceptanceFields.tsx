@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
-import type { TermsAcceptance } from './termsAcceptance';
+import type { TermsAcceptance } from '@/services/billingService';
 
 // The onerous clauses arts. 1341 and 1342 c.c. require a business to approve one by one.
 // Number, title and anchor must match the headings in the English Terms.

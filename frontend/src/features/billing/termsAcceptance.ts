@@ -1,9 +1,4 @@
-/** The three boxes a User ticks before every Checkout (ADR 0010). */
-export interface TermsAcceptance {
-  acceptedTerms: boolean;
-  requestedImmediateStart: boolean;
-  approvedSpecificClauses: boolean;
-}
+import type { TermsAcceptance } from '@/services/billingService';
 
 export const NOTHING_ACCEPTED: TermsAcceptance = {
   acceptedTerms: false,
