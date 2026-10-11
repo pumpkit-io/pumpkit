@@ -44,7 +44,9 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | `STRIPE_BILLING_PORTAL_RETURN_URL` | Where the customer portal returns. |
 | `BILLING_PLAN_KEYS` | The Plans Pumpkit sells: Stripe price lookup keys as a quoted JSON list (like `CORS_ORIGINS`), in display order. Only these are listed and purchasable; each must be an active recurring price. |
 | `BILLING_TRIAL_PERIOD_DAYS` | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. `0` turns Trials off. |
-| `OPENROUTER_API_KEY` (optional) | Enables the LLM client; without it calls raise `LLMNotConfiguredError`. |
+| `LLM_API_KEY` (optional) | Key for the LLM endpoint. The app boots without it; writing a Post then fails with a 503 naming the variable. |
+| `LLM_BASE_URL` (optional) | Any OpenAI-compatible chat completions endpoint, such as `https://api.openai.com/v1` or a local Ollama at `http://localhost:11434/v1`. Defaults to OpenRouter (`https://openrouter.ai/api/v1`). Prompt cache hints are sent only to OpenRouter. |
+| `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` (optional) | The model for each writing call: the draft call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
 | `TWITTERAPI_IO_API_KEY` (optional) | Reads Inspiration authors' posts from twitterapi.io (ADR 0005). The app boots without it; adding an author then fails with a 503 naming the variable. |
 | `X_CLIENT_ID` (optional) | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the three X settings; connecting an X account then fails with a 503 naming them. |
 | `X_CLIENT_SECRET` (optional) | That X app's client secret. Pumpkit calls X as a confidential client. |

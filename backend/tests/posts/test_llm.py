@@ -166,3 +166,17 @@ async def test_cache_hints_are_left_out_for_an_endpoint_other_than_openrouter(mo
         {"role": "system", "content": [{"type": "text", "text": "be brief"}]},
         {"role": "user", "content": "hi"},
     ]
+
+
+@respx.mock
+async def test_an_answer_without_usage_comes_back_parsed_with_no_usage():
+    completion = _completion(json.dumps({"post": "hello"}))
+    del completion["usage"]
+    respx.post(COMPLETIONS_URL).mock(return_value=httpx.Response(200, json=completion))
+
+    result = await OpenAICompatibleLLM(LLMClient()).structured(
+        model="m", messages=[{"role": "user", "content": "x"}], response_model=_Answer
+    )
+
+    assert result.parsed == _Answer(post="hello")
+    assert result.usage is None

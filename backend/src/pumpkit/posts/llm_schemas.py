@@ -8,7 +8,7 @@ T = TypeVar("T", bound=BaseModel)
 
 @dataclass(frozen=True)
 class ModelUsage:
-    """Token usage reported by an OpenRouter model call, streamed or not.
+    """Token usage reported by a model call, streamed or not.
 
     Streamed calls get it from the final chunk, sent only with `include_usage` set.
     `raw` keeps the full provider payload (e.g. `cost`, `prompt_tokens_details`).

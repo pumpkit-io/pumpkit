@@ -136,16 +136,14 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     ]
 
 
-
-async def test_the_revision_call_uses_the_configured_model(
-    client, post_id, fake_llm, monkeypatch
-):
+async def test_the_revision_call_uses_the_configured_model(client, post_id, fake_llm, monkeypatch):
     monkeypatch.setattr(settings, "LLM_REVISING_MODEL", "llama3.3")
     fake_llm.replies = [{"post": "draft 2"}, {"post": "final 2"}]
 
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
     assert fake_llm.calls[0].model == "llama3.3"
+
 
 async def test_the_humanizer_gets_the_original_brief_and_the_scrubbed_revision(
     client, post_id, fake_llm

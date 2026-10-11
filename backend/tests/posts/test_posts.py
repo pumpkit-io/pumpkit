@@ -118,7 +118,6 @@ async def test_the_draft_call_gets_the_draft_prompt_then_the_corpus_then_the_bri
     ]
 
 
-
 async def test_the_draft_and_humanizer_calls_use_the_configured_models(
     client, with_author, fake_llm, monkeypatch
 ):
@@ -129,6 +128,7 @@ async def test_the_draft_and_humanizer_calls_use_the_configured_models(
     await client.post(POSTS, json={"brief": "ship"})
 
     assert [call.model for call in fake_llm.calls] == ["llama3.3", "qwen3"]
+
 
 async def test_the_humanizer_gets_its_prompt_the_corpus_the_brief_message_then_the_scrubbed_draft(
     client, with_author, fake_llm
