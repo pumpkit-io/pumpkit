@@ -78,11 +78,14 @@ async def check_monthly_cap(
     excluding_id: Optional[str] = None,
 ) -> None:
     """Pass `excluding_id` when moving an existing one, so it doesn't count itself."""
+    cap = settings.SCHEDULED_POSTS_MONTHLY_CAP
+    if cap is None:
+        return
     start, end = rules.month_bounds(publish_at)
     count = await service.count_publishing_between(
         db, user_id=user_id, start=start, end=end, excluding_id=excluding_id
     )
-    rules.check_month_has_room(count, cap=settings.SCHEDULED_POSTS_MONTHLY_CAP, moment=publish_at)
+    rules.check_month_has_room(count, cap=cap, moment=publish_at)
 
 
 async def create_scheduled_post(
