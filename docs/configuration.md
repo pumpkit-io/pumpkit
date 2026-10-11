@@ -60,7 +60,7 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `X_REDIRECT_URI` (optional) | The frontend's `/oauth/x/callback` route, e.g. `http://localhost:5173/oauth/x/callback`. Register the same URL as a callback on the X app. |
 | `PUBLISHER_POLL_INTERVAL_SECONDS` (optional) | How often the publisher process looks for due Scheduled posts. Defaults to 30, so a Scheduled post goes out within about 30 seconds of its time. |
 | `SCHEDULED_POSTS_MONTHLY_CAP` (optional) | Most Scheduled posts a User may have whose publish time falls in one UTC calendar month, counting Published, waiting and Failed ones (a cancelled one frees its place). Creating, Post now or rescheduling into a full month is refused with the date the cap resets. Defaults to 100. It bounds what the Instance's X app pays for publishing (ADR 0006). Set it empty for no cap, when you pay for your own X app; `0` turns scheduling off. |
-| `POSTHOG_ENABLED` (optional) | `true` to enable server-side analytics and error tracking. |
+| `POSTHOG_ENABLED` (optional) | `true` to enable server-side analytics and error tracking, given `POSTHOG_PROJECT_API_KEY`. The browser's analytics follow the key alone. |
 | `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. With it set, the frontend loads PostHog after Analytics consent (ADR 0009) and shows the consent banner; without it, neither. |
 | `POSTHOG_PERSONAL_API_KEY` (optional) | Personal key, used by `scripts/deploy.sh` for deploy annotations. |
 | `POSTHOG_HOST` (optional) | PostHog ingestion host, for the backend and the browser. Defaults to `https://eu.i.posthog.com`; in production point it at your reverse-proxy path (`https://<domain>/ph-relay`). |

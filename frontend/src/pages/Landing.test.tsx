@@ -10,8 +10,8 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
-import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
-import { WITH_OPERATOR } from '@/features/instance/testInstances';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { api } from '@/services/apiService';
 import { billingService } from '@/services/billingService';
@@ -61,7 +61,7 @@ const QUARTERLY_PLAN = {
 
 /** Renders the landing page as a signed-out visitor sees it at `/`. */
 const WITH_ANALYTICS: Instance = {
-  ...DEFAULT_INSTANCE,
+  ...SELLS_PLANS,
   analytics: {
     key: 'phc_test',
     host: 'https://eu.i.posthog.com',
@@ -69,7 +69,7 @@ const WITH_ANALYTICS: Instance = {
   },
 };
 
-function renderLanding(instance: Instance = DEFAULT_INSTANCE) {
+function renderLanding(instance: Instance = SELLS_PLANS) {
   return render(
     <InstanceProvider instance={instance}>
       <ThemeProvider>
@@ -94,7 +94,7 @@ describe('Landing on an Instance that sells no Plans', () => {
   it('shows no pricing section or Pricing link and asks for no Plans', () => {
     const fetchPlans = vi.spyOn(billingService, 'fetchPlans');
     onTestFinished(() => fetchPlans.mockRestore());
-    renderLanding({ ...DEFAULT_INSTANCE, sells_plans: false });
+    renderLanding({ ...SELLS_PLANS, sells_plans: false });
 
     expect(screen.queryByRole('region', { name: 'Simple pricing' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
@@ -144,7 +144,7 @@ describe('Landing landmarks', () => {
 
 describe('Landing header', () => {
   it("names the Instance's app in the header", () => {
-    renderLanding({ ...DEFAULT_INSTANCE, app_name: 'acmeWriter' });
+    renderLanding({ ...SELLS_PLANS, app_name: 'acmeWriter' });
     const header = screen.getByRole('banner');
     expect(within(header).getByRole('link', { name: 'acmeWriter home' })).toBeInTheDocument();
   });
