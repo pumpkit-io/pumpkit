@@ -5,8 +5,11 @@ The backend is one installable package, `src/pumpkit/`, with tests outside it in
 ## Rules
 
 - Router → mediator → service still holds inside each area.
+- An area skips the modules it has no use for: `support` has nothing to orchestrate or store, so it has only a router.
+- A module that would grow unwieldy may become a subpackage, as `auth/service/` did.
 - An area may import another area's `service`, `models`, `schemas` and domain modules, never its `router` or `mediator`.
 - Areas never import in a cycle. The order is `core` ← `auth` ← `billing` ← {`authors`, `x_connection`, `support`} ← `posts` ← `scheduling`.
+- `GET /x-connection` and `POST /x-connection/authorizations/complete` are served from `scheduling`, not `x_connection`: their response carries the count of waiting Scheduled posts, and `x_connection` may not import `scheduling`.
 - `core` imports no area. Errors that map to an HTTP response subclass a base error in `core`, so one generic handler answers them all.
 - `User` has no relationships to other areas' models. Each child keeps its `user` relationship and its `ON DELETE CASCADE` foreign key, and `pumpkit/models.py` imports every area's models so Alembic and the tests see the whole schema.
 - import-linter enforces the import rules in CI.

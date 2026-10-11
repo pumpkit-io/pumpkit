@@ -83,7 +83,7 @@ Add the page to `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`, whi
 
 ### Edit the user profile
 
-Profile fields are saved through `PATCH` on the users router; the logic lives in `backend/src/pumpkit/auth/service/users.py::update_user_profile` (router to service). The UI is `frontend/src/features/account/`.
+Profile fields are saved through `PATCH /users/me` in `backend/src/pumpkit/auth/router.py`; the logic lives in `backend/src/pumpkit/auth/service/users.py::update_user_profile` (router to service). The UI is `frontend/src/features/account/`.
 
 ### Track an event
 
