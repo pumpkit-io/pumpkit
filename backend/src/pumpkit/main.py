@@ -9,7 +9,6 @@ from pumpkit.api.routers import (
     inspiration_authors,
     posts,
     scheduled_posts,
-    support,
     x_connection,
 )
 from pumpkit.auth.router import router as auth_router
@@ -19,6 +18,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import limiter
+from pumpkit.support.router import router as support_router
 
 
 @asynccontextmanager
@@ -43,7 +43,7 @@ app.add_middleware(
 # The prefix lives here so routers stay unaware of their mount point.
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
-app.include_router(support.router, prefix="/api/v1")
+app.include_router(support_router, prefix="/api/v1")
 app.include_router(inspiration_authors.router, prefix="/api/v1")
 app.include_router(posts.router, prefix="/api/v1")
 app.include_router(x_connection.router, prefix="/api/v1")
