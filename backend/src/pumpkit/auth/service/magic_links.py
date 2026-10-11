@@ -11,6 +11,7 @@ from typing import Optional, Union
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.auth.service.retention as retention
 from pumpkit.auth.models import MagicLink
 from pumpkit.auth.service.sessions import ClientInfo
 from pumpkit.core.config import settings
@@ -70,6 +71,7 @@ async def issue(
     Issue a Magic link for `email`, unless one was issued within the cool-down.
     Earlier unconsumed links for that email stop working.
     """
+    await retention.purge_expired(db, now=now)
     latest = await _latest_for_email(db, email)
     if latest is not None and now - as_utc(latest.sent_at) < COOLDOWN:
         return CoolingDown()
