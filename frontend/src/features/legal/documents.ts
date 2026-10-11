@@ -22,6 +22,12 @@ export const TERMS_PATH = '/terms';
 const PRIVACY_IT_PATH = '/it/privacy';
 const TERMS_IT_PATH = '/it/terms';
 
+/** The English legal documents the footers link to, in display order. */
+export const LEGAL_LINKS = [
+  { path: PRIVACY_PATH, label: 'Privacy Policy' },
+  { path: TERMS_PATH, label: 'Terms' },
+];
+
 // Bump with every change to a document's text; both languages share the date.
 // TERMS_LAST_UPDATED must equal the backend's TERMS_VERSION.
 const PRIVACY_LAST_UPDATED = '2026-10-11';
