@@ -8,10 +8,10 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
-import pumpkit.api.services.x_connections as x_connections_service
 import pumpkit.publishing.publish as publish
+import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.db.models import ScheduledPost
-from pumpkit.core.x_publisher import XPublisher
+from pumpkit.x_connection.x_publisher import XPublisher
 
 
 async def publish_scheduled_post(

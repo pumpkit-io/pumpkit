@@ -7,7 +7,6 @@ from slowapi.errors import RateLimitExceeded
 
 from pumpkit.api.routers import (
     scheduled_posts,
-    x_connection,
 )
 from pumpkit.auth.router import router as auth_router
 from pumpkit.authors.router import router as authors_router
@@ -19,6 +18,7 @@ from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import limiter
 from pumpkit.posts.router import router as posts_router
 from pumpkit.support.router import router as support_router
+from pumpkit.x_connection.router import router as x_connection_router
 
 
 @asynccontextmanager
@@ -46,7 +46,9 @@ app.include_router(billing_router, prefix="/api/v1")
 app.include_router(support_router, prefix="/api/v1")
 app.include_router(authors_router, prefix="/api/v1")
 app.include_router(posts_router, prefix="/api/v1")
-app.include_router(x_connection.router, prefix="/api/v1")
+app.include_router(scheduled_posts.x_connection_router, prefix="/api/v1")
+app.include_router(x_connection_router, prefix="/api/v1")
+app.include_router(scheduled_posts.x_authorization_router, prefix="/api/v1")
 app.include_router(scheduled_posts.router, prefix="/api/v1")
 
 app.state.limiter = limiter

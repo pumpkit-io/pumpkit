@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from pumpkit.api.mediators.publishing import fail_stuck, publish_next_due
 from pumpkit.core.logging import logger
 from pumpkit.core.time import Clock
-from pumpkit.core.x_publisher import XPublisher
+from pumpkit.x_connection.x_publisher import XPublisher
 
 
 async def run_pass(

@@ -11,16 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
 from pumpkit.billing.models import Subscription
-from pumpkit.core.db.models import XConnection
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.security import decrypt
-from pumpkit.core.x_publisher import (
+from pumpkit.main import app
+from pumpkit.x_connection.models import XConnection
+from pumpkit.x_connection.x_publisher import (
     XAccount,
     XPublisherError,
     XReconnectNeededError,
     code_challenge_for,
 )
-from pumpkit.main import app
 
 X_CONNECTION = "/api/v1/x-connection"
 AUTHORIZATIONS = f"{X_CONNECTION}/authorizations"

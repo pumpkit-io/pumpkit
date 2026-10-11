@@ -8,7 +8,7 @@ import pytest
 import respx
 
 from pumpkit.core.config import settings
-from pumpkit.core.x_publisher import (
+from pumpkit.x_connection.x_publisher import (
     X_AUTHORIZE_URL,
     X_REVOKE_URL,
     X_TOKEN_URL,

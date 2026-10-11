@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from pumpkit.publishing.x_length import x_weighted_length
+from pumpkit.x_connection.x_length import x_weighted_length
 
 # Shared with frontend/src/lib/xLength.test.ts; the lengths come from twitter-text 3.1.0.
 CASES = json.loads((Path(__file__).parent / "x_weighted_length_cases.json").read_text())

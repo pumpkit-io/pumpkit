@@ -9,8 +9,8 @@ from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.core.logging import logger
 from pumpkit.core.time import system_clock
-from pumpkit.core.x_publisher import get_x_publisher
 from pumpkit.publishing.publisher import run
+from pumpkit.x_connection.x_publisher import get_x_publisher
 
 
 async def main() -> None:

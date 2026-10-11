@@ -70,3 +70,14 @@ class ScheduledPostUpdateRequest(BaseModel):
         if self.text is None and self.publish_at is None:
             raise ValueError("Give a new text, a new publish time, or both.")
         return self
+
+
+class XConnectionResponse(BaseModel):
+    """The User's X connection. Tokens never leave the backend."""
+
+    handle: str
+    # The longest Scheduled post X accepts from this account, in X's weighted characters.
+    char_limit: int
+    needs_reconnect: bool
+    # Scheduled posts for this X account not yet published; disconnecting makes them fail.
+    scheduled_posts_waiting: int
