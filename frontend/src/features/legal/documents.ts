@@ -1,5 +1,7 @@
 import privacyEn from './documents/privacy.en.md?raw';
+import privacyIt from './documents/privacy.it.md?raw';
 import termsEn from './documents/terms.en.md?raw';
+import termsIt from './documents/terms.it.md?raw';
 
 export type LegalLanguage = 'en' | 'it';
 
@@ -11,12 +13,14 @@ export interface LegalDocument {
   /** ISO date shown as "Last updated"; bump it with every change to the text. */
   lastUpdated: string;
   markdown: string;
-  /** Path of the same document in the other language, once it exists. */
-  alternatePath?: string;
+  /** Path of the same document in the other language. */
+  alternatePath: string;
 }
 
 export const PRIVACY_PATH = '/privacy';
 export const TERMS_PATH = '/terms';
+const PRIVACY_IT_PATH = '/it/privacy';
+const TERMS_IT_PATH = '/it/terms';
 
 /** Every legal document, served at its own public route: a new document is a Markdown file plus an entry here. */
 export const LEGAL_DOCUMENTS: LegalDocument[] = [
@@ -26,6 +30,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
     title: 'Privacy Policy',
     lastUpdated: '2026-10-11',
     markdown: privacyEn,
+    alternatePath: PRIVACY_IT_PATH,
   },
   {
     path: TERMS_PATH,
@@ -33,6 +38,23 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
     title: 'Terms',
     lastUpdated: '2026-10-11',
     markdown: termsEn,
+    alternatePath: TERMS_IT_PATH,
+  },
+  {
+    path: PRIVACY_IT_PATH,
+    language: 'it',
+    title: 'Informativa sulla privacy',
+    lastUpdated: '2026-10-11',
+    markdown: privacyIt,
+    alternatePath: PRIVACY_PATH,
+  },
+  {
+    path: TERMS_IT_PATH,
+    language: 'it',
+    title: 'Termini',
+    lastUpdated: '2026-10-11',
+    markdown: termsIt,
+    alternatePath: TERMS_PATH,
   },
 ];
 

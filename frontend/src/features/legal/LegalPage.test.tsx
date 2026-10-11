@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -83,5 +83,91 @@ describe('Terms at /terms', () => {
   ])('gives the onerous clause "%s" the anchor #%s', (name, id) => {
     renderLegalRoute('/terms');
     expect(screen.getByRole('heading', { level: 2, name })).toHaveAttribute('id', id);
+  });
+});
+
+describe('Informativa sulla privacy at /it/privacy', () => {
+  it('renders its Italian heading and the same Last updated date for a signed-out visitor', () => {
+    renderLegalRoute('/it/privacy');
+    const main = screen.getByRole('main');
+    expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Informativa sulla privacy',
+    );
+    expect(within(main).getByText('Ultimo aggiornamento: 11 ottobre 2026')).toBeInTheDocument();
+  });
+
+  it('sets its own page title and Italian as the page language', () => {
+    renderLegalRoute('/it/privacy');
+    expect(document.title).toBe('Informativa sulla privacy · Pumpkit');
+    expect(document.documentElement.lang).toBe('it');
+  });
+
+  it('keeps the English anchors on its sections', () => {
+    renderLegalRoute('/it/privacy');
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Cookie e archiviazione nel browser' }),
+    ).toHaveAttribute('id', 'cookies');
+    expect(screen.getByRole('heading', { level: 2, name: 'Inspiration author' })).toHaveAttribute(
+      'id',
+      'inspiration-authors',
+    );
+  });
+});
+
+describe('Termini at /it/terms', () => {
+  it('renders its Italian heading and the same Last updated date for a signed-out visitor', () => {
+    renderLegalRoute('/it/terms');
+    const main = screen.getByRole('main');
+    expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Termini');
+    expect(within(main).getByText('Ultimo aggiornamento: 11 ottobre 2026')).toBeInTheDocument();
+  });
+
+  it('sets Italian as the page language', () => {
+    renderLegalRoute('/it/terms');
+    expect(document.documentElement.lang).toBe('it');
+  });
+
+  it.each([
+    ['9. Sospensione e risoluzione da parte del Gestore', 'suspension'],
+    ['11. Rinnovo automatico e disdetta', 'renewal'],
+    ['12. Diritto di recesso per i consumatori', 'withdrawal'],
+    ['13. Esclusione dei rimborsi', 'refunds'],
+    ['15. Limitazione di responsabilità', 'liability'],
+    ['18. Modifiche ai presenti Termini', 'changes'],
+    ['20. Foro competente', 'courts'],
+  ])('gives clause "%s" the same anchor as the English Terms, #%s', (name, id) => {
+    renderLegalRoute('/it/terms');
+    expect(screen.getByRole('heading', { level: 2, name })).toHaveAttribute('id', id);
+  });
+
+  it('numbers the same clauses as the English Terms, with the same anchors', () => {
+    const clauses = (path: string) => {
+      const { unmount } = renderLegalRoute(path);
+      const found = screen
+        .getAllByRole('heading', { level: 2 })
+        .map((heading) => `${heading.textContent?.match(/^(\d+)\./)?.[1] ?? '-'} #${heading.id}`);
+      unmount();
+      return found;
+    };
+    const english = clauses('/terms');
+    expect(english).toHaveLength(22);
+    expect(clauses('/it/terms')).toEqual(english);
+  });
+});
+
+describe('language links', () => {
+  it.each([
+    ['/privacy', 'Leggi in italiano', '/it/privacy', 'Informativa sulla privacy'],
+    ['/it/privacy', 'Read in English', '/privacy', 'Privacy Policy'],
+    ['/terms', 'Leggi in italiano', '/it/terms', 'Termini'],
+    ['/it/terms', 'Read in English', '/terms', 'Terms'],
+  ])('%s offers "%s", which opens %s', (from, label, to, title) => {
+    renderLegalRoute(from);
+    const link = screen.getByRole('link', { name: label });
+    expect(link).toHaveAttribute('href', to);
+    fireEvent.click(link);
+    expect(within(screen.getByRole('main')).getByRole('heading', { level: 1 })).toHaveTextContent(
+      title,
+    );
   });
 });
