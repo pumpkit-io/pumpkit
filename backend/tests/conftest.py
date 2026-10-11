@@ -37,9 +37,7 @@ _TEST_ENV = {
     "GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES": "64",
     "GOOGLE_COOKIE_MAX_AGE_SECONDS": "600",
     "GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS": "30",
-    "RESEND_API_KEY": "re_test",
-    "RESEND_NOREPLY_ADDRESS": "noreply@example.com",
-    "RESEND_SUPPORT_ADDRESS": "support@example.com",
+    "SUPPORT_EMAIL": "support@example.com",
     "STRIPE_SECRET_KEY": "sk_test_dummy",
     "STRIPE_PUBLISHABLE_KEY": "pk_test_dummy",
     "STRIPE_WEBHOOK_SECRET": "whsec_dummy",
@@ -48,7 +46,7 @@ _TEST_ENV = {
     "STRIPE_BILLING_PORTAL_RETURN_URL": "http://localhost:5173/billing",
     "BILLING_PLAN_KEYS": '["pumpkit_pro_monthly"]',
     "BILLING_TRIAL_PERIOD_DAYS": "14",
-    "OPENROUTER_API_KEY": "sk-or-test",
+    "LLM_API_KEY": "sk-test",
     "POSTHOG_ENABLED": "false",
 }
 for _key, _value in _TEST_ENV.items():
@@ -98,7 +96,7 @@ from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # 
 @pytest.fixture(autouse=True)
 def auth_outbox():
     """
-    Every test sends auth email to an in-memory outbox instead of Resend.
+    Every test sends auth email to an in-memory outbox instead of an SMTP server or the log.
     Request it by name to read `auth_outbox.messages` or set `auth_outbox.fail = True`.
     """
     outbox = OutboxAuthMailer()
@@ -198,7 +196,7 @@ def fake_x_publisher():
 @pytest.fixture(autouse=True)
 def fake_llm():
     """
-    Every test calls models through a scripted fake instead of OpenRouter. Request it by name
+    Every test calls models through a scripted fake instead of a real endpoint. Request it by name
     to queue `fake_llm.replies` (field dicts or exceptions) and read `fake_llm.calls`.
     """
     fake = FakeLLM()

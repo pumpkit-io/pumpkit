@@ -18,9 +18,7 @@ _INSTANCE_ENV = {
     "POSTGRES_DB": "postgres",
     "JWT_SECRET_KEY": "test-secret-key-test-secret-key-0123456789",
     "FERNET_ENCRYPTION_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
-    "RESEND_API_KEY": "re_test",
-    "RESEND_NOREPLY_ADDRESS": "noreply@example.org",
-    "RESEND_SUPPORT_ADDRESS": "support@example.org",
+    "SUPPORT_EMAIL": "support@example.org",
 }
 
 _STRIPE_ENV = {
@@ -33,6 +31,11 @@ _STRIPE_ENV = {
 _GOOGLE_ENV = {
     "GOOGLE_CLIENT_ID": "client-id",
     "GOOGLE_CLIENT_SECRET": "client-secret",
+}
+
+_SMTP_ENV = {
+    "SMTP_HOST": "smtp.example.org",
+    "EMAIL_FROM": "noreply@example.org",
 }
 
 
@@ -97,24 +100,55 @@ def test_providers_are_off_when_none_of_their_settings_are_set(instance_env):
     assert s.is_stripe_billing_configured() is False
     assert s.is_google_configured() is False
     assert s.is_posthog_configured() is False
+    assert s.is_smtp_configured() is False
 
 
 def test_providers_are_off_when_their_settings_are_left_empty(instance_env):
-    empty = {key: "" for key in (*_STRIPE_ENV, *_GOOGLE_ENV, "POSTHOG_PROJECT_API_KEY")}
+    empty = {
+        key: ""
+        for key in (
+            *_STRIPE_ENV,
+            *_GOOGLE_ENV,
+            *_SMTP_ENV,
+            "POSTHOG_PROJECT_API_KEY",
+            "SMTP_PORT",
+            "SMTP_USERNAME",
+            "SMTP_PASSWORD",
+        )
+    }
 
     s = instance_env(**empty)
 
     assert s.is_stripe_billing_configured() is False
     assert s.is_google_configured() is False
     assert s.is_posthog_configured() is False
+    assert s.is_smtp_configured() is False
 
 
 def test_providers_are_on_when_all_their_settings_are_set(instance_env):
-    s = instance_env(**_STRIPE_ENV, **_GOOGLE_ENV, POSTHOG_PROJECT_API_KEY="phc_test")
+    s = instance_env(**_STRIPE_ENV, **_GOOGLE_ENV, **_SMTP_ENV, POSTHOG_PROJECT_API_KEY="phc_test")
 
     assert s.is_stripe_billing_configured() is True
     assert s.is_google_configured() is True
     assert s.is_posthog_configured() is True
+    assert s.is_smtp_configured() is True
+
+
+@pytest.mark.parametrize(
+    ("security", "port"),
+    [("starttls", 587), ("tls", 465), ("none", 25)],
+)
+def test_smtp_port_defaults_to_the_security_modes_port(instance_env, security, port):
+    s = instance_env(**_SMTP_ENV, SMTP_SECURITY=security)
+
+    assert s.smtp_port() == port
+
+
+def test_smtp_defaults_to_starttls_and_an_explicit_port_wins(instance_env):
+    s = instance_env(**_SMTP_ENV, SMTP_PORT="2525")
+
+    assert s.SMTP_SECURITY == "starttls"
+    assert s.smtp_port() == 2525
 
 
 @pytest.mark.parametrize(
@@ -125,6 +159,8 @@ def test_providers_are_on_when_all_their_settings_are_set(instance_env):
         (_STRIPE_ENV, ["STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"]),
         (_GOOGLE_ENV, ["GOOGLE_CLIENT_SECRET"]),
         (_GOOGLE_ENV, ["GOOGLE_CLIENT_ID"]),
+        (_SMTP_ENV, ["SMTP_HOST"]),
+        (_SMTP_ENV, ["EMAIL_FROM"]),
     ],
 )
 def test_partly_configured_provider_fails_naming_each_missing_setting(instance_env, group, unset):
@@ -146,7 +182,7 @@ def test_empty_plan_keys_count_as_unset(instance_env):
 
 
 def test_settings_boot_without_optional_providers(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     for key in (
         "POSTHOG_ENABLED",
         "POSTHOG_PROJECT_API_KEY",
@@ -155,7 +191,8 @@ def test_settings_boot_without_optional_providers(monkeypatch):
     ):
         monkeypatch.delenv(key, raising=False)
     s = Settings()  # pyright: ignore[reportCallIssue]
-    assert s.OPENROUTER_API_KEY is None
+    assert s.LLM_API_KEY is None
+    assert s.LLM_BASE_URL == "https://openrouter.ai/api/v1"
     assert s.POSTHOG_ENABLED is False
     assert s.POSTHOG_PROJECT_API_KEY is None
     assert s.POSTHOG_HOST == "https://eu.i.posthog.com"

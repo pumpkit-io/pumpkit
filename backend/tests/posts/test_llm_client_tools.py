@@ -1,7 +1,7 @@
 import pytest
 
-from pumpkit.posts.openrouter import openrouter_client
-from pumpkit.posts.openrouter_schemas import AssembledToolCall
+from pumpkit.posts.llm_client import llm_client
+from pumpkit.posts.llm_schemas import AssembledToolCall
 
 
 class _Delta:
@@ -44,10 +44,10 @@ async def test_stream_reassembles_tool_call(monkeypatch):
         assert kwargs["tools"][0]["function"]["name"] == "lookup"
         return _fake_stream(chunks)
 
-    monkeypatch.setattr(openrouter_client._llm_client.chat.completions, "create", fake_create)
+    monkeypatch.setattr(llm_client._llm_client.chat.completions, "create", fake_create)
 
     events = []
-    async for ev in openrouter_client.llm_stream(
+    async for ev in llm_client.llm_stream(
         model="m", messages=[], tools=[{"type": "function", "function": {"name": "lookup"}}]
     ):
         events.append(ev)

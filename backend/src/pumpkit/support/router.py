@@ -19,7 +19,7 @@ async def support_contact(request: Request) -> RedirectResponse:
     Browsers follow a mailto: Location, so the frontend never needs the address.
     """
     return RedirectResponse(
-        url=f"mailto:{settings.RESEND_SUPPORT_ADDRESS}",
+        url=f"mailto:{settings.SUPPORT_EMAIL}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

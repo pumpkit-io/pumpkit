@@ -2,9 +2,9 @@
 
 Every setting comes from environment variables, split across three files copied from their `.env.example`: the root `.env`, `backend/.env` and `frontend/.env`.
 
-Variables marked (optional) can be left empty; the app boots without them, using the default shown. Only the Instance's URLs, the database, `JWT_SECRET_KEY`, `FERNET_ENCRYPTION_KEY` and the Resend variables are required.
+Variables marked (optional) can be left empty; the app boots without them, using the default shown. Only the Instance's URLs, the database, `JWT_SECRET_KEY`, `FERNET_ENCRYPTION_KEY` and `SUPPORT_EMAIL` are required.
 
-Each optional provider is a group of settings (ADR 0011). With all of a group's required settings set, the provider is on; with none set, it is off; with only some set, the backend refuses to start and names the missing ones. The groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), Google sign-in (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and PostHog (`POSTHOG_PROJECT_API_KEY`).
+Each optional provider is a group of settings (ADR 0011). With all of a group's required settings set, the provider is on; with none set, it is off; with only some set, the backend refuses to start and names the missing ones. The groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), Google sign-in (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), SMTP (`SMTP_HOST`, `EMAIL_FROM`) and PostHog (`POSTHOG_PROJECT_API_KEY`).
 
 ## Root `.env`
 
@@ -39,15 +39,20 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `GOOGLE_NONCE_TOKEN_NUM_BYTES`, `GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES` (optional) | Size of the OAuth nonce and PKCE verifier. Default to 64. |
 | `GOOGLE_COOKIE_MAX_AGE_SECONDS` (optional) | Lifetime of the short-lived PKCE/CSRF cookies during OAuth. Defaults to 600. |
 | `GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS` (optional) | Timeout for Google's token endpoint. Defaults to 30. |
-| `RESEND_API_KEY` | Resend API key for transactional email. |
-| `RESEND_NOREPLY_ADDRESS`, `RESEND_SUPPORT_ADDRESS` | Sender and support addresses. |
+| `SUPPORT_EMAIL` | The address the support link opens a new email to. |
+| `SMTP_HOST`, `EMAIL_FROM` (optional) | SMTP server and the address Magic link emails come from. Set both or neither. Without them each Magic link, its recipient and expiry are written to the backend log at warning level, and startup says so; configure SMTP before inviting anyone else. |
+| `SMTP_SECURITY` (optional) | `starttls` (default), `tls` or `none`. |
+| `SMTP_PORT` (optional) | Defaults to the security mode's port: 587 for `starttls`, 465 for `tls`, 25 for `none`. |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` (optional) | SMTP login; leave empty for a server that needs none. |
 | `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` (optional) | Stripe API keys. Part of the Stripe billing group. |
 | `STRIPE_WEBHOOK_SECRET` (optional) | Signing secret of the webhook endpoint. Part of the Stripe billing group. |
 | `STRIPE_CHECKOUT_SUCCESS_URL`, `STRIPE_CHECKOUT_CANCEL_URL` (optional) | Where Checkout returns after paying or cancelling. Default to `FRONTEND_URL` + `/billing/success` and `/billing/cancelled`. |
 | `STRIPE_BILLING_PORTAL_RETURN_URL` (optional) | Where the customer portal returns. Defaults to `FRONTEND_URL` + `/billing`. |
 | `BILLING_PLAN_KEYS` (optional) | Part of the Stripe billing group; an empty list counts as unset. The Plans Pumpkit sells: Stripe price lookup keys as a quoted JSON list (like `CORS_ORIGINS`), in display order. Only these are listed and purchasable; each must be an active recurring price. |
 | `BILLING_TRIAL_PERIOD_DAYS` (optional) | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. Defaults to 14. `0` turns Trials off. |
-| `OPENROUTER_API_KEY` (optional) | Enables the LLM client; without it calls raise `LLMNotConfiguredError`. |
+| `LLM_API_KEY` (optional) | Key for the LLM endpoint. The app boots without it; writing a Post then fails with a 503 naming the variable. |
+| `LLM_BASE_URL` (optional) | Any OpenAI-compatible chat completions endpoint, such as `https://api.openai.com/v1` or a local Ollama at `http://localhost:11434/v1`. Defaults to OpenRouter (`https://openrouter.ai/api/v1`). Prompt cache hints are sent only to OpenRouter. |
+| `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` (optional) | The model for each writing call: the draft call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
 | `TWITTERAPI_IO_API_KEY` (optional) | Reads Inspiration authors' posts from twitterapi.io (ADR 0005). The app boots without it; adding an author then fails with a 503 naming the variable. |
 | `X_CLIENT_ID` (optional) | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the three X settings; connecting an X account then fails with a 503 naming them. |
 | `X_CLIENT_SECRET` (optional) | That X app's client secret. Pumpkit calls X as a confidential client. |
@@ -59,6 +64,8 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `POSTHOG_PERSONAL_API_KEY` (optional) | Personal key, used by `scripts/deploy.sh` for deploy annotations. |
 | `POSTHOG_HOST` (optional) | PostHog ingestion host, for the backend and the browser. Defaults to `https://eu.i.posthog.com`; in production point it at your reverse-proxy path (`https://<domain>/ph-relay`). |
 | `POSTHOG_UI_HOST` (optional) | PostHog app host the browser links to when `POSTHOG_HOST` is a relay. Defaults to `https://eu.posthog.com`. |
+
+To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`, `SMTP_PASSWORD` to a Resend API key and `EMAIL_FROM` to an address on a domain verified in Resend; the default `starttls` on port 587 works.
 
 ## `frontend/.env`
 

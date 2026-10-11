@@ -1,22 +1,27 @@
 """
 The `AuthMailer` port, so mediators never see the email provider.
 
-Production uses `ResendAuthMailer`; tests override `get_auth_mailer` with `OutboxAuthMailer`.
+`SmtpAuthMailer` sends through any SMTP server when SMTP is configured, `LogAuthMailer`
+writes the Magic link to the log otherwise; tests override `get_auth_mailer` with `OutboxAuthMailer`.
 """
 
-import base64
+import asyncio
+import smtplib
+import ssl
 from dataclasses import dataclass, field
+from email.message import EmailMessage
+from email.utils import formataddr
 from functools import lru_cache
 from pathlib import Path
-from typing import Protocol
+from typing import Optional, Protocol
 
-import resend
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from resend.exceptions import ResendError
 
-from pumpkit.core.config import settings
+from pumpkit.core.config import SmtpSecurity, settings
+from pumpkit.core.logging import logger
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+_SMTP_TIMEOUT_SECONDS = 30
 
 
 class AuthMailerError(Exception):
@@ -49,7 +54,7 @@ _email_templates = Environment(
 )
 
 
-def resend_magic_link_params(email: MagicLinkEmail, logo_base64: str) -> resend.Emails.SendParams:
+def _magic_link_message(email: MagicLinkEmail, from_address: str, logo: bytes) -> EmailMessage:
     html = _email_templates.get_template("emails/magic_link.html").render(
         display_name=email.display_name,
         magic_url=email.link_url,
@@ -57,36 +62,83 @@ def resend_magic_link_params(email: MagicLinkEmail, logo_base64: str) -> resend.
         app_name=settings.APP_NAME,
         logo_cid=_LOGO_CONTENT_ID,
     )
-    return {
-        "from": f"{settings.APP_NAME} <{settings.RESEND_NOREPLY_ADDRESS}>",
-        "to": [email.to],
-        "subject": f"Sign in to {settings.APP_NAME}",
-        "html": html,
-        "attachments": [
-            {
-                "filename": "logo.png",
-                "content": logo_base64,
-                "content_type": "image/png",
-                "content_id": _LOGO_CONTENT_ID,
-            }
-        ],
-    }
+    message = EmailMessage()
+    message["From"] = formataddr((settings.APP_NAME, from_address))
+    message["To"] = email.to
+    message["Subject"] = f"Sign in to {settings.APP_NAME}"
+    message.set_content(
+        f"Sign in to {settings.APP_NAME}: {email.link_url}\n"
+        f"The link expires in {email.expires_in_minutes} minutes."
+    )
+    message.add_alternative(html, subtype="html")
+    # The logo is a related part of the HTML so mail clients render it inline by content id.
+    html_part = message.get_body(preferencelist=("html",))
+    assert html_part is not None
+    html_part.add_related(
+        logo, maintype="image", subtype="png", cid=f"<{_LOGO_CONTENT_ID}>", filename="logo.png"
+    )
+    return message
 
 
-def read_logo_base64() -> str:
-    return base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
-
-
-class ResendAuthMailer:
-    def __init__(self) -> None:
-        resend.api_key = settings.RESEND_API_KEY
-        self._logo_base64 = read_logo_base64()
+class SmtpAuthMailer:
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int,
+        security: SmtpSecurity,
+        username: Optional[str],
+        password: Optional[str],
+        from_address: str,
+    ) -> None:
+        self._host = host
+        self._port = port
+        self._security = security
+        self._username = username
+        self._password = password
+        self._from_address = from_address
+        self._logo = _LOGO_PATH.read_bytes()
 
     async def send_magic_link(self, email: MagicLinkEmail) -> None:
+        message = _magic_link_message(email, self._from_address, self._logo)
         try:
-            await resend.Emails.send_async(resend_magic_link_params(email, self._logo_base64))
-        except ResendError as error:
-            raise AuthMailerError("Resend could not send the Magic link email") from error
+            # smtplib blocks, so the send runs off the event loop.
+            await asyncio.to_thread(self._send, message)
+        except (smtplib.SMTPException, OSError) as error:
+            raise AuthMailerError("The SMTP server could not send the Magic link email") from error
+
+    def _send(self, message: EmailMessage) -> None:
+        context = ssl.create_default_context()
+        if self._security == "tls":
+            client = smtplib.SMTP_SSL(
+                self._host, self._port, timeout=_SMTP_TIMEOUT_SECONDS, context=context
+            )
+        else:
+            client = smtplib.SMTP(self._host, self._port, timeout=_SMTP_TIMEOUT_SECONDS)
+        with client:
+            if self._security == "starttls":
+                client.starttls(context=context)
+            if self._username and self._password:
+                client.login(self._username, self._password)
+            client.send_message(message)
+
+
+class LogAuthMailer:
+    """Writes the Magic link to the log, for an Instance without SMTP."""
+
+    async def send_magic_link(self, email: MagicLinkEmail) -> None:
+        logger.warning(
+            "Magic link for %s (expires in %d minutes): %s",
+            email.to,
+            email.expires_in_minutes,
+            email.link_url,
+        )
+
+
+def announce_magic_link_delivery() -> None:
+    """Say once at startup where Magic links go, so a Self-hoster without SMTP finds them."""
+    if not settings.is_smtp_configured():
+        logger.warning("SMTP is not configured: Magic links are written to this log")
 
 
 @dataclass
@@ -105,4 +157,13 @@ class OutboxAuthMailer:
 @lru_cache
 def get_auth_mailer() -> AuthMailer:
     """FastAPI dependency for the `AuthMailer` port."""
-    return ResendAuthMailer()
+    if settings.SMTP_HOST and settings.EMAIL_FROM:
+        return SmtpAuthMailer(
+            host=settings.SMTP_HOST,
+            port=settings.smtp_port(),
+            security=settings.SMTP_SECURITY,
+            username=settings.SMTP_USERNAME,
+            password=settings.SMTP_PASSWORD,
+            from_address=settings.EMAIL_FROM,
+        )
+    return LogAuthMailer()
