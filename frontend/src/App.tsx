@@ -39,13 +39,13 @@ function RootRedirect() {
 }
 
 function AppRoutes() {
-  const { sells_plans } = useInstance();
+  const { sells_plans, operator } = useInstance();
 
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
-      {legalRoutes}
+      {legalRoutes(operator)}
       <Route
         element={
           <ProtectedRoute>

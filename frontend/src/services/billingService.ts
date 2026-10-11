@@ -48,8 +48,8 @@ export interface TermsAcceptance {
 /** The Plans on sale and the Terms version a checkout must accept. */
 export interface PlanCatalog {
   plans: Plan[];
-  /** The current Terms' "Last updated" date, in ISO form. */
-  termsVersion: string;
+  /** The current Terms' "Last updated" date, in ISO form; null where the Instance has no Terms (ADR 0011). */
+  termsVersion: string | null;
 }
 
 interface BillingMeApi {
@@ -91,7 +91,7 @@ export const billingService = {
   },
 
   fetchPlans: async (): Promise<PlanCatalog> => {
-    const { data } = await apiService.get<{ data: PlanApi[]; terms_version: string }>(
+    const { data } = await apiService.get<{ data: PlanApi[]; terms_version: string | null }>(
       '/billing/plans',
     );
     return {
@@ -108,21 +108,25 @@ export const billingService = {
   },
 
   /**
-   * Starts Stripe Checkout for a Plan with the User's acceptance of `termsVersion` (ADR 0010).
+   * Starts Stripe Checkout for a Plan with the User's acceptance of `termsVersion` (ADR 0010),
+   * or with the Plan alone when `termsVersion` is null because the Instance has no Terms.
    * The server decides the price, quantity and any Trial, refuses an acceptance missing a box,
    * and refuses with a 409 when `termsVersion` is no longer current.
    */
   startSubscriptionCheckout: async (
     planKey: string,
-    termsVersion: string,
+    termsVersion: string | null,
     acceptance: TermsAcceptance,
   ): Promise<string> => {
-    const { data } = await apiService.post<{ url: string }>('/billing/checkout', {
-      plan_key: planKey,
+    const terms = termsVersion && {
       terms_version: termsVersion,
       accepted_terms: acceptance.acceptedTerms,
       requested_immediate_start: acceptance.requestedImmediateStart,
       approved_specific_clauses: acceptance.approvedSpecificClauses,
+    };
+    const { data } = await apiService.post<{ url: string }>('/billing/checkout', {
+      plan_key: planKey,
+      ...terms,
     });
     return data.url;
   },

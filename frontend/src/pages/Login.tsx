@@ -35,7 +35,9 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const offersGoogle = useInstance().sign_in_methods.includes('google');
+  const { sign_in_methods, operator } = useInstance();
+  const offersGoogle = sign_in_methods.includes('google');
+  const hasTerms = operator !== null;
 
   useEffect(() => {
     const code = new URLSearchParams(location.search).get('error');
@@ -133,17 +135,19 @@ export function Login() {
                   </Button>
                 </form>
                 {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}
-                <p className="text-center text-xs leading-5 text-muted-foreground">
-                  By continuing, you agree to the{' '}
-                  <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
-                    Terms
-                  </Link>{' '}
-                  and acknowledge the{' '}
-                  <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
-                    Privacy Policy
-                  </Link>
-                  .
-                </p>
+                {hasTerms && (
+                  <p className="text-center text-xs leading-5 text-muted-foreground">
+                    By continuing, you agree to the{' '}
+                    <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
+                      Terms
+                    </Link>{' '}
+                    and acknowledge the{' '}
+                    <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
+                      Privacy Policy
+                    </Link>
+                    .
+                  </p>
+                )}
               </div>
             </div>
           </div>

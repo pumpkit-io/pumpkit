@@ -54,8 +54,15 @@ class Settings(BaseSettings):
     GOOGLE_COOKIE_MAX_AGE_SECONDS: int = 600
     GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS: int = 30
 
-    # Where the support link sends Users' email.
-    SUPPORT_EMAIL: str
+    # Optional group: the company running this Instance, shown with its legal pages (ADR 0011).
+    OPERATOR_NAME: Optional[str] = None
+    OPERATOR_ADDRESS: Optional[str] = None
+    # Where the support link sends Users' email; part of the Operator details.
+    SUPPORT_EMAIL: Optional[str] = None
+    OPERATOR_VAT_ID: Optional[str] = None
+    OPERATOR_REA: Optional[str] = None
+    OPERATOR_SHARE_CAPITAL: Optional[str] = None
+    OPERATOR_PEC: Optional[str] = None
 
     # Optional group: Magic links are emailed only with a host and a from address, else logged.
     SMTP_HOST: Optional[str] = None
@@ -152,6 +159,11 @@ class Settings(BaseSettings):
             },
             "PostHog": {"POSTHOG_PROJECT_API_KEY": self.POSTHOG_PROJECT_API_KEY},
             "SMTP": {"SMTP_HOST": self.SMTP_HOST, "EMAIL_FROM": self.EMAIL_FROM},
+            "Operator details": {
+                "OPERATOR_NAME": self.OPERATOR_NAME,
+                "OPERATOR_ADDRESS": self.OPERATOR_ADDRESS,
+                "SUPPORT_EMAIL": self.SUPPORT_EMAIL,
+            },
         }
 
     def _is_configured(self, group: str) -> bool:
@@ -168,6 +180,9 @@ class Settings(BaseSettings):
 
     def is_smtp_configured(self) -> bool:
         return self._is_configured("SMTP")
+
+    def is_operator_configured(self) -> bool:
+        return self._is_configured("Operator details")
 
     def smtp_port(self) -> int:
         return self.SMTP_PORT or _SMTP_DEFAULT_PORTS[self.SMTP_SECURITY]

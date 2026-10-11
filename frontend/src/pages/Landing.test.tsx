@@ -11,6 +11,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
+import { WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { api } from '@/services/apiService';
 import { billingService } from '@/services/billingService';
@@ -261,29 +262,43 @@ describe('Landing authors', () => {
 });
 
 describe('Landing footer', () => {
-  it('names the Operator with its company details', () => {
-    renderLanding();
+  it('names the Operator with its company details from the Instance', () => {
+    renderLanding(WITH_OPERATOR);
     const footer = screen.getByRole('contentinfo');
-    expect(within(footer).getByText('INCEPTIONAL S.R.L.')).toBeInTheDocument();
-    expect(
-      within(footer).getByText('Via Eugenio Curiel, 34, Fano (PU), Italy'),
-    ).toBeInTheDocument();
+    expect(within(footer).getByText('Example S.R.L.')).toBeInTheDocument();
+    expect(within(footer).getByText('Via Roma 1, Milano, Italy')).toBeInTheDocument();
     expect(
       within(footer).getByText(
-        'VAT ID IT02853580419 · REA PS-307481 · Share capital €1 fully paid in',
+        'VAT ID IT01234567890 · REA MI-123456 · Share capital €10,000 fully paid in',
       ),
     ).toBeInTheDocument();
-    expect(within(footer).getByText('PEC inceptional@pec.it')).toBeInTheDocument();
+    expect(within(footer).getByText('PEC example@pec.it')).toBeInTheDocument();
+  });
+
+  it('leaves out the company identifiers the Operator details do not set', () => {
+    renderLanding({
+      ...WITH_OPERATOR,
+      operator: {
+        ...WITH_OPERATOR.operator!,
+        vat_id: null,
+        rea: 'MI-123456',
+        share_capital: null,
+        pec: null,
+      },
+    });
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByText('REA MI-123456')).toBeInTheDocument();
+    expect(within(footer).queryByText(/VAT ID|Share capital|PEC/)).not.toBeInTheDocument();
   });
 
   it('offers Cookie settings', () => {
-    renderLanding(WITH_ANALYTICS);
+    renderLanding({ ...WITH_OPERATOR, analytics: WITH_ANALYTICS.analytics });
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
   });
 
   it('offers no Cookie settings on an Instance without analytics', () => {
-    renderLanding();
+    renderLanding(WITH_OPERATOR);
     const footer = screen.getByRole('contentinfo');
     expect(
       within(footer).queryByRole('button', { name: 'Cookie settings' }),
@@ -291,17 +306,30 @@ describe('Landing footer', () => {
   });
 
   it('links to the Privacy Policy, the Terms and the support address', () => {
-    renderLanding();
+    renderLanding(WITH_OPERATOR);
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
       'href',
       '/privacy',
     );
     expect(within(footer).getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms');
-    expect(within(footer).getByRole('link', { name: 'support@pumpkit.io' })).toHaveAttribute(
+    expect(within(footer).getByRole('link', { name: 'help@example.org' })).toHaveAttribute(
       'href',
-      'mailto:support@pumpkit.io',
+      'mailto:help@example.org',
     );
+  });
+
+  it('shows only Cookie settings on an Instance with analytics but no Operator details', () => {
+    renderLanding(WITH_ANALYTICS);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+    expect(within(footer).queryByRole('link')).not.toBeInTheDocument();
+    expect(footer.querySelector('address')).toBeNull();
+  });
+
+  it('has no footer on an Instance with neither Operator details nor analytics', () => {
+    renderLanding();
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
   });
 });
 

@@ -37,6 +37,8 @@ _TEST_ENV = {
     "GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES": "64",
     "GOOGLE_COOKIE_MAX_AGE_SECONDS": "600",
     "GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS": "30",
+    "OPERATOR_NAME": "Example S.R.L.",
+    "OPERATOR_ADDRESS": "Via Roma 1, Milano, Italy",
     "SUPPORT_EMAIL": "support@example.com",
     "STRIPE_SECRET_KEY": "sk_test_dummy",
     "STRIPE_PUBLISHABLE_KEY": "pk_test_dummy",
@@ -281,6 +283,13 @@ def sells_no_plans(monkeypatch) -> None:
     for key in ("STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"):
         monkeypatch.setattr(settings, key, None)
     monkeypatch.setattr(settings, "BILLING_PLAN_KEYS", [])
+
+
+@pytest.fixture
+def no_operator_details(monkeypatch) -> None:
+    """Unset the Operator details group, so the Instance has no legal pages or Terms."""
+    for key in ("OPERATOR_NAME", "OPERATOR_ADDRESS", "SUPPORT_EMAIL"):
+        monkeypatch.setattr(settings, key, None)
 
 
 @pytest_asyncio.fixture

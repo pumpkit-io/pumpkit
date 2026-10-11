@@ -61,6 +61,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
+import { WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
@@ -942,7 +943,7 @@ describe('Home', () => {
     });
 
     it('links to the Privacy Policy and the Terms at the bottom, in a new tab', async () => {
-      renderHome();
+      renderHome(undefined, WITH_OPERATOR);
       await authorsPanel();
 
       const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
@@ -954,15 +955,32 @@ describe('Home', () => {
     });
 
     it('offers Cookie settings next to the legal links', async () => {
-      renderHome(undefined, WITH_ANALYTICS);
+      renderHome(undefined, { ...WITH_OPERATOR, analytics: WITH_ANALYTICS.analytics });
       await authorsPanel();
 
       const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
       expect(legal.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
     });
 
-    it('offers no Cookie settings on an Instance without analytics', async () => {
+    it('offers only Cookie settings on an Instance with analytics but no Operator details', async () => {
+      renderHome(undefined, WITH_ANALYTICS);
+      await authorsPanel();
+
+      expect(screen.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
+    });
+
+    it('has no legal links or Cookie settings on an Instance with neither', async () => {
       renderHome();
+      await authorsPanel();
+
+      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
+    });
+
+    it('offers no Cookie settings on an Instance without analytics', async () => {
+      renderHome(undefined, WITH_OPERATOR);
       await authorsPanel();
 
       const legal = within(screen.getByRole('navigation', { name: 'Legal' }));

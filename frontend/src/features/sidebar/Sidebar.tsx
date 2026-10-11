@@ -35,19 +35,22 @@ function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () 
 const LEGAL_LINK_CLASS =
   'rounded-sm underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
+/** The legal links where the Instance has Operator details, and Cookie settings where it has analytics. */
 function LegalLinks() {
-  const { analytics } = useInstance();
+  const { operator, analytics } = useInstance();
+  if (!operator && !analytics) return null;
   return (
-    <nav aria-label="Legal" className="px-4 pb-3">
+    <nav aria-label={operator ? 'Legal' : 'Cookies'} className="px-4 pb-3">
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        {LEGAL_LINKS.map(({ path, label }) => (
-          <li key={path}>
-            {/* A new tab, because leaving the signed-in layout would drop the Post on screen. */}
-            <a href={path} target="_blank" rel="noopener noreferrer" className={LEGAL_LINK_CLASS}>
-              {label}
-            </a>
-          </li>
-        ))}
+        {operator &&
+          LEGAL_LINKS.map(({ path, label }) => (
+            <li key={path}>
+              {/* A new tab, because leaving the signed-in layout would drop the Post on screen. */}
+              <a href={path} target="_blank" rel="noopener noreferrer" className={LEGAL_LINK_CLASS}>
+                {label}
+              </a>
+            </li>
+          ))}
         {analytics && (
           <li>
             <CookieSettingsButton className={LEGAL_LINK_CLASS} />

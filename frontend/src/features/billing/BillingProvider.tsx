@@ -6,7 +6,7 @@ import { track } from '@/lib/analytics';
 export interface BillingData {
   me: BillingMe;
   plans: Plan[];
-  termsVersion: string;
+  termsVersion: string | null;
 }
 
 interface BillingContextValue {

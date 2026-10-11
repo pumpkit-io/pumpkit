@@ -18,7 +18,6 @@ _INSTANCE_ENV = {
     "POSTGRES_DB": "postgres",
     "JWT_SECRET_KEY": "test-secret-key-test-secret-key-0123456789",
     "FERNET_ENCRYPTION_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
-    "SUPPORT_EMAIL": "support@example.org",
 }
 
 _STRIPE_ENV = {
@@ -36,6 +35,12 @@ _GOOGLE_ENV = {
 _SMTP_ENV = {
     "SMTP_HOST": "smtp.example.org",
     "EMAIL_FROM": "noreply@example.org",
+}
+
+_OPERATOR_ENV = {
+    "OPERATOR_NAME": "Example S.R.L.",
+    "OPERATOR_ADDRESS": "Via Roma 1, Milano, Italy",
+    "SUPPORT_EMAIL": "support@example.org",
 }
 
 
@@ -101,6 +106,7 @@ def test_providers_are_off_when_none_of_their_settings_are_set(instance_env):
     assert s.is_google_configured() is False
     assert s.is_posthog_configured() is False
     assert s.is_smtp_configured() is False
+    assert s.is_operator_configured() is False
 
 
 def test_providers_are_off_when_their_settings_are_left_empty(instance_env):
@@ -110,6 +116,7 @@ def test_providers_are_off_when_their_settings_are_left_empty(instance_env):
             *_STRIPE_ENV,
             *_GOOGLE_ENV,
             *_SMTP_ENV,
+            *_OPERATOR_ENV,
             "POSTHOG_PROJECT_API_KEY",
             "SMTP_PORT",
             "SMTP_USERNAME",
@@ -123,15 +130,23 @@ def test_providers_are_off_when_their_settings_are_left_empty(instance_env):
     assert s.is_google_configured() is False
     assert s.is_posthog_configured() is False
     assert s.is_smtp_configured() is False
+    assert s.is_operator_configured() is False
 
 
 def test_providers_are_on_when_all_their_settings_are_set(instance_env):
-    s = instance_env(**_STRIPE_ENV, **_GOOGLE_ENV, **_SMTP_ENV, POSTHOG_PROJECT_API_KEY="phc_test")
+    s = instance_env(
+        **_STRIPE_ENV,
+        **_GOOGLE_ENV,
+        **_SMTP_ENV,
+        **_OPERATOR_ENV,
+        POSTHOG_PROJECT_API_KEY="phc_test",
+    )
 
     assert s.is_stripe_billing_configured() is True
     assert s.is_google_configured() is True
     assert s.is_posthog_configured() is True
     assert s.is_smtp_configured() is True
+    assert s.is_operator_configured() is True
 
 
 @pytest.mark.parametrize(
@@ -161,6 +176,8 @@ def test_smtp_defaults_to_starttls_and_an_explicit_port_wins(instance_env):
         (_GOOGLE_ENV, ["GOOGLE_CLIENT_ID"]),
         (_SMTP_ENV, ["SMTP_HOST"]),
         (_SMTP_ENV, ["EMAIL_FROM"]),
+        (_OPERATOR_ENV, ["SUPPORT_EMAIL"]),
+        (_OPERATOR_ENV, ["OPERATOR_NAME", "OPERATOR_ADDRESS"]),
     ],
 )
 def test_partly_configured_provider_fails_naming_each_missing_setting(instance_env, group, unset):
