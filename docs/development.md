@@ -101,7 +101,7 @@ When you add a cookie or a browser storage key (a `storage.ts` key, a cookie the
 
 ### Branding
 
-To rebrand, change `APP_NAME` and `VITE_APP_NAME`, the meta tags and JSON-LD graph in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, the wordmark font (Google Sans Code, bundled from `@fontsource-variable/google-sans-code` in `frontend/src/main.tsx` and declared as `fontFamily.wordmark` in `frontend/tailwind.config.ts`), `frontend/public/*.png`, `backend/src/pumpkit/auth/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
+To rebrand, change `APP_NAME`, the meta tags and JSON-LD graph in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, the wordmark font (Google Sans Code, bundled from `@fontsource-variable/google-sans-code` in `frontend/src/main.tsx` and declared as `fontFamily.wordmark` in `frontend/tailwind.config.ts`), `frontend/public/*.png`, `backend/src/pumpkit/auth/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
 
 ## Testing
 

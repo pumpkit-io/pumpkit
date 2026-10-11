@@ -109,6 +109,8 @@ class Settings(BaseSettings):
     POSTHOG_PROJECT_API_KEY: Optional[str] = None
     POSTHOG_PERSONAL_API_KEY: Optional[str] = None
     POSTHOG_HOST: str = "https://eu.i.posthog.com"
+    # Where the browser's PostHog links point, when POSTHOG_HOST is a relay rather than PostHog.
+    POSTHOG_UI_HOST: str = "https://eu.posthog.com"
 
     @model_validator(mode="after")
     def _default_return_urls(self) -> Self:

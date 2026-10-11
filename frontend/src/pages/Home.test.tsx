@@ -59,6 +59,8 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
@@ -110,23 +112,34 @@ function apiError(status: number, detail: string, extra: Record<string, unknown>
   });
 }
 
-function renderHome(state?: unknown) {
+const WITH_ANALYTICS: Instance = {
+  ...DEFAULT_INSTANCE,
+  analytics: {
+    key: 'phc_test',
+    host: 'https://eu.i.posthog.com',
+    ui_host: 'https://eu.posthog.com',
+  },
+};
+
+function renderHome(state?: unknown, instance: Instance = DEFAULT_INSTANCE) {
   return render(
-    <AuthProvider>
-      <ThemeProvider>
-        <MemoryRouter
-          initialEntries={[{ pathname: '/home', state }]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/home" element={<Home />} />
-              <Route path="/scheduled" element={<Scheduled />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>
-    </AuthProvider>,
+    <InstanceProvider instance={instance}>
+      <AuthProvider>
+        <ThemeProvider>
+          <MemoryRouter
+            initialEntries={[{ pathname: '/home', state }]}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/home" element={<Home />} />
+                <Route path="/scheduled" element={<Scheduled />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </AuthProvider>
+    </InstanceProvider>,
   );
 }
 
@@ -941,11 +954,19 @@ describe('Home', () => {
     });
 
     it('offers Cookie settings next to the legal links', async () => {
-      renderHome();
+      renderHome(undefined, WITH_ANALYTICS);
       await authorsPanel();
 
       const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
       expect(legal.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+    });
+
+    it('offers no Cookie settings on an Instance without analytics', async () => {
+      renderHome();
+      await authorsPanel();
+
+      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
+      expect(legal.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
     });
 
     it('remembers a collapsed sidebar across visits', async () => {

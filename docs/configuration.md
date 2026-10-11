@@ -12,7 +12,7 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | --- | --- |
 | `ENV` | `local` or `prod`. With `prod` the database connection requires SSL. |
 | `LOG_LEVEL` (optional) | Python log level. Defaults to `INFO`. |
-| `APP_NAME` (optional) | Brand name used in emails and server-side copy. Defaults to `Pumpkit`. |
+| `APP_NAME` (optional) | Brand name used in emails, server-side copy and the UI, which reads it from `GET /api/v1/instance`. Defaults to `Pumpkit`. |
 | `BACKEND_URL`, `BACKEND_PORT` | Public URL and port of the backend. |
 | `FRONTEND_URL`, `FRONTEND_PORT` | Public URL and port of the frontend. |
 | `CORS_ORIGINS` | Allowed origins, as a quoted JSON list (see note below). |
@@ -60,9 +60,10 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `PUBLISHER_POLL_INTERVAL_SECONDS` (optional) | How often the publisher process looks for due Scheduled posts. Defaults to 30, so a Scheduled post goes out within about 30 seconds of its time. |
 | `SCHEDULED_POSTS_MONTHLY_CAP` (optional) | Most Scheduled posts a User may have whose publish time falls in one UTC calendar month, counting Published, waiting and Failed ones (a cancelled one frees its place). Creating, Post now or rescheduling into a full month is refused with the date the cap resets. Defaults to 100. It bounds what the Instance's X app pays for publishing (ADR 0006). Set it empty for no cap, when you pay for your own X app; `0` turns scheduling off. |
 | `POSTHOG_ENABLED` (optional) | `true` to enable server-side analytics and error tracking. |
-| `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. |
+| `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. With it set, the frontend loads PostHog after Analytics consent (ADR 0009) and shows the consent banner; without it, neither. |
 | `POSTHOG_PERSONAL_API_KEY` (optional) | Personal key, used by `scripts/deploy.sh` for deploy annotations. |
-| `POSTHOG_HOST` (optional) | PostHog ingestion host. |
+| `POSTHOG_HOST` (optional) | PostHog ingestion host, for the backend and the browser. Defaults to `https://eu.i.posthog.com`; in production point it at your reverse-proxy path (`https://<domain>/ph-relay`). |
+| `POSTHOG_UI_HOST` (optional) | PostHog app host the browser links to when `POSTHOG_HOST` is a relay. Defaults to `https://eu.posthog.com`. |
 
 To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`, `SMTP_PASSWORD` to a Resend API key and `EMAIL_FROM` to an address on a domain verified in Resend; the default `starttls` on port 587 works.
 
@@ -71,10 +72,5 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 | Variable | Meaning |
 | --- | --- |
 | `VITE_API_URL` | Backend API base URL, e.g. `http://localhost:8000/api/v1`. Required for builds. |
-| `VITE_APP_NAME` | Brand name shown in the UI (default `Pumpkit`). |
 | `VITE_BYPASS_AUTH` | Dev only: treat every route as authenticated. Ignored in production builds. |
-| `VITE_POSTHOG_ENABLED` (optional) | `true` to enable browser analytics. |
-| `VITE_POSTHOG_KEY` (optional) | PostHog project key. |
-| `VITE_POSTHOG_HOST` (optional) | Ingestion host; in production point it at your reverse-proxy path (`https://<domain>/ph-relay`). |
-| `VITE_POSTHOG_UI_HOST` (optional) | PostHog UI host, used for links. |
 

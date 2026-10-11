@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('posthog-js', () => {
   const posthog = {
@@ -23,21 +23,31 @@ import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { PostHogPageviewTracker } from '@/lib/PostHogPageviewTracker';
 import { track } from '@/lib/analytics';
 import { startAnalytics } from '@/lib/analyticsConsent';
+import { DEFAULT_INSTANCE, type AnalyticsSettings } from '@/lib/instance';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { ConsentBanner } from './ConsentBanner';
 
 const mocked = posthog as unknown as typeof posthog & { __loaded: boolean };
 
+const ANALYTICS: AnalyticsSettings = {
+  key: 'phc_test',
+  host: 'https://eu.i.posthog.com',
+  ui_host: 'https://eu.posthog.com',
+};
+
 /** A visitor on a public page: the banner, the pageview tracker and the company footer. */
-function renderPage(path = '/login') {
+function renderPage(path = '/login', analytics: AnalyticsSettings | null = ANALYTICS) {
   return render(
-    <MemoryRouter
-      initialEntries={[path]}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
-      <PostHogPageviewTracker />
-      <ConsentBanner />
-      <CompanyFooter />
-    </MemoryRouter>,
+    <InstanceProvider instance={{ ...DEFAULT_INSTANCE, analytics }}>
+      <MemoryRouter
+        initialEntries={[path]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <PostHogPageviewTracker />
+        <ConsentBanner />
+        <CompanyFooter />
+      </MemoryRouter>
+    </InstanceProvider>,
   );
 }
 
@@ -53,21 +63,36 @@ function clearCookies() {
 }
 
 beforeEach(() => {
-  vi.stubEnv('VITE_POSTHOG_ENABLED', 'true');
-  vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test');
   localStorage.clear();
   sessionStorage.clear();
   clearCookies();
   mocked.__loaded = false;
   vi.clearAllMocks();
+  startAnalytics(ANALYTICS);
 });
-afterEach(() => {
-  vi.unstubAllEnvs();
+
+describe('An Instance without analytics', () => {
+  it('shows no banner and no Cookie settings, and never loads PostHog', () => {
+    startAnalytics(null);
+    renderPage('/login', null);
+    expect(banner()).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
+    track('login_google_clicked');
+    expect(posthog.init).not.toHaveBeenCalled();
+  });
+
+  it('never loads PostHog, even for a browser that stored Analytics consent', () => {
+    localStorage.setItem('pumpkit:analytics-consent', '"granted"');
+    startAnalytics(null);
+    renderPage('/login', null);
+    track('login_google_clicked');
+    expect(posthog.init).not.toHaveBeenCalled();
+  });
 });
 
 describe('Analytics consent with no stored choice', () => {
   it('shows the banner, linking to the cookie section, and never starts PostHog', () => {
-    startAnalytics();
+    startAnalytics(ANALYTICS);
     renderPage();
     expect(banner()).toBeInTheDocument();
     expect(within(banner()!).getByRole('link', { name: /cookies/i })).toHaveAttribute(
@@ -100,7 +125,7 @@ describe('Rejecting analytics', () => {
 
   it('keeps the banner hidden on the next visit without starting PostHog', () => {
     localStorage.setItem('pumpkit:analytics-consent', '"denied"');
-    startAnalytics();
+    startAnalytics(ANALYTICS);
     renderPage();
     expect(banner()).not.toBeInTheDocument();
     expect(posthog.init).not.toHaveBeenCalled();
@@ -129,7 +154,7 @@ describe('Accepting analytics', () => {
 
   it('starts PostHog at app start on the next visit and keeps the banner hidden', () => {
     localStorage.setItem('pumpkit:analytics-consent', '"granted"');
-    startAnalytics();
+    startAnalytics(ANALYTICS);
     renderPage();
     expect(posthog.init).toHaveBeenCalledTimes(1);
     expect(banner()).not.toBeInTheDocument();

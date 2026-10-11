@@ -6,8 +6,10 @@ export function toSlug(name: string): string {
   return slug || 'app';
 }
 
-/** Display name of the app. Set VITE_APP_NAME in frontend/.env. */
-export const APP_NAME: string = import.meta.env.VITE_APP_NAME || 'Pumpkit';
+/** Prefix for browser storage keys and Web Lock names, from the Instance's app name. */
+export let APP_SLUG: string = toSlug('Pumpkit');
 
-/** Prefix for browser storage keys and Web Lock names. */
-export const APP_SLUG: string = toSlug(APP_NAME);
+/** Call before the modules that build keys at import time load, or they keep the default slug. */
+export function setAppSlug(appName: string): void {
+  APP_SLUG = toSlug(appName);
+}

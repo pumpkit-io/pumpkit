@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { CookieSettingsButton } from '@/features/analyticsConsent/CookieSettingsButton';
+import { useInstance } from '@/features/instance/useInstance';
 import { cn } from '@/lib/utils';
 import { LEGAL_LINKS } from './documents';
 import { OPERATOR } from './operator';
@@ -8,6 +9,7 @@ const LINK_CLASS = 'text-foreground underline-offset-4 transition-colors hover:u
 
 /** The Operator's company details, the legal links and Cookie settings, at the foot of every public page. */
 export function CompanyFooter({ className }: { className?: string }) {
+  const { analytics } = useInstance();
   return (
     <footer
       className={cn('border-t border-border px-6 py-8 text-xs text-muted-foreground', className)}
@@ -30,9 +32,11 @@ export function CompanyFooter({ className }: { className?: string }) {
                 </Link>
               </li>
             ))}
-            <li>
-              <CookieSettingsButton className={LINK_CLASS} />
-            </li>
+            {analytics && (
+              <li>
+                <CookieSettingsButton className={LINK_CLASS} />
+              </li>
+            )}
             <li>
               <a href={`mailto:${OPERATOR.supportEmail}`} className={LINK_CLASS}>
                 {OPERATOR.supportEmail}

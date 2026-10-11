@@ -1,14 +1,11 @@
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { DEFAULT_INSTANCE } from '@/lib/instance';
 import { Brand } from './Brand';
 
 describe('Brand', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.resetModules();
-  });
-
   it('shows the app name by default', () => {
     render(
       <ThemeProvider>
@@ -18,16 +15,13 @@ describe('Brand', () => {
     expect(screen.getByText('Pumpkit')).toBeInTheDocument();
   });
 
-  it('shows the configured app name with its casing', async () => {
-    vi.stubEnv('VITE_APP_NAME', 'acmeWriter');
-    vi.resetModules();
-    const { Brand: ConfiguredBrand } = await import('./Brand');
-    const { ThemeProvider: ConfiguredThemeProvider } =
-      await import('@/features/theme/ThemeProvider');
+  it("shows the Instance's app name with its casing", () => {
     render(
-      <ConfiguredThemeProvider>
-        <ConfiguredBrand />
-      </ConfiguredThemeProvider>,
+      <InstanceProvider instance={{ ...DEFAULT_INSTANCE, app_name: 'acmeWriter' }}>
+        <ThemeProvider>
+          <Brand />
+        </ThemeProvider>
+      </InstanceProvider>,
     );
     expect(screen.getByText('acmeWriter')).toBeInTheDocument();
   });
