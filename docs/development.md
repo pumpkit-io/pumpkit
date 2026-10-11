@@ -3,7 +3,7 @@
 ## Project layout
 
 ```
-backend/app/
+backend/src/pumpkit/
   api/routers/     HTTP endpoints only: auth deps, parsing, response shaping
   api/mediators/   orchestration across services (webhook dispatch, Google and Magic link sign-in)
   api/services/    one resource or capability each: DB access, Subscriptions, users, tokens
@@ -14,7 +14,7 @@ backend/app/
   db/              SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
-  tests/           pytest suite
+backend/tests/     pytest suite, mirroring the package tree; fixtures in conftest.py
 frontend/src/
   features/        self-contained feature modules (account, billing, inspirationAuthors, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives
@@ -40,17 +40,17 @@ Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subs
 
 Every Stripe call goes through the `BillingGateway` port (`core/billing_gateway.py`): only its Stripe adapter uses the SDK, it returns plain data, and any provider failure is a `BillingProviderError`, which the global handler returns as a 502 with an `error_id`. Routers inject it with `Depends(get_billing_gateway)`; tests get `FakeBillingGateway` through the autouse `fake_billing` fixture, which holds each customer's Subscriptions (`fake_billing.set_subscription(...)`) and signs webhook events (`fake_billing.signed_event(...)`) to post to the endpoint.
 
-Gate an endpoint on being Subscribed with `current_user: User = Depends(require_subscribed_user)` (`app/api/dependencies.py`): it returns a 403 to a User who isn't, reading only Pumpkit's copy. Tests make the `user` fixture Subscribed by requesting the `subscribed` fixture. On the frontend, `useSubscribed()` (inside `SubscribedProvider`) tells a screen whether to show its tools or a `SubscribePrompt` that opens the Billing dialog; treat a 403 from a write as a cue to call its `refresh()`.
+Gate an endpoint on being Subscribed with `current_user: User = Depends(require_subscribed_user)` (`src/pumpkit/api/dependencies.py`): it returns a 403 to a User who isn't, reading only Pumpkit's copy. Tests make the `user` fixture Subscribed by requesting the `subscribed` fixture. On the frontend, `useSubscribed()` (inside `SubscribedProvider`) tells a screen whether to show its tools or a `SubscribePrompt` that opens the Billing dialog; treat a 403 from a write as a cue to call its `refresh()`.
 
 `mediators/billing.handle_webhook` owns the webhook transaction: it records the event for deduplication, locks the customer's User row, syncs the customer's Subscriptions from Stripe (`subscriptions.sync_customer`) and commits once. The lock is held across the Stripe call, so webhooks for one customer run one after another. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it; a webhook for an unknown customer is logged and skipped.
 
 ### Write a Post
 
-Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answers with the Post and its first Version once both model calls are done, which can take a minute or two (the Caddyfile allows it). `mediators/posts.start_post` reads the corpus (the newest 20 stored posts of each of the User's Inspiration authors, in list order) through `services/posts`, ends the read transaction, writes the Version with `app/writing/versions.py`, and only then stores the Post with its corpus post ids and the attempt, succeeded or failed. A failed attempt is committed before the error is re-raised, so it survives the request's rollback.
+Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answers with the Post and its first Version once both model calls are done, which can take a minute or two (the Caddyfile allows it). `mediators/posts.start_post` reads the corpus (the newest 20 stored posts of each of the User's Inspiration authors, in list order) through `services/posts`, ends the read transaction, writes the Version with `src/pumpkit/writing/versions.py`, and only then stores the Post with its corpus post ids and the attempt, succeeded or failed. A failed attempt is committed before the error is re-raised, so it survives the request's rollback.
 
 `POST /api/v1/posts/{id}/versions` takes Feedback and answers with the next Version. `mediators/posts.add_version` reads the Post's stored corpus (not the User's current Inspiration authors) and its Versions, then runs the revision call: the draft prompt, the corpus, the Brief, each Final as an assistant turn after the Feedback that produced it, and the new Feedback last. Drafts and failed attempts stay out of that conversation. A Post with no Version (its first attempt failed) answers 409.
 
-The prompts in `app/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included: change them only on purpose, as a prompt change. The writing, humanizing and revising models are constants in `app/writing/constants.py`.
+The prompts in `src/pumpkit/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included: change them only on purpose, as a prompt change. The writing, humanizing and revising models are constants in `src/pumpkit/writing/constants.py`.
 
 ### Schedule a post
 
@@ -58,7 +58,7 @@ A Subscribed User connects X on the Scheduled page (`x_connection` router; the X
 
 A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send the Final's text with `source_version_id`, the Version's id. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so Home and Scheduled share it.
 
-A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m app.publishing`, the `publisher` service in `docker-compose.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
+A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m pumpkit.publishing`, the `publisher` service in `docker-compose.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
 
 1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "Check your X profile" (`mediators/publishing.fail_stuck`: a publisher died mid-call);
 2. claims and publishes the soonest due one (`mediators/publishing.publish_next_due`, which claims through `services/scheduled_posts.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere);
@@ -66,7 +66,7 @@ A Scheduled post for later waits in `scheduled` until the publisher picks it up.
 
 `mediators/publishing` owns every commit of a publish: it commits the claim and any rotated refresh token before calling X, calls X once, and commits Published or Failed. Its steps live in `publishing/publish.py`, which flushes and never commits. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so it goes back in `scheduled` with a doubling backoff from one minute for the publisher to retry, and becomes Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same mediator; when X doesn't take it, the request returns it in `scheduled` and the publisher retries it like any other.
 
-Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clock)` directly and checking outcomes through `GET /api/v1/scheduled-posts` (see `tests/publishing/test_publisher.py`). The `fixed_clock` fixture freezes time at a known instant for tests that write out dates. Under SQLite the row lock is a no-op, so tests of concurrent passes exercise the conditional claim.
+Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clock)` directly and checking outcomes through `GET /api/v1/scheduled-posts` (see `backend/tests/publishing/test_publisher.py`). The `fixed_clock` fixture freezes time at a known instant for tests that write out dates. Under SQLite the row lock is a no-op, so tests of concurrent passes exercise the conditional claim.
 
 ### Call an LLM
 
@@ -80,7 +80,7 @@ Add the page to `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`, whi
 
 ### Edit the user profile
 
-Profile fields are saved through `PATCH` on the users router; the logic lives in `backend/app/api/services/users.py::update_user_profile` (router to service). The UI is `frontend/src/features/account/`.
+Profile fields are saved through `PATCH` on the users router; the logic lives in `backend/src/pumpkit/api/services/users.py::update_user_profile` (router to service). The UI is `frontend/src/features/account/`.
 
 ### Track an event
 
@@ -88,7 +88,7 @@ Add it to `EVENTS` in `frontend/src/lib/analytics.ts`, then call `track('my_even
 
 ### Branding
 
-To rebrand, change `APP_NAME` and `VITE_APP_NAME`, the meta tags and JSON-LD graph in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, the wordmark font (Google Sans Code, loaded in `frontend/index.html` and declared as `fontFamily.wordmark` in `frontend/tailwind.config.ts`), `frontend/public/*.png`, `backend/app/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
+To rebrand, change `APP_NAME` and `VITE_APP_NAME`, the meta tags and JSON-LD graph in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, the wordmark font (Google Sans Code, loaded in `frontend/index.html` and declared as `fontFamily.wordmark` in `frontend/tailwind.config.ts`), `frontend/public/*.png`, `backend/src/pumpkit/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.
 
 ## Testing
 
