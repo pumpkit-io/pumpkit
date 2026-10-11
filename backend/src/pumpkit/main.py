@@ -6,6 +6,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 import pumpkit.scheduling.router as scheduling_router
+from pumpkit.auth.mailer import announce_magic_link_delivery
 from pumpkit.auth.router import router as auth_router
 from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.router import router as billing_router
@@ -22,6 +23,7 @@ from pumpkit.x_connection.router import router as x_connection_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up application...")
+    announce_magic_link_delivery()
     yield
     logger.info("Shutting down application...")
     # Flush any pending PostHog events before the process exits.

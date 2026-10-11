@@ -306,8 +306,11 @@ async def _sign_in_with_magic_link(
 
 def build_inbox_redirect_response() -> RedirectResponse:
     """Open Gmail filtered to the Magic link sender."""
-    query = f"from:{settings.RESEND_NOREPLY_ADDRESS}"
-    target = f"https://mail.google.com/mail/u/0/#search/{quote(query, safe='')}"
+    target = "https://mail.google.com/mail/u/0/#inbox"
+    # Without SMTP no email is sent, so there is no sender to filter on.
+    if settings.EMAIL_FROM:
+        query = f"from:{settings.EMAIL_FROM}"
+        target = f"https://mail.google.com/mail/u/0/#search/{quote(query, safe='')}"
     return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
 
 
