@@ -418,12 +418,12 @@ async def test_llm_structured_sends_json_schema_response_format():
 
 
 async def test_unconfigured_client_raises_clear_error(monkeypatch):
-    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
+    monkeypatch.setattr(settings, "LLM_API_KEY", None)
     client = LLMClient()
-    with pytest.raises(LLMNotConfiguredError, match="OPENROUTER_API_KEY"):
+    with pytest.raises(LLMNotConfiguredError, match="LLM_API_KEY"):
         await client.llm_complete(model="openai/gpt-5", messages=[{"role": "user", "content": "x"}])
 
 
 def test_construction_without_key_does_not_raise(monkeypatch):
-    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
+    monkeypatch.setattr(settings, "LLM_API_KEY", None)
     LLMClient()

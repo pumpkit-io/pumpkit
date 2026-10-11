@@ -22,8 +22,6 @@ T = TypeVar("T", bound=BaseModel)
 
 ReasoningEffort = Literal["low", "medium", "high"]
 
-_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-
 _LLM_CLIENT_TIMEOUT = httpx.Timeout(
     600.0,  # Read, write and connection-pool timeout.
     connect=10.0,
@@ -32,13 +30,13 @@ _LLM_CLIENT_MAX_RETRIES = 2
 
 
 class LLMNotConfiguredError(NotConfiguredError):
-    """Raised when an LLM call is attempted without OPENROUTER_API_KEY configured."""
+    """Raised when an LLM call is attempted without LLM_API_KEY configured."""
 
 
 class LLMClient:
-    """Async wrapper around OpenRouter's OpenAI-compatible chat completions API.
+    """Async wrapper around the OpenAI-compatible chat completions API at `LLM_BASE_URL`.
 
-    The SDK client is created on first use, so the app boots without OPENROUTER_API_KEY.
+    The SDK client is created on first use, so the app boots without LLM_API_KEY.
     """
 
     def __init__(self) -> None:
@@ -47,13 +45,13 @@ class LLMClient:
     @property
     def _llm_client(self) -> AsyncOpenAI:
         if self._client is None:
-            if not settings.OPENROUTER_API_KEY:
+            if not settings.LLM_API_KEY:
                 raise LLMNotConfiguredError(
-                    "OPENROUTER_API_KEY is not set. Add it to backend/.env to enable LLM calls."
+                    "LLM_API_KEY is not set. Add it to backend/.env to enable LLM calls."
                 )
             self._client = AsyncOpenAI(
-                api_key=settings.OPENROUTER_API_KEY,
-                base_url=_OPENROUTER_BASE_URL,
+                api_key=settings.LLM_API_KEY,
+                base_url=settings.LLM_BASE_URL,
                 timeout=_LLM_CLIENT_TIMEOUT,
                 max_retries=_LLM_CLIENT_MAX_RETRIES,
             )
@@ -85,7 +83,7 @@ class LLMClient:
 
         if not content:
             raise ValueError(
-                f"OpenRouter returned an empty response for a non-streamed, non-structured LLM call. model={kwargs.get('model')}"
+                f"The LLM returned an empty response for a non-streamed, non-structured LLM call. model={kwargs.get('model')}"
             )
 
         return CompleteResult(
@@ -191,7 +189,7 @@ class LLMClient:
         parsed = response.choices[0].message.parsed
         if parsed is None:
             raise ValueError(
-                f"OpenRouter returned an empty response for a non-streamed, structured LLM call. response_model={response_model.__name__}, model={kwargs.get('model')}"
+                f"The LLM returned an empty response for a non-streamed, structured LLM call. response_model={response_model.__name__}, model={kwargs.get('model')}"
             )
         return StructuredResult(
             parsed=parsed,

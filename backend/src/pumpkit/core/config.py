@@ -63,8 +63,10 @@ class Settings(BaseSettings):
     # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
     BILLING_TRIAL_PERIOD_DAYS: int = Field(ge=0)
 
+    # Any OpenAI-compatible chat completions endpoint; OpenRouter by default.
+    LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
     # Optional: when unset, pumpkit.posts.llm_client raises LLMNotConfiguredError on use, not at boot.
-    OPENROUTER_API_KEY: Optional[str] = None
+    LLM_API_KEY: Optional[str] = None
 
     # Optional: when unset, pumpkit.authors.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None

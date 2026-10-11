@@ -6,10 +6,12 @@ import pytest
 import respx
 from pydantic import BaseModel, ConfigDict
 
+from pumpkit.core.config import settings
 from pumpkit.posts.llm import LLMError, OpenAICompatibleLLM
 from pumpkit.posts.llm_client import LLMClient
 
 COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
+LOCAL_BASE_URL = "http://localhost:11434/v1"
 
 
 class _Answer(BaseModel):
@@ -115,3 +117,25 @@ async def test_a_cache_breakpoint_reaches_openrouter_and_cached_tokens_come_back
     assert result.usage is not None
     assert result.usage.raw["prompt_tokens_details"]["cached_tokens"] == 900
     assert result.usage.raw["prompt_tokens_details"]["cache_write_tokens"] == 0
+
+
+@respx.mock
+async def test_a_call_goes_to_the_configured_endpoint_with_the_configured_key(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_BASE_URL", LOCAL_BASE_URL)
+    monkeypatch.setattr(settings, "LLM_API_KEY", "local-key")
+    sent: dict[str, Any] = {}
+
+    def _respond(request: httpx.Request) -> httpx.Response:
+        sent["authorization"] = request.headers["authorization"]
+        sent.update(json.loads(request.content))
+        return httpx.Response(200, json=_completion(json.dumps({"post": "hello"})))
+
+    respx.post(f"{LOCAL_BASE_URL}/chat/completions").mock(side_effect=_respond)
+
+    result = await OpenAICompatibleLLM(LLMClient()).structured(
+        model="llama3.3", messages=[{"role": "user", "content": "hi"}], response_model=_Answer
+    )
+
+    assert result.parsed == _Answer(post="hello")
+    assert sent["authorization"] == "Bearer local-key"
+    assert sent["model"] == "llama3.3"

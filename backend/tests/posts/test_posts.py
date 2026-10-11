@@ -316,16 +316,14 @@ async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_autho
     assert sorted(p.attempts[0].status for p in posts) == ["failed", "succeeded"]
 
 
-async def test_writing_without_the_openrouter_key_fails_clearly_and_stores_the_attempt(
+async def test_writing_without_the_llm_key_fails_clearly_and_stores_the_attempt(
     client, db, with_author, fake_llm
 ):
-    fake_llm.replies = [
-        LLMNotConfiguredError("OPENROUTER_API_KEY is not set. Add it to backend/.env.")
-    ]
+    fake_llm.replies = [LLMNotConfiguredError("LLM_API_KEY is not set. Add it to backend/.env.")]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
     assert response.status_code == 503
-    assert "OPENROUTER_API_KEY" in response.json()["detail"]
+    assert "LLM_API_KEY" in response.json()["detail"]
     [post] = await _stored_posts(db)
     assert post.attempts[0].status == "failed"
