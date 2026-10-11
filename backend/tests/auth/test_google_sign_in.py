@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 import pumpkit.auth.service.sessions as sessions
 from pumpkit.auth.google_sign_in import GoogleClaims
 from pumpkit.auth.models import GoogleIdentity, User
+from pumpkit.core.config import settings
 from tests.conftest import callback_fragment
 
 SIGN_IN_FAILED = "http://localhost:5173/login?error=sign_in_failed"
@@ -184,3 +185,19 @@ async def test_a_refused_google_sign_in_leaves_nothing_behind(
         "/api/v1/users/me", headers={"Authorization": f"Bearer {signed_in.access_token}"}
     )
     assert me.json()["first_name"] is None
+
+
+async def test_without_google_settings_the_google_sign_in_routes_are_not_found(
+    new_browser, monkeypatch
+):
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", None)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", None)
+    browser = new_browser()
+
+    start = await browser.get("/api/v1/login/google")
+    callback = await browser.get(
+        "/api/v1/oauth/google/callback", params={"code": "c", "state": "s"}
+    )
+
+    assert start.status_code == 404
+    assert callback.status_code == 404

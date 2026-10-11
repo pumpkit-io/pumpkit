@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.auth.service.users as user_service
 from pumpkit.auth import mediator
 from pumpkit.auth.dependencies import get_current_user
-from pumpkit.auth.google_sign_in import GoogleSignIn, get_google_sign_in
+from pumpkit.auth.google_sign_in import GoogleSignIn, get_google_sign_in, require_google_sign_in
 from pumpkit.auth.mailer import AuthMailer, get_auth_mailer
 from pumpkit.auth.models import User
 from pumpkit.auth.schemas import MagicLinkRequest, UserProfileResponse, UserProfileUpdate
@@ -20,12 +20,22 @@ from pumpkit.core.time import Clock, get_clock
 router = APIRouter()
 
 
-@router.get("/login/google", status_code=status.HTTP_200_OK, tags=["auth"])
+@router.get(
+    "/login/google",
+    status_code=status.HTTP_200_OK,
+    tags=["auth"],
+    dependencies=[Depends(require_google_sign_in)],
+)
 async def start_google_sign_in() -> JSONResponse:
     return await mediator.start_google_sign_in()
 
 
-@router.get("/oauth/google/callback", status_code=status.HTTP_303_SEE_OTHER, tags=["auth"])
+@router.get(
+    "/oauth/google/callback",
+    status_code=status.HTTP_303_SEE_OTHER,
+    tags=["auth"],
+    dependencies=[Depends(require_google_sign_in)],
+)
 async def oauth_google_callback(
     request: Request,
     # Optional: Google sends `error` without a code when the User cancels, and

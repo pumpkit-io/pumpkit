@@ -34,7 +34,7 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `FERNET_ENCRYPTION_KEY` | 32 url-safe base64-encoded bytes (generate with `Fernet.generate_key()`). |
 | `MAGIC_LINK_TOKEN_DURATION_MINUTES`, `MAGIC_LINK_TOKEN_NUM_BYTES` (optional) | Magic-link token lifetime and size. Default to 15 and 32. |
 | `SIGN_UP_ALLOWLIST` (optional) | The Sign-up allowlist: comma-separated email addresses and `@domain` entries (e.g. `me@example.com,@team.example`), matched ignoring case. Checked when a Magic link is requested or completed and when Google sign-in completes; an open Session keeps refreshing until it expires, so Suspend a User to cut them off at once. Empty lets anyone sign in. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional) | Google OAuth credentials. Set both or neither. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional) | Google OAuth credentials. Set both or neither. With neither, the sign-in page offers only the Magic link and the Google sign-in routes answer 404. |
 | `GOOGLE_OAUTH_REDIRECT_URI` (optional) | Must match the redirect URI registered in Google Cloud. Defaults to `BACKEND_URL` + `/api/v1/oauth/google/callback`. |
 | `GOOGLE_NONCE_TOKEN_NUM_BYTES`, `GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES` (optional) | Size of the OAuth nonce and PKCE verifier. Default to 64. |
 | `GOOGLE_COOKIE_MAX_AGE_SECONDS` (optional) | Lifetime of the short-lived PKCE/CSRF cookies during OAuth. Defaults to 600. |

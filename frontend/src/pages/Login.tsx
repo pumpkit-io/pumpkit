@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
+import { useInstance } from '@/features/instance/useInstance';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
 import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
 import { authService } from '../services/authService';
@@ -34,6 +35,7 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const offersGoogle = useInstance().sign_in_methods.includes('google');
 
   useEffect(() => {
     const code = new URLSearchParams(location.search).get('error');
@@ -76,21 +78,27 @@ export function Login() {
               <h1 className="text-3xl font-normal leading-none tracking-tight text-foreground">
                 Welcome back
               </h1>
-              <p className="text-sm text-muted-foreground">Sign in with Google or a magic link</p>
+              <p className="text-sm text-muted-foreground">
+                {offersGoogle ? 'Sign in with Google or a magic link' : 'Sign in with a magic link'}
+              </p>
             </div>
             <div className="p-6 pt-0">
               <div className="grid gap-6">
-                <GoogleAuthButton
-                  onError={() => setError("We couldn't start Google sign-in. Try again.")}
-                />
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="h-px w-full shrink-0 bg-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-card px-2 text-muted-foreground">or</span>
-                  </div>
-                </div>
+                {offersGoogle && (
+                  <>
+                    <GoogleAuthButton
+                      onError={() => setError("We couldn't start Google sign-in. Try again.")}
+                    />
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="h-px w-full shrink-0 bg-border" />
+                      </div>
+                      <div className="relative flex justify-center text-xs">
+                        <span className="bg-card px-2 text-muted-foreground">or</span>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">

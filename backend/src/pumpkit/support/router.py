@@ -4,7 +4,7 @@ from fastapi.responses import RedirectResponse
 from pumpkit.billing import service as billing_service
 from pumpkit.core.config import settings
 from pumpkit.core.rate_limit import limiter
-from pumpkit.support.schemas import AnalyticsSettings, InstanceResponse
+from pumpkit.support.schemas import AnalyticsSettings, InstanceResponse, SignInMethod
 
 router = APIRouter(tags=["support"])
 
@@ -37,11 +37,14 @@ async def instance(request: Request) -> InstanceResponse:
         if posthog_key
         else None
     )
-    # TODO(#98): derive sign_in_methods and operator from their provider settings.
+    sign_in_methods: list[SignInMethod] = ["magic_link"]
+    if settings.is_google_configured():
+        sign_in_methods.append("google")
+    # TODO(#98): derive operator from its provider settings.
     return InstanceResponse(
         app_name=settings.APP_NAME,
         sells_plans=billing_service.sells_plans(),
-        sign_in_methods=["magic_link", "google"],
+        sign_in_methods=sign_in_methods,
         operator=None,
         analytics=analytics,
     )
