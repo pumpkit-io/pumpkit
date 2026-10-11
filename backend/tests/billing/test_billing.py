@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import select
 
 import pumpkit.billing.service as subscriptions_service
 from pumpkit.billing.gateway import (
@@ -10,15 +11,24 @@ from pumpkit.billing.gateway import (
     Plan,
     SubscriptionState,
 )
+from pumpkit.billing.models import TermsAcceptance
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 
 CUSTOMER = "cus_alice"
 BILLING_ME = "/api/v1/billing/me"
 CHECKOUT = "/api/v1/billing/checkout"
-CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly"}
 PORTAL = "/api/v1/billing/portal"
 PLANS = "/api/v1/billing/plans"
+# The English Terms' "Last updated" date.
+TERMS_VERSION = "2026-10-11"
+ACCEPTANCE = {
+    "terms_version": TERMS_VERSION,
+    "accepted_terms": True,
+    "requested_immediate_start": True,
+    "approved_specific_clauses": True,
+}
+CHECKOUT_MONTHLY = {"plan_key": "pumpkit_pro_monthly", **ACCEPTANCE}
 
 MONTHLY = Plan(
     key="pumpkit_pro_monthly",
@@ -241,7 +251,9 @@ async def test_checkout_with_an_unknown_plan_key_returns_400_without_calling_the
 ):
     fake_billing.plans = [MONTHLY, STRAY]
 
-    response = await client.post(CHECKOUT, json={"plan_key": "stray_test_price"})
+    response = await client.post(
+        CHECKOUT, json={**CHECKOUT_MONTHLY, "plan_key": "stray_test_price"}
+    )
 
     assert response.status_code == 400
     assert fake_billing.plan_lookups == []
@@ -271,10 +283,97 @@ async def test_a_checkout_payload_cannot_set_the_price_quantity_or_trial(
 
 
 async def test_checkout_without_a_plan_key_is_rejected(client, fake_billing):
-    response = await client.post(CHECKOUT, json={"price_id": "price_monthly"})
+    response = await client.post(CHECKOUT, json={"price_id": "price_monthly", **ACCEPTANCE})
 
     assert response.status_code == 422
     assert fake_billing.checkouts == []
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["terms_version", "accepted_terms", "requested_immediate_start", "approved_specific_clauses"],
+)
+async def test_a_checkout_missing_an_acceptance_field_is_rejected_without_calling_the_gateway(
+    client, fake_billing, field
+):
+    payload = {key: value for key, value in CHECKOUT_MONTHLY.items() if key != field}
+
+    response = await client.post(CHECKOUT, json=payload)
+
+    assert response.status_code == 422
+    assert fake_billing.plan_lookups == []
+    assert fake_billing.customers_created == []
+    assert fake_billing.checkouts == []
+
+
+@pytest.mark.parametrize(
+    "field", ["accepted_terms", "requested_immediate_start", "approved_specific_clauses"]
+)
+@pytest.mark.parametrize("value", [False, 1, "true"], ids=["false", "one", "string"])
+async def test_a_checkout_without_true_on_an_acceptance_is_rejected_without_calling_the_gateway(
+    client, fake_billing, field, value
+):
+    response = await client.post(CHECKOUT, json={**CHECKOUT_MONTHLY, field: value})
+
+    assert response.status_code == 422
+    assert fake_billing.plan_lookups == []
+    assert fake_billing.customers_created == []
+    assert fake_billing.checkouts == []
+
+
+async def test_a_checkout_for_an_outdated_terms_version_returns_409_without_calling_the_gateway(
+    client, fake_billing
+):
+    response = await client.post(CHECKOUT, json={**CHECKOUT_MONTHLY, "terms_version": "2026-01-01"})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "The Terms have changed. Please review the current Terms and accept them again."
+    )
+    assert fake_billing.plan_lookups == []
+    assert fake_billing.customers_created == []
+    assert fake_billing.checkouts == []
+
+
+async def _acceptances(db) -> list[TermsAcceptance]:
+    return list((await db.execute(select(TermsAcceptance))).scalars())
+
+
+async def test_a_checkout_records_the_users_acceptance_of_the_terms(client, db, fake_billing, user):
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 200
+    assert response.json()["url"] == fake_billing.checkout_url
+    [acceptance] = await _acceptances(db)
+    assert (
+        acceptance.user_id,
+        acceptance.terms_version,
+        acceptance.accepted_terms,
+        acceptance.requested_immediate_start,
+        acceptance.approved_specific_clauses,
+    ) == (user.id, "2026-10-11", True, True, True)
+    assert acceptance.accepted_at is not None
+
+
+@pytest.mark.parametrize(
+    "failing", ["list_plans", "create_customer", "create_subscription_checkout"]
+)
+async def test_the_acceptance_of_the_terms_survives_a_gateway_failure(
+    client, db, fake_billing, user, failing
+):
+    fake_billing.fail_on = {failing}
+
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+
+    assert response.status_code == 502
+    assert [a.user_id for a in await _acceptances(db)] == [user.id]
+
+
+async def test_a_rejected_checkout_records_no_acceptance(client, db, fake_billing):
+    await client.post(CHECKOUT, json={**CHECKOUT_MONTHLY, "terms_version": "2026-01-01"})
+    await client.post(CHECKOUT, json={**CHECKOUT_MONTHLY, "accepted_terms": False})
+
+    assert await _acceptances(db) == []
 
 
 async def test_a_configured_plan_the_provider_cannot_resolve_fails_checkout_with_502(
@@ -352,7 +451,7 @@ async def test_the_portal_creates_the_stripe_customer_when_missing(client, db, f
     assert user.stripe_customer_id == "cus_fake_1"
 
 
-async def test_the_plans_endpoint_returns_only_the_configured_plans(
+async def test_the_plans_endpoint_returns_only_the_configured_plans_and_the_terms_version(
     client, fake_billing, monkeypatch
 ):
     monkeypatch.setattr(
@@ -381,7 +480,8 @@ async def test_the_plans_endpoint_returns_only_the_configured_plans(
                 "interval": "month",
                 "interval_count": 1,
             },
-        ]
+        ],
+        "terms_version": TERMS_VERSION,
     }
 
 
