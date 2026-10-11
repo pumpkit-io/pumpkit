@@ -256,6 +256,9 @@ class StripeBillingGateway:
             "success_url": settings.STRIPE_CHECKOUT_SUCCESS_URL,
             "cancel_url": settings.STRIPE_CHECKOUT_CANCEL_URL,
             "allow_promotion_codes": True,
+            "automatic_tax": {"enabled": True},
+            "tax_id_collection": {"enabled": True},
+            "customer_update": {"address": "auto", "name": "auto"},
         }
         if trial_period_days is not None:
             params["subscription_data"] = {"trial_period_days": trial_period_days}

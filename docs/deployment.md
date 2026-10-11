@@ -113,6 +113,13 @@ subscribed to: `customer.subscription.created`, `customer.subscription.updated`,
 `customer.subscription.deleted` and `checkout.session.completed`. Put its signing
 secret in `STRIPE_WEBHOOK_SECRET`.
 
+Checkout asks Stripe to charge VAT and collect VAT IDs, and Stripe refuses to
+create a Checkout until Stripe Tax is set up in that mode. Under Settings → Tax,
+set the origin address and the default product category, set "Include tax in
+prices" to Yes, and add a registration for Italy (and the EU One-Stop Shop if
+the Operator is registered for it). Each Plan's price must have its tax
+behaviour set to inclusive, so consumer prices include VAT as the Terms say.
+
 ## 7. X app
 
 Scheduled posts publish through the X app whose `X_CLIENT_ID` and `X_CLIENT_SECRET`
