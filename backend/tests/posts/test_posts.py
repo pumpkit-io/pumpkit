@@ -6,16 +6,18 @@ from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.models import InspirationAuthor
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.core.config import settings
 from pumpkit.core.time import as_utc
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.llm_client import LLMNotConfiguredError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.constants import HUMANIZING_MODEL, WRITING_MODEL
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
+# The model the prompts were tuned against, used for every call unless a setting says otherwise.
+DEFAULT_MODEL = "openai/gpt-5.6-luna"
 
 
 def _posts(handle: str, count: int) -> list[FetchedPost]:
@@ -107,7 +109,7 @@ async def test_the_draft_call_gets_the_draft_prompt_then_the_corpus_then_the_bri
     await client.post(POSTS, json={"brief": "  ship small things\n"})
 
     draft_call = fake_llm.calls[0]
-    assert draft_call.model == WRITING_MODEL
+    assert draft_call.model == DEFAULT_MODEL
     assert draft_call.response_model.__name__ == "drafted_post"
     assert draft_call.messages == [
         _system(DRAFT_POST_PROMPT),
@@ -115,6 +117,18 @@ async def test_the_draft_call_gets_the_draft_prompt_then_the_corpus_then_the_bri
         _user("ship small things"),
     ]
 
+
+
+async def test_the_draft_and_humanizer_calls_use_the_configured_models(
+    client, with_author, fake_llm, monkeypatch
+):
+    monkeypatch.setattr(settings, "LLM_DRAFTING_MODEL", "llama3.3")
+    monkeypatch.setattr(settings, "LLM_HUMANIZING_MODEL", "qwen3")
+    fake_llm.replies = [{"post": "draft"}, {"post": "final"}]
+
+    await client.post(POSTS, json={"brief": "ship"})
+
+    assert [call.model for call in fake_llm.calls] == ["llama3.3", "qwen3"]
 
 async def test_the_humanizer_gets_its_prompt_the_corpus_the_brief_message_then_the_scrubbed_draft(
     client, with_author, fake_llm
@@ -124,7 +138,7 @@ async def test_the_humanizer_gets_its_prompt_the_corpus_the_brief_message_then_t
     await client.post(POSTS, json={"brief": "ship small things"})
 
     humanizer_call = fake_llm.calls[1]
-    assert humanizer_call.model == HUMANIZING_MODEL
+    assert humanizer_call.model == DEFAULT_MODEL
     assert humanizer_call.response_model.__name__ == "refined_post"
     assert humanizer_call.messages == [
         _system(HUMANIZER_PROMPT),
@@ -262,7 +276,7 @@ async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
     [attempt] = post.attempts
     assert attempt.status == "succeeded"
     assert (attempt.draft, attempt.final, attempt.final_char_count) == ("draft", "final", 5)
-    assert (attempt.writing_model, attempt.humanizing_model) == (WRITING_MODEL, HUMANIZING_MODEL)
+    assert (attempt.writing_model, attempt.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
     assert attempt.writing_usage == {
         "prompt_tokens": 100,
         "completion_tokens": 20,

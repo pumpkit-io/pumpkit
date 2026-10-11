@@ -12,6 +12,7 @@ def test_settings_boot_without_optional_providers(monkeypatch):
         monkeypatch.delenv(key, raising=False)
     s = Settings()  # pyright: ignore[reportCallIssue]
     assert s.LLM_API_KEY is None
+    assert s.LLM_BASE_URL == "https://openrouter.ai/api/v1"
     assert s.POSTHOG_ENABLED is False
     assert s.POSTHOG_PROJECT_API_KEY is None
     assert s.POSTHOG_HOST == "https://eu.i.posthog.com"
