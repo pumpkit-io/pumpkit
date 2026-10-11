@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 Environment = Literal["local", "dev", "stg", "prod"]
@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     FERNET_ENCRYPTION_KEY: str
     MAGIC_LINK_TOKEN_DURATION_MINUTES: int
     MAGIC_LINK_TOKEN_NUM_BYTES: int
+    # Comma-separated addresses and `@domain` entries that may sign in; empty lets anyone in.
+    SIGN_UP_ALLOWLIST: str = ""
 
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
@@ -83,14 +85,20 @@ class Settings(BaseSettings):
 
     # How often the publisher process looks for due Scheduled posts.
     PUBLISHER_POLL_INTERVAL_SECONDS: int = Field(default=30, ge=1)
-    # Each User's Scheduled posts per UTC calendar month of publish time (ADR 0006).
-    SCHEDULED_POSTS_MONTHLY_CAP: int = Field(default=100, ge=0)
+    # Each User's Scheduled posts per UTC calendar month of publish time (ADR 0006); None is no cap.
+    SCHEDULED_POSTS_MONTHLY_CAP: Optional[int] = Field(default=100, ge=0)
 
     # Optional: PostHog is disabled unless POSTHOG_ENABLED=true and a project key is set.
     POSTHOG_ENABLED: bool = False
     POSTHOG_PROJECT_API_KEY: Optional[str] = None
     POSTHOG_PERSONAL_API_KEY: Optional[str] = None
     POSTHOG_HOST: str = "https://eu.i.posthog.com"
+
+    @field_validator("SCHEDULED_POSTS_MONTHLY_CAP", mode="before")
+    @classmethod
+    def _empty_cap_is_no_cap(cls, value: object) -> object:
+        # Pydantic would reject the empty string an `.env` line leaves for an int.
+        return None if value == "" else value
 
     def is_env_local(self) -> bool:
         return self.ENV == "local"
