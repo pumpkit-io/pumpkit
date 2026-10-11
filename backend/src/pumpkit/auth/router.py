@@ -140,6 +140,8 @@ async def update_current_user_profile(
     current_user = await user_service.update_user_profile(
         db=db, user=current_user, changes=update.model_dump(exclude_unset=True)
     )
+    await db.commit()
+    await db.refresh(current_user)
 
     return UserProfileResponse(
         id=current_user.id,

@@ -103,7 +103,7 @@ def fill_empty_profile(user: User, hints: NameHints) -> None:
 
 async def update_user_profile(db: AsyncSession, user: User, changes: dict[str, Any]) -> User:
     """
-    Apply profile changes and commit.
+    Apply profile changes. Flushes, never commits.
 
     A first or last name change re-derives display_name, which the app shows for the User;
     clearing both falls back to the email local part.
@@ -115,6 +115,5 @@ async def update_user_profile(db: AsyncSession, user: User, changes: dict[str, A
         derived = " ".join(part for part in (user.first_name, user.last_name) if part).strip()
         user.display_name = derived or user.email.split("@", 1)[0]
 
-    await db.commit()
-    await db.refresh(user)
+    await db.flush()
     return user
