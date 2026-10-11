@@ -13,7 +13,7 @@ Pumpkit is run by INCEPTIONAL S.R.L., called the Operator in these Terms:
 
 These Terms cover only the hosted service at pumpkit.io. Pumpkit's code is open source, and anyone can run their own copy. The Operator does not run those self-hosted instances, and these Terms do not apply to them.
 
-These Terms apply from the moment you sign in. You accept them again on the Billing dialog before checkout, where you also confirm, by ticking separate boxes, your request for the service to start immediately (clause 12) and, if you act for a business, your specific approval of the clauses listed there under arts. 1341 and 1342 of the Italian Civil Code.
+These Terms apply from the moment you sign in. You accept them again in the Billing dialog before every checkout, where you also confirm, by ticking separate boxes, your request for the service to start immediately (clause 12) and your specific approval, which every User gives, of the clauses listed there under arts. 1341 and 1342 of the Italian Civil Code.
 
 In these Terms, a **consumer** is a person using Pumpkit for purposes outside their trade, business, craft or profession. A **business** is anyone else, including a sole trader or freelancer using Pumpkit for their work.
 

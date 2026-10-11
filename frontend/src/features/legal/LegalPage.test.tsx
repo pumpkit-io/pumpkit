@@ -171,3 +171,18 @@ describe('language links', () => {
     );
   });
 });
+
+describe('every legal document', () => {
+  it.each(['/privacy', '/terms', '/it/privacy', '/it/terms'])(
+    '%s gives every section heading an explicit {#anchor} id',
+    (path) => {
+      renderLegalRoute(path);
+      const main = screen.getByRole('main');
+      const headings = [
+        ...within(main).getAllByRole('heading', { level: 2 }),
+        ...within(main).queryAllByRole('heading', { level: 3 }),
+      ];
+      for (const heading of headings) expect(heading.id, heading.textContent ?? '').not.toBe('');
+    },
+  );
+});

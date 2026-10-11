@@ -13,7 +13,7 @@ Pumpkit è gestito da INCEPTIONAL S.R.L., di seguito il Gestore:
 
 I presenti Termini riguardano soltanto il servizio ospitato su pumpkit.io. Il codice di Pumpkit è open source e chiunque può eseguirne una propria copia. Il Gestore non gestisce tali istanze installate in proprio e i presenti Termini non si applicano a esse.
 
-I presenti Termini si applicano dal momento in cui accedi. Li accetti di nuovo nella finestra Billing prima del pagamento, dove confermi anche, spuntando caselle separate, la tua richiesta che il servizio inizi immediatamente (clausola 12) e, se agisci per un'impresa, la tua approvazione specifica delle clausole lì elencate ai sensi degli artt. 1341 e 1342 del Codice civile.
+I presenti Termini si applicano dal momento in cui accedi. Li accetti di nuovo nella finestra Billing prima di ogni pagamento, dove confermi anche, spuntando caselle separate, la tua richiesta che il servizio inizi immediatamente (clausola 12) e la tua approvazione specifica, che ogni Utente dà, delle clausole lì elencate ai sensi degli artt. 1341 e 1342 del Codice civile.
 
 Nei presenti Termini, è **consumatore** la persona fisica che usa Pumpkit per scopi estranei alla propria attività imprenditoriale, commerciale, artigianale o professionale. È **impresa** chiunque altro, compresi l'imprenditore individuale e il libero professionista che usano Pumpkit per il proprio lavoro.
 
@@ -71,13 +71,13 @@ Non devi usare Pumpkit per:
 
 ## 9. Sospensione e risoluzione da parte del Gestore {#suspension}
 
-Il Gestore può sospendere il tuo account se:
+Il Gestore può sospendere (Suspend) il tuo account se:
 
 - violi la clausola 8 o un altro obbligo previsto dai presenti Termini;
 - lo richiedono la legge, un giudice o un'autorità pubblica;
 - il tuo account viene usato in un modo che mette a rischio Pumpkit, i suoi Utenti o terzi, ad esempio dopo una violazione della sicurezza.
 
-Un Utente sospeso non può accedere. Il Gestore ti comunica via email il motivo della sospensione del tuo account, salvo che la legge lo vieti.
+Un Utente sospeso (Suspended) non può accedere. Il Gestore ti comunica via email il motivo della sospensione del tuo account, salvo che la legge lo vieti.
 
 In caso di violazione grave o ripetuta della clausola 8, il Gestore può risolvere il contratto via email con effetto immediato. Il tuo Abbonamento cessa immediatamente, senza rimborso per il periodo non utilizzato, salvo i casi in cui la legge preveda un rimborso.
 

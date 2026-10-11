@@ -12,13 +12,14 @@ import {
   billingService,
   type Subscription,
   type SubscriptionStatus,
+  type TermsAcceptance,
 } from '@/services/billingService';
 import { redirectTo } from '@/lib/navigation';
 import { track } from '@/lib/analytics';
 import { useBilling } from './useBilling';
 import type { BillingData } from './BillingProvider';
 import { PlanCard, recurringLabel } from './PlanCard';
-import { acceptsAll, NOTHING_ACCEPTED, type TermsAcceptance } from './termsAcceptance';
+import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
 import { TermsAcceptanceFields } from './TermsAcceptanceFields';
 
 function ErrorBanner({ message }: { message: string }) {
@@ -91,7 +92,7 @@ function RunningSubscription({
 
 /**
  * The acceptance boxes and the Plans, for a User who may subscribe. Mounted only while the
- * dialog is open, so every Checkout starts with the boxes unticked.
+ * dialog is open, so every checkout starts with the boxes unticked.
  */
 function SubscribeOffer({
   data,
@@ -100,7 +101,7 @@ function SubscribeOffer({
 }: {
   data: BillingData;
   pendingId: string | null;
-  onSubscribe: (planKey: string) => void;
+  onSubscribe: (planKey: string, acceptance: TermsAcceptance) => void;
 }) {
   const [acceptance, setAcceptance] = useState<TermsAcceptance>(NOTHING_ACCEPTED);
   const accepted = acceptsAll(acceptance);
@@ -129,7 +130,7 @@ function SubscribeOffer({
             actionLabel={pendingId === plan.key ? 'Redirecting…' : 'Subscribe'}
             ariaLabel={`Subscribe to ${plan.productName}`}
             disabled={!accepted || pendingId !== null}
-            onAction={() => onSubscribe(plan.key)}
+            onAction={() => onSubscribe(plan.key, acceptance)}
           />
         ))}
       </div>
@@ -153,9 +154,11 @@ export function BillingDialog() {
     }
   };
 
-  const onSubscribe = (planKey: string, termsVersion: string) => {
+  const onSubscribe = (planKey: string, termsVersion: string, acceptance: TermsAcceptance) => {
     track('billing_subscription_checkout_started', { plan_key: planKey });
-    void go(planKey, () => billingService.startSubscriptionCheckout(planKey, termsVersion));
+    void go(planKey, () =>
+      billingService.startSubscriptionCheckout(planKey, termsVersion, acceptance),
+    );
   };
 
   const onManage = async () => {
@@ -198,7 +201,9 @@ export function BillingDialog() {
                     key={data.termsVersion}
                     data={data}
                     pendingId={pendingId}
-                    onSubscribe={(planKey) => onSubscribe(planKey, data.termsVersion)}
+                    onSubscribe={(planKey, acceptance) =>
+                      onSubscribe(planKey, data.termsVersion, acceptance)
+                    }
                   />
                 ) : (
                   subscription && (

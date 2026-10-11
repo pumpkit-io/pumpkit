@@ -5,7 +5,8 @@ vi.mock('posthog-js', () => ({
 }));
 
 import posthog from 'posthog-js';
-import { EVENTS, registerSuperProperties, track } from './analytics';
+import { EVENTS, track } from './analytics';
+import { registerSuperProperties } from './analyticsConsent';
 
 describe('analytics without Analytics consent', () => {
   it('does not call PostHog', () => {

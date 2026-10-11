@@ -2,27 +2,15 @@ import { Children, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { Link } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
+import { TEXT_LINK_CLASS } from './textLink';
 
 const ANCHOR_SUFFIX = /\s*\{#([a-z0-9-]+)\}\s*$/;
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-function textOf(children: ReactNode): string {
-  return Children.toArray(children)
-    .map((child) => (typeof child === 'string' ? child : ''))
-    .join('');
-}
 
 /**
  * Splits a heading written as `## Title {#anchor}` into its text and anchor. An explicit anchor
  * keeps links from the banner and the checkout working when the heading is reworded.
  */
-function headingParts(children: ReactNode): { id: string; content: ReactNode } {
+function headingParts(children: ReactNode): { id?: string; content: ReactNode } {
   const parts = Children.toArray(children);
   const last = parts[parts.length - 1];
   if (typeof last === 'string') {
@@ -31,7 +19,7 @@ function headingParts(children: ReactNode): { id: string; content: ReactNode } {
       return { id: match[1], content: [...parts.slice(0, -1), last.replace(ANCHOR_SUFFIX, '')] };
     }
   }
-  return { id: slugify(textOf(children)), content: children };
+  return { content: children };
 }
 
 const components: Components = {
@@ -72,11 +60,9 @@ const components: Components = {
     <td className="border-b border-border py-2 pr-4 align-top leading-6">{children}</td>
   ),
   a: ({ href = '', children }) => {
-    const className =
-      'text-foreground underline underline-offset-4 transition-opacity hover:opacity-70';
     if (href.startsWith('/')) {
       return (
-        <Link to={href} className={className}>
+        <Link to={href} className={TEXT_LINK_CLASS}>
           {children}
         </Link>
       );
@@ -85,7 +71,7 @@ const components: Components = {
     return (
       <a
         href={href}
-        className={className}
+        className={TEXT_LINK_CLASS}
         {...(external && { target: '_blank', rel: 'noopener noreferrer' })}
       >
         {children}

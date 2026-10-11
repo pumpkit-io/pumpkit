@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PRIVACY_PATH } from '@/features/legal/documents';
+import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
 import {
   grantAnalyticsConsent,
   onCookieSettingsOpened,
@@ -44,8 +45,8 @@ export function ConsentBanner() {
         <a
           href={`${PRIVACY_PATH}#cookies`}
           target="_blank"
-          rel="noopener"
-          className="text-foreground underline underline-offset-4"
+          rel="noopener noreferrer"
+          className={TEXT_LINK_CLASS}
         >
           How Pumpkit uses cookies
         </a>

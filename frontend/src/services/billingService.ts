@@ -24,7 +24,7 @@ export interface BillingMe {
   subscription: Subscription | null;
   subscribed: boolean;
   maySubscribe: boolean;
-  /** The Trial a Checkout would start with; set only when the User may subscribe. */
+  /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
 }
 
@@ -38,7 +38,14 @@ export interface Plan {
   intervalCount: number;
 }
 
-/** The Plans on sale and the Terms version a Checkout must accept. */
+/** The three boxes a User ticks before every checkout (ADR 0010). */
+export interface TermsAcceptance {
+  acceptedTerms: boolean;
+  requestedImmediateStart: boolean;
+  approvedSpecificClauses: boolean;
+}
+
+/** The Plans on sale and the Terms version a checkout must accept. */
 export interface PlanCatalog {
   plans: Plan[];
   /** The current Terms' "Last updated" date, in ISO form. */
@@ -101,17 +108,21 @@ export const billingService = {
   },
 
   /**
-   * Starts Checkout for a Plan once the User has ticked all three acceptance boxes for
-   * `termsVersion` (ADR 0010). The server decides the price, quantity and any Trial, and
-   * refuses with a 409 when `termsVersion` is no longer current.
+   * Starts Stripe Checkout for a Plan with the User's acceptance of `termsVersion` (ADR 0010).
+   * The server decides the price, quantity and any Trial, refuses an acceptance missing a box,
+   * and refuses with a 409 when `termsVersion` is no longer current.
    */
-  startSubscriptionCheckout: async (planKey: string, termsVersion: string): Promise<string> => {
+  startSubscriptionCheckout: async (
+    planKey: string,
+    termsVersion: string,
+    acceptance: TermsAcceptance,
+  ): Promise<string> => {
     const { data } = await apiService.post<{ url: string }>('/billing/checkout', {
       plan_key: planKey,
       terms_version: termsVersion,
-      accepted_terms: true,
-      requested_immediate_start: true,
-      approved_specific_clauses: true,
+      accepted_terms: acceptance.acceptedTerms,
+      requested_immediate_start: acceptance.requestedImmediateStart,
+      approved_specific_clauses: acceptance.approvedSpecificClauses,
     });
     return data.url;
   },

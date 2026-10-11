@@ -1,7 +1,5 @@
 import { captureEvent } from './analyticsConsent';
 
-export { registerSuperProperties } from './analyticsConsent';
-
 // track() is typed against these keys, so an event must be declared here to be trackable.
 export const EVENTS = {
   // Landing (/)

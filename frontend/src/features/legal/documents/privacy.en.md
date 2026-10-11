@@ -100,11 +100,10 @@ The Operator may also disclose personal data to public authorities when the law 
 
 ## Transfers outside the EU {#transfers}
 
-Some recipients process data in the United States or another country outside the European Union. Each such transfer relies on one of two safeguards: the European Commission's adequacy decision for the EU-US Data Privacy Framework, for a recipient certified under it, or the Standard Contractual Clauses approved by the European Commission, included in the recipient's data processing terms.
+Some recipients process data in the United States or another country outside the European Union. Each such transfer relies on one of two safeguards: the European Commission's adequacy decision for the EU-US Data Privacy Framework, for a recipient certified under it, or the Standard Contractual Clauses approved by the European Commission, included in the recipient's data processing terms. DigitalOcean and PostHog process data in the European Union, so they are not listed.
 
 | Recipient     | Safeguard              |
 | ------------- | ---------------------- |
-| DigitalOcean  | [safeguard to confirm] |
 | Google        | [safeguard to confirm] |
 | Resend        | [safeguard to confirm] |
 | Stripe        | [safeguard to confirm] |
@@ -112,7 +111,6 @@ Some recipients process data in the United States or another country outside the
 | twitterapi.io | [safeguard to confirm] |
 | OpenRouter    | [safeguard to confirm] |
 | OpenAI        | [safeguard to confirm] |
-| PostHog       | [safeguard to confirm] |
 
 To get a copy of the safeguard that covers a transfer, write to support@pumpkit.io.
 

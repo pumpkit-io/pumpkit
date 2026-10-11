@@ -100,11 +100,10 @@ Il Gestore può inoltre comunicare dati personali alle autorità pubbliche quand
 
 ## Trasferimenti al di fuori dell'UE {#transfers}
 
-Alcuni destinatari trattano i dati negli Stati Uniti o in un altro paese al di fuori dell'Unione europea. Ciascuno di questi trasferimenti si basa su una di due garanzie: la decisione di adeguatezza della Commissione europea relativa all'EU-US Data Privacy Framework, per un destinatario certificato nell'ambito di tale quadro, oppure le Clausole contrattuali standard approvate dalla Commissione europea, incluse nelle condizioni sul trattamento dei dati del destinatario.
+Alcuni destinatari trattano i dati negli Stati Uniti o in un altro paese al di fuori dell'Unione europea. Ciascuno di questi trasferimenti si basa su una di due garanzie: la decisione di adeguatezza della Commissione europea relativa all'EU-US Data Privacy Framework, per un destinatario certificato nell'ambito di tale quadro, oppure le Clausole contrattuali standard approvate dalla Commissione europea, incluse nelle condizioni sul trattamento dei dati del destinatario. DigitalOcean e PostHog trattano i dati nell'Unione europea, quindi non sono elencati.
 
 | Destinatario  | Garanzia               |
 | ------------- | ---------------------- |
-| DigitalOcean  | [safeguard to confirm] |
 | Google        | [safeguard to confirm] |
 | Resend        | [safeguard to confirm] |
 | Stripe        | [safeguard to confirm] |
@@ -112,7 +111,6 @@ Alcuni destinatari trattano i dati negli Stati Uniti o in un altro paese al di f
 | twitterapi.io | [safeguard to confirm] |
 | OpenRouter    | [safeguard to confirm] |
 | OpenAI        | [safeguard to confirm] |
-| PostHog       | [safeguard to confirm] |
 
 Per ottenere una copia della garanzia che copre un trasferimento, scrivi a support@pumpkit.io.
 

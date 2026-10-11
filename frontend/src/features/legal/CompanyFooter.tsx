@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { CookieSettingsButton } from '@/features/analyticsConsent/CookieSettingsButton';
 import { cn } from '@/lib/utils';
-import { PRIVACY_PATH, TERMS_PATH } from './documents';
+import { LEGAL_LINKS } from './documents';
 import { OPERATOR } from './operator';
 
 const LINK_CLASS = 'text-foreground underline-offset-4 transition-colors hover:underline';
@@ -23,16 +23,13 @@ export function CompanyFooter({ className }: { className?: string }) {
         </address>
         <nav aria-label="Legal">
           <ul className="flex flex-wrap gap-x-5 gap-y-2">
-            <li>
-              <Link to={PRIVACY_PATH} className={LINK_CLASS}>
-                Privacy Policy
-              </Link>
-            </li>
-            <li>
-              <Link to={TERMS_PATH} className={LINK_CLASS}>
-                Terms
-              </Link>
-            </li>
+            {LEGAL_LINKS.map(({ path, label }) => (
+              <li key={path}>
+                <Link to={path} className={LINK_CLASS}>
+                  {label}
+                </Link>
+              </li>
+            ))}
             <li>
               <CookieSettingsButton className={LINK_CLASS} />
             </li>

@@ -8,14 +8,9 @@ vi.mock('@/lib/analyticsConsent', async (importOriginal) => ({
 }));
 
 import { hardRedirect } from '@/lib/navigation';
-import { resetPostHog } from '@/lib/analyticsConsent';
+import { POSTHOG_IDENTIFIED_KEY, resetPostHog } from '@/lib/analyticsConsent';
 import { api } from '@/services/apiService';
-import {
-  installRefreshOnUnauthorized,
-  POSTHOG_IDENTIFIED_KEY,
-  SESSION_STORAGE_KEY,
-  session,
-} from '@/lib/session';
+import { installRefreshOnUnauthorized, SESSION_STORAGE_KEY, session } from '@/lib/session';
 
 installRefreshOnUnauthorized();
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
