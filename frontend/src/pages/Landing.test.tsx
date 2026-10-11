@@ -1,7 +1,7 @@
 import type { InternalAxiosRequestConfig } from 'axios';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
@@ -13,6 +13,7 @@ import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 import { track } from '@/lib/analytics';
 import { api } from '@/services/apiService';
+import { billingService } from '@/services/billingService';
 import { Landing } from './Landing';
 
 const originalAdapter = api.defaults.adapter;
@@ -86,6 +87,18 @@ beforeEach(() => {
 
 afterEach(() => {
   api.defaults.adapter = originalAdapter;
+});
+
+describe('Landing on an Instance that sells no Plans', () => {
+  it('shows no pricing section or Pricing link and asks for no Plans', () => {
+    const fetchPlans = vi.spyOn(billingService, 'fetchPlans');
+    onTestFinished(() => fetchPlans.mockRestore());
+    renderLanding({ ...DEFAULT_INSTANCE, sells_plans: false });
+
+    expect(screen.queryByRole('region', { name: 'Simple pricing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
+    expect(fetchPlans).not.toHaveBeenCalled();
+  });
 });
 
 describe('Landing hero', () => {

@@ -45,6 +45,8 @@ Every Stripe call goes through the `BillingGateway` port (`src/pumpkit/billing/g
 
 Gate an endpoint on being Subscribed with `current_user: User = Depends(require_subscribed_user)` (`src/pumpkit/billing/dependencies.py`): it returns a 403 to a User who isn't, reading only Pumpkit's copy. Tests make the `user` fixture Subscribed by requesting the `subscribed` fixture. On the frontend, `useSubscribed()` (inside `SubscribedProvider`) tells a screen whether to show its tools or a `SubscribePrompt` that opens the Billing dialog; treat a 403 from a write as a cue to call its `refresh()`.
 
+An Instance without the Stripe billing group sells no Plans (ADR 0011): `billing/service.sells_plans()` is false, `require_subscribed_user` and the publisher's check let every User through (`billing/service.has_access`), and the billing routes and the webhook answer 404. The frontend reads `sells_plans` from `useInstance()`: `useSubscribed()` reports every User as Subscribed, and the Billing dialog, the Billing menu item, the `/billing` routes and the landing page's pricing are left out. Tests switch billing off with the `sells_no_plans` fixture, or by rendering with an Instance whose `sells_plans` is false.
+
 `billing/mediator.handle_webhook` owns the webhook transaction: it records the event for deduplication, locks the customer's User row, syncs the customer's Subscriptions from Stripe (`billing/service.sync_customer`) and commits once. The lock is held across the Stripe call, so webhooks for one customer run one after another. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it; a webhook for an unknown customer is logged and skipped.
 
 ### Write a Post
