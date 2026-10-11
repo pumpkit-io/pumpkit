@@ -4,6 +4,8 @@ Scheduled posts are made and checked through the HTTP API.
 """
 
 import asyncio
+import subprocess
+import sys
 from datetime import timedelta
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlsplit
@@ -279,3 +281,12 @@ async def test_the_pass_tracks_what_it_publishes(
         distinct_id=subscribed.user_id,
         properties={"source": "typed"},
     )
+
+
+def test_the_publisher_process_maps_every_model_it_queries():
+    # A fresh interpreter, as `python -m` starts it: this test process has already imported every model.
+    script = "import pumpkit.scheduling.publisher\nfrom sqlalchemy.orm import configure_mappers\nconfigure_mappers()"
+
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr

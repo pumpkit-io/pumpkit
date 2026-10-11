@@ -7,6 +7,8 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+# Models name `User` by string, so the process needs every model mapped, not just the ones it imports.
+import pumpkit.models  # noqa: F401
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
