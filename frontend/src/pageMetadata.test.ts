@@ -42,12 +42,7 @@ describe('page metadata in index.html', () => {
     );
   });
 
-  it('loads Inter at weights 300 to 700 and Google Sans Code for the wordmark', () => {
-    const href =
-      head.querySelector<HTMLLinkElement>('link[rel="stylesheet"][href*="fonts.googleapis.com"]')
-        ?.href ?? '';
-    const families = new URL(href).searchParams.getAll('family');
-    expect(families).toContain('Inter:wght@300..700');
-    expect(families.some((family) => family.startsWith('Google Sans Code'))).toBe(true);
+  it('loads nothing from Google Fonts', () => {
+    expect(head.innerHTML).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
   });
 });
