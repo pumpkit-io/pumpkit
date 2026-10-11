@@ -59,29 +59,6 @@ class User(Base):
 
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True)
 
-    google_identities: Mapped[list["GoogleIdentity"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    magic_links: Mapped[list["MagicLink"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    subscriptions: Mapped[list["Subscription"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    inspiration_authors: Mapped[list["InspirationAuthor"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    posts: Mapped[list["Post"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    x_connection: Mapped[Optional["XConnection"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-    scheduled_posts: Mapped[list["ScheduledPost"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-
 
 class GoogleIdentity(Base):
     """
@@ -105,7 +82,7 @@ class GoogleIdentity(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    user: Mapped["User"] = relationship(back_populates="google_identities")
+    user: Mapped["User"] = relationship()
 
 
 class RefreshToken(Base):
@@ -142,7 +119,7 @@ class RefreshToken(Base):
     ip: Mapped[Optional[str]] = mapped_column(String)
     user_agent: Mapped[Optional[str]] = mapped_column(String)
 
-    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+    user: Mapped["User"] = relationship()
 
     __table_args__ = (
         # Helps housekeeping queries
@@ -179,7 +156,7 @@ class MagicLink(Base):
     requester_ip: Mapped[Optional[str]] = mapped_column(String)
     requester_user_agent: Mapped[Optional[str]] = mapped_column(String)
 
-    user: Mapped[Optional["User"]] = relationship(back_populates="magic_links")
+    user: Mapped[Optional["User"]] = relationship()
 
     __table_args__ = (CheckConstraint("expires_at > sent_at", name="expires_at_gt_sent_at"),)
 
@@ -215,7 +192,7 @@ class Subscription(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    user: Mapped["User"] = relationship(back_populates="subscriptions")
+    user: Mapped["User"] = relationship()
 
 
 class StripeEvent(Base):
@@ -251,7 +228,7 @@ class InspirationAuthor(Base):
     position: Mapped[int] = mapped_column(Integer)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    user: Mapped["User"] = relationship(back_populates="inspiration_authors")
+    user: Mapped["User"] = relationship()
 
     __table_args__ = (UniqueConstraint("user_id", "handle"),)
 
@@ -296,7 +273,7 @@ class Post(Base):
     corpus_post_ids: Mapped[list[str]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    user: Mapped["User"] = relationship(back_populates="posts")
+    user: Mapped["User"] = relationship()
     attempts: Mapped[list["VersionAttempt"]] = relationship(
         back_populates="post", cascade="all, delete-orphan", order_by="VersionAttempt.sequence"
     )
@@ -385,7 +362,7 @@ class XConnection(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    user: Mapped["User"] = relationship(back_populates="x_connection")
+    user: Mapped["User"] = relationship()
 
 
 class PendingXAuthorization(Base):
@@ -453,7 +430,7 @@ class ScheduledPost(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    user: Mapped["User"] = relationship(back_populates="scheduled_posts")
+    user: Mapped["User"] = relationship()
 
     # The publisher looks up due Scheduled posts by state and time.
     __table_args__ = (Index("ix_scheduled_posts_state_publish_at", "state", "publish_at"),)
