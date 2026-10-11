@@ -84,33 +84,23 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 The Operator shares personal data only with the providers below, and each receives only what its task needs.
 
-| Recipient                                                        | What it receives                                                                                                 | Where                 |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------- |
-| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                             | Frankfurt, Germany    |
-| Google (sign-in)                                                 | Your sign-in request when you choose Google                                                                      | United States         |
-| Resend (email)                                                   | Your email address and the Magic link email                                                                      | United States         |
-| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout               | United States         |
-| X (X connection and publishing)                                  | Your authorization when you connect, and the text of each Scheduled post when it is published                    | United States         |
-| twitterapi.io (reading public posts)                             | The handles of your Inspiration authors                                                                          | [location to confirm] |
-| OpenRouter (writing)                                             | Your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors | United States         |
-| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                           | United States         |
-| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                     | European Union        |
+| Recipient                                                        | What it receives                                                                                                 | Where              |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------ |
+| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                             | Frankfurt, Germany |
+| Google (sign-in)                                                 | Your sign-in request when you choose Google                                                                      | United States      |
+| Resend (email)                                                   | Your email address and the Magic link email                                                                      | United States      |
+| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout               | United States      |
+| X (X connection and publishing)                                  | Your authorization when you connect, and the text of each Scheduled post when it is published                    | United States      |
+| twitterapi.io (reading public posts)                             | The handles of your Inspiration authors                                                                          |                    |
+| OpenRouter (writing)                                             | Your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors | United States      |
+| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                           | United States      |
+| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                     | European Union     |
 
 The Operator may also disclose personal data to public authorities when the law requires it.
 
 ## Transfers outside the EU {#transfers}
 
-Some recipients process data in the United States or another country outside the European Union. Each such transfer relies on one of two safeguards: the European Commission's adequacy decision for the EU-US Data Privacy Framework, for a recipient certified under it, or the Standard Contractual Clauses approved by the European Commission, included in the recipient's data processing terms. DigitalOcean and PostHog process data in the European Union, so they are not listed.
-
-| Recipient     | Safeguard              |
-| ------------- | ---------------------- |
-| Google        | [safeguard to confirm] |
-| Resend        | [safeguard to confirm] |
-| Stripe        | [safeguard to confirm] |
-| X             | [safeguard to confirm] |
-| twitterapi.io | [safeguard to confirm] |
-| OpenRouter    | [safeguard to confirm] |
-| OpenAI        | [safeguard to confirm] |
+Some recipients process data in the United States or another country outside the European Union. Each such transfer relies on one of two safeguards: the European Commission's adequacy decision for the EU-US Data Privacy Framework, for a recipient certified under it, or the Standard Contractual Clauses approved by the European Commission, included in the recipient's data processing terms. DigitalOcean and PostHog process data in the European Union, so no transfer applies to them.
 
 To get a copy of the safeguard that covers a transfer, write to support@pumpkit.io.
 
@@ -124,9 +114,9 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 - **Session and Magic link records:** 90 days after they expire. This includes a Magic link requested by someone who never created an account.
 - **Inspiration authors' public posts:** while any User has that author among their Inspiration authors, or until the author objects.
 - **Billing records held by Stripe, and invoices:** 10 years, as Italian tax law requires.
-- **Analytics events, server events and error reports:** [PostHog event retention period].
-- **Session recordings:** [PostHog recording retention period].
-- **Backups:** backups of the server are overwritten on a rolling schedule, so deleted data leaves them within [backup retention period].
+- **Analytics events, server events and error reports:** 30 days.
+- **Session recordings:** 30 days.
+- **Backups:** backups of the server are overwritten on a rolling schedule, so deleted data leaves them within 30 days.
 
 ## Your rights {#rights}
 

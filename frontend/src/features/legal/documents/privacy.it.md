@@ -91,7 +91,7 @@ Il Gestore condivide i dati personali solo con i fornitori indicati qui sotto, e
 | Resend (email)                                                             | Il tuo indirizzo email e l'email con il Magic link                                                                   | Stati Uniti           |
 | Stripe (fatturazione)                                                      | Il tuo nome, indirizzo email e identificativo utente, e i dati di pagamento che inserisci su Stripe Checkout         | Stati Uniti           |
 | X (X connection e pubblicazione)                                           | La tua autorizzazione quando colleghi l'account e il testo di ogni Scheduled post quando viene pubblicato            | Stati Uniti           |
-| twitterapi.io (lettura dei post pubblici)                                  | Gli handle dei tuoi Inspiration author                                                                               | [location to confirm] |
+| twitterapi.io (lettura dei post pubblici)                                  | Gli handle dei tuoi Inspiration author                                                                               |                       |
 | OpenRouter (scrittura)                                                     | Il tuo Brief, i tuoi Feedback, le Versioni precedenti del Post e i post pubblici recenti dei tuoi Inspiration author | Stati Uniti           |
 | Il fornitore del modello dietro OpenRouter, attualmente OpenAI (scrittura) | Gli stessi dati di OpenRouter                                                                                        | Stati Uniti           |
 | PostHog (analisi)                                                          | L'analisi nel tuo browser, solo dopo il Consenso analitico, e gli eventi del server e le segnalazioni di errore      | Unione europea        |
@@ -100,17 +100,7 @@ Il Gestore può inoltre comunicare dati personali alle autorità pubbliche quand
 
 ## Trasferimenti al di fuori dell'UE {#transfers}
 
-Alcuni destinatari trattano i dati negli Stati Uniti o in un altro paese al di fuori dell'Unione europea. Ciascuno di questi trasferimenti si basa su una di due garanzie: la decisione di adeguatezza della Commissione europea relativa all'EU-US Data Privacy Framework, per un destinatario certificato nell'ambito di tale quadro, oppure le Clausole contrattuali standard approvate dalla Commissione europea, incluse nelle condizioni sul trattamento dei dati del destinatario. DigitalOcean e PostHog trattano i dati nell'Unione europea, quindi non sono elencati.
-
-| Destinatario  | Garanzia               |
-| ------------- | ---------------------- |
-| Google        | [safeguard to confirm] |
-| Resend        | [safeguard to confirm] |
-| Stripe        | [safeguard to confirm] |
-| X             | [safeguard to confirm] |
-| twitterapi.io | [safeguard to confirm] |
-| OpenRouter    | [safeguard to confirm] |
-| OpenAI        | [safeguard to confirm] |
+Alcuni destinatari trattano i dati negli Stati Uniti o in un altro paese al di fuori dell'Unione europea. Ciascuno di questi trasferimenti si basa su una di due garanzie: la decisione di adeguatezza della Commissione europea relativa all'EU-US Data Privacy Framework, per un destinatario certificato nell'ambito di tale quadro, oppure le Clausole contrattuali standard approvate dalla Commissione europea, incluse nelle condizioni sul trattamento dei dati del destinatario. DigitalOcean e PostHog trattano i dati nell'Unione europea, quindi nessun trasferimento li riguarda.
 
 Per ottenere una copia della garanzia che copre un trasferimento, scrivi a support@pumpkit.io.
 
@@ -124,9 +114,9 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 - **Registrazioni delle Sessioni e dei Magic link:** 90 giorni dalla scadenza. Ciò include un Magic link richiesto da chi non ha mai creato un account.
 - **Post pubblici degli Inspiration author:** finché almeno un Utente ha quell'autore tra i propri Inspiration author, oppure finché l'autore non si oppone.
 - **Dati di fatturazione conservati da Stripe e fatture:** 10 anni, come richiesto dalla normativa fiscale italiana.
-- **Eventi di analisi, eventi del server e segnalazioni di errore:** [PostHog event retention period].
-- **Registrazioni delle sessioni:** [PostHog recording retention period].
-- **Backup:** i backup del server vengono sovrascritti a rotazione, quindi i dati eliminati escono dai backup entro [backup retention period].
+- **Eventi di analisi, eventi del server e segnalazioni di errore:** 30 giorni.
+- **Registrazioni delle sessioni:** 30 giorni.
+- **Backup:** i backup del server vengono sovrascritti a rotazione, quindi i dati eliminati escono dai backup entro 30 giorni.
 
 ## I tuoi diritti {#rights}
 
