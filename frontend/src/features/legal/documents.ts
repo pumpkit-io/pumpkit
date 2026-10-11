@@ -1,4 +1,5 @@
 import privacyEn from './documents/privacy.en.md?raw';
+import termsEn from './documents/terms.en.md?raw';
 
 export type LegalLanguage = 'en' | 'it';
 
@@ -25,6 +26,13 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
     title: 'Privacy Policy',
     lastUpdated: '2026-10-11',
     markdown: privacyEn,
+  },
+  {
+    path: TERMS_PATH,
+    language: 'en',
+    title: 'Terms',
+    lastUpdated: '2026-10-11',
+    markdown: termsEn,
   },
 ];
 

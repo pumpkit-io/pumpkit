@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Login } from './Login';
@@ -51,5 +51,19 @@ describe('the sign-in page', () => {
 
     expect(screen.getByText('Welcome back')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('tells people that continuing means agreeing to the Terms, with links to both documents', () => {
+    renderLogin('/login');
+
+    const notice = screen.getByText(/^By continuing, you agree to the/);
+    expect(notice).toHaveTextContent(
+      'By continuing, you agree to the Terms and acknowledge the Privacy Policy.',
+    );
+    expect(within(notice).getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms');
+    expect(within(notice).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
   });
 });
