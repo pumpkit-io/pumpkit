@@ -2,9 +2,9 @@
 
 Every setting comes from environment variables, split across three files copied from their `.env.example`: the root `.env`, `backend/.env` and `frontend/.env`.
 
-Variables marked (optional) can be left empty; the app boots without them, using the default shown. Only the Instance's URLs, the database, `JWT_SECRET_KEY`, `FERNET_ENCRYPTION_KEY` and the Resend variables are required.
+Variables marked (optional) can be left empty; the app boots without them, using the default shown. Only the Instance's URLs, the database, `JWT_SECRET_KEY`, `FERNET_ENCRYPTION_KEY` and `SUPPORT_EMAIL` are required.
 
-Each optional provider is a group of settings (ADR 0011). With all of a group's required settings set, the provider is on; with none set, it is off; with only some set, the backend refuses to start and names the missing ones. The groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), Google sign-in (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and PostHog (`POSTHOG_PROJECT_API_KEY`).
+Each optional provider is a group of settings (ADR 0011). With all of a group's required settings set, the provider is on; with none set, it is off; with only some set, the backend refuses to start and names the missing ones. The groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), Google sign-in (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), SMTP (`SMTP_HOST`, `EMAIL_FROM`) and PostHog (`POSTHOG_PROJECT_API_KEY`).
 
 ## Root `.env`
 
@@ -39,8 +39,11 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `GOOGLE_NONCE_TOKEN_NUM_BYTES`, `GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES` (optional) | Size of the OAuth nonce and PKCE verifier. Default to 64. |
 | `GOOGLE_COOKIE_MAX_AGE_SECONDS` (optional) | Lifetime of the short-lived PKCE/CSRF cookies during OAuth. Defaults to 600. |
 | `GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS` (optional) | Timeout for Google's token endpoint. Defaults to 30. |
-| `RESEND_API_KEY` | Resend API key for transactional email. |
-| `RESEND_NOREPLY_ADDRESS`, `RESEND_SUPPORT_ADDRESS` | Sender and support addresses. |
+| `SUPPORT_EMAIL` | The address the support link opens a new email to. |
+| `SMTP_HOST`, `EMAIL_FROM` (optional) | SMTP server and the address Magic link emails come from. Set both or neither. Without them each Magic link, its recipient and expiry are written to the backend log at warning level, and startup says so; configure SMTP before inviting anyone else. |
+| `SMTP_SECURITY` (optional) | `starttls` (default), `tls` or `none`. |
+| `SMTP_PORT` (optional) | Defaults to the security mode's port: 587 for `starttls`, 465 for `tls`, 25 for `none`. |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` (optional) | SMTP login; leave empty for a server that needs none. |
 | `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` (optional) | Stripe API keys. Part of the Stripe billing group. |
 | `STRIPE_WEBHOOK_SECRET` (optional) | Signing secret of the webhook endpoint. Part of the Stripe billing group. |
 | `STRIPE_CHECKOUT_SUCCESS_URL`, `STRIPE_CHECKOUT_CANCEL_URL` (optional) | Where Checkout returns after paying or cancelling. Default to `FRONTEND_URL` + `/billing/success` and `/billing/cancelled`. |
@@ -60,6 +63,8 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `POSTHOG_PROJECT_API_KEY` (optional) | PostHog project key. |
 | `POSTHOG_PERSONAL_API_KEY` (optional) | Personal key, used by `scripts/deploy.sh` for deploy annotations. |
 | `POSTHOG_HOST` (optional) | PostHog ingestion host. |
+
+To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`, `SMTP_PASSWORD` to a Resend API key and `EMAIL_FROM` to an address on a domain verified in Resend; the default `starttls` on port 587 works.
 
 ## `frontend/.env`
 

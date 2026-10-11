@@ -6,6 +6,9 @@ from pydantic_settings import BaseSettings, NoDecode
 
 Environment = Literal["local", "dev", "stg", "prod"]
 LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+SmtpSecurity = Literal["starttls", "tls", "none"]
+
+_SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "none": 25}
 
 
 class Settings(BaseSettings):
@@ -51,9 +54,17 @@ class Settings(BaseSettings):
     GOOGLE_COOKIE_MAX_AGE_SECONDS: int = 600
     GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS: int = 30
 
-    RESEND_API_KEY: str
-    RESEND_NOREPLY_ADDRESS: str
-    RESEND_SUPPORT_ADDRESS: str
+    # Where the support link sends Users' email.
+    SUPPORT_EMAIL: str
+
+    # Optional group: Magic links are emailed only with a host and a from address, else logged.
+    SMTP_HOST: Optional[str] = None
+    EMAIL_FROM: Optional[str] = None
+    # None means the security mode's standard port.
+    SMTP_PORT: Optional[int] = None
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_SECURITY: SmtpSecurity = "starttls"
 
     # Optional group: Stripe billing is on only with both keys, the webhook secret and Plan keys.
     STRIPE_SECRET_KEY: Optional[str] = None
@@ -138,6 +149,7 @@ class Settings(BaseSettings):
                 "GOOGLE_CLIENT_SECRET": self.GOOGLE_CLIENT_SECRET,
             },
             "PostHog": {"POSTHOG_PROJECT_API_KEY": self.POSTHOG_PROJECT_API_KEY},
+            "SMTP": {"SMTP_HOST": self.SMTP_HOST, "EMAIL_FROM": self.EMAIL_FROM},
         }
 
     def _is_configured(self, group: str) -> bool:
@@ -152,6 +164,12 @@ class Settings(BaseSettings):
     def is_posthog_configured(self) -> bool:
         return self._is_configured("PostHog")
 
+    def is_smtp_configured(self) -> bool:
+        return self._is_configured("SMTP")
+
+    def smtp_port(self) -> int:
+        return self.SMTP_PORT or _SMTP_DEFAULT_PORTS[self.SMTP_SECURITY]
+
     @field_validator("BILLING_PLAN_KEYS", mode="before")
     @classmethod
     def _parse_plan_keys(cls, value: object) -> object:
@@ -160,9 +178,9 @@ class Settings(BaseSettings):
             return json.loads(value) if value.strip() else []
         return value
 
-    @field_validator("SCHEDULED_POSTS_MONTHLY_CAP", mode="before")
+    @field_validator("SCHEDULED_POSTS_MONTHLY_CAP", "SMTP_PORT", mode="before")
     @classmethod
-    def _empty_cap_is_no_cap(cls, value: object) -> object:
+    def _empty_int_is_none(cls, value: object) -> object:
         # Pydantic would reject the empty string an `.env` line leaves for an int.
         return None if value == "" else value
 
