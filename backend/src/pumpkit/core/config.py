@@ -1,4 +1,5 @@
 import json
+from enum import StrEnum
 from typing import Annotated, Literal, Optional, Self
 
 from pydantic import Field, field_validator, model_validator
@@ -9,6 +10,16 @@ LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 SmtpSecurity = Literal["starttls", "tls", "none"]
 
 _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "none": 25}
+
+
+class ProviderGroup(StrEnum):
+    """An optional provider's settings group (ADR 0011); the value names it in startup errors."""
+
+    STRIPE_BILLING = "Stripe billing"
+    GOOGLE_SIGN_IN = "Google sign-in"
+    POSTHOG = "PostHog"
+    SMTP = "SMTP"
+    OPERATOR_DETAILS = "Operator details"
 
 
 class Settings(BaseSettings):
@@ -111,7 +122,8 @@ class Settings(BaseSettings):
     # Each User's Scheduled posts per UTC calendar month of publish time (ADR 0006); None is no cap.
     SCHEDULED_POSTS_MONTHLY_CAP: Optional[int] = Field(default=100, ge=0)
 
-    # Optional: PostHog is disabled unless POSTHOG_ENABLED=true and a project key is set.
+    # Optional group: the project key turns on browser analytics behind the consent banner.
+    # Backend events also need POSTHOG_ENABLED=true, so dev and test Instances send none.
     POSTHOG_ENABLED: bool = False
     POSTHOG_PROJECT_API_KEY: Optional[str] = None
     POSTHOG_PERSONAL_API_KEY: Optional[str] = None
@@ -144,45 +156,45 @@ class Settings(BaseSettings):
                 raise ValueError(f"{name} is partly configured; missing: {', '.join(missing)}")
         return self
 
-    def _provider_groups(self) -> dict[str, dict[str, object]]:
+    def _provider_groups(self) -> dict[ProviderGroup, dict[str, object]]:
         """Each optional provider's required settings; empty values count as unset."""
         return {
-            "Stripe billing": {
+            ProviderGroup.STRIPE_BILLING: {
                 "STRIPE_SECRET_KEY": self.STRIPE_SECRET_KEY,
                 "STRIPE_PUBLISHABLE_KEY": self.STRIPE_PUBLISHABLE_KEY,
                 "STRIPE_WEBHOOK_SECRET": self.STRIPE_WEBHOOK_SECRET,
                 "BILLING_PLAN_KEYS": self.BILLING_PLAN_KEYS,
             },
-            "Google sign-in": {
+            ProviderGroup.GOOGLE_SIGN_IN: {
                 "GOOGLE_CLIENT_ID": self.GOOGLE_CLIENT_ID,
                 "GOOGLE_CLIENT_SECRET": self.GOOGLE_CLIENT_SECRET,
             },
-            "PostHog": {"POSTHOG_PROJECT_API_KEY": self.POSTHOG_PROJECT_API_KEY},
-            "SMTP": {"SMTP_HOST": self.SMTP_HOST, "EMAIL_FROM": self.EMAIL_FROM},
-            "Operator details": {
+            ProviderGroup.POSTHOG: {"POSTHOG_PROJECT_API_KEY": self.POSTHOG_PROJECT_API_KEY},
+            ProviderGroup.SMTP: {"SMTP_HOST": self.SMTP_HOST, "EMAIL_FROM": self.EMAIL_FROM},
+            ProviderGroup.OPERATOR_DETAILS: {
                 "OPERATOR_NAME": self.OPERATOR_NAME,
                 "OPERATOR_ADDRESS": self.OPERATOR_ADDRESS,
                 "SUPPORT_EMAIL": self.SUPPORT_EMAIL,
             },
         }
 
-    def _is_configured(self, group: str) -> bool:
+    def _is_configured(self, group: ProviderGroup) -> bool:
         return all(self._provider_groups()[group].values())
 
     def is_stripe_billing_configured(self) -> bool:
-        return self._is_configured("Stripe billing")
+        return self._is_configured(ProviderGroup.STRIPE_BILLING)
 
     def is_google_configured(self) -> bool:
-        return self._is_configured("Google sign-in")
+        return self._is_configured(ProviderGroup.GOOGLE_SIGN_IN)
 
     def is_posthog_configured(self) -> bool:
-        return self._is_configured("PostHog")
+        return self._is_configured(ProviderGroup.POSTHOG)
 
     def is_smtp_configured(self) -> bool:
-        return self._is_configured("SMTP")
+        return self._is_configured(ProviderGroup.SMTP)
 
     def is_operator_configured(self) -> bool:
-        return self._is_configured("Operator details")
+        return self._is_configured(ProviderGroup.OPERATOR_DETAILS)
 
     def smtp_port(self) -> int:
         return self.SMTP_PORT or _SMTP_DEFAULT_PORTS[self.SMTP_SECURITY]

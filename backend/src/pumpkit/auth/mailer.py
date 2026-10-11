@@ -157,13 +157,13 @@ class OutboxAuthMailer:
 @lru_cache
 def get_auth_mailer() -> AuthMailer:
     """FastAPI dependency for the `AuthMailer` port."""
-    if settings.SMTP_HOST and settings.EMAIL_FROM:
+    if settings.is_smtp_configured():
         return SmtpAuthMailer(
-            host=settings.SMTP_HOST,
+            host=settings.SMTP_HOST or "",
             port=settings.smtp_port(),
             security=settings.SMTP_SECURITY,
             username=settings.SMTP_USERNAME,
             password=settings.SMTP_PASSWORD,
-            from_address=settings.EMAIL_FROM,
+            from_address=settings.EMAIL_FROM or "",
         )
     return LogAuthMailer()
