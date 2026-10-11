@@ -218,7 +218,8 @@ class StripeBillingGateway:
     """Calls Stripe with its own client and API key, off the event loop, and returns plain data."""
 
     def __init__(self, client: Optional[stripe.StripeClient] = None) -> None:
-        self._client = client or stripe.StripeClient(settings.STRIPE_SECRET_KEY)
+        # Without Stripe billing configured, Stripe rejects every call made with the empty key.
+        self._client = client or stripe.StripeClient(settings.STRIPE_SECRET_KEY or "")
 
     async def _call(self, what: str, call: Callable[[], _T]) -> _T:
         try:
@@ -335,7 +336,7 @@ class StripeBillingGateway:
         # Pure HMAC work, no network: no need to leave the event loop.
         try:
             event = self._client.construct_event(
-                payload=payload, sig_header=signature, secret=settings.STRIPE_WEBHOOK_SECRET
+                payload=payload, sig_header=signature, secret=settings.STRIPE_WEBHOOK_SECRET or ""
             )
         except (ValueError, stripe.SignatureVerificationError) as error:
             raise WebhookSignatureError("Invalid Stripe webhook") from error
