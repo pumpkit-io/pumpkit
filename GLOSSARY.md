@@ -111,7 +111,7 @@ The company that runs the hosted Pumpkit at pumpkit.io and is the other party to
 _Avoid_: we (in docs), owner, provider, Pumpkit (for the company)
 
 **Terms**:
-The contract between the Operator and a User for using the hosted Pumpkit, in English and Italian with both versions equally valid. A User accepts them before their first Subscription's checkout (see ADR 0010).
+The contract between the Operator and a User for using the hosted Pumpkit, in English and Italian with both versions equally valid. A User accepts them before every checkout, so each Subscription has its own acceptance (see ADR 0010).
 _Avoid_: ToS, terms and conditions, EULA, user agreement
 
 **Privacy Policy**:

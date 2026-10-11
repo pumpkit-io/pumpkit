@@ -66,8 +66,8 @@ class StripeEvent(Base):
 
 class TermsAcceptance(Base):
     """
-    A User's acceptance of one Terms version before a Checkout (ADR 0010), as evidence of
-    what they agreed to and when. One row per Checkout request, kept even if the Checkout fails.
+    A User's acceptance of one Terms version before a checkout (ADR 0010), as evidence of
+    what they agreed to and when. One row per checkout request, kept even if the checkout fails.
     """
 
     __tablename__ = "terms_acceptances"

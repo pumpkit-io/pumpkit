@@ -80,7 +80,7 @@ class PlanResponse(BaseModel):
 
 
 class PlansListResponse(BaseModel):
-    """The Plans Pumpkit sells, in display order, and the Terms version a Checkout must accept."""
+    """The Plans Pumpkit sells, in display order, and the Terms version a checkout must accept."""
 
     data: list[PlanResponse]
     terms_version: str

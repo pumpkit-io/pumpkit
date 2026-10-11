@@ -1,6 +1,6 @@
 """add Terms acceptances
 
-A User accepts the Terms before each Checkout (ADR 0010). Each row records the Terms version,
+A User accepts the Terms before each checkout (ADR 0010). Each row records the Terms version,
 when it was accepted and the three boxes the User ticked, and goes with the User's account.
 
 Revision ID: 0011
