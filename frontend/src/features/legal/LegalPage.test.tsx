@@ -64,3 +64,24 @@ describe('Privacy Policy at /privacy', () => {
     expect(within(footer).getByText(/INCEPTIONAL S\.R\.L\./)).toBeInTheDocument();
   });
 });
+
+describe('Terms at /terms', () => {
+  it('renders its heading and Last updated date for a signed-out visitor', () => {
+    renderLegalRoute('/terms');
+    const main = screen.getByRole('main');
+    expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Terms');
+    expect(within(main).getByText('Last updated: 11 October 2026')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['9. Suspension and termination by the Operator', 'suspension'],
+    ['11. Automatic renewal and cancellation', 'renewal'],
+    ['13. No refunds', 'refunds'],
+    ['15. Limitation of liability', 'liability'],
+    ['18. Changes to these Terms', 'changes'],
+    ['20. Competent court', 'courts'],
+  ])('gives the onerous clause "%s" the anchor #%s', (name, id) => {
+    renderLegalRoute('/terms');
+    expect(screen.getByRole('heading', { level: 2, name })).toHaveAttribute('id', id);
+  });
+});
