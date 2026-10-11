@@ -8,13 +8,14 @@ from functools import lru_cache
 from typing import Any, Optional, Protocol
 
 import requests
-from fastapi import HTTPException, status
+from fastapi import status
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import id_token
 from starlette.concurrency import run_in_threadpool
 
 from pumpkit.auth.google_config import GOOGLE_JWKS_REQUEST, GOOGLE_TOKEN_ENDPOINT
 from pumpkit.core.config import settings
+from pumpkit.core.providers import require_provider
 
 
 class GoogleSignInError(Exception):
@@ -122,7 +123,5 @@ def get_google_sign_in() -> GoogleSignIn:
     return GoogleOAuthSignIn()
 
 
-def require_google_sign_in() -> None:
-    """FastAPI dependency: 404 on an Instance without the Google settings (ADR 0011)."""
-    if not settings.is_google_configured():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+# FastAPI dependency: the Google routes answer 404 on an Instance without the Google settings.
+require_google_sign_in = require_provider(settings.is_google_configured)

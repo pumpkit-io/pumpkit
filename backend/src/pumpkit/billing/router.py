@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,16 +14,10 @@ from pumpkit.billing.schemas import (
     PlansListResponse,
 )
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.providers import require_provider
 from pumpkit.core.rate_limit import limiter
 
-
-def _require_plans_sold() -> None:
-    # An Instance without Stripe has no billing at all, so its billing routes don't exist.
-    if not service.sells_plans():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-
-
-router = APIRouter(tags=["billing"], dependencies=[Depends(_require_plans_sold)])
+router = APIRouter(tags=["billing"], dependencies=[Depends(require_provider(service.sells_plans))])
 
 
 @router.get(
