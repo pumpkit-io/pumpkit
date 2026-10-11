@@ -24,9 +24,9 @@ import stripe
 from starlette.concurrency import run_in_threadpool
 from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateParams
 
+from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError
-from pumpkit.core.subscription_status import SubscriptionStatus
 
 
 class BillingProviderError(AppError):

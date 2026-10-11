@@ -3,19 +3,16 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.services.stripe_events as stripe_events_service
-import pumpkit.api.services.subscriptions as subscriptions_service
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
-from pumpkit.core.billing_gateway import (
+from pumpkit.billing import service
+from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
     WebhookEvent,
     WebhookSignatureError,
 )
-from pumpkit.core.config import settings
-from pumpkit.core.logging import logger
-from pumpkit.schemas.billing import (
+from pumpkit.billing.schemas import (
     BillingMeResponse,
     BillingPortalResponse,
     BillingSubscriptionResponse,
@@ -24,6 +21,8 @@ from pumpkit.schemas.billing import (
     PlanResponse,
     PlansListResponse,
 )
+from pumpkit.core.config import settings
+from pumpkit.core.logging import logger
 
 
 async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
@@ -31,8 +30,8 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
     What the User holds and may do, from Pumpkit's copy only: never a call to
     the billing provider, so it reflects the last sync (ADR 0004).
     """
-    subscription = await subscriptions_service.get_user_subscription(db, user_id=user.id)
-    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+    subscription = await service.get_user_subscription(db, user_id=user.id)
+    offer = await service.get_subscription_offer(db, user_id=user.id)
     return BillingMeResponse(
         subscription=(
             None
@@ -44,7 +43,7 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
                 cancel_at_period_end=subscription.cancel_at_period_end,
             )
         ),
-        subscribed=subscriptions_service.is_subscribed(subscription),
+        subscribed=service.is_subscribed(subscription),
         may_subscribe=offer.may_subscribe,
         trial_days=offer.trial_days,
     )
@@ -129,8 +128,8 @@ async def create_checkout_session(
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     # Take the User's lock again: creating the customer committed and released it.
     await users_service.lock_user(db, user)
-    await subscriptions_service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
-    offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
+    await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+    offer = await service.get_subscription_offer(db, user_id=user.id)
     if not offer.may_subscribe:
         # Commit before raising, or the 409 rolls back the sync of what Stripe just said.
         await db.commit()
@@ -138,9 +137,7 @@ async def create_checkout_session(
             status_code=status.HTTP_409_CONFLICT,
             detail="You already have a Subscription. Manage it in the billing portal.",
         )
-    for incomplete in await subscriptions_service.list_incomplete_subscriptions(
-        db, user_id=user.id
-    ):
+    for incomplete in await service.list_incomplete_subscriptions(db, user_id=user.id):
         await gateway.cancel_subscription(subscription_id=incomplete.stripe_subscription_id)
     await gateway.expire_open_checkouts(customer_id=customer_id)
     session = await gateway.create_subscription_checkout(
@@ -190,9 +187,7 @@ async def handle_webhook(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature.")
 
     try:
-        is_new = await stripe_events_service.try_record_event(
-            db, event_id=event.id, event_type=event.type
-        )
+        is_new = await service.try_record_event(db, event_id=event.id, event_type=event.type)
         if not is_new:
             logger.info("Ignoring replayed Stripe event %s (%s)", event.id, event.type)
             await db.rollback()
@@ -239,4 +234,4 @@ async def _sync_customer(
         )
         return
     await users_service.lock_user(db, user)
-    await subscriptions_service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+    await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)

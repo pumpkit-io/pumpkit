@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pumpkit.core.subscription_status import SubscriptionStatus
+from pumpkit.billing.subscription_status import SubscriptionStatus
 
 
 class CheckoutRequest(BaseModel):

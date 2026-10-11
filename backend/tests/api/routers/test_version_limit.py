@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
-from pumpkit.core.db.models import Post, Subscription, VersionAttempt
+from pumpkit.billing.models import Subscription
+from pumpkit.core.db.models import Post, VersionAttempt
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.llm import LLMError
 from pumpkit.core.x_reader import FetchedPost

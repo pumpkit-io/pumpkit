@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-import pumpkit.api.services.subscriptions as subscriptions_service
+import pumpkit.billing.service as subscriptions_service
 from pumpkit.auth.models import User
-from pumpkit.core.billing_gateway import BillingProviderError, FakeBillingGateway, SubscriptionState
+from pumpkit.billing.gateway import BillingProviderError, FakeBillingGateway, SubscriptionState
 from pumpkit.core.config import settings
 
 CUSTOMER = "cus_1"

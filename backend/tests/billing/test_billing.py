@@ -2,16 +2,16 @@ from datetime import datetime, timezone
 
 import pytest
 
-import pumpkit.api.services.subscriptions as subscriptions_service
-from pumpkit.core.billing_gateway import (
+import pumpkit.billing.service as subscriptions_service
+from pumpkit.billing.gateway import (
     CheckoutCall,
     CustomerCall,
     FakeBillingGateway,
     Plan,
     SubscriptionState,
 )
+from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
-from pumpkit.core.subscription_status import SubscriptionStatus
 
 CUSTOMER = "cus_alice"
 BILLING_ME = "/api/v1/billing/me"

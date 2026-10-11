@@ -10,8 +10,8 @@ from typing import Literal, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
-import pumpkit.api.services.subscriptions as subscriptions_service
 import pumpkit.api.services.x_connections as x_connections_service
+import pumpkit.billing.service as subscriptions_service
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.db.models import ScheduledPost, XConnection
 from pumpkit.core.time import as_utc

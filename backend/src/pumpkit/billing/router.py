@@ -2,19 +2,19 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import pumpkit.api.mediators.billing as billing_mediator
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
-from pumpkit.core.billing_gateway import BillingGateway, get_billing_gateway
-from pumpkit.core.db.session import get_async_db
-from pumpkit.core.rate_limit import limiter
-from pumpkit.schemas.billing import (
+from pumpkit.billing import mediator
+from pumpkit.billing.gateway import BillingGateway, get_billing_gateway
+from pumpkit.billing.schemas import (
     BillingMeResponse,
     BillingPortalResponse,
     CheckoutRequest,
     CheckoutResponse,
     PlansListResponse,
 )
+from pumpkit.core.db.session import get_async_db
+from pumpkit.core.rate_limit import limiter
 
 router = APIRouter(tags=["billing"])
 
@@ -28,7 +28,7 @@ async def get_billing_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> BillingMeResponse:
-    return await billing_mediator.get_billing_me(db=db, user=current_user)
+    return await mediator.get_billing_me(db=db, user=current_user)
 
 
 @router.get(
@@ -42,7 +42,7 @@ async def list_billing_plans(
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> PlansListResponse:
     # Public: the landing page lists Plans to signed-out visitors.
-    return await billing_mediator.list_plans(gateway=gateway)
+    return await mediator.list_plans(gateway=gateway)
 
 
 @router.post(
@@ -58,7 +58,7 @@ async def create_billing_checkout(
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> CheckoutResponse:
-    return await billing_mediator.create_checkout_session(
+    return await mediator.create_checkout_session(
         db=db, gateway=gateway, user=current_user, checkout_request=checkout_request
     )
 
@@ -75,9 +75,7 @@ async def create_billing_portal(
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> BillingPortalResponse:
-    return await billing_mediator.create_billing_portal_session(
-        db=db, gateway=gateway, user=current_user
-    )
+    return await mediator.create_billing_portal_session(db=db, gateway=gateway, user=current_user)
 
 
 @router.post("/stripe/webhook", status_code=status.HTTP_200_OK)
@@ -92,8 +90,6 @@ async def stripe_webhook(
 
     # handle_webhook owns the transaction and rolls back before re-raising, so errors reach
     # the global handlers (502 if Stripe failed during the sync, else 500) and Stripe retries.
-    await billing_mediator.handle_webhook(
-        db=db, gateway=gateway, payload=payload, signature=signature
-    )
+    await mediator.handle_webhook(db=db, gateway=gateway, payload=payload, signature=signature)
 
     return JSONResponse(content={"received": True}, status_code=status.HTTP_200_OK)

@@ -1,15 +1,19 @@
-"""Pumpkit's copy of each Subscription, synced from the billing provider (ADR 0004)."""
+"""
+Pumpkit's copy of each Subscription, synced from the billing provider (ADR 0004),
+and the Stripe event log that makes webhooks idempotent.
+"""
 
 from dataclasses import dataclass
 from typing import Optional
 
 from sqlalchemy import exists, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.core.billing_gateway import BillingGateway
+from pumpkit.billing.gateway import BillingGateway
+from pumpkit.billing.models import StripeEvent, Subscription
+from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
-from pumpkit.core.db.models import Subscription
-from pumpkit.core.subscription_status import SubscriptionStatus
 
 # An Ended Subscription can never run again.
 _ENDED_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
@@ -135,3 +139,28 @@ async def sync_customer(
         subscription.cancel_at_period_end = state.cancel_at_period_end
         subscription.stripe_created_at = state.created_at
     await db.flush()
+
+
+async def try_record_event(
+    db: AsyncSession,
+    *,
+    event_id: str,
+    event_type: str,
+) -> bool:
+    """
+    Record `event_id`, returning True only the first time it is seen.
+
+    The existence check keeps the common path cheap; the savepoint catches two
+    concurrent handlers that both pass it and race on the insert.
+    """
+    existing = await db.execute(select(StripeEvent.id).where(StripeEvent.id == event_id))
+    if existing.scalar_one_or_none() is not None:
+        return False
+
+    try:
+        async with db.begin_nested():
+            db.add(StripeEvent(id=event_id, type=event_type))
+            await db.flush()
+    except IntegrityError:
+        return False
+    return True

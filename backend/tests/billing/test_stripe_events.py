@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pumpkit.api.services.stripe_events as stripe_events_service
+import pumpkit.billing.service as stripe_events_service
 
 
 async def test_first_record_returns_true(db):

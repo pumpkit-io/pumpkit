@@ -9,7 +9,7 @@ from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 
 import pumpkit.core.errors as errors_module
-from pumpkit.core.billing_gateway import BillingProviderError
+from pumpkit.billing.gateway import BillingProviderError
 from pumpkit.core.errors import AppError, RetryLaterError
 from pumpkit.core.llm import LLMError
 from pumpkit.core.openrouter import LLMNotConfiguredError

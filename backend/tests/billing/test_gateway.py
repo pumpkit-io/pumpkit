@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 import stripe
 
-from pumpkit.core.billing_gateway import (
+from pumpkit.billing.gateway import (
     BillingGateway,
     FakeBillingGateway,
     StripeBillingGateway,

@@ -11,8 +11,8 @@ from typing import Any, Optional
 import pytest
 from sqlalchemy import func, select
 
-from pumpkit.core.billing_gateway import SubscriptionState
-from pumpkit.core.db.models import StripeEvent, Subscription
+from pumpkit.billing.gateway import SubscriptionState
+from pumpkit.billing.models import StripeEvent, Subscription
 
 WEBHOOK = "/api/v1/stripe/webhook"
 

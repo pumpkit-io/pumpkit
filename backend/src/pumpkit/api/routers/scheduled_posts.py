@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.mediators.scheduled_posts as scheduled_posts_mediator
-from pumpkit.api.dependencies import require_subscribed_user
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
+from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.models import ScheduledPostState
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
