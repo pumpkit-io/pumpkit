@@ -940,6 +940,14 @@ describe('Home', () => {
       for (const link of [privacy, terms]) expect(link).toHaveAttribute('target', '_blank');
     });
 
+    it('offers Cookie settings next to the legal links', async () => {
+      renderHome();
+      await authorsPanel();
+
+      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
+      expect(legal.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+    });
+
     it('remembers a collapsed sidebar across visits', async () => {
       const first = renderHome();
       fireEvent.click(await screen.findByRole('button', { name: 'Close sidebar' }));

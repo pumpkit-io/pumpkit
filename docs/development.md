@@ -89,6 +89,16 @@ Profile fields are saved through `PATCH /users/me` in `backend/src/pumpkit/auth/
 
 Add it to `EVENTS` in `frontend/src/lib/analytics.ts`, then call `track('my_event', {...})`.
 
+### Changing the Terms or the Privacy Policy
+
+Each document is a Markdown file per language in `frontend/src/features/legal/documents/` (`terms.en.md`, `terms.it.md`, `privacy.en.md`, `privacy.it.md`), listed with its route and "Last updated" date in `frontend/src/features/legal/documents.ts`. Both languages are equally valid, so they must always say the same thing.
+
+1. Edit the English and the Italian file in the same change, keeping the same sections, clause numbers and `{#anchor}` ids. Links point at those anchors, such as the consent banner's link to `/privacy#cookies`.
+2. Set `lastUpdated` in `documents.ts` to the day of the change for both language versions of the document, so the two pages show the same date.
+3. For a material change, email every User at least 30 days before it applies, as clause 18 of the Terms and the last section of the Privacy Policy promise.
+
+When you add a cookie or a browser storage key (a `storage.ts` key, a cookie the backend sets, or one a new third-party script sets), add a row for it to the cookie tables in both Privacy Policy files, under strictly necessary or Analytics consent, and follow the steps above.
+
 ### Branding
 
 To rebrand, change `APP_NAME` and `VITE_APP_NAME`, the meta tags and JSON-LD graph in `frontend/index.html`, `frontend/src/assets/brand/*.svg`, the wordmark font (Google Sans Code, bundled from `@fontsource-variable/google-sans-code` in `frontend/src/main.tsx` and declared as `fontFamily.wordmark` in `frontend/tailwind.config.ts`), `frontend/public/*.png`, `backend/src/pumpkit/auth/templates/emails/assets/logo.png`, and the design tokens in `frontend/src/index.css`.

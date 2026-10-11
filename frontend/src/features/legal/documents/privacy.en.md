@@ -178,14 +178,16 @@ Pumpkit stores a few things in your browser. Some are strictly necessary for Pum
 | `pumpkit:session`                                                                | Local storage | Holds the access token of your current Session      | Until you sign out or the Session ends |
 | `pumpkit:theme`                                                                  | Local storage | Remembers whether you chose the light or dark theme | Until you clear it                     |
 | `pumpkit:sidebar-collapsed`                                                      | Local storage | Remembers whether you collapsed the sidebar         | Until you clear it                     |
+| `pumpkit:analytics-consent`                                                      | Local storage | Remembers whether you gave Analytics consent        | Until you clear it                     |
 
 ### Analytics, only with Analytics consent {#cookies-analytics}
 
-| Name                         | Kind                     | Purpose                                                        | Lifetime                |
-| ---------------------------- | ------------------------ | -------------------------------------------------------------- | ----------------------- |
-| `ph_<project key>_posthog`   | Cookie and local storage | Lets PostHog recognise your browser across visits              | 1 year                  |
-| PostHog session entries      | Session storage          | Tie a session recording together                               | Until you close the tab |
-| `pumpkit:posthog-identified` | Session storage          | Records that this tab already linked analytics to your account | Until you close the tab |
+| Name                            | Kind                     | Purpose                                                        | Lifetime                             |
+| ------------------------------- | ------------------------ | -------------------------------------------------------------- | ------------------------------------ |
+| `ph_<project key>_posthog`      | Cookie and local storage | Lets PostHog recognise your browser across visits              | 1 year                               |
+| `__ph_opt_in_out_<project key>` | Local storage            | Records that PostHog may capture in this browser               | Until you withdraw Analytics consent |
+| PostHog session entries         | Session storage          | Tie a session recording together                               | Until you close the tab              |
+| `pumpkit:posthog-identified`    | Session storage          | Records that this tab already linked analytics to your account | Until you close the tab              |
 
 Until you give Analytics consent, Pumpkit does not load PostHog at all: it sends nothing to PostHog and stores nothing for it. If you refuse, Pumpkit works the same.
 

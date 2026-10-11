@@ -245,6 +245,12 @@ describe('Landing footer', () => {
     expect(within(footer).getByText('PEC inceptional@pec.it')).toBeInTheDocument();
   });
 
+  it('offers Cookie settings', () => {
+    renderLanding();
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+  });
+
   it('links to the Privacy Policy, the Terms and the support address', () => {
     renderLanding();
     const footer = screen.getByRole('contentinfo');
