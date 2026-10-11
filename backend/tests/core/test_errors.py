@@ -14,7 +14,7 @@ from pumpkit.billing.gateway import BillingProviderError
 from pumpkit.core.errors import AppError, RetryLaterError
 from pumpkit.main import app as main_app
 from pumpkit.posts.llm import LLMError
-from pumpkit.posts.openrouter import LLMNotConfiguredError
+from pumpkit.posts.llm_client import LLMNotConfiguredError
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
@@ -48,10 +48,10 @@ RESPONSES = [
     (LLMError("provider said no"), 502, LLM_502),
     (
         LLMNotConfiguredError(
-            "OPENROUTER_API_KEY is not set. Add it to backend/.env to enable LLM calls."
+            "LLM_API_KEY is not set. Add it to backend/.env to enable LLM calls."
         ),
         503,
-        b'{"detail":"OPENROUTER_API_KEY is not set. Add it to backend/.env to enable LLM calls."}',
+        b'{"detail":"LLM_API_KEY is not set. Add it to backend/.env to enable LLM calls."}',
     ),
     (XReaderError("timeout"), 502, X_READER_502),
     (HandleNotFoundError("nobody"), 502, X_READER_502),

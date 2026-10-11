@@ -12,7 +12,7 @@ backend/src/pumpkit/
   authors/         Inspiration authors and their posts; the X reader (twitterapi.io)
   x_connection/    X connections; the X publisher port (X's API) and X's weighted length count
   support/         the support contact redirect (a router only)
-  posts/           Posts and Versions; the LLM port and OpenRouter client
+  posts/           Posts and Versions; the LLM port and OpenAI-compatible client
   posts/writing/   the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
   scheduling/      Scheduled posts: rules, publish steps, publishing, and the publisher process
 backend/tests/     pytest suite, mirroring the package tree; fixtures in conftest.py
@@ -73,9 +73,9 @@ Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clo
 
 ### Call an LLM
 
-Set `OPENROUTER_API_KEY`. Mediators reach models through the `LLM` port (`posts/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
+Set `LLM_API_KEY` (and `LLM_BASE_URL` for an endpoint other than OpenRouter). Mediators reach models through the `LLM` port (`posts/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
 
-The port wraps `openrouter_client` (`posts/openrouter.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
+The port wraps `llm_client` (`posts/llm_client.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
 
 ### Add a page to the shell
 
