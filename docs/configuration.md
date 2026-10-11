@@ -2,15 +2,17 @@
 
 Every setting comes from environment variables, split across three files copied from their `.env.example`: the root `.env`, `backend/.env` and `frontend/.env`.
 
-Variables marked (optional) can be left empty; the app boots without them. Only the database, auth (JWT, Fernet, Google, Resend), Stripe and billing variables are required.
+Variables marked (optional) can be left empty; the app boots without them, using the default shown. Only the Instance's URLs, the database, `JWT_SECRET_KEY`, `FERNET_ENCRYPTION_KEY` and the Resend variables are required.
+
+Each optional provider is a group of settings (ADR 0011). With all of a group's required settings set, the provider is on; with none set, it is off; with only some set, the backend refuses to start and names the missing ones. The groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), Google sign-in (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and PostHog (`POSTHOG_PROJECT_API_KEY`).
 
 ## Root `.env`
 
 | Variable | Meaning |
 | --- | --- |
 | `ENV` | `local` or `prod`. With `prod` the database connection requires SSL. |
-| `LOG_LEVEL` | Python log level, e.g. `INFO`. |
-| `APP_NAME` | Brand name used in emails and server-side copy. |
+| `LOG_LEVEL` (optional) | Python log level. Defaults to `INFO`. |
+| `APP_NAME` (optional) | Brand name used in emails and server-side copy. Defaults to `Pumpkit`. |
 | `BACKEND_URL`, `BACKEND_PORT` | Public URL and port of the backend. |
 | `FRONTEND_URL`, `FRONTEND_PORT` | Public URL and port of the frontend. |
 | `CORS_ORIGINS` | Allowed origins, as a quoted JSON list (see note below). |
@@ -24,26 +26,26 @@ Variables marked (optional) can be left empty; the app boots without them. Only 
 | Variable | Meaning |
 | --- | --- |
 | `JWT_SECRET_KEY` | Random string of at least 32 characters used to sign tokens. |
-| `JWT_ALGORITHM` | Signing algorithm, `HS256`. |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime. |
-| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime. |
-| `JWT_ISSUER`, `JWT_AUDIENCE` | `iss` / `aud` claims of issued tokens. |
-| `COOKIE_MAX_AGE_SECONDS` | Refresh cookie lifetime (2592000 = 30 days). |
+| `JWT_ALGORITHM` (optional) | Signing algorithm. Defaults to `HS256`. |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (optional) | Access token lifetime. Defaults to 30. |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` (optional) | Refresh token lifetime. Defaults to 30. |
+| `JWT_ISSUER`, `JWT_AUDIENCE` (optional) | `iss` / `aud` claims of issued tokens. Default to `pumpkit` and `pumpkit-api`. |
+| `COOKIE_MAX_AGE_SECONDS` (optional) | Refresh cookie lifetime. Defaults to 2592000 (30 days). |
 | `FERNET_ENCRYPTION_KEY` | 32 url-safe base64-encoded bytes (generate with `Fernet.generate_key()`). |
-| `MAGIC_LINK_TOKEN_DURATION_MINUTES`, `MAGIC_LINK_TOKEN_NUM_BYTES` | Magic-link token lifetime and size. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials. |
-| `GOOGLE_OAUTH_REDIRECT_URI` | Must match the redirect URI registered in Google Cloud. |
-| `GOOGLE_NONCE_TOKEN_NUM_BYTES`, `GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES` | Size of the OAuth nonce and PKCE verifier. |
-| `GOOGLE_COOKIE_MAX_AGE_SECONDS` | Lifetime of the short-lived PKCE/CSRF cookies during OAuth. |
-| `GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS` | Timeout for Google's token endpoint. |
+| `MAGIC_LINK_TOKEN_DURATION_MINUTES`, `MAGIC_LINK_TOKEN_NUM_BYTES` (optional) | Magic-link token lifetime and size. Default to 15 and 32. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional) | Google OAuth credentials. Set both or neither. |
+| `GOOGLE_OAUTH_REDIRECT_URI` (optional) | Must match the redirect URI registered in Google Cloud. Defaults to `BACKEND_URL` + `/api/v1/oauth/google/callback`. |
+| `GOOGLE_NONCE_TOKEN_NUM_BYTES`, `GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES` (optional) | Size of the OAuth nonce and PKCE verifier. Default to 64. |
+| `GOOGLE_COOKIE_MAX_AGE_SECONDS` (optional) | Lifetime of the short-lived PKCE/CSRF cookies during OAuth. Defaults to 600. |
+| `GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS` (optional) | Timeout for Google's token endpoint. Defaults to 30. |
 | `RESEND_API_KEY` | Resend API key for transactional email. |
 | `RESEND_NOREPLY_ADDRESS`, `RESEND_SUPPORT_ADDRESS` | Sender and support addresses. |
-| `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` | Stripe API keys. |
-| `STRIPE_WEBHOOK_SECRET` | Signing secret of the webhook endpoint. |
-| `STRIPE_CHECKOUT_SUCCESS_URL`, `STRIPE_CHECKOUT_CANCEL_URL` | Where Checkout returns after paying or cancelling. |
-| `STRIPE_BILLING_PORTAL_RETURN_URL` | Where the customer portal returns. |
-| `BILLING_PLAN_KEYS` | The Plans Pumpkit sells: Stripe price lookup keys as a quoted JSON list (like `CORS_ORIGINS`), in display order. Only these are listed and purchasable; each must be an active recurring price. |
-| `BILLING_TRIAL_PERIOD_DAYS` | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. `0` turns Trials off. |
+| `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` (optional) | Stripe API keys. Part of the Stripe billing group. |
+| `STRIPE_WEBHOOK_SECRET` (optional) | Signing secret of the webhook endpoint. Part of the Stripe billing group. |
+| `STRIPE_CHECKOUT_SUCCESS_URL`, `STRIPE_CHECKOUT_CANCEL_URL` (optional) | Where Checkout returns after paying or cancelling. Default to `FRONTEND_URL` + `/billing/success` and `/billing/cancelled`. |
+| `STRIPE_BILLING_PORTAL_RETURN_URL` (optional) | Where the customer portal returns. Defaults to `FRONTEND_URL` + `/billing`. |
+| `BILLING_PLAN_KEYS` (optional) | Part of the Stripe billing group; an empty list counts as unset. The Plans Pumpkit sells: Stripe price lookup keys as a quoted JSON list (like `CORS_ORIGINS`), in display order. Only these are listed and purchasable; each must be an active recurring price. |
+| `BILLING_TRIAL_PERIOD_DAYS` (optional) | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. Defaults to 14. `0` turns Trials off. |
 | `OPENROUTER_API_KEY` (optional) | Enables the LLM client; without it calls raise `LLMNotConfiguredError`. |
 | `TWITTERAPI_IO_API_KEY` (optional) | Reads Inspiration authors' posts from twitterapi.io (ADR 0005). The app boots without it; adding an author then fails with a 503 naming the variable. |
 | `X_CLIENT_ID` (optional) | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the three X settings; connecting an X account then fails with a 503 naming them. |
