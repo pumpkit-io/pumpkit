@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-import pumpkit.core.exceptions as exceptions_module
+import pumpkit.core.errors as exceptions_module
 from pumpkit.core.billing_gateway import BillingProviderError
 from pumpkit.main import app as main_app
 

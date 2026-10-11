@@ -4,7 +4,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.db.models import User
+from pumpkit.core.db.models import User
 
 
 async def get_user_by_email(

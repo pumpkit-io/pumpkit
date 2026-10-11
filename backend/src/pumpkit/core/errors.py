@@ -1,19 +1,34 @@
+import math
 import re
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Mapping
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from pumpkit.core.analytics import posthog_client
 from pumpkit.core.billing_gateway import BillingProviderError
 from pumpkit.core.llm import LLMError
-from pumpkit.core.logger import logger
+from pumpkit.core.logging import logger
 from pumpkit.core.openrouter import LLMNotConfiguredError
-from pumpkit.core.posthog import posthog_client
-from pumpkit.core.retry_later import RetryLaterError
 from pumpkit.core.x_publisher import XPublisherError, XPublisherNotConfiguredError
 from pumpkit.core.x_reader import XReaderError, XReaderNotConfiguredError
+
+
+class RetryLaterError(Exception):
+    """
+    A request refused until `retry_at`. Answered as a 429 whose body carries `detail` and
+    `retry_at`, with a `Retry-After` header in whole seconds.
+    """
+
+    def __init__(self, detail: str, *, retry_at: datetime, now: datetime) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.retry_at = retry_at
+        # Rounded up, so a client that waits exactly this long is not refused again.
+        self.retry_after_seconds = max(1, math.ceil((retry_at - now).total_seconds()))
+
 
 _REDACTED = "[redacted]"
 _SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie", "stripe-signature", "x-api-key"}

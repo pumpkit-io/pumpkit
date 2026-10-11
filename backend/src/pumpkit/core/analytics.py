@@ -5,7 +5,7 @@ from typing import Any, Mapping, Optional
 from posthog import Posthog
 
 from pumpkit.core.config import settings
-from pumpkit.core.logger import logger
+from pumpkit.core.logging import logger
 
 
 class PostHogClient:

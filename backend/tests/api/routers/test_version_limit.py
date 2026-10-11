@@ -5,10 +5,10 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.api.dependencies import get_current_user
+from pumpkit.core.db.models import Post, Subscription, User, VersionAttempt
+from pumpkit.core.db.session import get_async_db
 from pumpkit.core.llm import LLMError
 from pumpkit.core.x_reader import FetchedPost
-from pumpkit.db.models import Post, Subscription, User, VersionAttempt
-from pumpkit.db.session import get_async_db
 from pumpkit.main import app
 
 AUTHORS = "/api/v1/inspiration-authors"

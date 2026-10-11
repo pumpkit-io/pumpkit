@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.db.models import StripeEvent
+from pumpkit.core.db.models import StripeEvent
 
 
 async def try_record_event(

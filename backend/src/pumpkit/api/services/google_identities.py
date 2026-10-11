@@ -4,8 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.users as user_service
+from pumpkit.core.db.models import GoogleIdentity, User
 from pumpkit.core.google_sign_in import GoogleClaims
-from pumpkit.db.models import GoogleIdentity, User
 
 
 async def get_google_identity(

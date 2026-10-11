@@ -1,6 +1,6 @@
 import pytest
 
-from pumpkit.db.urls import build_database_url
+from pumpkit.core.db.urls import build_database_url
 
 _PARTS = dict(user="u", password="p@ss/word", host="h", port="5432", database="d")
 

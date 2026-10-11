@@ -11,7 +11,7 @@ backend/src/pumpkit/
   core/            settings, security, logging, OpenRouter and PostHog clients, ports (billing gateway, Google sign-in, auth mailer, X reader, X publisher, LLM)
   writing/         the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
   publishing/      publishing Scheduled posts on X (claim, refresh, checks, outcome), the publisher process and X's length count
-  db/              SQLAlchemy models, session, database URLs
+  core/db/         SQLAlchemy models, session, database URLs
   schemas/         Pydantic request/response models
   templates/       email templates and assets
 backend/tests/     pytest suite, mirroring the package tree; fixtures in conftest.py

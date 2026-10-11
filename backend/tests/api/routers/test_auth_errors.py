@@ -7,7 +7,7 @@ import pumpkit.api.mediators.magic_link_auth as magic_link_auth_mediator
 import pumpkit.api.mediators.sessions as sessions_mediator
 import pumpkit.api.services.refresh_tokens as refresh_tokens_service
 import pumpkit.api.services.sessions as sessions
-from pumpkit.db.models import User
+from pumpkit.core.db.models import User
 from tests.conftest import magic_link_token
 
 

@@ -10,7 +10,7 @@ from typing import Optional, cast
 from sqlalchemy import CursorResult, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.db.models import (
+from pumpkit.core.db.models import (
     FAILED,
     PUBLISHED,
     PUBLISHING,

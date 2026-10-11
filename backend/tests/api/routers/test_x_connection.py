@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.api.dependencies import get_current_user
+from pumpkit.core.db.models import Subscription, User, XConnection
+from pumpkit.core.db.session import get_async_db
 from pumpkit.core.security import decrypt
 from pumpkit.core.x_publisher import (
     XAccount,
@@ -16,8 +18,6 @@ from pumpkit.core.x_publisher import (
     XReconnectNeededError,
     code_challenge_for,
 )
-from pumpkit.db.models import Subscription, User, XConnection
-from pumpkit.db.session import get_async_db
 from pumpkit.main import app
 
 X_CONNECTION = "/api/v1/x-connection"

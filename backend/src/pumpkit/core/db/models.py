@@ -20,9 +20,9 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from pumpkit.core.db.base import Base
 from pumpkit.core.ids import ulid_with_prefix
 from pumpkit.core.subscription_status import SubscriptionStatus
-from pumpkit.db.base import Base
 
 # Unique and primary key columns are indexed automatically, so they don't set index=True.
 

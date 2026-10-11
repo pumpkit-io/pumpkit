@@ -5,8 +5,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.mediators.google_auth as google_auth_mediator
+from pumpkit.core.db.session import get_async_db
 from pumpkit.core.google_sign_in import GoogleSignIn, get_google_sign_in
-from pumpkit.db.session import get_async_db
 
 router = APIRouter(tags=["auth"])
 

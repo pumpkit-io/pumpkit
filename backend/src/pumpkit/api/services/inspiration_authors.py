@@ -5,8 +5,8 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.core.datetimes import as_utc
-from pumpkit.db.models import AuthorFetch, AuthorPost, InspirationAuthor
+from pumpkit.core.db.models import AuthorFetch, AuthorPost, InspirationAuthor
+from pumpkit.core.time import as_utc
 
 
 @dataclass(frozen=True)

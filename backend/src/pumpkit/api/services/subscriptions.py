@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.core.billing_gateway import BillingGateway
 from pumpkit.core.config import settings
+from pumpkit.core.db.models import Subscription
 from pumpkit.core.subscription_status import SubscriptionStatus
-from pumpkit.db.models import Subscription
 
 # An Ended Subscription can never run again.
 _ENDED_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}

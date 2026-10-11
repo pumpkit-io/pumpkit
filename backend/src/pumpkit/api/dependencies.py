@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.api.services.sessions as sessions
 import pumpkit.api.services.subscriptions as subscriptions_service
 import pumpkit.api.services.users as user_service
+from pumpkit.core.db.models import User
+from pumpkit.core.db.session import get_async_db
 from pumpkit.core.security import get_bearer_token, verify_access_token
-from pumpkit.db.models import User
-from pumpkit.db.session import get_async_db
 
 
 async def get_current_user(

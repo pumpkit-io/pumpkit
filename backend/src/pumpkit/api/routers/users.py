@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.users as user_service
 from pumpkit.api.dependencies import get_current_user
-from pumpkit.db.models import User
-from pumpkit.db.session import get_async_db
+from pumpkit.core.db.models import User
+from pumpkit.core.db.session import get_async_db
 from pumpkit.schemas.users import UserProfileResponse, UserProfileUpdate
 
 router = APIRouter(tags=["users"])

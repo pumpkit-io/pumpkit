@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from pumpkit.core.posthog import PostHogClient
+from pumpkit.core.analytics import PostHogClient
 
 
 def test_disabled_client_is_a_noop():

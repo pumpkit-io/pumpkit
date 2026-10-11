@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import Session, sessionmaker
 
 from pumpkit.core.config import settings
-from pumpkit.core.logger import logger
-from pumpkit.db.urls import build_database_url
+from pumpkit.core.db.urls import build_database_url
+from pumpkit.core.logging import logger
 
 
 class DatabaseSessionHandler:

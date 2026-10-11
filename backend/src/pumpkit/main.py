@@ -17,10 +17,10 @@ from pumpkit.api.routers import (
     users,
     x_connection,
 )
+from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
-from pumpkit.core.exceptions import register_exception_handlers
-from pumpkit.core.logger import logger
-from pumpkit.core.posthog import posthog_client
+from pumpkit.core.errors import register_exception_handlers
+from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import limiter
 
 

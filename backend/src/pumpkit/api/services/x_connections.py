@@ -9,9 +9,9 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.core.db.models import XConnection
 from pumpkit.core.security import decrypt, encrypt
 from pumpkit.core.x_publisher import XAccount, XTokens
-from pumpkit.db.models import XConnection
 
 
 async def get_connection(db: AsyncSession, *, user_id: str) -> Optional[XConnection]:

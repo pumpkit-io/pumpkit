@@ -4,10 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.mediators.magic_link_auth as magic_link_auth_mediator
 from pumpkit.core.auth_mailer import AuthMailer, get_auth_mailer
-from pumpkit.core.clock import Clock, get_clock
+from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
-from pumpkit.db.session import get_async_db
-from pumpkit.schemas.common import MessageResponse
+from pumpkit.core.schemas import MessageResponse
+from pumpkit.core.time import Clock, get_clock
 from pumpkit.schemas.magic_link_auth import MagicLinkRequest
 
 router = APIRouter(tags=["auth"])

@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.api.services.sessions import ClientInfo
 from pumpkit.core.config import settings
-from pumpkit.core.datetimes import as_utc
+from pumpkit.core.db.models import MagicLink
 from pumpkit.core.security import generate_token, hash_token
-from pumpkit.db.models import MagicLink
+from pumpkit.core.time import as_utc
 
 # Minimum time between two Magic links issued for the same email.
 COOLDOWN = timedelta(seconds=60)

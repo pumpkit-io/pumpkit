@@ -13,8 +13,8 @@ from pumpkit.core.billing_gateway import (
     WebhookSignatureError,
 )
 from pumpkit.core.config import settings
-from pumpkit.core.logger import logger
-from pumpkit.db.models import User
+from pumpkit.core.db.models import User
+from pumpkit.core.logging import logger
 from pumpkit.schemas.billing import (
     BillingMeResponse,
     BillingPortalResponse,

@@ -10,8 +10,8 @@ from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.core.config import settings
+from pumpkit.core.db.models import RefreshToken, SignInMethod
 from pumpkit.core.security import hash_token
-from pumpkit.db.models import RefreshToken, SignInMethod
 
 
 async def create_refresh_token(

@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.services.author_posts as author_posts_service
 import pumpkit.api.services.inspiration_authors as inspiration_authors_service
-from pumpkit.core.retry_later import RetryLaterError
+from pumpkit.core.db.models import InspirationAuthor, User
+from pumpkit.core.errors import RetryLaterError
 from pumpkit.core.x_handles import normalize_handle
 from pumpkit.core.x_reader import FetchedPost, HandleNotFoundError, XReader
-from pumpkit.db.models import InspirationAuthor, User
 from pumpkit.schemas.inspiration_authors import (
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,

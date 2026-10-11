@@ -11,10 +11,10 @@ import pumpkit.api.services.sessions as sessions
 import pumpkit.api.services.users as user_service
 from pumpkit.core.auth_mailer import AuthMailer, AuthMailerError, MagicLinkEmail
 from pumpkit.core.config import settings
-from pumpkit.core.exceptions import report_unexpected_exception
-from pumpkit.core.logger import logger
-from pumpkit.db.models import User
-from pumpkit.schemas.common import MessageResponse
+from pumpkit.core.db.models import User
+from pumpkit.core.errors import report_unexpected_exception
+from pumpkit.core.logging import logger
+from pumpkit.core.schemas import MessageResponse
 
 # Same message whether the email is registered or cooling down, so it never reveals accounts.
 _GENERIC_REQUEST_MESSAGE = "If an account exists for that email, we've sent you a sign-in link."

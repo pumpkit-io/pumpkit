@@ -5,8 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from pumpkit.core.datetimes import as_utc
-from pumpkit.db.models import (
+from pumpkit.core.db.models import (
     ATTEMPT_FAILED,
     ATTEMPT_SUCCEEDED,
     AuthorPost,
@@ -14,6 +13,7 @@ from pumpkit.db.models import (
     Post,
     VersionAttempt,
 )
+from pumpkit.core.time import as_utc
 from pumpkit.writing import slop
 from pumpkit.writing.constants import CORPUS_POSTS_PER_AUTHOR
 from pumpkit.writing.corpus import Corpus, CorpusPost, group_corpus

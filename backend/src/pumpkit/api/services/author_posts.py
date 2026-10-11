@@ -4,9 +4,9 @@ from typing import Optional, Sequence
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.core.datetimes import as_utc
+from pumpkit.core.db.models import AuthorFetch, AuthorPost
+from pumpkit.core.time import as_utc
 from pumpkit.core.x_reader import FetchedPost
-from pumpkit.db.models import AuthorFetch, AuthorPost
 
 
 async def store_new_posts(

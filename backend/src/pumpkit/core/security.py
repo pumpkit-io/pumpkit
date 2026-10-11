@@ -13,7 +13,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from pumpkit.core.config import settings
-from pumpkit.core.logger import logger
+from pumpkit.core.logging import logger
 
 TokenType = Literal["access", "refresh"]
 

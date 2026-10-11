@@ -7,14 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.api.services.x_authorizations as x_authorizations_service
 import pumpkit.api.services.x_connections as x_connections_service
-from pumpkit.core.logger import logger
+from pumpkit.core.db.models import User, XConnection
+from pumpkit.core.logging import logger
 from pumpkit.core.x_publisher import (
     XPublisher,
     XPublisherError,
     XReconnectNeededError,
     code_challenge_for,
 )
-from pumpkit.db.models import User, XConnection
 from pumpkit.publishing.x_length import x_post_max_chars
 from pumpkit.schemas.x_connection import XAuthorizationStartResponse, XConnectionResponse
 

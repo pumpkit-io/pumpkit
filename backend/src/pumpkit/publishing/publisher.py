@@ -7,8 +7,8 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pumpkit.api.mediators.publishing import fail_stuck, publish_next_due
-from pumpkit.core.clock import Clock
-from pumpkit.core.logger import logger
+from pumpkit.core.logging import logger
+from pumpkit.core.time import Clock
 from pumpkit.core.x_publisher import XPublisher
 
 

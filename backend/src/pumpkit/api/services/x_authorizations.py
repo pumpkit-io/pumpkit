@@ -10,10 +10,10 @@ from typing import Optional
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.core.datetimes import as_utc
+from pumpkit.core.db.models import PendingXAuthorization
 from pumpkit.core.security import decrypt, encrypt, generate_token, hash_token
+from pumpkit.core.time import as_utc
 from pumpkit.core.x_publisher import new_code_verifier
-from pumpkit.db.models import PendingXAuthorization
 
 LIFETIME = timedelta(minutes=10)
 

@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.api.mediators.sessions as sessions_mediator
-from pumpkit.db.session import get_async_db
+from pumpkit.core.db.session import get_async_db
 
 router = APIRouter(tags=["auth"])
 

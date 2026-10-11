@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.api.services.scheduled_posts as scheduled_posts_service
 import pumpkit.api.services.x_connections as x_connections_service
 import pumpkit.publishing.publish as publish
+from pumpkit.core.db.models import ScheduledPost
 from pumpkit.core.x_publisher import XPublisher
-from pumpkit.db.models import ScheduledPost
 
 
 async def publish_scheduled_post(
