@@ -50,6 +50,8 @@ import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 import { AppLayout } from './AppLayout';
 import { Scheduled } from './Scheduled';
 
@@ -122,22 +124,24 @@ function apiError(status: number, detail: string) {
   });
 }
 
-function renderScheduled(state?: unknown) {
+function renderScheduled(state?: unknown, instance: Instance = DEFAULT_INSTANCE) {
   return render(
-    <AuthProvider>
-      <ThemeProvider>
-        <MemoryRouter
-          initialEntries={[{ pathname: '/scheduled', state }]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/scheduled" element={<Scheduled />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>
-    </AuthProvider>,
+    <InstanceProvider instance={instance}>
+      <AuthProvider>
+        <ThemeProvider>
+          <MemoryRouter
+            initialEntries={[{ pathname: '/scheduled', state }]}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/scheduled" element={<Scheduled />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </AuthProvider>
+    </InstanceProvider>,
   );
 }
 
@@ -271,6 +275,32 @@ describe('Scheduled', () => {
     const panel = await xPanel();
     expect(await panel.findByText('@ada')).toBeInTheDocument();
     expect(panel.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+  });
+
+  describe('On an Instance that sells no Plans', () => {
+    const NO_PLANS: Instance = { ...DEFAULT_INSTANCE, sells_plans: false };
+
+    beforeEach(() => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+    });
+
+    it('offers a User without a Subscription to connect X', async () => {
+      renderScheduled(undefined, NO_PLANS);
+
+      const panel = await xPanel();
+      expect(await panel.findByRole('button', { name: 'Connect X' })).toBeInTheDocument();
+      expect(screen.queryByText(/needs a subscription/i)).not.toBeInTheDocument();
+      expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
+    });
+
+    it('lets a User without a Subscription Post now', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      renderScheduled(undefined, NO_PLANS);
+
+      const box = await composer();
+      expect(await box.findByRole('button', { name: 'Post now' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Subscribe' })).not.toBeInTheDocument();
+    });
   });
 
   it('shows the message the X callback left behind', async () => {

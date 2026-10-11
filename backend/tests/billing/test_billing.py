@@ -643,3 +643,18 @@ async def test_billing_api_serves_only_subscription_routes(client):
         "/api/v1/billing/portal",
         "/api/v1/stripe/webhook",
     }
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("GET", BILLING_ME), ("GET", PLANS), ("POST", CHECKOUT), ("POST", PORTAL)],
+)
+async def test_billing_routes_answer_404_where_no_plans_are_sold(
+    client, sells_no_plans, fake_billing, method, path
+):
+    body = CHECKOUT_MONTHLY if path == CHECKOUT else None
+
+    response = await client.request(method, path, json=body)
+
+    assert response.status_code == 404
+    assert fake_billing.checkouts == [] and fake_billing.portals == []

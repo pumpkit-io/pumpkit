@@ -306,6 +306,15 @@ async def test_a_user_who_is_not_subscribed_cannot_connect(client, fake_x_publis
     assert fake_x_publisher.exchanges == []
 
 
+async def test_a_user_without_a_subscription_connects_where_no_plans_are_sold(
+    client, sells_no_plans, clock
+):
+    completed = await _connect(client)
+
+    assert completed.status_code == 200
+    assert (await client.get(X_CONNECTION)).status_code == 200
+
+
 async def test_a_user_whose_subscription_ended_can_still_see_and_disconnect_x(
     client, db, subscribed, clock
 ):

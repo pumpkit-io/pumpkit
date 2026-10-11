@@ -13,11 +13,10 @@ async def require_subscribed_user(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_async_db)
 ) -> User:
     """
-    The signed-in User, if Subscribed; else a 403. Reads only Pumpkit's copy of the
-    Subscription (ADR 0004), so a payment Stripe hasn't synced yet doesn't count.
+    The signed-in User, if Subscribed or the Instance sells no Plans; else a 403. Reads only
+    Pumpkit's copy of the Subscription (ADR 0004), so a payment Stripe hasn't synced yet doesn't count.
     """
-    subscription = await service.get_user_subscription(db, user_id=current_user.id)
-    if not service.is_subscribed(subscription):
+    if not await service.has_access(db, user_id=current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This needs a Subscription. Subscribe to continue.",

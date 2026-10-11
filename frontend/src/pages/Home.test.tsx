@@ -987,6 +987,56 @@ describe('Home', () => {
     expect(screen.getByText('Billing')).toBeInTheDocument();
   });
 
+  describe('On an Instance that sells no Plans', () => {
+    const NO_PLANS: Instance = { ...DEFAULT_INSTANCE, sells_plans: false };
+
+    it('lets a User without a Subscription add authors and write, with no prompt to subscribe', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      renderHome(undefined, NO_PLANS);
+
+      const panel = await authorsPanel();
+      expect(await panel.findByLabelText('X handle')).toBeInTheDocument();
+      const area = await writer();
+      expect(await area.findByRole('button', { name: 'Write the Post' })).toBeInTheDocument();
+      expect(screen.queryByText(/needs a subscription/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Subscribe' })).not.toBeInTheDocument();
+      expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
+    });
+
+    it('opens Schedule on a Final instead of Billing', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      renderHome(undefined, NO_PLANS);
+      const area = await writer();
+      await writeBrief(area, 'ship');
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+
+      expect(
+        await screen.findByRole('dialog', { name: 'Schedule this Final' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Billing' })).not.toBeInTheDocument();
+    });
+
+    it('offers no Billing in the user menu', async () => {
+      renderHome(undefined, NO_PLANS);
+      const [menuButton] = await screen.findAllByRole('button', { name: 'User menu' });
+
+      fireEvent.keyDown(menuButton, { key: 'Enter' });
+
+      expect(await screen.findByRole('menuitem', { name: 'Account' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: 'Billing' })).not.toBeInTheDocument();
+    });
+
+    it('opens no Billing dialog when sent back from a checkout', async () => {
+      renderHome({ checkoutStatus: 'success' }, NO_PLANS);
+
+      expect(await writer()).toBeTruthy();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Inspiration authors', () => {
     it('lists the authors in order with when their posts were last fetched and how many are stored', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);

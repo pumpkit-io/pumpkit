@@ -17,7 +17,8 @@ const NAV_LINKS = [
 const MOBILE_MENU_ID = 'landing-mobile-menu';
 
 export function HeroHeader() {
-  const { app_name } = useInstance();
+  const { app_name, sells_plans } = useInstance();
+  const links = sells_plans ? NAV_LINKS : NAV_LINKS.filter(({ href }) => href !== '#pricing');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -51,7 +52,7 @@ export function HeroHeader() {
   };
 
   const navLinks = (surface: Surface) =>
-    NAV_LINKS.map(({ label, href, event }) => (
+    links.map(({ label, href, event }) => (
       <li key={href}>
         <a
           href={href}

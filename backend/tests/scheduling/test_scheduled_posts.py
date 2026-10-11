@@ -201,6 +201,17 @@ async def test_a_user_who_is_not_subscribed_cannot_post_now(client, fake_x_publi
     assert fake_x_publisher.published == []
 
 
+async def test_a_user_without_a_subscription_posts_now_where_no_plans_are_sold(
+    client, sells_no_plans, fake_x_publisher, clock
+):
+    await _connect_x(client)
+
+    response = await _post_now(client)
+
+    assert response.status_code == 201
+    assert response.json()["state"] == "published"
+
+
 async def test_a_post_x_refuses_fails_with_x_s_own_words(
     client, subscribed, fake_x_publisher, clock
 ):
@@ -492,6 +503,17 @@ async def test_a_user_who_is_not_subscribed_cannot_schedule(client, fake_x_publi
     response = await _schedule(client, "2026-10-10T14:00:00Z")
 
     assert response.status_code == 403
+
+
+async def test_a_user_without_a_subscription_schedules_where_no_plans_are_sold(
+    client, sells_no_plans, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+
+    response = await _schedule(client, "2026-10-10T14:00:00Z")
+
+    assert response.status_code == 201
+    assert response.json()["state"] == "scheduled"
 
 
 @pytest.fixture

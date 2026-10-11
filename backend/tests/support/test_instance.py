@@ -54,6 +54,18 @@ async def test_instance_answers_without_a_session(new_browser, posthog_off):
     assert response.json()["app_name"] == settings.APP_NAME
 
 
+async def test_an_instance_without_stripe_sells_no_plans(client, sells_no_plans):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["sells_plans"] is False
+
+
+async def test_an_instance_with_stripe_sells_plans(client):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["sells_plans"] is True
+
+
 async def test_instance_without_google_offers_only_the_magic_link(client, google_off):
     response = await client.get("/api/v1/instance")
 

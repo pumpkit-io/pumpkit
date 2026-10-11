@@ -13,6 +13,7 @@ import { AuthProvider, BYPASS_AUTH, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ThemeProvider } from './features/theme/ThemeProvider';
 import { ConsentBanner } from './features/analyticsConsent/ConsentBanner';
+import { useInstance } from './features/instance/useInstance';
 import { LEGAL_DOCUMENTS } from './features/legal/documents';
 import { legalRoutes } from './features/legal/legalRoutes';
 import { PostHogPageviewTracker } from './lib/PostHogPageviewTracker';
@@ -38,6 +39,8 @@ function RootRedirect() {
 }
 
 function AppRoutes() {
+  const { sells_plans } = useInstance();
+
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
@@ -64,30 +67,34 @@ function AppRoutes() {
       <Route path="/oauth/google/callback" element={<GoogleAuthCallback />} />
       <Route path="/auth/magic-link/callback" element={<MagicLinkCallback />} />
       <Route path="/login/magic-link/sent" element={<MagicLinkSent />} />
-      <Route
-        path="/billing/success"
-        element={
-          <ProtectedRoute>
-            <BillingSuccessRedirect />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/billing/cancelled"
-        element={
-          <ProtectedRoute>
-            <BillingCancelledRedirect />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/billing"
-        element={
-          <ProtectedRoute>
-            <Navigate to="/home" replace state={{ openBilling: true }} />
-          </ProtectedRoute>
-        }
-      />
+      {sells_plans && (
+        <>
+          <Route
+            path="/billing/success"
+            element={
+              <ProtectedRoute>
+                <BillingSuccessRedirect />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/billing/cancelled"
+            element={
+              <ProtectedRoute>
+                <BillingCancelledRedirect />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <ProtectedRoute>
+                <Navigate to="/home" replace state={{ openBilling: true }} />
+              </ProtectedRoute>
+            }
+          />
+        </>
+      )}
     </Routes>
   );
 }

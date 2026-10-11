@@ -257,6 +257,19 @@ async def test_a_user_who_is_not_subscribed_gets_403(client, fake_llm):
     assert fake_llm.calls == []
 
 
+async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_sold(
+    client, sells_no_plans, fake_x_reader, fake_llm
+):
+    fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    fake_llm.replies = [{"post": "draft"}, {"post": "final"}]
+
+    response = await client.post(POSTS, json={"brief": "ship"})
+
+    assert response.status_code == 201
+    assert response.json()["versions"][0]["final"] == "final"
+
+
 async def _stored_posts(db) -> list[Post]:
     result = await db.execute(select(Post).options(selectinload(Post.attempts)))
     return list(result.scalars())
