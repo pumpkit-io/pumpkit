@@ -46,3 +46,15 @@ async def test_instance_answers_without_a_session(new_browser, posthog_off):
 
     assert response.status_code == 200
     assert response.json()["app_name"] == settings.APP_NAME
+
+
+async def test_an_instance_without_stripe_sells_no_plans(client, sells_no_plans):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["sells_plans"] is False
+
+
+async def test_an_instance_with_stripe_sells_plans(client):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["sells_plans"] is True

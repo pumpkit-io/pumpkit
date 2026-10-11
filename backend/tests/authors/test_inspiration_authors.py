@@ -137,6 +137,18 @@ async def test_a_user_who_is_not_subscribed_gets_403_when_adding(client, fake_x_
     assert fake_x_reader.calls == []
 
 
+async def test_a_user_without_a_subscription_adds_and_removes_where_no_plans_are_sold(
+    client, sells_no_plans, fake_x_reader
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+
+    added = await client.post(AUTHORS, json={"handle": "levelsio"})
+    removed = await client.delete(f"{AUTHORS}/levelsio")
+
+    assert added.status_code == 201
+    assert removed.status_code == 204
+
+
 async def test_a_user_whose_subscription_ended_gets_403_when_removing(
     client, db, subscribed, fake_x_reader
 ):

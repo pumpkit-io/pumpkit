@@ -202,3 +202,11 @@ async def test_an_unhandled_event_type_is_recorded_and_ignored(
     assert response.status_code == 200
     assert await _count(db, StripeEvent) == 1
     assert await _count(db, Subscription) == 0
+
+
+async def test_the_webhook_answers_404_where_no_plans_are_sold(
+    client, db, user, sells_no_plans, fake_billing
+):
+    response = await _send(client, fake_billing, "evt_1", "customer.subscription.updated", "cus_1")
+
+    assert response.status_code == 404

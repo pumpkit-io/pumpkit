@@ -84,6 +84,7 @@ from pumpkit.auth.models import MagicLink, User  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
+from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
@@ -272,6 +273,14 @@ async def subscribed(db, user) -> Subscription:
     db.add(subscription)
     await db.commit()
     return subscription
+
+
+@pytest.fixture
+def sells_no_plans(monkeypatch) -> None:
+    """Unset the Stripe settings group, so the Instance sells no Plans."""
+    for key in ("STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"):
+        monkeypatch.setattr(settings, key, None)
+    monkeypatch.setattr(settings, "BILLING_PLAN_KEYS", [])
 
 
 @pytest_asyncio.fixture

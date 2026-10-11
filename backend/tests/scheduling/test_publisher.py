@@ -68,6 +68,19 @@ async def test_a_scheduled_post_is_published_once_due_and_never_before(
     assert fake_x_publisher.published == [("access-1001-1", "At five past")]
 
 
+async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_plans_are_sold(
+    client, db_session_maker, sells_no_plans, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    await _schedule(client, "2026-10-10T12:05:00Z", "No Plans here")
+    fixed_clock.advance(timedelta(minutes=5))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    assert (await _listed(client))["No Plans here"]["state"] == "published"
+    assert fake_x_publisher.published == [("access-1001-1", "No Plans here")]
+
+
 async def test_one_pass_publishes_every_due_scheduled_post(
     client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
 ):
