@@ -5,11 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from pumpkit.authors.models import AuthorPost, InspirationAuthor
 from pumpkit.core.db.models import (
     ATTEMPT_FAILED,
     ATTEMPT_SUCCEEDED,
-    AuthorPost,
-    InspirationAuthor,
     Post,
     VersionAttempt,
 )
