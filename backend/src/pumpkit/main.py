@@ -6,18 +6,18 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from pumpkit.api.routers import (
-    inspiration_authors,
     posts,
     scheduled_posts,
-    support,
 )
 from pumpkit.auth.router import router as auth_router
+from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.router import router as billing_router
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import limiter
+from pumpkit.support.router import router as support_router
 from pumpkit.x_connection.router import router as x_connection_router
 
 
@@ -43,8 +43,8 @@ app.add_middleware(
 # The prefix lives here so routers stay unaware of their mount point.
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
-app.include_router(support.router, prefix="/api/v1")
-app.include_router(inspiration_authors.router, prefix="/api/v1")
+app.include_router(support_router, prefix="/api/v1")
+app.include_router(authors_router, prefix="/api/v1")
 app.include_router(posts.router, prefix="/api/v1")
 app.include_router(scheduled_posts.x_connection_router, prefix="/api/v1")
 app.include_router(x_connection_router, prefix="/api/v1")

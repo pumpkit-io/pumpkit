@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pumpkit.core.x_handles import normalize_handle
+from pumpkit.authors.handles import normalize_handle
 
 
 class InspirationAuthorAddRequest(BaseModel):

@@ -6,8 +6,8 @@ import pytest
 from httpx import AsyncClient
 
 import pumpkit.publishing.publish as publish_module
+from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
-from pumpkit.core.x_reader import FetchedPost
 from pumpkit.publishing.publisher import run_pass
 from pumpkit.x_connection.x_publisher import (
     XAccount,

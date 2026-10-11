@@ -6,8 +6,7 @@ import httpx
 import pytest
 import respx
 
-from pumpkit.core.config import settings
-from pumpkit.core.x_reader import (
+from pumpkit.authors.x_reader import (
     TWITTERAPI_IO_LAST_TWEETS_URL,
     FetchedPost,
     HandleNotFoundError,
@@ -15,6 +14,7 @@ from pumpkit.core.x_reader import (
     XReaderError,
     XReaderNotConfiguredError,
 )
+from pumpkit.core.config import settings
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

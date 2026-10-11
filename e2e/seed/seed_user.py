@@ -14,8 +14,9 @@ from sqlalchemy import delete, select
 
 from pumpkit.auth.models import User
 from pumpkit.auth.tokens import create_access_token
+from pumpkit.authors.models import InspirationAuthor
 from pumpkit.billing.models import Subscription
-from pumpkit.core.db.models import InspirationAuthor, ScheduledPost
+from pumpkit.core.db.models import ScheduledPost
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.x_connection.models import XConnection
 
