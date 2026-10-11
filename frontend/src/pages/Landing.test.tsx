@@ -9,8 +9,9 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 }));
 
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 import { track } from '@/lib/analytics';
-import { APP_NAME } from '@/lib/app';
 import { api } from '@/services/apiService';
 import { Landing } from './Landing';
 
@@ -57,13 +58,24 @@ const QUARTERLY_PLAN = {
 };
 
 /** Renders the landing page as a signed-out visitor sees it at `/`. */
-function renderLanding() {
+const WITH_ANALYTICS: Instance = {
+  ...DEFAULT_INSTANCE,
+  analytics: {
+    key: 'phc_test',
+    host: 'https://eu.i.posthog.com',
+    ui_host: 'https://eu.posthog.com',
+  },
+};
+
+function renderLanding(instance: Instance = DEFAULT_INSTANCE) {
   return render(
-    <ThemeProvider>
-      <MemoryRouter>
-        <Landing />
-      </MemoryRouter>
-    </ThemeProvider>,
+    <InstanceProvider instance={instance}>
+      <ThemeProvider>
+        <MemoryRouter>
+          <Landing />
+        </MemoryRouter>
+      </ThemeProvider>
+    </InstanceProvider>,
   );
 }
 
@@ -117,6 +129,12 @@ describe('Landing landmarks', () => {
 });
 
 describe('Landing header', () => {
+  it("names the Instance's app in the header", () => {
+    renderLanding({ ...DEFAULT_INSTANCE, app_name: 'acmeWriter' });
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('link', { name: 'acmeWriter home' })).toBeInTheDocument();
+  });
+
   it('links the Authors and Pricing anchors to their sections', () => {
     renderLanding();
     const header = screen.getByRole('banner');
@@ -142,7 +160,7 @@ describe('Landing header', () => {
   it('tracks the logo and the desktop links with their surface', () => {
     renderLanding();
     const header = screen.getByRole('banner');
-    fireEvent.click(within(header).getByRole('link', { name: `${APP_NAME} home` }));
+    fireEvent.click(within(header).getByRole('link', { name: 'Pumpkit home' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Authors' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Pricing' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Get started' }));
@@ -246,9 +264,17 @@ describe('Landing footer', () => {
   });
 
   it('offers Cookie settings', () => {
-    renderLanding();
+    renderLanding(WITH_ANALYTICS);
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+  });
+
+  it('offers no Cookie settings on an Instance without analytics', () => {
+    renderLanding();
+    const footer = screen.getByRole('contentinfo');
+    expect(
+      within(footer).queryByRole('button', { name: 'Cookie settings' }),
+    ).not.toBeInTheDocument();
   });
 
   it('links to the Privacy Policy, the Terms and the support address', () => {

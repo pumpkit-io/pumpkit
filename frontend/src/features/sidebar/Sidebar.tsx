@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PanelLeft, SquarePen } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
 import { CookieSettingsButton } from '@/features/analyticsConsent/CookieSettingsButton';
+import { useInstance } from '@/features/instance/useInstance';
 import { LEGAL_LINKS } from '@/features/legal/documents';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './useSidebar';
@@ -35,6 +36,7 @@ const LEGAL_LINK_CLASS =
   'rounded-sm underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 function LegalLinks() {
+  const { analytics } = useInstance();
   return (
     <nav aria-label="Legal" className="px-4 pb-3">
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -46,9 +48,11 @@ function LegalLinks() {
             </a>
           </li>
         ))}
-        <li>
-          <CookieSettingsButton className={LEGAL_LINK_CLASS} />
-        </li>
+        {analytics && (
+          <li>
+            <CookieSettingsButton className={LEGAL_LINK_CLASS} />
+          </li>
+        )}
       </ul>
     </nav>
   );

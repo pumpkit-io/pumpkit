@@ -34,6 +34,11 @@ import { AuthProvider, useAuth } from './AuthContext';
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>;
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 const originalAdapter = api.defaults.adapter;
+const ANALYTICS = {
+  key: 'phc_test',
+  host: 'https://eu.i.posthog.com',
+  ui_host: 'https://eu.posthog.com',
+};
 
 type Answer = { status: number; data?: unknown } | 'network';
 
@@ -86,12 +91,10 @@ beforeEach(async () => {
   vi.mocked(posthog.identify).mockClear();
   vi.mocked(posthog.init).mockClear();
   (posthog as unknown as { __loaded: boolean }).__loaded = false;
-  vi.stubEnv('VITE_POSTHOG_ENABLED', 'true');
-  vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test');
+  startAnalytics(ANALYTICS);
 });
 afterEach(() => {
   api.defaults.adapter = originalAdapter;
-  vi.unstubAllEnvs();
 });
 
 describe('AuthProvider bootstrap', () => {
@@ -159,7 +162,7 @@ describe('AuthProvider analytics identity', () => {
 
   it('identifies the person once by User ID after PostHog starts with stored consent', async () => {
     localStorage.setItem('pumpkit:analytics-consent', '"granted"');
-    startAnalytics();
+    startAnalytics(ANALYTICS);
     session.start('t', inMinutes(60));
     fakeBackend();
     const { result } = renderHook(() => useAuth(), { wrapper });
