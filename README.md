@@ -30,7 +30,7 @@ These steps run Pumpkit on your computer at http://localhost:8080. For a server 
    docker compose version
    ```
 
-   Check: it prints `Docker Compose version v2.` and the rest of the version.
+   **Check:** it prints `Docker Compose version v2.` and the rest of the version.
 
 2. Get the code:
 
@@ -40,7 +40,7 @@ These steps run Pumpkit on your computer at http://localhost:8080. For a server 
    ls compose.yml .env.example
    ```
 
-   Check: `ls` prints `.env.example` and `compose.yml`.
+   **Check:** `ls` prints `.env.example` and `compose.yml`.
 
 3. Write `.env`, with the secrets generated for you:
 
@@ -49,7 +49,7 @@ These steps run Pumpkit on your computer at http://localhost:8080. For a server 
      sh scripts/setup.sh --public-url http://localhost:8080 </dev/null
    ```
 
-   Check: it prints `Wrote /path/to/pumpkit/.env (mode 600).`, then `Generated: POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY` and `Set: PUBLIC_URL LLM_API_KEY TWITTERAPI_IO_API_KEY`. Run `sh scripts/setup.sh` with no arguments instead and it asks for each value.
+   **Check:** it prints `Wrote /path/to/pumpkit/.env (mode 600).`, then `Generated: POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY` and `Set: PUBLIC_URL LLM_API_KEY TWITTERAPI_IO_API_KEY`. Run `sh scripts/setup.sh` with no arguments instead and it asks for each value.
 
 4. Start Pumpkit:
 
@@ -57,7 +57,7 @@ These steps run Pumpkit on your computer at http://localhost:8080. For a server 
    docker compose up -d --wait
    ```
 
-   Check: it exits once every service is healthy, and `docker compose ps --format 'table {{.Service}}\t{{.Status}}'` lists `backend`, `db`, `publisher` and `web`, each `Up` and `(healthy)`.
+   **Check:** it exits once every service is healthy, and `docker compose ps --format 'table {{.Service}}\t{{.Status}}'` lists `backend`, `db`, `publisher` and `web`, each `Up` and `(healthy)`.
 
 5. Check its health:
 
@@ -65,7 +65,7 @@ These steps run Pumpkit on your computer at http://localhost:8080. For a server 
    curl -s http://localhost:8080/api/v1/health
    ```
 
-   Check: it prints `{"status":"ok"}`.
+   **Check:** it prints `{"status":"ok"}`.
 
 6. Sign in. Open http://localhost:8080, choose **Get started**, enter your email address and send the Magic link. Without SMTP, the link goes to the backend log:
 
@@ -73,9 +73,9 @@ These steps run Pumpkit on your computer at http://localhost:8080. For a server 
    docker compose logs backend | grep "Magic link for"
    ```
 
-   Check: it prints `... [WARNING] Magic link for you@example.com (expires in 15 minutes): http://localhost:8080/api/v1/login/magic-link?token=...`. Open that URL in the same browser; it lands on Home, with your address in the sidebar.
+   **Check:** it prints `... [WARNING] Magic link for you@example.com (expires in 15 minutes): http://localhost:8080/api/v1/login/magic-link?token=...`. Open that URL in the same browser; it lands on Home, with your address in the sidebar.
 
-7. Write a Post: add an X handle under **Inspiration authors**, type a Brief and choose **Write the Post**. Check: after a minute or two, a Version appears with its Final and Draft.
+7. Write a Post: add an X handle under **Inspiration authors**, type a Brief and choose **Write the Post**. **Check:** after a minute or two, a Version appears with its Final and Draft.
 
 Before you invite anyone else, configure SMTP so Magic links arrive by email ([SMTP](./docs/self-hosting.md#smtp)). To upgrade, read the CHANGELOG, then follow [Upgrades](./docs/self-hosting.md#upgrades).
 

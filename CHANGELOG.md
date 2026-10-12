@@ -15,8 +15,7 @@ The first release that a Self-hoster can install.
 - `scripts/setup.sh`, which writes `.env` with every secret generated, keeps values already there, never prints a secret, and names each missing required value when run without a terminal.
 - `GET /api/v1/health`, which answers 200 when the backend can reach the database and 503 when it cannot.
 - `GET /api/v1/instance`, which tells the frontend the app name, sign-in methods, whether the Instance sells Plans, the Operator details and the analytics settings.
-- Optional providers. Stripe billing, SMTP email, Google sign-in, Operator details and PostHog analytics each turn on when their settings are set and off when none are; a partly configured provider stops the backend at startup and names the missing settings.
-- Without Stripe, every signed-in User has full access. Without SMTP, Magic links go to the backend log. Without Google, sign-in offers only Magic links. Without Operator details, the legal pages and company footer are hidden.
+- Optional providers. Stripe billing, SMTP email, Google sign-in, Operator details and PostHog analytics each turn on when their settings are set and off when none are; a partly configured provider stops the backend at startup and names the missing settings. Without Stripe, every signed-in User has full access; without SMTP, Magic links go to the backend log; without Google, sign-in offers only Magic links; without Operator details, the legal pages and company footer are hidden.
 - A Sign-up allowlist (`SIGN_UP_ALLOWLIST`) of addresses and `@domain` entries that may sign in.
 - Any OpenAI-compatible LLM endpoint (`LLM_BASE_URL`, `LLM_API_KEY`), with the drafting, humanizing and revising models as settings.
 - `POSTGRES_SSL` to require SSL on the database connection, independent of `ENV`.

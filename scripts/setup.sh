@@ -226,4 +226,4 @@ chmod 600 "$env_file"
 [ -z "$generated_now" ] || printf 'Generated:%s\n' "$generated_now"
 [ -z "$set_now" ] || printf 'Set:%s\n' "$set_now"
 [ -z "$kept" ] || printf 'Kept the value already in .env, ignoring the one passed:%s\n' "$kept"
-printf 'Next, start Pumpkit:\n  docker compose up -d\n'
+printf 'Next, start Pumpkit:\n  docker compose up -d --wait\n'

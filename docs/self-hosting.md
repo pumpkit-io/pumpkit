@@ -26,7 +26,7 @@ git --version
 
 **Check:** the first line reads `Docker Compose version v2.` followed by the rest of the version (for example `Docker Compose version v2.31.0`); the second reads `git version` and a version.
 
-**Server path only.** Point the domain at the server with an `A` record (and an `AAAA` record if the server has IPv6), and open ports 80 and 443 in the server's firewall and in the cloud provider's firewall. Caddy, inside the web container, needs both ports to get a certificate. On this computer:
+**Server path only.** Point the domain at the server with an `A` record (and an `AAAA` record if the server has IPv6), and open ports 80 and 443 in the server's firewall and in the cloud provider's firewall. Caddy, inside the web container, serves Pumpkit on 443 and redirects HTTP to HTTPS on 80; it gets its certificate through either port. On this computer:
 
 ```sh
 dig +short pumpkit.example.org
@@ -55,7 +55,7 @@ Choose `PUBLIC_URL`, the address Users open:
 | Laptop | `http://localhost:8080` | nothing; with port 8080 taken, `--http-port 8081` and `--public-url http://localhost:8081` |
 | Server | `https://pumpkit.example.org`, your domain | `--http-port 80`, and optionally `--acme-email you@example.org` for certificate expiry notices |
 
-An `https://` `PUBLIC_URL` gets a certificate automatically; an `http://` one is served as plain HTTP on any host. The web container listens on `HTTP_PORT` (default 8080, for laptops) and `HTTPS_PORT` (default 443). A server needs `HTTP_PORT=80`, because the certificate authority checks the domain on port 80.
+An `https://` `PUBLIC_URL` gets a certificate automatically; an `http://` one is served as plain HTTP on any host. The web container listens on `HTTP_PORT` (default 8080, for laptops) and `HTTPS_PORT` (default 443). A server needs `HTTP_PORT=80`: port 80 serves the redirect from HTTP to HTTPS and answers the certificate authority's HTTP-01 challenge.
 
 Laptop:
 
@@ -80,7 +80,7 @@ Wrote /path/to/pumpkit/.env (mode 600).
 Generated: POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY
 Set: PUBLIC_URL LLM_API_KEY TWITTERAPI_IO_API_KEY
 Next, start Pumpkit:
-  docker compose up -d
+  docker compose up -d --wait
 ```
 
 The `Set:` line also names any optional setting you passed. If it instead starts with `Missing required values:`, it names each value to pass and writes nothing.
@@ -113,13 +113,17 @@ With an [external Postgres](#external-postgres), `db` is not listed.
 
 ### 5. Check the health endpoint
 
-On the laptop path, or on this computer for the server path:
+Laptop path, with your `PUBLIC_URL`:
 
 ```sh
 curl -s http://localhost:8080/api/v1/health
 ```
 
-On the server path, use your `PUBLIC_URL`: `curl -s https://pumpkit.example.org/api/v1/health`.
+Server path, on this computer, with your `PUBLIC_URL`:
+
+```sh
+curl -s https://pumpkit.example.org/api/v1/health
+```
 
 **Check:** it prints `{"status":"ok"}`. `{"status":"unavailable"}` means the backend cannot reach the database.
 

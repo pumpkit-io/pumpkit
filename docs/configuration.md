@@ -44,7 +44,7 @@ Read by Docker Compose and the `web` service of the production stack (`compose.y
 | Variable | Meaning |
 | --- | --- |
 | `PUMPKIT_VERSION` | The release to run: the tag of `ghcr.io/pumpkit-io/pumpkit-backend` and `ghcr.io/pumpkit-io/pumpkit-web`, without the `v` (such as `0.1.0`). `.env.example` sets the current release; change it only to upgrade, after reading `CHANGELOG.md`. With `docker compose up --build`, the images built from the checkout get this tag. |
-| `HTTP_PORT` | The host port the web server's plain HTTP listens on. Defaults to 8080, for a laptop. A server with an `https` `PUBLIC_URL` needs 80, where the certificate authority checks the domain and where HTTP redirects to HTTPS. |
+| `HTTP_PORT` | The host port the web server's plain HTTP listens on. Defaults to 8080, for a laptop. A server with an `https` `PUBLIC_URL` needs 80, which redirects HTTP to HTTPS and answers the certificate authority's HTTP-01 challenge. |
 | `HTTPS_PORT` | The host port for HTTPS. Defaults to 443. |
 | `ACME_EMAIL` | The address the certificate authority sends expiry notices to, for an `https` `PUBLIC_URL`. Optional. |
 

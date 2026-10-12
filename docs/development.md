@@ -114,7 +114,7 @@ make e2e    # starts the dev stack if it is down, then runs Playwright against i
 
 Before the first `make e2e`, run `cd e2e && npm install && npx playwright install chromium`. CONTRIBUTING lists every target.
 
-The e2e suite opens the Billing dialog, so its Instance must sell Plans: set the Stripe billing group in `.env`, with dummy values if you like (CI uses `sk_test_dummy`, `pk_test_dummy`, `whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`).
+The e2e suite opens the Billing dialog, so its Instance must sell Plans: set the Stripe billing group in `.env`. [CONTRIBUTING](../CONTRIBUTING.md#make-targets) gives dummy values that work.
 
 If host port 5432 is already taken, add a local compose override that remaps the db service and point `COMPOSE_FILE` at it:
 
