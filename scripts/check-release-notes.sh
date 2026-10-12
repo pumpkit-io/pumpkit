@@ -92,12 +92,19 @@ else
   fail "expected a non-zero exit for a missing file, got status $status"
 fi
 
+# Right after a release is cut, Unreleased is empty and the entries sit under the version .env.example names.
+release=$(sed -n 's/^PUMPKIT_VERSION=//p' "$repo_root/.env.example")
 run_notes Unreleased "$repo_root/CHANGELOG.md"
 if [ "$status" -eq 0 ] && [ -s "$out" ]; then
   pass "CHANGELOG.md has an Unreleased section with entries"
 else
-  fail "expected CHANGELOG.md to have a non-empty Unreleased section, got status $status:"
-  cat "$err"
+  run_notes "$release" "$repo_root/CHANGELOG.md"
+  if [ "$status" -eq 0 ] && [ -s "$out" ]; then
+    pass "CHANGELOG.md has a section with entries for $release, the release .env.example names"
+  else
+    fail "expected CHANGELOG.md to have entries under Unreleased or under $release, got status $status:"
+    cat "$err"
+  fi
 fi
 
 if grep -q 'Before 1\.0' "$repo_root/CHANGELOG.md"; then
