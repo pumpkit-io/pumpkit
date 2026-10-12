@@ -1,14 +1,18 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.billing import service as billing_service
 from pumpkit.core.config import settings
+from pumpkit.core.db.health import database_is_reachable
+from pumpkit.core.db.session import get_async_db
 from pumpkit.core.providers import require_provider
 from pumpkit.core.rate_limit import limiter
 from pumpkit.support.schemas import (
     AnalyticsSettings,
+    HealthResponse,
     InstanceResponse,
     OperatorDetails,
     SignInMethod,
@@ -72,4 +76,19 @@ async def instance(request: Request) -> InstanceResponse:
         operator=_operator_details(),
         support_email=settings.SUPPORT_EMAIL or None,
         analytics=analytics,
+    )
+
+
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"model": HealthResponse}},
+)
+async def health(db: AsyncSession = Depends(get_async_db)) -> HealthResponse | JSONResponse:
+    """Public and not rate limited: Self-hosters, their agents and container healthchecks poll it."""
+    if await database_is_reachable(db):
+        return HealthResponse(status="ok")
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=HealthResponse(status="unavailable").model_dump(),
     )

@@ -31,3 +31,7 @@ class InstanceResponse(BaseModel):
     operator: Optional[OperatorDetails]
     support_email: Optional[str]
     analytics: Optional[AnalyticsSettings]
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok", "unavailable"]
