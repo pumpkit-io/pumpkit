@@ -18,7 +18,7 @@ export function MagicLinkSent() {
   const location = useLocation();
   const state = (location.state ?? {}) as MagicLinkSentState;
   const email = typeof state.email === 'string' ? state.email : '';
-  const { operator } = useInstance();
+  const { support_email } = useInstance();
 
   useEffect(() => {
     if (!email) {
@@ -74,8 +74,7 @@ export function MagicLinkSent() {
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Can't find it? Check your spam folder.
-            {/* The support address is part of the Operator details, so only they offer it. */}
-            {operator && (
+            {support_email && (
               <>
                 {' '}
                 Still need help?{' '}

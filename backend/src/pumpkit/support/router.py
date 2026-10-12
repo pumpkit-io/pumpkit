@@ -28,19 +28,18 @@ def _operator_details() -> Optional[OperatorDetails]:
         rea=settings.OPERATOR_REA or None,
         share_capital=settings.OPERATOR_SHARE_CAPITAL or None,
         pec=settings.OPERATOR_PEC or None,
-        support_email=settings.SUPPORT_EMAIL or "",
     )
 
 
 @router.get(
     "/support/contact",
     status_code=status.HTTP_303_SEE_OTHER,
-    dependencies=[Depends(require_provider(settings.is_operator_configured))],
+    dependencies=[Depends(require_provider(settings.has_support_email))],
 )
 @limiter.limit("60/minute")
 async def support_contact(request: Request) -> RedirectResponse:
     """
-    303-redirect to a mailto: link for the support address; 404 without Operator details.
+    303-redirect to a mailto: link for the support address; 404 without SUPPORT_EMAIL.
     Browsers follow a mailto: Location, so the frontend never needs the address.
     """
     return RedirectResponse(
@@ -71,5 +70,6 @@ async def instance(request: Request) -> InstanceResponse:
         sells_plans=billing_service.sells_plans(),
         sign_in_methods=sign_in_methods,
         operator=_operator_details(),
+        support_email=settings.SUPPORT_EMAIL or None,
         analytics=analytics,
     )

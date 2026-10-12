@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -440,7 +440,14 @@ describe('Home', () => {
       createdAt: '2026-10-10T12:00:00Z',
     };
 
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     beforeEach(() => {
+      // The fixtures' times are in October 2026, so the picker's min would block them once they passed.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-10T12:00'));
       vi.mocked(scheduledPostService.schedule).mockReset();
       vi.mocked(scheduledPostService.postNow).mockReset();
       vi.mocked(xConnectionService.startAuthorization).mockReset();

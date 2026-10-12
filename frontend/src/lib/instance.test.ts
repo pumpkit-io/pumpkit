@@ -6,6 +6,7 @@ const MAGIC_LINK_ONLY = {
   sells_plans: false,
   sign_in_methods: ['magic_link'],
   operator: null,
+  support_email: null,
   analytics: null,
 };
 
@@ -19,7 +20,7 @@ describe('fetchInstance', () => {
     vi.restoreAllMocks();
   });
 
-  it('offers only the Magic link, with no Plans, Operator details or analytics, when the backend is unreachable', async () => {
+  it('offers only the Magic link, with no Plans, Operator details, support address or analytics, when the backend is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
     await expect(fetchInstance()).resolves.toEqual(MAGIC_LINK_ONLY);

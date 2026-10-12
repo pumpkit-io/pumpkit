@@ -9,7 +9,6 @@ export interface OperatorDetails {
   rea: string | null;
   share_capital: string | null;
   pec: string | null;
-  support_email: string;
 }
 
 export interface AnalyticsSettings {
@@ -23,6 +22,8 @@ export interface Instance {
   sells_plans: boolean;
   sign_in_methods: SignInMethod[];
   operator: OperatorDetails | null;
+  /** Where the support link sends Users' email; null hides it. */
+  support_email: string | null;
   analytics: AnalyticsSettings | null;
 }
 
@@ -32,6 +33,7 @@ export const DEFAULT_INSTANCE: Instance = {
   sells_plans: false,
   sign_in_methods: ['magic_link'],
   operator: null,
+  support_email: null,
   analytics: null,
 };
 

@@ -68,12 +68,14 @@ class Settings(BaseSettings):
     # Optional group: the company running this Instance, shown with its legal pages (ADR 0011).
     OPERATOR_NAME: Optional[str] = None
     OPERATOR_ADDRESS: Optional[str] = None
-    # Where the support link sends Users' email; part of the Operator details.
-    SUPPORT_EMAIL: Optional[str] = None
     OPERATOR_VAT_ID: Optional[str] = None
     OPERATOR_REA: Optional[str] = None
     OPERATOR_SHARE_CAPITAL: Optional[str] = None
     OPERATOR_PEC: Optional[str] = None
+
+    # Optional: where the support link sends Users' email; unset hides the link.
+    # Required with Operator details, since their company footer gives it as the contact address.
+    SUPPORT_EMAIL: Optional[str] = None
 
     # Optional group: Magic links are emailed only with a host and a from address, else logged.
     SMTP_HOST: Optional[str] = None
@@ -154,6 +156,11 @@ class Settings(BaseSettings):
             missing = [key for key, value in group.items() if not value]
             if missing and len(missing) < len(group):
                 raise ValueError(f"{name} is partly configured; missing: {', '.join(missing)}")
+        if self.is_operator_configured() and not self.has_support_email():
+            raise ValueError(
+                f"{ProviderGroup.OPERATOR_DETAILS} are set without SUPPORT_EMAIL, the contact "
+                "address their company footer shows; missing: SUPPORT_EMAIL"
+            )
         return self
 
     def _provider_groups(self) -> dict[ProviderGroup, dict[str, object]]:
@@ -174,7 +181,6 @@ class Settings(BaseSettings):
             ProviderGroup.OPERATOR_DETAILS: {
                 "OPERATOR_NAME": self.OPERATOR_NAME,
                 "OPERATOR_ADDRESS": self.OPERATOR_ADDRESS,
-                "SUPPORT_EMAIL": self.SUPPORT_EMAIL,
             },
         }
 
@@ -195,6 +201,9 @@ class Settings(BaseSettings):
 
     def is_operator_configured(self) -> bool:
         return self._is_configured(ProviderGroup.OPERATOR_DETAILS)
+
+    def has_support_email(self) -> bool:
+        return bool(self.SUPPORT_EMAIL)
 
     def smtp_port(self) -> int:
         return self.SMTP_PORT or _SMTP_DEFAULT_PORTS[self.SMTP_SECURITY]

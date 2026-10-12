@@ -22,7 +22,7 @@ def posthog_on(monkeypatch):
 
 
 async def test_instance_without_posthog_has_no_analytics(
-    client, posthog_off, no_operator_details, monkeypatch
+    client, posthog_off, no_operator_details, no_support_email, monkeypatch
 ):
     monkeypatch.setattr(settings, "APP_NAME", "acmeWriter")
 
@@ -34,6 +34,7 @@ async def test_instance_without_posthog_has_no_analytics(
         "sells_plans": True,
         "sign_in_methods": ["magic_link", "google"],
         "operator": None,
+        "support_email": None,
         "analytics": None,
     }
 
@@ -80,10 +81,24 @@ async def test_instance_with_google_offers_both_sign_in_methods(client):
     assert response.json()["sign_in_methods"] == ["magic_link", "google"]
 
 
-async def test_instance_without_operator_details_has_no_operator(client, no_operator_details):
+async def test_instance_with_neither_has_no_operator_or_support_email(
+    client, no_operator_details, no_support_email
+):
     response = await client.get("/api/v1/instance")
 
     assert response.json()["operator"] is None
+    assert response.json()["support_email"] is None
+
+
+async def test_instance_with_support_email_alone_carries_it_without_operator(
+    client, no_operator_details, monkeypatch
+):
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", "help@example.org")
+
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["operator"] is None
+    assert response.json()["support_email"] == "help@example.org"
 
 
 async def test_instance_with_operator_details_carries_them(client, monkeypatch):
@@ -102,5 +117,5 @@ async def test_instance_with_operator_details_carries_them(client, monkeypatch):
         "rea": None,
         "share_capital": None,
         "pec": "example@pec.it",
-        "support_email": "help@example.org",
     }
+    assert response.json()["support_email"] == "help@example.org"

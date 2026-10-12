@@ -6,7 +6,7 @@ import { LEGAL_LINKS } from './documents';
 
 /**
  * The legal links where the Instance has Operator details, and Cookie settings where it has
- * analytics (ADR 0011); with neither, nothing. `children` are further list items after them.
+ * analytics (ADR 0011). `children` are further list items after them; with none of these, nothing.
  */
 export function LegalLinks({
   className,
@@ -22,9 +22,9 @@ export function LegalLinks({
   children?: ReactNode;
 }) {
   const { operator, analytics } = useInstance();
-  if (!operator && !analytics) return null;
+  if (!operator && !analytics && !children) return null;
   return (
-    <nav aria-label={operator ? 'Legal' : 'Cookies'} className={className}>
+    <nav aria-label={operator ? 'Legal' : children ? 'Support' : 'Cookies'} className={className}>
       <ul className={listClassName}>
         {operator &&
           LEGAL_LINKS.map(({ path, label }) => (

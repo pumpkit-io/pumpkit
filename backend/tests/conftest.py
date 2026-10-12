@@ -288,8 +288,14 @@ def sells_no_plans(monkeypatch) -> None:
 @pytest.fixture
 def no_operator_details(monkeypatch) -> None:
     """Unset the Operator details group, so the Instance has no legal pages or Terms."""
-    for key in ("OPERATOR_NAME", "OPERATOR_ADDRESS", "SUPPORT_EMAIL"):
+    for key in ("OPERATOR_NAME", "OPERATOR_ADDRESS"):
         monkeypatch.setattr(settings, key, None)
+
+
+@pytest.fixture
+def no_support_email(monkeypatch) -> None:
+    """Unset SUPPORT_EMAIL, so the Instance offers no support link."""
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", None)
 
 
 @pytest_asyncio.fixture

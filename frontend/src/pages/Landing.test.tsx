@@ -11,7 +11,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import type { Instance } from '@/lib/instance';
-import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
+import { SELLS_PLANS, WITH_OPERATOR, WITH_SUPPORT_EMAIL } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { api } from '@/services/apiService';
 import { billingService } from '@/services/billingService';
@@ -324,6 +324,17 @@ describe('Landing footer', () => {
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
     expect(within(footer).queryByRole('link')).not.toBeInTheDocument();
+    expect(footer.querySelector('address')).toBeNull();
+  });
+
+  it('shows only the support address on an Instance with it but no Operator details', () => {
+    renderLanding(WITH_SUPPORT_EMAIL);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: 'help@example.org' })).toHaveAttribute(
+      'href',
+      'mailto:help@example.org',
+    );
+    expect(within(footer).queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
     expect(footer.querySelector('address')).toBeNull();
   });
 

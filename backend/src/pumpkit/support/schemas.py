@@ -12,7 +12,6 @@ class OperatorDetails(BaseModel):
     rea: Optional[str] = None
     share_capital: Optional[str] = None
     pec: Optional[str] = None
-    support_email: str
 
 
 class AnalyticsSettings(BaseModel):
@@ -30,4 +29,5 @@ class InstanceResponse(BaseModel):
     sells_plans: bool
     sign_in_methods: list[SignInMethod]
     operator: Optional[OperatorDetails]
+    support_email: Optional[str]
     analytics: Optional[AnalyticsSettings]

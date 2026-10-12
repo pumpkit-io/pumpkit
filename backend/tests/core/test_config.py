@@ -40,7 +40,6 @@ _SMTP_ENV = {
 _OPERATOR_ENV = {
     "OPERATOR_NAME": "Example S.R.L.",
     "OPERATOR_ADDRESS": "Via Roma 1, Milano, Italy",
-    "SUPPORT_EMAIL": "support@example.org",
 }
 
 
@@ -117,6 +116,7 @@ def test_providers_are_off_when_their_settings_are_left_empty(instance_env):
             *_GOOGLE_ENV,
             *_SMTP_ENV,
             *_OPERATOR_ENV,
+            "SUPPORT_EMAIL",
             "POSTHOG_PROJECT_API_KEY",
             "SMTP_PORT",
             "SMTP_USERNAME",
@@ -131,6 +131,7 @@ def test_providers_are_off_when_their_settings_are_left_empty(instance_env):
     assert s.is_posthog_configured() is False
     assert s.is_smtp_configured() is False
     assert s.is_operator_configured() is False
+    assert s.has_support_email() is False
 
 
 def test_providers_are_on_when_all_their_settings_are_set(instance_env):
@@ -139,6 +140,7 @@ def test_providers_are_on_when_all_their_settings_are_set(instance_env):
         **_GOOGLE_ENV,
         **_SMTP_ENV,
         **_OPERATOR_ENV,
+        SUPPORT_EMAIL="support@example.org",
         POSTHOG_PROJECT_API_KEY="phc_test",
     )
 
@@ -176,8 +178,8 @@ def test_smtp_defaults_to_starttls_and_an_explicit_port_wins(instance_env):
         (_GOOGLE_ENV, ["GOOGLE_CLIENT_ID"]),
         (_SMTP_ENV, ["SMTP_HOST"]),
         (_SMTP_ENV, ["EMAIL_FROM"]),
-        (_OPERATOR_ENV, ["SUPPORT_EMAIL"]),
-        (_OPERATOR_ENV, ["OPERATOR_NAME", "OPERATOR_ADDRESS"]),
+        (_OPERATOR_ENV, ["OPERATOR_ADDRESS"]),
+        (_OPERATOR_ENV, ["OPERATOR_NAME"]),
     ],
 )
 def test_partly_configured_provider_fails_naming_each_missing_setting(instance_env, group, unset):
@@ -189,6 +191,33 @@ def test_partly_configured_provider_fails_naming_each_missing_setting(instance_e
     message = str(excinfo.value)
     for key in unset:
         assert key in message
+
+
+def test_support_email_alone_is_a_complete_instance(instance_env):
+    s = instance_env(SUPPORT_EMAIL="support@example.org")
+
+    assert s.has_support_email()
+    assert not s.is_operator_configured()
+
+
+def test_an_instance_may_set_neither_operator_details_nor_support_email(instance_env):
+    s = instance_env()
+
+    assert not s.has_support_email()
+    assert not s.is_operator_configured()
+
+
+def test_operator_details_with_support_email_turn_both_on(instance_env):
+    s = instance_env(**_OPERATOR_ENV, SUPPORT_EMAIL="support@example.org")
+
+    assert s.has_support_email()
+    assert s.is_operator_configured()
+
+
+def test_operator_details_without_support_email_fail_naming_it(instance_env):
+    # The company footer on the legal pages gives the support address as the Operator's contact.
+    with pytest.raises(ValidationError, match="SUPPORT_EMAIL"):
+        instance_env(**_OPERATOR_ENV)
 
 
 def test_empty_plan_keys_count_as_unset(instance_env):

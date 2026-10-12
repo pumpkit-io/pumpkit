@@ -16,12 +16,12 @@ function companyIdentifiers({ vat_id, rea, share_capital }: OperatorDetails): st
 }
 
 /**
- * The Operator's company details and legal links, and Cookie settings, at the foot of every
- * public page. Each part shows only where the Instance has it (ADR 0011); with neither, no footer.
+ * The Operator's company details and legal links, Cookie settings and the support address, at
+ * the foot of every public page. Each part shows only where the Instance has it (ADR 0011).
  */
 export function CompanyFooter({ className }: { className?: string }) {
-  const { operator, analytics } = useInstance();
-  if (!operator && !analytics) return null;
+  const { operator, analytics, support_email } = useInstance();
+  if (!operator && !analytics && !support_email) return null;
   const identifiers = operator && companyIdentifiers(operator);
   return (
     <footer
@@ -42,13 +42,13 @@ export function CompanyFooter({ className }: { className?: string }) {
           </address>
         )}
         <LegalLinks listClassName="flex flex-wrap gap-x-5 gap-y-2" linkClassName={LINK_CLASS}>
-          {operator && (
+          {support_email ? (
             <li>
-              <a href={`mailto:${operator.support_email}`} className={LINK_CLASS}>
-                {operator.support_email}
+              <a href={`mailto:${support_email}`} className={LINK_CLASS}>
+                {support_email}
               </a>
             </li>
-          )}
+          ) : null}
         </LegalLinks>
       </div>
     </footer>

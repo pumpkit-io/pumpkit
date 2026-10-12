@@ -7,9 +7,16 @@ export const SELLS_PLANS: Instance = {
   sign_in_methods: ['magic_link', 'google'],
 };
 
+/** For tests: a Self-hoster's Instance that gives a support address but no Operator details. */
+export const WITH_SUPPORT_EMAIL: Instance = {
+  ...DEFAULT_INSTANCE,
+  support_email: 'help@example.org',
+};
+
 /** For tests: an Instance with Operator details, as the hosted Instance is configured. */
 export const WITH_OPERATOR: Instance = {
   ...SELLS_PLANS,
+  support_email: 'help@example.org',
   operator: {
     name: 'Example S.R.L.',
     address: 'Via Roma 1, Milano, Italy',
@@ -17,6 +24,5 @@ export const WITH_OPERATOR: Instance = {
     rea: 'MI-123456',
     share_capital: '€10,000 fully paid in',
     pec: 'example@pec.it',
-    support_email: 'help@example.org',
   },
 };
