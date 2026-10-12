@@ -4,7 +4,7 @@ Thanks for helping! Pumpkit is in early development, so expect things to move.
 
 ## Development setup
 
-Prerequisites: Docker with Compose, Node.js 22 or newer with npm, and [uv](https://docs.astral.sh/uv/) (it installs the Python version in `backend/.python-version`).
+Prerequisites: Docker with Compose, Make, Node.js 22 or newer with npm, and [uv](https://docs.astral.sh/uv/) (it installs the Python version in `backend/.python-version`).
 
 ```bash
 # Environment: copy the example file, then fill in the required values (see docs/configuration.md)
@@ -12,22 +12,42 @@ cp .env.example .env
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"          # JWT_SECRET_KEY, POSTGRES_PASSWORD
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FERNET_ENCRYPTION_KEY
 
-# Run everything (Postgres, backend on :8000, frontend on :5173)
-docker compose -f compose.dev.yml up --build
-
-# Local tooling for tests, linting and the Git hooks
+# Local tooling for checks, tests and the Git hooks
 npm install                                   # repo root: installs the Husky pre-commit and pre-push hooks
-(cd frontend && npm install) && (cd e2e && npm install)
+(cd frontend && npm install) && (cd e2e && npm install && npx playwright install chromium)
 (cd backend && uv sync --extra dev)
+
+# Run everything with hot reload: Postgres, the backend on :8000, the publisher, and the app on :5173
+make dev
 ```
 
-Checks before you push:
+`make dev` runs the stack in `compose.dev.yml`, which bind-mounts `backend/` and `frontend/` and sets `PUBLIC_URL` to `http://localhost:5173`. Open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs. Without SMTP, Magic links go to the backend log.
+
+### Make targets
+
+CI runs these same targets, so a branch that passes them locally passes CI.
+
+| Target       | What it runs                                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| `make dev`   | The dev stack in `compose.dev.yml`, in the foreground                                                     |
+| `make check` | Lint, format check, typecheck and import contracts for backend, frontend and e2e, plus the frontend build |
+| `make test`  | Backend pytest and frontend vitest                                                                        |
+| `make fmt`   | The formatters in all three packages (ruff format and Prettier)                                           |
+| `make e2e`   | Starts the dev stack in the background if it is down, waits for it, then runs Playwright against it       |
+
+Each package also has its own targets: `check-backend`, `check-frontend`, `check-e2e`, `test-backend` and `test-frontend`. Run `make check test` before you push.
+
+The e2e suite opens the Billing dialog, so `make e2e` needs the Stripe billing group in `.env`. Dummy values work: `STRIPE_SECRET_KEY=sk_test_dummy`, `STRIPE_PUBLISHABLE_KEY=pk_test_dummy`, `STRIPE_WEBHOOK_SECRET=whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`.
+
+### Stripe webhooks
+
+To try billing against Stripe in test mode, put your test keys in `.env` and forward webhooks to the dev backend with the [Stripe CLI](https://docs.stripe.com/stripe-cli):
 
 ```bash
-cd backend && uv run ruff check . && uv run ruff format --check . && uv run --extra dev pyright && uv run --extra dev pytest
-cd frontend && npm run lint && npm run format:check && npm run typecheck && npm test && npm run build
-cd e2e && npm run format:check && npm run typecheck
+stripe listen --forward-to localhost:8000/api/v1/stripe/webhook
 ```
+
+Use the `whsec_...` secret it prints as `STRIPE_WEBHOOK_SECRET`, then restart the backend so it reads the new value.
 
 The project layout and common recipes are in [docs/development.md](./docs/development.md).
 

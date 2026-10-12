@@ -108,11 +108,11 @@ To rebrand, change `APP_NAME`, the meta tags and JSON-LD graph in `frontend/inde
 ## Testing
 
 ```bash
-cd backend && uv sync --extra dev && uv run --extra dev pytest
-cd frontend && npm test
-# e2e, run from the repo root against the dev stack
-docker compose -f compose.dev.yml up -d && cd e2e && npm install && npx playwright install chromium && npm test
+make test   # backend pytest and frontend vitest
+make e2e    # starts the dev stack if it is down, then runs Playwright against it
 ```
+
+Before the first `make e2e`, run `cd e2e && npm install && npx playwright install chromium`. CONTRIBUTING lists every target.
 
 The e2e suite opens the Billing dialog, so its Instance must sell Plans: set the Stripe billing group in `.env`, with dummy values if you like (CI uses `sk_test_dummy`, `pk_test_dummy`, `whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`).
 
@@ -126,7 +126,7 @@ services:
 ```
 
 ```bash
-COMPOSE_FILE=compose.dev.yml:compose.dev.override.local.yml docker compose up -d
+make dev DEV_COMPOSE="docker compose -f compose.dev.yml -f compose.dev.override.local.yml"
 ```
 
 ## Deployment
