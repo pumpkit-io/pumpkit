@@ -11,14 +11,14 @@ Website: https://pumpkit.io
 You need Docker with Compose. For running tests and tooling outside Docker, also Node.js 22+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-cp .env.example .env && cp backend/.env.example backend/.env && cp frontend/.env.example frontend/.env
+cp .env.example .env
 # Generate secrets
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"          # JWT_SECRET_KEY, POSTGRES_PASSWORD
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FERNET_ENCRYPTION_KEY
-docker compose up --build
+docker compose -f compose.dev.yml up --build
 ```
 
-Fill in the remaining values in the three `.env` files (optionally SMTP, which emails Magic links, or they go to the backend log; Stripe; optionally Google). Every variable is described in [docs/configuration.md](./docs/configuration.md). Users sign in only with Google or a Magic link (see [ADR 0002](./docs/adr/0002-google-and-magic-link-only.md)). Then open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs.
+Fill in the required values in `.env` (optionally SMTP, which emails Magic links, or they go to the backend log; Stripe; optionally Google). Every variable is described in [docs/configuration.md](./docs/configuration.md). Users sign in only with Google or a Magic link (see [ADR 0002](./docs/adr/0002-google-and-magic-link-only.md)). Then open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs.
 
 To receive Stripe webhooks locally:
 

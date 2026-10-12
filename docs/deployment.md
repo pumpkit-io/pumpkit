@@ -39,9 +39,7 @@ Give the server read access to the repo with a deploy key (`ssh-keygen` as
 `pumpkit`, add the public key to the repository's deploy keys).
 
 Create, as `pumpkit`:
-- `/home/pumpkit/app/.env`: from `.env.example`, with `ENV=prod`, real `POSTGRES_*`, `BACKEND_URL`/`FRONTEND_URL` = `https://<domain>`, `CORS_ORIGINS='["https://<domain>"]'`.
-- `/home/pumpkit/app/backend/.env`: from `backend/.env.example`, with production secrets and `https://<domain>/billing/...` Stripe URLs. The hosted Instance also sets the Operator details (`OPERATOR_*`) to the company named in the Terms, so the footer, legal pages and Terms at checkout appear, and `SUPPORT_EMAIL`, which the Operator details require. A Self-hoster may set `SUPPORT_EMAIL` alone to offer a support link.
-- `/home/pumpkit/app/frontend/.env`: `VITE_API_URL=https://<domain>/api/v1`. The app name and PostHog come from `backend/.env` at runtime; with PostHog, set `POSTHOG_HOST=https://<domain>/ph-relay` there.
+- `/home/pumpkit/app/.env`: from `.env.example`, with `PUBLIC_URL=https://<domain>`, production secrets and real `POSTGRES_*`; every other URL derives from `PUBLIC_URL`. The hosted Instance also sets the Operator details (`OPERATOR_*`) to the company named in the Terms, so the footer, legal pages and Terms at checkout appear, and `SUPPORT_EMAIL`, which the Operator details require. A Self-hoster may set `SUPPORT_EMAIL` alone to offer a support link. With PostHog, set `POSTHOG_HOST=https://<domain>/ph-relay`.
 
 ## 4. Backend service
 
@@ -56,7 +54,7 @@ After=network-online.target
 User=pumpkit
 WorkingDirectory=/home/pumpkit/app/backend
 EnvironmentFile=/home/pumpkit/app/.env
-EnvironmentFile=/home/pumpkit/app/backend/.env
+EnvironmentFile=-/home/pumpkit/app/backend/.env
 ExecStartPre=/home/pumpkit/.local/bin/uv run alembic upgrade head
 ExecStart=/home/pumpkit/.local/bin/uv run uvicorn pumpkit.main:app --host 127.0.0.1 --port 8000 --workers 2
 Restart=always
@@ -123,9 +121,8 @@ behaviour set to inclusive, so consumer prices include VAT as the Terms say.
 ## 7. X app
 
 Scheduled posts publish through the X app whose `X_CLIENT_ID` and `X_CLIENT_SECRET`
-are in `backend/.env`. In the X developer portal, add
-`https://<domain>/oauth/x/callback` to the app's callback URLs and set the same value
-as `X_REDIRECT_URI`.
+are in `.env`. In the X developer portal, add
+`https://<domain>/oauth/x/callback` to the app's callback URLs.
 
 ## 8. Deploy
 

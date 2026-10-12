@@ -7,13 +7,13 @@ Thanks for helping! Pumpkit is in early development, so expect things to move.
 Prerequisites: Docker with Compose, Node.js 22 or newer with npm, and [uv](https://docs.astral.sh/uv/) (it installs the Python version in `backend/.python-version`).
 
 ```bash
-# Environment: copy the three example files, then fill in the values (see docs/configuration.md)
-cp .env.example .env && cp backend/.env.example backend/.env && cp frontend/.env.example frontend/.env
+# Environment: copy the example file, then fill in the required values (see docs/configuration.md)
+cp .env.example .env
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"          # JWT_SECRET_KEY, POSTGRES_PASSWORD
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FERNET_ENCRYPTION_KEY
 
 # Run everything (Postgres, backend on :8000, frontend on :5173)
-docker compose up --build
+docker compose -f compose.dev.yml up --build
 
 # Local tooling for tests, linting and the Git hooks
 npm install                                   # repo root: installs the Husky pre-commit and pre-push hooks

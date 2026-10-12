@@ -19,7 +19,7 @@
     }
 
     # First-party PostHog relay dodges adblockers; blocklists match names like /ingest or /analytics.
-    # backend/.env must set POSTHOG_HOST=https://<domain>/ph-relay.
+    # .env must set POSTHOG_HOST=https://<domain>/ph-relay.
     @ph_static path /ph-relay/static/*
     @ph_general path /ph-relay/*
 
