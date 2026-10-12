@@ -7,10 +7,9 @@ Thanks for helping! Pumpkit is in early development, so expect things to move.
 Prerequisites: Docker with Compose, Make, Node.js 22 or newer with npm, and [uv](https://docs.astral.sh/uv/) (it installs the Python version in `backend/.python-version`).
 
 ```bash
-# Environment: copy the example file, then fill in the required values (see docs/configuration.md)
-cp .env.example .env
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"          # JWT_SECRET_KEY, POSTGRES_PASSWORD
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FERNET_ENCRYPTION_KEY
+# Environment: writes .env with the secrets generated (see docs/configuration.md).
+# Placeholder keys are enough until you write a Post or add an Inspiration author.
+LLM_API_KEY=dev TWITTERAPI_IO_API_KEY=dev sh scripts/setup.sh --public-url http://localhost:5173 </dev/null
 
 # Local tooling for checks, tests and the Git hooks
 npm install                                   # repo root: installs the Husky pre-commit and pre-push hooks
@@ -21,7 +20,7 @@ npm install                                   # repo root: installs the Husky pr
 make dev
 ```
 
-`make dev` runs the stack in `compose.dev.yml`, which bind-mounts `backend/` and `frontend/` and sets `PUBLIC_URL` to `http://localhost:5173`. Open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs. Without SMTP, Magic links go to the backend log.
+`make dev` runs the stack in `compose.dev.yml`, which bind-mounts `backend/` and `frontend/` and sets `PUBLIC_URL` to `http://localhost:5173`. Open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs. Without SMTP, Magic links go to the backend log (`docker compose -f compose.dev.yml logs backend | grep "Magic link for"`). To add a real key later, edit its line in `.env`: `setup.sh` keeps values already there.
 
 ### Make targets
 
@@ -63,6 +62,10 @@ The project layout and common recipes are in [docs/development.md](./docs/develo
 - Fill in the PR template: a small summary visual, before/after evidence (a screenshot or test output), and the merge danger.
 - CI (lint, format, typecheck, tests) must pass.
 - Domain terms come from `GLOSSARY.md`; architectural decisions live in `docs/adr/`; review standards are in `CODING_STANDARDS.md`.
+
+## Releases
+
+Maintainers cut releases by pushing a version tag; [docs/releasing.md](./docs/releasing.md) has the steps and the pumpkit.io deploy.
 
 ## AI-assisted contributions
 
