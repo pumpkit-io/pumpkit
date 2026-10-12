@@ -408,7 +408,7 @@ Find the symptom, run the check it gives, and fix the cause.
 
 **`docker compose up` fails with `port is already allocated` or `address already in use`.** Another program holds `HTTP_PORT` (default 8080) or `HTTPS_PORT` (default 443). On a laptop, set both to free ports in `.env`, such as `HTTP_PORT=8081`, `HTTPS_PORT=8444` and `PUBLIC_URL=http://localhost:8081`. On a server, stop whatever else serves ports 80 and 443 (`sudo ss -ltnp | grep -E ':(80|443) '` names it).
 
-**`docker compose up` or `pull` fails with `denied` for a `ghcr.io/pumpkit-io` image.** No release has the version in `PUMPKIT_VERSION`. Check it against [the releases](https://github.com/pumpkit-io/pumpkit/releases), or build from source with `docker compose up -d --wait --build`.
+**`docker compose` prints `denied` for a `ghcr.io/pumpkit-io` image.** No published release has the version in `PUMPKIT_VERSION`. `docker compose up` then builds the images from the checkout instead (the output goes on with `Building`), which works but takes several minutes; `docker compose pull` fails. Check the version against [the releases](https://github.com/pumpkit-io/pumpkit/releases).
 
 **`docker compose up --wait` fails because `backend` is unhealthy.** Read why:
 
@@ -428,9 +428,9 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **Google sign-in fails with `redirect_uri_mismatch`.** The OAuth client's redirect URI must be exactly `PUBLIC_URL/api/v1/oauth/google/callback`.
 
-**Writing a Post fails.** The LLM key is wrong or has no credit, or `LLM_BASE_URL` and the three models don't match. `docker compose logs --tail 50 backend` shows the endpoint's error.
+**Adding an Inspiration author shows "X can't be read right now. Please try again later."** twitterapi.io refused the request. `docker compose logs backend | grep "twitterapi.io returned" | tail -1` prints the status: `twitterapi.io returned HTTP 401` means `TWITTERAPI_IO_API_KEY` is wrong; for another status, check your account and credit on the twitterapi.io dashboard.
 
-**Adding an Inspiration author fails.** The twitterapi.io key is wrong or has no credit, or the X handle does not exist.
+**Writing a Post fails.** The LLM key is wrong or has no credit, or `LLM_BASE_URL` and the three models don't match. `docker compose logs --tail 50 backend` shows the endpoint's error.
 
 **Connecting X fails.** The X group is unset, or the X app's callback URL is not exactly `PUBLIC_URL/oauth/x/callback`, or the app is not an OAuth 2.0 confidential client with read and write permissions.
 
