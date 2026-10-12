@@ -169,7 +169,7 @@ async def test_the_stripe_checkout_charges_vat_and_collects_vat_ids():
     assert form["customer_update[name]"] == ["auto"]
 
 
-async def test_the_stripe_checkout_keeps_the_operator_the_seller():
+async def test_the_stripe_checkout_keeps_the_instance_the_seller():
     http = _RecordedStripe(
         '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'
     )
