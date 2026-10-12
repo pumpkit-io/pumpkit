@@ -1,7 +1,10 @@
 # CI calls these targets (.github/workflows/ci.yml), so a target that passes here passes there.
 DEV_COMPOSE ?= docker compose -f compose.dev.yml
+# The production stack; pass COMPOSE="docker compose -p NAME" to run it beside another one.
+COMPOSE ?= docker compose
+SMOKE_URL ?= http://localhost:8080
 
-.PHONY: dev check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-wait
+.PHONY: dev check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-wait smoke
 
 dev:
 	$(DEV_COMPOSE) up --build
@@ -52,3 +55,8 @@ e2e-wait:
 			sleep 2; \
 		done; \
 	done
+
+# Builds and starts the production stack from this checkout's .env, then checks it over HTTP.
+smoke:
+	$(COMPOSE) up -d --build --wait --wait-timeout 300
+	sh scripts/check-stack.sh $(SMOKE_URL)

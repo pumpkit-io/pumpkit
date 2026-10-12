@@ -1,0 +1,12 @@
+# Runs the stack against an external Postgres instead of the bundled db service.
+# Set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_DB, POSTGRES_PASSWORD (and POSTGRES_SSL=require
+# for a managed database) in .env, plus COMPOSE_FILE=compose.yml:compose.external-db.yml so that
+# every docker compose command picks this file up.
+services:
+
+  # Only an explicit `--profile bundled-db` starts it.
+  db:
+    profiles: [bundled-db]
+
+  backend:
+    depends_on: !reset {}

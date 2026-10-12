@@ -278,6 +278,51 @@ async def test_the_loop_runs_passes_until_it_is_stopped(
     assert (await _listed(client))["From the loop"]["state"] == "published"
 
 
+async def test_the_loop_touches_its_heartbeat_after_each_pass_that_completes(
+    db_session_maker, fake_x_publisher, fixed_clock, tmp_path
+):
+    heartbeat = tmp_path / "heartbeat"
+    stop = asyncio.Event()
+
+    looping = asyncio.create_task(
+        run(
+            db_session_maker,
+            fake_x_publisher,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+            heartbeat=heartbeat,
+        )
+    )
+    await asyncio.sleep(0.2)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=1)
+
+    assert heartbeat.exists()
+
+
+async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed_clock, tmp_path):
+    heartbeat = tmp_path / "heartbeat"
+    broken_session_maker = MagicMock(side_effect=RuntimeError("database unreachable"))
+    stop = asyncio.Event()
+
+    looping = asyncio.create_task(
+        run(
+            broken_session_maker,
+            fake_x_publisher,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+            heartbeat=heartbeat,
+        )
+    )
+    await asyncio.sleep(0.1)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=1)
+
+    assert not heartbeat.exists()
+
+
 async def test_the_pass_tracks_what_it_publishes(
     client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, monkeypatch
 ):

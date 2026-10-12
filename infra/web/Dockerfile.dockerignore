@@ -1,0 +1,5 @@
+*
+!frontend
+!infra/web
+frontend/node_modules
+frontend/dist

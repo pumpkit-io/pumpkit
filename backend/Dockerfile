@@ -19,3 +19,6 @@ RUN uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/requiremen
     && uv pip install --system -r /tmp/requirements.txt
 
 COPY . .
+
+# Migrations, then the API. The publisher runs `python -m pumpkit.scheduling.publisher` instead.
+CMD ["/app/start.sh"]

@@ -2,7 +2,9 @@
 
 import asyncio
 import signal
+import tempfile
 from datetime import timedelta
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -16,6 +18,9 @@ from pumpkit.core.logging import logger
 from pumpkit.core.time import Clock, system_clock
 from pumpkit.scheduling.publishing import fail_stuck, publish_next_due
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
+
+# compose.yml's publisher healthcheck reads this path's age.
+HEARTBEAT_FILE = Path(tempfile.gettempdir()) / "pumpkit-publisher-heartbeat"
 
 
 async def run_pass(
@@ -41,13 +46,20 @@ async def run(
     *,
     poll_interval: timedelta,
     stop: asyncio.Event,
+    heartbeat: Optional[Path] = None,
 ) -> None:
-    """Run a pass every `poll_interval` until `stop` is set. A failed pass is logged and retried."""
+    """
+    Run a pass every `poll_interval` until `stop` is set. A failed pass is logged and retried.
+    Each pass that completes touches `heartbeat`, which the container healthcheck reads.
+    """
     while not stop.is_set():
         try:
             await run_pass(session_maker, publisher, clock, stop)
         except Exception:
             logger.exception("Publisher pass failed; trying again next interval")
+        else:
+            if heartbeat is not None:
+                heartbeat.touch()
         try:
             await asyncio.wait_for(stop.wait(), timeout=poll_interval.total_seconds())
         except TimeoutError:
@@ -70,6 +82,7 @@ async def main() -> None:
             system_clock,
             poll_interval=interval,
             stop=stop,
+            heartbeat=HEARTBEAT_FILE,
         )
     finally:
         logger.info("Publisher stopping")
