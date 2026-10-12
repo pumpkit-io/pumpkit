@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-12
+
 The first release that a Self-hoster can install.
 
 ### Added
