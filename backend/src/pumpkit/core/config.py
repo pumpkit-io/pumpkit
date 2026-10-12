@@ -5,6 +5,8 @@ from typing import Annotated, Literal, Optional, Self
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode
 
+from pumpkit.core.db.urls import PostgresSsl
+
 Environment = Literal["local", "dev", "stg", "prod"]
 LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 SmtpSecurity = Literal["starttls", "tls", "none"]
@@ -40,6 +42,7 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str
     POSTGRES_PORT: str
     POSTGRES_DB: str
+    POSTGRES_SSL: PostgresSsl = "disable"
 
     # Authentication
     JWT_SECRET_KEY: str

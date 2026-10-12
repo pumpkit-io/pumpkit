@@ -42,7 +42,7 @@ def build_connection_url() -> str:
         host=get_required_setting("POSTGRES_HOST"),
         port=get_required_setting("POSTGRES_PORT"),
         database=get_required_setting("POSTGRES_DB"),
-        env=os.getenv("ENV", "local"),
+        ssl=os.getenv("POSTGRES_SSL") or "disable",
     )
 
 

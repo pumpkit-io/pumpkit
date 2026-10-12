@@ -10,7 +10,7 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 
 | Variable | Meaning |
 | --- | --- |
-| `ENV` | `local` or `prod`. With `prod` the database connection requires SSL. |
+| `ENV` | `local` or `prod`. |
 | `LOG_LEVEL` (optional) | Python log level. Defaults to `INFO`. |
 | `APP_NAME` (optional) | Brand name used in emails, server-side copy and the UI, which reads it from `GET /api/v1/instance`. Defaults to `Pumpkit`. |
 | `BACKEND_URL`, `BACKEND_PORT` | Public URL and port of the backend. |
@@ -18,6 +18,7 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `CORS_ORIGINS` | Allowed origins, as a quoted JSON list (see note below). |
 | `POSTGRES_USER`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB` | Database connection parts. |
 | `POSTGRES_PASSWORD` | Database password: a random string of at least 32 characters. |
+| `POSTGRES_SSL` (optional) | `disable` (default) or `require`. With `require` the backend and Alembic connect with SSL (`sslmode=require` / `ssl=require`), which managed Postgres providers need. `ENV` has no effect on SSL. |
 
 `CORS_ORIGINS` is single-quoted JSON (`'["http://localhost:5173"]'`). `docker compose` `env_file` accepts that form; a plain `docker run --env-file` would keep the quotes as part of the value. The backend builds its sync database URL (used by Alembic) with the `psycopg2` driver explicitly and the async one with `asyncpg`.
 
