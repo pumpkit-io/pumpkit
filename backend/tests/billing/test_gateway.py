@@ -169,6 +169,22 @@ async def test_the_stripe_checkout_charges_vat_and_collects_vat_ids():
     assert form["customer_update[name]"] == ["auto"]
 
 
+async def test_the_stripe_checkout_keeps_the_operator_the_seller():
+    http = _RecordedStripe(
+        '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'
+    )
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    await gateway.create_subscription_checkout(
+        customer_id="cus_1", price_id="price_1Monthly", quantity=1, user_id="user_1"
+    )
+
+    [form] = http.forms
+    # Stripe turns Managed Payments on by default for new accounts, which makes Stripe
+    # the merchant of record and refuses products without a tax code.
+    assert form["managed_payments[enabled]"] == ["false"]
+
+
 async def test_the_fake_lists_a_cancelled_subscription_as_ended():
     gateway = FakeBillingGateway()
     incomplete = SubscriptionState(
