@@ -21,6 +21,7 @@ The first release that a Self-hoster can install.
 - Any OpenAI-compatible LLM endpoint (`LLM_BASE_URL`, `LLM_API_KEY`), with the drafting, humanizing and revising models as settings.
 - `POSTGRES_SSL` to require SSL on the database connection, independent of `ENV`.
 - `ALLOW_SEARCH_INDEXING`, off by default, so an Instance is hidden from search engines unless it opts in.
+- `docs/self-hosting.md`, the guide to running an Instance on a laptop or a server, which the README's prompt asks an AI agent to follow.
 - A root `Makefile` with `dev`, `check`, `test`, `fmt`, `e2e` and `smoke`, which CI also runs.
 
 ### Changed
@@ -35,4 +36,4 @@ The first release that a Self-hoster can install.
 ### Removed
 
 - `backend/.env.example` and `frontend/.env.example`.
-- The systemd units, `scripts/deploy.sh` and `docs/deployment.md`. Deploy with the production compose file instead.
+- The systemd deploy: the publisher's systemd unit, `infra/Caddyfile`, `scripts/deploy.sh` with its `deploy.env.example` and PostHog deploy annotations, and `docs/deployment.md`. Deploy with the production compose file instead, following `docs/self-hosting.md`.
