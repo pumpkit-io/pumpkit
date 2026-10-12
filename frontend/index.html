@@ -11,32 +11,33 @@
       name="description"
       content="Pumpkit is an open-source writing tool for X. Write a brief, pick up to three X authors to learn style from, and get a post ready to paste. Not quite right? Say what to change and get a new version."
     />
-    <link rel="canonical" href="https://pumpkit.io/" />
-    <meta name="robots" content="index,follow" />
+    <!-- The web image fills in the public URL and turns on indexing when it starts: infra/web/start.d/20-index-html.sh. -->
+    <link rel="canonical" href="__PUBLIC_URL__/" />
+    <meta name="robots" content="noindex,nofollow" />
     <meta name="theme-color" content="#ffffff" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Pumpkit" />
-    <meta property="og:url" content="https://pumpkit.io/" />
+    <meta property="og:url" content="__PUBLIC_URL__/" />
     <meta property="og:title" content="Pumpkit: open-source writing tool for X" />
     <meta
       property="og:description"
       content="Pumpkit is an open-source writing tool for X. Write a brief, pick up to three X authors to learn style from, and get a post ready to paste. Not quite right? Say what to change and get a new version."
     />
     <!-- Placeholder: og-image.png was made for the old product; redo it from the real product screenshot. -->
-    <meta property="og:image" content="https://pumpkit.io/og-image.png" />
+    <meta property="og:image" content="__PUBLIC_URL__/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:locale" content="en_US" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:url" content="https://pumpkit.io/" />
+    <meta name="twitter:url" content="__PUBLIC_URL__/" />
     <meta name="twitter:title" content="Pumpkit: open-source writing tool for X" />
     <meta
       name="twitter:description"
       content="Pumpkit is an open-source writing tool for X. Write a brief, pick up to three X authors to learn style from, and get a post ready to paste. Not quite right? Say what to change and get a new version."
     />
-    <meta name="twitter:image" content="https://pumpkit.io/og-image.png" />
+    <meta name="twitter:image" content="__PUBLIC_URL__/og-image.png" />
 
     <script type="application/ld+json">
       {
@@ -44,30 +45,30 @@
         "@graph": [
           {
             "@type": "Organization",
-            "@id": "https://pumpkit.io/#organization",
+            "@id": "__PUBLIC_URL__/#organization",
             "name": "Pumpkit",
-            "url": "https://pumpkit.io/",
-            "logo": "https://pumpkit.io/apple-touch-icon.png",
+            "url": "__PUBLIC_URL__/",
+            "logo": "__PUBLIC_URL__/apple-touch-icon.png",
             "sameAs": ["https://github.com/pumpkit-io/pumpkit"]
           },
           {
             "@type": "WebSite",
-            "@id": "https://pumpkit.io/#website",
+            "@id": "__PUBLIC_URL__/#website",
             "name": "Pumpkit",
-            "url": "https://pumpkit.io/",
+            "url": "__PUBLIC_URL__/",
             "description": "Pumpkit is an open-source writing tool for X. Write a brief, pick up to three X authors to learn style from, and get a post ready to paste. Not quite right? Say what to change and get a new version.",
-            "publisher": { "@id": "https://pumpkit.io/#organization" }
+            "publisher": { "@id": "__PUBLIC_URL__/#organization" }
           },
           {
             "@type": "SoftwareApplication",
-            "@id": "https://pumpkit.io/#software",
+            "@id": "__PUBLIC_URL__/#software",
             "name": "Pumpkit",
-            "url": "https://pumpkit.io/",
+            "url": "__PUBLIC_URL__/",
             "description": "Pumpkit is an open-source writing tool for X. Write a brief, pick up to three X authors to learn style from, and get a post ready to paste. Not quite right? Say what to change and get a new version.",
             "applicationCategory": "BusinessApplication",
             "operatingSystem": "Web",
             "license": "https://www.gnu.org/licenses/agpl-3.0.html",
-            "publisher": { "@id": "https://pumpkit.io/#organization" }
+            "publisher": { "@id": "__PUBLIC_URL__/#organization" }
           }
         ]
       }
