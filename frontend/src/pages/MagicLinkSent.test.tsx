@@ -34,7 +34,7 @@ describe('the Magic link sent page', () => {
 
     expect(screen.getByRole('link', { name: 'Contact support' })).toHaveAttribute(
       'href',
-      expect.stringMatching(/\/support\/contact$/),
+      '/api/v1/support/contact',
     );
   });
 

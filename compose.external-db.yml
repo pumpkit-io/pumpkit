@@ -1,0 +1,9 @@
+# Swaps the bundled db service for an external Postgres, set up as docs/self-hosting.md#external-postgres says.
+services:
+
+  # Only an explicit `--profile bundled-db` starts it.
+  db:
+    profiles: [bundled-db]
+
+  backend:
+    depends_on: !reset {}

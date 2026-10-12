@@ -1,9 +1,10 @@
 import axios, { AxiosResponse } from 'axios';
 import { APP_SLUG } from '@/lib/app';
+import { API_BASE_URL } from '@/lib/api';
 import { readSession, writeSession } from '@/lib/session/store';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },

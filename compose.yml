@@ -1,0 +1,83 @@
+# The production stack, a whole Instance from the release images; docs/self-hosting.md runs it.
+name: pumpkit
+
+services:
+
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+
+  # Applies the migrations, then serves the API.
+  backend:
+    image: ghcr.io/pumpkit-io/pumpkit-backend:${PUMPKIT_VERSION:-latest}
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+
+  # Publishes due Scheduled posts (ADR 0007), only once the backend has migrated the database.
+  publisher:
+    image: ghcr.io/pumpkit-io/pumpkit-backend:${PUMPKIT_VERSION:-latest}
+    build: ./backend
+    command: ["python", "-m", "pumpkit.scheduling.publisher"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # Each completed pass touches the heartbeat, so a stale one means passes keep failing.
+      test: ["CMD-SHELL", "find /tmp/pumpkit-publisher-heartbeat -mmin -5 | grep -q ."]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      start_interval: 2s
+
+  # Serves the frontend and proxies /api to the backend; terminates TLS for an https PUBLIC_URL.
+  web:
+    image: ghcr.io/pumpkit-io/pumpkit-web:${PUMPKIT_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: infra/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      ALLOW_SEARCH_INDEXING: ${ALLOW_SEARCH_INDEXING:-false}
+      POSTHOG_RELAY: ${POSTHOG_RELAY:-false}
+    ports:
+      - ${HTTP_PORT:-8080}:80
+      - ${HTTPS_PORT:-443}:443
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    healthcheck:
+      # Caddy's admin endpoint answers only inside the container.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 5s
+
+volumes:
+  postgres_data:
+  # Caddy's certificates and ACME account.
+  caddy_data:
+  caddy_config:

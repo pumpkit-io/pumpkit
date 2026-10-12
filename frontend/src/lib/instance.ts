@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '@/lib/api';
+
 /** What this Instance offers, from `GET /instance`, so one frontend build serves every Instance. */
 
 export type SignInMethod = 'magic_link' | 'google';
@@ -43,7 +45,7 @@ export const DEFAULT_INSTANCE: Instance = {
  */
 export async function fetchInstance(): Promise<Instance> {
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/instance`);
+    const response = await fetch(`${API_BASE_URL}/instance`);
     if (!response.ok) throw new Error(`GET /instance answered ${response.status}`);
     return (await response.json()) as Instance;
   } catch (error) {

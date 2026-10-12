@@ -253,7 +253,7 @@ describe('Scheduled', () => {
 
   it('shows why connecting failed to start', async () => {
     vi.mocked(xConnectionService.startAuthorization).mockRejectedValue(
-      apiError(503, 'X_CLIENT_ID, X_CLIENT_SECRET and X_REDIRECT_URI must be set.'),
+      apiError(503, 'X_CLIENT_ID and X_CLIENT_SECRET must be set in .env to connect X accounts.'),
     );
     renderScheduled();
 

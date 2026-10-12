@@ -7,6 +7,7 @@ import asyncio
 import subprocess
 import sys
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,7 +16,7 @@ from httpx import AsyncClient
 
 import pumpkit.scheduling.publish as publish_module
 import pumpkit.scheduling.service as scheduled_posts_service
-from pumpkit.scheduling.publisher import run, run_pass
+from pumpkit.scheduling.publisher import HEARTBEAT_FILE, run, run_pass
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
@@ -276,6 +277,57 @@ async def test_the_loop_runs_passes_until_it_is_stopped(
     await asyncio.wait_for(looping, timeout=1)
 
     assert (await _listed(client))["From the loop"]["state"] == "published"
+
+
+async def test_the_loop_touches_its_heartbeat_after_each_pass_that_completes(
+    db_session_maker, fake_x_publisher, fixed_clock, tmp_path
+):
+    heartbeat = tmp_path / "heartbeat"
+    stop = asyncio.Event()
+
+    looping = asyncio.create_task(
+        run(
+            db_session_maker,
+            fake_x_publisher,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+            heartbeat=heartbeat,
+        )
+    )
+    await asyncio.sleep(0.2)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=1)
+
+    assert heartbeat.exists()
+
+
+async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed_clock, tmp_path):
+    heartbeat = tmp_path / "heartbeat"
+    broken_session_maker = MagicMock(side_effect=RuntimeError("database unreachable"))
+    stop = asyncio.Event()
+
+    looping = asyncio.create_task(
+        run(
+            broken_session_maker,
+            fake_x_publisher,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+            heartbeat=heartbeat,
+        )
+    )
+    await asyncio.sleep(0.1)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=1)
+
+    assert not heartbeat.exists()
+
+
+def test_the_compose_healthcheck_reads_the_heartbeat_the_publisher_touches():
+    compose = (Path(__file__).parents[3] / "compose.yml").read_text()
+
+    assert f"find {HEARTBEAT_FILE} -mmin" in compose
 
 
 async def test_the_pass_tracks_what_it_publishes(

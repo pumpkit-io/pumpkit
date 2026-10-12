@@ -32,9 +32,9 @@ _NO_STORE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 
 
 def _refresh_cookie_name() -> str:
-    # In production the "__Host-" prefix makes the browser accept the cookie only
-    # over HTTPS, with path "/" and no domain attribute.
-    return "__Host-refresh_token" if settings.is_env_production() else "refresh_token"
+    # Over HTTPS the "__Host-" prefix makes the browser accept the cookie only when
+    # Secure, with path "/" and no domain attribute. Safari drops Secure cookies on http://localhost.
+    return "__Host-refresh_token" if settings.serves_https() else "refresh_token"
 
 
 def _refresh_cookie_attributes() -> dict[str, Any]:
@@ -43,7 +43,7 @@ def _refresh_cookie_attributes() -> dict[str, Any]:
         "key": _refresh_cookie_name(),
         "path": "/",
         "httponly": True,  # Out of reach of page scripts (XSS)
-        "secure": settings.is_env_production(),
+        "secure": settings.serves_https(),
         "samesite": "lax",
     }
 
@@ -89,7 +89,7 @@ class IssuedSession:
         A 303 to a frontend callback page (e.g. `/auth/magic-link/callback`) carrying
         the access token and its expiry in the URL fragment, which never reaches a server.
         """
-        url = f"{settings.FRONTEND_URL}{callback_path}#{urlencode(self._access_token_fields())}"
+        url = f"{settings.frontend_url()}{callback_path}#{urlencode(self._access_token_fields())}"
         response = RedirectResponse(
             url=url, status_code=status.HTTP_303_SEE_OTHER, headers=_NO_STORE_HEADERS
         )
@@ -153,7 +153,7 @@ def sign_in_error_redirect(code: str) -> RedirectResponse:
     sign-in page with a machine-readable error code (e.g. `sign_in_failed`).
     """
     return RedirectResponse(
-        url=f"{settings.FRONTEND_URL}/login?error={code}",
+        url=f"{settings.frontend_url()}/login?error={code}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

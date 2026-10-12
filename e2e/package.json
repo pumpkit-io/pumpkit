@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "End-to-end smoke tests (run against docker compose up)",
+  "description": "End-to-end smoke tests (run against the compose.dev.yml stack)",
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",

@@ -1,6 +1,2 @@
 User-agent: *
-Allow: /
-Disallow: /home
-Disallow: /billing
-
-Sitemap: https://pumpkit.io/sitemap.xml
+Disallow: /

@@ -19,25 +19,17 @@ jobs:
           ./gitleaks git --no-banner --redact
   backend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - run: uv sync --locked --extra dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run --extra dev pyright
-      - run: uv run --extra dev lint-imports
-      - run: uv run --extra dev pytest
+        working-directory: backend
+      - run: make check-backend
+      - run: make test-backend
   frontend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,18 +38,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-        env:
-          VITE_API_URL: http://localhost:8000/api/v1
-  e2e-format:
+        working-directory: frontend
+      - run: make check-frontend
+      - run: make test-frontend
+  e2e-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: e2e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,25 +51,25 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
       - run: npm ci
-      - run: npm run format:check
+        working-directory: e2e
+      - run: make check-e2e
   e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Write env files
+      - name: Write .env
         run: |
           cp .env.example .env
           sed -i 's|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=e2e|' .env
-          cp frontend/.env.example frontend/.env
-          cp backend/.env.example backend/.env
-          sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$(openssl rand -hex 32)|" backend/.env
-          sed -i "s|^FERNET_ENCRYPTION_KEY=.*|FERNET_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')|" backend/.env
-      - run: docker compose up -d --build
-      - name: Wait for the backend and frontend
-        run: |
-          for url in http://localhost:8000/docs http://localhost:5173; do
-            timeout 180 bash -c "until curl -s -o /dev/null $url; do sleep 2; done"
-          done
+          sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$(openssl rand -hex 32)|" .env
+          sed -i "s|^FERNET_ENCRYPTION_KEY=.*|FERNET_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')|" .env
+          # The suite opens the Billing dialog, which only an Instance selling Plans shows.
+          cat >> .env <<'EOF'
+          STRIPE_SECRET_KEY=sk_test_dummy
+          STRIPE_PUBLISHABLE_KEY=pk_test_dummy
+          STRIPE_WEBHOOK_SECRET=whsec_dummy
+          BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'
+          EOF
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -94,21 +79,23 @@ jobs:
         working-directory: e2e
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
-      - run: npm test
-        working-directory: e2e
+      - run: make e2e
       - if: failure()
-        run: docker compose logs --tail 100
-  e2e-typecheck:
+        run: docker compose -f compose.dev.yml logs --tail 100
+  stack:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: e2e
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: e2e/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
+      - run: sh scripts/setup.sh --public-url http://localhost:8080 --llm-api-key dummy --twitterapi-io-api-key dummy </dev/null
+      - run: make smoke
+      - name: Check search indexing turned on
+        run: |
+          ALLOW_SEARCH_INDEXING=true docker compose up -d --wait web
+          EXPECT_SEARCH_INDEXING=true sh scripts/check-stack.sh
+      - if: failure()
+        run: docker compose logs --tail 100
+  release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/check-release-notes.sh

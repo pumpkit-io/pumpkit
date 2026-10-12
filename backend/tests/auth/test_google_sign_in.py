@@ -5,6 +5,7 @@ Google sign-in over HTTP, through the fake `GoogleSignIn` port and real token ve
 from dataclasses import replace
 from urllib.parse import parse_qs, urlsplit
 
+import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import func, select
 
@@ -185,6 +186,23 @@ async def test_a_refused_google_sign_in_leaves_nothing_behind(
         "/api/v1/users/me", headers={"Authorization": f"Bearer {signed_in.access_token}"}
     )
     assert me.json()["first_name"] is None
+
+
+@pytest.mark.parametrize(
+    ("env", "public_url", "secure"),
+    [("prod", "http://localhost:8080", False), ("local", "https://pumpkit.example.org", True)],
+)
+async def test_google_sign_in_cookies_are_secure_exactly_when_the_public_url_is_https(
+    new_browser, monkeypatch, env, public_url, secure
+):
+    monkeypatch.setattr(settings, "ENV", env)
+    monkeypatch.setattr(settings, "PUBLIC_URL", public_url)
+
+    started = await new_browser().get("/api/v1/login/google")
+
+    cookies = started.headers.get_list("set-cookie")
+    assert len(cookies) == 3
+    assert all(("; secure" in cookie.lower()) is secure for cookie in cookies)
 
 
 async def test_without_google_settings_the_google_sign_in_routes_are_not_found(

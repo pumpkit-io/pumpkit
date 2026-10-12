@@ -1,0 +1,108 @@
+name: Release
+# Pushing a tag vX.Y.Z publishes both images to GHCR, then a GitHub Release with that version's CHANGELOG section.
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      # Image tags and PUMPKIT_VERSION drop the tag's v.
+      - id: version
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag $GITHUB_REF_NAME is not vX.Y.Z or vX.Y.Z-prerelease"
+            exit 1
+          fi
+          case $version in
+            *-*) prerelease=true ;;
+            *) prerelease=false ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+      - name: Check PUMPKIT_VERSION in .env.example
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          expected=${VERSION%%-*}
+          actual=$(sed -n 's/^PUMPKIT_VERSION=//p' .env.example)
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::.env.example sets PUMPKIT_VERSION=$actual; set it to $expected before tagging"
+            exit 1
+          fi
+      # Fails before any image is pushed when the CHANGELOG has no section for this version.
+      - name: Check release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: sh scripts/release-notes.sh "$VERSION" || { [ "$PRERELEASE" = true ] && sh scripts/release-notes.sh Unreleased; }
+
+  images:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: pumpkit-backend
+            context: backend
+            file: backend/Dockerfile
+          - image: pumpkit-web
+            context: .
+            file: infra/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Tags X.Y.Z, plus latest unless the tag is a pre-release.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/pumpkit-io/${{ matrix.image }}
+          tags: type=semver,pattern={{version}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  release:
+    needs: [check, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      # A pre-release without its own CHANGELOG section takes the Unreleased one.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          set -- --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
+          if [ "$PRERELEASE" = true ]; then
+            set -- "$@" --prerelease
+            sh scripts/release-notes.sh "$VERSION" > notes.md || sh scripts/release-notes.sh Unreleased > notes.md
+          else
+            sh scripts/release-notes.sh "$VERSION" > notes.md
+          fi
+          gh release create "$GITHUB_REF_NAME" "$@"
