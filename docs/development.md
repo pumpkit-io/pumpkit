@@ -23,7 +23,7 @@ frontend/src/
   lib/             analytics, storage, app constants and helpers
   pages/           route-level pages
   contexts/        auth context
-e2e/               Playwright tests run against docker compose
+e2e/               Playwright tests run against compose.dev.yml
 infra/             Caddyfile, publisher systemd unit
 scripts/           deploy.sh
 docs/              deployment guide
@@ -63,7 +63,7 @@ A Subscribed User connects X on the Scheduled page (`x_connection/router.py` and
 
 A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send the Final's text with `source_version_id`, the Version's id. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so Home and Scheduled share it.
 
-A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m pumpkit.scheduling.publisher`, the `publisher` service in `docker-compose.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
+A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m pumpkit.scheduling.publisher`, the `publisher` service in `compose.dev.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
 
 1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "Check your X profile" (`scheduling/publishing.fail_stuck`: a publisher died mid-call);
 2. claims and publishes the soonest due one (`scheduling/publishing.publish_next_due`, which claims through `scheduling/service.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere);
@@ -110,21 +110,23 @@ To rebrand, change `APP_NAME`, the meta tags and JSON-LD graph in `frontend/inde
 ```bash
 cd backend && uv sync --extra dev && uv run --extra dev pytest
 cd frontend && npm test
-# e2e, run from the repo root with docker compose
-docker compose up -d && cd e2e && npm install && npx playwright install chromium && npm test
+# e2e, run from the repo root against the dev stack
+docker compose -f compose.dev.yml up -d && cd e2e && npm install && npx playwright install chromium && npm test
 ```
+
+The e2e suite opens the Billing dialog, so its Instance must sell Plans: set the Stripe billing group in `.env`, with dummy values if you like (CI uses `sk_test_dummy`, `pk_test_dummy`, `whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`).
 
 If host port 5432 is already taken, add a local compose override that remaps the db service and point `COMPOSE_FILE` at it:
 
 ```yaml
-# docker-compose.override.local.yml
+# compose.dev.override.local.yml
 services:
   db:
     ports: !override ["55433:5432"]
 ```
 
 ```bash
-COMPOSE_FILE=docker-compose.yml:docker-compose.override.local.yml docker compose up -d
+COMPOSE_FILE=compose.dev.yml:compose.dev.override.local.yml docker compose up -d
 ```
 
 ## Deployment

@@ -108,12 +108,12 @@ fi
 echo "▶ Syncing Python deps (uv sync)"
 sudo -u "$APP_USER" bash -lc "set -e; cd '$APP_DIR/backend'; ~/.local/bin/uv sync"
 
-echo "▶ Building frontend (env vars from $APP_DIR/frontend/.env)"
+echo "▶ Building frontend"
 sudo -u "$APP_USER" bash -lc "
   set -e
   cd '$APP_DIR/frontend'
-  # vite compiles with undefined env vars and ships a broken bundle; fail fast.
-  grep -qE '^VITE_API_URL=.' .env 2>/dev/null || { echo '✗ missing or empty VITE_API_URL in frontend/.env'; exit 1; }
+  # The backend refuses to start without PUBLIC_URL; fail before building.
+  grep -qE '^PUBLIC_URL=.' ../.env 2>/dev/null || { echo '✗ missing or empty PUBLIC_URL in .env'; exit 1; }
   rm -rf dist
   npm ci --no-progress --no-audit --no-fund
   npm run build

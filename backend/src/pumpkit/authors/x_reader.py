@@ -42,9 +42,7 @@ class XReaderNotConfiguredError(NotConfiguredError, XReaderError):
     """Raised when X is read without TWITTERAPI_IO_API_KEY configured."""
 
     def __init__(self) -> None:
-        super().__init__(
-            "TWITTERAPI_IO_API_KEY is not set. Add it to backend/.env to read X posts."
-        )
+        super().__init__("TWITTERAPI_IO_API_KEY is not set. Add it to .env to read X posts.")
 
 
 class HandleNotFoundError(XReaderError):

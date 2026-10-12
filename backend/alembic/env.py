@@ -35,13 +35,14 @@ def get_required_setting(key: str) -> str:
 
 
 def build_connection_url() -> str:
+    # The defaults match pumpkit.core.config.Settings: the compose stack's bundled Postgres.
     return build_database_url(
         driver="psycopg2",
-        user=get_required_setting("POSTGRES_USER"),
+        user=os.getenv("POSTGRES_USER") or "postgres",
         password=get_required_setting("POSTGRES_PASSWORD"),
-        host=get_required_setting("POSTGRES_HOST"),
-        port=get_required_setting("POSTGRES_PORT"),
-        database=get_required_setting("POSTGRES_DB"),
+        host=os.getenv("POSTGRES_HOST") or "db",
+        port=os.getenv("POSTGRES_PORT") or "5432",
+        database=os.getenv("POSTGRES_DB") or "postgres",
         ssl=os.getenv("POSTGRES_SSL") or "disable",
     )
 

@@ -4,7 +4,7 @@ The user is Subscribed through a Subscription written straight into Pumpkit's co
 no Inspiration authors, X connection or Scheduled posts, so Home and Scheduled show their
 tools without calling any provider.
 
-Run inside the backend container: `docker compose exec -T backend python - < e2e/seed/seed_user.py`.
+Run inside the backend container: `docker compose -f compose.dev.yml exec -T backend python - < e2e/seed/seed_user.py`.
 """
 
 import asyncio

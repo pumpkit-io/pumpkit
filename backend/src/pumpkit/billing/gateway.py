@@ -254,8 +254,8 @@ class StripeBillingGateway:
             "customer": customer_id,
             "client_reference_id": user_id,
             "line_items": [{"price": price_id, "quantity": quantity}],
-            "success_url": settings.STRIPE_CHECKOUT_SUCCESS_URL,
-            "cancel_url": settings.STRIPE_CHECKOUT_CANCEL_URL,
+            "success_url": settings.stripe_checkout_success_url(),
+            "cancel_url": settings.stripe_checkout_cancel_url(),
             "allow_promotion_codes": True,
             "automatic_tax": {"enabled": True},
             "tax_id_collection": {"enabled": True},
@@ -289,7 +289,7 @@ class StripeBillingGateway:
         portal = await self._call(
             "create a billing-portal session",
             lambda: self._client.v1.billing_portal.sessions.create(
-                {"customer": customer_id, "return_url": settings.STRIPE_BILLING_PORTAL_RETURN_URL}
+                {"customer": customer_id, "return_url": settings.stripe_billing_portal_return_url()}
             ),
         )
         return portal.url

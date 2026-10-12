@@ -47,7 +47,7 @@ class LLMClient:
         if self._client is None:
             if not settings.LLM_API_KEY:
                 raise LLMNotConfiguredError(
-                    "LLM_API_KEY is not set. Add it to backend/.env to enable LLM calls."
+                    "LLM_API_KEY is not set. Add it to .env to enable LLM calls."
                 )
             self._client = AsyncOpenAI(
                 api_key=settings.LLM_API_KEY,

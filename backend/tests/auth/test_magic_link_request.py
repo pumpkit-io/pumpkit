@@ -11,7 +11,7 @@ async def test_requesting_a_magic_link_emails_one_sign_in_link(client, auth_outb
     assert len(auth_outbox.messages) == 1
     message = auth_outbox.messages[0]
     assert message.to == "bob@example.com"
-    assert message.link_url.startswith("http://localhost:8000/api/v1/login/magic-link?token=")
+    assert message.link_url.startswith("http://localhost:5173/api/v1/login/magic-link?token=")
 
 
 async def test_failed_send_returns_the_error_and_an_immediate_retry_sends_an_email(

@@ -55,8 +55,7 @@ class XPublisherNotConfiguredError(NotConfiguredError, XPublisherError):
 
     def __init__(self) -> None:
         super().__init__(
-            "X_CLIENT_ID, X_CLIENT_SECRET and X_REDIRECT_URI must be set in backend/.env "
-            "to connect X accounts."
+            "X_CLIENT_ID and X_CLIENT_SECRET must be set in .env to connect X accounts."
         )
 
 
@@ -290,14 +289,10 @@ def _detail(response: httpx.Response) -> str:
 
 def _x_app() -> tuple[str, str, str]:
     """The X app's client id, secret and redirect URI, or `XPublisherNotConfiguredError`."""
-    client_id, secret, redirect_uri = (
-        settings.X_CLIENT_ID,
-        settings.X_CLIENT_SECRET,
-        settings.X_REDIRECT_URI,
-    )
-    if not client_id or not secret or not redirect_uri:
+    client_id, secret = settings.X_CLIENT_ID, settings.X_CLIENT_SECRET
+    if not client_id or not secret:
         raise XPublisherNotConfiguredError()
-    return client_id, secret, redirect_uri
+    return client_id, secret, settings.x_redirect_uri()
 
 
 async def _token_call(url: str, data: dict[str, str]) -> dict[str, Any]:

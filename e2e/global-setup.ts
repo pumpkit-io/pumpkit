@@ -9,11 +9,15 @@ const STORAGE_STATE = path.join(__dirname, 'storageState.json');
 const APP_ORIGIN = 'http://localhost:5173';
 
 function seedUserAndGetToken(): string {
-  const out = execFileSync('docker', ['compose', 'exec', '-T', 'backend', 'python', '-'], {
-    cwd: REPO_ROOT,
-    input: readFileSync(SEED_SCRIPT, 'utf8'),
-    encoding: 'utf8',
-  });
+  const out = execFileSync(
+    'docker',
+    ['compose', '-f', 'compose.dev.yml', 'exec', '-T', 'backend', 'python', '-'],
+    {
+      cwd: REPO_ROOT,
+      input: readFileSync(SEED_SCRIPT, 'utf8'),
+      encoding: 'utf8',
+    },
+  );
   const match = out.match(/E2E_ACCESS_TOKEN=(\S+)/);
   if (!match) throw new Error(`Seed script did not print a token. Output:\n${out}`);
   return match[1];

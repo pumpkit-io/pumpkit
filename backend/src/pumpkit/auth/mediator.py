@@ -63,7 +63,7 @@ async def start_google_sign_in() -> JSONResponse:
 
     query_params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_OAUTH_REDIRECT_URI,
+        "redirect_uri": settings.google_oauth_redirect_uri(),
         "response_type": "code",
         "scope": " ".join(GOOGLE_SIGN_IN_SCOPES),
         "state": state,
@@ -238,7 +238,7 @@ async def request_magic_link(
             MagicLinkEmail(
                 to=email,
                 display_name=user.display_name if user else "",
-                link_url=f"{settings.BACKEND_URL}/api/v1/login/magic-link?token={issued.token}",
+                link_url=f"{settings.api_url()}/login/magic-link?token={issued.token}",
                 expires_in_minutes=issued.expires_in_minutes,
             )
         )

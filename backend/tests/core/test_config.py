@@ -5,17 +5,8 @@ from pumpkit.core.config import Settings
 
 # What a Self-hoster must set: everything else has a default or belongs to an optional provider.
 _INSTANCE_ENV = {
-    "ENV": "local",
-    "BACKEND_URL": "https://api.example.org",
-    "BACKEND_PORT": "8000",
-    "FRONTEND_URL": "https://app.example.org",
-    "FRONTEND_PORT": "5173",
-    "CORS_ORIGINS": '["https://app.example.org"]',
-    "POSTGRES_USER": "postgres",
+    "PUBLIC_URL": "https://pumpkit.example.org",
     "POSTGRES_PASSWORD": "postgres",
-    "POSTGRES_HOST": "localhost",
-    "POSTGRES_PORT": "5432",
-    "POSTGRES_DB": "postgres",
     "JWT_SECRET_KEY": "test-secret-key-test-secret-key-0123456789",
     "FERNET_ENCRYPTION_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
 }
@@ -79,23 +70,70 @@ def test_internal_tunables_default_to_todays_values(instance_env):
     assert s.BILLING_TRIAL_PERIOD_DAYS == 14
 
 
-def test_return_urls_default_under_the_instance_urls(instance_env):
+def test_postgres_connection_defaults_to_the_bundled_database(instance_env):
     s = instance_env()
 
-    assert s.STRIPE_CHECKOUT_SUCCESS_URL == "https://app.example.org/billing/success"
-    assert s.STRIPE_CHECKOUT_CANCEL_URL == "https://app.example.org/billing/cancelled"
-    assert s.STRIPE_BILLING_PORTAL_RETURN_URL == "https://app.example.org/billing"
-    assert s.GOOGLE_OAUTH_REDIRECT_URI == "https://api.example.org/api/v1/oauth/google/callback"
-
-
-def test_explicit_return_urls_win_over_the_defaults(instance_env):
-    s = instance_env(
-        STRIPE_CHECKOUT_SUCCESS_URL="https://other.example.org/ok",
-        GOOGLE_OAUTH_REDIRECT_URI="https://other.example.org/google",
+    assert (s.POSTGRES_USER, s.POSTGRES_HOST, s.POSTGRES_PORT, s.POSTGRES_DB) == (
+        "postgres",
+        "db",
+        "5432",
+        "postgres",
     )
 
-    assert s.STRIPE_CHECKOUT_SUCCESS_URL == "https://other.example.org/ok"
-    assert s.GOOGLE_OAUTH_REDIRECT_URI == "https://other.example.org/google"
+
+def test_an_instance_runs_in_production_unless_told_otherwise(instance_env):
+    assert instance_env().is_env_production()
+
+
+def test_a_domain_public_url_gives_every_url_the_instance_needs(instance_env):
+    s = instance_env(PUBLIC_URL="https://pumpkit.example.org")
+
+    assert s.frontend_url() == "https://pumpkit.example.org"
+    assert s.api_url() == "https://pumpkit.example.org/api/v1"
+    assert s.cors_origins() == ["https://pumpkit.example.org"]
+    assert s.google_oauth_redirect_uri() == (
+        "https://pumpkit.example.org/api/v1/oauth/google/callback"
+    )
+    assert s.x_redirect_uri() == "https://pumpkit.example.org/oauth/x/callback"
+    assert s.stripe_checkout_success_url() == "https://pumpkit.example.org/billing/success"
+    assert s.stripe_checkout_cancel_url() == "https://pumpkit.example.org/billing/cancelled"
+    assert s.stripe_billing_portal_return_url() == "https://pumpkit.example.org/billing"
+
+
+def test_a_localhost_public_url_keeps_its_port(instance_env):
+    s = instance_env(PUBLIC_URL="http://localhost:8080")
+
+    assert s.frontend_url() == "http://localhost:8080"
+    assert s.api_url() == "http://localhost:8080/api/v1"
+    assert s.cors_origins() == ["http://localhost:8080"]
+    assert s.google_oauth_redirect_uri() == "http://localhost:8080/api/v1/oauth/google/callback"
+    assert s.x_redirect_uri() == "http://localhost:8080/oauth/x/callback"
+    assert s.stripe_checkout_success_url() == "http://localhost:8080/billing/success"
+    assert s.stripe_checkout_cancel_url() == "http://localhost:8080/billing/cancelled"
+    assert s.stripe_billing_portal_return_url() == "http://localhost:8080/billing"
+
+
+def test_a_trailing_slash_on_the_public_url_is_dropped(instance_env):
+    s = instance_env(PUBLIC_URL="https://pumpkit.example.org/")
+
+    assert s.api_url() == "https://pumpkit.example.org/api/v1"
+    assert s.cors_origins() == ["https://pumpkit.example.org"]
+
+
+@pytest.mark.parametrize(
+    "public_url",
+    ["pumpkit.example.org", "ftp://pumpkit.example.org", "https://pumpkit.example.org/app"],
+)
+def test_a_public_url_that_is_not_a_bare_http_origin_fails_naming_it(instance_env, public_url):
+    with pytest.raises(ValidationError, match="PUBLIC_URL"):
+        instance_env(PUBLIC_URL=public_url)
+
+
+def test_an_instance_needs_its_public_url(instance_env, monkeypatch):
+    monkeypatch.delenv("PUBLIC_URL")
+
+    with pytest.raises(ValidationError, match="PUBLIC_URL"):
+        instance_env()
 
 
 def test_providers_are_off_when_none_of_their_settings_are_set(instance_env):
