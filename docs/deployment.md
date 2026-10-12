@@ -25,9 +25,9 @@ sudo -u pumpkit bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh'
 
 ## 2. Database
 
-Use a managed Postgres (recommended) or install one locally. With `ENV=prod`
-the backend and Alembic connect with SSL (`sslmode=require` / `ssl=require`),
-which managed providers require. A local Postgres must then have SSL enabled.
+Use a managed Postgres (recommended) or install one locally. With
+`POSTGRES_SSL=require` the backend and Alembic connect with SSL
+(`sslmode=require` / `ssl=require`), which managed providers require.
 
 ## 3. Code and environment files
 
@@ -39,7 +39,7 @@ Give the server read access to the repo with a deploy key (`ssh-keygen` as
 `pumpkit`, add the public key to the repository's deploy keys).
 
 Create, as `pumpkit`:
-- `/home/pumpkit/app/.env`: from `.env.example`, with `PUBLIC_URL=https://<domain>`, production secrets and real `POSTGRES_*`; every other URL derives from `PUBLIC_URL`. The hosted Instance also sets the Operator details (`OPERATOR_*`) to the company named in the Terms, so the footer, legal pages and Terms at checkout appear, and `SUPPORT_EMAIL`, which the Operator details require. A Self-hoster may set `SUPPORT_EMAIL` alone to offer a support link. With PostHog, set `POSTHOG_HOST=https://<domain>/ph-relay`.
+- `/home/pumpkit/app/.env`: from `.env.example`, with `PUBLIC_URL=https://<domain>`, production secrets and real `POSTGRES_*` (`POSTGRES_SSL=require` for a managed Postgres); every other URL derives from `PUBLIC_URL`. The hosted Instance also sets the Operator details (`OPERATOR_*`) to the company named in the Terms, so the footer, legal pages and Terms at checkout appear, and `SUPPORT_EMAIL`, which the Operator details require. A Self-hoster may set `SUPPORT_EMAIL` alone to offer a support link. With PostHog, set `POSTHOG_HOST=https://<domain>/ph-relay`.
 
 ## 4. Backend service
 

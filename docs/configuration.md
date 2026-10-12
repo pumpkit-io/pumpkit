@@ -110,6 +110,7 @@ The defaults reach the compose stack's bundled Postgres; set these only for an e
 | `POSTGRES_HOST` | Defaults to `db`, the bundled service. The dev stack always uses `db`. |
 | `POSTGRES_PORT` | Defaults to `5432`. |
 | `POSTGRES_DB` | Defaults to `postgres`. |
+| `POSTGRES_SSL` | `disable` (default) or `require`. With `require` the backend and Alembic connect with SSL (`sslmode=require` / `ssl=require`), which managed Postgres providers need. `ENV` has no effect on SSL. |
 
 ### Instance and internal tunables
 
@@ -119,7 +120,7 @@ These rarely need changing. `.env.example` lists only `APP_NAME` and `LOG_LEVEL`
 | --- | --- |
 | `APP_NAME` | Brand name used in emails, server-side copy and the UI, which reads it from `GET /api/v1/instance`. Defaults to `Pumpkit`. |
 | `LOG_LEVEL` | Python log level. Defaults to `INFO`. |
-| `ENV` | `prod` (default) or `local`. `prod` marks the refresh cookie `Secure` with the `__Host-` prefix and requires SSL on the database connection. The dev stack sets `local`. |
+| `ENV` | `prod` (default) or `local`. `prod` marks the refresh cookie `Secure` with the `__Host-` prefix. The dev stack sets `local`. |
 | `JWT_ALGORITHM` | Signing algorithm. Defaults to `HS256`. |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime. Defaults to 30. |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime. Defaults to 30. |

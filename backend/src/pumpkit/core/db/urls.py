@@ -4,9 +4,10 @@ No app imports, so Alembic can use this without loading settings.
 """
 
 import urllib.parse
-from typing import Literal
+from typing import Literal, get_args
 
 Driver = Literal["psycopg2", "asyncpg", "default"]
+PostgresSsl = Literal["disable", "require"]
 
 # The sync driver is pinned explicitly: SQLAlchemy 2.1 defaults a bare
 # `postgresql://` URL to psycopg v3, which is not installed (psycopg2 is).
@@ -30,9 +31,12 @@ def build_database_url(
     host: str,
     port: str,
     database: str,
-    env: str,
+    ssl: str,
 ) -> str:
-    """Require SSL when env == 'prod': managed Postgres in production requires TLS."""
+    """`ssl` is POSTGRES_SSL: "require" for a managed Postgres that only accepts TLS."""
+    # Alembic passes the raw environment value, so an unknown one is rejected here.
+    if ssl not in get_args(PostgresSsl):
+        raise ValueError(f"POSTGRES_SSL must be 'disable' or 'require', not {ssl!r}")
     quoted_password = urllib.parse.quote_plus(password)
-    ssl_query = _SSL_QUERY[driver] if env == "prod" else ""
+    ssl_query = _SSL_QUERY[driver] if ssl == "require" else ""
     return f"{_SCHEMES[driver]}://{user}:{quoted_password}@{host}:{port}/{database}{ssl_query}"

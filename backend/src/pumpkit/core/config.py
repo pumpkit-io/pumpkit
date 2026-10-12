@@ -6,6 +6,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode
 
+from pumpkit.core.db.urls import PostgresSsl
+
 Environment = Literal["local", "dev", "stg", "prod"]
 LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 SmtpSecurity = Literal["starttls", "tls", "none"]
@@ -37,6 +39,7 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: str = "5432"
     POSTGRES_DB: str = "postgres"
+    POSTGRES_SSL: PostgresSsl = "disable"
 
     # Authentication
     JWT_SECRET_KEY: str

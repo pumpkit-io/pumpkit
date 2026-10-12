@@ -43,7 +43,7 @@ def build_connection_url() -> str:
         host=os.getenv("POSTGRES_HOST") or "db",
         port=os.getenv("POSTGRES_PORT") or "5432",
         database=os.getenv("POSTGRES_DB") or "postgres",
-        env=os.getenv("ENV", "local"),
+        ssl=os.getenv("POSTGRES_SSL") or "disable",
     )
 
 
