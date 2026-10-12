@@ -260,9 +260,8 @@ class StripeBillingGateway:
             "automatic_tax": {"enabled": True},
             "tax_id_collection": {"enabled": True},
             "customer_update": {"address": "auto", "name": "auto"},
-            # Whoever runs the Instance is the seller and charges tax through Stripe Tax.
-            # Stripe turns Managed Payments (Stripe as merchant of record) on by default
-            # for new accounts, which would override that.
+            # Keep the Instance the seller, charging tax through Stripe Tax: Stripe turns on
+            # Managed Payments (Stripe as merchant of record) by default for new accounts.
             "managed_payments": {"enabled": False},
         }
         if trial_period_days is not None:

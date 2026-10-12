@@ -440,4 +440,4 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **A Scheduled post does not go out.** `docker compose ps publisher` should show `(healthy)`; `docker compose logs --tail 50 publisher` shows its passes and any error from X. A Failed Scheduled post shows its reason on the Scheduled page.
 
-**Stripe Checkout fails, or a paid Subscription does not show.** Check Stripe Tax ([Selling Plans](#selling-plans), step 2) and the backend log, which has Stripe's reason, and in Stripe's webhook endpoint page check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.
+**Stripe Checkout fails, or a paid Subscription does not show.** Check Stripe Tax ([Selling Plans](#selling-plans), step 2) and the backend log, which has Stripe's reason. On Stripe's webhook endpoint page, check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.
