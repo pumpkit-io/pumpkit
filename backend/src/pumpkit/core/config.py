@@ -196,6 +196,10 @@ class Settings(BaseSettings):
     def smtp_port(self) -> int:
         return self.SMTP_PORT or _SMTP_DEFAULT_PORTS[self.SMTP_SECURITY]
 
+    def serves_https(self) -> bool:
+        """Whether Users reach the Instance over HTTPS, which decides if cookies are `Secure`."""
+        return urlsplit(self.PUBLIC_URL).scheme == "https"
+
     def frontend_url(self) -> str:
         return self.PUBLIC_URL
 
@@ -235,18 +239,6 @@ class Settings(BaseSettings):
     def _empty_int_is_none(cls, value: object) -> object:
         # Pydantic would reject the empty string an `.env` line leaves for an int.
         return None if value == "" else value
-
-    def is_env_local(self) -> bool:
-        return self.ENV == "local"
-
-    def is_env_development(self) -> bool:
-        return self.ENV == "dev"
-
-    def is_env_staging(self) -> bool:
-        return self.ENV == "stg"
-
-    def is_env_production(self) -> bool:
-        return self.ENV == "prod"
 
 
 settings: Settings = Settings()  # pyright: ignore[reportCallIssue]

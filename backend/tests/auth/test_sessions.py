@@ -4,7 +4,9 @@ Sessions over HTTP: Magic link sign-in starts one, `/refresh-token` rotates it a
 """
 
 import jwt
+from httpx import AsyncClient, Response
 
+from pumpkit.core.config import settings
 from tests.conftest import callback_fragment, magic_link_token
 
 
@@ -138,3 +140,55 @@ async def test_refresh_without_a_cookie_is_refused(new_browser):
 
     assert response.status_code == 401
     assert response.json() == {"detail": "invalid_refresh_token"}
+
+
+async def _open_magic_link(browser: AsyncClient, auth_outbox) -> Response:
+    await browser.post("/api/v1/login/magic-link/request", json={"email": "bob@example.com"})
+    return await browser.get(
+        "/api/v1/login/magic-link",
+        params={"token": magic_link_token(auth_outbox.messages[-1].link_url)},
+    )
+
+
+async def test_an_http_public_url_sets_the_refresh_cookie_without_secure_even_in_prod(
+    new_browser, auth_outbox, monkeypatch
+):
+    monkeypatch.setattr(settings, "ENV", "prod")
+    monkeypatch.setattr(settings, "PUBLIC_URL", "http://localhost:8080")
+
+    opened = await _open_magic_link(new_browser(), auth_outbox)
+
+    [cookie] = opened.headers.get_list("set-cookie")
+    assert cookie.startswith("refresh_token=")
+    assert "secure" not in cookie.lower()
+
+
+async def test_an_https_public_url_sets_a_secure_host_refresh_cookie_even_locally(
+    new_browser, auth_outbox, monkeypatch
+):
+    monkeypatch.setattr(settings, "ENV", "local")
+    monkeypatch.setattr(settings, "PUBLIC_URL", "https://pumpkit.example.org")
+
+    opened = await _open_magic_link(new_browser(), auth_outbox)
+
+    [cookie] = opened.headers.get_list("set-cookie")
+    assert cookie.startswith("__Host-refresh_token=")
+    assert "; secure" in cookie.lower()
+
+
+async def test_an_https_public_url_rotates_and_clears_the_host_refresh_cookie(
+    new_browser, auth_outbox, monkeypatch
+):
+    monkeypatch.setattr(settings, "PUBLIC_URL", "https://pumpkit.example.org")
+    opened = await _open_magic_link(new_browser(), auth_outbox)
+    [cookie] = opened.headers.get_list("set-cookie")
+    # The test client speaks plain HTTP and would hold back a Secure cookie: send it by hand.
+    browser = new_browser()
+    browser.cookies.set("__Host-refresh_token", cookie.split(";")[0].split("=", 1)[1])
+
+    assert (await browser.post("/api/v1/refresh-token")).status_code == 200
+    logged_out = await browser.post("/api/v1/logout")
+
+    [cleared] = logged_out.headers.get_list("set-cookie")
+    assert cleared.startswith("__Host-refresh_token=")
+    assert "; secure" in cleared.lower()

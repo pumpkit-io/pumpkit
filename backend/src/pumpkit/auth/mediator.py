@@ -189,7 +189,7 @@ def _google_cookie_attributes(key: str) -> dict[str, Any]:
         "key": key,
         "path": "/",
         "httponly": True,
-        "secure": settings.is_env_production(),
+        "secure": settings.serves_https(),
         "samesite": "lax",
     }
 
