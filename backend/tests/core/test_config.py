@@ -231,6 +231,19 @@ def test_partly_configured_provider_fails_naming_each_missing_setting(instance_e
         assert key in message
 
 
+def test_a_settings_error_does_not_print_secret_values(instance_env):
+    with pytest.raises(ValidationError) as excinfo:
+        instance_env(
+            TWITTERAPI_IO_API_KEY="tw-s3cret",
+            STRIPE_SECRET_KEY="sk_s3cret",
+        )
+
+    message = str(excinfo.value)
+    assert "STRIPE_PUBLISHABLE_KEY" in message
+    assert "tw-s3cret" not in message
+    assert "sk_s3cret" not in message
+
+
 def test_support_email_alone_is_a_complete_instance(instance_env):
     s = instance_env(SUPPORT_EMAIL="support@example.org")
 

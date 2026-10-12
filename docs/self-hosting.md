@@ -416,7 +416,7 @@ Find the symptom, run the check it gives, and fix the cause.
 docker compose logs backend | grep -o 'Value error, [^[]*' | tail -1
 ```
 
-A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` names the provider settings to complete or remove. If it prints nothing, read the end of the log with `docker compose logs --tail 50 backend`. A database connection error there means the `POSTGRES_*` settings are wrong; with an external database, also check `POSTGRES_SSL`. Avoid pasting the full log into a chat: a settings error in it can include setting values.
+A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` names the provider settings to complete or remove. If it prints nothing, read the end of the log with `docker compose logs --tail 50 backend`. A database connection error there means the `POSTGRES_*` settings are wrong; with an external database, also check `POSTGRES_SSL`.
 
 **The health check prints `{"status":"unavailable"}`.** The backend cannot reach Postgres. `docker compose ps db` shows whether the bundled database is healthy; for an external one, check the host, port, password and `POSTGRES_SSL`.
 
