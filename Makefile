@@ -57,6 +57,7 @@ e2e-wait:
 	done
 
 # Builds and starts the production stack from this checkout's .env, then checks it over HTTP.
+# The checks expect the PostHog relay exactly when the running web service has it turned on.
 smoke:
 	$(COMPOSE) up -d --build --wait --wait-timeout 300
-	sh scripts/check-stack.sh $(SMOKE_URL)
+	POSTHOG_RELAY=$$($(COMPOSE) exec -T web printenv POSTHOG_RELAY) sh scripts/check-stack.sh $(SMOKE_URL)

@@ -62,6 +62,7 @@ services:
     environment:
       PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
       ACME_EMAIL: ${ACME_EMAIL:-}
+      POSTHOG_RELAY: ${POSTHOG_RELAY:-false}
     ports:
       - ${HTTP_PORT:-8080}:80
       - ${HTTPS_PORT:-443}:443

@@ -15,6 +15,7 @@ FROM caddy:2.10-alpine
 COPY infra/web/Caddyfile /etc/caddy/Caddyfile
 COPY infra/web/start.sh /usr/local/bin/pumpkit-web-start
 COPY infra/web/start.d/ /etc/pumpkit/start.d/
+COPY infra/web/snippets/ /etc/pumpkit/snippets/
 COPY --from=build /app/dist /srv
 
 ENTRYPOINT ["pumpkit-web-start"]

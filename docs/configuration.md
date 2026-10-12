@@ -97,7 +97,8 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 | `POSTHOG_PROJECT_API_KEY` | PostHog project key. With it set, the frontend loads PostHog after Analytics consent (ADR 0009) and shows the consent banner; without it, neither. |
 | `POSTHOG_ENABLED` | `true` to enable server-side analytics and error tracking, given `POSTHOG_PROJECT_API_KEY`. The browser's analytics follow the key alone. Defaults to `false`. |
 | `POSTHOG_PERSONAL_API_KEY` | Personal key, used by `scripts/deploy.sh` for deploy annotations. |
-| `POSTHOG_HOST` | PostHog ingestion host, for the backend and the browser. Defaults to `https://eu.i.posthog.com`; behind a relay, point it at the relay path (`PUBLIC_URL/ph-relay`). |
+| `POSTHOG_HOST` | PostHog ingestion host, for the backend and the browser. Defaults to `https://eu.i.posthog.com`. With `POSTHOG_RELAY=true`, set it to the relay path, `PUBLIC_URL/ph-relay` (for example `https://pumpkit.example.org/ph-relay`). |
+| `POSTHOG_RELAY` | `true` to have the web server relay PostHog on the Instance's own origin, so adblockers that block PostHog's hosts let analytics through. It proxies `/ph-relay/static/*` to `https://eu-assets.i.posthog.com` and the rest of `/ph-relay/*` to `https://eu.i.posthog.com`, PostHog's EU Cloud. Point `POSTHOG_HOST` at it. Defaults to `false`, which leaves `/ph-relay` an ordinary app route. Read by the `web` service only. |
 | `POSTHOG_UI_HOST` | PostHog app host the browser links to when `POSTHOG_HOST` is a relay. Defaults to `https://eu.posthog.com`. |
 
 ### Database
