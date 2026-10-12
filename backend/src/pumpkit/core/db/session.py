@@ -22,7 +22,7 @@ class DatabaseSessionHandler:
             host=settings.POSTGRES_HOST,
             port=settings.POSTGRES_PORT,
             database=settings.POSTGRES_DB,
-            env=settings.ENV,
+            ssl=settings.POSTGRES_SSL,
         )
 
         self.url: str = build_database_url(driver="default", **url_parts)

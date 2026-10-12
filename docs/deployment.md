@@ -25,9 +25,9 @@ sudo -u pumpkit bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh'
 
 ## 2. Database
 
-Use a managed Postgres (recommended) or install one locally. With `ENV=prod`
-the backend and Alembic connect with SSL (`sslmode=require` / `ssl=require`),
-which managed providers require. A local Postgres must then have SSL enabled.
+Use a managed Postgres (recommended) or install one locally. With
+`POSTGRES_SSL=require` the backend and Alembic connect with SSL
+(`sslmode=require` / `ssl=require`), which managed providers require.
 
 ## 3. Code and environment files
 
@@ -39,7 +39,7 @@ Give the server read access to the repo with a deploy key (`ssh-keygen` as
 `pumpkit`, add the public key to the repository's deploy keys).
 
 Create, as `pumpkit`:
-- `/home/pumpkit/app/.env`: from `.env.example`, with `ENV=prod`, real `POSTGRES_*`, `BACKEND_URL`/`FRONTEND_URL` = `https://<domain>`, `CORS_ORIGINS='["https://<domain>"]'`.
+- `/home/pumpkit/app/.env`: from `.env.example`, with `ENV=prod`, real `POSTGRES_*` (`POSTGRES_SSL=require` for a managed Postgres), `BACKEND_URL`/`FRONTEND_URL` = `https://<domain>`, `CORS_ORIGINS='["https://<domain>"]'`.
 - `/home/pumpkit/app/backend/.env`: from `backend/.env.example`, with production secrets and `https://<domain>/billing/...` Stripe URLs. The hosted Instance also sets the Operator details (`OPERATOR_*`) to the company named in the Terms, so the footer, legal pages and Terms at checkout appear, and `SUPPORT_EMAIL`, which the Operator details require. A Self-hoster may set `SUPPORT_EMAIL` alone to offer a support link.
 - `/home/pumpkit/app/frontend/.env`: `VITE_API_URL=https://<domain>/api/v1`. The app name and PostHog come from `backend/.env` at runtime; with PostHog, set `POSTHOG_HOST=https://<domain>/ph-relay` there.
 
