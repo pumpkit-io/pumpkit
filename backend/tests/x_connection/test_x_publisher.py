@@ -33,7 +33,6 @@ from pumpkit.x_connection.x_publisher import (
 def x_app(monkeypatch):
     monkeypatch.setattr(settings, "X_CLIENT_ID", "x-client-id")
     monkeypatch.setattr(settings, "X_CLIENT_SECRET", "x-client-secret")
-    monkeypatch.setattr(settings, "X_REDIRECT_URI", "http://localhost:5173/oauth/x/callback")
 
 
 def test_the_challenge_matches_the_rfc_7636_example():
@@ -69,7 +68,7 @@ def test_the_authorize_url_asks_for_the_publishing_scopes_with_an_s256_challenge
     }
 
 
-@pytest.mark.parametrize("missing", ["X_CLIENT_ID", "X_CLIENT_SECRET", "X_REDIRECT_URI"])
+@pytest.mark.parametrize("missing", ["X_CLIENT_ID", "X_CLIENT_SECRET"])
 def test_without_the_x_app_settings_it_fails_on_use_naming_them(monkeypatch, missing):
     monkeypatch.setattr(settings, missing, None)
 

@@ -89,7 +89,7 @@ class IssuedSession:
         A 303 to a frontend callback page (e.g. `/auth/magic-link/callback`) carrying
         the access token and its expiry in the URL fragment, which never reaches a server.
         """
-        url = f"{settings.FRONTEND_URL}{callback_path}#{urlencode(self._access_token_fields())}"
+        url = f"{settings.frontend_url()}{callback_path}#{urlencode(self._access_token_fields())}"
         response = RedirectResponse(
             url=url, status_code=status.HTTP_303_SEE_OTHER, headers=_NO_STORE_HEADERS
         )
@@ -153,7 +153,7 @@ def sign_in_error_redirect(code: str) -> RedirectResponse:
     sign-in page with a machine-readable error code (e.g. `sign_in_failed`).
     """
     return RedirectResponse(
-        url=f"{settings.FRONTEND_URL}/login?error={code}",
+        url=f"{settings.frontend_url()}/login?error={code}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

@@ -47,18 +47,16 @@ RESPONSES = [
     (BillingProviderError("stripe said sk_live_secret is wrong"), 502, BILLING_502),
     (LLMError("provider said no"), 502, LLM_502),
     (
-        LLMNotConfiguredError(
-            "LLM_API_KEY is not set. Add it to backend/.env to enable LLM calls."
-        ),
+        LLMNotConfiguredError("LLM_API_KEY is not set. Add it to .env to enable LLM calls."),
         503,
-        b'{"detail":"LLM_API_KEY is not set. Add it to backend/.env to enable LLM calls."}',
+        b'{"detail":"LLM_API_KEY is not set. Add it to .env to enable LLM calls."}',
     ),
     (XReaderError("timeout"), 502, X_READER_502),
     (HandleNotFoundError("nobody"), 502, X_READER_502),
     (
         XReaderNotConfiguredError(),
         503,
-        b'{"detail":"TWITTERAPI_IO_API_KEY is not set. Add it to backend/.env to read X posts."}',
+        b'{"detail":"TWITTERAPI_IO_API_KEY is not set. Add it to .env to read X posts."}',
     ),
     (XPublisherError("timeout"), 502, X_PUBLISHER_502),
     (XReconnectNeededError("revoked"), 502, X_PUBLISHER_502),
@@ -69,8 +67,7 @@ RESPONSES = [
     (
         XPublisherNotConfiguredError(),
         503,
-        b'{"detail":"X_CLIENT_ID, X_CLIENT_SECRET and X_REDIRECT_URI must be set in '
-        b'backend/.env to connect X accounts."}',
+        b'{"detail":"X_CLIENT_ID and X_CLIENT_SECRET must be set in .env to connect X accounts."}',
     ),
     (RuntimeError("kaboom"), 500, UNHANDLED_500),
 ]

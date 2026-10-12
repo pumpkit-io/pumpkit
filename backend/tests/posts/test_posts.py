@@ -346,7 +346,7 @@ async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_autho
 async def test_writing_without_the_llm_key_fails_clearly_and_stores_the_attempt(
     client, db, with_author, fake_llm
 ):
-    fake_llm.replies = [LLMNotConfiguredError("LLM_API_KEY is not set. Add it to backend/.env.")]
+    fake_llm.replies = [LLMNotConfiguredError("LLM_API_KEY is not set. Add it to .env.")]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
