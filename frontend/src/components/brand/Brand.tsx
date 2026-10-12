@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { APP_NAME } from '@/lib/app';
+import { useInstance } from '@/features/instance/useInstance';
 import { useTheme } from '@/features/theme/useTheme';
 import logoLight from '@/assets/brand/logo-light.svg';
 import logoDark from '@/assets/brand/logo-dark.svg';
@@ -15,6 +15,7 @@ interface BrandProps {
 /** Replace the SVGs in src/assets/brand/ with your own. */
 export function Brand({ className, showName = true, nameHidden = false, size = 'md' }: BrandProps) {
   const { resolved } = useTheme();
+  const { app_name } = useInstance();
   const src = resolved === 'dark' ? logoDark : logoLight;
   return (
     <span className={cn('flex items-center gap-2', className)}>
@@ -33,7 +34,7 @@ export function Brand({ className, showName = true, nameHidden = false, size = '
             nameHidden && 'opacity-0',
           )}
         >
-          {APP_NAME}
+          {app_name}
         </span>
       )}
     </span>

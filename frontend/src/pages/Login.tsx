@@ -3,9 +3,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
+import { useInstance } from '@/features/instance/useInstance';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
 import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
 import { authService } from '../services/authService';
+import { errorMessage, errorStatus } from '../services/apiErrors';
 import { track } from '../lib/analytics';
 import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
 
@@ -19,7 +21,13 @@ const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
     'That magic link is invalid or has expired. Request a new one below.',
   [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
   [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Try again.",
+  [SIGN_IN_ERROR.emailNotAllowed]: "This site doesn't accept sign-ins from that email address.",
 };
+
+/** The 403 the backend answers when the Sign-up allowlist refuses the email. */
+function isEmailNotAllowed(err: unknown): boolean {
+  return errorStatus(err) === 403 && errorMessage(err, '') === SIGN_IN_ERROR.emailNotAllowed;
+}
 
 export function Login() {
   const location = useLocation();
@@ -27,6 +35,9 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { sign_in_methods, operator } = useInstance();
+  const offersGoogle = sign_in_methods.includes('google');
+  const hasTerms = operator !== null;
 
   useEffect(() => {
     const code = new URLSearchParams(location.search).get('error');
@@ -50,7 +61,11 @@ export function Login() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown';
       track('login_magic_link_requested_failed', { error_message: message });
-      setError("We couldn't send the magic link. Try again in a moment.");
+      setError(
+        isEmailNotAllowed(err)
+          ? SIGN_IN_ERROR_MESSAGES[SIGN_IN_ERROR.emailNotAllowed]
+          : "We couldn't send the magic link. Try again in a moment.",
+      );
     } finally {
       setLoading(false);
     }
@@ -65,21 +80,27 @@ export function Login() {
               <h1 className="text-3xl font-normal leading-none tracking-tight text-foreground">
                 Welcome back
               </h1>
-              <p className="text-sm text-muted-foreground">Sign in with Google or a magic link</p>
+              <p className="text-sm text-muted-foreground">
+                {offersGoogle ? 'Sign in with Google or a magic link' : 'Sign in with a magic link'}
+              </p>
             </div>
             <div className="p-6 pt-0">
               <div className="grid gap-6">
-                <GoogleAuthButton
-                  onError={() => setError("We couldn't start Google sign-in. Try again.")}
-                />
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="h-px w-full shrink-0 bg-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-card px-2 text-muted-foreground">or</span>
-                  </div>
-                </div>
+                {offersGoogle && (
+                  <>
+                    <GoogleAuthButton
+                      onError={() => setError("We couldn't start Google sign-in. Try again.")}
+                    />
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="h-px w-full shrink-0 bg-border" />
+                      </div>
+                      <div className="relative flex justify-center text-xs">
+                        <span className="bg-card px-2 text-muted-foreground">or</span>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
@@ -114,17 +135,19 @@ export function Login() {
                   </Button>
                 </form>
                 {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}
-                <p className="text-center text-xs leading-5 text-muted-foreground">
-                  By continuing, you agree to the{' '}
-                  <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
-                    Terms
-                  </Link>{' '}
-                  and acknowledge the{' '}
-                  <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
-                    Privacy Policy
-                  </Link>
-                  .
-                </p>
+                {hasTerms && (
+                  <p className="text-center text-xs leading-5 text-muted-foreground">
+                    By continuing, you agree to the{' '}
+                    <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
+                      Terms
+                    </Link>{' '}
+                    and acknowledge the{' '}
+                    <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
+                      Privacy Policy
+                    </Link>
+                    .
+                  </p>
+                )}
               </div>
             </div>
           </div>

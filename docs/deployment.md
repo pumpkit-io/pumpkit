@@ -40,8 +40,8 @@ Give the server read access to the repo with a deploy key (`ssh-keygen` as
 
 Create, as `pumpkit`:
 - `/home/pumpkit/app/.env`: from `.env.example`, with `ENV=prod`, real `POSTGRES_*`, `BACKEND_URL`/`FRONTEND_URL` = `https://<domain>`, `CORS_ORIGINS='["https://<domain>"]'`.
-- `/home/pumpkit/app/backend/.env`: from `backend/.env.example`, with production secrets and `https://<domain>/billing/...` Stripe URLs.
-- `/home/pumpkit/app/frontend/.env`: `VITE_API_URL=https://<domain>/api/v1`, `VITE_APP_NAME`, optional PostHog (`VITE_POSTHOG_HOST=https://<domain>/ph-relay`).
+- `/home/pumpkit/app/backend/.env`: from `backend/.env.example`, with production secrets and `https://<domain>/billing/...` Stripe URLs. The hosted Instance also sets the Operator details (`OPERATOR_*`) to the company named in the Terms, so the footer, legal pages and Terms at checkout appear, and `SUPPORT_EMAIL`, which the Operator details require. A Self-hoster may set `SUPPORT_EMAIL` alone to offer a support link.
+- `/home/pumpkit/app/frontend/.env`: `VITE_API_URL=https://<domain>/api/v1`. The app name and PostHog come from `backend/.env` at runtime; with PostHog, set `POSTHOG_HOST=https://<domain>/ph-relay` there.
 
 ## 4. Backend service
 

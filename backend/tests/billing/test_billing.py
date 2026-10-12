@@ -375,6 +375,26 @@ async def test_a_rejected_checkout_records_no_acceptance(client, db, fake_billin
     assert await _acceptances(db) == []
 
 
+async def test_without_operator_details_a_checkout_needs_no_acceptance_and_records_none(
+    client, db, fake_billing, no_operator_details
+):
+    response = await client.post(CHECKOUT, json={"plan_key": "pumpkit_pro_monthly"})
+
+    assert response.status_code == 200
+    assert response.json()["url"] == fake_billing.checkout_url
+    assert len(fake_billing.checkouts) == 1
+    assert await _acceptances(db) == []
+
+
+async def test_without_operator_details_the_plans_carry_no_terms_version(
+    client, fake_billing, no_operator_details
+):
+    response = await client.get(PLANS)
+
+    assert response.status_code == 200
+    assert response.json()["terms_version"] is None
+
+
 async def test_a_configured_plan_the_provider_cannot_resolve_fails_checkout_with_502(
     client, fake_billing, assert_reported_502
 ):
@@ -643,3 +663,18 @@ async def test_billing_api_serves_only_subscription_routes(client):
         "/api/v1/billing/portal",
         "/api/v1/stripe/webhook",
     }
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("GET", BILLING_ME), ("GET", PLANS), ("POST", CHECKOUT), ("POST", PORTAL)],
+)
+async def test_billing_routes_answer_404_where_no_plans_are_sold(
+    client, sells_no_plans, fake_billing, method, path
+):
+    body = CHECKOUT_MONTHLY if path == CHECKOUT else None
+
+    response = await client.request(method, path, json=body)
+
+    assert response.status_code == 404
+    assert fake_billing.checkouts == [] and fake_billing.portals == []

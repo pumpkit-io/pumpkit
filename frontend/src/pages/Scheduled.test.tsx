@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -50,6 +50,9 @@ import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { AppLayout } from './AppLayout';
 import { Scheduled } from './Scheduled';
 
@@ -122,22 +125,24 @@ function apiError(status: number, detail: string) {
   });
 }
 
-function renderScheduled(state?: unknown) {
+function renderScheduled(state?: unknown, instance: Instance = SELLS_PLANS) {
   return render(
-    <AuthProvider>
-      <ThemeProvider>
-        <MemoryRouter
-          initialEntries={[{ pathname: '/scheduled', state }]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/scheduled" element={<Scheduled />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>
-    </AuthProvider>,
+    <InstanceProvider instance={instance}>
+      <AuthProvider>
+        <ThemeProvider>
+          <MemoryRouter
+            initialEntries={[{ pathname: '/scheduled', state }]}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/scheduled" element={<Scheduled />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </AuthProvider>
+    </InstanceProvider>,
   );
 }
 
@@ -158,7 +163,14 @@ async function xPanel() {
 }
 
 describe('Scheduled', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
+    // The fixtures' times are in October 2026, so the picker's min would block them once they passed.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T12:00'));
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
@@ -271,6 +283,32 @@ describe('Scheduled', () => {
     const panel = await xPanel();
     expect(await panel.findByText('@ada')).toBeInTheDocument();
     expect(panel.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+  });
+
+  describe('On an Instance that sells no Plans', () => {
+    const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
+
+    beforeEach(() => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+    });
+
+    it('offers a User without a Subscription to connect X', async () => {
+      renderScheduled(undefined, NO_PLANS);
+
+      const panel = await xPanel();
+      expect(await panel.findByRole('button', { name: 'Connect X' })).toBeInTheDocument();
+      expect(screen.queryByText(/needs a subscription/i)).not.toBeInTheDocument();
+      expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
+    });
+
+    it('lets a User without a Subscription Post now', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      renderScheduled(undefined, NO_PLANS);
+
+      const box = await composer();
+      expect(await box.findByRole('button', { name: 'Post now' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Subscribe' })).not.toBeInTheDocument();
+    });
   });
 
   it('shows the message the X callback left behind', async () => {
@@ -528,12 +566,6 @@ describe('Scheduled', () => {
     });
 
     it('shows why a time was refused and keeps the text and time', async () => {
-      // The picker's min follows the clock, so a real one would block this time once it passed.
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(new Date('2026-10-10T12:00'));
-      onTestFinished(() => {
-        vi.useRealTimers();
-      });
       vi.mocked(scheduledPostService.schedule).mockRejectedValue(
         apiError(422, 'Pick a time at least a minute from now.'),
       );

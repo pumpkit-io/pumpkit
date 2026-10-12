@@ -98,6 +98,23 @@ async def _newest_subscription(
     return result.scalar_one_or_none()
 
 
+def sells_plans() -> bool:
+    """Whether this Instance sells Plans: only with the Stripe settings group (ADR 0011)."""
+    return settings.is_stripe_billing_configured()
+
+
+def requires_terms_acceptance() -> bool:
+    """Whether a checkout must accept the Terms: only with Plans and Operator details (ADR 0011)."""
+    return sells_plans() and settings.is_operator_configured()
+
+
+async def has_access(db: AsyncSession, *, user_id: str) -> bool:
+    """Whether a User may use Pumpkit: always where no Plans are sold, else only when Subscribed."""
+    if not sells_plans():
+        return True
+    return is_subscribed(await get_user_subscription(db, user_id=user_id))
+
+
 def is_subscribed(subscription: Optional[Subscription]) -> bool:
     """
     Whether a User holding `subscription` is Subscribed: it is in its Trial,

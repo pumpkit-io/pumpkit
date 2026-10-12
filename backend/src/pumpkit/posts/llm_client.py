@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import NotConfiguredError
-from pumpkit.posts.openrouter_schemas import (
+from pumpkit.posts.llm_schemas import (
     AssembledToolCall,
     CompleteResult,
     ModelUsage,
@@ -22,8 +22,6 @@ T = TypeVar("T", bound=BaseModel)
 
 ReasoningEffort = Literal["low", "medium", "high"]
 
-_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-
 _LLM_CLIENT_TIMEOUT = httpx.Timeout(
     600.0,  # Read, write and connection-pool timeout.
     connect=10.0,
@@ -32,13 +30,13 @@ _LLM_CLIENT_MAX_RETRIES = 2
 
 
 class LLMNotConfiguredError(NotConfiguredError):
-    """Raised when an LLM call is attempted without OPENROUTER_API_KEY configured."""
+    """Raised when an LLM call is attempted without LLM_API_KEY configured."""
 
 
-class OpenRouterClient:
-    """Async wrapper around OpenRouter's OpenAI-compatible chat completions API.
+class LLMClient:
+    """Async wrapper around the OpenAI-compatible chat completions API at `LLM_BASE_URL`.
 
-    The SDK client is created on first use, so the app boots without OPENROUTER_API_KEY.
+    The SDK client is created on first use, so the app boots without LLM_API_KEY.
     """
 
     def __init__(self) -> None:
@@ -47,17 +45,21 @@ class OpenRouterClient:
     @property
     def _llm_client(self) -> AsyncOpenAI:
         if self._client is None:
-            if not settings.OPENROUTER_API_KEY:
+            if not settings.LLM_API_KEY:
                 raise LLMNotConfiguredError(
-                    "OPENROUTER_API_KEY is not set. Add it to backend/.env to enable LLM calls."
+                    "LLM_API_KEY is not set. Add it to backend/.env to enable LLM calls."
                 )
             self._client = AsyncOpenAI(
-                api_key=settings.OPENROUTER_API_KEY,
-                base_url=_OPENROUTER_BASE_URL,
+                api_key=settings.LLM_API_KEY,
+                base_url=settings.LLM_BASE_URL,
                 timeout=_LLM_CLIENT_TIMEOUT,
                 max_retries=_LLM_CLIENT_MAX_RETRIES,
             )
         return self._client
+
+    def _sends_cache_hints(self) -> bool:
+        """Only OpenRouter takes `cache_control` on message blocks; strict endpoints reject it."""
+        return self._llm_client.base_url.host == "openrouter.ai"
 
     async def llm_complete(
         self,
@@ -85,7 +87,7 @@ class OpenRouterClient:
 
         if not content:
             raise ValueError(
-                f"OpenRouter returned an empty response for a non-streamed, non-structured LLM call. model={kwargs.get('model')}"
+                f"The LLM returned an empty response for a non-streamed, non-structured LLM call. model={kwargs.get('model')}"
             )
 
         return CompleteResult(
@@ -191,7 +193,7 @@ class OpenRouterClient:
         parsed = response.choices[0].message.parsed
         if parsed is None:
             raise ValueError(
-                f"OpenRouter returned an empty response for a non-streamed, structured LLM call. response_model={response_model.__name__}, model={kwargs.get('model')}"
+                f"The LLM returned an empty response for a non-streamed, structured LLM call. response_model={response_model.__name__}, model={kwargs.get('model')}"
             )
         return StructuredResult(
             parsed=parsed,
@@ -218,7 +220,22 @@ class OpenRouterClient:
         )
 
     @staticmethod
+    def _without_cache_hints(messages: list[dict]) -> list[dict]:
+        return [
+            {
+                **message,
+                "content": [
+                    {k: v for k, v in block.items() if k != "cache_control"}
+                    for block in message["content"]
+                ],
+            }
+            if isinstance(message.get("content"), list)
+            else message
+            for message in messages
+        ]
+
     def _build_llm_kwargs(
+        self,
         *,
         model: str,
         messages: list[dict],
@@ -241,6 +258,9 @@ class OpenRouterClient:
 
         merged_extra = {**wrapper_extra, **(extra_body or {})}
 
+        if not self._sends_cache_hints():
+            messages = self._without_cache_hints(messages)
+
         kwargs: dict = {"model": model, "messages": messages}
 
         if tools:
@@ -249,7 +269,7 @@ class OpenRouterClient:
                 kwargs["tool_choice"] = tool_choice
 
         kwargs.update(
-            OpenRouterClient._prune_none(
+            LLMClient._prune_none(
                 {
                     "temperature": temperature,
                     "max_tokens": max_tokens,
@@ -264,4 +284,4 @@ class OpenRouterClient:
         return kwargs
 
 
-openrouter_client = OpenRouterClient()
+llm_client = LLMClient()

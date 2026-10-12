@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
-from pumpkit.billing import mediator
+from pumpkit.billing import mediator, service
 from pumpkit.billing.gateway import BillingGateway, get_billing_gateway
 from pumpkit.billing.schemas import (
     BillingMeResponse,
@@ -14,9 +14,10 @@ from pumpkit.billing.schemas import (
     PlansListResponse,
 )
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.providers import require_provider
 from pumpkit.core.rate_limit import limiter
 
-router = APIRouter(tags=["billing"])
+router = APIRouter(tags=["billing"], dependencies=[Depends(require_provider(service.sells_plans))])
 
 
 @router.get(

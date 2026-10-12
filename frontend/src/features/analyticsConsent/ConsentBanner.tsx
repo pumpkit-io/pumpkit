@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PRIVACY_PATH } from '@/features/legal/documents';
 import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
+import { useInstance } from '@/features/instance/useInstance';
 import {
   grantAnalyticsConsent,
   onCookieSettingsOpened,
@@ -9,8 +10,12 @@ import {
   useAnalyticsConsent,
 } from '@/lib/analyticsConsent';
 
-/** Asks for Analytics consent while this browser has no choice stored, or when Cookie settings reopens it. */
+/**
+ * Asks for Analytics consent while this browser has no choice stored, or when Cookie settings
+ * reopens it. An Instance without analytics has nothing to ask about.
+ */
 export function ConsentBanner() {
+  const { analytics } = useInstance();
   const consent = useAnalyticsConsent();
   const [reopened, setReopened] = useState(false);
   const regionRef = useRef<HTMLElement>(null);
@@ -22,7 +27,7 @@ export function ConsentBanner() {
     if (reopened) regionRef.current?.focus();
   }, [reopened]);
 
-  if (consent !== null && !reopened) return null;
+  if (!analytics || (consent !== null && !reopened)) return null;
 
   const choose = (accept: boolean) => {
     setReopened(false);

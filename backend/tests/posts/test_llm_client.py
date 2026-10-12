@@ -8,19 +8,19 @@ from openai import APIStatusError
 from pydantic import BaseModel
 
 from pumpkit.core.config import settings
-from pumpkit.posts.openrouter import LLMNotConfiguredError, OpenRouterClient, openrouter_client
-from pumpkit.posts.openrouter_schemas import ModelUsage, StreamDelta
+from pumpkit.posts.llm_client import LLMClient, LLMNotConfiguredError, llm_client
+from pumpkit.posts.llm_schemas import ModelUsage, StreamDelta
 
 BASE_URL = "https://openrouter.ai/api/v1"
 
 
-def _make_client() -> OpenRouterClient:
+def _make_client() -> LLMClient:
     """respx patches httpx globally, so the client needs no injected transport."""
-    return OpenRouterClient()
+    return LLMClient()
 
 
 def test_singleton_exported():
-    assert isinstance(openrouter_client, OpenRouterClient)
+    assert isinstance(llm_client, LLMClient)
 
 
 def test_client_construction_does_not_touch_network():
@@ -418,12 +418,12 @@ async def test_llm_structured_sends_json_schema_response_format():
 
 
 async def test_unconfigured_client_raises_clear_error(monkeypatch):
-    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
-    client = OpenRouterClient()
-    with pytest.raises(LLMNotConfiguredError, match="OPENROUTER_API_KEY"):
+    monkeypatch.setattr(settings, "LLM_API_KEY", None)
+    client = LLMClient()
+    with pytest.raises(LLMNotConfiguredError, match="LLM_API_KEY"):
         await client.llm_complete(model="openai/gpt-5", messages=[{"role": "user", "content": "x"}])
 
 
 def test_construction_without_key_does_not_raise(monkeypatch):
-    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
-    OpenRouterClient()
+    monkeypatch.setattr(settings, "LLM_API_KEY", None)
+    LLMClient()

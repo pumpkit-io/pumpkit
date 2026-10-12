@@ -8,6 +8,7 @@ import { PostWriterProvider } from '@/features/posts/PostWriterProvider';
 import { Sidebar } from '@/features/sidebar/Sidebar';
 import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
 import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
+import { useInstance } from '@/features/instance/useInstance';
 import { XConnectionProvider } from '@/features/xConnection/XConnectionProvider';
 import { ProfileProvider } from './Home/ProfileContext';
 import { Shell } from './Home/Shell';
@@ -15,6 +16,7 @@ import { useBootstrap } from './Home/useBootstrap';
 
 function AppLayoutInner() {
   const { profile, setProfile } = useBootstrap();
+  const { sells_plans } = useInstance();
 
   return (
     <ProfileProvider value={profile} setValue={setProfile}>
@@ -24,7 +26,7 @@ function AppLayoutInner() {
         </PostWriterProvider>
       </XConnectionProvider>
       <AccountDialog />
-      <BillingDialog />
+      {sells_plans && <BillingDialog />}
     </ProfileProvider>
   );
 }

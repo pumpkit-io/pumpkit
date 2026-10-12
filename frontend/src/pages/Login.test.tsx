@@ -1,16 +1,26 @@
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Login } from './Login';
+import { authService } from '@/services/authService';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 
-function renderLogin(path: string) {
+vi.mock('@/services/authService', () => ({
+  authService: { requestMagicLink: vi.fn(), getGoogleLoginUrl: vi.fn() },
+}));
+
+function renderLogin(path: string, instance: Instance = SELLS_PLANS) {
   render(
-    <MemoryRouter
-      initialEntries={[path]}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
-      <Login />
-    </MemoryRouter>,
+    <InstanceProvider instance={instance}>
+      <MemoryRouter
+        initialEntries={[path]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Login />
+      </MemoryRouter>
+    </InstanceProvider>,
   );
 }
 
@@ -19,6 +29,7 @@ describe('the sign-in page', () => {
     ['invalid_magic_link', /magic link is invalid or has expired/i],
     ['account_suspended', /account has been suspended/i],
     ['sign_in_failed', /couldn't sign you in/i],
+    ['email_not_allowed', /^This site doesn't accept sign-ins from that email address\.$/i],
   ])('explains the %s error', (code, message) => {
     renderLogin(`/login?error=${code}`);
 
@@ -26,7 +37,13 @@ describe('the sign-in page', () => {
   });
 
   it('shows a different message for each error code', () => {
-    const messages = ['invalid_magic_link', 'account_suspended', 'sign_in_failed'].map((code) => {
+    const codes = [
+      'invalid_magic_link',
+      'account_suspended',
+      'sign_in_failed',
+      'email_not_allowed',
+    ];
+    const messages = codes.map((code) => {
       const { unmount } = render(
         <MemoryRouter
           initialEntries={[`/login?error=${code}`]}
@@ -40,7 +57,7 @@ describe('the sign-in page', () => {
       return text;
     });
 
-    expect(new Set(messages).size).toBe(3);
+    expect(new Set(messages).size).toBe(codes.length);
   });
 
   it.each([
@@ -54,7 +71,7 @@ describe('the sign-in page', () => {
   });
 
   it('tells people that continuing means agreeing to the Terms, with links to both documents', () => {
-    renderLogin('/login');
+    renderLogin('/login', WITH_OPERATOR);
 
     const notice = screen.getByText(/^By continuing, you agree to the/);
     expect(notice).toHaveTextContent(
@@ -64,6 +81,43 @@ describe('the sign-in page', () => {
     expect(within(notice).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
       'href',
       '/privacy',
+    );
+  });
+
+  it('shows no Terms notice or company footer on an Instance without Operator details', () => {
+    renderLogin('/login');
+
+    expect(screen.queryByText(/you agree to the/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+  });
+
+  it('offers Google next to the magic link when the Instance has Google sign-in', () => {
+    renderLogin('/login', { ...SELLS_PLANS, sign_in_methods: ['magic_link', 'google'] });
+
+    expect(screen.getByRole('button', { name: /google/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
+  });
+
+  it('offers only the magic link when the Instance has no Google sign-in', () => {
+    renderLogin('/login', { ...SELLS_PLANS, sign_in_methods: ['magic_link'] });
+
+    expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/google/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
+  });
+
+  it('says the site does not accept an email the Sign-up allowlist refuses', async () => {
+    vi.mocked(authService.requestMagicLink).mockRejectedValueOnce({
+      response: { status: 403, data: { detail: 'email_not_allowed' } },
+    });
+    renderLogin('/login');
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'mallory@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Email me a magic link' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /^This site doesn't accept sign-ins from that email address\.$/i,
     );
   });
 });

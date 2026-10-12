@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PanelLeft, SquarePen } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
-import { CookieSettingsButton } from '@/features/analyticsConsent/CookieSettingsButton';
-import { LEGAL_LINKS } from '@/features/legal/documents';
+import { LegalLinks } from '@/features/legal/LegalLinks';
 import { cn } from '@/lib/utils';
 import { useSidebar } from './useSidebar';
 import { NewPostButton } from './NewPostButton';
@@ -33,26 +32,6 @@ function ToggleButton({ collapsed, onClick }: { collapsed: boolean; onClick: () 
 
 const LEGAL_LINK_CLASS =
   'rounded-sm underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
-
-function LegalLinks() {
-  return (
-    <nav aria-label="Legal" className="px-4 pb-3">
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        {LEGAL_LINKS.map(({ path, label }) => (
-          <li key={path}>
-            {/* A new tab, because leaving the signed-in layout would drop the Post on screen. */}
-            <a href={path} target="_blank" rel="noopener noreferrer" className={LEGAL_LINK_CLASS}>
-              {label}
-            </a>
-          </li>
-        ))}
-        <li>
-          <CookieSettingsButton className={LEGAL_LINK_CLASS} />
-        </li>
-      </ul>
-    </nav>
-  );
-}
 
 export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } = {}) {
   const { collapsed, toggleCollapsed, setMobileOpen } = useSidebar();
@@ -166,7 +145,13 @@ export function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean } =
               />
             ))}
           </nav>
-          <LegalLinks />
+          {/* A new tab, because leaving the signed-in layout would drop the Post on screen. */}
+          <LegalLinks
+            newTab
+            className="px-4 pb-3"
+            listClassName="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+            linkClassName={LEGAL_LINK_CLASS}
+          />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -59,6 +59,9 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
@@ -110,23 +113,34 @@ function apiError(status: number, detail: string, extra: Record<string, unknown>
   });
 }
 
-function renderHome(state?: unknown) {
+const WITH_ANALYTICS: Instance = {
+  ...SELLS_PLANS,
+  analytics: {
+    key: 'phc_test',
+    host: 'https://eu.i.posthog.com',
+    ui_host: 'https://eu.posthog.com',
+  },
+};
+
+function renderHome(state?: unknown, instance: Instance = SELLS_PLANS) {
   return render(
-    <AuthProvider>
-      <ThemeProvider>
-        <MemoryRouter
-          initialEntries={[{ pathname: '/home', state }]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/home" element={<Home />} />
-              <Route path="/scheduled" element={<Scheduled />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>
-    </AuthProvider>,
+    <InstanceProvider instance={instance}>
+      <AuthProvider>
+        <ThemeProvider>
+          <MemoryRouter
+            initialEntries={[{ pathname: '/home', state }]}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/home" element={<Home />} />
+                <Route path="/scheduled" element={<Scheduled />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </AuthProvider>
+    </InstanceProvider>,
   );
 }
 
@@ -426,7 +440,14 @@ describe('Home', () => {
       createdAt: '2026-10-10T12:00:00Z',
     };
 
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     beforeEach(() => {
+      // The fixtures' times are in October 2026, so the picker's min would block them once they passed.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-10T12:00'));
       vi.mocked(scheduledPostService.schedule).mockReset();
       vi.mocked(scheduledPostService.postNow).mockReset();
       vi.mocked(xConnectionService.startAuthorization).mockReset();
@@ -929,7 +950,7 @@ describe('Home', () => {
     });
 
     it('links to the Privacy Policy and the Terms at the bottom, in a new tab', async () => {
-      renderHome();
+      renderHome(undefined, WITH_OPERATOR);
       await authorsPanel();
 
       const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
@@ -941,11 +962,36 @@ describe('Home', () => {
     });
 
     it('offers Cookie settings next to the legal links', async () => {
-      renderHome();
+      renderHome(undefined, { ...WITH_OPERATOR, analytics: WITH_ANALYTICS.analytics });
       await authorsPanel();
 
       const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
       expect(legal.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+    });
+
+    it('offers only Cookie settings on an Instance with analytics but no Operator details', async () => {
+      renderHome(undefined, WITH_ANALYTICS);
+      await authorsPanel();
+
+      expect(screen.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
+    });
+
+    it('has no legal links or Cookie settings on an Instance with neither', async () => {
+      renderHome();
+      await authorsPanel();
+
+      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
+    });
+
+    it('offers no Cookie settings on an Instance without analytics', async () => {
+      renderHome(undefined, WITH_OPERATOR);
+      await authorsPanel();
+
+      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
+      expect(legal.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
     });
 
     it('remembers a collapsed sidebar across visits', async () => {
@@ -964,6 +1010,56 @@ describe('Home', () => {
     renderHome({ checkoutStatus: 'success' });
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Billing')).toBeInTheDocument();
+  });
+
+  describe('On an Instance that sells no Plans', () => {
+    const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
+
+    it('lets a User without a Subscription add authors and write, with no prompt to subscribe', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      renderHome(undefined, NO_PLANS);
+
+      const panel = await authorsPanel();
+      expect(await panel.findByLabelText('X handle')).toBeInTheDocument();
+      const area = await writer();
+      expect(await area.findByRole('button', { name: 'Write the Post' })).toBeInTheDocument();
+      expect(screen.queryByText(/needs a subscription/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Subscribe' })).not.toBeInTheDocument();
+      expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
+    });
+
+    it('opens Schedule on a Final instead of Billing', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      renderHome(undefined, NO_PLANS);
+      const area = await writer();
+      await writeBrief(area, 'ship');
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+
+      expect(
+        await screen.findByRole('dialog', { name: 'Schedule this Final' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Billing' })).not.toBeInTheDocument();
+    });
+
+    it('offers no Billing in the user menu', async () => {
+      renderHome(undefined, NO_PLANS);
+      const [menuButton] = await screen.findAllByRole('button', { name: 'User menu' });
+
+      fireEvent.keyDown(menuButton, { key: 'Enter' });
+
+      expect(await screen.findByRole('menuitem', { name: 'Account' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: 'Billing' })).not.toBeInTheDocument();
+    });
+
+    it('opens no Billing dialog when sent back from a checkout', async () => {
+      renderHome({ checkoutStatus: 'success' }, NO_PLANS);
+
+      expect(await writer()).toBeTruthy();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 
   describe('Inspiration authors', () => {

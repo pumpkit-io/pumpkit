@@ -1,7 +1,7 @@
 import type { InternalAxiosRequestConfig } from 'axios';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
@@ -9,9 +9,12 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 }));
 
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import type { Instance } from '@/lib/instance';
+import { SELLS_PLANS, WITH_OPERATOR, WITH_SUPPORT_EMAIL } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
-import { APP_NAME } from '@/lib/app';
 import { api } from '@/services/apiService';
+import { billingService } from '@/services/billingService';
 import { Landing } from './Landing';
 
 const originalAdapter = api.defaults.adapter;
@@ -57,13 +60,24 @@ const QUARTERLY_PLAN = {
 };
 
 /** Renders the landing page as a signed-out visitor sees it at `/`. */
-function renderLanding() {
+const WITH_ANALYTICS: Instance = {
+  ...SELLS_PLANS,
+  analytics: {
+    key: 'phc_test',
+    host: 'https://eu.i.posthog.com',
+    ui_host: 'https://eu.posthog.com',
+  },
+};
+
+function renderLanding(instance: Instance = SELLS_PLANS) {
   return render(
-    <ThemeProvider>
-      <MemoryRouter>
-        <Landing />
-      </MemoryRouter>
-    </ThemeProvider>,
+    <InstanceProvider instance={instance}>
+      <ThemeProvider>
+        <MemoryRouter>
+          <Landing />
+        </MemoryRouter>
+      </ThemeProvider>
+    </InstanceProvider>,
   );
 }
 
@@ -74,6 +88,18 @@ beforeEach(() => {
 
 afterEach(() => {
   api.defaults.adapter = originalAdapter;
+});
+
+describe('Landing on an Instance that sells no Plans', () => {
+  it('shows no pricing section or Pricing link and asks for no Plans', () => {
+    const fetchPlans = vi.spyOn(billingService, 'fetchPlans');
+    onTestFinished(() => fetchPlans.mockRestore());
+    renderLanding({ ...SELLS_PLANS, sells_plans: false });
+
+    expect(screen.queryByRole('region', { name: 'Simple pricing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
+    expect(fetchPlans).not.toHaveBeenCalled();
+  });
 });
 
 describe('Landing hero', () => {
@@ -117,6 +143,12 @@ describe('Landing landmarks', () => {
 });
 
 describe('Landing header', () => {
+  it("names the Instance's app in the header", () => {
+    renderLanding({ ...SELLS_PLANS, app_name: 'acmeWriter' });
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('link', { name: 'acmeWriter home' })).toBeInTheDocument();
+  });
+
   it('links the Authors and Pricing anchors to their sections', () => {
     renderLanding();
     const header = screen.getByRole('banner');
@@ -142,7 +174,7 @@ describe('Landing header', () => {
   it('tracks the logo and the desktop links with their surface', () => {
     renderLanding();
     const header = screen.getByRole('banner');
-    fireEvent.click(within(header).getByRole('link', { name: `${APP_NAME} home` }));
+    fireEvent.click(within(header).getByRole('link', { name: 'Pumpkit home' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Authors' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Pricing' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Get started' }));
@@ -230,39 +262,85 @@ describe('Landing authors', () => {
 });
 
 describe('Landing footer', () => {
-  it('names the Operator with its company details', () => {
-    renderLanding();
+  it('names the Operator with its company details from the Instance', () => {
+    renderLanding(WITH_OPERATOR);
     const footer = screen.getByRole('contentinfo');
-    expect(within(footer).getByText('INCEPTIONAL S.R.L.')).toBeInTheDocument();
-    expect(
-      within(footer).getByText('Via Eugenio Curiel, 34, Fano (PU), Italy'),
-    ).toBeInTheDocument();
+    expect(within(footer).getByText('Example S.R.L.')).toBeInTheDocument();
+    expect(within(footer).getByText('Via Roma 1, Milano, Italy')).toBeInTheDocument();
     expect(
       within(footer).getByText(
-        'VAT ID IT02853580419 · REA PS-307481 · Share capital €1 fully paid in',
+        'VAT ID IT01234567890 · REA MI-123456 · Share capital €10,000 fully paid in',
       ),
     ).toBeInTheDocument();
-    expect(within(footer).getByText('PEC inceptional@pec.it')).toBeInTheDocument();
+    expect(within(footer).getByText('PEC example@pec.it')).toBeInTheDocument();
+  });
+
+  it('leaves out the company identifiers the Operator details do not set', () => {
+    renderLanding({
+      ...WITH_OPERATOR,
+      operator: {
+        ...WITH_OPERATOR.operator!,
+        vat_id: null,
+        rea: 'MI-123456',
+        share_capital: null,
+        pec: null,
+      },
+    });
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByText('REA MI-123456')).toBeInTheDocument();
+    expect(within(footer).queryByText(/VAT ID|Share capital|PEC/)).not.toBeInTheDocument();
   });
 
   it('offers Cookie settings', () => {
-    renderLanding();
+    renderLanding({ ...WITH_OPERATOR, analytics: WITH_ANALYTICS.analytics });
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
   });
 
+  it('offers no Cookie settings on an Instance without analytics', () => {
+    renderLanding(WITH_OPERATOR);
+    const footer = screen.getByRole('contentinfo');
+    expect(
+      within(footer).queryByRole('button', { name: 'Cookie settings' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('links to the Privacy Policy, the Terms and the support address', () => {
-    renderLanding();
+    renderLanding(WITH_OPERATOR);
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
       'href',
       '/privacy',
     );
     expect(within(footer).getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms');
-    expect(within(footer).getByRole('link', { name: 'support@pumpkit.io' })).toHaveAttribute(
+    expect(within(footer).getByRole('link', { name: 'help@example.org' })).toHaveAttribute(
       'href',
-      'mailto:support@pumpkit.io',
+      'mailto:help@example.org',
     );
+  });
+
+  it('shows only Cookie settings on an Instance with analytics but no Operator details', () => {
+    renderLanding(WITH_ANALYTICS);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
+    expect(within(footer).queryByRole('link')).not.toBeInTheDocument();
+    expect(footer.querySelector('address')).toBeNull();
+  });
+
+  it('shows only the support address on an Instance with it but no Operator details', () => {
+    renderLanding(WITH_SUPPORT_EMAIL);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: 'help@example.org' })).toHaveAttribute(
+      'href',
+      'mailto:help@example.org',
+    );
+    expect(within(footer).queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
+    expect(footer.querySelector('address')).toBeNull();
+  });
+
+  it('has no footer on an Instance with neither Operator details nor analytics', () => {
+    renderLanding();
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
   });
 });
 

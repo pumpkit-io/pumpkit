@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import posthog, { type PostHogConfig } from 'posthog-js';
+import type { AnalyticsSettings } from './instance';
 import { storage, storageKey } from './storage';
 
 /**
@@ -23,6 +24,7 @@ const consentListeners = new Set<Listener>();
 const settingsListeners = new Set<Listener>();
 
 let superProperties: Record<string, unknown> = {};
+let settings: AnalyticsSettings | null = null;
 
 export function getAnalyticsConsent(): AnalyticsConsent | null {
   const value = storage.get<unknown>('analytics-consent', null);
@@ -33,15 +35,13 @@ function capturing(): boolean {
   return posthog.__loaded && getAnalyticsConsent() === 'granted';
 }
 
-/** No-op unless VITE_POSTHOG_ENABLED is 'true' and a key is set, so local dev stays quiet. */
+/** No-op on an Instance without analytics. */
 function startPostHog(): void {
-  const apiKey = import.meta.env.VITE_POSTHOG_KEY ?? '';
-  if (import.meta.env.VITE_POSTHOG_ENABLED !== 'true' || !apiKey) return;
+  if (!settings) return;
   if (!posthog.__loaded) {
     const config: Partial<PostHogConfig> = {
-      api_host: import.meta.env.VITE_POSTHOG_HOST ?? 'https://eu.i.posthog.com',
-      // In prod point VITE_POSTHOG_HOST at the Caddy relay (https://<domain>/ph-relay) so events bypass adblockers; ui_host keeps dashboard links pointing at PostHog.
-      ui_host: import.meta.env.VITE_POSTHOG_UI_HOST ?? 'https://eu.posthog.com',
+      api_host: settings.host,
+      ui_host: settings.ui_host,
       // Cheaper, and keeps anonymous traffic out of the persons table.
       person_profiles: 'identified_only',
       // Autocapture only fires $pageview on initial load; PostHogPageviewTracker covers SPA navigations.
@@ -55,7 +55,7 @@ function startPostHog(): void {
       opt_out_capturing_by_default: true,
       opt_out_persistence_by_default: true,
     };
-    posthog.init(apiKey, config);
+    posthog.init(settings.key, config);
   }
   posthog.opt_in_capturing({ captureEventName: false });
   posthog.register(superProperties);
@@ -88,8 +88,12 @@ function notifyConsent(): void {
   consentListeners.forEach((listener) => listener());
 }
 
-/** Starts PostHog at app start when this browser already gave Analytics consent. */
-export function startAnalytics(): void {
+/**
+ * Takes the Instance's analytics settings at app start, and starts PostHog when this browser
+ * already gave Analytics consent. With null, PostHog never loads.
+ */
+export function startAnalytics(analytics: AnalyticsSettings | null): void {
+  settings = analytics;
   if (getAnalyticsConsent() === 'granted') startPostHog();
 }
 

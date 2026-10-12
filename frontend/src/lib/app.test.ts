@@ -1,10 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { APP_NAME, APP_SLUG, toSlug } from './app';
+import { afterEach, describe, expect, it } from 'vitest';
+import { APP_SLUG, setAppSlug, toSlug } from './app';
+import { storageKey } from './storage';
 
 describe('app identity', () => {
-  it('defaults the app name', () => {
-    expect(APP_NAME).toBe('Pumpkit');
+  afterEach(() => setAppSlug('Pumpkit'));
+
+  it('defaults the slug until the Instance loads', () => {
     expect(APP_SLUG).toBe('pumpkit');
+  });
+
+  it("namespaces storage keys with the Instance's app name once loaded", () => {
+    setAppSlug('Acme Writer');
+    expect(storageKey('theme')).toBe('acme-writer:theme');
   });
 
   it('slugifies names', () => {

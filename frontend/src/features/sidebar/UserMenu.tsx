@@ -15,6 +15,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useAccount } from '@/features/account/useAccount';
 import { useBilling } from '@/features/billing/useBilling';
+import { useInstance } from '@/features/instance/useInstance';
 import { useTheme, type ThemeChoice } from '@/features/theme/useTheme';
 import { track } from '@/lib/analytics';
 
@@ -22,6 +23,7 @@ export function UserMenu({ trigger }: { trigger: ReactNode }) {
   const { logout } = useAuth();
   const account = useAccount();
   const billing = useBilling();
+  const { sells_plans } = useInstance();
   const { choice, setChoice } = useTheme();
 
   return (
@@ -36,14 +38,16 @@ export function UserMenu({ trigger }: { trigger: ReactNode }) {
         >
           <UserIcon className="h-3.5 w-3.5" /> Account
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => {
-            track('user_menu_billing_clicked');
-            billing.open('user_menu');
-          }}
-        >
-          <CreditCard className="h-3.5 w-3.5" /> Billing
-        </DropdownMenuItem>
+        {sells_plans && (
+          <DropdownMenuItem
+            onSelect={() => {
+              track('user_menu_billing_clicked');
+              billing.open('user_menu');
+            }}
+          >
+            <CreditCard className="h-3.5 w-3.5" /> Billing
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Palette className="mr-2 h-3.5 w-3.5" /> Theme

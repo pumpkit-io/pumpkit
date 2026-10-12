@@ -4,7 +4,7 @@ import { Menu, X } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
-import { APP_NAME } from '@/lib/app';
+import { useInstance } from '@/features/instance/useInstance';
 import { cn } from '@/lib/utils';
 
 type Surface = 'desktop' | 'mobile';
@@ -17,6 +17,8 @@ const NAV_LINKS = [
 const MOBILE_MENU_ID = 'landing-mobile-menu';
 
 export function HeroHeader() {
+  const { app_name, sells_plans } = useInstance();
+  const links = sells_plans ? NAV_LINKS : NAV_LINKS.filter(({ href }) => href !== '#pricing');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -50,7 +52,7 @@ export function HeroHeader() {
   };
 
   const navLinks = (surface: Surface) =>
-    NAV_LINKS.map(({ label, href, event }) => (
+    links.map(({ label, href, event }) => (
       <li key={href}>
         <a
           href={href}
@@ -94,7 +96,7 @@ export function HeroHeader() {
         <div className="relative flex items-center justify-between py-3 lg:py-4">
           <Link
             to="/"
-            aria-label={`${APP_NAME} home`}
+            aria-label={`${app_name} home`}
             onClick={() => track('landing_nav_logo_clicked')}
           >
             <Brand size="sm" />

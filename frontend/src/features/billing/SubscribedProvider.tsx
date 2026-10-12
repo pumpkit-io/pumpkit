@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useInstance } from '@/features/instance/useInstance';
 import { billingService } from '@/services/billingService';
 import { useBilling } from './useBilling';
 
@@ -14,19 +15,22 @@ export const SubscribedContext = createContext<SubscribedContextValue | null>(nu
 /**
  * Whether the User is Subscribed, for Home to show writing tools or a prompt to subscribe.
  * It is a hint only: the backend's 403 is the real gate. Must sit inside a BillingProvider.
+ * On an Instance that sells no Plans every User counts as Subscribed, so no prompt shows.
  */
 export function SubscribedProvider({ children }: { children: ReactNode }) {
   const billing = useBilling();
-  const [subscribed, setSubscribed] = useState<boolean | null>(null);
+  const { sells_plans } = useInstance();
+  const [subscribed, setSubscribed] = useState<boolean | null>(sells_plans ? null : true);
 
   const refresh = useCallback(() => {
+    if (!sells_plans) return;
     billingService
       .fetchBillingMe()
       .then((me) => setSubscribed(me.subscribed))
       .catch(() => {
         // Leave the last answer: the backend still refuses writes if it was wrong.
       });
-  }, []);
+  }, [sells_plans]);
 
   useEffect(refresh, [refresh]);
 

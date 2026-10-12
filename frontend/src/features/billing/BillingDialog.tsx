@@ -91,8 +91,8 @@ function RunningSubscription({
 }
 
 /**
- * The acceptance boxes and the Plans, for a User who may subscribe. Mounted only while the
- * dialog is open, so every checkout starts with the boxes unticked.
+ * The acceptance boxes, where the Instance has Terms (ADR 0011), and the Plans, for a User who
+ * may subscribe. Mounted only while the dialog is open, so every checkout starts unticked.
  */
 function SubscribeOffer({
   data,
@@ -104,17 +104,22 @@ function SubscribeOffer({
   onSubscribe: (planKey: string, acceptance: TermsAcceptance) => void;
 }) {
   const [acceptance, setAcceptance] = useState<TermsAcceptance>(NOTHING_ACCEPTED);
-  const accepted = acceptsAll(acceptance);
+  const hasTerms = data.termsVersion !== null;
+  const accepted = !hasTerms || acceptsAll(acceptance);
 
   if (data.plans.length === 0) {
     return <p className="font-sans text-xs text-muted-foreground">No Plans are available yet.</p>;
   }
   return (
     <>
-      <p className="font-sans text-xs text-muted-foreground">
-        Tick the three boxes, then choose a Plan.
-      </p>
-      <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} />
+      {hasTerms && (
+        <>
+          <p className="font-sans text-xs text-muted-foreground">
+            Tick the three boxes, then choose a Plan.
+          </p>
+          <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} />
+        </>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {data.plans.map((plan) => (
           <PlanCard
@@ -154,7 +159,11 @@ export function BillingDialog() {
     }
   };
 
-  const onSubscribe = (planKey: string, termsVersion: string, acceptance: TermsAcceptance) => {
+  const onSubscribe = (
+    planKey: string,
+    termsVersion: string | null,
+    acceptance: TermsAcceptance,
+  ) => {
     track('billing_subscription_checkout_started', { plan_key: planKey });
     void go(planKey, () =>
       billingService.startSubscriptionCheckout(planKey, termsVersion, acceptance),

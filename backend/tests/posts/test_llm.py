@@ -6,10 +6,12 @@ import pytest
 import respx
 from pydantic import BaseModel, ConfigDict
 
-from pumpkit.posts.llm import LLMError, OpenRouterLLM
-from pumpkit.posts.openrouter import OpenRouterClient
+from pumpkit.core.config import settings
+from pumpkit.posts.llm import LLMError, OpenAICompatibleLLM
+from pumpkit.posts.llm_client import LLMClient
 
 COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
+LOCAL_BASE_URL = "http://localhost:11434/v1"
 
 
 class _Answer(BaseModel):
@@ -46,7 +48,7 @@ async def test_a_structured_call_reaches_openrouter_and_comes_back_parsed():
     respx.post(COMPLETIONS_URL).mock(side_effect=_respond)
     messages = [{"role": "system", "content": "be brief"}, {"role": "user", "content": "hi"}]
 
-    result = await OpenRouterLLM(OpenRouterClient()).structured(
+    result = await OpenAICompatibleLLM(LLMClient()).structured(
         model="openai/gpt-5.6-luna", messages=messages, response_model=_Answer, max_tokens=500
     )
 
@@ -65,7 +67,7 @@ async def test_a_provider_error_becomes_an_llm_error():
     )
 
     with pytest.raises(LLMError):
-        await OpenRouterLLM(OpenRouterClient()).structured(
+        await OpenAICompatibleLLM(LLMClient()).structured(
             model="m", messages=[{"role": "user", "content": "x"}], response_model=_Answer
         )
 
@@ -77,7 +79,7 @@ async def test_an_answer_that_does_not_fit_the_schema_becomes_an_llm_error():
     )
 
     with pytest.raises(LLMError):
-        await OpenRouterLLM(OpenRouterClient()).structured(
+        await OpenAICompatibleLLM(LLMClient()).structured(
             model="m", messages=[{"role": "user", "content": "x"}], response_model=_Answer
         )
 
@@ -107,7 +109,7 @@ async def test_a_cache_breakpoint_reaches_openrouter_and_cached_tokens_come_back
     }
     messages = [{"role": "system", "content": [block]}, {"role": "user", "content": "hi"}]
 
-    result = await OpenRouterLLM(OpenRouterClient()).structured(
+    result = await OpenAICompatibleLLM(LLMClient()).structured(
         model="m", messages=messages, response_model=_Answer
     )
 
@@ -115,3 +117,66 @@ async def test_a_cache_breakpoint_reaches_openrouter_and_cached_tokens_come_back
     assert result.usage is not None
     assert result.usage.raw["prompt_tokens_details"]["cached_tokens"] == 900
     assert result.usage.raw["prompt_tokens_details"]["cache_write_tokens"] == 0
+
+
+@respx.mock
+async def test_a_call_goes_to_the_configured_endpoint_with_the_configured_key(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_BASE_URL", LOCAL_BASE_URL)
+    monkeypatch.setattr(settings, "LLM_API_KEY", "local-key")
+    sent: dict[str, Any] = {}
+
+    def _respond(request: httpx.Request) -> httpx.Response:
+        sent["authorization"] = request.headers["authorization"]
+        sent.update(json.loads(request.content))
+        return httpx.Response(200, json=_completion(json.dumps({"post": "hello"})))
+
+    respx.post(f"{LOCAL_BASE_URL}/chat/completions").mock(side_effect=_respond)
+
+    result = await OpenAICompatibleLLM(LLMClient()).structured(
+        model="llama3.3", messages=[{"role": "user", "content": "hi"}], response_model=_Answer
+    )
+
+    assert result.parsed == _Answer(post="hello")
+    assert sent["authorization"] == "Bearer local-key"
+    assert sent["model"] == "llama3.3"
+
+
+@respx.mock
+async def test_cache_hints_are_left_out_for_an_endpoint_other_than_openrouter(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_BASE_URL", LOCAL_BASE_URL)
+    sent: dict[str, Any] = {}
+
+    def _respond(request: httpx.Request) -> httpx.Response:
+        sent.update(json.loads(request.content))
+        return httpx.Response(200, json=_completion(json.dumps({"post": "hello"})))
+
+    respx.post(f"{LOCAL_BASE_URL}/chat/completions").mock(side_effect=_respond)
+    block = {
+        "type": "text",
+        "text": "be brief",
+        "cache_control": {"type": "ephemeral", "ttl": "1h"},
+    }
+    messages = [{"role": "system", "content": [block]}, {"role": "user", "content": "hi"}]
+
+    await OpenAICompatibleLLM(LLMClient()).structured(
+        model="m", messages=messages, response_model=_Answer
+    )
+
+    assert sent["messages"] == [
+        {"role": "system", "content": [{"type": "text", "text": "be brief"}]},
+        {"role": "user", "content": "hi"},
+    ]
+
+
+@respx.mock
+async def test_an_answer_without_usage_comes_back_parsed_with_no_usage():
+    completion = _completion(json.dumps({"post": "hello"}))
+    del completion["usage"]
+    respx.post(COMPLETIONS_URL).mock(return_value=httpx.Response(200, json=completion))
+
+    result = await OpenAICompatibleLLM(LLMClient()).structured(
+        model="m", messages=[{"role": "user", "content": "x"}], response_model=_Answer
+    )
+
+    assert result.parsed == _Answer(post="hello")
+    assert result.usage is None

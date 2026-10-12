@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from pumpkit.auth.google_config import GOOGLE_JWKS_REQUEST, GOOGLE_TOKEN_ENDPOINT
 from pumpkit.core.config import settings
+from pumpkit.core.providers import require_provider
 
 
 class GoogleSignInError(Exception):
@@ -120,3 +121,7 @@ class FakeGoogleSignIn:
 def get_google_sign_in() -> GoogleSignIn:
     """FastAPI dependency for the `GoogleSignIn` port."""
     return GoogleOAuthSignIn()
+
+
+# FastAPI dependency: the Google routes answer 404 on an Instance without the Google settings.
+require_google_sign_in = require_provider(settings.is_google_configured)

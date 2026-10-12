@@ -8,6 +8,7 @@ from httpx import AsyncClient
 import pumpkit.scheduling.publish as publish_module
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
+from pumpkit.core.rate_limit import limiter
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import (
     XAccount,
@@ -198,6 +199,17 @@ async def test_a_user_who_is_not_subscribed_cannot_post_now(client, fake_x_publi
 
     assert response.status_code == 403
     assert fake_x_publisher.published == []
+
+
+async def test_a_user_without_a_subscription_posts_now_where_no_plans_are_sold(
+    client, sells_no_plans, fake_x_publisher, clock
+):
+    await _connect_x(client)
+
+    response = await _post_now(client)
+
+    assert response.status_code == 201
+    assert response.json()["state"] == "published"
 
 
 async def test_a_post_x_refuses_fails_with_x_s_own_words(
@@ -493,6 +505,17 @@ async def test_a_user_who_is_not_subscribed_cannot_schedule(client, fake_x_publi
     assert response.status_code == 403
 
 
+async def test_a_user_without_a_subscription_schedules_where_no_plans_are_sold(
+    client, sells_no_plans, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+
+    response = await _schedule(client, "2026-10-10T14:00:00Z")
+
+    assert response.status_code == 201
+    assert response.json()["state"] == "scheduled"
+
+
 @pytest.fixture
 async def final(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """The first Version of a new Post, whose Final is "The final, version one."."""
@@ -725,6 +748,43 @@ async def test_post_now_works_again_once_the_utc_month_turns(
     assert after.status_code == 201, after.text
     assert after.json()["publish_at"] == "2026-11-01T00:00:00Z"
     assert after.json()["state"] == "published"
+
+
+@pytest.fixture
+def no_cap(monkeypatch):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", None)
+    # Filling a month past 100 would otherwise trip the per-minute limit on creating.
+    monkeypatch.setattr(limiter, "enabled", False)
+
+
+async def test_with_no_cap_a_user_can_schedule_and_post_now_past_100_in_a_month(
+    client, subscribed, fake_x_publisher, fixed_clock, no_cap
+):
+    await _connect_x(client)
+    for day in range(11, 31):
+        for hour in range(9, 14):
+            await _schedule(client, f"2026-10-{day}T{hour:02}:00:00Z")
+
+    hundred_and_first = await _schedule(client, "2026-10-31T09:00:00Z")
+    posted_now = await _post_now(client)
+
+    assert hundred_and_first.status_code == 201, hundred_and_first.text
+    assert posted_now.status_code == 201, posted_now.text
+    assert posted_now.json()["state"] == "published"
+
+
+async def test_with_a_cap_of_0_nothing_can_be_scheduled_or_posted_now(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch
+):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 0)
+    await _connect_x(client)
+
+    scheduled = await _schedule(client, "2026-10-11T09:00:00Z")
+    posted_now = await _post_now(client)
+
+    assert scheduled.status_code == posted_now.status_code == 409
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert fake_x_publisher.published == []
 
 
 async def test_scheduled_posts_can_be_listed_by_state_in_the_same_order(

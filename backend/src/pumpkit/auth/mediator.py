@@ -24,6 +24,7 @@ from pumpkit.auth.google_config import (
 from pumpkit.auth.google_sign_in import GoogleSignIn, GoogleSignInError
 from pumpkit.auth.mailer import AuthMailer, AuthMailerError, MagicLinkEmail
 from pumpkit.auth.models import User
+from pumpkit.auth.sign_up_allowlist import EMAIL_NOT_ALLOWED, EmailNotAllowedError, may_sign_in
 from pumpkit.core.config import settings
 from pumpkit.core.errors import report_unexpected_exception
 from pumpkit.core.logging import logger
@@ -98,7 +99,7 @@ async def oauth_google_callback(
 ) -> RedirectResponse:
     """
     Always redirect: to the frontend callback with a new Session, or to the sign-in page
-    with `sign_in_failed` or `account_suspended`. An unexpected exception is reported and
+    with `sign_in_failed`, `account_suspended` or `email_not_allowed`. An unexpected exception is reported and
     rolled back, so a failure halfway leaves no User or Google identity behind.
     """
     try:
@@ -154,6 +155,8 @@ async def _sign_in_with_google(
     except GoogleSignInError as exc:
         logger.warning("Google sign-in failed: %s", exc)
         return sessions.sign_in_error_redirect("sign_in_failed")
+    if not may_sign_in(claims.email):
+        return sessions.sign_in_error_redirect(EMAIL_NOT_ALLOWED)
 
     # One sign-in, one transaction: the User, their Google identity and the
     # Session commit together, or not at all.
@@ -212,7 +215,10 @@ async def request_magic_link(
     Always returns a generic message, to avoid disclosing account existence.
     If the email can't be sent, the link is invalidated so an immediate retry
     sends a new one, and `AuthMailerError` reaches the global handler.
+    An email the Sign-up allowlist refuses raises `EmailNotAllowedError` and sends nothing.
     """
+    if not may_sign_in(email):
+        raise EmailNotAllowedError()
     user: Optional[User] = await user_service.get_user_by_email(db=db, email=email)
     issued = await magic_links.issue(
         db,
@@ -254,8 +260,8 @@ async def complete_magic_link(
 ) -> RedirectResponse:
     """
     Always redirect: to the frontend callback with a new Session, or to the sign-in page with
-    `invalid_magic_link`, `account_suspended` or `sign_in_failed`. An unexpected exception is
-    reported and rolled back, so a failure halfway leaves no User behind.
+    `invalid_magic_link`, `account_suspended`, `email_not_allowed` or `sign_in_failed`. An
+    unexpected exception is reported and rolled back, so a failure halfway leaves no User behind.
     """
     try:
         return await _sign_in_with_magic_link(token=token, request=request, db=db, now=now)
@@ -275,6 +281,10 @@ async def _sign_in_with_magic_link(
     if isinstance(redeemed, magic_links.RedemptionFailure):
         logger.warning("Magic link rejected: %s", redeemed.reason.value)
         return sessions.sign_in_error_redirect("invalid_magic_link")
+    if not may_sign_in(redeemed.email):
+        # Commit so the single-use Magic link stays consumed, before any User is created.
+        await db.commit()
+        return sessions.sign_in_error_redirect(EMAIL_NOT_ALLOWED)
 
     # Trust only the email on the consumed Magic link row, never the click URL.
     # Every Sign-in method resolves through this operation, so one email reaches one User.
@@ -296,8 +306,11 @@ async def _sign_in_with_magic_link(
 
 def build_inbox_redirect_response() -> RedirectResponse:
     """Open Gmail filtered to the Magic link sender."""
-    query = f"from:{settings.RESEND_NOREPLY_ADDRESS}"
-    target = f"https://mail.google.com/mail/u/0/#search/{quote(query, safe='')}"
+    target = "https://mail.google.com/mail/u/0/#inbox"
+    # Without SMTP no email is sent, so there is no sender to filter on.
+    if settings.EMAIL_FROM:
+        query = f"from:{settings.EMAIL_FROM}"
+        target = f"https://mail.google.com/mail/u/0/#search/{quote(query, safe='')}"
     return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
 
 

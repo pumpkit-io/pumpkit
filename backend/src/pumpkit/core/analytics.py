@@ -16,14 +16,13 @@ class PostHogClient:
 
     def __init__(self) -> None:
         self._client: Optional[Posthog] = None
-        project_api_key = settings.POSTHOG_PROJECT_API_KEY
-        self._enabled = bool(settings.POSTHOG_ENABLED and project_api_key)
-        if not settings.POSTHOG_ENABLED or not project_api_key:
+        self._enabled = settings.POSTHOG_ENABLED and settings.is_posthog_configured()
+        if not self._enabled:
             logger.info("PostHog disabled (POSTHOG_ENABLED=false or missing project key)")
             return
 
         client = Posthog(
-            project_api_key=project_api_key,
+            project_api_key=settings.POSTHOG_PROJECT_API_KEY or "",
             host=settings.POSTHOG_HOST,
             personal_api_key=settings.POSTHOG_PERSONAL_API_KEY or None,
         )

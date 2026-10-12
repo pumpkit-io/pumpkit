@@ -76,10 +76,7 @@ async def fail_stuck(db: AsyncSession, *, now: datetime) -> list[str]:
 
 async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPost) -> XConnection:
     """The X connection, row-locked until the next commit, or `Failed`."""
-    subscription = await subscriptions_service.get_user_subscription(
-        db, user_id=scheduled_post.user_id
-    )
-    if not subscriptions_service.is_subscribed(subscription):
+    if not await subscriptions_service.has_access(db, user_id=scheduled_post.user_id):
         raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
 
     connection = await x_connections_service.lock_connection(db, user_id=scheduled_post.user_id)

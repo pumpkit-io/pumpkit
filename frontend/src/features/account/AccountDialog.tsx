@@ -14,7 +14,7 @@ import { userService } from '@/services/userService';
 import { AvatarEditor } from './AvatarEditor';
 import { track } from '@/lib/analytics';
 import { identifyUser } from '@/lib/analyticsConsent';
-import { APP_NAME } from '@/lib/app';
+import { useInstance } from '@/features/instance/useInstance';
 
 interface FormState {
   firstName: string;
@@ -47,6 +47,7 @@ function initialsFor(firstName: string, lastName: string, fallback: string): str
 }
 
 export function AccountDialog() {
+  const { app_name } = useInstance();
   const { isOpen, close, error, setError, pendingSave, setPendingSave } = useAccount();
   const profile = useProfile();
   const setProfile = useProfileMutator();
@@ -136,7 +137,7 @@ export function AccountDialog() {
             Account
           </DialogTitle>
           <p className="mt-1 font-sans text-xs text-muted-foreground">
-            Update how you appear across {APP_NAME}.
+            Update how you appear across {app_name}.
           </p>
         </DialogHeader>
 
@@ -206,7 +207,7 @@ export function AccountDialog() {
 
         <DialogFooter>
           <span className="font-sans text-[11px] text-muted-foreground">
-            Changes apply everywhere in {APP_NAME}.
+            Changes apply everywhere in {app_name}.
           </span>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" onClick={close} disabled={pendingSave}>

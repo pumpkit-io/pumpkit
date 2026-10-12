@@ -4,6 +4,20 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 
 ## Language
 
+### Instances
+
+**Instance**:
+One running copy of Pumpkit, with its own Users and data. The Operator runs the hosted Instance at pumpkit.io; anyone may run their own from the open-source code.
+_Avoid_: deployment, server, tenant, edition
+
+**Self-hoster**:
+A person who runs their own Instance. They are not the Operator, and the Operator's Terms and Privacy Policy do not cover their Instance.
+_Avoid_: admin, host, operator (for anyone but the Operator)
+
+**Sign-up allowlist**:
+The email addresses and email domains that may sign in to an Instance. An Instance without one lets anyone sign in.
+_Avoid_: whitelist, invite list, access list
+
 ### Accounts
 
 **User**:
@@ -33,7 +47,7 @@ _Avoid_: banned, inactive, deactivated
 ### Billing
 
 **Plan**:
-A recurring offer a User can subscribe to. Pumpkit decides which Plans exist; nothing else is purchasable.
+A recurring offer a User can subscribe to. Each Instance decides which Plans exist; nothing else is purchasable. An Instance may sell no Plans, and then every User may use all of Pumpkit without a Subscription.
 _Avoid_: price, tier, product
 
 **Subscription**:
@@ -107,7 +121,7 @@ _Avoid_: errored, rejected, dead
 ### Legal
 
 **Operator**:
-The company that runs the hosted Pumpkit at pumpkit.io and is the other party to the Terms: INCEPTIONAL S.R.L. People who self-host Pumpkit's open-source code are not covered by the Operator's Terms or Privacy Policy.
+The company that runs the hosted Instance at pumpkit.io and is the other party to the Terms: INCEPTIONAL S.R.L. Self-hosters' Instances are not covered by the Operator's Terms or Privacy Policy.
 _Avoid_: we (in docs), owner, provider, Pumpkit (for the company)
 
 **Terms**:

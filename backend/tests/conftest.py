@@ -37,9 +37,9 @@ _TEST_ENV = {
     "GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES": "64",
     "GOOGLE_COOKIE_MAX_AGE_SECONDS": "600",
     "GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS": "30",
-    "RESEND_API_KEY": "re_test",
-    "RESEND_NOREPLY_ADDRESS": "noreply@example.com",
-    "RESEND_SUPPORT_ADDRESS": "support@example.com",
+    "OPERATOR_NAME": "Example S.R.L.",
+    "OPERATOR_ADDRESS": "Via Roma 1, Milano, Italy",
+    "SUPPORT_EMAIL": "support@example.com",
     "STRIPE_SECRET_KEY": "sk_test_dummy",
     "STRIPE_PUBLISHABLE_KEY": "pk_test_dummy",
     "STRIPE_WEBHOOK_SECRET": "whsec_dummy",
@@ -48,7 +48,7 @@ _TEST_ENV = {
     "STRIPE_BILLING_PORTAL_RETURN_URL": "http://localhost:5173/billing",
     "BILLING_PLAN_KEYS": '["pumpkit_pro_monthly"]',
     "BILLING_TRIAL_PERIOD_DAYS": "14",
-    "OPENROUTER_API_KEY": "sk-or-test",
+    "LLM_API_KEY": "sk-test",
     "POSTHOG_ENABLED": "false",
 }
 for _key, _value in _TEST_ENV.items():
@@ -86,6 +86,7 @@ from pumpkit.auth.models import MagicLink, User  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
+from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
@@ -98,7 +99,7 @@ from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # 
 @pytest.fixture(autouse=True)
 def auth_outbox():
     """
-    Every test sends auth email to an in-memory outbox instead of Resend.
+    Every test sends auth email to an in-memory outbox instead of an SMTP server or the log.
     Request it by name to read `auth_outbox.messages` or set `auth_outbox.fail = True`.
     """
     outbox = OutboxAuthMailer()
@@ -198,7 +199,7 @@ def fake_x_publisher():
 @pytest.fixture(autouse=True)
 def fake_llm():
     """
-    Every test calls models through a scripted fake instead of OpenRouter. Request it by name
+    Every test calls models through a scripted fake instead of a real endpoint. Request it by name
     to queue `fake_llm.replies` (field dicts or exceptions) and read `fake_llm.calls`.
     """
     fake = FakeLLM()
@@ -274,6 +275,27 @@ async def subscribed(db, user) -> Subscription:
     db.add(subscription)
     await db.commit()
     return subscription
+
+
+@pytest.fixture
+def sells_no_plans(monkeypatch) -> None:
+    """Unset the Stripe settings group, so the Instance sells no Plans."""
+    for key in ("STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"):
+        monkeypatch.setattr(settings, key, None)
+    monkeypatch.setattr(settings, "BILLING_PLAN_KEYS", [])
+
+
+@pytest.fixture
+def no_operator_details(monkeypatch) -> None:
+    """Unset the Operator details group, so the Instance has no legal pages or Terms."""
+    for key in ("OPERATOR_NAME", "OPERATOR_ADDRESS"):
+        monkeypatch.setattr(settings, key, None)
+
+
+@pytest.fixture
+def no_support_email(monkeypatch) -> None:
+    """Unset SUPPORT_EMAIL, so the Instance offers no support link."""
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", None)
 
 
 @pytest_asyncio.fixture
