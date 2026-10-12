@@ -150,7 +150,7 @@ async def test_the_stripe_adapter_cancels_a_subscription_now():
     assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1Incomplete"
 
 
-async def test_the_stripe_checkout_charges_vat_and_collects_vat_ids():
+async def test_the_stripe_checkout_charges_vat_as_the_seller_and_collects_vat_ids():
     http = _RecordedStripe(
         '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'
     )
@@ -167,6 +167,9 @@ async def test_the_stripe_checkout_charges_vat_and_collects_vat_ids():
     # the address and business name it collects onto that customer.
     assert form["customer_update[address]"] == ["auto"]
     assert form["customer_update[name]"] == ["auto"]
+    # Stripe turns Managed Payments on by default for new accounts, which makes Stripe
+    # the merchant of record and refuses products without a tax code.
+    assert form["managed_payments[enabled]"] == ["false"]
 
 
 async def test_the_fake_lists_a_cancelled_subscription_as_ended():

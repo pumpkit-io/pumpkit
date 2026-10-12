@@ -285,7 +285,7 @@ docker compose up -d --wait
 Turn this on only if you charge Users. You are then the seller: your own Terms, Privacy Policy and tax registration apply, not the Operator's.
 
 1. **Create the Plans.** In Stripe, create a product with one recurring price per Plan, give each price a lookup key (for example `pro_monthly`), and set each price's tax behaviour to inclusive. Only the lookup keys in `BILLING_PLAN_KEYS` are on sale, in that order.
-2. **Set up Stripe Tax.** Checkout charges tax and collects tax IDs, and Stripe refuses to open a Checkout until Stripe Tax is set up. Under Settings, then Tax, set the origin address and the default product category, set "Include tax in prices" to Yes, and add a registration for each place you collect tax in.
+2. **Set up Stripe Tax.** Checkout charges tax and collects tax IDs, and Stripe refuses to open a Checkout until Stripe Tax is set up. Under Settings, then Tax, set the origin address and the default product category (for example "Software as a service (SaaS) - business use"), set "Include tax in prices" to Yes, and add a registration for each place you collect tax in. Without a registration, Checkout charges no tax. Pumpkit turns off Stripe's Managed Payments (Stripe as merchant of record, on by default for new accounts) for its Checkouts, so you stay the seller whatever that setting says.
 3. **Add the webhook endpoint.** In Stripe's Developers section, add an endpoint at `PUBLIC_URL/api/v1/stripe/webhook` (for example `https://pumpkit.example.org/api/v1/stripe/webhook`) subscribed to `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` and `checkout.session.completed`. Copy its signing secret.
 4. **Write the settings.**
 
@@ -440,4 +440,4 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **A Scheduled post does not go out.** `docker compose ps publisher` should show `(healthy)`; `docker compose logs --tail 50 publisher` shows its passes and any error from X. A Failed Scheduled post shows its reason on the Scheduled page.
 
-**Stripe Checkout fails, or a paid Subscription does not show.** Check Stripe Tax ([Selling Plans](#selling-plans), step 2), and in Stripe's webhook endpoint page check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.
+**Stripe Checkout fails, or a paid Subscription does not show.** Check Stripe Tax ([Selling Plans](#selling-plans), step 2) and the backend log, which has Stripe's reason. On Stripe's webhook endpoint page, check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.

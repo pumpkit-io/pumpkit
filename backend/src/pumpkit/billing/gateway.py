@@ -260,6 +260,9 @@ class StripeBillingGateway:
             "automatic_tax": {"enabled": True},
             "tax_id_collection": {"enabled": True},
             "customer_update": {"address": "auto", "name": "auto"},
+            # Keep the Instance the seller, charging tax through Stripe Tax: Stripe turns on
+            # Managed Payments (Stripe as merchant of record) by default for new accounts.
+            "managed_payments": {"enabled": False},
         }
         if trial_period_days is not None:
             params["subscription_data"] = {"trial_period_days": trial_period_days}
