@@ -31,6 +31,7 @@ None of these is a setting. A trailing slash on `PUBLIC_URL` is dropped.
 | Stripe Checkout return | `PUBLIC_URL/billing/success` and `PUBLIC_URL/billing/cancelled` | Where Checkout returns after paying or cancelling. |
 | Stripe customer portal return | `PUBLIC_URL/billing` | Where the customer portal returns. |
 | Stripe webhook | `PUBLIC_URL/api/v1/stripe/webhook` | Register it as the webhook endpoint in Stripe. |
+| Canonical and social URLs | `PUBLIC_URL/` | The web container writes them into `index.html`'s canonical, Open Graph, Twitter card and JSON-LD tags, and into `sitemap.xml`, when it starts. |
 
 ## Optional
 
@@ -111,6 +112,12 @@ The defaults reach the compose stack's bundled Postgres; set these only for an e
 | `POSTGRES_PORT` | Defaults to `5432`. |
 | `POSTGRES_DB` | Defaults to `postgres`. |
 | `POSTGRES_SSL` | `disable` (default) or `require`. With `require` the backend and Alembic connect with SSL (`sslmode=require` / `ssl=require`), which managed Postgres providers need. `ENV` has no effect on SSL. |
+
+### Search indexing
+
+| Variable | Meaning |
+| --- | --- |
+| `ALLOW_SEARCH_INDEXING` | `false` (default) or `true`, read by the web container when it starts. `false` serves `index.html` with `<meta name="robots" content="noindex,nofollow">` and a `robots.txt` that disallows every path, so the Instance stays out of search engines. `true` serves `index,follow` and a `robots.txt` that allows crawling (except `/home` and `/billing`) and names `PUBLIC_URL/sitemap.xml`. The hosted Instance at pumpkit.io sets `true`. |
 
 ### Instance and internal tunables
 
