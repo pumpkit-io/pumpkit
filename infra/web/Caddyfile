@@ -17,6 +17,9 @@
 		}
 	}
 
+	# Optional routes that start.d steps turn on, such as the PostHog relay.
+	import /etc/caddy/site.d/*.caddy
+
 	# SPA: fall back to index.html for client routes.
 	handle {
 		root * /srv

@@ -1,0 +1,18 @@
+# The first-party PostHog relay, imported into the site when POSTHOG_RELAY=true (start.d/30-posthog-relay.sh).
+# It dodges adblockers, whose blocklists match names like /ingest or /analytics.
+@ph_static path /ph-relay/static/*
+@ph_general path /ph-relay/*
+
+handle @ph_static {
+	uri strip_prefix /ph-relay
+	reverse_proxy https://eu-assets.i.posthog.com {
+		header_up Host eu-assets.i.posthog.com
+	}
+}
+
+handle @ph_general {
+	uri strip_prefix /ph-relay
+	reverse_proxy https://eu.i.posthog.com {
+		header_up Host eu.i.posthog.com
+	}
+}
