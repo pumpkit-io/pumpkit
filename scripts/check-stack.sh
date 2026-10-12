@@ -1,6 +1,5 @@
 #!/bin/sh
 # Checks a running production stack over HTTP, the way a Self-hoster's browser sees it.
-# Usage: sh scripts/check-stack.sh [BASE_URL] (default http://localhost:8080). Needs curl.
 # With POSTHOG_RELAY=true it expects the PostHog relay, which needs PostHog reachable from the stack.
 set -eu
 
