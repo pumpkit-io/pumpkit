@@ -82,3 +82,11 @@ jobs:
       - run: make e2e
       - if: failure()
         run: docker compose -f compose.dev.yml logs --tail 100
+  stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/setup.sh --public-url http://localhost:8080 --llm-api-key dummy --twitterapi-io-api-key dummy </dev/null
+      - run: make smoke
+      - if: failure()
+        run: docker compose logs --tail 100
