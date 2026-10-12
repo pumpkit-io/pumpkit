@@ -26,6 +26,15 @@ describe('fetchInstance', () => {
     await expect(fetchInstance()).resolves.toEqual(MAGIC_LINK_ONLY);
   });
 
+  it("asks the API on the page's own origin", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(MAGIC_LINK_ONLY));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchInstance();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/instance');
+  });
+
   it('falls back the same way when /instance answers with an error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 502 })));
 

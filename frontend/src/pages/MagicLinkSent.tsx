@@ -5,13 +5,13 @@ import { Button } from '../components/ui/button';
 import { Brand } from '@/components/brand/Brand';
 import { useInstance } from '@/features/instance/useInstance';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
+import { API_BASE_URL } from '@/lib/api';
 import { isGmailAddress } from '../lib/gmailSearch';
 
 type MagicLinkSentState = { email?: string };
 
-const API_URL = import.meta.env.VITE_API_URL;
-const INBOX_REDIRECT_URL = `${API_URL}/login/magic-link/inbox-redirect`;
-const SUPPORT_CONTACT_URL = `${API_URL}/support/contact`;
+const INBOX_REDIRECT_URL = `${API_BASE_URL}/login/magic-link/inbox-redirect`;
+const SUPPORT_CONTACT_URL = `${API_BASE_URL}/support/contact`;
 
 export function MagicLinkSent() {
   const navigate = useNavigate();
