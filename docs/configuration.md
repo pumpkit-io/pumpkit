@@ -1,6 +1,6 @@
 # Configuration
 
-Every setting comes from one `.env` file at the repo root, copied from `.env.example`. Every service reads it: the dev stack in `compose.dev.yml` passes it to the backend and the publisher, and the Vite dev server reads it from the repo root.
+Every setting comes from one `.env` file at the repo root, copied from `.env.example`. `sh scripts/setup.sh` writes it with the three secrets generated, asking for (or, without a terminal, naming) each missing required value and keeping every value already there; `--help` lists its flags. Every service reads it: the dev stack in `compose.dev.yml` passes it to the backend and the publisher, and the Vite dev server reads it from the repo root.
 
 Only the settings under [Required](#required) must be set. Everything else is optional: leave it unset or empty and the app boots with the default shown, or with that provider off.
 
