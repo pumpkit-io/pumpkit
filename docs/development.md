@@ -114,7 +114,9 @@ make e2e    # starts the dev stack if it is down, then runs Playwright against i
 
 Before the first `make e2e`, run `cd e2e && npm install && npx playwright install chromium`. CONTRIBUTING lists every target.
 
-The e2e suite opens the Billing dialog, so its Instance must sell Plans: set the Stripe billing group in `.env`, with dummy values if you like (CI uses `sk_test_dummy`, `pk_test_dummy`, `whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`).
+`make smoke` builds and starts the production stack from `.env`, then runs `scripts/check-stack.sh` against it. To check a stack that is already running, run `sh scripts/check-stack.sh [BASE_URL]` (default `http://localhost:8080`; it needs curl). Set `POSTHOG_RELAY=true` when the stack runs the PostHog relay, and `EXPECT_SEARCH_INDEXING=true` when it has `ALLOW_SEARCH_INDEXING=true`.
+
+The e2e suite opens the Billing dialog, so its Instance must sell Plans: set the Stripe billing group in `.env`. [CONTRIBUTING](../CONTRIBUTING.md#make-targets) gives dummy values that work.
 
 If host port 5432 is already taken, add a local compose override that remaps the db service and point `COMPOSE_FILE` at it:
 

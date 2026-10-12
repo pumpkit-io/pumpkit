@@ -1,6 +1,4 @@
-# The production stack: `docker compose up -d` runs a whole Instance from the release images,
-# `docker compose up -d --build` builds them from this checkout. Settings come from the root .env.
-# For an external Postgres, add compose.external-db.yml (see its header).
+# The production stack, a whole Instance from the release images; docs/self-hosting.md runs it.
 name: pumpkit
 
 services:

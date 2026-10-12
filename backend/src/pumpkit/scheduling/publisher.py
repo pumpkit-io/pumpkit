@@ -2,7 +2,6 @@
 
 import asyncio
 import signal
-import tempfile
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional
@@ -19,8 +18,8 @@ from pumpkit.core.time import Clock, system_clock
 from pumpkit.scheduling.publishing import fail_stuck, publish_next_due
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
-# compose.yml's publisher healthcheck reads this path's age.
-HEARTBEAT_FILE = Path(tempfile.gettempdir()) / "pumpkit-publisher-heartbeat"
+# compose.yml's publisher healthcheck reads this exact path's age.
+HEARTBEAT_FILE = Path("/tmp/pumpkit-publisher-heartbeat")
 
 
 async def run_pass(

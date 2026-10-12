@@ -7,6 +7,7 @@ import asyncio
 import subprocess
 import sys
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,7 +16,7 @@ from httpx import AsyncClient
 
 import pumpkit.scheduling.publish as publish_module
 import pumpkit.scheduling.service as scheduled_posts_service
-from pumpkit.scheduling.publisher import run, run_pass
+from pumpkit.scheduling.publisher import HEARTBEAT_FILE, run, run_pass
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
@@ -321,6 +322,12 @@ async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed
     await asyncio.wait_for(looping, timeout=1)
 
     assert not heartbeat.exists()
+
+
+def test_the_compose_healthcheck_reads_the_heartbeat_the_publisher_touches():
+    compose = (Path(__file__).parents[3] / "compose.yml").read_text()
+
+    assert f"find {HEARTBEAT_FILE} -mmin" in compose
 
 
 async def test_the_pass_tracks_what_it_publishes(

@@ -4,11 +4,11 @@ from typing import Annotated, Literal, Optional, Self
 from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, NoDecode
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from pumpkit.core.db.urls import PostgresSsl
 
-Environment = Literal["local", "dev", "stg", "prod"]
+Environment = Literal["local", "prod"]
 LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 SmtpSecurity = Literal["starttls", "tls", "none"]
 
@@ -26,6 +26,9 @@ class ProviderGroup(StrEnum):
 
 
 class Settings(BaseSettings):
+    # A settings error is logged at startup; its input values would include every secret.
+    model_config = SettingsConfigDict(hide_input_in_errors=True)
+
     ENV: Environment = "prod"
     LOG_LEVEL: LoggingLevel = "INFO"
     APP_NAME: str = "Pumpkit"

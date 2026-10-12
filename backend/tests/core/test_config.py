@@ -85,6 +85,12 @@ def test_an_instance_runs_in_production_unless_told_otherwise(instance_env):
     assert instance_env().ENV == "prod"
 
 
+def test_env_is_either_prod_or_local(instance_env):
+    assert instance_env(ENV="local").ENV == "local"
+    with pytest.raises(ValidationError, match="ENV"):
+        instance_env(ENV="stg")
+
+
 def test_a_domain_public_url_gives_every_url_the_instance_needs(instance_env):
     s = instance_env(PUBLIC_URL="https://pumpkit.example.org")
 
@@ -229,6 +235,19 @@ def test_partly_configured_provider_fails_naming_each_missing_setting(instance_e
     message = str(excinfo.value)
     for key in unset:
         assert key in message
+
+
+def test_a_settings_error_does_not_print_secret_values(instance_env):
+    with pytest.raises(ValidationError) as excinfo:
+        instance_env(
+            TWITTERAPI_IO_API_KEY="tw-s3cret",
+            STRIPE_SECRET_KEY="sk_s3cret",
+        )
+
+    message = str(excinfo.value)
+    assert "STRIPE_PUBLISHABLE_KEY" in message
+    assert "tw-s3cret" not in message
+    assert "sk_s3cret" not in message
 
 
 def test_support_email_alone_is_a_complete_instance(instance_env):
