@@ -40,6 +40,44 @@ for path in / /home; do
   fi
 done
 
+get /
+if [ "$code" = 200 ] && grep -q "<link rel=\"canonical\" href=\"$base_url/\"" "$body" &&
+  ! grep -q '__PUBLIC_URL__' "$body"; then
+  pass "/ names $base_url/ as its canonical URL"
+else
+  fail "/: expected the canonical URL $base_url/ and no __PUBLIC_URL__ placeholder"
+fi
+case "$base_url" in
+  https://pumpkit.io) ;;
+  *)
+    if grep -q 'https://pumpkit\.io' "$body"; then
+      fail "/: an Instance at $base_url still names https://pumpkit.io: $(grep -o 'https://pumpkit\.io[^"]*' "$body" | head -3 | tr '\n' ' ')"
+    else
+      pass "/ names no pumpkit.io URL"
+    fi
+    ;;
+esac
+
+# Set EXPECT_SEARCH_INDEXING=true to check an Instance with ALLOW_SEARCH_INDEXING=true.
+if [ "${EXPECT_SEARCH_INDEXING:-false}" = true ]; then
+  robots_meta='index,follow'
+  robots_rule='Allow: /'
+else
+  robots_meta='noindex,nofollow'
+  robots_rule='Disallow: /$'
+fi
+if grep -q "<meta name=\"robots\" content=\"$robots_meta\"" "$body"; then
+  pass "/ carries the robots tag $robots_meta"
+else
+  fail "/: expected the robots tag $robots_meta, got $(grep -o '<meta name="robots"[^>]*>' "$body" || echo none)"
+fi
+get /robots.txt
+if [ "$code" = 200 ] && grep -q "^$robots_rule" "$body"; then
+  pass "/robots.txt says $robots_rule"
+else
+  fail "/robots.txt: expected 200 with '$robots_rule', got $code $(head -c 200 "$body")"
+fi
+
 get /api/v1/instance
 if [ "$code" = 200 ] && grep -q '"app_name"' "$body"; then
   pass "/api/v1/instance answers on the same origin"
