@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from pumpkit.core.db.urls import PostgresSsl
 
-Environment = Literal["local", "dev", "stg", "prod"]
+Environment = Literal["local", "prod"]
 LoggingLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 SmtpSecurity = Literal["starttls", "tls", "none"]
 
