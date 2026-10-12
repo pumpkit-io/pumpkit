@@ -90,3 +90,8 @@ jobs:
       - run: make smoke
       - if: failure()
         run: docker compose logs --tail 100
+  release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/check-release-notes.sh
