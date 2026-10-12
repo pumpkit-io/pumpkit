@@ -82,7 +82,7 @@ def test_postgres_connection_defaults_to_the_bundled_database(instance_env):
 
 
 def test_an_instance_runs_in_production_unless_told_otherwise(instance_env):
-    assert instance_env().is_env_production()
+    assert instance_env().ENV == "prod"
 
 
 def test_a_domain_public_url_gives_every_url_the_instance_needs(instance_env):

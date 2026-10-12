@@ -32,6 +32,8 @@ None of these is a setting. A trailing slash on `PUBLIC_URL` is dropped.
 | Stripe customer portal return | `PUBLIC_URL/billing` | Where the customer portal returns. |
 | Stripe webhook | `PUBLIC_URL/api/v1/stripe/webhook` | Register it as the webhook endpoint in Stripe. |
 
+The scheme of `PUBLIC_URL` also decides the sign-in cookies. With `https` they are `Secure`, and the refresh cookie is named `__Host-refresh_token`; with `http` they are plain and the refresh cookie is `refresh_token`, because Safari drops `Secure` cookies on `http://localhost`.
+
 ## Optional
 
 ### LLM endpoint
@@ -120,7 +122,7 @@ These rarely need changing. `.env.example` lists only `APP_NAME` and `LOG_LEVEL`
 | --- | --- |
 | `APP_NAME` | Brand name used in emails, server-side copy and the UI, which reads it from `GET /api/v1/instance`. Defaults to `Pumpkit`. |
 | `LOG_LEVEL` | Python log level. Defaults to `INFO`. |
-| `ENV` | `prod` (default) or `local`. `prod` marks the refresh cookie `Secure` with the `__Host-` prefix. The dev stack sets `local`. |
+| `ENV` | `prod` (default) or `local`. It only tags each PostHog event with `env`, so one PostHog project can keep environments apart. The dev stack sets `local`. |
 | `JWT_ALGORITHM` | Signing algorithm. Defaults to `HS256`. |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime. Defaults to 30. |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime. Defaults to 30. |
