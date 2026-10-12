@@ -16,6 +16,8 @@ COPY infra/web/Caddyfile /etc/caddy/Caddyfile
 COPY infra/web/start.sh /usr/local/bin/pumpkit-web-start
 COPY infra/web/start.d/ /etc/pumpkit/start.d/
 COPY --from=build /app/dist /srv
+# start.d/20-index-html.sh writes these back into /srv from PUBLIC_URL on every start.
+RUN mkdir -p /etc/pumpkit/templates && mv /srv/index.html /srv/sitemap.xml /etc/pumpkit/templates/
 
 ENTRYPOINT ["pumpkit-web-start"]
 CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

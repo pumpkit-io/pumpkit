@@ -88,6 +88,10 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh scripts/setup.sh --public-url http://localhost:8080 --llm-api-key dummy --twitterapi-io-api-key dummy </dev/null
       - run: make smoke
+      - name: Check search indexing turned on
+        run: |
+          ALLOW_SEARCH_INDEXING=true docker compose up -d --wait web
+          EXPECT_SEARCH_INDEXING=true sh scripts/check-stack.sh
       - if: failure()
         run: docker compose logs --tail 100
   release-notes:
