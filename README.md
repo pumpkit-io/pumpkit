@@ -20,13 +20,7 @@ docker compose -f compose.dev.yml up --build
 
 Fill in the required values in `.env` (optionally SMTP, which emails Magic links, or they go to the backend log; Stripe; optionally Google). Every variable is described in [docs/configuration.md](./docs/configuration.md). Users sign in only with Google or a Magic link (see [ADR 0002](./docs/adr/0002-google-and-magic-link-only.md)). Then open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs.
 
-To receive Stripe webhooks locally:
-
-```bash
-stripe listen --forward-to localhost:8000/api/v1/stripe/webhook
-```
-
-Use the `whsec_...` secret it prints as `STRIPE_WEBHOOK_SECRET`.
+To receive Stripe webhooks locally, see [CONTRIBUTING.md](./CONTRIBUTING.md#stripe-webhooks).
 
 More: [project layout and recipes](./docs/development.md), [deployment](./docs/deployment.md).
 

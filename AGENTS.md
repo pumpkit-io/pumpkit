@@ -5,7 +5,8 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 ## Stack and commands
 
 - Backend: Python 3.13, FastAPI, SQLAlchemy, Alembic, managed with **uv** (`backend/`). Frontend: React, Vite, TypeScript, Tailwind, managed with **npm** (`frontend/`). E2E: Playwright, npm (`e2e/`).
-- Dev: `docker compose -f compose.dev.yml up --build` (Postgres, backend on :8000, frontend on :5173, which proxies `/api` to the backend)
+- Root `Makefile`, which CI calls: `make check` (lint, format check, typecheck, import contracts and frontend build, all three packages) · `make test` (backend and frontend) · `make fmt` · `make e2e` (starts the dev stack if needed) · `make dev`. Per package: `make check-backend`, `check-frontend`, `check-e2e`, `test-backend`, `test-frontend`. The per-package commands below are what they run.
+- Dev: `make dev`, or `docker compose -f compose.dev.yml up --build` (Postgres, backend on :8000, frontend on :5173, which proxies `/api` to the backend)
 - Lint: `cd backend && uv run ruff check .` · `cd frontend && npm run lint`
 - Format: `cd backend && uv run ruff format .` · `cd frontend && npm run format` (same in `e2e/`)
 - Imports: `cd backend && uv run --extra dev lint-imports` (ADR 0008's package rules, contracts in `backend/pyproject.toml`)

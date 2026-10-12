@@ -19,25 +19,17 @@ jobs:
           ./gitleaks git --no-banner --redact
   backend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - run: uv sync --locked --extra dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run --extra dev pyright
-      - run: uv run --extra dev lint-imports
-      - run: uv run --extra dev pytest
+        working-directory: backend
+      - run: make check-backend
+      - run: make test-backend
   frontend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,16 +38,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-  e2e-format:
+        working-directory: frontend
+      - run: make check-frontend
+      - run: make test-frontend
+  e2e-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: e2e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -64,7 +51,8 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
       - run: npm ci
-      - run: npm run format:check
+        working-directory: e2e
+      - run: make check-e2e
   e2e:
     runs-on: ubuntu-latest
     steps:
@@ -82,12 +70,6 @@ jobs:
           STRIPE_WEBHOOK_SECRET=whsec_dummy
           BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'
           EOF
-      - run: docker compose -f compose.dev.yml up -d --build
-      - name: Wait for the backend and frontend
-        run: |
-          for url in http://localhost:8000/docs http://localhost:5173; do
-            timeout 180 bash -c "until curl -s -o /dev/null $url; do sleep 2; done"
-          done
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -97,21 +79,6 @@ jobs:
         working-directory: e2e
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
-      - run: npm test
-        working-directory: e2e
+      - run: make e2e
       - if: failure()
         run: docker compose -f compose.dev.yml logs --tail 100
-  e2e-typecheck:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: e2e
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: e2e/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
