@@ -24,9 +24,9 @@ frontend/src/
   pages/           route-level pages
   contexts/        auth context
 e2e/               Playwright tests run against compose.dev.yml
-infra/             Caddyfile, publisher systemd unit
-scripts/           deploy.sh
-docs/              deployment guide
+infra/web/         the web image: Dockerfile, Caddyfile, start-up steps, PostHog relay snippet
+scripts/           setup.sh (writes .env), check-stack.sh (smoke checks), release notes
+docs/              configuration, self-hosting, releasing, ADRs
 ```
 
 Every area is built from the same modules: `router.py` (HTTP only: dependencies, parsing, response shaping), `mediator.py` (orchestration and the transaction), `service.py` (one resource or capability each, with its database access), `schemas.py` (Pydantic request and response models) and `models.py` (SQLAlchemy tables). An area with nothing to orchestrate skips the mediator, and `support` is a router alone. The call direction is `router -> mediator -> service`, never backwards, and no DB queries in routers or mediators.
@@ -37,7 +37,7 @@ ADR 0008 orders the areas `core` <- `auth` <- `billing` <- {`authors`, `x_connec
 
 ### Subscriptions
 
-Pumpkit bills only by Subscription (see `docs/adr/0003-subscription-only-billing.md`). Create each Plan as a recurring price in Stripe with a lookup key (for example `pumpkit_pro_monthly`), and list that key in `BILLING_PLAN_KEYS` (see `docs/configuration.md`). Set each price's tax behaviour to inclusive, and set up Stripe Tax in test mode too: Checkout charges VAT and collects VAT IDs, so Stripe refuses to create one without it (see `docs/deployment.md`). Only those Plans appear on the landing page and in the billing dialog (`GET /api/v1/billing/plans`), and Checkout (`POST /api/v1/billing/checkout`) takes nothing but a Plan key: the server resolves the price and always buys one. A User has at most one Running Subscription, and the backend enforces it: before deciding anything, Checkout syncs the User's Subscriptions from Stripe (`billing/service.sync_customer`), so it sees a Subscription no webhook has reported yet, and a User with a Running Subscription gets a `409 Conflict` (they manage it in the billing portal). A User who has never had a Subscription gets a Trial of `BILLING_TRIAL_PERIOD_DAYS` days, once, through that Checkout with a card; the client can't ask for one. The billing service answers both questions (`billing/service.get_subscription_offer`). Starting a Checkout cancels the User's `incomplete` Subscriptions and expires their other open Checkouts, so only the newest attempt can start a Subscription.
+Pumpkit bills only by Subscription (see `docs/adr/0003-subscription-only-billing.md`). Create each Plan as a recurring price in Stripe with a lookup key (for example `pumpkit_pro_monthly`), and list that key in `BILLING_PLAN_KEYS` (see `docs/configuration.md`). Set each price's tax behaviour to inclusive, and set up Stripe Tax in test mode too: Checkout charges VAT and collects VAT IDs, so Stripe refuses to create one without it (see [Selling Plans](self-hosting.md#selling-plans)). Only those Plans appear on the landing page and in the billing dialog (`GET /api/v1/billing/plans`), and Checkout (`POST /api/v1/billing/checkout`) takes nothing but a Plan key: the server resolves the price and always buys one. A User has at most one Running Subscription, and the backend enforces it: before deciding anything, Checkout syncs the User's Subscriptions from Stripe (`billing/service.sync_customer`), so it sees a Subscription no webhook has reported yet, and a User with a Running Subscription gets a `409 Conflict` (they manage it in the billing portal). A User who has never had a Subscription gets a Trial of `BILLING_TRIAL_PERIOD_DAYS` days, once, through that Checkout with a card; the client can't ask for one. The billing service answers both questions (`billing/service.get_subscription_offer`). Starting a Checkout cancels the User's `incomplete` Subscriptions and expires their other open Checkouts, so only the newest attempt can start a Subscription.
 
 Subscribe the Stripe webhook to: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` and `checkout.session.completed`. Webhooks are nudges (ADR 0004): each of these events only names the customer that changed, and Pumpkit then lists that customer's Subscriptions from Stripe and syncs its copy, ignoring the event's payload.
 
@@ -63,7 +63,7 @@ A Subscribed User connects X on the Scheduled page (`x_connection/router.py` and
 
 A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send the Final's text with `source_version_id`, the Version's id. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so Home and Scheduled share it.
 
-A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m pumpkit.scheduling.publisher`, the `publisher` service in `compose.dev.yml` and `infra/pumpkit-publisher.service` in production. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
+A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m pumpkit.scheduling.publisher`, the `publisher` service in `compose.dev.yml` and `compose.yml`. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
 
 1. fails Scheduled posts stuck in `publishing` for over 10 minutes with "Check your X profile" (`scheduling/publishing.fail_stuck`: a publisher died mid-call);
 2. claims and publishes the soonest due one (`scheduling/publishing.publish_next_due`, which claims through `scheduling/service.claim_next_due`: `FOR UPDATE SKIP LOCKED` on Postgres, and a conditional update that keeps the claim single anywhere);
@@ -129,6 +129,6 @@ services:
 make dev DEV_COMPOSE="docker compose -f compose.dev.yml -f compose.dev.override.local.yml"
 ```
 
-## Deployment
+## Self-hosting and releases
 
-See [deployment.md](./deployment.md) for server provisioning and `scripts/deploy.sh`.
+Running an Instance: [self-hosting.md](./self-hosting.md). Cutting a release and deploying pumpkit.io: [releasing.md](./releasing.md).

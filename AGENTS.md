@@ -13,19 +13,21 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 - Typecheck: `cd backend && uv run --extra dev pyright` · `cd frontend && npm run typecheck` (same in `e2e/`)
 - Test: `cd backend && uv run --extra dev pytest` (SQLite, no services needed) · `cd frontend && npm test` · `cd e2e && npm test` (against the `compose.dev.yml` stack)
 - Build: `cd frontend && npm run build`
-- Config comes from one root `.env` (copy `.env.example`); every URL derives from `PUBLIC_URL`. See `docs/configuration.md`. Never commit secrets.
+- Config comes from one root `.env`, written by `sh scripts/setup.sh` from `.env.example`; every URL derives from `PUBLIC_URL`. See `docs/configuration.md`. Never commit secrets.
+- To self-host Pumpkit, follow `docs/self-hosting.md`.
 
 ## Where things are
 
 - `backend/src/pumpkit/`: one package per domain area (ADR 0008): `auth`, `billing`, `authors`, `posts`, `x_connection`, `scheduling`, `support`. Each holds `router.py`, `mediator.py`, `service.py`, `schemas.py` and `models.py` (`support` has only a router and schemas), plus the adapter for the provider it owns: `billing/gateway.py` (the only Stripe SDK user), `authors/x_reader.py` (twitterapi.io, ADR 0005), `x_connection/x_publisher.py` (X's own API for connecting accounts and publishing, ADR 0006), `posts/llm.py` (the LLM port over structured calls to an OpenAI-compatible endpoint).
 - `backend/src/pumpkit/core/`: plumbing every area shares (config, logging, `db/` session and base, errors, security, rate limiting, analytics, time, ids). `main.py` mounts every router; `models.py` imports every area's models for Alembic and the tests.
 - Writing: `posts/writing/` holds the pumpkit-v6 workflow (prompts as plain text, corpus framing, scrub, and writing a Version: draft call, scrub, humanizer call). The `authors` and `posts` areas serve Inspiration authors and Posts; on the frontend they live in `features/inspirationAuthors/` and `features/posts/`, composed on Home.
-- Publishing: `scheduling/` publishes Scheduled posts at most once (ADR 0007). `publishing.py` sequences and commits a publish for both Post now and the publisher, over the flush-only steps in `publish.py`; `publisher.py` is the publisher process's pass, loop and entry point, run as `python -m pumpkit.scheduling.publisher` (its own compose service and systemd unit). The frontend has `features/xConnection/` and `features/scheduledPosts/` on the Scheduled page.
+- Publishing: `scheduling/` publishes Scheduled posts at most once (ADR 0007). `publishing.py` sequences and commits a publish for both Post now and the publisher, over the flush-only steps in `publish.py`; `publisher.py` is the publisher process's pass, loop and entry point, run as `python -m pumpkit.scheduling.publisher` (its own compose service). The frontend has `features/xConnection/` and `features/scheduledPosts/` on the Scheduled page.
 - X connection routes: `x_connection/router.py` starts an authorization and disconnects; `GET /x-connection` and `POST /x-connection/authorizations/complete` live in `scheduling/router.py` because they answer with the count of waiting Scheduled posts, and `x_connection` sits below `scheduling`.
 - `backend/alembic/`: migrations.
 - `backend/tests/`: the pytest suite, mirroring the package tree, with shared fixtures in `conftest.py`.
 - `frontend/src/`: `pages/` (routes), `features/` (self-contained modules), `components/`, `services/` (API clients), `lib/`.
-- `e2e/`: Playwright smoke tests. `infra/`, `scripts/deploy.sh`, `docs/deployment.md`: single-server deploy.
+- `e2e/`: Playwright smoke tests, against the dev stack in `compose.dev.yml`.
+- Self-hosting: `compose.yml` (the production stack), `compose.external-db.yml`, `infra/web/` (the web image: Caddy serving the built frontend), `scripts/setup.sh` (writes `.env`), `scripts/check-stack.sh` (smoke checks). Releases: `.github/workflows/release.yml`, steps in `docs/releasing.md`.
 - `docs/development.md`: project layout and recipes (Subscriptions, Scheduled posts, LLM calls, analytics events, branding).
 
 ## Rules
