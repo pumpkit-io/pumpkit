@@ -1,7 +1,6 @@
 """
 Writing a Version, the pumpkit-v6 way: the writing call (the draft call for the first
-Version, the revision call after Feedback), the scrub, then the humanizer call. After Feedback
-the humanizer also gets the previous Final and every Feedback, which v6's did not.
+Version, the revision call after Feedback), the scrub, then the humanizer call.
 
 The scrubbed writing-call text is the Draft and the humanizer's text is the Final. Every
 call gets the system prompt first and the corpus second, as in v6, so the per-call parts
@@ -90,28 +89,25 @@ def draft_messages(corpus: Corpus, brief: str) -> list[dict]:
     return [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
 
 
+def _humanizer_prefix(corpus: Corpus, brief: str) -> list[dict]:
+    return [_system(HUMANIZER_PROMPT), _user(context_message(corpus)), _user(brief_message(brief))]
+
+
 def humanizer_messages(corpus: Corpus, brief: str, draft: str) -> list[dict]:
     """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Draft last."""
-    return [
-        _system(HUMANIZER_PROMPT),
-        _user(context_message(corpus)),
-        _user(brief_message(brief)),
-        _user(draft),
-    ]
+    return [*_humanizer_prefix(corpus, brief), _user(draft)]
 
 
 def revision_humanizer_messages(
     corpus: Corpus, brief: str, earlier: Sequence[EarlierVersion], feedback: str, draft: str
 ) -> list[dict]:
     """
-    The first Version's humanizer messages, then what lets it keep the sentences the Feedback
-    left alone and the asks it made. The shared prefix keeps the provider's cache warm.
+    The first Version's prefix, then what keeps the humanizer from rewording sentences the
+    Feedback left alone or undoing what any Feedback asked for.
     """
     given = [version.feedback for version in earlier if version.feedback is not None]
     return [
-        _system(HUMANIZER_PROMPT),
-        _user(context_message(corpus)),
-        _user(brief_message(brief)),
+        *_humanizer_prefix(corpus, brief),
         _user(previous_final_message(earlier[-1].final)),
         _user(feedback_given_message([*given, feedback])),
         _user(revised_draft_message(draft)),

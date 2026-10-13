@@ -163,9 +163,9 @@ def _previous(final: str) -> str:
 def _feedback_given(*feedback: str) -> str:
     return (
         "This is the feedback I gave on the post, oldest first. The last one is what the post "
-        "below answers. Keep every explicit ask in it, even where your guidelines say "
-        "otherwise. Where it contradicts the brief, the feedback wins, and later feedback wins "
-        "over earlier feedback.\n\n"
+        "below answers. Keep every explicit ask in all of them, even where your guidelines "
+        "say otherwise, unless a later one overrides it. Where the feedback contradicts the "
+        "brief, the feedback wins.\n\n"
         + "\n".join(f"<feedback>\n{text}\n</feedback>" for text in feedback)
     )
 
@@ -173,9 +173,9 @@ def _feedback_given(*feedback: str) -> str:
 def _to_rewrite(draft: str) -> str:
     return (
         "This is the post to rewrite, written from the previous post and my latest feedback. "
-        "Return every sentence that is also in the previous post exactly as it is here, even "
-        "if it moved. A sentence that differs only in punctuation counts as unchanged. Apply "
-        "your guidelines only to the sentences that are new or reworded.\n\n"
+        "Return every sentence that is also in the previous post exactly as it is in <post> "
+        "below, even if it moved. A sentence that differs only in punctuation counts as "
+        "unchanged. Apply your guidelines only to the sentences that are new or reworded.\n\n"
         f"<post>\n{draft}\n</post>"
     )
 
