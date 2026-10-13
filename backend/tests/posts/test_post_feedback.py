@@ -145,7 +145,42 @@ async def test_the_revision_call_uses_the_configured_model(client, post_id, fake
     assert fake_llm.calls[0].model == "llama3.3"
 
 
-async def test_the_humanizer_gets_the_original_brief_and_the_scrubbed_revision(
+def _brief(brief: str) -> str:
+    return (
+        "This is the brief the post below was written from. Use it only to keep the rewrite "
+        "true to what it asks for - its position and any explicit asks. Do not add anything "
+        f"from it that the post does not already say.\n\n<brief>\n{brief}\n</brief>"
+    )
+
+
+def _previous(final: str) -> str:
+    return (
+        "This is the post as I last saw it, before my latest feedback.\n\n"
+        f"<previous_post>\n{final}\n</previous_post>"
+    )
+
+
+def _latest_feedback(feedback: str) -> str:
+    return (
+        "This is my latest feedback on that post. The post below already applies it, so "
+        "don't apply it again, and don't add, remove or reorder anything to serve it. If it "
+        "asks for something your guidelines would undo, keep what it asks for.\n\n"
+        f"<feedback>\n{feedback}\n</feedback>"
+    )
+
+
+def _to_rewrite(draft: str) -> str:
+    return (
+        "This is the post to rewrite. Return every sentence that is also in the previous "
+        "post exactly as it is in <post> below, even if it moved. A sentence that differs "
+        "only in punctuation counts as unchanged. Apply your guidelines only to the "
+        "sentences that are new or reworded, and don't add sentences or ideas the post "
+        "doesn't have.\n\n"
+        f"<post>\n{draft}\n</post>"
+    )
+
+
+async def test_the_humanizer_gets_the_previous_final_the_feedback_and_the_scrubbed_revision(
     client, post_id, fake_llm
 ):
     fake_llm.replies = [{"post": "it’s shorter—now"}, {"post": "final 2"}]
@@ -154,11 +189,35 @@ async def test_the_humanizer_gets_the_original_brief_and_the_scrubbed_revision(
 
     humanizer_call = fake_llm.calls[1]
     assert humanizer_call.model == DEFAULT_MODEL
-    assert humanizer_call.messages[0] == _system(HUMANIZER_PROMPT)
-    assert humanizer_call.messages[1] == _user(LEVELSIO_CORPUS)
-    assert "<brief>\nship small things\n</brief>" in humanizer_call.messages[2]["content"]
-    assert humanizer_call.messages[3] == _user("it's shorter - now")
-    assert len(humanizer_call.messages) == 4
+    assert humanizer_call.response_model.__name__ == "refined_post"
+    assert humanizer_call.messages == [
+        _system(HUMANIZER_PROMPT),
+        _user(LEVELSIO_CORPUS),
+        _user(_brief("ship small things")),
+        _user(_previous("final 1")),
+        _user(_latest_feedback("shorter")),
+        _user(_to_rewrite("it's shorter - now")),
+    ]
+
+
+async def test_the_humanizer_gets_only_the_latest_feedback_and_the_latest_final(
+    client, post_id, fake_llm
+):
+    fake_llm.replies = [
+        {"post": "draft 2"},
+        {"post": "final 2"},
+        {"post": "draft 3"},
+        {"post": "final 3"},
+    ]
+
+    await client.post(_versions_url(post_id), json={"feedback": "write a much longer version"})
+    await client.post(_versions_url(post_id), json={"feedback": "shorter"})
+
+    assert fake_llm.calls[3].messages[3:] == [
+        _user(_previous("final 2")),
+        _user(_latest_feedback("shorter")),
+        _user(_to_rewrite("draft 3")),
+    ]
 
 
 async def test_the_revision_uses_the_posts_corpus_after_the_users_authors_change(

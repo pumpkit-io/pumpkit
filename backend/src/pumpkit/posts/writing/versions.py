@@ -22,6 +22,11 @@ from pumpkit.posts.writing.prompts.corpus import context_message
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.feedback import feedback_message
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.posts.writing.prompts.revision_humanizer import (
+    latest_feedback_message,
+    previous_final_message,
+    revised_draft_message,
+)
 from pumpkit.posts.writing.scrub import scrub
 
 
@@ -84,13 +89,27 @@ def draft_messages(corpus: Corpus, brief: str) -> list[dict]:
     return [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
 
 
+def _humanizer_prefix(corpus: Corpus, brief: str) -> list[dict]:
+    return [_system(HUMANIZER_PROMPT), _user(context_message(corpus)), _user(brief_message(brief))]
+
+
 def humanizer_messages(corpus: Corpus, brief: str, draft: str) -> list[dict]:
-    """The humanizer gets the original Brief, never Feedback, and the scrubbed Draft last."""
+    """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Draft last."""
+    return [*_humanizer_prefix(corpus, brief), _user(draft)]
+
+
+def revision_humanizer_messages(
+    corpus: Corpus, brief: str, previous_final: str, feedback: str, draft: str
+) -> list[dict]:
+    """
+    The first Version's prefix, then what keeps the humanizer from rewording sentences the
+    Feedback left alone or undoing what it asked for. Earlier asks live on in the previous Final.
+    """
     return [
-        _system(HUMANIZER_PROMPT),
-        _user(context_message(corpus)),
-        _user(brief_message(brief)),
-        _user(draft),
+        *_humanizer_prefix(corpus, brief),
+        _user(previous_final_message(previous_final)),
+        _user(latest_feedback_message(feedback)),
+        _user(revised_draft_message(draft)),
     ]
 
 
@@ -124,7 +143,7 @@ async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVe
         max_tokens=MAX_TOKENS,
     )
     draft = scrub(drafted.parsed.post)
-    return await _humanize(llm, corpus, brief, draft, drafted)
+    return await _humanize(llm, humanizer_messages(corpus, brief, draft), draft, drafted)
 
 
 async def write_next_version(
@@ -138,15 +157,16 @@ async def write_next_version(
         max_tokens=MAX_TOKENS,
     )
     draft = scrub(revised.parsed.post)
-    return await _humanize(llm, corpus, brief, draft, revised)
+    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
+    return await _humanize(llm, messages, draft, revised)
 
 
 async def _humanize(
-    llm: LLM, corpus: Corpus, brief: str, draft: str, written: StructuredResult
+    llm: LLM, messages: list[dict], draft: str, written: StructuredResult
 ) -> WrittenVersion:
     refined = await llm.structured(
         model=settings.LLM_HUMANIZING_MODEL,
-        messages=humanizer_messages(corpus, brief, draft),
+        messages=messages,
         response_model=FinalPost,
         max_tokens=MAX_TOKENS,
     )
