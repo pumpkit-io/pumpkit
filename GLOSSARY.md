@@ -106,12 +106,16 @@ _Avoid_: revision request, comment, instruction
 A User's permission for Pumpkit to publish on one X account they own. Each User has at most one, and an X account belongs to at most one User. It is never a Sign-in method.
 _Avoid_: X login, X identity, linked account, X auth
 
+**Community**:
+An X Community: a group on X whose posts appear in the group rather than on each author's profile. A Scheduled post may go to one Community instead of the User's profile; it is still posted by the X account of the User's X connection, and the User chooses whether it is also shared with that account's followers.
+_Avoid_: group, X group, space
+
 **Scheduled post**:
-A text a User has set to be published on the X account of their X connection at a chosen time, either typed by the User or copied from a Version's Final. It keeps its own copy of the text and stays a Scheduled post after it is Published or Failed.
+A text a User has set to be published at a chosen time by the X account of their X connection, either on that account's profile or in one Community. It is either typed by the User or copied from a Version's Final. One Scheduled post is one X post; posting the same text in two places takes two Scheduled posts. It keeps its own copy of the text and stays a Scheduled post after it is Published or Failed.
 _Avoid_: queued tweet, publication, scheduled tweet
 
 **Published**:
-A Scheduled post that X has accepted and shows on the User's X account. It can no longer change.
+A Scheduled post that X has accepted and shows on the User's X account, or in its Community. It can no longer change.
 _Avoid_: posted, sent, live
 
 **Failed**:
