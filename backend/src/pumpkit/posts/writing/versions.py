@@ -23,7 +23,7 @@ from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.feedback import feedback_message
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.revision_humanizer import (
-    feedback_given_message,
+    latest_feedback_message,
     previous_final_message,
     revised_draft_message,
 )
@@ -99,17 +99,16 @@ def humanizer_messages(corpus: Corpus, brief: str, draft: str) -> list[dict]:
 
 
 def revision_humanizer_messages(
-    corpus: Corpus, brief: str, earlier: Sequence[EarlierVersion], feedback: str, draft: str
+    corpus: Corpus, brief: str, previous_final: str, feedback: str, draft: str
 ) -> list[dict]:
     """
     The first Version's prefix, then what keeps the humanizer from rewording sentences the
-    Feedback left alone or undoing what any Feedback asked for.
+    Feedback left alone or undoing what it asked for. Earlier asks live on in the previous Final.
     """
-    given = [version.feedback for version in earlier if version.feedback is not None]
     return [
         *_humanizer_prefix(corpus, brief),
-        _user(previous_final_message(earlier[-1].final)),
-        _user(feedback_given_message([*given, feedback])),
+        _user(previous_final_message(previous_final)),
+        _user(latest_feedback_message(feedback)),
         _user(revised_draft_message(draft)),
     ]
 
@@ -158,7 +157,7 @@ async def write_next_version(
         max_tokens=MAX_TOKENS,
     )
     draft = scrub(revised.parsed.post)
-    messages = revision_humanizer_messages(corpus, brief, earlier, feedback, draft)
+    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
     return await _humanize(llm, messages, draft, revised)
 
 

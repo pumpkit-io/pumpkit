@@ -160,22 +160,22 @@ def _previous(final: str) -> str:
     )
 
 
-def _feedback_given(*feedback: str) -> str:
+def _latest_feedback(feedback: str) -> str:
     return (
-        "This is the feedback I gave on the post, oldest first. The last one is what the post "
-        "below answers. Keep every explicit ask in all of them, even where your guidelines "
-        "say otherwise, unless a later one overrides it. Where the feedback contradicts the "
-        "brief, the feedback wins.\n\n"
-        + "\n".join(f"<feedback>\n{text}\n</feedback>" for text in feedback)
+        "This is my latest feedback on that post. The post below already applies it, so "
+        "don't apply it again, and don't add, remove or reorder anything to serve it. If it "
+        "asks for something your guidelines would undo, keep what it asks for.\n\n"
+        f"<feedback>\n{feedback}\n</feedback>"
     )
 
 
 def _to_rewrite(draft: str) -> str:
     return (
-        "This is the post to rewrite, written from the previous post and my latest feedback. "
-        "Return every sentence that is also in the previous post exactly as it is in <post> "
-        "below, even if it moved. A sentence that differs only in punctuation counts as "
-        "unchanged. Apply your guidelines only to the sentences that are new or reworded.\n\n"
+        "This is the post to rewrite. Return every sentence that is also in the previous "
+        "post exactly as it is in <post> below, even if it moved. A sentence that differs "
+        "only in punctuation counts as unchanged. Apply your guidelines only to the "
+        "sentences that are new or reworded, and don't add sentences or ideas the post "
+        "doesn't have.\n\n"
         f"<post>\n{draft}\n</post>"
     )
 
@@ -195,12 +195,12 @@ async def test_the_humanizer_gets_the_previous_final_the_feedback_and_the_scrubb
         _user(LEVELSIO_CORPUS),
         _user(_brief("ship small things")),
         _user(_previous("final 1")),
-        _user(_feedback_given("shorter")),
+        _user(_latest_feedback("shorter")),
         _user(_to_rewrite("it's shorter - now")),
     ]
 
 
-async def test_the_humanizer_gets_every_feedback_oldest_first_and_the_latest_final(
+async def test_the_humanizer_gets_only_the_latest_feedback_and_the_latest_final(
     client, post_id, fake_llm
 ):
     fake_llm.replies = [
@@ -210,12 +210,12 @@ async def test_the_humanizer_gets_every_feedback_oldest_first_and_the_latest_fin
         {"post": "final 3"},
     ]
 
-    await client.post(_versions_url(post_id), json={"feedback": "add #buildinpublic"})
+    await client.post(_versions_url(post_id), json={"feedback": "write a much longer version"})
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
     assert fake_llm.calls[3].messages[3:] == [
         _user(_previous("final 2")),
-        _user(_feedback_given("add #buildinpublic", "shorter")),
+        _user(_latest_feedback("shorter")),
         _user(_to_rewrite("draft 3")),
     ]
 
