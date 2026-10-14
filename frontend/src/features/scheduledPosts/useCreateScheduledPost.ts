@@ -9,6 +9,7 @@ import {
   type ScheduledPost,
 } from '@/services/scheduledPostService';
 import { PROFILE } from './communities';
+import { pastCommunitiesChanged } from './usePastCommunities';
 
 /** What a Post now that comes back scheduled means: the publisher retries it. */
 export const X_BUSY_NOTICE = 'X was busy. Pumpkit will keep trying for the next 15 minutes.';
@@ -57,6 +58,7 @@ export function useCreateScheduledPost() {
             ? { destination: 'community', share_with_followers: destination.shareWithFollowers }
             : { destination: 'profile' }),
         });
+        if (destination.community) pastCommunitiesChanged();
         // A Failed one may have flagged the X connection for reconnecting.
         if (created.state === 'failed') void reloadXConnection();
         return { kind: 'created', scheduledPost: created };

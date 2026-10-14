@@ -965,6 +965,70 @@ describe('Scheduled', () => {
       );
       expect(scheduledPostService.lookUpCommunity).not.toHaveBeenCalled();
     });
+
+    it('offers a Community just posted into without a reload', async () => {
+      const NEW: Community = { id: '999', name: null, url: 'https://x.com/i/communities/999' };
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([MAKERS]);
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...PUBLISHED,
+        community: NEW,
+      });
+      renderScheduled();
+
+      const box = await composer();
+      await box.findByRole('option', { name: 'Indie makers' });
+      fireEvent.change(box.getByLabelText('Post text'), { target: { value: 'Hello' } });
+      fireEvent.change(box.getByLabelText('Post to'), { target: { value: 'community' } });
+      fireEvent.change(box.getByLabelText('Community URL or ID'), { target: { value: '999' } });
+      await vi.waitFor(() =>
+        expect(box.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+      );
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([NEW, MAKERS]);
+      fireEvent.click(box.getByRole('button', { name: 'Post now' }));
+
+      expect(await box.findByRole('option', { name: '999' })).toBeInTheDocument();
+    });
+
+    it('offers a Community a post was just moved into without a reload', async () => {
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([]);
+      vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({ ...MONDAY, community: UNNAMED });
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      const item = within((await upcoming.findByText(MONDAY.text)).closest('li')!);
+      fireEvent.click(item.getByRole('button', { name: 'Edit' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
+      fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
+      fireEvent.change(dialog.getByLabelText('Community URL or ID'), { target: { value: '123' } });
+      await vi.waitFor(() =>
+        expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+      );
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([UNNAMED]);
+      fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+      const box = await composer();
+      expect(await box.findByRole('option', { name: '123' })).toBeInTheDocument();
+    });
+
+    it('opens the edit dialog on the post’s Community among them', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([
+        { ...MONDAY, community: MAKERS, shareWithFollowers: true },
+      ]);
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      const item = within((await upcoming.findByText(MONDAY.text)).closest('li')!);
+      fireEvent.click(item.getByRole('button', { name: 'Edit' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
+      await dialog.findByRole('option', { name: '123' });
+
+      expect(dialog.getByLabelText('Post to')).toHaveDisplayValue('Indie makers');
+      expect(dialog.getAllByRole('option', { name: 'Indie makers' })).toHaveLength(1);
+      expect(dialog.queryByLabelText('Community URL or ID')).not.toBeInTheDocument();
+      expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
+      expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
   });
 
   describe('lists', () => {
@@ -1218,10 +1282,8 @@ describe('Scheduled', () => {
         renderScheduled();
 
         const dialog = await editDialog('Monday morning.');
-        expect(dialog.getByLabelText('Post to')).toHaveValue('community');
-        expect(dialog.getByLabelText('Community URL or ID')).toHaveValue(
-          IN_COMMUNITY.community!.url,
-        );
+        expect(dialog.getByLabelText('Post to')).toHaveDisplayValue('Indie makers');
+        expect(dialog.queryByLabelText('Community URL or ID')).not.toBeInTheDocument();
         expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
         expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
         fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'profile' } });
@@ -1276,10 +1338,7 @@ describe('Scheduled', () => {
         renderScheduled();
 
         const dialog = await editDialog('Monday morning.');
-        expect(dialog.getByRole('link', { name: 'Indie makers' })).toHaveAttribute(
-          'href',
-          IN_COMMUNITY.community!.url,
-        );
+        expect(dialog.getByLabelText('Post to')).toHaveDisplayValue('Indie makers');
         fireEvent.change(dialog.getByLabelText('Post text'), { target: { value: 'Edited.' } });
         fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
 

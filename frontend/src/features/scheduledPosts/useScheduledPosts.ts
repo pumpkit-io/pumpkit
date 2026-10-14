@@ -13,6 +13,7 @@ import {
   X_BUSY_NOTICE,
   type NewScheduledPost,
 } from './useCreateScheduledPost';
+import { pastCommunitiesChanged } from './usePastCommunities';
 
 /** The User's Scheduled posts, loaded on mount, with Post now, Schedule, edit and cancel. */
 export function useScheduledPosts() {
@@ -93,6 +94,7 @@ export function useScheduledPosts() {
       change(async () => {
         const edited = await scheduledPostService.edit(id, changes);
         setScheduledPosts((current) => current?.map((p) => (p.id === id ? edited : p)));
+        if (changes.community) pastCommunitiesChanged();
       }, "Couldn't save the changes. Please try again."),
     [change],
   );
