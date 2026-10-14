@@ -1028,6 +1028,126 @@ describe('Scheduled', () => {
       expect(screen.queryByRole('region', { name: 'Failed' })).not.toBeInTheDocument();
     });
 
+    describe('Community', () => {
+      const IN_COMMUNITY: ScheduledPost = {
+        ...MONDAY,
+        community: {
+          id: '1493446837214187523',
+          name: 'Indie makers',
+          url: 'https://x.com/i/communities/1493446837214187523',
+        },
+        shareWithFollowers: true,
+      };
+
+      async function editDialog(text: string) {
+        fireEvent.click((await upcomingItem(text)).getByRole('button', { name: 'Edit' }));
+        return within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
+      }
+
+      it('starts from the post’s Community and moves it back to the profile', async () => {
+        vi.mocked(scheduledPostService.list).mockResolvedValue([IN_COMMUNITY]);
+        vi.mocked(scheduledPostService.edit).mockResolvedValue(MONDAY);
+        renderScheduled();
+
+        const dialog = await editDialog('Monday morning.');
+        expect(dialog.getByLabelText('Post to')).toHaveValue('community');
+        expect(dialog.getByLabelText('Community URL or ID')).toHaveValue(
+          IN_COMMUNITY.community!.url,
+        );
+        expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
+        expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'profile' } });
+        expect(dialog.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+        await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { community: null });
+        const item = await upcomingItem('Monday morning.');
+        expect(item.queryByText(/In the Community/)).not.toBeInTheDocument();
+      });
+
+      it('moves a profile post into a pasted Community, shared with followers by default', async () => {
+        vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY]);
+        vi.mocked(scheduledPostService.edit).mockResolvedValue({
+          ...IN_COMMUNITY,
+          community: { ...IN_COMMUNITY.community!, name: null },
+        });
+        renderScheduled();
+
+        const dialog = await editDialog('Monday morning.');
+        expect(dialog.getByLabelText('Post to')).toHaveValue('profile');
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
+        expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+        fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
+          target: { value: IN_COMMUNITY.community!.url },
+        });
+        expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
+        fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+        await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, {
+          community: { id: IN_COMMUNITY.community!.id, name: null },
+          shareWithFollowers: true,
+        });
+        expect(
+          (await upcomingItem('Monday morning.')).getByRole('link', {
+            name: IN_COMMUNITY.community!.id,
+          }),
+        ).toHaveAttribute('href', IN_COMMUNITY.community!.url);
+      });
+
+      it('changes only whether it is shared with followers, keeping the Community', async () => {
+        vi.mocked(scheduledPostService.list).mockResolvedValue([IN_COMMUNITY]);
+        vi.mocked(scheduledPostService.edit).mockResolvedValue({
+          ...IN_COMMUNITY,
+          shareWithFollowers: false,
+        });
+        renderScheduled();
+
+        const dialog = await editDialog('Monday morning.');
+        fireEvent.click(dialog.getByLabelText('Also share with followers'));
+        fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+        await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, {
+          shareWithFollowers: false,
+        });
+      });
+
+      it('moves a Failed one into a Community as it reschedules it', async () => {
+        vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED]);
+        vi.mocked(scheduledPostService.edit).mockResolvedValue({
+          ...FAILED,
+          state: 'scheduled',
+          failedReason: null,
+          publishAt: '2026-10-12T07:00:00Z',
+          community: { id: '123', name: null, url: 'https://x.com/i/communities/123' },
+        });
+        renderScheduled();
+
+        const failed = within(await screen.findByRole('region', { name: 'Failed' }));
+        fireEvent.click(await failed.findByRole('button', { name: 'Reschedule' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
+        fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
+          target: { value: '123' },
+        });
+        fireEvent.click(dialog.getByLabelText('Also share with followers'));
+        expect(dialog.getByRole('button', { name: 'Reschedule' })).toBeDisabled();
+        fireEvent.change(dialog.getByLabelText('Date and time'), {
+          target: { value: '2026-10-12T09:00' },
+        });
+        fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
+
+        expect(await (await upcomingList()).findByText(FAILED.text)).toBeInTheDocument();
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(FAILED.id, {
+          publishAt: '2026-10-12T07:00:00.000Z',
+          community: { id: '123', name: null },
+          shareWithFollowers: false,
+        });
+      });
+    });
+
     it('removes a Failed one once the User confirms', async () => {
       vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED]);
       vi.mocked(scheduledPostService.cancel).mockResolvedValue(undefined);
