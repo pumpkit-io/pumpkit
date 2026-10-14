@@ -116,7 +116,9 @@ class ScheduledPostUpdateRequest(BaseModel):
     def _something_to_change(self) -> "ScheduledPostUpdateRequest":
         unchanged = self.text is None and self.publish_at is None
         if unchanged and self.share_with_followers is None and not self.changes_community:
-            raise ValueError("Give something to change.")
+            raise ValueError(
+                "Change the text, the publish time, the Community or sharing with followers."
+            )
         return self
 
 
