@@ -18,7 +18,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
 from pumpkit.scheduling import communities, rules, service
-from pumpkit.scheduling.communities import Community
+from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import MonthFull, RuleBroken
@@ -81,9 +81,7 @@ async def look_up_community(reader: XReader, pasted: str) -> CommunityResponse:
         # The name is only a label, so a failed read mustn't stop the User posting.
         logger.warning("Looking up Community %s failed: %s", community_id, error)
         name = None
-    return CommunityResponse(
-        id=community_id, name=name, url=communities.community_url(community_id)
-    )
+    return _community_response(community_id, name)
 
 
 async def list_scheduled_posts(
@@ -151,14 +149,13 @@ async def create_scheduled_post(
     publish_now: bool,
     now: datetime,
     source_version_id: Optional[str] = None,
-    community: Optional[Community] = None,
-    share_with_followers: bool = False,
+    destination: Destination = Destination(),
 ) -> ScheduledPostResponse:
     """With `publish_now`, published within the request: Published, Failed, or back in scheduled."""
     connection = await connection_to_publish_on(db, user_id=user.id)
     try:
-        if community is not None:
-            communities.check_community_id(community.id)
+        if destination.community is not None:
+            communities.check_community_id(destination.community.id)
         rules.check_length(text, limit=x_post_max_chars(connection.subscription_type))
         publish_at = now if publish_now else rules.check_publish_at(publish_at, now=now)
         await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
@@ -174,8 +171,7 @@ async def create_scheduled_post(
         publish_at=publish_at.replace(second=0, microsecond=0) if publish_now else publish_at,
         now=now,
         source_version_id=source_version_id,
-        community=community,
-        share_with_followers=share_with_followers,
+        destination=destination,
     )
     if publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
@@ -236,12 +232,14 @@ async def edit_scheduled_post(
     if scheduled_post.state not in (SCHEDULED, FAILED):
         raise _publishing_started()
     reschedule = None
-    move = None
+    destination = None
     try:
         if changes_community or share_with_followers is not None:
             if community is not None:
                 communities.check_community_id(community.id)
-            move = _move(scheduled_post, changes_community, community, share_with_followers)
+            destination = _destination_after_edit(
+                scheduled_post, changes_community, community, share_with_followers
+            )
         connection = (
             await connection_to_publish_on(db, user_id=user.id)
             if publish_at is not None
@@ -265,7 +263,7 @@ async def edit_scheduled_post(
         scheduled_post_id=scheduled_post_id,
         text=text,
         reschedule=reschedule,
-        move=move,
+        destination=destination,
         now=now,
     ):
         raise _publishing_started()
@@ -273,18 +271,18 @@ async def edit_scheduled_post(
     return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
 
 
-def _move(
+def _destination_after_edit(
     scheduled_post: ScheduledPost,
     changes_community: bool,
     community: Optional[Community],
     share_with_followers: Optional[bool],
-) -> service.Move:
+) -> Destination:
     """Where the Scheduled post goes after the edit, keeping what the edit leaves unsaid."""
     if not changes_community and scheduled_post.community_id is not None:
         community = Community(id=scheduled_post.community_id, name=scheduled_post.community_name)
     if share_with_followers is None:
         share_with_followers = scheduled_post.share_with_followers
-    return service.Move(community=community, share_with_followers=share_with_followers)
+    return Destination(community=community, share_with_followers=share_with_followers)
 
 
 async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:

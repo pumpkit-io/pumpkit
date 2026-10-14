@@ -1,8 +1,8 @@
 """add a Community to Scheduled posts
 
 A Scheduled post may go to one Community instead of the User's profile. It keeps the
-Community's ID, its name as shown when it was picked (empty when it couldn't be looked up), and
-whether X also shares it with the account's followers. Existing Scheduled posts are profile posts.
+Community's ID, its name as shown when it was picked (empty when it couldn't be looked up), when
+the Community was last set on it, and whether X also shares it with the account's followers. Existing Scheduled posts are profile posts.
 
 Revision ID: 0012
 Revises: 0011
@@ -27,6 +27,9 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("community_id", sa.String(), nullable=True))
         batch_op.add_column(sa.Column("community_name", sa.String(), nullable=True))
         batch_op.add_column(
+            sa.Column("community_set_at", sa.DateTime(timezone=True), nullable=True)
+        )
+        batch_op.add_column(
             sa.Column(
                 "share_with_followers",
                 sa.Boolean(),
@@ -39,5 +42,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     with op.batch_alter_table("scheduled_posts", schema=None) as batch_op:
         batch_op.drop_column("share_with_followers")
+        batch_op.drop_column("community_set_at")
         batch_op.drop_column("community_name")
         batch_op.drop_column("community_id")

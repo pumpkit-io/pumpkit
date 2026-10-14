@@ -5,12 +5,12 @@ Flushes and never commits: the caller (the mediator or `publishing`) owns the tr
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from sqlalchemy import CursorResult, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.scheduling.communities import Community
+from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
     PUBLISHED,
@@ -30,17 +30,15 @@ async def create(
     publish_at: datetime,
     now: datetime,
     source_version_id: Optional[str] = None,
-    community: Optional[Community] = None,
-    share_with_followers: bool = False,
+    destination: Destination = Destination(),
 ) -> ScheduledPost:
-    """A new Scheduled post in scheduled; `share_with_followers` counts only with a Community. Flushes."""
+    """A new Scheduled post in scheduled. Flushes."""
     scheduled_post = ScheduledPost(
         user_id=user_id,
         x_user_id=x_user_id,
         text=text,
-        community_id=community.id if community else None,
-        community_name=community.name if community else None,
-        share_with_followers=community is not None and share_with_followers,
+        **_destination_columns(destination),
+        community_set_at=now if destination.community else None,
         publish_at=publish_at,
         source_version_id=source_version_id,
         state=SCHEDULED,
@@ -51,6 +49,15 @@ async def create(
     db.add(scheduled_post)
     await db.flush()
     return scheduled_post
+
+
+def _destination_columns(destination: Destination) -> dict[str, Any]:
+    community = destination.community
+    return {
+        "community_id": community.id if community else None,
+        "community_name": community.name if community else None,
+        "share_with_followers": community is not None and destination.share_with_followers,
+    }
 
 
 async def list_for_user(
@@ -89,14 +96,6 @@ class Reschedule:
     x_user_id: str
 
 
-@dataclass(frozen=True)
-class Move:
-    # None for the User's profile.
-    community: Optional[Community]
-    # Counts only with a Community, as in `create`.
-    share_with_followers: bool
-
-
 async def edit(
     db: AsyncSession,
     *,
@@ -104,22 +103,27 @@ async def edit(
     text: Optional[str],
     reschedule: Optional[Reschedule],
     now: datetime,
-    move: Optional[Move] = None,
+    destination: Optional[Destination] = None,
 ) -> bool:
     """
     Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
     back in scheduled for the new time and X account, as if it had never been tried. The state
     check in the update keeps a claim by the publisher between the User's read and this write safe.
+    A `destination` of None leaves it where it goes; moving it into another Community is a use.
     """
     values: dict[str, object] = {"updated_at": now}
     if text is not None:
         values["text"] = text
-    if move is not None:
-        community = move.community
-        values.update(
-            community_id=community.id if community else None,
-            community_name=community.name if community else None,
-            share_with_followers=community is not None and move.share_with_followers,
+    if destination is not None:
+        community = destination.community
+        values.update(_destination_columns(destination))
+        values["community_set_at"] = (
+            case(
+                (ScheduledPost.community_id.is_distinct_from(community.id), now),
+                else_=ScheduledPost.community_set_at,
+            )
+            if community
+            else None
         )
     if reschedule is not None:
         values.update(
@@ -233,8 +237,8 @@ async def count_waiting(db: AsyncSession, *, user_id: str, x_user_id: str) -> in
 
 async def past_communities(db: AsyncSession, *, user_id: str, x_user_id: str) -> list[Community]:
     """
-    The Communities of the User's Scheduled posts for the X account, most recently created
-    first, each once under the latest name stored for it.
+    The Communities of the User's Scheduled posts for the X account, the one most recently set
+    on a Scheduled post first, each once under the latest name stored for it.
     """
     result = await db.execute(
         select(ScheduledPost.community_id, ScheduledPost.community_name)
@@ -243,7 +247,7 @@ async def past_communities(db: AsyncSession, *, user_id: str, x_user_id: str) ->
             ScheduledPost.x_user_id == x_user_id,
             ScheduledPost.community_id.is_not(None),
         )
-        .order_by(ScheduledPost.created_at.desc(), ScheduledPost.id.desc())
+        .order_by(ScheduledPost.community_set_at.desc(), ScheduledPost.id.desc())
     )
     names: dict[str, Optional[str]] = {}
     for community_id, name in result.tuples():

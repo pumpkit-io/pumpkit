@@ -72,6 +72,44 @@ async def test_a_scheduled_post_counts_as_a_use_too(
     assert [c["id"] for c in await _past_communities(client)] == [MAKERS]
 
 
+async def test_editing_a_post_into_a_community_counts_as_its_latest_use(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    later = {"text": "Later", "publish_at": "2026-10-11T09:00:00Z"}
+    earlier_post = (await client.post(SCHEDULED_POSTS, json=later)).json()
+    fixed_clock.advance(timedelta(minutes=1))
+    await client.post(SCHEDULED_POSTS, json={**later, "community": {"id": MAKERS}})
+    fixed_clock.advance(timedelta(minutes=1))
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{earlier_post['id']}", json={"community": {"id": WRITERS}}
+    )
+
+    assert response.status_code == 200, response.text
+    assert [c["id"] for c in await _past_communities(client)] == [WRITERS, MAKERS]
+
+
+async def test_changing_only_the_share_with_followers_choice_is_no_new_use(
+    client, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    later = {"text": "Later", "publish_at": "2026-10-11T09:00:00Z"}
+    makers_post = (
+        await client.post(SCHEDULED_POSTS, json={**later, "community": {"id": MAKERS}})
+    ).json()
+    fixed_clock.advance(timedelta(minutes=1))
+    await client.post(SCHEDULED_POSTS, json={**later, "community": {"id": WRITERS}})
+    fixed_clock.advance(timedelta(minutes=1))
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{makers_post['id']}", json={"share_with_followers": True}
+    )
+
+    assert response.status_code == 200, response.text
+    assert [c["id"] for c in await _past_communities(client)] == [WRITERS, MAKERS]
+
+
 async def test_a_past_community_shows_the_latest_name_stored_for_it(
     client, subscribed, fake_x_publisher, clock
 ):
