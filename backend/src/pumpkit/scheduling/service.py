@@ -10,6 +10,7 @@ from typing import Optional, cast
 from sqlalchemy import CursorResult, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.scheduling.communities import Community
 from pumpkit.scheduling.models import (
     FAILED,
     PUBLISHED,
@@ -29,12 +30,17 @@ async def create(
     publish_at: datetime,
     now: datetime,
     source_version_id: Optional[str] = None,
+    community: Optional[Community] = None,
+    share_with_followers: bool = False,
 ) -> ScheduledPost:
-    """A new Scheduled post in scheduled. Flushes."""
+    """A new Scheduled post in scheduled; `share_with_followers` counts only with a Community. Flushes."""
     scheduled_post = ScheduledPost(
         user_id=user_id,
         x_user_id=x_user_id,
         text=text,
+        community_id=community.id if community else None,
+        community_name=community.name if community else None,
+        share_with_followers=community is not None and share_with_followers,
         publish_at=publish_at,
         source_version_id=source_version_id,
         state=SCHEDULED,

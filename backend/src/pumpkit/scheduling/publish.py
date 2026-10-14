@@ -124,10 +124,15 @@ async def fresh_access_token(
     return tokens.access_token
 
 
-async def call_x(publisher: XPublisher, *, access_token: str, text: str) -> str:
+async def call_x(publisher: XPublisher, scheduled_post: ScheduledPost, *, access_token: str) -> str:
     """X's post id, or `Failed`. A "reconnect_needed" one means X refused the access token."""
     try:
-        return await publisher.publish(access_token=access_token, text=text)
+        return await publisher.publish(
+            access_token=access_token,
+            text=scheduled_post.text,
+            community_id=scheduled_post.community_id,
+            share_with_followers=scheduled_post.share_with_followers,
+        )
     except XReconnectNeededError:
         raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
     except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
@@ -164,10 +169,14 @@ def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optiona
 
 
 def capture_published(scheduled_post: ScheduledPost) -> None:
+    properties: dict[str, object] = {
+        "source": "final" if scheduled_post.source_version_id else "typed",
+        "destination": "community" if scheduled_post.community_id else "profile",
+    }
+    if scheduled_post.community_id:
+        properties["share_with_followers"] = scheduled_post.share_with_followers
     posthog_client.capture(
-        "scheduled_post_published",
-        distinct_id=scheduled_post.user_id,
-        properties={"source": "final" if scheduled_post.source_version_id else "typed"},
+        "scheduled_post_published", distinct_id=scheduled_post.user_id, properties=properties
     )
 
 
