@@ -1,6 +1,7 @@
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import type { ScheduledPost } from '@/services/scheduledPostService';
+import { InTheCommunity } from './InTheCommunity';
 
 const dateTime = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -38,15 +39,7 @@ function CommunityLine({ post, followers }: { post: ScheduledPost; followers?: b
   return (
     <p className="flex flex-wrap gap-x-3 font-sans text-xs text-muted-foreground">
       <span>
-        In the Community{' '}
-        <a
-          href={post.community.url}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-foreground underline underline-offset-2"
-        >
-          {post.community.name ?? post.community.id}
-        </a>
+        <InTheCommunity community={post.community} />
       </span>
       {followers && (
         <span>
@@ -66,7 +59,8 @@ const ITEM = 'space-y-1.5 px-4 py-3';
 
 /**
  * Upcoming Scheduled posts soonest first, Failed ones with their reason, and Published ones
- * with a link to X, each with its Community when it has one. Without `onEdit` or `onCancel`, the lists offer no such control.
+ * with a link to X, each with its Community when it has one. Without `onEdit` or `onCancel`,
+ * the lists offer no such control.
  */
 export function ScheduledPostLists({
   scheduledPosts,

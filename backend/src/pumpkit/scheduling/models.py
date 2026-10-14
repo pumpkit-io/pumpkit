@@ -54,6 +54,8 @@ class ScheduledPost(Base):
     # The Community it goes to, None for the profile, with its name as shown when it was picked.
     community_id: Mapped[Optional[str]] = mapped_column(String)
     community_name: Mapped[Optional[str]] = mapped_column(String)
+    # When the Community was last set on it, which orders the Communities offered again.
+    community_set_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     # With a Community, whether X also shows it on the profile and in the followers' timelines.
     share_with_followers: Mapped[bool] = mapped_column(Boolean, default=False)
     # UTC, whole minutes.

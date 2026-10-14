@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
@@ -12,6 +12,8 @@ import {
   type CommunityLookup,
   type DestinationDraft,
 } from './communities';
+import { InTheCommunity } from './InTheCommunity';
+import { usePastCommunities } from './usePastCommunities';
 
 const PAST = 'past:';
 const NOT_LOOKED_UP: CommunityLookup = { state: 'none' };
@@ -64,7 +66,8 @@ function useCommunityLookup(value: DestinationDraft, onChange: (value: Destinati
 /**
  * Where a Scheduled post goes: "My profile", a Community the User posted to before, or one
  * named by pasting its URL or ID. While a Community is chosen, an "Also share with followers"
- * checkbox shows, checked each time one is picked.
+ * checkbox shows, checked each time one is picked. A `pastCommunity` value missing from the
+ * past list is offered among them all the same.
  */
 export function DestinationField({
   value,
@@ -76,7 +79,11 @@ export function DestinationField({
   disabled?: boolean;
 }) {
   const id = useId();
-  const past = usePastCommunities();
+  const loaded = usePastCommunities();
+  const past =
+    value.kind === 'pastCommunity' && !loaded.some((c) => c.id === value.community.id)
+      ? [value.community, ...loaded]
+      : loaded;
   useCommunityLookup(value, onChange);
   const unreadable =
     value.kind === 'community' && value.pasted.trim() !== '' && !communityIdFrom(value.pasted);
@@ -147,15 +154,7 @@ export function DestinationField({
               )}
               {lookup.state === 'found' && (
                 <p className="font-sans text-xs text-muted-foreground">
-                  In the Community{' '}
-                  <a
-                    href={lookup.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-foreground underline underline-offset-2"
-                  >
-                    {lookup.name ?? lookup.id}
-                  </a>
+                  <InTheCommunity community={lookup} />
                 </p>
               )}
             </div>
@@ -176,7 +175,7 @@ export function DestinationField({
   );
 }
 
-function draftFor(selected: string, past: Community[]): DestinationDraft {
+function draftFor(selected: string, past: Pick<Community, 'id' | 'name'>[]): DestinationDraft {
   if (selected === 'community') {
     return { kind: 'community', pasted: '', shareWithFollowers: true, lookup: NOT_LOOKED_UP };
   }
@@ -187,20 +186,4 @@ function draftFor(selected: string, past: Community[]): DestinationDraft {
     community: { id: community.id, name: community.name },
     shareWithFollowers: true,
   };
-}
-
-/** Loaded once per field; without them, pasting a Community still works. */
-function usePastCommunities(): Community[] {
-  const [past, setPast] = useState<Community[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    scheduledPostService
-      .pastCommunities()
-      .then((found) => !cancelled && setPast(found))
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return past;
 }

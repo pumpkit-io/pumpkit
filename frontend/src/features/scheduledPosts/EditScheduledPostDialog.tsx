@@ -21,10 +21,9 @@ import { XLengthCounter } from './XLengthCounter';
 function draftOf(post: ScheduledPost): DestinationDraft {
   if (!post.community) return PROFILE_DRAFT;
   return {
-    kind: 'community',
-    pasted: post.community.url,
+    kind: 'pastCommunity',
+    community: { id: post.community.id, name: post.community.name },
     shareWithFollowers: post.shareWithFollowers,
-    lookup: { state: 'found', ...post.community },
   };
 }
 
@@ -99,8 +98,8 @@ function EditForm({
           disabled={saving}
         />
         <XLengthCounter length={length} limit={charLimit} />
-        <PublishTimeField value={when} onChange={setWhen} disabled={saving} />
         <DestinationField value={draft} onChange={setDraft} disabled={saving} />
+        <PublishTimeField value={when} onChange={setWhen} disabled={saving} />
         {error && <ErrorBanner message={error} />}
       </div>
       <DialogFooter className="justify-end gap-2">

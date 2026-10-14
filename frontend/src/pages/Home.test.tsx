@@ -713,6 +713,26 @@ describe('Home', () => {
         });
       });
 
+      it('says a Final goes into a Community picked from the past ones', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+        vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([
+          { id: COMMUNITY_ID, name: 'Indie makers', url: COMMUNITY_URL },
+        ]);
+        const final = await finalWritten();
+
+        fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+        const option = await dialog.findByRole<HTMLOptionElement>('option', {
+          name: 'Indie makers',
+        });
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: option.value } });
+
+        expect(
+          dialog.getByText(/goes out from @ada into the Community straight away/i),
+        ).toBeInTheDocument();
+        vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([]);
+      });
+
       it('schedules the Final into a Community kept from the followers', async () => {
         vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
         vi.mocked(scheduledPostService.schedule).mockResolvedValue({

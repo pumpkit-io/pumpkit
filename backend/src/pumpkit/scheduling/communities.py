@@ -26,6 +26,14 @@ class Community:
     name: Optional[str]
 
 
+@dataclass(frozen=True)
+class Destination:
+    # None for the User's profile.
+    community: Optional[Community] = None
+    # Whether X also shares it with the account's followers; counts only with a Community.
+    share_with_followers: bool = False
+
+
 def community_url(community_id: str) -> str:
     return f"https://x.com/i/communities/{community_id}"
 
