@@ -7,12 +7,15 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { xWeightedLength } from '@/lib/xLength';
+import type { Destination } from '@/services/scheduledPostService';
+import { destinationFrom, PROFILE_DRAFT } from './communities';
+import { DestinationField } from './DestinationField';
 import { PublishTimeField } from './PublishTimeField';
 import { XLengthCounter } from './XLengthCounter';
 
 /**
- * Where the User types a text and either schedules it for a date and time in the browser's
- * timezone or posts it on their X account straight away.
+ * Where the User types a text, picks their profile or a Community, and either schedules it for
+ * a date and time in the browser's timezone or posts it on their X account straight away.
  */
 export function Composer({
   posting,
@@ -25,8 +28,8 @@ export function Composer({
   error: string | null;
   /** What came of the last send, when it needs saying. */
   notice: string | null;
-  onPostNow: (text: string) => Promise<boolean>;
-  onSchedule: (text: string, publishAt: string) => Promise<boolean>;
+  onPostNow: (text: string, destination: Destination) => Promise<boolean>;
+  onSchedule: (text: string, publishAt: string, destination: Destination) => Promise<boolean>;
 }) {
   const { subscribed } = useSubscribed();
   const { connection } = useXConnectionContext();
@@ -34,6 +37,9 @@ export function Composer({
   /** The picked time as the input holds it, in the browser's timezone; '' when none. */
   const [when, setWhen] = useState('');
   const length = useMemo(() => xWeightedLength(text), [text]);
+  // Kept after a send, so a run of posts can go to the same Community.
+  const [draft, setDraft] = useState(PROFILE_DRAFT);
+  const destination = destinationFrom(draft);
 
   const clear = () => {
     setText('');
@@ -43,11 +49,13 @@ export function Composer({
   const schedule = async (e: FormEvent) => {
     e.preventDefault();
     // A datetime-local value without an offset parses as local time.
-    if (await onSchedule(text, new Date(when).toISOString())) clear();
+    if (!destination) return;
+    if (await onSchedule(text, new Date(when).toISOString(), destination)) clear();
   };
 
   const postNow = async () => {
-    if (await onPostNow(text)) clear();
+    if (!destination) return;
+    if (await onPostNow(text, destination)) clear();
   };
 
   let action;
@@ -60,9 +68,11 @@ export function Composer({
   } else if (connection === null || connection.needsReconnect) {
     action = <ConnectXPrompt />;
   } else {
-    const unsendable = posting || length > connection.charLimit || !text.trim();
+    const unsendable =
+      posting || length > connection.charLimit || !text.trim() || destination === null;
     action = (
       <div className="space-y-3">
+        <DestinationField value={draft} onChange={setDraft} disabled={posting} />
         <PublishTimeField value={when} onChange={setWhen} disabled={posting} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <XLengthCounter length={length} limit={connection.charLimit} />

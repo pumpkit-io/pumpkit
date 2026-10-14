@@ -69,6 +69,34 @@ async def test_a_scheduled_post_is_published_once_due_and_never_before(
     assert fake_x_publisher.published == [("access-1001-1", "At five past")]
 
 
+async def test_a_due_community_post_goes_out_in_its_community(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "text": "For the Community",
+            "publish_at": "2026-10-10T12:05:00Z",
+            "community": {"id": "1493446837214187523", "name": "Indie makers"},
+            "share_with_followers": True,
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["community"] == {
+        "id": "1493446837214187523",
+        "name": "Indie makers",
+        "url": "https://x.com/i/communities/1493446837214187523",
+    }
+    fixed_clock.advance(timedelta(minutes=5))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    assert (await _listed(client))["For the Community"]["state"] == "published"
+    assert fake_x_publisher.published == [("access-1001-1", "For the Community")]
+    assert fake_x_publisher.published_to == [("1493446837214187523", True)]
+
+
 async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_plans_are_sold(
     client, db_session_maker, sells_no_plans, fake_x_publisher, fixed_clock
 ):
@@ -108,11 +136,11 @@ async def test_two_passes_at_once_publish_each_scheduled_post_once(
     another_started = asyncio.Event()
     publish = fake_x_publisher.publish
 
-    async def overlapping_publish(*, access_token: str, text: str) -> str:
+    async def overlapping_publish(**kwargs) -> str:
         if fake_x_publisher.published:
             another_started.set()
-            return await publish(access_token=access_token, text=text)
-        posted = await publish(access_token=access_token, text=text)
+            return await publish(**kwargs)
+        posted = await publish(**kwargs)
         await asyncio.wait_for(another_started.wait(), timeout=5)
         return posted
 
@@ -344,7 +372,7 @@ async def test_the_pass_tracks_what_it_publishes(
     captured.capture.assert_called_once_with(
         "scheduled_post_published",
         distinct_id=subscribed.user_id,
-        properties={"source": "typed"},
+        properties={"source": "typed", "destination": "profile"},
     )
 
 

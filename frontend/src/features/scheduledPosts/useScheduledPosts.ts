@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
-import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
+import {
+  scheduledPostService,
+  type Destination,
+  type ScheduledPost,
+} from '@/services/scheduledPostService';
 import {
   useCreateScheduledPost,
   X_BUSY_NOTICE,
@@ -47,11 +51,15 @@ export function useScheduledPosts() {
     [create],
   );
 
-  const postNow = useCallback((text: string) => add({ text, postNow: true }), [add]);
+  const postNow = useCallback(
+    (text: string, destination: Destination) => add({ text, postNow: true, destination }),
+    [add],
+  );
 
   /** `publishAt` is an ISO instant on a whole minute. */
   const schedule = useCallback(
-    (text: string, publishAt: string) => add({ text, postNow: false, publishAt }),
+    (text: string, publishAt: string, destination: Destination) =>
+      add({ text, postNow: false, publishAt, destination }),
     [add],
   );
 

@@ -7,6 +7,8 @@ from pumpkit.scheduling.models import ScheduledPostState
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
+# Far past any Community name X allows; the name is only a label the User sees.
+COMMUNITY_NAME_MAX_CHARS = 200
 
 
 def _strip_text(value: Optional[str]) -> Optional[str]:
@@ -18,6 +20,22 @@ def _strip_text(value: Optional[str]) -> Optional[str]:
     return stripped
 
 
+class CommunityRequest(BaseModel):
+    """A Community as the client named it: the server checks the ID and trusts the name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: Optional[str] = Field(None, max_length=COMMUNITY_NAME_MAX_CHARS)
+
+
+class CommunityResponse(BaseModel):
+    id: str
+    # None when it couldn't be looked up: show the ID instead.
+    name: Optional[str]
+    url: str
+
+
 class ScheduledPostCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -27,6 +45,10 @@ class ScheduledPostCreateRequest(BaseModel):
     publish_now: bool = False
     # The Version whose Final the text copies; None for a typed post.
     source_version_id: Optional[str] = None
+    # The Community it goes to; None for the User's profile.
+    community: Optional[CommunityRequest] = None
+    # With a Community, whether X also shares it with the account's followers; ignored without.
+    share_with_followers: bool = False
 
     _strip = field_validator("text")(_strip_text)
 
@@ -49,6 +71,9 @@ class ScheduledPostResponse(BaseModel):
     failed_reason: Optional[str]
     # The Version whose Final it copied; None when typed or when that Version is gone.
     source_version_id: Optional[str]
+    # The Community it goes to; None for the User's profile.
+    community: Optional[CommunityResponse]
+    share_with_followers: bool
     created_at: datetime
 
 

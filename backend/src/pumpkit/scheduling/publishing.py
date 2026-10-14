@@ -74,7 +74,7 @@ async def _publish(
     await db.commit()
 
     try:
-        return await publish.call_x(publisher, access_token=access_token, text=scheduled_post.text)
+        return await publish.call_x(publisher, scheduled_post, access_token=access_token)
     except publish.Failed as failed:
         if failed.category == "reconnect_needed":
             await x_connections_service.flag_needs_reconnect(db, connection, now=now)

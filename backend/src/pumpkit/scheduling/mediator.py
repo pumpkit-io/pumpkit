@@ -10,11 +10,13 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.core.config import settings
 from pumpkit.core.time import as_utc
-from pumpkit.scheduling import rules, service
+from pumpkit.scheduling import communities, rules, service
+from pumpkit.scheduling.communities import Community
 from pumpkit.scheduling.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import MonthFull, RuleBroken
 from pumpkit.scheduling.schemas import (
+    CommunityResponse,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
     XConnectionResponse,
@@ -27,6 +29,7 @@ from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostResponse:
     published_at = scheduled_post.published_at
     x_post_id = scheduled_post.x_post_id
+    community_id = scheduled_post.community_id
     return ScheduledPostResponse(
         id=scheduled_post.id,
         text=scheduled_post.text,
@@ -37,6 +40,14 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         x_post_url=f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None,
         failed_reason=scheduled_post.failed_reason,
         source_version_id=scheduled_post.source_version_id,
+        community=CommunityResponse(
+            id=community_id,
+            name=scheduled_post.community_name,
+            url=communities.community_url(community_id),
+        )
+        if community_id
+        else None,
+        share_with_followers=scheduled_post.share_with_followers,
         created_at=as_utc(scheduled_post.created_at),
     )
 
@@ -97,10 +108,14 @@ async def create_scheduled_post(
     publish_now: bool,
     now: datetime,
     source_version_id: Optional[str] = None,
+    community: Optional[Community] = None,
+    share_with_followers: bool = False,
 ) -> ScheduledPostResponse:
     """With `publish_now`, published within the request: Published, Failed, or back in scheduled."""
     connection = await connection_to_publish_on(db, user_id=user.id)
     try:
+        if community is not None:
+            communities.check_community_id(community.id)
         rules.check_length(text, limit=x_post_max_chars(connection.subscription_type))
         publish_at = now if publish_now else rules.check_publish_at(publish_at, now=now)
         await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
@@ -108,17 +123,19 @@ async def create_scheduled_post(
         raise _refused(rule) from None
     if source_version_id is not None:
         await _check_source_version(db, user_id=user.id, version_id=source_version_id)
-    if publish_now:
-        return await _post_now(db, publisher, user, connection, text, now, source_version_id)
     scheduled_post = await service.create(
         db,
         user_id=user.id,
         x_user_id=connection.x_user_id,
         text=text,
-        publish_at=publish_at,
+        publish_at=publish_at.replace(second=0, microsecond=0) if publish_now else publish_at,
         now=now,
         source_version_id=source_version_id,
+        community=community,
+        share_with_followers=share_with_followers,
     )
+    if publish_now:
+        return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
     await db.commit()
     return scheduled_post_response(scheduled_post)
 
@@ -131,24 +148,8 @@ async def _check_source_version(db: AsyncSession, *, user_id: str, version_id: s
 
 
 async def _post_now(
-    db: AsyncSession,
-    publisher: XPublisher,
-    user: User,
-    connection: XConnection,
-    text: str,
-    now: datetime,
-    source_version_id: Optional[str],
+    db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
 ) -> ScheduledPostResponse:
-    scheduled_post = await service.create(
-        db,
-        user_id=user.id,
-        x_user_id=connection.x_user_id,
-        text=text,
-        publish_at=now.replace(second=0, microsecond=0),
-        now=now,
-        source_version_id=source_version_id,
-    )
-    scheduled_post_id = scheduled_post.id
     # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     published = await service.get(db, scheduled_post_id=scheduled_post_id)

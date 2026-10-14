@@ -10,6 +10,7 @@ from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.scheduling import mediator
+from pumpkit.scheduling.communities import Community
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
     ScheduledPostCreateRequest,
@@ -91,6 +92,7 @@ async def create_scheduled_post(
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
     """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
+    community = create_request.community
     return await mediator.create_scheduled_post(
         db=db,
         publisher=publisher,
@@ -99,6 +101,8 @@ async def create_scheduled_post(
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
         source_version_id=create_request.source_version_id,
+        community=Community(id=community.id, name=community.name) if community else None,
+        share_with_followers=create_request.share_with_followers,
         now=clock(),
     )
 
