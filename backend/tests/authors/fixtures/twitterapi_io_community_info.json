@@ -1,0 +1,25 @@
+{
+  "community_info": {
+    "id": "1493446837214187523",
+    "name": "Build in Public",
+    "description": "A place to share what you are building.",
+    "question": null,
+    "member_count": 152340,
+    "moderator_count": 6,
+    "created_at": "Tue Feb 15 03:41:12 +0000 2022",
+    "join_policy": "Open",
+    "invites_policy": "MemberInvitesAllowed",
+    "is_nsfw": false,
+    "is_pinned": false,
+    "role": "NonMember",
+    "primary_topic": { "id": "1301", "name": "Entrepreneurship" },
+    "banner_url": "https://pbs.twimg.com/community_banner_img/1493446837214187523/banner.jpg",
+    "search_tags": ["buildinpublic", "indiehackers"],
+    "rules": [{ "id": "1", "name": "Be kind", "description": "No harassment." }],
+    "creator": { "id": "1000000001", "userName": "creator" },
+    "admin": { "id": "1000000001", "userName": "creator" },
+    "members_preview": []
+  },
+  "status": "success",
+  "msg": ""
+}

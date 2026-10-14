@@ -84,7 +84,7 @@ Before you invite anyone else, configure SMTP so Magic links arrive by email ([S
 | Provider | Required | What it enables | Without it |
 | --- | --- | --- | --- |
 | LLM endpoint (OpenRouter or any OpenAI-compatible endpoint) | Yes | Writing and revising Posts | `scripts/setup.sh` stops and asks for `LLM_API_KEY` |
-| twitterapi.io | Yes | Reading Inspiration authors' posts, which set the writing style | `scripts/setup.sh` stops and asks for `TWITTERAPI_IO_API_KEY` |
+| twitterapi.io | Yes | Reading Inspiration authors' posts, which set the writing style, and Community names | `scripts/setup.sh` stops and asks for `TWITTERAPI_IO_API_KEY` |
 | SMTP | No | Emailing Magic links | Magic links go to the backend log, so only you can sign in |
 | Google | No | Signing in with Google | Users sign in with a Magic link only |
 | X app | No | Connecting an X account to schedule Posts or post them now | Users copy the Final into X themselves |

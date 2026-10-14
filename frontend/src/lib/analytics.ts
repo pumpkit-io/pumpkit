@@ -118,6 +118,10 @@ export const EVENTS = {
   // Scheduled (/scheduled) + the X callback
   x_connected: { description: 'Scheduled: connected an X account through X consent screen.' },
   x_disconnected: { description: 'Scheduled: disconnected the X account.' },
+  community_looked_up: {
+    description:
+      'Scheduled: looked up a Community pasted by its URL or ID. Props: found (boolean), named (boolean, only when found).',
+  },
   scheduled_post_created: {
     description:
       'Scheduled: created a Scheduled post. Props: source (typed | final), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).',

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
+from pumpkit.authors.x_reader import XReader, get_x_reader
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
@@ -13,6 +14,8 @@ from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
+    CommunityLookupRequest,
+    CommunityResponse,
     PastCommunitiesResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
@@ -62,6 +65,18 @@ async def complete_x_authorization(
         state=complete_request.state,
         now=clock(),
     )
+
+
+@router.post("/community-lookups", response_model=CommunityResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def look_up_community(
+    request: Request,
+    lookup_request: CommunityLookupRequest,
+    current_user: User = Depends(require_subscribed_user),
+    reader: XReader = Depends(get_x_reader),
+) -> CommunityResponse:
+    """Without twitterapi.io, or when it fails, the Community comes back without a name."""
+    return await mediator.look_up_community(reader=reader, pasted=lookup_request.pasted)
 
 
 # Open to Users who aren't Subscribed, so their Published and Failed history stays visible.

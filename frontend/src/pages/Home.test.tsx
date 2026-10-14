@@ -49,6 +49,7 @@ vi.mock('@/services/scheduledPostService', () => ({
     list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),
+    lookUpCommunity: vi.fn(),
   },
 }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
@@ -645,6 +646,17 @@ describe('Home', () => {
       const COMMUNITY_ID = '1493446837214187523';
       const COMMUNITY_URL = `https://x.com/i/communities/${COMMUNITY_ID}`;
 
+      beforeEach(() => {
+        // As when the Instance has no twitterapi.io: the Community comes back without a name.
+        vi.mocked(scheduledPostService.lookUpCommunity)
+          .mockReset()
+          .mockImplementation(async (id) => ({
+            id,
+            name: null,
+            url: `https://x.com/i/communities/${id}`,
+          }));
+      });
+
       it('offers My profile first, and the followers checkbox only while a Community is chosen', async () => {
         vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
         const final = await finalWritten();
@@ -679,6 +691,9 @@ describe('Home', () => {
         fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
           target: { value: COMMUNITY_URL },
         });
+        await vi.waitFor(() =>
+          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+        );
         expect(
           dialog.getByText(/goes out from @ada into the Community straight away/i),
         ).toBeInTheDocument();
@@ -712,6 +727,9 @@ describe('Home', () => {
         fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
           target: { value: '123' },
         });
+        await vi.waitFor(() =>
+          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+        );
         fireEvent.click(dialog.getByLabelText('Also share with followers'));
         fireEvent.change(dialog.getByLabelText('Date and time'), {
           target: { value: '2026-10-12T09:00' },

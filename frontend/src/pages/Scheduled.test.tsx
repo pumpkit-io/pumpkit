@@ -36,6 +36,7 @@ vi.mock('@/services/scheduledPostService', () => ({
     schedule: vi.fn(),
     edit: vi.fn(),
     cancel: vi.fn(),
+    lookUpCommunity: vi.fn(),
   },
 }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
@@ -647,12 +648,112 @@ describe('Scheduled', () => {
 
     beforeEach(() => {
       vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      // As when the Instance has no twitterapi.io: the Community comes back without a name.
+      vi.mocked(scheduledPostService.lookUpCommunity)
+        .mockReset()
+        .mockImplementation(async (id) => ({
+          id,
+          name: null,
+          url: `https://x.com/i/communities/${id}`,
+        }));
     });
 
     async function pickCommunity(box: Awaited<ReturnType<typeof composer>>, pasted: string) {
       fireEvent.change(await box.findByLabelText('Post to'), { target: { value: 'community' } });
       fireEvent.change(box.getByLabelText('Community URL or ID'), { target: { value: pasted } });
+      await vi.waitFor(() =>
+        expect(box.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+      );
     }
+
+    it('shows the name of a pasted Community and posts it with that name', async () => {
+      vi.mocked(scheduledPostService.lookUpCommunity).mockResolvedValue({
+        id: COMMUNITY_ID,
+        name: 'Build in Public',
+        url: COMMUNITY_URL,
+      });
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...IN_COMMUNITY,
+        community: { id: COMMUNITY_ID, name: 'Build in Public', url: COMMUNITY_URL },
+      });
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), {
+        target: { value: 'Hello Community.' },
+      });
+      await pickCommunity(box, COMMUNITY_URL);
+
+      expect(box.getByRole('link', { name: 'Build in Public' })).toHaveAttribute(
+        'href',
+        COMMUNITY_URL,
+      );
+      expect(scheduledPostService.lookUpCommunity).toHaveBeenCalledWith(COMMUNITY_ID);
+      expect(track).toHaveBeenCalledWith('community_looked_up', { found: true, named: true });
+      fireEvent.click(box.getByRole('button', { name: 'Post now' }));
+      await vi.waitFor(() =>
+        expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello Community.', undefined, {
+          community: { id: COMMUNITY_ID, name: 'Build in Public' },
+          shareWithFollowers: true,
+        }),
+      );
+    });
+
+    it('holds back posting until the pasted Community is looked up', async () => {
+      vi.mocked(scheduledPostService.lookUpCommunity).mockReturnValue(new Promise(() => {}));
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'Hello' } });
+      fireEvent.change(await box.findByLabelText('Post to'), { target: { value: 'community' } });
+      fireEvent.change(box.getByLabelText('Community URL or ID'), {
+        target: { value: COMMUNITY_URL },
+      });
+
+      expect(await box.findByText('Looking up the Community…')).toBeInTheDocument();
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+    });
+
+    it('says when X has no such Community and holds back posting', async () => {
+      const missing = 'X has no Community with that ID. Check the URL.';
+      vi.mocked(scheduledPostService.lookUpCommunity).mockRejectedValue(apiError(404, missing));
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'Hello' } });
+      await pickCommunity(box, COMMUNITY_URL);
+
+      expect(box.getByText(missing)).toBeInTheDocument();
+      expect(box.getByLabelText('Community URL or ID')).toHaveAttribute('aria-invalid', 'true');
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+      expect(track).toHaveBeenCalledWith('community_looked_up', { found: false });
+    });
+
+    it('shows the Community by its ID when its name could not be looked up', async () => {
+      vi.mocked(scheduledPostService.lookUpCommunity).mockRejectedValue(apiError(500, 'boom'));
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'Hello' } });
+      await pickCommunity(box, COMMUNITY_URL);
+
+      expect(box.getByRole('link', { name: COMMUNITY_ID })).toHaveAttribute('href', COMMUNITY_URL);
+      expect(box.getByRole('button', { name: 'Post now' })).toBeEnabled();
+    });
+
+    it('lists a Scheduled post by its Community name', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([
+        { ...MONDAY, community: { id: COMMUNITY_ID, name: 'Build in Public', url: COMMUNITY_URL } },
+      ]);
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      const monday = within((await upcoming.findByText('Monday morning.')).closest('li')!);
+      expect(monday.getByRole('link', { name: 'Build in Public' })).toHaveAttribute(
+        'href',
+        COMMUNITY_URL,
+      );
+    });
 
     it('posts to the profile unless a Community is picked', async () => {
       vi.mocked(scheduledPostService.postNow).mockResolvedValue(PUBLISHED);

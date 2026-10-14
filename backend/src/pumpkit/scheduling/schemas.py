@@ -9,6 +9,7 @@ from pumpkit.scheduling.models import ScheduledPostState
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
 # Far past any Community name X allows; the name is only a label the User sees.
 COMMUNITY_NAME_MAX_CHARS = 200
+COMMUNITY_PASTE_MAX_CHARS = 2_000
 
 
 def _strip_text(value: Optional[str]) -> Optional[str]:
@@ -27,6 +28,13 @@ class CommunityRequest(BaseModel):
 
     id: str
     name: Optional[str] = Field(None, max_length=COMMUNITY_NAME_MAX_CHARS)
+
+
+class CommunityLookupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # A Community URL or bare ID as the User pasted it.
+    pasted: str = Field(..., max_length=COMMUNITY_PASTE_MAX_CHARS)
 
 
 class CommunityResponse(BaseModel):

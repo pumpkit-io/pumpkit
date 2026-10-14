@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.posts.service as posts_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
+from pumpkit.authors.x_reader import (
+    CommunityNotFoundError,
+    XReader,
+    XReaderError,
+    XReaderNotConfiguredError,
+)
 from pumpkit.core.config import settings
+from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community
@@ -52,6 +59,30 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         else None,
         share_with_followers=scheduled_post.share_with_followers,
         created_at=as_utc(scheduled_post.created_at),
+    )
+
+
+async def look_up_community(reader: XReader, pasted: str) -> CommunityResponse:
+    """The pasted Community with its name on X, or with no name when X can't be read."""
+    try:
+        community_id = communities.community_id_from(pasted)
+    except RuleBroken as rule:
+        raise _refused(rule) from None
+    try:
+        name: Optional[str] = (await reader.fetch_community(community_id)).name
+    except CommunityNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="X has no Community with that ID. Check the URL.",
+        ) from None
+    except XReaderNotConfiguredError:
+        name = None
+    except XReaderError as error:
+        # The name is only a label, so a failed read mustn't stop the User posting.
+        logger.warning("Looking up Community %s failed: %s", community_id, error)
+        name = None
+    return CommunityResponse(
+        id=community_id, name=name, url=communities.community_url(community_id)
     )
 
 

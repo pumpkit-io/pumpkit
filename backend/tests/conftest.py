@@ -167,7 +167,8 @@ def fake_billing():
 def fake_x_reader():
     """
     Every test reads X through a fake instead of twitterapi.io. Request it by name to
-    set `fake_x_reader.posts[handle]`, read `fake_x_reader.calls`, or set `fail` or `not_configured`.
+    set `posts[handle]` or `communities[id]`, read `calls` or `community_calls`, or set `fail`
+    or `not_configured`.
     """
     fake = FakeXReader()
     app.dependency_overrides[get_x_reader] = lambda: fake
