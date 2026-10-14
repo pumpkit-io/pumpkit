@@ -17,6 +17,8 @@ import { useXConnectionContext } from '@/features/xConnection/useXConnectionCont
 import { xWeightedLength } from '@/lib/xLength';
 import type { Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
+import { destinationFrom, PROFILE_DRAFT, type DestinationDraft } from './communities';
+import { DestinationField } from './DestinationField';
 import { PublishTimeField } from './PublishTimeField';
 import { useCreateScheduledPost, X_BUSY_NOTICE } from './useCreateScheduledPost';
 import { XLengthCounter } from './XLengthCounter';
@@ -84,17 +86,21 @@ function FinalToXDialog({
   /** The picked time as the input holds it, in the browser's timezone; '' when none. */
   const [when, setWhen] = useState('');
   const [created, setCreated] = useState<ScheduledPost | null>(null);
+  const [draft, setDraft] = useState<DestinationDraft>(PROFILE_DRAFT);
+  const destination = destinationFrom(draft);
   const length = useMemo(() => xWeightedLength(version.final), [version.final]);
   const postNow = action === 'postNow';
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
+    if (!destination) return;
     const outcome = await create(
       postNow
-        ? { text: version.final, sourceVersionId: version.id, postNow: true }
+        ? { text: version.final, sourceVersionId: version.id, destination, postNow: true }
         : {
             text: version.final,
             sourceVersionId: version.id,
+            destination,
             postNow: false,
             // A datetime-local value without an offset parses as local time.
             publishAt: new Date(when).toISOString(),
@@ -132,9 +138,11 @@ function FinalToXDialog({
       </Button>
     );
   } else {
-    description = postNow
-      ? `It goes out on @${connection.handle} straight away.`
-      : `It goes out on @${connection.handle} at the time you pick.`;
+    const where =
+      draft.kind === 'community'
+        ? `from @${connection.handle} into the Community`
+        : `on @${connection.handle}`;
+    description = `It goes out ${where} ${postNow ? 'straight away' : 'at the time you pick'}.`;
     body = (
       <>
         <div className="space-y-1.5 rounded-lg bg-muted/50 p-3">
@@ -143,11 +151,13 @@ function FinalToXDialog({
           </p>
           <XLengthCounter length={length} limit={connection.charLimit} />
         </div>
+        <DestinationField value={draft} onChange={setDraft} disabled={sending} />
         {!postNow && <PublishTimeField value={when} onChange={setWhen} disabled={sending} />}
         {error && <ErrorBanner message={error} />}
       </>
     );
-    const unsendable = sending || length > connection.charLimit || (!postNow && !when);
+    const unsendable =
+      sending || length > connection.charLimit || (!postNow && !when) || destination === null;
     footer = (
       <>
         <Button type="button" variant="outline" className="h-10" onClick={onClose}>
