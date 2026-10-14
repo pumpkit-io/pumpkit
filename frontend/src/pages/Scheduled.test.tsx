@@ -30,6 +30,7 @@ vi.mock('@/services/xConnectionService', () => ({
 }));
 vi.mock('@/services/scheduledPostService', () => ({
   scheduledPostService: {
+    pastCommunities: vi.fn().mockResolvedValue([]),
     list: vi.fn(),
     postNow: vi.fn(),
     schedule: vi.fn(),
@@ -48,7 +49,11 @@ import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
-import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
+import {
+  scheduledPostService,
+  type Community,
+  type ScheduledPost,
+} from '@/services/scheduledPostService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import type { Instance } from '@/lib/instance';
@@ -796,6 +801,67 @@ describe('Scheduled', () => {
       const profile = within(published.getByText(PUBLISHED.text).closest('li')!);
       expect(profile.queryByRole('link', { name: COMMUNITY_ID })).not.toBeInTheDocument();
       expect(profile.queryByText(/followers/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Past Communities', () => {
+    const MAKERS: Community = {
+      id: '1493446837214187523',
+      name: 'Indie makers',
+      url: 'https://x.com/i/communities/1493446837214187523',
+    };
+    const UNNAMED: Community = { id: '123', name: null, url: 'https://x.com/i/communities/123' };
+
+    beforeEach(() => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([MAKERS, UNNAMED]);
+    });
+
+    afterEach(() => {
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([]);
+    });
+
+    function pick(box: Awaited<ReturnType<typeof composer>>, option: string) {
+      const value = box.getByRole<HTMLOptionElement>('option', { name: option }).value;
+      fireEvent.change(box.getByLabelText('Post to'), { target: { value } });
+    }
+
+    it('offers them below My profile, next to pasting a new one', async () => {
+      renderScheduled();
+
+      const box = await composer();
+      await box.findByRole('option', { name: 'Indie makers' });
+
+      expect(box.getAllByRole('option').map((o) => o.textContent)).toEqual([
+        'My profile',
+        'Indie makers',
+        '123',
+        'Another Community',
+      ]);
+    });
+
+    it('posts into the one picked, with followers checked whatever was chosen before', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue(PUBLISHED);
+      renderScheduled();
+
+      const box = await composer();
+      await box.findByRole('option', { name: 'Indie makers' });
+      pick(box, '123');
+      fireEvent.click(box.getByLabelText('Also share with followers'));
+      expect(box.getByLabelText('Also share with followers')).not.toBeChecked();
+      pick(box, 'Indie makers');
+      expect(box.getByLabelText('Post to')).toHaveDisplayValue('Indie makers');
+      expect(box.queryByLabelText('Community URL or ID')).not.toBeInTheDocument();
+      expect(box.getByLabelText('Also share with followers')).toBeChecked();
+      fireEvent.change(box.getByLabelText('Post text'), { target: { value: 'Hello' } });
+      fireEvent.click(box.getByRole('button', { name: 'Post now' }));
+
+      await vi.waitFor(() =>
+        expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello', undefined, {
+          community: { id: MAKERS.id, name: 'Indie makers' },
+          shareWithFollowers: true,
+        }),
+      );
     });
   });
 

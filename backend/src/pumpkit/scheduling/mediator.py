@@ -17,6 +17,7 @@ from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import MonthFull, RuleBroken
 from pumpkit.scheduling.schemas import (
     CommunityResponse,
+    PastCommunitiesResponse,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
     XConnectionResponse,
@@ -24,6 +25,12 @@ from pumpkit.scheduling.schemas import (
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
+
+
+def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:
+    return CommunityResponse(
+        id=community_id, name=name, url=communities.community_url(community_id)
+    )
 
 
 def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostResponse:
@@ -40,11 +47,7 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         x_post_url=f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None,
         failed_reason=scheduled_post.failed_reason,
         source_version_id=scheduled_post.source_version_id,
-        community=CommunityResponse(
-            id=community_id,
-            name=scheduled_post.community_name,
-            url=communities.community_url(community_id),
-        )
+        community=_community_response(community_id, scheduled_post.community_name)
         if community_id
         else None,
         share_with_followers=scheduled_post.share_with_followers,
@@ -57,6 +60,15 @@ async def list_scheduled_posts(
 ) -> ScheduledPostsListResponse:
     scheduled_posts = await service.list_for_user(db, user_id=user.id, state=state)
     return ScheduledPostsListResponse(data=[scheduled_post_response(s) for s in scheduled_posts])
+
+
+async def list_past_communities(db: AsyncSession, user: User) -> PastCommunitiesResponse:
+    """Only the connected X account's: membership in a Community belongs to the X account."""
+    connection = await x_connections_service.get_connection(db, user_id=user.id)
+    if connection is None:
+        return PastCommunitiesResponse(data=[])
+    past = await service.past_communities(db, user_id=user.id, x_user_id=connection.x_user_id)
+    return PastCommunitiesResponse(data=[_community_response(c.id, c.name) for c in past])
 
 
 async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnection:

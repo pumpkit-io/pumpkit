@@ -1,5 +1,6 @@
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Input } from '@/components/ui/input';
+import { scheduledPostService, type Community } from '@/services/scheduledPostService';
 import {
   communityIdFrom,
   NOT_A_COMMUNITY,
@@ -7,10 +8,12 @@ import {
   type DestinationDraft,
 } from './communities';
 
+const PAST = 'past:';
+
 /**
- * Where a Scheduled post goes: "My profile", or a Community named by pasting its URL or ID.
- * While a Community is chosen, an "Also share with followers" checkbox shows, checked each
- * time one is picked.
+ * Where a Scheduled post goes: "My profile", a Community the User posted to before, or one
+ * named by pasting its URL or ID. While a Community is chosen, an "Also share with followers"
+ * checkbox shows, checked each time one is picked.
  */
 export function DestinationField({
   value,
@@ -22,6 +25,7 @@ export function DestinationField({
   disabled?: boolean;
 }) {
   const id = useId();
+  const past = usePastCommunities();
   const unreadable =
     value.kind === 'community' && value.pasted.trim() !== '' && !communityIdFrom(value.pasted);
 
@@ -33,50 +37,51 @@ export function DestinationField({
         </label>
         <select
           id={`${id}-to`}
-          value={value.kind}
-          onChange={(e) =>
-            onChange(
-              e.target.value === 'community'
-                ? { kind: 'community', pasted: '', shareWithFollowers: true }
-                : PROFILE_DRAFT,
-            )
-          }
+          value={value.kind === 'pastCommunity' ? PAST + value.community.id : value.kind}
+          onChange={(e) => onChange(draftFor(e.target.value, past))}
           disabled={disabled}
           className="flex h-10 w-full rounded-lg border border-muted-foreground bg-background px-3 py-2 font-sans text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-64"
         >
           <option value="profile">My profile</option>
-          <option value="community">A Community</option>
+          {past.map((community) => (
+            <option key={community.id} value={PAST + community.id}>
+              {community.name ?? community.id}
+            </option>
+          ))}
+          <option value="community">{past.length ? 'Another Community' : 'A Community'}</option>
         </select>
       </div>
-      {value.kind === 'community' && (
+      {value.kind !== 'profile' && (
         <>
-          <div className="space-y-1.5">
-            <label
-              htmlFor={`${id}-community`}
-              className="block font-sans text-sm font-medium text-foreground"
-            >
-              Community URL or ID
-            </label>
-            <Input
-              id={`${id}-community`}
-              value={value.pasted}
-              onChange={(e) => onChange({ ...value, pasted: e.target.value })}
-              placeholder="https://x.com/i/communities/…"
-              aria-invalid={unreadable}
-              aria-describedby={unreadable ? `${id}-unreadable` : undefined}
-              disabled={disabled}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            {unreadable && (
-              <p
-                id={`${id}-unreadable`}
-                className="font-sans text-xs text-red-700 dark:text-red-300"
+          {value.kind === 'community' && (
+            <div className="space-y-1.5">
+              <label
+                htmlFor={`${id}-community`}
+                className="block font-sans text-sm font-medium text-foreground"
               >
-                {NOT_A_COMMUNITY}
-              </p>
-            )}
-          </div>
+                Community URL or ID
+              </label>
+              <Input
+                id={`${id}-community`}
+                value={value.pasted}
+                onChange={(e) => onChange({ ...value, pasted: e.target.value })}
+                placeholder="https://x.com/i/communities/…"
+                aria-invalid={unreadable}
+                aria-describedby={unreadable ? `${id}-unreadable` : undefined}
+                disabled={disabled}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {unreadable && (
+                <p
+                  id={`${id}-unreadable`}
+                  className="font-sans text-xs text-red-700 dark:text-red-300"
+                >
+                  {NOT_A_COMMUNITY}
+                </p>
+              )}
+            </div>
+          )}
           <label className="flex cursor-pointer items-center gap-3 font-sans text-sm text-foreground">
             <input
               type="checkbox"
@@ -91,4 +96,31 @@ export function DestinationField({
       )}
     </div>
   );
+}
+
+function draftFor(selected: string, past: Community[]): DestinationDraft {
+  if (selected === 'community') return { kind: 'community', pasted: '', shareWithFollowers: true };
+  const community = past.find((c) => PAST + c.id === selected);
+  if (!community) return PROFILE_DRAFT;
+  return {
+    kind: 'pastCommunity',
+    community: { id: community.id, name: community.name },
+    shareWithFollowers: true,
+  };
+}
+
+/** Loaded once per field; without them, pasting a Community still works. */
+function usePastCommunities(): Community[] {
+  const [past, setPast] = useState<Community[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    scheduledPostService
+      .pastCommunities()
+      .then((found) => !cancelled && setPast(found))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return past;
 }

@@ -36,6 +36,12 @@ class CommunityResponse(BaseModel):
     url: str
 
 
+class PastCommunitiesResponse(BaseModel):
+    """The Communities the User posted to before on the connected X account, most recent first."""
+
+    data: list[CommunityResponse]
+
+
 class ScheduledPostCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

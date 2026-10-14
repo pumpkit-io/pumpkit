@@ -45,6 +45,7 @@ vi.mock('@/services/xConnectionService', () => ({
 }));
 vi.mock('@/services/scheduledPostService', () => ({
   scheduledPostService: {
+    pastCommunities: vi.fn().mockResolvedValue([]),
     list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),

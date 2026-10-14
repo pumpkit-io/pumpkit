@@ -215,6 +215,27 @@ async def count_waiting(db: AsyncSession, *, user_id: str, x_user_id: str) -> in
     return result.scalar_one()
 
 
+async def past_communities(db: AsyncSession, *, user_id: str, x_user_id: str) -> list[Community]:
+    """
+    The Communities of the User's Scheduled posts for the X account, most recently created
+    first, each once under the latest name stored for it.
+    """
+    result = await db.execute(
+        select(ScheduledPost.community_id, ScheduledPost.community_name)
+        .where(
+            ScheduledPost.user_id == user_id,
+            ScheduledPost.x_user_id == x_user_id,
+            ScheduledPost.community_id.is_not(None),
+        )
+        .order_by(ScheduledPost.created_at.desc(), ScheduledPost.id.desc())
+    )
+    names: dict[str, Optional[str]] = {}
+    for community_id, name in result.tuples():
+        if community_id is not None and names.get(community_id) is None:
+            names[community_id] = name
+    return [Community(id=community_id, name=name) for community_id, name in names.items()]
+
+
 async def count_publishing_between(
     db: AsyncSession,
     *,
