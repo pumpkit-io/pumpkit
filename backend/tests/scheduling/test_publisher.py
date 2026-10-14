@@ -20,6 +20,7 @@ from pumpkit.scheduling.publisher import HEARTBEAT_FILE, run, run_pass
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,
+    XPostRejectedError,
     XRateLimitedError,
 )
 
@@ -95,6 +96,34 @@ async def test_a_due_community_post_goes_out_in_its_community(
     assert (await _listed(client))["For the Community"]["state"] == "published"
     assert fake_x_publisher.published == [("access-1001-1", "For the Community")]
     assert fake_x_publisher.published_to == [("1493446837214187523", True)]
+
+
+async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_membership_hint(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+):
+    await _connect_x(client)
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "text": "Not a member",
+            "publish_at": "2026-10-10T12:05:00Z",
+            "community": {"id": "1493446837214187523", "name": "Indie makers"},
+        },
+    )
+    assert response.status_code == 201, response.text
+    fake_x_publisher.fail_publish = XPostRejectedError(
+        403, "You do not have permission to create this Tweet."
+    )
+    fixed_clock.advance(timedelta(minutes=5))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    failed = (await _listed(client))["Not a member"]
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == (
+        "X refused the post: You do not have permission to create this Tweet. Check that your "
+        "X account is a member of this Community and allowed to post in it."
+    )
 
 
 async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_plans_are_sold(

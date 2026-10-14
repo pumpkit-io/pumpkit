@@ -8,10 +8,13 @@ from httpx import AsyncClient
 
 import pumpkit.scheduling.publish as publish_module
 from pumpkit.core.config import settings
+from pumpkit.x_connection.x_publisher import XPostRejectedError
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
+# What X answered a non-member in spike #124.
+NOT_A_MEMBER = XPostRejectedError(403, "You do not have permission to create this Tweet.")
 
 
 async def _connect_x(client: AsyncClient) -> None:
@@ -115,6 +118,49 @@ async def test_a_community_post_follows_the_x_account_s_length_limit(
         response.json()["detail"] == "This post is 281 characters by X's count, over the 280 limit."
     )
     assert fake_x_publisher.published == []
+
+
+async def test_a_community_post_x_refuses_for_a_non_member_fails_with_a_membership_hint(
+    client, subscribed, fake_x_publisher, clock, monkeypatch
+):
+    captured = MagicMock()
+    monkeypatch.setattr(publish_module, "posthog_client", captured)
+    await _connect_x(client)
+    fake_x_publisher.fail_publish = NOT_A_MEMBER
+
+    response = await _post_now(client, community={"id": COMMUNITY_ID, "name": None})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["state"] == "failed"
+    assert response.json()["failed_reason"] == (
+        "X refused the post: You do not have permission to create this Tweet. Check that your "
+        "X account is a member of this Community and allowed to post in it."
+    )
+    captured.capture.assert_called_once_with(
+        "scheduled_post_failed",
+        distinct_id=subscribed.user_id,
+        properties={"reason": "refused_by_x"},
+    )
+
+
+@pytest.mark.parametrize(
+    ("refusal", "community"),
+    [
+        (NOT_A_MEMBER, None),
+        (XPostRejectedError(400, "Duplicate content."), {"id": COMMUNITY_ID, "name": None}),
+    ],
+    ids=["profile post refused with 403", "community post refused with 400"],
+)
+async def test_other_refusals_fail_without_the_membership_hint(
+    client, subscribed, fake_x_publisher, clock, refusal, community
+):
+    await _connect_x(client)
+    fake_x_publisher.fail_publish = refusal
+
+    response = await _post_now(client, community=community)
+
+    assert response.json()["state"] == "failed"
+    assert response.json()["failed_reason"] == f"X refused the post: {refusal.message}"
 
 
 async def test_community_posts_count_towards_the_monthly_cap(

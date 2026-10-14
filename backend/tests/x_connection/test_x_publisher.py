@@ -368,6 +368,23 @@ async def test_a_refused_post_carries_x_s_own_words(body):
     assert raised.value.message == "You are not allowed to create a Tweet with duplicate content."
 
 
+@pytest.mark.parametrize("status", [400, 403, 404])
+@respx.mock
+async def test_a_refused_post_keeps_x_s_status(status):
+    respx.post(X_TWEETS_URL).mock(
+        return_value=httpx.Response(
+            status, json={"detail": "You do not have permission to create this Tweet."}
+        )
+    )
+
+    with pytest.raises(XPostRejectedError) as raised:
+        await OfficialXPublisher().publish(
+            access_token="access-1", text="Hello X", community_id="1493446837214187523"
+        )
+
+    assert raised.value.x_status == status
+
+
 @respx.mock
 async def test_a_refusal_without_a_readable_body_still_says_what_x_answered():
     respx.post(X_TWEETS_URL).mock(return_value=httpx.Response(400, text="Bad Request"))
