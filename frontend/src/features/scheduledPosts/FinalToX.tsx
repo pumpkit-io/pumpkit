@@ -139,7 +139,7 @@ function FinalToXDialog({
     );
   } else {
     const where =
-      draft.kind === 'community'
+      draft.kind !== 'profile'
         ? `from @${connection.handle} into the Community`
         : `on @${connection.handle}`;
     description = `It goes out ${where} ${postNow ? 'straight away' : 'at the time you pick'}.`;
