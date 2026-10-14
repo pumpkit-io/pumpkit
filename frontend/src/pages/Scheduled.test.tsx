@@ -88,6 +88,8 @@ const PUBLISHED: ScheduledPost = {
   publishedAt: '2026-10-10T12:00:14Z',
   xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
   failedReason: null,
+  community: null,
+  shareWithFollowers: false,
   createdAt: '2026-10-10T12:00:14Z',
 };
 // The tests run in Europe/Rome (vitest.config.ts), two hours ahead of UTC in October.
@@ -99,6 +101,8 @@ const MONDAY: ScheduledPost = {
   publishedAt: null,
   xPostUrl: null,
   failedReason: null,
+  community: null,
+  shareWithFollowers: false,
   createdAt: '2026-10-10T12:00:00Z',
 };
 const WEDNESDAY: ScheduledPost = {
@@ -115,6 +119,8 @@ const FAILED: ScheduledPost = {
   publishedAt: null,
   xPostUrl: null,
   failedReason: 'X refused the post: You are not allowed to create a Tweet with duplicate content.',
+  community: null,
+  shareWithFollowers: false,
   createdAt: '2026-10-10T12:01:03Z',
 };
 
@@ -354,11 +360,13 @@ describe('Scheduled', () => {
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
         'Shipping the new onboarding today.',
         undefined,
+        { community: null, shareWithFollowers: false },
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
         source: 'typed',
         post_now: true,
+        destination: 'profile',
       });
     });
 
@@ -546,12 +554,14 @@ describe('Scheduled', () => {
         'Monday morning.',
         '2026-10-12T07:00:00.000Z',
         undefined,
+        { community: null, shareWithFollowers: false },
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(box.getByLabelText('Date and time')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
         source: 'typed',
         post_now: false,
+        destination: 'profile',
       });
     });
 
@@ -616,6 +626,176 @@ describe('Scheduled', () => {
       });
 
       expect(box.getByRole('button', { name: 'Schedule' })).toBeDisabled();
+    });
+  });
+
+  describe('Communities', () => {
+    const COMMUNITY_ID = '1493446837214187523';
+    const COMMUNITY_URL = `https://x.com/i/communities/${COMMUNITY_ID}`;
+    const IN_COMMUNITY: ScheduledPost = {
+      ...PUBLISHED,
+      id: 'scheduled_post_06',
+      text: 'Hello Community.',
+      community: { id: COMMUNITY_ID, name: null, url: COMMUNITY_URL },
+      shareWithFollowers: true,
+    };
+
+    beforeEach(() => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    });
+
+    async function pickCommunity(box: Awaited<ReturnType<typeof composer>>, pasted: string) {
+      fireEvent.change(await box.findByLabelText('Post to'), { target: { value: 'community' } });
+      fireEvent.change(box.getByLabelText('Community URL or ID'), { target: { value: pasted } });
+    }
+
+    it('posts to the profile unless a Community is picked', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue(PUBLISHED);
+      renderScheduled();
+
+      const box = await composer();
+      expect(await box.findByLabelText('Post to')).toHaveDisplayValue('My profile');
+      expect(box.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
+      fireEvent.change(box.getByLabelText('Post text'), { target: { value: 'Hello' } });
+      fireEvent.click(box.getByRole('button', { name: 'Post now' }));
+
+      await vi.waitFor(() =>
+        expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello', undefined, {
+          community: null,
+          shareWithFollowers: false,
+        }),
+      );
+    });
+
+    it('posts now into a Community pasted by its URL, shared with followers by default', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue(IN_COMMUNITY);
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), {
+        target: { value: 'Hello Community.' },
+      });
+      await pickCommunity(box, `${COMMUNITY_URL}?s=20`);
+      expect(box.getByLabelText('Also share with followers')).toBeChecked();
+      fireEvent.click(box.getByRole('button', { name: 'Post now' }));
+
+      const published = await publishedList();
+      expect(await published.findByText('Hello Community.')).toBeInTheDocument();
+      expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello Community.', undefined, {
+        community: { id: COMMUNITY_ID, name: null },
+        shareWithFollowers: true,
+      });
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        source: 'typed',
+        post_now: true,
+        destination: 'community',
+        share_with_followers: true,
+      });
+    });
+
+    it('schedules into a Community named by its ID, kept from the followers', async () => {
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue({
+        ...MONDAY,
+        community: { id: '123', name: null, url: 'https://x.com/i/communities/123' },
+      });
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), {
+        target: { value: 'Monday morning.' },
+      });
+      await pickCommunity(box, ' 123 ');
+      fireEvent.click(box.getByLabelText('Also share with followers'));
+      fireEvent.change(box.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(box.getByRole('button', { name: 'Schedule' }));
+
+      const upcoming = await upcomingList();
+      expect(await upcoming.findByText('Monday morning.')).toBeInTheDocument();
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        'Monday morning.',
+        '2026-10-12T07:00:00.000Z',
+        undefined,
+        { community: { id: '123', name: null }, shareWithFollowers: false },
+      );
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        source: 'typed',
+        post_now: false,
+        destination: 'community',
+        share_with_followers: false,
+      });
+    });
+
+    it('shows the followers checkbox only for a Community, checked each time one is picked', async () => {
+      renderScheduled();
+
+      const box = await composer();
+      await pickCommunity(box, COMMUNITY_URL);
+      fireEvent.click(box.getByLabelText('Also share with followers'));
+      expect(box.getByLabelText('Also share with followers')).not.toBeChecked();
+
+      fireEvent.change(box.getByLabelText('Post to'), { target: { value: 'profile' } });
+      expect(box.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
+      expect(box.queryByLabelText('Community URL or ID')).not.toBeInTheDocument();
+
+      fireEvent.change(box.getByLabelText('Post to'), { target: { value: 'community' } });
+      expect(box.getByLabelText('Also share with followers')).toBeChecked();
+    });
+
+    it('says when the pasted text is not a Community and holds back posting', async () => {
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'Hello' } });
+      await pickCommunity(box, 'https://x.com/ada');
+
+      expect(
+        box.getByText(
+          "That isn't a Community. Paste its URL from X, like https://x.com/i/communities/123, or its ID.",
+        ),
+      ).toBeInTheDocument();
+      expect(box.getByLabelText('Community URL or ID')).toHaveAttribute('aria-invalid', 'true');
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+
+      fireEvent.change(box.getByLabelText('Community URL or ID'), { target: { value: '' } });
+      expect(box.queryByText(/isn't a Community/)).not.toBeInTheDocument();
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+    });
+
+    it('lists each one with its Community and whether a Published one went to followers', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([
+        { ...MONDAY, community: IN_COMMUNITY.community, shareWithFollowers: false },
+        IN_COMMUNITY,
+        {
+          ...PUBLISHED,
+          id: 'scheduled_post_05',
+          text: 'Only there.',
+          community: IN_COMMUNITY.community,
+        },
+        PUBLISHED,
+      ]);
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      const monday = within((await upcoming.findByText('Monday morning.')).closest('li')!);
+      expect(monday.getByRole('link', { name: COMMUNITY_ID })).toHaveAttribute(
+        'href',
+        COMMUNITY_URL,
+      );
+      expect(monday.queryByText(/followers/)).not.toBeInTheDocument();
+      const published = await publishedList();
+      const shared = within(published.getByText('Hello Community.').closest('li')!);
+      expect(shared.getByRole('link', { name: COMMUNITY_ID })).toHaveAttribute(
+        'href',
+        COMMUNITY_URL,
+      );
+      expect(shared.getByText('Also shared with followers')).toBeInTheDocument();
+      const only = within(published.getByText('Only there.').closest('li')!);
+      expect(only.getByText('Not shared with followers')).toBeInTheDocument();
+      const profile = within(published.getByText(PUBLISHED.text).closest('li')!);
+      expect(profile.queryByRole('link', { name: COMMUNITY_ID })).not.toBeInTheDocument();
+      expect(profile.queryByText(/followers/)).not.toBeInTheDocument();
     });
   });
 

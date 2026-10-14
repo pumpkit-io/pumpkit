@@ -29,6 +29,34 @@ function PostText({ text }: { text: string }) {
   );
 }
 
+/**
+ * The Community a Scheduled post goes to, by name or else by ID, linking to it on X. With
+ * `followers`, it also says whether X shared it with the account's followers.
+ */
+function CommunityLine({ post, followers }: { post: ScheduledPost; followers?: boolean }) {
+  if (!post.community) return null;
+  return (
+    <p className="flex flex-wrap gap-x-3 font-sans text-xs text-muted-foreground">
+      <span>
+        In the Community{' '}
+        <a
+          href={post.community.url}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-foreground underline underline-offset-2"
+        >
+          {post.community.name ?? post.community.id}
+        </a>
+      </span>
+      {followers && (
+        <span>
+          {post.shareWithFollowers ? 'Also shared with followers' : 'Not shared with followers'}
+        </span>
+      )}
+    </p>
+  );
+}
+
 function ItemActions({ children }: { children: React.ReactNode }) {
   return <div className="flex gap-2 pt-1">{children}</div>;
 }
@@ -38,7 +66,7 @@ const ITEM = 'space-y-1.5 px-4 py-3';
 
 /**
  * Upcoming Scheduled posts soonest first, Failed ones with their reason, and Published ones
- * with a link to X. Without `onEdit` or `onCancel`, the lists offer no such control.
+ * with a link to X, each with its Community when it has one. Without `onEdit` or `onCancel`, the lists offer no such control.
  */
 export function ScheduledPostLists({
   scheduledPosts,
@@ -76,6 +104,7 @@ export function ScheduledPostLists({
             {upcoming.map((post) => (
               <li key={post.id} className={ITEM}>
                 <PostText text={post.text} />
+                <CommunityLine post={post} />
                 <p className="font-sans text-xs text-muted-foreground">
                   {post.state === 'publishing'
                     ? 'Publishing now'
@@ -106,6 +135,7 @@ export function ScheduledPostLists({
             {failed.map((post) => (
               <li key={post.id} className={ITEM}>
                 <PostText text={post.text} />
+                <CommunityLine post={post} />
                 <p className="font-sans text-xs text-red-700 dark:text-red-300">
                   {post.failedReason}
                 </p>
@@ -138,6 +168,7 @@ export function ScheduledPostLists({
             {published.map((post) => (
               <li key={post.id} className={ITEM}>
                 <PostText text={post.text} />
+                <CommunityLine post={post} followers />
                 <p className="flex flex-wrap gap-x-3 font-sans text-xs text-muted-foreground">
                   {post.publishedAt && (
                     <span>Published {dateTime.format(new Date(post.publishedAt))}</span>

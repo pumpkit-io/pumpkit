@@ -11,7 +11,7 @@ NOT_A_COMMUNITY = (
 )
 
 # X's pattern for a Community ID.
-_ID = r"\d{1,19}"
+_ID = r"[0-9]{1,19}"
 _BARE_ID = re.compile(_ID)
 _URL = re.compile(
     rf"(?:https?://)?(?:www\.)?(?:x|twitter)\.com/i/communities/(?P<id>{_ID})/?(?:\?\S*)?",

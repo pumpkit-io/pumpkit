@@ -17,6 +17,8 @@
   { "note": "a 20-digit ID", "pasted": "12345678901234567890", "id": null },
   { "note": "an ID with letters", "pasted": "123abc", "id": null },
   { "note": "a negative number", "pasted": "-123", "id": null },
+  { "note": "digits other than 0 to 9", "pasted": "١٢٣", "id": null },
+  { "note": "a Community URL with digits other than 0 to 9", "pasted": "https://x.com/i/communities/١٢٣", "id": null },
   { "note": "a profile URL", "pasted": "https://x.com/ada", "id": null },
   { "note": "a post URL", "pasted": "https://x.com/ada/status/1890000000000000001", "id": null },
   { "note": "a Community URL without an ID", "pasted": "https://x.com/i/communities/", "id": null },

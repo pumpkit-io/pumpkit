@@ -437,6 +437,8 @@ describe('Home', () => {
       publishedAt: null,
       xPostUrl: null,
       failedReason: null,
+      community: null,
+      shareWithFollowers: false,
       createdAt: '2026-10-10T12:00:00Z',
     };
 
@@ -482,10 +484,12 @@ describe('Home', () => {
         'the final text',
         '2026-10-12T07:00:00.000Z',
         'version_attempt_01',
+        { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
         source: 'final',
         post_now: false,
+        destination: 'profile',
       });
       expect(dialog.getByRole('link', { name: 'See Scheduled posts' })).toHaveAttribute(
         'href',
@@ -538,10 +542,12 @@ describe('Home', () => {
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
         'the final text',
         'version_attempt_01',
+        { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
         source: 'final',
         post_now: true,
+        destination: 'profile',
       });
     });
 
