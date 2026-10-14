@@ -13,6 +13,7 @@ from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
+    PastCommunitiesResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
@@ -75,6 +76,18 @@ async def list_scheduled_posts(
     db: AsyncSession = Depends(get_async_db),
 ) -> ScheduledPostsListResponse:
     return await mediator.list_scheduled_posts(db=db, user=current_user, state=state)
+
+
+@router.get(
+    "/scheduled-posts/communities",
+    response_model=PastCommunitiesResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def list_past_communities(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> PastCommunitiesResponse:
+    return await mediator.list_past_communities(db=db, user=current_user)
 
 
 @router.post(
