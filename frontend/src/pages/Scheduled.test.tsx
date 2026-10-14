@@ -193,6 +193,14 @@ describe('Scheduled', () => {
     vi.mocked(scheduledPostService.schedule).mockReset();
     vi.mocked(scheduledPostService.edit).mockReset();
     vi.mocked(scheduledPostService.cancel).mockReset();
+    // As when the Instance has no twitterapi.io: the Community comes back without a name.
+    vi.mocked(scheduledPostService.lookUpCommunity)
+      .mockReset()
+      .mockImplementation(async (id) => ({
+        id,
+        name: null,
+        url: `https://x.com/i/communities/${id}`,
+      }));
     vi.mocked(redirectTo).mockReset();
     vi.mocked(track).mockClear();
   });
@@ -648,14 +656,6 @@ describe('Scheduled', () => {
 
     beforeEach(() => {
       vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      // As when the Instance has no twitterapi.io: the Community comes back without a name.
-      vi.mocked(scheduledPostService.lookUpCommunity)
-        .mockReset()
-        .mockImplementation(async (id) => ({
-          id,
-          name: null,
-          url: `https://x.com/i/communities/${id}`,
-        }));
     });
 
     async function pickCommunity(box: Awaited<ReturnType<typeof composer>>, pasted: string) {
@@ -963,6 +963,7 @@ describe('Scheduled', () => {
           shareWithFollowers: true,
         }),
       );
+      expect(scheduledPostService.lookUpCommunity).not.toHaveBeenCalled();
     });
   });
 
@@ -1248,6 +1249,9 @@ describe('Scheduled', () => {
         fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
           target: { value: IN_COMMUNITY.community!.url },
         });
+        await vi.waitFor(() =>
+          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+        );
         expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
         fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
 
@@ -1261,6 +1265,27 @@ describe('Scheduled', () => {
             name: IN_COMMUNITY.community!.id,
           }),
         ).toHaveAttribute('href', IN_COMMUNITY.community!.url);
+      });
+
+      it('shows the stored Community name and saves a text edit without looking it up', async () => {
+        vi.mocked(scheduledPostService.list).mockResolvedValue([IN_COMMUNITY]);
+        vi.mocked(scheduledPostService.edit).mockResolvedValue({
+          ...IN_COMMUNITY,
+          text: 'Edited.',
+        });
+        renderScheduled();
+
+        const dialog = await editDialog('Monday morning.');
+        expect(dialog.getByRole('link', { name: 'Indie makers' })).toHaveAttribute(
+          'href',
+          IN_COMMUNITY.community!.url,
+        );
+        fireEvent.change(dialog.getByLabelText('Post text'), { target: { value: 'Edited.' } });
+        fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+        await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { text: 'Edited.' });
+        expect(scheduledPostService.lookUpCommunity).not.toHaveBeenCalled();
       });
 
       it('changes only whether it is shared with followers, keeping the Community', async () => {
@@ -1299,6 +1324,9 @@ describe('Scheduled', () => {
         fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
           target: { value: '123' },
         });
+        await vi.waitFor(() =>
+          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+        );
         fireEvent.click(dialog.getByLabelText('Also share with followers'));
         expect(dialog.getByRole('button', { name: 'Reschedule' })).toBeDisabled();
         fireEvent.change(dialog.getByLabelText('Date and time'), {

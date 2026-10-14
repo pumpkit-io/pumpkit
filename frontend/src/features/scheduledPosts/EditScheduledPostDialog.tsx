@@ -24,6 +24,7 @@ function draftOf(post: ScheduledPost): DestinationDraft {
     kind: 'community',
     pasted: post.community.url,
     shareWithFollowers: post.shareWithFollowers,
+    lookup: { state: 'found', ...post.community },
   };
 }
 
