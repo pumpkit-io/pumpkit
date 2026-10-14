@@ -67,6 +67,15 @@ const destinationBody = ({ community, shareWithFollowers }: Destination) => ({
 });
 
 export const scheduledPostService = {
+  /**
+   * The Communities the User posted to before on the connected X account, most recently used
+   * first, each under the latest name stored for it.
+   */
+  pastCommunities: async (): Promise<Community[]> => {
+    const { data } = await apiService.get<{ data: Community[] }>('/scheduled-posts/communities');
+    return data.data;
+  },
+
   /** Waiting ones first, soonest first; then Published and Failed ones, newest first. */
   list: async (): Promise<ScheduledPost[]> => {
     const { data } = await apiService.get<{ data: ScheduledPostApi[] }>('/scheduled-posts');

@@ -1,4 +1,4 @@
-import type { Destination } from '@/services/scheduledPostService';
+import type { Community, Destination } from '@/services/scheduledPostService';
 
 /** Where a Scheduled post goes unless the User picks a Community. */
 export const PROFILE: Destination = { community: null, shareWithFollowers: false };
@@ -22,15 +22,27 @@ export function communityIdFrom(pasted: string): string | null {
   return URL_PATTERN.exec(trimmed)?.[1] ?? null;
 }
 
-/** What the field holds: the User's profile, or a Community named by what they pasted. */
+/**
+ * What the field holds: the User's profile, a Community named by what they pasted, or one
+ * they posted to before.
+ */
 export type DestinationDraft =
-  { kind: 'profile' } | { kind: 'community'; pasted: string; shareWithFollowers: boolean };
+  | { kind: 'profile' }
+  | { kind: 'community'; pasted: string; shareWithFollowers: boolean }
+  | {
+      kind: 'pastCommunity';
+      community: Pick<Community, 'id' | 'name'>;
+      shareWithFollowers: boolean;
+    };
 
 export const PROFILE_DRAFT: DestinationDraft = { kind: 'profile' };
 
 /** Where the draft sends a Scheduled post, or null while the paste names no Community. */
 export function destinationFrom(draft: DestinationDraft): Destination | null {
   if (draft.kind === 'profile') return PROFILE;
+  if (draft.kind === 'pastCommunity') {
+    return { community: draft.community, shareWithFollowers: draft.shareWithFollowers };
+  }
   const id = communityIdFrom(draft.pasted);
   if (id === null) return null;
   return { community: { id, name: null }, shareWithFollowers: draft.shareWithFollowers };
