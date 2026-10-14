@@ -1,11 +1,64 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Input } from '@/components/ui/input';
+import { track } from '@/lib/analytics';
+import { errorMessage, errorStatus } from '@/services/apiErrors';
+import { scheduledPostService } from '@/services/scheduledPostService';
 import {
   communityIdFrom,
+  communityUrl,
+  lookupFor,
   NOT_A_COMMUNITY,
   PROFILE_DRAFT,
+  type CommunityLookup,
   type DestinationDraft,
 } from './communities';
+
+const NOT_LOOKED_UP: CommunityLookup = { state: 'none' };
+
+/**
+ * Looks up the Community the draft names whenever it names a new one, and hands the draft back
+ * with the outcome, unless the User has pasted something else in the meantime.
+ */
+function useCommunityLookup(value: DestinationDraft, onChange: (value: DestinationDraft) => void) {
+  const latest = useRef({ value, onChange });
+  latest.current = { value, onChange };
+  const lookingFor =
+    value.kind === 'community' && value.lookup.state === 'looking' ? value.lookup.id : null;
+
+  useEffect(() => {
+    if (lookingFor === null) return;
+    const settle = (lookup: CommunityLookup) => {
+      const { value: current, onChange: change } = latest.current;
+      if (current.kind !== 'community' || current.lookup.state !== 'looking') return;
+      if (current.lookup.id !== lookingFor) return;
+      change({ ...current, lookup });
+    };
+    scheduledPostService.lookUpCommunity(lookingFor).then(
+      (community) => {
+        track('community_looked_up', { found: true, named: community.name !== null });
+        settle({ state: 'found', ...community });
+      },
+      (error: unknown) => {
+        if (errorStatus(error) === 404) {
+          track('community_looked_up', { found: false });
+          settle({
+            state: 'missing',
+            id: lookingFor,
+            message: errorMessage(error, 'X has no Community with that ID.'),
+          });
+          return;
+        }
+        // The name is only a label: without it the Community still takes posts, shown by its ID.
+        settle({
+          state: 'found',
+          id: lookingFor,
+          name: null,
+          url: communityUrl(lookingFor),
+        });
+      },
+    );
+  }, [lookingFor]);
+}
 
 /**
  * Where a Scheduled post goes: "My profile", or a Community named by pasting its URL or ID.
@@ -22,8 +75,11 @@ export function DestinationField({
   disabled?: boolean;
 }) {
   const id = useId();
+  useCommunityLookup(value, onChange);
   const unreadable =
     value.kind === 'community' && value.pasted.trim() !== '' && !communityIdFrom(value.pasted);
+  const lookup = value.kind === 'community' ? value.lookup : NOT_LOOKED_UP;
+  const problem = unreadable ? NOT_A_COMMUNITY : lookup.state === 'missing' ? lookup.message : null;
 
   return (
     <div className="space-y-3">
@@ -37,7 +93,7 @@ export function DestinationField({
           onChange={(e) =>
             onChange(
               e.target.value === 'community'
-                ? { kind: 'community', pasted: '', shareWithFollowers: true }
+                ? { kind: 'community', pasted: '', shareWithFollowers: true, lookup: NOT_LOOKED_UP }
                 : PROFILE_DRAFT,
             )
           }
@@ -60,20 +116,41 @@ export function DestinationField({
             <Input
               id={`${id}-community`}
               value={value.pasted}
-              onChange={(e) => onChange({ ...value, pasted: e.target.value })}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  pasted: e.target.value,
+                  lookup: lookupFor(e.target.value, value.lookup),
+                })
+              }
               placeholder="https://x.com/i/communities/…"
-              aria-invalid={unreadable}
-              aria-describedby={unreadable ? `${id}-unreadable` : undefined}
+              aria-invalid={problem !== null}
+              aria-describedby={problem !== null ? `${id}-problem` : undefined}
               disabled={disabled}
               autoComplete="off"
               spellCheck={false}
             />
-            {unreadable && (
-              <p
-                id={`${id}-unreadable`}
-                className="font-sans text-xs text-red-700 dark:text-red-300"
-              >
-                {NOT_A_COMMUNITY}
+            {problem !== null && (
+              <p id={`${id}-problem`} className="font-sans text-xs text-red-700 dark:text-red-300">
+                {problem}
+              </p>
+            )}
+            {lookup.state === 'looking' && (
+              <p role="status" className="font-sans text-xs text-muted-foreground">
+                Looking up the Community…
+              </p>
+            )}
+            {lookup.state === 'found' && (
+              <p className="font-sans text-xs text-muted-foreground">
+                In the Community{' '}
+                <a
+                  href={lookup.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-foreground underline underline-offset-2"
+                >
+                  {lookup.name ?? lookup.id}
+                </a>
               </p>
             )}
           </div>

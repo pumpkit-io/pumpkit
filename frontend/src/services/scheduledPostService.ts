@@ -122,6 +122,15 @@ export const scheduledPostService = {
     return toScheduledPost(data);
   },
 
+  /**
+   * The Community a pasted URL or ID names, with its name on X, or a null name when it can't be
+   * read. Fails with a 404 when X has no such Community.
+   */
+  lookUpCommunity: async (pasted: string): Promise<Community> => {
+    const { data } = await apiService.post<Community>('/community-lookups', { pasted });
+    return data;
+  },
+
   /** Deletes a scheduled or Failed one. */
   cancel: async (id: string): Promise<void> => {
     await apiService.delete(`/scheduled-posts/${encodeURIComponent(id)}`);
