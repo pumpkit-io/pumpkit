@@ -87,13 +87,22 @@ class ScheduledPostUpdateRequest(BaseModel):
     text: Optional[str] = Field(None, max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
+    # A new Community; an explicit null moves the Scheduled post back to the User's profile.
+    community: Optional[CommunityRequest] = None
+    # Ignored when the Scheduled post ends up on the profile.
+    share_with_followers: Optional[bool] = None
 
     _strip = field_validator("text")(_strip_text)
 
+    @property
+    def changes_community(self) -> bool:
+        return "community" in self.model_fields_set
+
     @model_validator(mode="after")
     def _something_to_change(self) -> "ScheduledPostUpdateRequest":
-        if self.text is None and self.publish_at is None:
-            raise ValueError("Give a new text, a new publish time, or both.")
+        unchanged = self.text is None and self.publish_at is None
+        if unchanged and self.share_with_followers is None and not self.changes_community:
+            raise ValueError("Give something to change.")
         return self
 
 
