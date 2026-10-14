@@ -173,12 +173,12 @@ Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](ht
 
 ### twitterapi.io (required)
 
-Reads the recent posts of each Inspiration author, which set the style Pumpkit writes in (ADR 0005).
+Reads the recent posts of each Inspiration author, which set the style Pumpkit writes in (ADR 0005), and the name of each Community a User pastes to post into.
 
 - Get a key: sign up at [twitterapi.io](https://twitterapi.io/dashboard); the key is on the dashboard.
 - Pricing: [twitterapi.io pricing](https://twitterapi.io/pricing).
 - Settings: `TWITTERAPI_IO_API_KEY`.
-- Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, adding an Inspiration author fails, and a User with no Inspiration author cannot write a Post.
+- Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, adding an Inspiration author fails, and a User with no Inspiration author cannot write a Post. A pasted Community shows its ID instead of its name, and posting into it still works.
 - **Check:** adding an X handle under **Inspiration authors** on Home lists it.
 
 ### SMTP
