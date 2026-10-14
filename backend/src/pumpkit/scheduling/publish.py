@@ -56,6 +56,10 @@ X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a
 OUTCOME_UNKNOWN_REASON = (
     "X didn't confirm this post. It may have been published. Check your X profile."
 )
+# X answers a Community post from a non-member with a 403, and can't be asked about membership.
+COMMUNITY_MEMBERSHIP_HINT = (
+    "Check that your X account is a member of this Community and allowed to post in it."
+)
 
 # Far longer than one call to X takes: a Scheduled post publishing this long lost its publisher.
 STUCK_AFTER = timedelta(minutes=10)
@@ -138,7 +142,10 @@ async def call_x(publisher: XPublisher, scheduled_post: ScheduledPost, *, access
     except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
         raise Failed("x_unavailable", X_UNAVAILABLE_REASON)
     except XPostRejectedError as rejected:
-        raise Failed("refused_by_x", f"X refused the post: {rejected.message}")
+        reason = f"X refused the post: {rejected.message}"
+        if scheduled_post.community_id and rejected.x_status == 403:
+            reason = f"{reason} {COMMUNITY_MEMBERSHIP_HINT}"
+        raise Failed("refused_by_x", reason)
     except XPublisherError:
         raise Failed("outcome_unknown", OUTCOME_UNKNOWN_REASON)
 
