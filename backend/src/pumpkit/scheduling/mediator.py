@@ -192,16 +192,25 @@ async def edit_scheduled_post(
     text: Optional[str],
     publish_at: Optional[datetime],
     now: datetime,
+    changes_community: bool = False,
+    community: Optional[Community] = None,
+    share_with_followers: Optional[bool] = None,
 ) -> ScheduledPostResponse:
     """
-    New text, a new publish time, or both, for a scheduled or Failed Scheduled post. A new time
-    reschedules it on the X account connected now, so a Failed one gets another try.
+    New text, time, Community or share with followers for a scheduled or Failed Scheduled post.
+    A new time reschedules it on the X account connected now, so a Failed one gets another try.
+    With `changes_community`, `community` replaces the current one and None means the profile.
     """
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
         raise _publishing_started()
     reschedule = None
+    move = None
     try:
+        if changes_community or share_with_followers is not None:
+            if community is not None:
+                communities.check_community_id(community.id)
+            move = _move(scheduled_post, changes_community, community, share_with_followers)
         connection = (
             await connection_to_publish_on(db, user_id=user.id)
             if publish_at is not None
@@ -221,11 +230,30 @@ async def edit_scheduled_post(
     except RuleBroken as rule:
         raise _refused(rule) from None
     if not await service.edit(
-        db, scheduled_post_id=scheduled_post_id, text=text, reschedule=reschedule, now=now
+        db,
+        scheduled_post_id=scheduled_post_id,
+        text=text,
+        reschedule=reschedule,
+        move=move,
+        now=now,
     ):
         raise _publishing_started()
     await db.commit()
     return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
+
+
+def _move(
+    scheduled_post: ScheduledPost,
+    changes_community: bool,
+    community: Optional[Community],
+    share_with_followers: Optional[bool],
+) -> service.Move:
+    """Where the Scheduled post goes after the edit, keeping what the edit leaves unsaid."""
+    if not changes_community and scheduled_post.community_id is not None:
+        community = Community(id=scheduled_post.community_id, name=scheduled_post.community_name)
+    if share_with_followers is None:
+        share_with_followers = scheduled_post.share_with_followers
+    return service.Move(community=community, share_with_followers=share_with_followers)
 
 
 async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:

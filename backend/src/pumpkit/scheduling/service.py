@@ -89,6 +89,14 @@ class Reschedule:
     x_user_id: str
 
 
+@dataclass(frozen=True)
+class Move:
+    # None for the User's profile.
+    community: Optional[Community]
+    # Counts only with a Community, as in `create`.
+    share_with_followers: bool
+
+
 async def edit(
     db: AsyncSession,
     *,
@@ -96,6 +104,7 @@ async def edit(
     text: Optional[str],
     reschedule: Optional[Reschedule],
     now: datetime,
+    move: Optional[Move] = None,
 ) -> bool:
     """
     Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
@@ -105,6 +114,13 @@ async def edit(
     values: dict[str, object] = {"updated_at": now}
     if text is not None:
         values["text"] = text
+    if move is not None:
+        community = move.community
+        values.update(
+            community_id=community.id if community else None,
+            community_name=community.name if community else None,
+            share_with_followers=community is not None and move.share_with_followers,
+        )
     if reschedule is not None:
         values.update(
             state=SCHEDULED,

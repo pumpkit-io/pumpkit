@@ -18,6 +18,15 @@ export interface Destination {
   shareWithFollowers: boolean;
 }
 
+/** What an edit changes; anything left out stays as it is. */
+export interface ScheduledPostChanges {
+  text?: string;
+  publishAt?: string;
+  /** Null moves it back to the User's profile. */
+  community?: Destination['community'];
+  shareWithFollowers?: boolean;
+}
+
 /** A text set to be published on the User's X account, with its own copy of the text. */
 export interface ScheduledPost {
   id: string;
@@ -120,13 +129,16 @@ export const scheduledPostService = {
    * For a scheduled or Failed one. A new `publishAt` reschedules it on the X account connected
    * now and puts a Failed one back in scheduled.
    */
-  edit: async (
-    id: string,
-    changes: { text?: string; publishAt?: string },
-  ): Promise<ScheduledPost> => {
+  edit: async (id: string, changes: ScheduledPostChanges): Promise<ScheduledPost> => {
     const { data } = await apiService.patch<ScheduledPostApi>(
       `/scheduled-posts/${encodeURIComponent(id)}`,
-      { text: changes.text, publish_at: changes.publishAt },
+      {
+        text: changes.text,
+        publish_at: changes.publishAt,
+        // Sent only when given: null moves it back to the profile, absent keeps the Community.
+        ...('community' in changes && { community: changes.community }),
+        share_with_followers: changes.shareWithFollowers,
+      },
     );
     return toScheduledPost(data);
   },

@@ -6,6 +6,7 @@ import {
   scheduledPostService,
   type Destination,
   type ScheduledPost,
+  type ScheduledPostChanges,
 } from '@/services/scheduledPostService';
 import {
   useCreateScheduledPost,
@@ -88,7 +89,7 @@ export function useScheduledPosts() {
   );
 
   const edit = useCallback(
-    (id: string, changes: { text?: string; publishAt?: string }) =>
+    (id: string, changes: ScheduledPostChanges) =>
       change(async () => {
         const edited = await scheduledPostService.edit(id, changes);
         setScheduledPosts((current) => current?.map((p) => (p.id === id ? edited : p)));

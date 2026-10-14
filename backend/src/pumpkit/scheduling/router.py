@@ -132,12 +132,16 @@ async def edit_scheduled_post(
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
+    community = update_request.community
     return await mediator.edit_scheduled_post(
         db=db,
         user=current_user,
         scheduled_post_id=scheduled_post_id,
         text=update_request.text,
         publish_at=update_request.publish_at,
+        changes_community=update_request.changes_community,
+        community=Community(id=community.id, name=community.name) if community else None,
+        share_with_followers=update_request.share_with_followers,
         now=clock(),
     )
 
