@@ -78,8 +78,9 @@ class XOutcomeUnknownError(XPublisherError):
 class XPostRejectedError(XPublisherError):
     """X refused the post; `message` is X's own words, fit to show the User."""
 
-    def __init__(self, status_code: int, message: str) -> None:
-        super().__init__(f"X refused the post with HTTP {status_code}")
+    def __init__(self, x_status: int, message: str) -> None:
+        super().__init__(f"X refused the post with HTTP {x_status}")
+        self.x_status = x_status
         self.message = message
 
 
