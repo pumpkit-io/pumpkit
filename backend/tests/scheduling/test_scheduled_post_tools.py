@@ -5,10 +5,11 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
+from sqlalchemy import delete, update
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.models import SCHEDULED, ScheduledPost
@@ -464,3 +465,46 @@ async def test_the_read_only_and_link_tools_allow_60_calls_a_minute(subscribed, 
     result = await mcp.call_tool(name)
 
     assert "retry_at" in result["structuredContent"]
+
+
+@pytest.fixture
+async def subscription_ended(connected, mcp, db) -> None:
+    """Ends the Subscription after `user` connected X and created the API key."""
+    await db.execute(delete(Subscription))
+    await db.commit()
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("schedule_post", {"text": "Hi.", "publish_at": "2026-10-10T14:00:00Z"}),
+        ("list_scheduled_posts", {}),
+        ("edit_scheduled_post", {"scheduled_post_id": "scheduled_post_missing", "text": "Hi."}),
+        ("delete_scheduled_post", {"scheduled_post_id": "scheduled_post_missing"}),
+        ("list_past_communities", {}),
+    ],
+)
+async def test_a_user_whose_subscription_ended_gets_the_subscribe_link(
+    subscription_ended, mcp, fixed_clock, name, arguments
+):
+    result = await mcp.call_tool(name, **arguments)
+
+    assert error_text(result) == (
+        "This needs a Subscription. Subscribe to continue. http://localhost:5173/billing"
+    )
+
+
+async def test_connect_x_works_for_a_user_whose_subscription_ended(subscription_ended, mcp):
+    result = await mcp.call_tool("connect_x")
+
+    assert result["structuredContent"]["url"] == SCHEDULED_PAGE
+
+
+async def test_every_user_schedules_on_an_instance_that_sells_no_plans(
+    sells_no_plans, client, fake_x_publisher, mcp, fixed_clock
+):
+    await _connect_x(client)
+
+    result = await _schedule(mcp)
+
+    assert result["isError"] is False, result

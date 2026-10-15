@@ -24,6 +24,7 @@ import pumpkit.auth.mediator as auth_mediator
 import pumpkit.auth.service.users as user_service
 import pumpkit.authors.tools as authors_tools
 import pumpkit.billing.service as billing_service
+import pumpkit.billing.tools as billing_tools
 import pumpkit.posts.tools as posts_tools
 import pumpkit.scheduling.tools as scheduling_tools
 from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
@@ -33,7 +34,12 @@ from pumpkit.core.mcp_tools import McpTool, ToolCall, error_result, resolve, too
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.time import get_clock
 
-TOOLS: list[McpTool] = [*authors_tools.TOOLS, *posts_tools.TOOLS, *scheduling_tools.TOOLS]
+TOOLS: list[McpTool] = [
+    *authors_tools.TOOLS,
+    *posts_tools.TOOLS,
+    *scheduling_tools.TOOLS,
+    *billing_tools.TOOLS,
+]
 
 INSTRUCTIONS = """\
 Pumpkit writes X posts in the style of X accounts the User picks, their Inspiration authors \
