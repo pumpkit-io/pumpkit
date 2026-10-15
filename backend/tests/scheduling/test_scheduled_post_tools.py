@@ -14,7 +14,11 @@ from pumpkit.core.config import settings
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.models import SCHEDULED, ScheduledPost
 from pumpkit.x_connection.models import XConnection
-from pumpkit.x_connection.x_publisher import XPostRejectedError
+from pumpkit.x_connection.x_publisher import (
+    XNotReceivedError,
+    XPostRejectedError,
+    XRateLimitedError,
+)
 from tests.mcp_client import error_text
 
 SCHEDULED_PAGE = "http://localhost:5173/scheduled"
@@ -421,10 +425,13 @@ async def test_past_communities_are_the_ones_the_user_posted_to_before(
     assert result["structuredContent"] == {"data": [COMMUNITY]}
 
 
-async def test_tools_list_shows_deleting_a_scheduled_post_as_destructive(subscribed, mcp):
+async def test_tools_list_shows_post_now_and_deleting_a_scheduled_post_as_destructive(
+    subscribed, mcp
+):
     tools = await mcp.list_tools()
 
-    assert tools["delete_scheduled_post"]["annotations"]["destructiveHint"] is True
+    for name in ("post_now", "delete_scheduled_post"):
+        assert tools[name]["annotations"]["destructiveHint"] is True
     for name in ("schedule_post", "edit_scheduled_post"):
         assert tools[name]["annotations"] == {"readOnlyHint": False, "destructiveHint": False}
     for name in ("list_scheduled_posts", "list_past_communities", "connect_x"):
@@ -439,10 +446,13 @@ async def test_connect_x_links_to_the_scheduled_page(subscribed, mcp):
     assert SCHEDULED_PAGE in result["structuredContent"]["message"]
 
 
-@pytest.mark.parametrize("name", ["schedule_post", "edit_scheduled_post", "delete_scheduled_post"])
+@pytest.mark.parametrize(
+    "name", ["schedule_post", "post_now", "edit_scheduled_post", "delete_scheduled_post"]
+)
 async def test_the_write_tools_allow_10_calls_a_minute(connected, mcp, fixed_clock, name):
     arguments = {
         "schedule_post": {"text": "Hi.", "publish_at": "2026-10-10T14:00:00Z"},
+        "post_now": {"text": "x" * 281},
         "edit_scheduled_post": {"scheduled_post_id": "scheduled_post_missing", "text": "Hi."},
         "delete_scheduled_post": {"scheduled_post_id": "scheduled_post_missing"},
     }[name]
@@ -478,6 +488,7 @@ async def subscription_ended(connected, mcp, db) -> None:
     ("name", "arguments"),
     [
         ("schedule_post", {"text": "Hi.", "publish_at": "2026-10-10T14:00:00Z"}),
+        ("post_now", {"text": "Hi."}),
         ("list_scheduled_posts", {}),
         ("edit_scheduled_post", {"scheduled_post_id": "scheduled_post_missing", "text": "Hi."}),
         ("delete_scheduled_post", {"scheduled_post_id": "scheduled_post_missing"}),
@@ -549,3 +560,86 @@ async def test_post_now_that_x_refuses_says_it_failed_and_why(
     assert posted["state"] == "failed"
     assert posted["failed_reason"] == "X refused the post: Duplicate content."
     assert posted["message"] == "Failed. X refused the post: Duplicate content."
+
+
+async def test_post_now_into_a_community_publishes_it_there(
+    connected, known_community, mcp, fake_x_publisher, fixed_clock
+):
+    result = await mcp.call_tool(
+        "post_now", text="Hello Community.", community=COMMUNITY_URL, share_with_followers=True
+    )
+
+    assert result["structuredContent"]["state"] == "published"
+    assert result["structuredContent"]["community"] == COMMUNITY
+    assert fake_x_publisher.published_to == [(COMMUNITY_ID, True)]
+
+
+async def test_a_community_post_x_refuses_fails_with_the_membership_hint(
+    connected, known_community, mcp, fake_x_publisher, fixed_clock
+):
+    fake_x_publisher.fail_publish = XPostRejectedError(403, "You are not permitted.")
+
+    result = await mcp.call_tool("post_now", text="Hello Community.", community=COMMUNITY_ID)
+
+    assert result["structuredContent"]["state"] == "failed"
+    assert result["structuredContent"]["message"] == (
+        "Failed. X refused the post: You are not permitted. Check that your X account is a "
+        "member of this Community and allowed to post in it."
+    )
+
+
+@pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
+async def test_post_now_x_didnt_take_says_pumpkit_keeps_trying(
+    connected, mcp, fake_x_publisher, fixed_clock, error
+):
+    fake_x_publisher.fail_publish = error
+
+    result = await mcp.call_tool("post_now", text="Out now.")
+
+    assert result["isError"] is False, result
+    posted = result["structuredContent"]
+    assert posted["state"] == "scheduled"
+    assert posted["message"] == "X was busy. Pumpkit will keep trying for the next 15 minutes."
+
+
+async def test_post_now_without_an_x_connection_links_to_the_scheduled_page(
+    subscribed, mcp, fixed_clock
+):
+    result = await mcp.call_tool("post_now", text="Out now.")
+
+    assert error_text(result) == f"Connect your X account first. {SCHEDULED_PAGE}"
+
+
+async def test_post_now_on_an_x_connection_that_needs_reconnecting_links_to_the_scheduled_page(
+    connected, mcp, db, fake_x_publisher, fixed_clock
+):
+    await db.execute(update(XConnection).values(needs_reconnect=True))
+    await db.commit()
+
+    result = await mcp.call_tool("post_now", text="Out now.")
+
+    assert error_text(result) == (
+        f"X no longer accepts Pumpkit's access to your account. Reconnect X first. {SCHEDULED_PAGE}"
+    )
+    assert fake_x_publisher.published == []
+
+
+async def test_post_now_over_the_x_accounts_limit_is_refused(connected, mcp, fixed_clock):
+    result = await mcp.call_tool("post_now", text="x" * 281)
+
+    assert error_text(result) == "This post is 281 characters by X's count, over the 280 limit."
+
+
+async def test_post_now_past_the_monthly_cap_is_refused(
+    connected, mcp, fake_x_publisher, fixed_clock, monkeypatch
+):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 1)
+    await _schedule(mcp, text="First", at="2026-10-30T09:00:00Z")
+
+    result = await mcp.call_tool("post_now", text="Second")
+
+    assert error_text(result) == (
+        "You have 1 Scheduled posts in October 2026, the most for one month. "
+        "The cap resets on November 1, 2026."
+    )
+    assert fake_x_publisher.published == []

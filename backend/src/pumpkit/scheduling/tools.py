@@ -19,7 +19,8 @@ from pumpkit.core.mcp_tools import (
 from pumpkit.core.schemas import LinkResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community, Destination
-from pumpkit.scheduling.models import FAILED, ScheduledPostState
+from pumpkit.scheduling.models import FAILED, PUBLISHED, ScheduledPostState
+from pumpkit.scheduling.publish import RETRY_WINDOW
 from pumpkit.scheduling.schemas import (
     CommunityLookupRequest,
     PastCommunitiesResponse,
@@ -148,9 +149,14 @@ async def schedule_post(
 
 
 def _post_now_message(posted: ScheduledPostAnswer) -> str:
+    """The web app's words for how Post now ended."""
+    if posted.state == PUBLISHED:
+        return f"Published on X: {posted.x_post_url}"
     if posted.state == FAILED:
         return f"Failed. {posted.failed_reason}"
-    return f"Published on X: {posted.x_post_url}"
+    # Back in scheduled: X never took it, so the publisher retries it.
+    minutes = int(RETRY_WINDOW.total_seconds() // 60)
+    return f"X was busy. Pumpkit will keep trying for the next {minutes} minutes."
 
 
 async def post_now(
