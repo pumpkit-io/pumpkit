@@ -66,6 +66,9 @@ class NotConfiguredError(AppError):
     reported = False
 
 
+# What a client reads for an unexpected exception, whose details never leave the server.
+UNEXPECTED_ERROR_DETAIL = "Something went wrong. Please try again later or contact us for support."
+
 _REDACTED = "[redacted]"
 _SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie", "stripe-signature", "x-api-key"}
 _SENSITIVE_QUERY_KEY = re.compile(r"token|code|state|password|secret", re.IGNORECASE)
@@ -124,8 +127,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return JSONResponse(
         status_code=500,
         content={
-            "detail": "Something went wrong. Please try again later or contact us for support.",
-            "error_id": error_id,  # Never leak the error details to the client.
+            "detail": UNEXPECTED_ERROR_DETAIL,
+            "error_id": error_id,
         },
     )
 
