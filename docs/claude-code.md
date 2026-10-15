@@ -25,3 +25,16 @@ On an Instance that sells Plans, creating a key and using the tools need a Subsc
 | `remove_inspiration_author` | Removes one of your Inspiration authors. Claude Code asks before calling it. |
 
 Each tool refuses what the web app refuses, with the same message. Tools are limited per User: 20 calls a minute to add or remove an Inspiration author, and 60 for the tools that only read. Over the limit, a tool answers with when to try again.
+
+## Post tools
+
+Ask Claude Code to write a Post from an idea, then ask for changes in plain words. Each change makes a new Version and keeps the earlier ones.
+
+| Tool | What it does |
+| --- | --- |
+| `start_post` | Starts a Post from a Brief and writes its first Version in the style of your Inspiration authors. Answers with the Final and its character count. |
+| `give_feedback` | Gives Feedback on the latest Version of a Post, such as "shorter" or "end with a question", and writes the next Version. |
+| `list_posts` | Lists your Posts, newest first, 20 at a time (up to 50), with each one's Brief and how many Versions it has. |
+| `get_post` | Reads one Post with all its Versions, each with its Feedback, Final and character count, so Claude Code can compare them or schedule an earlier one. |
+
+Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code don't show up in the web app, which shows only the Post you are writing on Home.
