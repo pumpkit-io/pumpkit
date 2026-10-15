@@ -168,7 +168,12 @@ allowed_importers = ["pumpkit.scheduling", "pumpkit.main"]
 [[tool.importlinter.contracts]]
 name = "Only pumpkit.mcp_server imports a tools module"
 type = "protected"
-protected_modules = ["pumpkit.authors.tools", "pumpkit.posts.tools", "pumpkit.scheduling.tools"]
+protected_modules = [
+    "pumpkit.billing.tools",
+    "pumpkit.authors.tools",
+    "pumpkit.posts.tools",
+    "pumpkit.scheduling.tools",
+]
 allowed_importers = ["pumpkit.mcp_server"]
 
 [[tool.importlinter.contracts]]
