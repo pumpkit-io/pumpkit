@@ -43,3 +43,28 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
             }
         ],
     }
+
+
+@pytest.fixture
+async def post_id(with_author, mcp, fake_llm) -> str:
+    """A Post of the User's with one Version, whose Final is "final 1"."""
+    fake_llm.replies = [{"post": "draft 1"}, {"post": "final 1"}]
+    return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
+
+
+async def test_giving_feedback_returns_the_next_versions_final_and_character_count(
+    post_id, mcp, fake_llm
+):
+    fake_llm.replies = [{"post": "draft 2"}, {"post": "shorter final"}]
+
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback=" shorter\n")
+
+    assert result["isError"] is False
+    version = result["structuredContent"]
+    assert version == {
+        "id": version["id"],
+        "number": 2,
+        "feedback": "shorter",
+        "final": "shorter final",
+        "final_char_count": 13,
+    }

@@ -4,7 +4,13 @@ from pumpkit.auth.models import User
 from pumpkit.core.mcp_tools import ADDITIVE, McpTool, ToolCall
 from pumpkit.posts import mediator
 from pumpkit.posts.llm import get_llm
-from pumpkit.posts.schemas import PostResponse, PostStartRequest, PostToolResponse
+from pumpkit.posts.schemas import (
+    FeedbackRequest,
+    PostResponse,
+    PostStartRequest,
+    PostToolResponse,
+    VersionToolResponse,
+)
 
 
 def _post_answer(post: PostResponse) -> PostToolResponse:
@@ -25,7 +31,27 @@ async def start_post(call: ToolCall[User], brief: str) -> PostToolResponse:
     return _post_answer(post)
 
 
+async def give_feedback(call: ToolCall[User], post_id: str, feedback: str) -> VersionToolResponse:
+    """
+    Give Feedback in plain words on the latest Version of one of the User's Posts, such as
+    "shorter" or "end with a question", and write its next Version, keeping the earlier ones.
+    Show the User the new Final and its character count. Takes up to a minute.
+    """
+    feedback_request = FeedbackRequest(feedback=feedback)
+    llm = await call.provide(get_llm)
+    version = await mediator.add_version(
+        db=call.db,
+        llm=llm,
+        user=call.user,
+        post_id=post_id,
+        feedback=feedback_request.feedback,
+        now=call.now,
+    )
+    return VersionToolResponse.model_validate(version.model_dump())
+
+
 TOOLS = [
-    # The rate of `POST /posts`.
+    # The rates of `POST /posts` and `POST /posts/{post_id}/versions`.
     McpTool(start_post, rate="20/minute", annotations=ADDITIVE),
+    McpTool(give_feedback, rate="20/minute", annotations=ADDITIVE),
 ]
