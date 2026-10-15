@@ -58,15 +58,14 @@ def _x_connection_links_to_scheduled_page() -> Iterator[None]:
 
 async def _post_text(call: ToolCall[User], text: Optional[str], version_id: Optional[str]) -> str:
     """The text a Scheduled post publishes: typed, or a Version's Final copied."""
-    if (text is None) == (version_id is None):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Give either the text or a Version id, not both.",
-        )
-    if version_id is not None:
+    if text is not None and version_id is None:
+        return text
+    if version_id is not None and text is None:
         return await mediator.version_final(db=call.db, user=call.user, version_id=version_id)
-    assert text is not None
-    return text
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail="Give either the text or a Version id, not both.",
+    )
 
 
 async def _community(call: ToolCall[User], pasted: str) -> Community:
@@ -86,6 +85,42 @@ async def _destination(
     )
 
 
+async def _create_scheduled_post(
+    call: ToolCall[User],
+    *,
+    text: Optional[str],
+    version_id: Optional[str],
+    publish_at: Optional[str],
+    publish_now: bool,
+    community: Optional[str],
+    share_with_followers: bool,
+) -> ScheduledPostAnswer:
+    """A new Scheduled post from typed text or a Version, checked as the create route checks it."""
+    create_request = ScheduledPostCreateRequest.model_validate(
+        {
+            "text": await _post_text(call, text, version_id),
+            "publish_at": publish_at,
+            "publish_now": publish_now,
+            "source_version_id": version_id,
+        }
+    )
+    destination = await _destination(call, community, share_with_followers)
+    publisher = await call.provide(get_x_publisher)
+    with _x_connection_links_to_scheduled_page():
+        scheduled_post = await mediator.create_scheduled_post(
+            db=call.db,
+            publisher=publisher,
+            user=call.user,
+            text=create_request.text,
+            publish_at=create_request.publish_at,
+            publish_now=create_request.publish_now,
+            now=call.now,
+            source_version_id=create_request.source_version_id,
+            destination=destination,
+        )
+    return _answer(scheduled_post)
+
+
 async def schedule_post(
     call: ToolCall[User],
     publish_at: str,
@@ -100,36 +135,24 @@ async def schedule_post(
     of a Version to publish its Final. It goes to the User's profile, or to the Community whose
     URL or ID `community` holds, where `share_with_followers` also shows it to their followers.
     """
-    create_request = ScheduledPostCreateRequest.model_validate(
-        {
-            "text": await _post_text(call, text, version_id),
-            "publish_at": publish_at,
-            "source_version_id": version_id,
-        }
+    return await _create_scheduled_post(
+        call,
+        text=text,
+        version_id=version_id,
+        publish_at=publish_at,
+        publish_now=False,
+        community=community,
+        share_with_followers=share_with_followers,
     )
-    destination = await _destination(call, community, share_with_followers)
-    publisher = await call.provide(get_x_publisher)
-    with _x_connection_links_to_scheduled_page():
-        scheduled_post = await mediator.create_scheduled_post(
-            db=call.db,
-            publisher=publisher,
-            user=call.user,
-            text=create_request.text,
-            publish_at=create_request.publish_at,
-            publish_now=False,
-            now=call.now,
-            source_version_id=create_request.source_version_id,
-            destination=destination,
-        )
-    return _answer(scheduled_post)
 
 
 async def list_scheduled_posts(
     call: ToolCall[User], state: Optional[ScheduledPostState] = None
 ) -> ScheduledPostsListAnswer:
     """
-    List the User's Scheduled posts, soonest first, with their state, publish time and
-    Community. A Failed one says why it failed; a Published one links to the post on X.
+    List the User's Scheduled posts with their state, publish time and Community: waiting ones
+    soonest first, then Published and Failed ones newest first. A Failed one says why it
+    failed, and a Published one links to the post on X.
     """
     listed = await mediator.list_scheduled_posts(db=call.db, user=call.user, state=state)
     return ScheduledPostsListAnswer(data=listed.data, scheduled_page_url=scheduled_page_url())
