@@ -44,6 +44,7 @@ Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 2
 | Tool | What it does |
 | --- | --- |
 | `schedule_post` | Schedules your own text, or a Version's Final by the Version's id, for a time with its UTC offset. It goes to your profile, or to a Community you name by its URL or ID, optionally shared with your followers too. |
+| `post_now` | Publishes your own text, or a Version's Final, on X right away, to your profile or a Community like `schedule_post`. Claude Code shows you the exact text and asks before calling it. It answers Published with the link to the post on X, Failed with the reason, or, when X hasn't taken the post yet, that Pumpkit keeps trying for 15 minutes. |
 | `list_scheduled_posts` | Lists your Scheduled posts with their state, time and Community, and why a Failed one failed. |
 | `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. |
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post. Claude Code asks before calling it. |
@@ -51,4 +52,4 @@ Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 2
 | `connect_x` | Answers with the link to the Scheduled page, where you connect, reconnect or disconnect X. |
 | `manage_subscription` | Answers with the link to the billing page, where you subscribe or manage your Subscription. On an Instance that sells no Plans, it says so instead. |
 
-Scheduling follows the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, the time must be at least a minute away, a Community must be one X knows, and the monthly cap counts the Scheduled posts you made in the web app too. The X connection refusals and every Scheduled post answer link to the Scheduled page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.
+Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts the Scheduled posts you made in the web app too. The X connection refusals and every Scheduled post answer link to the Scheduled page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.

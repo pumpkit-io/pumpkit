@@ -101,6 +101,12 @@ class ScheduledPostAnswer(ScheduledPostResponse):
     scheduled_page_url: str
 
 
+class PostNowAnswer(ScheduledPostAnswer):
+    """`message` says how Post now ended, as the web app tells the User after Post now."""
+
+    message: str
+
+
 class ScheduledPostsListAnswer(ScheduledPostsListResponse):
     scheduled_page_url: str
 

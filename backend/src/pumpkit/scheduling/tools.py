@@ -19,10 +19,12 @@ from pumpkit.core.mcp_tools import (
 from pumpkit.core.schemas import LinkResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community, Destination
-from pumpkit.scheduling.models import ScheduledPostState
+from pumpkit.scheduling.models import FAILED, PUBLISHED, ScheduledPostState
+from pumpkit.scheduling.publish import RETRY_WINDOW
 from pumpkit.scheduling.schemas import (
     CommunityLookupRequest,
     PastCommunitiesResponse,
+    PostNowAnswer,
     ScheduledPageMessage,
     ScheduledPostAnswer,
     ScheduledPostCreateRequest,
@@ -146,6 +148,42 @@ async def schedule_post(
     )
 
 
+def _post_now_message(posted: ScheduledPostAnswer) -> str:
+    """The web app's words for how Post now ended."""
+    if posted.state == PUBLISHED:
+        return f"Published on X: {posted.x_post_url}"
+    if posted.state == FAILED:
+        return f"Failed. {posted.failed_reason}"
+    # Back in scheduled: X never took it, so the publisher retries it.
+    minutes = int(RETRY_WINDOW.total_seconds() // 60)
+    return f"X was busy. Pumpkit will keep trying for the next {minutes} minutes."
+
+
+async def post_now(
+    call: ToolCall[User],
+    text: Optional[str] = None,
+    version_id: Optional[str] = None,
+    community: Optional[str] = None,
+    share_with_followers: bool = False,
+) -> PostNowAnswer:
+    """
+    Publish a post on the User's connected X account right away. Show the User the exact text
+    and get their yes first. Give the text, or the id of a Version to publish its Final. It goes
+    to the User's profile, or to the Community whose URL or ID `community` holds, where
+    `share_with_followers` also shows it to their followers.
+    """
+    posted = await _create_scheduled_post(
+        call,
+        text=text,
+        version_id=version_id,
+        publish_at=None,
+        publish_now=True,
+        community=community,
+        share_with_followers=share_with_followers,
+    )
+    return PostNowAnswer(**posted.model_dump(), message=_post_now_message(posted))
+
+
 async def list_scheduled_posts(
     call: ToolCall[User], state: Optional[ScheduledPostState] = None
 ) -> ScheduledPostsListAnswer:
@@ -243,6 +281,8 @@ async def connect_x(call: ToolCall[User]) -> LinkResponse:
 TOOLS = [
     # The rate of `POST /scheduled-posts`.
     McpTool(schedule_post, rate="10/minute", annotations=ADDITIVE),
+    # The rate of `POST /scheduled-posts`, which Post now goes through on the web.
+    McpTool(post_now, rate="10/minute", annotations=DESTRUCTIVE),
     McpTool(list_scheduled_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     # The web edit and delete routes have no limit; these take the create route's.
     McpTool(edit_scheduled_post, rate="10/minute", annotations=ADDITIVE),
