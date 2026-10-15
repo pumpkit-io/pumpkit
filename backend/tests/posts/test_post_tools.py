@@ -86,9 +86,7 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
     }
 
 
-async def test_reading_a_post_returns_every_version_but_not_failed_attempts(
-    post_id, mcp, fake_llm
-):
+async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post_id, mcp, fake_llm):
     fake_llm.replies = [LLMError("provider down")]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
     fake_llm.replies = [{"post": "draft 2"}, {"post": "final two"}]
@@ -258,4 +256,6 @@ async def test_each_tool_has_its_per_user_limit_a_minute(
     assert error_text(result).startswith(f"You've called {tool} too often.")
     assert "retry_at" in result["structuredContent"]
     # Counted per User, so the web route from the same address still answers.
-    assert (await client.post("/api/v1/posts/post_missing/versions", json={"feedback": "x"})).status_code == 404
+    assert (
+        await client.post("/api/v1/posts/post_missing/versions", json={"feedback": "x"})
+    ).status_code == 404

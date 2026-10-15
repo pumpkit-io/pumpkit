@@ -6,10 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
 from pumpkit.core.errors import RetryLaterError
+from pumpkit.core.time import as_utc
 from pumpkit.posts import service
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
-from pumpkit.core.time import as_utc
 from pumpkit.posts.schemas import (
     PostResponse,
     PostsPageResponse,

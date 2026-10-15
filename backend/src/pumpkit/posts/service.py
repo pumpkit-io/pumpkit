@@ -53,9 +53,7 @@ async def get_user_post(db: AsyncSession, *, user_id: str, post_id: str) -> Opti
     return result.scalar_one_or_none()
 
 
-async def list_user_posts(
-    db: AsyncSession, *, user_id: str, limit: int, offset: int
-) -> list[Post]:
+async def list_user_posts(db: AsyncSession, *, user_id: str, limit: int, offset: int) -> list[Post]:
     """A page of the User's Posts with their attempts, newest first."""
     result = await db.execute(
         select(Post)
