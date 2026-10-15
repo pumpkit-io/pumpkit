@@ -8,16 +8,25 @@ from fastapi import HTTPException, status
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import get_x_reader
 from pumpkit.core.config import settings
-from pumpkit.core.mcp_tools import ADDITIVE, READ_ONLY, READ_ONLY_RATE, McpTool, ToolCall
+from pumpkit.core.mcp_tools import (
+    ADDITIVE,
+    DESTRUCTIVE,
+    READ_ONLY,
+    READ_ONLY_RATE,
+    McpTool,
+    ToolCall,
+)
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
     CommunityLookupRequest,
+    ScheduledPageMessage,
     ScheduledPostAnswer,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostsListAnswer,
+    ScheduledPostUpdateRequest,
 )
 from pumpkit.x_connection.x_publisher import get_x_publisher
 
@@ -124,8 +133,73 @@ async def list_scheduled_posts(
     return ScheduledPostsListAnswer(data=listed.data, scheduled_page_url=scheduled_page_url())
 
 
+async def edit_scheduled_post(
+    call: ToolCall[User],
+    scheduled_post_id: str,
+    text: Optional[str] = None,
+    publish_at: Optional[str] = None,
+    community: Optional[str] = None,
+    to_profile: bool = False,
+    share_with_followers: Optional[bool] = None,
+) -> ScheduledPostAnswer:
+    """
+    Change a waiting or Failed Scheduled post: its text, its publish time (an ISO 8601 time
+    with its UTC offset, which gives a Failed one another try), the Community whose URL or ID
+    `community` holds, or, with `to_profile`, send it to the User's profile instead. Leave out
+    what stays the same.
+    """
+    if community is not None and to_profile:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Give either a Community or the profile, not both.",
+        )
+    changes: dict[str, object] = {
+        name: value
+        for name, value in (
+            ("text", text),
+            ("publish_at", publish_at),
+            ("share_with_followers", share_with_followers),
+        )
+        if value is not None
+    }
+    new_community = await _community(call, community) if community is not None else None
+    if new_community is not None:
+        changes["community"] = {"id": new_community.id, "name": new_community.name}
+    elif to_profile:
+        changes["community"] = None
+    update_request = ScheduledPostUpdateRequest.model_validate(changes)
+    with _x_connection_links_to_scheduled_page():
+        scheduled_post = await mediator.edit_scheduled_post(
+            db=call.db,
+            user=call.user,
+            scheduled_post_id=scheduled_post_id,
+            text=update_request.text,
+            publish_at=update_request.publish_at,
+            changes_community=update_request.changes_community,
+            community=new_community,
+            share_with_followers=update_request.share_with_followers,
+            now=call.now,
+        )
+    return _answer(scheduled_post)
+
+
+async def delete_scheduled_post(
+    call: ToolCall[User], scheduled_post_id: str
+) -> ScheduledPageMessage:
+    """Delete a waiting or Failed Scheduled post, so it is never published. It can't be undone."""
+    await mediator.cancel_scheduled_post(
+        db=call.db, user=call.user, scheduled_post_id=scheduled_post_id
+    )
+    return ScheduledPageMessage(
+        message="The Scheduled post is deleted.", scheduled_page_url=scheduled_page_url()
+    )
+
+
 TOOLS = [
     # The rate of `POST /scheduled-posts`.
     McpTool(schedule_post, rate="10/minute", annotations=ADDITIVE),
     McpTool(list_scheduled_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    # The web edit and delete routes have no limit; these take the create route's.
+    McpTool(edit_scheduled_post, rate="10/minute", annotations=ADDITIVE),
+    McpTool(delete_scheduled_post, rate="10/minute", annotations=DESTRUCTIVE),
 ]

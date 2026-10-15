@@ -1,6 +1,6 @@
 """The Scheduled post MCP tools, refusing what the web routes refuse, in the same words."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -11,7 +11,9 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.scheduling.models import SCHEDULED, ScheduledPost
 from pumpkit.x_connection.models import XConnection
+from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 
 SCHEDULED_PAGE = "http://localhost:5173/scheduled"
@@ -231,4 +233,175 @@ async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock,
     )
 
     assert error_text(result) == message
+    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
+
+
+async def _post_now_on_the_web(client: AsyncClient, text: str = "Out now.") -> dict:
+    response = await client.post(
+        "/api/v1/scheduled-posts", json={"text": text, "publish_now": True}
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+@pytest.fixture
+async def failed(connected, client, fake_x_publisher, fixed_clock) -> dict:
+    """A Scheduled post X refused when the User Posted it now in the web app."""
+    fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
+    failed = await _post_now_on_the_web(client, "Duplicate.")
+    fake_x_publisher.fail_publish = None
+    assert failed["state"] == "failed"
+    return failed
+
+
+async def test_the_list_says_why_a_scheduled_post_failed(failed, mcp, fixed_clock):
+    listed = await mcp.call_tool("list_scheduled_posts", state="failed")
+
+    [scheduled] = listed["structuredContent"]["data"]
+    assert scheduled["state"] == "failed"
+    assert scheduled["failed_reason"] == "X refused the post: Duplicate content."
+
+
+async def test_editing_the_text_and_time_of_a_waiting_scheduled_post_saves_both(
+    connected, mcp, fixed_clock
+):
+    scheduled = (await _schedule(mcp, text="Lanch day."))["structuredContent"]
+
+    result = await mcp.call_tool(
+        "edit_scheduled_post",
+        scheduled_post_id=scheduled["id"],
+        text="  Launch day.  ",
+        publish_at="2026-10-11T11:30:00+02:00",
+    )
+
+    assert result["isError"] is False, result
+    assert result["structuredContent"] == {
+        **scheduled,
+        "text": "Launch day.",
+        "publish_at": "2026-10-11T09:30:00Z",
+    }
+
+
+async def test_rescheduling_a_failed_scheduled_post_waits_to_publish_again(
+    failed, mcp, fixed_clock
+):
+    result = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=failed["id"], publish_at="2026-10-10T14:00:00Z"
+    )
+
+    assert result["isError"] is False, result
+    assert result["structuredContent"]["state"] == "scheduled"
+    assert result["structuredContent"]["failed_reason"] is None
+
+
+async def test_editing_can_move_a_scheduled_post_into_a_community_and_back_to_the_profile(
+    connected, known_community, mcp, fixed_clock
+):
+    scheduled = (await _schedule(mcp))["structuredContent"]
+
+    into = await mcp.call_tool(
+        "edit_scheduled_post",
+        scheduled_post_id=scheduled["id"],
+        community=COMMUNITY_ID,
+        share_with_followers=True,
+    )
+    assert into["structuredContent"]["community"] == COMMUNITY
+    assert into["structuredContent"]["share_with_followers"] is True
+
+    back = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], to_profile=True
+    )
+    assert back["isError"] is False, back
+    assert back["structuredContent"]["community"] is None
+
+
+async def test_editing_to_a_community_and_the_profile_at_once_is_refused(
+    connected, mcp, fixed_clock
+):
+    scheduled = (await _schedule(mcp))["structuredContent"]
+
+    result = await mcp.call_tool(
+        "edit_scheduled_post",
+        scheduled_post_id=scheduled["id"],
+        community=COMMUNITY_ID,
+        to_profile=True,
+    )
+
+    assert error_text(result) == "Give either a Community or the profile, not both."
+
+
+async def test_editing_nothing_is_refused(connected, mcp, fixed_clock):
+    scheduled = (await _schedule(mcp))["structuredContent"]
+
+    result = await mcp.call_tool("edit_scheduled_post", scheduled_post_id=scheduled["id"])
+
+    assert error_text(result) == (
+        "Change the text, the publish time, the Community or sharing with followers."
+    )
+
+
+async def test_editing_into_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock):
+    scheduled = (await _schedule(mcp))["structuredContent"]
+
+    result = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], community="not a community"
+    )
+
+    assert error_text(result) == NOT_A_COMMUNITY
+
+
+PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
+
+
+async def test_a_published_scheduled_post_can_be_neither_edited_nor_deleted(
+    connected, client, mcp, fixed_clock
+):
+    published = await _post_now_on_the_web(client)
+
+    edited = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=published["id"], text="Changed"
+    )
+    deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=published["id"])
+
+    assert error_text(edited) == error_text(deleted) == PUBLISHING_STARTED
+
+
+async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fixed_clock):
+    bob = User(email="bob@example.com", display_name="Bob")
+    db.add(bob)
+    await db.flush()
+    bobs = ScheduledPost(
+        user_id=bob.id,
+        x_user_id="2002",
+        text="Bob's.",
+        publish_at=fixed_clock() + timedelta(hours=2),
+        state=SCHEDULED,
+        created_at=fixed_clock(),
+        updated_at=fixed_clock(),
+    )
+    db.add(bobs)
+    await db.commit()
+
+    edited = await mcp.call_tool("edit_scheduled_post", scheduled_post_id=bobs.id, text="Mine?")
+    deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=bobs.id)
+
+    assert error_text(edited) == error_text(deleted) == "Scheduled post not found."
+
+
+async def test_deleting_a_waiting_scheduled_post_takes_it_off_the_list(connected, mcp, fixed_clock):
+    scheduled = (await _schedule(mcp))["structuredContent"]
+
+    result = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=scheduled["id"])
+
+    assert result["structuredContent"] == {
+        "message": "The Scheduled post is deleted.",
+        "scheduled_page_url": SCHEDULED_PAGE,
+    }
+    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
+
+
+async def test_deleting_a_failed_scheduled_post_takes_it_off_the_list(failed, mcp, fixed_clock):
+    result = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=failed["id"])
+
+    assert result["isError"] is False, result
     assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []

@@ -105,6 +105,11 @@ class ScheduledPostsListAnswer(ScheduledPostsListResponse):
     scheduled_page_url: str
 
 
+class ScheduledPageMessage(BaseModel):
+    message: str
+    scheduled_page_url: str
+
+
 class ScheduledPostUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
