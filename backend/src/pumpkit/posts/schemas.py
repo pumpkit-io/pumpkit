@@ -5,6 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS, FEEDBACK_MAX_CHARS
 
+# Per caller, for the routes and MCP tools that write a Version.
+WRITE_RATE = "20/minute"
+
 
 class PostStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")

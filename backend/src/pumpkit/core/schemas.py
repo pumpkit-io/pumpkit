@@ -7,7 +7,7 @@ class MessageResponse(BaseModel):
     message: str
 
 
-class LinkResponse(BaseModel):
+class LinkToolResponse(BaseModel):
     """What a browser-only MCP tool answers: what to do, and the web app page to do it on."""
 
     message: str

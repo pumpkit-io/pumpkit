@@ -5,6 +5,7 @@ from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
 from pumpkit.authors import mediator
 from pumpkit.authors.schemas import (
+    WRITE_RATE,
     InspirationAuthorAddRequest,
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
@@ -35,7 +36,7 @@ async def list_inspiration_authors(
     response_model=InspirationAuthorResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@limiter.limit("20/minute")
+@limiter.limit(WRITE_RATE)
 async def add_inspiration_author(
     request: Request,
     add_request: InspirationAuthorAddRequest,
@@ -54,7 +55,7 @@ async def add_inspiration_author(
     response_model=InspirationAuthorResponse,
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("20/minute")
+@limiter.limit(WRITE_RATE)
 async def refresh_inspiration_author(
     request: Request,
     handle: str,

@@ -14,6 +14,7 @@ from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
+    WRITE_RATE,
     CommunityLookupRequest,
     CommunityRequest,
     CommunityResponse,
@@ -115,7 +116,7 @@ async def list_past_communities(
     response_model=ScheduledPostResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@limiter.limit("10/minute")
+@limiter.limit(WRITE_RATE)
 async def create_scheduled_post(
     request: Request,
     create_request: ScheduledPostCreateRequest,

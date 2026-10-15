@@ -5,6 +5,7 @@ from pumpkit.core.mcp_tools import ADDITIVE, READ_ONLY, READ_ONLY_RATE, McpTool,
 from pumpkit.posts import mediator
 from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import (
+    WRITE_RATE,
     FeedbackRequest,
     PostResponse,
     PostsPageRequest,
@@ -15,7 +16,7 @@ from pumpkit.posts.schemas import (
 )
 
 
-def _post_answer(post: PostResponse) -> PostToolResponse:
+def _post_tool_response(post: PostResponse) -> PostToolResponse:
     return PostToolResponse.model_validate(post.model_dump())
 
 
@@ -30,7 +31,7 @@ async def start_post(call: ToolCall[User], brief: str) -> PostToolResponse:
     post = await mediator.start_post(
         db=call.db, llm=llm, user=call.user, brief=start_request.brief, now=call.now
     )
-    return _post_answer(post)
+    return _post_tool_response(post)
 
 
 async def give_feedback(call: ToolCall[User], post_id: str, feedback: str) -> VersionToolResponse:
@@ -69,13 +70,12 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostToolResponse:
     Read one of the User's Posts: its Brief and every Version in order, each with the Feedback
     that made it, its Final and the Final's character count. A Version's id can be scheduled.
     """
-    return _post_answer(await mediator.get_post(db=call.db, user=call.user, post_id=post_id))
+    return _post_tool_response(await mediator.get_post(db=call.db, user=call.user, post_id=post_id))
 
 
 TOOLS = [
-    # The rates of `POST /posts` and `POST /posts/{post_id}/versions`.
-    McpTool(start_post, rate="20/minute", annotations=ADDITIVE),
-    McpTool(give_feedback, rate="20/minute", annotations=ADDITIVE),
+    McpTool(start_post, rate=WRITE_RATE, annotations=ADDITIVE),
+    McpTool(give_feedback, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(list_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     McpTool(get_post, rate=READ_ONLY_RATE, annotations=READ_ONLY),
 ]

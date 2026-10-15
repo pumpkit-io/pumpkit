@@ -5,6 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pumpkit.authors.handles import normalize_handle
 
+# Per caller, for the routes and MCP tools that add, refresh or remove Inspiration authors.
+WRITE_RATE = "20/minute"
+
 
 class InspirationAuthorAddRequest(BaseModel):
     """An X handle, with or without the @; it is normalised on the way in."""
