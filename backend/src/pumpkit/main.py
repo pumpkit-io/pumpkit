@@ -44,6 +44,7 @@ app.add_middleware(
 
 # The prefix lives here so routers stay unaware of their mount point.
 app.include_router(auth_router, prefix="/api/v1")
+# Billing's access rule gates key creation here, since auth sits below billing (ADR 0008).
 app.include_router(
     api_key_creation_router, prefix="/api/v1", dependencies=[Depends(require_subscribed_user)]
 )
