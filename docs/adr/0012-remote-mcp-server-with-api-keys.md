@@ -10,6 +10,8 @@ Users can drive Pumpkit from Claude Code and other MCP clients: start Posts, giv
 
 ## Consequences
 
+- This extends ADR 0008's module list. Each area that exposes tools gets a `tools.py` beside its router, a transport like the router that calls only its own area's mediator. `core/mcp_tools.py` holds the plumbing every tools module shares. `mcp_server.py` at the package root is the one place that assembles the tools, as `main.py` assembles the routers. Besides the tools modules, it calls `auth.mediator` to authenticate API keys and `billing.service.has_access`, the access check the web routes' `require_subscribed_user` makes.
+- The MCP SDK's DNS-rebinding Host check is off. Each Self-hoster serves Pumpkit on a host of their own behind Caddy, which the check would refuse, and the Bearer API key already guards the endpoint.
 - API keys belong to the `auth` area, next to Sessions (ADR 0008). Pumpkit stores only a SHA-256 hash of each key, and the existing bearer dependency keeps accepting only access tokens, so a key sent to a web route gets a 401.
 - Every API key has full access in v1. The risky tools (Post now, deleting a Scheduled post, removing an Inspiration author) are marked destructive in their MCP annotations so clients ask before calling them. Per-key permissions can come later, with existing keys treated as full access.
 - MCP calls send no product events, because ADR 0009 ties analytics to Analytics consent given in a browser, and an MCP client never gives it. Error reports still go to PostHog, as they do for the web routes.

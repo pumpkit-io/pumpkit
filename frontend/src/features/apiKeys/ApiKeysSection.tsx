@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { errorMessage } from '@/services/apiErrors';
+import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
+import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { apiKeyService, type ApiKey, type CreatedApiKey } from '@/services/apiKeyService';
 
 const date = (iso: string) => new Date(iso).toLocaleDateString();
@@ -14,6 +15,12 @@ function datesLabel(key: ApiKey): string {
 
 function CopyRow({ label, value, copyLabel }: { label: string; value: string; copyLabel: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  useEffect(() => {
+    if (state !== 'copied') return;
+    const timer = window.setTimeout(() => setState('idle'), 2000);
+    return () => window.clearTimeout(timer);
+  }, [state]);
 
   const copy = async () => {
     try {
@@ -151,6 +158,7 @@ export function ApiKeysSection() {
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsSubscription, setNeedsSubscription] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,13 +177,15 @@ export function ApiKeysSection() {
     if (!typed) return;
     setCreating(true);
     setError(null);
+    setNeedsSubscription(false);
     try {
       const next = await apiKeyService.create(typed);
       setCreated(next);
       setKeys((current) => [...(current ?? []), next.apiKey]);
       setName('');
     } catch (err) {
-      setError(errorMessage(err, 'Couldn’t create the key. Try again.'));
+      if (errorStatus(err) === 403) setNeedsSubscription(true);
+      else setError(errorMessage(err, 'Couldn’t create the key. Try again.'));
     } finally {
       setCreating(false);
     }
@@ -228,6 +238,12 @@ export function ApiKeysSection() {
         </Button>
       </form>
 
+      {needsSubscription && (
+        <SubscribePrompt
+          message="Creating API keys needs a Subscription."
+          source="account_api_keys"
+        />
+      )}
       {error && <ErrorBanner message={error} />}
 
       {loadFailed ? (

@@ -16,6 +16,9 @@ from pumpkit.core.db.session import get_async_db
 # auto_error=False so we raise the 401 and Bearer challenge ourselves, whatever FastAPI's default.
 _bearer_scheme = HTTPBearer(auto_error=False)
 
+# The 401 detail for a credential that names no User who may act, shared with the MCP endpoint.
+CREDENTIALS_INVALID = "Could not validate credentials"
+
 
 async def get_bearer_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
@@ -36,7 +39,7 @@ async def get_current_user(
     """Resolve the User from the request's bearer token, or raise a 401 challenge."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail=CREDENTIALS_INVALID,
         headers={"WWW-Authenticate": "Bearer"},
     )
 

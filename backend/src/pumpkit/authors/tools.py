@@ -4,6 +4,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors import mediator
 from pumpkit.authors.handles import normalize_handle
 from pumpkit.authors.schemas import (
+    WRITE_RATE,
     InspirationAuthorAddRequest,
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
@@ -50,7 +51,6 @@ async def remove_inspiration_author(call: ToolCall[User], handle: str) -> Messag
 
 TOOLS = [
     McpTool(list_inspiration_authors, rate=READ_ONLY_RATE, annotations=READ_ONLY),
-    # The rate of `POST /inspiration-authors`.
-    McpTool(add_inspiration_author, rate="20/minute", annotations=ADDITIVE),
-    McpTool(remove_inspiration_author, rate="20/minute", annotations=DESTRUCTIVE),
+    McpTool(add_inspiration_author, rate=WRITE_RATE, annotations=ADDITIVE),
+    McpTool(remove_inspiration_author, rate=WRITE_RATE, annotations=DESTRUCTIVE),
 ]

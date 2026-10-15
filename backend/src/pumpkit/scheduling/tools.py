@@ -1,6 +1,7 @@
 """The MCP tools for Scheduled posts, over the same mediator as the router."""
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Iterator, Optional
 
 from fastapi import HTTPException, status
@@ -16,20 +17,21 @@ from pumpkit.core.mcp_tools import (
     McpTool,
     ToolCall,
 )
-from pumpkit.core.schemas import LinkResponse
+from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import FAILED, PUBLISHED, ScheduledPostState
 from pumpkit.scheduling.publish import RETRY_WINDOW
 from pumpkit.scheduling.schemas import (
+    WRITE_RATE,
     CommunityLookupRequest,
     PastCommunitiesResponse,
-    PostNowAnswer,
-    ScheduledPageMessage,
-    ScheduledPostAnswer,
+    PostNowToolResponse,
+    ScheduledPageMessageToolResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
-    ScheduledPostsListAnswer,
+    ScheduledPostsListToolResponse,
+    ScheduledPostToolResponse,
     ScheduledPostUpdateRequest,
 )
 from pumpkit.x_connection.x_publisher import get_x_publisher
@@ -39,8 +41,8 @@ def scheduled_page_url() -> str:
     return f"{settings.frontend_url()}/scheduled"
 
 
-def _answer(scheduled_post: ScheduledPostResponse) -> ScheduledPostAnswer:
-    return ScheduledPostAnswer(
+def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolResponse:
+    return ScheduledPostToolResponse(
         **scheduled_post.model_dump(), scheduled_page_url=scheduled_page_url()
     )
 
@@ -50,20 +52,30 @@ def _x_connection_links_to_scheduled_page() -> Iterator[None]:
     """Adds the Scheduled page link to the X connection refusals: connecting X needs a browser."""
     try:
         yield
-    except HTTPException as refusal:
-        if refusal.detail not in (mediator.CONNECT_X_FIRST, mediator.RECONNECT_X_FIRST):
-            raise
+    except mediator.XConnectionNeeded as refusal:
         raise HTTPException(
             status_code=refusal.status_code, detail=f"{refusal.detail} {scheduled_page_url()}"
         ) from None
 
 
-async def _post_text(call: ToolCall[User], text: Optional[str], version_id: Optional[str]) -> str:
+@dataclass(frozen=True)
+class _PostToPublish:
+    """What schedule_post and post_now publish, as the client passes it."""
+
+    text: Optional[str]
+    version_id: Optional[str]
+    community: Optional[str]
+    share_with_followers: bool
+
+
+async def _post_text(call: ToolCall[User], post: _PostToPublish) -> str:
     """The text a Scheduled post publishes: typed, or a Version's Final copied."""
-    if text is not None and version_id is None:
-        return text
-    if version_id is not None and text is None:
-        return await mediator.version_final(db=call.db, user=call.user, version_id=version_id)
+    if post.text is not None and post.version_id is None:
+        return post.text
+    if post.version_id is not None and post.text is None:
+        return await mediator.source_version_final(
+            db=call.db, user=call.user, version_id=post.version_id
+        )
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail="Give either the text or a Version id, not both.",
@@ -78,35 +90,26 @@ async def _community(call: ToolCall[User], pasted: str) -> Community:
     return Community(id=found.id, name=found.name)
 
 
-async def _destination(
-    call: ToolCall[User], community: Optional[str], share_with_followers: bool
-) -> Destination:
+async def _destination(call: ToolCall[User], post: _PostToPublish) -> Destination:
     return Destination(
-        community=await _community(call, community) if community is not None else None,
-        share_with_followers=share_with_followers,
+        community=await _community(call, post.community) if post.community is not None else None,
+        share_with_followers=post.share_with_followers,
     )
 
 
 async def _create_scheduled_post(
-    call: ToolCall[User],
-    *,
-    text: Optional[str],
-    version_id: Optional[str],
-    publish_at: Optional[str],
-    publish_now: bool,
-    community: Optional[str],
-    share_with_followers: bool,
-) -> ScheduledPostAnswer:
+    call: ToolCall[User], post: _PostToPublish, *, publish_at: Optional[str], publish_now: bool
+) -> ScheduledPostToolResponse:
     """A new Scheduled post from typed text or a Version, checked as the create route checks it."""
     create_request = ScheduledPostCreateRequest.model_validate(
         {
-            "text": await _post_text(call, text, version_id),
+            "text": await _post_text(call, post),
             "publish_at": publish_at,
             "publish_now": publish_now,
-            "source_version_id": version_id,
+            "source_version_id": post.version_id,
         }
     )
-    destination = await _destination(call, community, share_with_followers)
+    destination = await _destination(call, post)
     publisher = await call.provide(get_x_publisher)
     with _x_connection_links_to_scheduled_page():
         scheduled_post = await mediator.create_scheduled_post(
@@ -120,7 +123,7 @@ async def _create_scheduled_post(
             source_version_id=create_request.source_version_id,
             destination=destination,
         )
-    return _answer(scheduled_post)
+    return _tool_response(scheduled_post)
 
 
 async def schedule_post(
@@ -130,25 +133,18 @@ async def schedule_post(
     version_id: Optional[str] = None,
     community: Optional[str] = None,
     share_with_followers: bool = False,
-) -> ScheduledPostAnswer:
+) -> ScheduledPostToolResponse:
     """
     Schedule a post on the User's connected X account for `publish_at`, an ISO 8601 time with
     its UTC offset, on a whole minute and at least a minute from now. Give the text, or the id
     of a Version to publish its Final. It goes to the User's profile, or to the Community whose
     URL or ID `community` holds, where `share_with_followers` also shows it to their followers.
     """
-    return await _create_scheduled_post(
-        call,
-        text=text,
-        version_id=version_id,
-        publish_at=publish_at,
-        publish_now=False,
-        community=community,
-        share_with_followers=share_with_followers,
-    )
+    post = _PostToPublish(text, version_id, community, share_with_followers)
+    return await _create_scheduled_post(call, post, publish_at=publish_at, publish_now=False)
 
 
-def _post_now_message(posted: ScheduledPostAnswer) -> str:
+def _post_now_message(posted: ScheduledPostToolResponse) -> str:
     """The web app's words for how Post now ended."""
     if posted.state == PUBLISHED:
         return f"Published on X: {posted.x_post_url}"
@@ -165,35 +161,28 @@ async def post_now(
     version_id: Optional[str] = None,
     community: Optional[str] = None,
     share_with_followers: bool = False,
-) -> PostNowAnswer:
+) -> PostNowToolResponse:
     """
     Publish a post on the User's connected X account right away. Show the User the exact text
     and get their yes first. Give the text, or the id of a Version to publish its Final. It goes
     to the User's profile, or to the Community whose URL or ID `community` holds, where
     `share_with_followers` also shows it to their followers.
     """
-    posted = await _create_scheduled_post(
-        call,
-        text=text,
-        version_id=version_id,
-        publish_at=None,
-        publish_now=True,
-        community=community,
-        share_with_followers=share_with_followers,
-    )
-    return PostNowAnswer(**posted.model_dump(), message=_post_now_message(posted))
+    post = _PostToPublish(text, version_id, community, share_with_followers)
+    posted = await _create_scheduled_post(call, post, publish_at=None, publish_now=True)
+    return PostNowToolResponse(**posted.model_dump(), message=_post_now_message(posted))
 
 
 async def list_scheduled_posts(
     call: ToolCall[User], state: Optional[ScheduledPostState] = None
-) -> ScheduledPostsListAnswer:
+) -> ScheduledPostsListToolResponse:
     """
     List the User's Scheduled posts with their state, publish time and Community: waiting ones
     soonest first, then Published and Failed ones newest first. A Failed one says why it
     failed, and a Published one links to the post on X.
     """
     listed = await mediator.list_scheduled_posts(db=call.db, user=call.user, state=state)
-    return ScheduledPostsListAnswer(data=listed.data, scheduled_page_url=scheduled_page_url())
+    return ScheduledPostsListToolResponse(data=listed.data, scheduled_page_url=scheduled_page_url())
 
 
 async def list_past_communities(call: ToolCall[User]) -> PastCommunitiesResponse:
@@ -212,7 +201,7 @@ async def edit_scheduled_post(
     community: Optional[str] = None,
     to_profile: bool = False,
     share_with_followers: Optional[bool] = None,
-) -> ScheduledPostAnswer:
+) -> ScheduledPostToolResponse:
     """
     Change a waiting or Failed Scheduled post: its text, its publish time (an ISO 8601 time
     with its UTC offset, which gives a Failed one another try), the Community whose URL or ID
@@ -251,42 +240,41 @@ async def edit_scheduled_post(
             share_with_followers=update_request.share_with_followers,
             now=call.now,
         )
-    return _answer(scheduled_post)
+    return _tool_response(scheduled_post)
 
 
 async def delete_scheduled_post(
     call: ToolCall[User], scheduled_post_id: str
-) -> ScheduledPageMessage:
+) -> ScheduledPageMessageToolResponse:
     """Delete a waiting or Failed Scheduled post, so it is never published. It can't be undone."""
     await mediator.cancel_scheduled_post(
         db=call.db, user=call.user, scheduled_post_id=scheduled_post_id
     )
-    return ScheduledPageMessage(
+    return ScheduledPageMessageToolResponse(
         message="The Scheduled post is deleted.", scheduled_page_url=scheduled_page_url()
     )
 
 
-async def connect_x(call: ToolCall[User]) -> LinkResponse:
+async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
     Where the User connects, reconnects or disconnects their X account: the Scheduled page of
     the Pumpkit web app, since X asks them to sign in and approve in a browser.
     """
     url = scheduled_page_url()
-    return LinkResponse(
+    return LinkToolResponse(
         message=f"Connect, reconnect or disconnect your X account on the Scheduled page: {url}",
         url=url,
     )
 
 
 TOOLS = [
-    # The rate of `POST /scheduled-posts`.
-    McpTool(schedule_post, rate="10/minute", annotations=ADDITIVE),
-    # The rate of `POST /scheduled-posts`, which Post now goes through on the web.
-    McpTool(post_now, rate="10/minute", annotations=DESTRUCTIVE),
+    McpTool(schedule_post, rate=WRITE_RATE, annotations=ADDITIVE),
+    # Post now goes through the create route on the web.
+    McpTool(post_now, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_scheduled_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     # The web edit and delete routes have no limit; these take the create route's.
-    McpTool(edit_scheduled_post, rate="10/minute", annotations=ADDITIVE),
-    McpTool(delete_scheduled_post, rate="10/minute", annotations=DESTRUCTIVE),
+    McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
+    McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
 ]

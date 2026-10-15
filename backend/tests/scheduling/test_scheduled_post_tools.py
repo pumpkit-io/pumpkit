@@ -7,6 +7,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import delete, update
 
+import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
@@ -369,6 +370,29 @@ async def test_a_published_scheduled_post_can_be_neither_edited_nor_deleted(
     deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=published["id"])
 
     assert error_text(edited) == error_text(deleted) == PUBLISHING_STARTED
+
+
+async def test_a_scheduled_post_being_published_can_be_neither_edited_nor_deleted(
+    connected, mcp, db_session_maker, fixed_clock
+):
+    scheduled = (await _schedule(mcp, at="2026-10-10T12:02:00Z"))["structuredContent"]
+    fixed_clock.advance(timedelta(minutes=2))
+    async with db_session_maker() as session:
+        assert await scheduled_posts_service.claim(
+            session, scheduled_post_id=scheduled["id"], now=fixed_clock()
+        )
+        await session.commit()
+
+    edited = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], text="Changed"
+    )
+    deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=scheduled["id"])
+
+    assert error_text(edited) == error_text(deleted) == PUBLISHING_STARTED
+    listed = await mcp.call_tool("list_scheduled_posts")
+    assert [(post["text"], post["state"]) for post in listed["structuredContent"]["data"]] == [
+        ("Shipping on Monday.", "publishing")
+    ]
 
 
 async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fixed_clock):

@@ -27,6 +27,7 @@ import pumpkit.billing.service as billing_service
 import pumpkit.billing.tools as billing_tools
 import pumpkit.posts.tools as posts_tools
 import pumpkit.scheduling.tools as scheduling_tools
+from pumpkit.auth.dependencies import CREDENTIALS_INVALID
 from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import get_async_db
@@ -76,7 +77,7 @@ _caller: ContextVar[_Caller] = ContextVar("mcp_caller")
 
 
 def _subscription_needed() -> CallToolResult:
-    subscribe_url = f"{settings.frontend_url()}/billing"
+    subscribe_url = settings.billing_page_url()
     return tool_error(f"{SUBSCRIPTION_NEEDED} {subscribe_url}", subscribe_url=subscribe_url)
 
 
@@ -102,7 +103,7 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
                 if user is None:
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Could not validate credentials",
+                        detail=CREDENTIALS_INVALID,
                     )
                 if tool.needs_access and not await billing_service.has_access(db, user_id=user.id):
                     return _subscription_needed()
@@ -143,7 +144,7 @@ class McpEndpoint:
             return
         user_id = await _authenticate(app, secret)
         if user_id is None:
-            await _unauthorized("Could not validate credentials")(scope, receive, send)
+            await _unauthorized(CREDENTIALS_INVALID)(scope, receive, send)
             return
 
         token = _caller.set(_Caller(app=app, request=Request(scope), user_id=user_id))

@@ -16,7 +16,7 @@ Pumpkit's backend serves an MCP server, so Claude Code and other MCP clients can
 
 On an Instance that sells Plans, creating a key and using the tools need a Subscription. When yours ends, every tool answers with a link to subscribe, and your keys work again once you resubscribe. Revoking a key in the account dialog stops it at once.
 
-## Tools
+## Inspiration author tools
 
 | Tool | What it does |
 | --- | --- |

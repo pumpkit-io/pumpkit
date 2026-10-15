@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.core.errors import UNEXPECTED_ERROR_DETAIL, AppError, report_unexpected_exception
 
 READ_ONLY = ToolAnnotations(read_only_hint=True)
-# MCP clients treat a tool without annotations as destructive, so one that only adds says it isn't.
+# Clients treat a tool without annotations as destructive; this one adds or edits, never deletes.
 ADDITIVE = ToolAnnotations(read_only_hint=False, destructive_hint=False)
 # Clients ask the User before calling a destructive tool.
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True)

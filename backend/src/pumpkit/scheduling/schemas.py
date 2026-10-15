@@ -21,6 +21,10 @@ def _strip_text(value: Optional[str]) -> Optional[str]:
     return stripped
 
 
+# Per caller, for the create route and the MCP tools that change Scheduled posts.
+WRITE_RATE = "10/minute"
+
+
 class CommunityRequest(BaseModel):
     """A Community as the client named it: the server checks the ID and trusts the name."""
 
@@ -95,23 +99,23 @@ class ScheduledPostsListResponse(BaseModel):
     data: list[ScheduledPostResponse]
 
 
-class ScheduledPostAnswer(ScheduledPostResponse):
+class ScheduledPostToolResponse(ScheduledPostResponse):
     """A Scheduled post as an MCP tool answers with it, linking to the web app's Scheduled page."""
 
     scheduled_page_url: str
 
 
-class PostNowAnswer(ScheduledPostAnswer):
+class PostNowToolResponse(ScheduledPostToolResponse):
     """`message` says how Post now ended, as the web app tells the User after Post now."""
 
     message: str
 
 
-class ScheduledPostsListAnswer(ScheduledPostsListResponse):
+class ScheduledPostsListToolResponse(ScheduledPostsListResponse):
     scheduled_page_url: str
 
 
-class ScheduledPageMessage(BaseModel):
+class ScheduledPageMessageToolResponse(BaseModel):
     message: str
     scheduled_page_url: str
 

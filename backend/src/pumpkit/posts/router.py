@@ -8,13 +8,19 @@ from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts import mediator
 from pumpkit.posts.llm import LLM, get_llm
-from pumpkit.posts.schemas import FeedbackRequest, PostResponse, PostStartRequest, VersionResponse
+from pumpkit.posts.schemas import (
+    WRITE_RATE,
+    FeedbackRequest,
+    PostResponse,
+    PostStartRequest,
+    VersionResponse,
+)
 
 router = APIRouter(tags=["posts"])
 
 
 @router.post("/posts", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("20/minute")
+@limiter.limit(WRITE_RATE)
 async def start_post(
     request: Request,
     start_request: PostStartRequest,
@@ -34,7 +40,7 @@ async def start_post(
     response_model=VersionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@limiter.limit("20/minute")
+@limiter.limit(WRITE_RATE)
 async def add_version(
     request: Request,
     post_id: str,
