@@ -1,12 +1,33 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/apiKeyService', () => ({
   apiKeyService: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
 }));
 
+import type { ComponentProps } from 'react';
+import { BillingContext } from '@/features/billing/BillingProvider';
 import { apiKeyService, type ApiKey } from '@/services/apiKeyService';
 import { ApiKeysSection } from './ApiKeysSection';
+
+const openBilling = vi.fn();
+const billing: ComponentProps<typeof BillingContext.Provider>['value'] = {
+  isOpen: false,
+  error: null,
+  data: null,
+  isLoading: false,
+  open: openBilling,
+  openWithError: vi.fn(),
+  close: vi.fn(),
+};
+
+function renderSection() {
+  return render(
+    <BillingContext.Provider value={billing}>
+      <ApiKeysSection />
+    </BillingContext.Provider>,
+  );
+}
 
 const WORK_LAPTOP: ApiKey = {
   id: 'api_key_1',
@@ -51,7 +72,7 @@ describe('ApiKeysSection', () => {
   it('lists the User’s keys with their prefix and dates', async () => {
     vi.mocked(apiKeyService.list).mockResolvedValue([WORK_LAPTOP, HOME_DESKTOP]);
 
-    render(<ApiKeysSection />);
+    renderSection();
 
     const work = await screen.findByRole('listitem', { name: 'Work laptop' });
     expect(within(work).getByText('pumpkit_AbCd1234…')).toBeInTheDocument();
@@ -69,7 +90,7 @@ describe('ApiKeysSection', () => {
   it('says so when there are no keys yet', async () => {
     vi.mocked(apiKeyService.list).mockResolvedValue([]);
 
-    render(<ApiKeysSection />);
+    renderSection();
 
     expect(await screen.findByText(/No API keys yet/)).toBeInTheDocument();
   });
@@ -81,7 +102,7 @@ describe('ApiKeysSection', () => {
       secret: SECRET,
       claudeCommand: COMMAND,
     });
-    render(<ApiKeysSection />);
+    renderSection();
     await screen.findByRole('listitem', { name: 'Work laptop' });
 
     await createKey('  Home desktop ');
@@ -102,10 +123,35 @@ describe('ApiKeysSection', () => {
     expect(screen.queryByText(COMMAND)).not.toBeInTheDocument();
   });
 
+  it('turns Copied back into Copy after two seconds', async () => {
+    vi.mocked(apiKeyService.list).mockResolvedValue([]);
+    vi.mocked(apiKeyService.create).mockResolvedValue({
+      apiKey: HOME_DESKTOP,
+      secret: SECRET,
+      claudeCommand: COMMAND,
+    });
+    renderSection();
+    await screen.findByText(/No API keys yet/);
+    await createKey('Home desktop');
+    const copyKey = await screen.findByRole('button', { name: 'Copy key' });
+
+    vi.useFakeTimers();
+    try {
+      await act(async () => fireEvent.click(copyKey));
+      expect(copyKey).toHaveTextContent(/^Copied$/);
+      act(() => vi.advanceTimersByTime(1999));
+      expect(copyKey).toHaveTextContent(/^Copied$/);
+      act(() => vi.advanceTimersByTime(1));
+      expect(copyKey).toHaveTextContent(/^Copy$/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('revokes a key after the User confirms', async () => {
     vi.mocked(apiKeyService.list).mockResolvedValue([WORK_LAPTOP, HOME_DESKTOP]);
     vi.mocked(apiKeyService.revoke).mockResolvedValue(undefined);
-    render(<ApiKeysSection />);
+    renderSection();
     const work = await screen.findByRole('listitem', { name: 'Work laptop' });
 
     fireEvent.click(within(work).getByRole('button', { name: 'Revoke Work laptop' }));
@@ -124,7 +170,7 @@ describe('ApiKeysSection', () => {
     const atCap =
       'You already have 10 API keys, the most you can hold. Revoke one to create another.';
     vi.mocked(apiKeyService.create).mockRejectedValue(failure(409, atCap));
-    render(<ApiKeysSection />);
+    renderSection();
     await screen.findByRole('listitem', { name: 'Work laptop' });
 
     await createKey('Eleventh');
@@ -133,22 +179,26 @@ describe('ApiKeysSection', () => {
     expect(screen.queryByText(/won’t be shown again/)).not.toBeInTheDocument();
   });
 
-  it('shows the subscribe error when the User has no access', async () => {
+  it('offers to subscribe when creating a key is refused for want of a Subscription', async () => {
     vi.mocked(apiKeyService.list).mockResolvedValue([]);
-    const subscribe = 'This needs a Subscription. Subscribe to continue.';
-    vi.mocked(apiKeyService.create).mockRejectedValue(failure(403, subscribe));
-    render(<ApiKeysSection />);
+    vi.mocked(apiKeyService.create).mockRejectedValue(
+      failure(403, 'This needs a Subscription. Subscribe to continue.'),
+    );
+    renderSection();
     await screen.findByText(/No API keys yet/);
 
     await createKey('Work laptop');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(subscribe);
+    expect(await screen.findByText('Creating API keys needs a Subscription.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
+    expect(openBilling).toHaveBeenCalledWith('account_api_keys');
   });
 
   it('says when the keys couldn’t be loaded', async () => {
     vi.mocked(apiKeyService.list).mockRejectedValue(new Error('Network Error'));
 
-    render(<ApiKeysSection />);
+    renderSection();
 
     expect(await screen.findByText(/Couldn’t load your API keys/)).toBeInTheDocument();
   });
