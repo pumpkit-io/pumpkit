@@ -226,8 +226,12 @@ class Settings(BaseSettings):
     def stripe_checkout_cancel_url(self) -> str:
         return f"{self.frontend_url()}/billing/cancelled"
 
-    def stripe_billing_portal_return_url(self) -> str:
+    def billing_page_url(self) -> str:
+        """The web app page where a User subscribes or manages their Subscription."""
         return f"{self.frontend_url()}/billing"
+
+    def stripe_billing_portal_return_url(self) -> str:
+        return self.billing_page_url()
 
     @field_validator("BILLING_PLAN_KEYS", mode="before")
     @classmethod
