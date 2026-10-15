@@ -187,6 +187,16 @@ async def list_api_keys(
     return await mediator.list_api_keys(db=db, user=current_user)
 
 
+@router.delete("/api-keys/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["api-keys"])
+async def revoke_api_key(
+    api_key_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    await mediator.revoke_api_key(db=db, user=current_user, api_key_id=api_key_id, now=clock())
+
+
 @api_key_creation_router.post(
     "/api-keys",
     response_model=ApiKeyCreatedResponse,

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import quote, urlencode
 
-from fastapi import Request, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -343,6 +343,9 @@ async def logout(request: Request, db: AsyncSession) -> JSONResponse:
     return sessions.ended_session_response()
 
 
+MAX_API_KEYS = 10
+
+
 def _api_key_response(api_key: ApiKey) -> ApiKeyResponse:
     return ApiKeyResponse(
         id=api_key.id,
@@ -365,6 +368,14 @@ def _claude_command(secret: str) -> str:
 async def create_api_key(
     db: AsyncSession, user: User, name: str, now: datetime
 ) -> ApiKeyCreatedResponse:
+    if await api_keys.count_unrevoked_api_keys(db, user_id=user.id) >= MAX_API_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"You already have {MAX_API_KEYS} API keys, the most you can hold. "
+                "Revoke one to create another."
+            ),
+        )
     api_key, secret = await api_keys.create_api_key(db, user_id=user.id, name=name, now=now)
     await db.commit()
     return ApiKeyCreatedResponse(
@@ -375,3 +386,15 @@ async def create_api_key(
 async def list_api_keys(db: AsyncSession, user: User) -> ApiKeysListResponse:
     keys = await api_keys.list_unrevoked_api_keys(db, user_id=user.id)
     return ApiKeysListResponse(data=[_api_key_response(api_key) for api_key in keys])
+
+
+async def revoke_api_key(db: AsyncSession, user: User, api_key_id: str, now: datetime) -> None:
+    """Revoke one of the User's keys; another User's key and a revoked one both read as a 404."""
+    api_key = await api_keys.get_unrevoked_api_key(db, user_id=user.id, api_key_id=api_key_id)
+    if api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="That API key doesn't exist or was already revoked.",
+        )
+    await api_keys.revoke_api_key(db, api_key, now=now)
+    await db.commit()

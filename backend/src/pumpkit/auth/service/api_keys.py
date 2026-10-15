@@ -4,8 +4,9 @@ access tokens. Flushes, never commits.
 """
 
 from datetime import datetime
+from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import ApiKey
@@ -32,6 +33,31 @@ async def create_api_key(
     db.add(api_key)
     await db.flush()
     return api_key, secret
+
+
+async def count_unrevoked_api_keys(db: AsyncSession, *, user_id: str) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(ApiKey)
+        .where(ApiKey.user_id == user_id, ApiKey.revoked_at.is_(None))
+    )
+    return result.scalar_one()
+
+
+async def get_unrevoked_api_key(
+    db: AsyncSession, *, user_id: str, api_key_id: str
+) -> Optional[ApiKey]:
+    result = await db.execute(
+        select(ApiKey).where(
+            ApiKey.id == api_key_id, ApiKey.user_id == user_id, ApiKey.revoked_at.is_(None)
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def revoke_api_key(db: AsyncSession, api_key: ApiKey, *, now: datetime) -> None:
+    api_key.revoked_at = now
+    await db.flush()
 
 
 async def list_unrevoked_api_keys(db: AsyncSession, *, user_id: str) -> list[ApiKey]:
