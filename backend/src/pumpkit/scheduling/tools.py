@@ -6,11 +6,14 @@ from typing import Iterator, Optional
 from fastapi import HTTPException, status
 
 from pumpkit.auth.models import User
+from pumpkit.authors.x_reader import get_x_reader
 from pumpkit.core.config import settings
 from pumpkit.core.mcp_tools import ADDITIVE, READ_ONLY, READ_ONLY_RATE, McpTool, ToolCall
 from pumpkit.scheduling import mediator
+from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
+    CommunityLookupRequest,
     ScheduledPostAnswer,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
@@ -55,16 +58,36 @@ async def _post_text(call: ToolCall[User], text: Optional[str], version_id: Opti
     return text
 
 
+async def _community(call: ToolCall[User], pasted: str) -> Community:
+    """The Community a pasted URL or ID names, looked up on X as the web app does before sending."""
+    lookup_request = CommunityLookupRequest(pasted=pasted)
+    reader = await call.provide(get_x_reader)
+    found = await mediator.look_up_community(reader=reader, pasted=lookup_request.pasted)
+    return Community(id=found.id, name=found.name)
+
+
+async def _destination(
+    call: ToolCall[User], community: Optional[str], share_with_followers: bool
+) -> Destination:
+    return Destination(
+        community=await _community(call, community) if community is not None else None,
+        share_with_followers=share_with_followers,
+    )
+
+
 async def schedule_post(
     call: ToolCall[User],
     publish_at: str,
     text: Optional[str] = None,
     version_id: Optional[str] = None,
+    community: Optional[str] = None,
+    share_with_followers: bool = False,
 ) -> ScheduledPostAnswer:
     """
     Schedule a post on the User's connected X account for `publish_at`, an ISO 8601 time with
     its UTC offset, on a whole minute and at least a minute from now. Give the text, or the id
-    of a Version to publish its Final.
+    of a Version to publish its Final. It goes to the User's profile, or to the Community whose
+    URL or ID `community` holds, where `share_with_followers` also shows it to their followers.
     """
     create_request = ScheduledPostCreateRequest.model_validate(
         {
@@ -73,6 +96,7 @@ async def schedule_post(
             "source_version_id": version_id,
         }
     )
+    destination = await _destination(call, community, share_with_followers)
     publisher = await call.provide(get_x_publisher)
     with _x_connection_links_to_scheduled_page():
         scheduled_post = await mediator.create_scheduled_post(
@@ -84,6 +108,7 @@ async def schedule_post(
             publish_now=False,
             now=call.now,
             source_version_id=create_request.source_version_id,
+            destination=destination,
         )
     return _answer(scheduled_post)
 

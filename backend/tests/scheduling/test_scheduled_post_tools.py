@@ -184,3 +184,51 @@ async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
         "You have 2 Scheduled posts in October 2026, the most for one month. "
         "The cap resets on November 1, 2026."
     )
+
+
+COMMUNITY_ID = "1493446837214187523"
+COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
+NOT_A_COMMUNITY = (
+    "That isn't a Community. Paste its URL from X, like https://x.com/i/communities/123, or its ID."
+)
+
+
+@pytest.fixture
+def known_community(fake_x_reader) -> None:
+    fake_x_reader.communities[COMMUNITY_ID] = "Build in Public"
+
+
+COMMUNITY = {"id": COMMUNITY_ID, "name": "Build in Public", "url": COMMUNITY_URL}
+
+
+@pytest.mark.parametrize("share_with_followers", [True, False])
+async def test_scheduling_into_a_community_names_it_as_x_does(
+    connected, known_community, mcp, fixed_clock, share_with_followers
+):
+    result = await mcp.call_tool(
+        "schedule_post",
+        text="Shipping on Monday.",
+        publish_at="2026-10-10T14:00:00Z",
+        community=f"{COMMUNITY_URL}?s=20",
+        share_with_followers=share_with_followers,
+    )
+
+    assert result["isError"] is False, result
+    assert result["structuredContent"]["community"] == COMMUNITY
+    assert result["structuredContent"]["share_with_followers"] is share_with_followers
+
+
+@pytest.mark.parametrize(
+    ("pasted", "message"),
+    [
+        ("https://x.com/levelsio", NOT_A_COMMUNITY),
+        ("123", "X has no Community with that ID. Check the URL."),
+    ],
+)
+async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock, pasted, message):
+    result = await mcp.call_tool(
+        "schedule_post", text="Hi.", publish_at="2026-10-10T14:00:00Z", community=pasted
+    )
+
+    assert error_text(result) == message
+    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
