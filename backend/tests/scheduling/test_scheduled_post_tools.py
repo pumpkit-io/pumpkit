@@ -5,10 +5,13 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import update
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.core.config import settings
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.x_connection.models import XConnection
 from tests.mcp_client import error_text
 
 SCHEDULED_PAGE = "http://localhost:5173/scheduled"
@@ -113,3 +116,71 @@ async def test_scheduling_needs_either_text_or_a_version(connected, mcp, fixed_c
     result = await mcp.call_tool("schedule_post", publish_at="2026-10-10T14:00:00Z", **arguments)
 
     assert error_text(result) == "Give either the text or a Version id, not both."
+
+
+async def _schedule(mcp, text: str = "Shipping on Monday.", at: str = "2026-10-10T14:00:00Z"):
+    return await mcp.call_tool("schedule_post", text=text, publish_at=at)
+
+
+async def test_scheduling_without_an_x_connection_links_to_the_scheduled_page(
+    subscribed, mcp, fixed_clock
+):
+    result = await _schedule(mcp)
+
+    assert error_text(result) == f"Connect your X account first. {SCHEDULED_PAGE}"
+
+
+async def test_scheduling_on_an_x_connection_that_needs_reconnecting_links_to_the_scheduled_page(
+    connected, mcp, db, fixed_clock
+):
+    await db.execute(update(XConnection).values(needs_reconnect=True))
+    await db.commit()
+
+    result = await _schedule(mcp)
+
+    assert error_text(result) == (
+        f"X no longer accepts Pumpkit's access to your account. Reconnect X first. {SCHEDULED_PAGE}"
+    )
+
+
+async def test_a_post_over_the_x_accounts_limit_is_refused(connected, mcp, fixed_clock):
+    result = await _schedule(mcp, text="x" * 281)
+
+    assert error_text(result) == "This post is 281 characters by X's count, over the 280 limit."
+
+
+@pytest.mark.parametrize(
+    ("at", "message"),
+    [
+        ("2026-10-10T12:00:00Z", "Pick a time at least a minute from now."),
+        ("2026-10-10T14:00:30Z", "Pick a time on a whole minute."),
+    ],
+)
+async def test_a_time_the_web_app_refuses_is_refused(connected, mcp, fixed_clock, at, message):
+    result = await _schedule(mcp, at=at)
+
+    assert error_text(result) == message
+
+
+async def test_a_time_without_its_utc_offset_is_refused(connected, mcp, fixed_clock):
+    result = await _schedule(mcp, at="2026-10-10T14:00:00")
+
+    assert error_text(result) == "Input should have timezone info"
+
+
+async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
+    connected, client, mcp, fixed_clock, monkeypatch
+):
+    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    from_web = await client.post(
+        "/api/v1/scheduled-posts", json={"text": "First", "publish_at": "2026-10-11T09:00:00Z"}
+    )
+    assert from_web.status_code == 201, from_web.text
+    await _schedule(mcp, text="Second", at="2026-10-30T09:00:00Z")
+
+    result = await _schedule(mcp, text="Third", at="2026-10-12T09:00:00Z")
+
+    assert error_text(result) == (
+        "You have 2 Scheduled posts in October 2026, the most for one month. "
+        "The cap resets on November 1, 2026."
+    )

@@ -33,6 +33,9 @@ from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
+CONNECT_X_FIRST = "Connect your X account first."
+RECONNECT_X_FIRST = "X no longer accepts Pumpkit's access to your account. Reconnect X first."
+
 
 def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:
     return CommunityResponse(
@@ -106,12 +109,12 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     if connection is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Connect your X account first.",
+            detail=CONNECT_X_FIRST,
         )
     if connection.needs_reconnect:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="X no longer accepts Pumpkit's access to your account. Reconnect X first.",
+            detail=RECONNECT_X_FIRST,
         )
     return connection
 

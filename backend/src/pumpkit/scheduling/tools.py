@@ -1,6 +1,7 @@
 """The MCP tools for Scheduled posts, over the same mediator as the router."""
 
-from typing import Optional
+from contextlib import contextmanager
+from typing import Iterator, Optional
 
 from fastapi import HTTPException, status
 
@@ -26,6 +27,19 @@ def _answer(scheduled_post: ScheduledPostResponse) -> ScheduledPostAnswer:
     return ScheduledPostAnswer(
         **scheduled_post.model_dump(), scheduled_page_url=scheduled_page_url()
     )
+
+
+@contextmanager
+def _x_connection_links_to_scheduled_page() -> Iterator[None]:
+    """Adds the Scheduled page link to the X connection refusals: connecting X needs a browser."""
+    try:
+        yield
+    except HTTPException as refusal:
+        if refusal.detail not in (mediator.CONNECT_X_FIRST, mediator.RECONNECT_X_FIRST):
+            raise
+        raise HTTPException(
+            status_code=refusal.status_code, detail=f"{refusal.detail} {scheduled_page_url()}"
+        ) from None
 
 
 async def _post_text(call: ToolCall[User], text: Optional[str], version_id: Optional[str]) -> str:
@@ -60,16 +74,17 @@ async def schedule_post(
         }
     )
     publisher = await call.provide(get_x_publisher)
-    scheduled_post = await mediator.create_scheduled_post(
-        db=call.db,
-        publisher=publisher,
-        user=call.user,
-        text=create_request.text,
-        publish_at=create_request.publish_at,
-        publish_now=False,
-        now=call.now,
-        source_version_id=create_request.source_version_id,
-    )
+    with _x_connection_links_to_scheduled_page():
+        scheduled_post = await mediator.create_scheduled_post(
+            db=call.db,
+            publisher=publisher,
+            user=call.user,
+            text=create_request.text,
+            publish_at=create_request.publish_at,
+            publish_now=False,
+            now=call.now,
+            source_version_id=create_request.source_version_id,
+        )
     return _answer(scheduled_post)
 
 
