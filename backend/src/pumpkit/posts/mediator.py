@@ -9,7 +9,14 @@ from pumpkit.core.errors import RetryLaterError
 from pumpkit.posts import service
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
-from pumpkit.posts.schemas import PostResponse, TellResponse, VersionResponse
+from pumpkit.core.time import as_utc
+from pumpkit.posts.schemas import (
+    PostResponse,
+    PostsPageResponse,
+    PostSummaryResponse,
+    TellResponse,
+    VersionResponse,
+)
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
 from pumpkit.posts.writing.versions import EarlierVersion, write_first_version, write_next_version
 
@@ -90,6 +97,24 @@ async def _user_post(db: AsyncSession, *, user: User, post_id: str) -> Post:
 
 def _versions(post: Post) -> list[VersionAttempt]:
     return [attempt for attempt in post.attempts if attempt.status == ATTEMPT_SUCCEEDED]
+
+
+async def list_posts(db: AsyncSession, user: User, limit: int, offset: int) -> PostsPageResponse:
+    """A page of the User's Posts, newest first."""
+    # One past the page tells whether another page follows.
+    posts = await service.list_user_posts(db, user_id=user.id, limit=limit + 1, offset=offset)
+    return PostsPageResponse(
+        data=[
+            PostSummaryResponse(
+                id=post.id,
+                brief=post.brief,
+                created_at=as_utc(post.created_at),
+                version_count=len(_versions(post)),
+            )
+            for post in posts[:limit]
+        ],
+        next_offset=offset + limit if len(posts) > limit else None,
+    )
 
 
 async def get_post(db: AsyncSession, user: User, post_id: str) -> PostResponse:

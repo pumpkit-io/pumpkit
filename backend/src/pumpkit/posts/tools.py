@@ -7,6 +7,8 @@ from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import (
     FeedbackRequest,
     PostResponse,
+    PostsPageRequest,
+    PostsPageResponse,
     PostStartRequest,
     PostToolResponse,
     VersionToolResponse,
@@ -50,6 +52,18 @@ async def give_feedback(call: ToolCall[User], post_id: str, feedback: str) -> Ve
     return VersionToolResponse.model_validate(version.model_dump())
 
 
+async def list_posts(call: ToolCall[User], limit: int = 20, offset: int = 0) -> PostsPageResponse:
+    """
+    List the User's Posts, newest first, each with its Brief and how many Versions it has, so
+    the User can pick up a Post from an earlier session. Pages hold up to 50; pass the answer's
+    `next_offset` as `offset` for the next page.
+    """
+    page = PostsPageRequest(limit=limit, offset=offset)
+    return await mediator.list_posts(
+        db=call.db, user=call.user, limit=page.limit, offset=page.offset
+    )
+
+
 async def get_post(call: ToolCall[User], post_id: str) -> PostToolResponse:
     """
     Read one of the User's Posts: its Brief and every Version in order, each with the Feedback
@@ -62,5 +76,6 @@ TOOLS = [
     # The rates of `POST /posts` and `POST /posts/{post_id}/versions`.
     McpTool(start_post, rate="20/minute", annotations=ADDITIVE),
     McpTool(give_feedback, rate="20/minute", annotations=ADDITIVE),
+    McpTool(list_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     McpTool(get_post, rate=READ_ONLY_RATE, annotations=READ_ONLY),
 ]
