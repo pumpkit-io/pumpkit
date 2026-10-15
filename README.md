@@ -94,6 +94,10 @@ Before you invite anyone else, configure SMTP so Magic links arrive by email ([S
 
 [docs/self-hosting.md](./docs/self-hosting.md#providers) says where to get each key, links each pricing page, and lists the callback URLs to register. [docs/configuration.md](./docs/configuration.md) describes every setting.
 
+## Use Pumpkit from Claude Code
+
+Every Instance serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in your account dialog, run the `claude mcp add` command it shows, and Claude Code can manage your Inspiration authors for you. See [docs/claude-code.md](./docs/claude-code.md) for the steps and the tools.
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development setup. Security issues: [SECURITY.md](./SECURITY.md).
