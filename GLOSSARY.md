@@ -44,6 +44,10 @@ _Avoid_: auth session, token family, login
 A User who may not sign in or keep any Session until the suspension ends; a permanent suspension has no practical end.
 _Avoid_: banned, inactive, deactivated
 
+**API key**:
+A secret a User creates so a program, such as Claude Code, can use Pumpkit on their behalf. It is never a Sign-in method and never opens a Session. A User may hold several, each with a name, and can revoke any of them at any time.
+_Avoid_: token, access token, personal access token, credential
+
 ### Billing
 
 **Plan**:

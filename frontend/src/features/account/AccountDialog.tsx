@@ -15,6 +15,7 @@ import { AvatarEditor } from './AvatarEditor';
 import { track } from '@/lib/analytics';
 import { identifyUser } from '@/lib/analyticsConsent';
 import { useInstance } from '@/features/instance/useInstance';
+import { ApiKeysSection } from '@/features/apiKeys/ApiKeysSection';
 
 interface FormState {
   firstName: string;
@@ -131,7 +132,8 @@ export function AccountDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(next) => (next ? null : close())}>
-      <DialogContent className="max-w-[560px]">
+      {/* The middle row scrolls, so a long list of API keys never pushes Save off the screen. */}
+      <DialogContent className="max-w-[560px] grid-rows-[auto_minmax(0,1fr)_auto]">
         <DialogHeader>
           <DialogTitle className="font-sans text-base font-semibold tracking-tight">
             Account
@@ -141,7 +143,7 @@ export function AccountDialog() {
           </p>
         </DialogHeader>
 
-        <div className="space-y-5 px-6 pb-4">
+        <div className="space-y-5 overflow-y-auto px-6 pb-4">
           <div className="flex items-center gap-5">
             <AvatarEditor
               value={form.avatarUrl}
@@ -203,6 +205,10 @@ export function AccountDialog() {
               </span>
             </div>
           </label>
+
+          <div className="border-t border-border pt-5">
+            <ApiKeysSection />
+          </div>
         </div>
 
         <DialogFooter>

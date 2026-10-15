@@ -1,0 +1,15 @@
+# Programs reach Pumpkit through a remote MCP server in the backend, authenticated by API keys
+
+Users can drive Pumpkit from Claude Code and other MCP clients: start Posts, give Feedback, manage Inspiration authors, schedule posts and Post now. The backend serves an MCP endpoint over Streamable HTTP, and its tools call the same mediators the routers call. Because the endpoint ships inside the backend, every Self-hoster's Instance has it with nothing extra to install or release. A program authenticates with an API key that the User creates in Pumpkit and pastes into the client's config. An API key is not a Sign-in method and opens no Session, so ADR 0002 still holds: people sign in only with Google or a Magic link, and an API key only lets a program act for a User who already has an account. API key access follows the web app's access rule, with no separate Plan (ADR 0003): on an Instance that sells Plans, only Subscribed Users can create API keys and use the tools, and on an Instance that sells none, every User can (ADR 0011). Tools that need a browser, such as connecting X or managing the Subscription, answer with a link to the web app instead.
+
+## Considered Options
+
+- **A local stdio MCP server published as an npm or PyPI package over a public REST API.** It would be one more artifact to version and release, and every User would have to install it and point it at the right Instance.
+- **A Claude Code skill or plugin that calls the REST API with curl.** It works only in Claude Code and leaves the agent to rebuild each HTTP call. A plugin can still bundle this MCP server's config later as a convenience.
+- **MCP OAuth 2.1 instead of API keys.** It gives a better first-run experience and is required for claude.ai web connectors, but it makes Pumpkit an OAuth authorization server, with client registration, PKCE and a consent page. That is a lot of security-sensitive code to own before anyone uses the integration. OAuth can be added later as a second way to grant the same access, with no change to the tools.
+
+## Consequences
+
+- API keys belong to the `auth` area, next to Sessions (ADR 0008). Pumpkit stores only a SHA-256 hash of each key, and the existing bearer dependency keeps accepting only access tokens, so a key sent to a web route gets a 401.
+- Every API key has full access in v1. The risky tools (Post now, deleting a Scheduled post, removing an Inspiration author) are marked destructive in their MCP annotations so clients ask before calling them. Per-key permissions can come later, with existing keys treated as full access.
+- MCP calls send no product events, because ADR 0009 ties analytics to Analytics consent given in a browser, and an MCP client never gives it. Error reports still go to PostHog, as they do for the web routes.

@@ -153,3 +153,27 @@ class MagicLink(Base):
     user: Mapped[Optional["User"]] = relationship()
 
     __table_args__ = (CheckConstraint("expires_at > sent_at", name="expires_at_gt_sent_at"),)
+
+
+class ApiKey(Base):
+    """
+    An API key a User created for a program such as Claude Code (ADR 0012). Only the
+    secret's SHA-256 hash is stored; revoking sets `revoked_at` and keeps the row.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("api_key")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+    name: Mapped[str] = mapped_column(String)
+    key_hash: Mapped[str] = mapped_column(String, unique=True)
+    # The start of the secret, too short to use, so a User can tell their keys apart.
+    prefix: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship()
