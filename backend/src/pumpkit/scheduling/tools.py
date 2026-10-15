@@ -2,6 +2,8 @@
 
 from typing import Optional
 
+from fastapi import HTTPException, status
+
 from pumpkit.auth.models import User
 from pumpkit.core.config import settings
 from pumpkit.core.mcp_tools import ADDITIVE, READ_ONLY, READ_ONLY_RATE, McpTool, ToolCall
@@ -26,13 +28,36 @@ def _answer(scheduled_post: ScheduledPostResponse) -> ScheduledPostAnswer:
     )
 
 
-async def schedule_post(call: ToolCall[User], text: str, publish_at: str) -> ScheduledPostAnswer:
+async def _post_text(call: ToolCall[User], text: Optional[str], version_id: Optional[str]) -> str:
+    """The text a Scheduled post publishes: typed, or a Version's Final copied."""
+    if (text is None) == (version_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Give either the text or a Version id, not both.",
+        )
+    if version_id is not None:
+        return await mediator.version_final(db=call.db, user=call.user, version_id=version_id)
+    assert text is not None
+    return text
+
+
+async def schedule_post(
+    call: ToolCall[User],
+    publish_at: str,
+    text: Optional[str] = None,
+    version_id: Optional[str] = None,
+) -> ScheduledPostAnswer:
     """
     Schedule a post on the User's connected X account for `publish_at`, an ISO 8601 time with
-    its UTC offset, on a whole minute and at least a minute from now.
+    its UTC offset, on a whole minute and at least a minute from now. Give the text, or the id
+    of a Version to publish its Final.
     """
     create_request = ScheduledPostCreateRequest.model_validate(
-        {"text": text, "publish_at": publish_at}
+        {
+            "text": await _post_text(call, text, version_id),
+            "publish_at": publish_at,
+            "source_version_id": version_id,
+        }
     )
     publisher = await call.provide(get_x_publisher)
     scheduled_post = await mediator.create_scheduled_post(
@@ -43,6 +68,7 @@ async def schedule_post(call: ToolCall[User], text: str, publish_at: str) -> Sch
         publish_at=create_request.publish_at,
         publish_now=False,
         now=call.now,
+        source_version_id=create_request.source_version_id,
     )
     return _answer(scheduled_post)
 

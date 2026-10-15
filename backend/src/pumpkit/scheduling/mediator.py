@@ -179,11 +179,17 @@ async def create_scheduled_post(
     return scheduled_post_response(scheduled_post)
 
 
-async def _check_source_version(db: AsyncSession, *, user_id: str, version_id: str) -> None:
-    """A 404 unless the source Version is one of the User's."""
+async def _check_source_version(db: AsyncSession, *, user_id: str, version_id: str) -> str:
+    """The source Version's Final, or a 404 unless the Version is one of the User's."""
     version = await posts_service.get_user_version(db, user_id=user_id, version_id=version_id)
-    if version is None:
+    if version is None or version.final is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found.")
+    return version.final
+
+
+async def version_final(db: AsyncSession, user: User, version_id: str) -> str:
+    """The Final of one of the User's Versions, which a Scheduled post copies as its text."""
+    return await _check_source_version(db, user_id=user.id, version_id=version_id)
 
 
 async def _post_now(
