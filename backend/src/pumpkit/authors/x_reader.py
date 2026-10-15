@@ -22,7 +22,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError, NotConfiguredError
 
 TWITTERAPI_IO_LAST_TWEETS_URL = "https://api.twitterapi.io/twitter/user/last_tweets"
-# 20 credits a call, and slow by its own docs.
+# twitterapi.io docs say this is slow.
 TWITTERAPI_IO_COMMUNITY_INFO_URL = "https://api.twitterapi.io/twitter/community/info"
 _TIMEOUT_SECONDS = 30.0
 
