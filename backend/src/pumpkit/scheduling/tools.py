@@ -16,11 +16,13 @@ from pumpkit.core.mcp_tools import (
     McpTool,
     ToolCall,
 )
+from pumpkit.core.schemas import LinkResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
     CommunityLookupRequest,
+    PastCommunitiesResponse,
     ScheduledPageMessage,
     ScheduledPostAnswer,
     ScheduledPostCreateRequest,
@@ -133,6 +135,14 @@ async def list_scheduled_posts(
     return ScheduledPostsListAnswer(data=listed.data, scheduled_page_url=scheduled_page_url())
 
 
+async def list_past_communities(call: ToolCall[User]) -> PastCommunitiesResponse:
+    """
+    List the Communities the User posted to before from the connected X account, most recently
+    used first, to offer them for a Scheduled post.
+    """
+    return await mediator.list_past_communities(db=call.db, user=call.user)
+
+
 async def edit_scheduled_post(
     call: ToolCall[User],
     scheduled_post_id: str,
@@ -195,6 +205,18 @@ async def delete_scheduled_post(
     )
 
 
+async def connect_x(call: ToolCall[User]) -> LinkResponse:
+    """
+    Where the User connects, reconnects or disconnects their X account: the Scheduled page of
+    the Pumpkit web app, since X asks them to sign in and approve in a browser.
+    """
+    url = scheduled_page_url()
+    return LinkResponse(
+        message=f"Connect, reconnect or disconnect your X account on the Scheduled page: {url}",
+        url=url,
+    )
+
+
 TOOLS = [
     # The rate of `POST /scheduled-posts`.
     McpTool(schedule_post, rate="10/minute", annotations=ADDITIVE),
@@ -202,4 +224,6 @@ TOOLS = [
     # The web edit and delete routes have no limit; these take the create route's.
     McpTool(edit_scheduled_post, rate="10/minute", annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate="10/minute", annotations=DESTRUCTIVE),
+    McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
 ]

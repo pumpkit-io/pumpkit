@@ -405,3 +405,62 @@ async def test_deleting_a_failed_scheduled_post_takes_it_off_the_list(failed, mc
 
     assert result["isError"] is False, result
     assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
+
+
+async def test_past_communities_are_the_ones_the_user_posted_to_before(
+    connected, known_community, mcp, fixed_clock
+):
+    assert (await mcp.call_tool("list_past_communities"))["structuredContent"] == {"data": []}
+    await mcp.call_tool(
+        "schedule_post", text="Hi.", publish_at="2026-10-10T14:00:00Z", community=COMMUNITY_ID
+    )
+
+    result = await mcp.call_tool("list_past_communities")
+
+    assert result["structuredContent"] == {"data": [COMMUNITY]}
+
+
+async def test_tools_list_shows_deleting_a_scheduled_post_as_destructive(subscribed, mcp):
+    tools = await mcp.list_tools()
+
+    assert tools["delete_scheduled_post"]["annotations"]["destructiveHint"] is True
+    for name in ("schedule_post", "edit_scheduled_post"):
+        assert tools[name]["annotations"] == {"readOnlyHint": False, "destructiveHint": False}
+    for name in ("list_scheduled_posts", "list_past_communities", "connect_x"):
+        assert tools[name]["annotations"]["readOnlyHint"] is True
+
+
+async def test_connect_x_links_to_the_scheduled_page(subscribed, mcp):
+    result = await mcp.call_tool("connect_x")
+
+    assert result["isError"] is False, result
+    assert result["structuredContent"]["url"] == SCHEDULED_PAGE
+    assert SCHEDULED_PAGE in result["structuredContent"]["message"]
+
+
+@pytest.mark.parametrize("name", ["schedule_post", "edit_scheduled_post", "delete_scheduled_post"])
+async def test_the_write_tools_allow_10_calls_a_minute(connected, mcp, fixed_clock, name):
+    arguments = {
+        "schedule_post": {"text": "Hi.", "publish_at": "2026-10-10T14:00:00Z"},
+        "edit_scheduled_post": {"scheduled_post_id": "scheduled_post_missing", "text": "Hi."},
+        "delete_scheduled_post": {"scheduled_post_id": "scheduled_post_missing"},
+    }[name]
+    for _ in range(10):
+        assert "retry_at" not in (
+            (await mcp.call_tool(name, **arguments)).get("structuredContent") or {}
+        )
+
+    result = await mcp.call_tool(name, **arguments)
+
+    assert error_text(result).startswith(f"You've called {name} too often.")
+    assert result["structuredContent"]["retry_at"].endswith("Z")
+
+
+@pytest.mark.parametrize("name", ["list_scheduled_posts", "list_past_communities", "connect_x"])
+async def test_the_read_only_and_link_tools_allow_60_calls_a_minute(subscribed, mcp, name):
+    for _ in range(60):
+        assert (await mcp.call_tool(name))["isError"] is False
+
+    result = await mcp.call_tool(name)
+
+    assert "retry_at" in result["structuredContent"]
