@@ -1,5 +1,6 @@
 """The Post MCP tools, writing with the faked LLM and refusing what the web routes refuse."""
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -7,7 +8,7 @@ import pytest
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.llm import LLMError
-from pumpkit.posts.models import Post
+from pumpkit.posts.models import Post, VersionAttempt
 from tests.mcp_client import error_text
 
 
@@ -22,6 +23,17 @@ async def with_author(subscribed, mcp, fake_x_reader):
         )
     ]
     assert (await mcp.call_tool("add_inspiration_author", handle="levelsio"))["isError"] is False
+
+
+async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscribed, mcp):
+    tools = await mcp.list_tools()
+
+    for name in WRITING_TOOLS:
+        assert tools[name]["annotations"] == {"readOnlyHint": False, "destructiveHint": False}
+    for name in ("list_posts", "get_post"):
+        assert tools[name]["annotations"]["readOnlyHint"] is True
+    assert tools["give_feedback"]["inputSchema"]["required"] == ["post_id", "feedback"]
+    assert "draft" not in json.dumps(tools["get_post"]["outputSchema"])
 
 
 async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
@@ -172,3 +184,78 @@ async def test_a_page_outside_the_bounds_is_refused(subscribed, mcp, arguments, 
     result = await mcp.call_tool("list_posts", **arguments)
 
     assert error_text(result) == detail
+
+
+def _writing_call(tool: str, post_id: str) -> dict[str, str]:
+    """The arguments of a call to the writing `tool`, on `post_id` when it takes one."""
+    if tool == "start_post":
+        return {"brief": "ship"}
+    return {"post_id": post_id, "feedback": "shorter"}
+
+
+WRITING_TOOLS = ["start_post", "give_feedback"]
+
+
+@pytest.mark.parametrize("tool", WRITING_TOOLS)
+async def test_a_model_failure_is_a_reported_tool_error(post_id, mcp, fake_llm, fake_posthog, tool):
+    fake_llm.replies = [LLMError("provider down")]
+
+    result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
+
+    assert error_text(result) == "Writing the Post failed. Please try again."
+    error_id = result["structuredContent"]["error_id"]
+    assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
+
+
+@pytest.mark.parametrize("tool", WRITING_TOOLS)
+async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_limit(
+    post_id, client, db, user, mcp, fake_llm, fixed_clock, tool
+):
+    # With the fixture's first Version, 29 attempts; the web route makes the 30th.
+    earlier = Post(user_id=user.id, brief="earlier", corpus_post_ids=[], created_at=fixed_clock())
+    db.add(earlier)
+    await db.flush()
+    for sequence in range(1, 29):
+        db.add(
+            VersionAttempt(
+                post_id=earlier.id,
+                sequence=sequence,
+                status="failed",
+                error="LLMError: down",
+                created_at=fixed_clock(),
+            )
+        )
+    await db.commit()
+    fixed_clock.advance(timedelta(minutes=10))
+    fake_llm.replies = [{"post": "draft"}, {"post": "final"}]
+    assert (await client.post("/api/v1/posts", json={"brief": "ship"})).status_code == 201
+    fake_llm.calls.clear()
+
+    result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
+
+    assert error_text(result) == "You've made 30 attempts at a Version in the last hour."
+    assert result["structuredContent"] == {"retry_at": "2026-10-10T13:00:30Z"}
+    assert fake_llm.calls == []
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "per_minute"),
+    [
+        ("start_post", {"brief": "ship"}, 20),
+        ("give_feedback", {"post_id": "post_missing", "feedback": "shorter"}, 20),
+        ("list_posts", {}, 60),
+        ("get_post", {"post_id": "post_missing"}, 60),
+    ],
+)
+async def test_each_tool_has_its_per_user_limit_a_minute(
+    subscribed, client, mcp, tool, arguments, per_minute
+):
+    for _ in range(per_minute):
+        await mcp.call_tool(tool, **arguments)
+
+    result = await mcp.call_tool(tool, **arguments)
+
+    assert error_text(result).startswith(f"You've called {tool} too often.")
+    assert "retry_at" in result["structuredContent"]
+    # Counted per User, so the web route from the same address still answers.
+    assert (await client.post("/api/v1/posts/post_missing/versions", json={"feedback": "x"})).status_code == 404
