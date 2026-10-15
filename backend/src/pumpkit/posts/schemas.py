@@ -56,3 +56,19 @@ class PostResponse(BaseModel):
     id: str
     brief: str
     versions: list[VersionResponse]
+
+
+class VersionToolResponse(BaseModel):
+    """A Version as the MCP tools answer with it: no Draft, which only the web app shows."""
+
+    id: str
+    number: int
+    feedback: Optional[str]
+    final: str
+    final_char_count: int
+
+
+class PostToolResponse(BaseModel):
+    id: str
+    brief: str
+    versions: list[VersionToolResponse]
