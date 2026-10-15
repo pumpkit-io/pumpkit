@@ -96,7 +96,7 @@ Before you invite anyone else, configure SMTP so Magic links arrive by email ([S
 
 ## Use Pumpkit from Claude Code
 
-Every Instance serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in your account dialog, run the `claude mcp add` command it shows, and Claude Code can manage your Inspiration authors for you. See [docs/claude-code.md](./docs/claude-code.md) for the steps and the tools.
+Every Instance serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in your account dialog, run the `claude mcp add` command it shows, and Claude Code can write Posts from a Brief, revise them with your Feedback, manage your Inspiration authors, schedule posts and Post now for you. See [docs/claude-code.md](./docs/claude-code.md) for the steps and the tools.
 
 ## Contributing
 

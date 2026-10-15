@@ -194,9 +194,7 @@ containers = [
     "pumpkit.posts",
     "pumpkit.scheduling",
 ]
-# An area's MCP tools sit beside its router, over the same mediator. Scheduling's publisher
-# process sits beside the mediator: both hand a publish to publishing, which commits it over
-# publish's flush-only steps.
+# MCP tools sit beside the router; scheduling's publisher sits beside the mediator.
 layers = [
     "router | (tools)",
     "(mediator) | (publisher)",
