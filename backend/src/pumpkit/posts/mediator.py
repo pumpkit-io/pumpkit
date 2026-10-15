@@ -81,6 +81,25 @@ def version_response(attempt: VersionAttempt) -> VersionResponse:
     )
 
 
+async def _user_post(db: AsyncSession, *, user: User, post_id: str) -> Post:
+    post = await service.get_user_post(db, user_id=user.id, post_id=post_id)
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
+    return post
+
+
+def _versions(post: Post) -> list[VersionAttempt]:
+    return [attempt for attempt in post.attempts if attempt.status == ATTEMPT_SUCCEEDED]
+
+
+async def get_post(db: AsyncSession, user: User, post_id: str) -> PostResponse:
+    """The User's Post with every Version, in order."""
+    post = await _user_post(db, user=user, post_id=post_id)
+    return PostResponse(
+        id=post.id, brief=post.brief, versions=[version_response(v) for v in _versions(post)]
+    )
+
+
 async def start_post(
     db: AsyncSession, llm: LLM, user: User, brief: str, now: datetime
 ) -> PostResponse:
@@ -123,10 +142,8 @@ async def add_version(
     Write the next Version of the User's Post from Feedback, with the corpus the Post started
     with. Stored after the calls like `start_post`, and a failure likewise.
     """
-    post = await service.get_user_post(db, user_id=user.id, post_id=post_id)
-    if post is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
-    versions = [attempt for attempt in post.attempts if attempt.status == ATTEMPT_SUCCEEDED]
+    post = await _user_post(db, user=user, post_id=post_id)
+    versions = _versions(post)
     if not versions:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

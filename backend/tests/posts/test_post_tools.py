@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.posts.llm import LLMError
 
 
 @pytest.fixture
@@ -68,3 +69,24 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "final": "shorter final",
         "final_char_count": 13,
     }
+
+
+async def test_reading_a_post_returns_every_version_but_not_failed_attempts(
+    post_id, mcp, fake_llm
+):
+    fake_llm.replies = [LLMError("provider down")]
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
+    fake_llm.replies = [{"post": "draft 2"}, {"post": "final two"}]
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="warmer")
+
+    result = await mcp.call_tool("get_post", post_id=post_id)
+
+    assert result["isError"] is False
+    post = result["structuredContent"]
+    assert post["id"] == post_id
+    assert post["brief"] == "ship small things"
+    assert [
+        (version["number"], version["feedback"], version["final"], version["final_char_count"])
+        for version in post["versions"]
+    ] == [(1, None, "final 1", 7), (2, "warmer", "final two", 9)]
+    assert "draft" not in post["versions"][0]
