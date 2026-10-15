@@ -4,7 +4,9 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.routing import Route
 
+import pumpkit.mcp_server as mcp_server
 import pumpkit.scheduling.router as scheduling_router
 from pumpkit.auth.mailer import announce_magic_link_delivery
 from pumpkit.auth.router import api_key_creation_router
@@ -56,6 +58,9 @@ app.include_router(scheduling_router.x_connection_router, prefix="/api/v1")
 app.include_router(x_connection_router, prefix="/api/v1")
 app.include_router(scheduling_router.x_authorization_router, prefix="/api/v1")
 app.include_router(scheduling_router.router, prefix="/api/v1")
+# A Route, not a Mount, so the URL has no trailing slash. POST only: a stateless server has
+# no stream for GET to open, and the request would hang.
+app.router.routes.append(Route("/api/v1/mcp", endpoint=mcp_server.endpoint, methods=["POST"]))
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]

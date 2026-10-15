@@ -91,8 +91,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 
-# ADR 0008's import rules. pumpkit.main and pumpkit.models wire every area together, so they
-# sit outside the layers.
+# ADR 0008's import rules. pumpkit.main, pumpkit.models and pumpkit.mcp_server wire every area
+# together, so they sit outside the layers.
 [tool.importlinter]
 root_packages = ["pumpkit"]
 
@@ -123,10 +123,11 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Only auth and pumpkit.main import auth.router or auth.mediator"
+name = "Only auth, pumpkit.main and pumpkit.mcp_server import auth.router or auth.mediator"
 type = "protected"
 protected_modules = ["pumpkit.auth.router", "pumpkit.auth.mediator"]
-allowed_importers = ["pumpkit.auth", "pumpkit.main"]
+# The MCP server authenticates API keys through auth's mediator, as a router would.
+allowed_importers = ["pumpkit.auth", "pumpkit.main", "pumpkit.mcp_server"]
 
 [[tool.importlinter.contracts]]
 name = "Only billing and pumpkit.main import billing.router or billing.mediator"
@@ -165,6 +166,18 @@ protected_modules = ["pumpkit.scheduling.router", "pumpkit.scheduling.mediator"]
 allowed_importers = ["pumpkit.scheduling", "pumpkit.main"]
 
 [[tool.importlinter.contracts]]
+name = "Only pumpkit.mcp_server imports a tools module"
+type = "protected"
+protected_modules = ["pumpkit.authors.tools", "pumpkit.posts.tools", "pumpkit.scheduling.tools"]
+allowed_importers = ["pumpkit.mcp_server"]
+
+[[tool.importlinter.contracts]]
+name = "Only pumpkit.main imports pumpkit.mcp_server"
+type = "protected"
+protected_modules = ["pumpkit.mcp_server"]
+allowed_importers = ["pumpkit.main"]
+
+[[tool.importlinter.contracts]]
 name = "Router, then mediator, then service inside each area"
 type = "layers"
 containers = [
@@ -176,10 +189,11 @@ containers = [
     "pumpkit.posts",
     "pumpkit.scheduling",
 ]
-# Scheduling's publisher process sits beside the mediator: both hand a publish to publishing,
-# which commits it over publish's flush-only steps.
+# An area's MCP tools sit beside its router, over the same mediator. Scheduling's publisher
+# process sits beside the mediator: both hand a publish to publishing, which commits it over
+# publish's flush-only steps.
 layers = [
-    "router",
+    "router | (tools)",
     "(mediator) | (publisher)",
     "(publishing)",
     "(publish)",
