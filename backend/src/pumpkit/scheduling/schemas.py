@@ -7,6 +7,9 @@ from pumpkit.scheduling.models import ScheduledPostState
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
+# Far past any Community name X allows; the name is only a label the User sees.
+COMMUNITY_NAME_MAX_CHARS = 200
+COMMUNITY_PASTE_MAX_CHARS = 2_000
 
 
 def _strip_text(value: Optional[str]) -> Optional[str]:
@@ -18,6 +21,35 @@ def _strip_text(value: Optional[str]) -> Optional[str]:
     return stripped
 
 
+class CommunityRequest(BaseModel):
+    """A Community as the client named it: the server checks the ID and trusts the name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: Optional[str] = Field(None, max_length=COMMUNITY_NAME_MAX_CHARS)
+
+
+class CommunityLookupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # A Community URL or bare ID as the User pasted it.
+    pasted: str = Field(..., max_length=COMMUNITY_PASTE_MAX_CHARS)
+
+
+class CommunityResponse(BaseModel):
+    id: str
+    # None when it couldn't be looked up: show the ID instead.
+    name: Optional[str]
+    url: str
+
+
+class PastCommunitiesResponse(BaseModel):
+    """The Communities the User posted to before on the connected X account, most recent first."""
+
+    data: list[CommunityResponse]
+
+
 class ScheduledPostCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -27,6 +59,10 @@ class ScheduledPostCreateRequest(BaseModel):
     publish_now: bool = False
     # The Version whose Final the text copies; None for a typed post.
     source_version_id: Optional[str] = None
+    # The Community it goes to; None for the User's profile.
+    community: Optional[CommunityRequest] = None
+    # With a Community, whether X also shares it with the account's followers; ignored without.
+    share_with_followers: bool = False
 
     _strip = field_validator("text")(_strip_text)
 
@@ -49,6 +85,9 @@ class ScheduledPostResponse(BaseModel):
     failed_reason: Optional[str]
     # The Version whose Final it copied; None when typed or when that Version is gone.
     source_version_id: Optional[str]
+    # The Community it goes to; None for the User's profile.
+    community: Optional[CommunityResponse]
+    share_with_followers: bool
     created_at: datetime
 
 
@@ -62,13 +101,24 @@ class ScheduledPostUpdateRequest(BaseModel):
     text: Optional[str] = Field(None, max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
+    # A new Community; an explicit null moves the Scheduled post back to the User's profile.
+    community: Optional[CommunityRequest] = None
+    # Ignored when the Scheduled post ends up on the profile.
+    share_with_followers: Optional[bool] = None
 
     _strip = field_validator("text")(_strip_text)
 
+    @property
+    def changes_community(self) -> bool:
+        return "community" in self.model_fields_set
+
     @model_validator(mode="after")
     def _something_to_change(self) -> "ScheduledPostUpdateRequest":
-        if self.text is None and self.publish_at is None:
-            raise ValueError("Give a new text, a new publish time, or both.")
+        unchanged = self.text is None and self.publish_at is None
+        if unchanged and self.share_with_followers is None and not self.changes_community:
+            raise ValueError(
+                "Change the text, the publish time, the Community or sharing with followers."
+            )
         return self
 
 

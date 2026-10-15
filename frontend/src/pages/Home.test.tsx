@@ -45,9 +45,11 @@ vi.mock('@/services/xConnectionService', () => ({
 }));
 vi.mock('@/services/scheduledPostService', () => ({
   scheduledPostService: {
+    pastCommunities: vi.fn().mockResolvedValue([]),
     list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),
+    lookUpCommunity: vi.fn(),
   },
 }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
@@ -437,6 +439,8 @@ describe('Home', () => {
       publishedAt: null,
       xPostUrl: null,
       failedReason: null,
+      community: null,
+      shareWithFollowers: false,
       createdAt: '2026-10-10T12:00:00Z',
     };
 
@@ -482,10 +486,12 @@ describe('Home', () => {
         'the final text',
         '2026-10-12T07:00:00.000Z',
         'version_attempt_01',
+        { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
         source: 'final',
         post_now: false,
+        destination: 'profile',
       });
       expect(dialog.getByRole('link', { name: 'See Scheduled posts' })).toHaveAttribute(
         'href',
@@ -538,10 +544,12 @@ describe('Home', () => {
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
         'the final text',
         'version_attempt_01',
+        { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
         source: 'final',
         post_now: true,
+        destination: 'profile',
       });
     });
 
@@ -632,6 +640,139 @@ describe('Home', () => {
       const dialog = within(await screen.findByRole('dialog'));
       expect(dialog.getByText('Reconnect X to post this Final.')).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Reconnect X' })).toBeInTheDocument();
+    });
+
+    describe('into a Community', () => {
+      const COMMUNITY_ID = '1493446837214187523';
+      const COMMUNITY_URL = `https://x.com/i/communities/${COMMUNITY_ID}`;
+
+      beforeEach(() => {
+        // As when the Instance has no twitterapi.io: the Community comes back without a name.
+        vi.mocked(scheduledPostService.lookUpCommunity)
+          .mockReset()
+          .mockImplementation(async (id) => ({
+            id,
+            name: null,
+            url: `https://x.com/i/communities/${id}`,
+          }));
+      });
+
+      it('offers My profile first, and the followers checkbox only while a Community is chosen', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+        const final = await finalWritten();
+
+        fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+        expect(dialog.getByLabelText('Post to')).toHaveDisplayValue('My profile');
+        expect(dialog.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
+        expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
+        expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'profile' } });
+        expect(dialog.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
+      });
+
+      it('posts the Final now into a pasted Community, shared with followers by default', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+        vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+          ...SCHEDULED,
+          state: 'published',
+          publishedAt: '2026-10-10T12:00:14Z',
+          xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+          community: { id: COMMUNITY_ID, name: null, url: COMMUNITY_URL },
+          shareWithFollowers: true,
+        });
+        const final = await finalWritten();
+
+        fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
+        fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
+          target: { value: COMMUNITY_URL },
+        });
+        await vi.waitFor(() =>
+          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+        );
+        expect(
+          dialog.getByText(/goes out from @ada into the Community straight away/i),
+        ).toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+        expect(await dialog.findByText('Published on X.')).toBeInTheDocument();
+        expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+          'the final text',
+          'version_attempt_01',
+          { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
+        );
+        expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+          source: 'final',
+          post_now: true,
+          destination: 'community',
+          share_with_followers: true,
+        });
+      });
+
+      it('says a Final goes into a Community picked from the past ones', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+        vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([
+          { id: COMMUNITY_ID, name: 'Indie makers', url: COMMUNITY_URL },
+        ]);
+        const final = await finalWritten();
+
+        fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+        const option = await dialog.findByRole<HTMLOptionElement>('option', {
+          name: 'Indie makers',
+        });
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: option.value } });
+
+        expect(
+          dialog.getByText(/goes out from @ada into the Community straight away/i),
+        ).toBeInTheDocument();
+        vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([]);
+      });
+
+      it('schedules the Final into a Community kept from the followers', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+        vi.mocked(scheduledPostService.schedule).mockResolvedValue({
+          ...SCHEDULED,
+          community: { id: '123', name: null, url: 'https://x.com/i/communities/123' },
+        });
+        const final = await finalWritten();
+
+        fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
+        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
+        fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
+          target: { value: '123' },
+        });
+        await vi.waitFor(() =>
+          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+        );
+        fireEvent.click(dialog.getByLabelText('Also share with followers'));
+        fireEvent.change(dialog.getByLabelText('Date and time'), {
+          target: { value: '2026-10-12T09:00' },
+        });
+        expect(
+          dialog.getByText(/goes out from @ada into the Community at the time you pick/i),
+        ).toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
+
+        expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
+        expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+          'the final text',
+          '2026-10-12T07:00:00.000Z',
+          'version_attempt_01',
+          { community: { id: '123', name: null }, shareWithFollowers: false },
+        );
+        expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+          source: 'final',
+          post_now: false,
+          destination: 'community',
+          share_with_followers: false,
+        });
+      });
     });
 
     it('points a User who is no longer Subscribed to Billing', async () => {

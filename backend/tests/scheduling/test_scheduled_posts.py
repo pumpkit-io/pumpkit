@@ -366,7 +366,7 @@ async def test_published_and_failed_are_tracked_for_analytics(
         "scheduled_post_failed",
     ]
     published, failed = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "typed"}
+    assert published.kwargs["properties"] == {"source": "typed", "destination": "profile"}
     assert failed.kwargs["properties"] == {"reason": "outcome_unknown"}
 
 
@@ -598,7 +598,7 @@ async def test_post_now_on_a_final_publishes_it_and_tracks_it_as_from_a_final(
     assert response.json()["source_version_id"] == final["id"]
     assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
     [published] = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "final"}
+    assert published.kwargs["properties"] == {"source": "final", "destination": "profile"}
 
 
 async def test_a_typed_scheduled_post_has_no_source_version(

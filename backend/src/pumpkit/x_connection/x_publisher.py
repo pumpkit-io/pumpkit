@@ -78,8 +78,9 @@ class XOutcomeUnknownError(XPublisherError):
 class XPostRejectedError(XPublisherError):
     """X refused the post; `message` is X's own words, fit to show the User."""
 
-    def __init__(self, status_code: int, message: str) -> None:
-        super().__init__(f"X refused the post with HTTP {status_code}")
+    def __init__(self, x_status: int, message: str) -> None:
+        super().__init__(f"X refused the post with HTTP {x_status}")
+        self.x_status = x_status
         self.message = message
 
 
@@ -135,8 +136,18 @@ class XPublisher(Protocol):
         """The X account the token acts for; a refused token raises `XReconnectNeededError`."""
         ...
 
-    async def publish(self, *, access_token: str, text: str) -> str:
-        """Publish `text` and return X's post id. Never retried: a retry could post it twice."""
+    async def publish(
+        self,
+        *,
+        access_token: str,
+        text: str,
+        community_id: Optional[str] = None,
+        share_with_followers: bool = False,
+    ) -> str:
+        """
+        Publish `text` on the account's profile, or in the Community `community_id`, and return
+        X's post id. Never retried: a retry could post it twice.
+        """
         ...
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
@@ -218,12 +229,25 @@ class OfficialXPublisher:
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
         await _token_call(X_REVOKE_URL, {"token": token, "token_type_hint": token_type_hint})
 
-    async def publish(self, *, access_token: str, text: str) -> str:
+    async def publish(
+        self,
+        *,
+        access_token: str,
+        text: str,
+        community_id: Optional[str] = None,
+        share_with_followers: bool = False,
+    ) -> str:
+        body: dict[str, Any] = {"text": text}
+        if community_id is not None:
+            body["community_id"] = community_id
+            # Also posts it to the followers' timelines, per X's developer changelog of Jul 28,
+            # 2025; the English API reference wrongly ties it to super-follower posts.
+            body["share_with_followers"] = share_with_followers
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     X_TWEETS_URL,
-                    json={"text": text},
+                    json=body,
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as error:
@@ -336,7 +360,8 @@ class FakeXPublisher:
     X in memory. Every code exchange and refresh issues tokens `access-<id>-<n>` and
     `refresh-<id>-<n>` for `account`, n counting issues, valid for two hours; the authorize
     URL carries its query like X's. Records `exchanges` (code, verifier), `refreshes`
-    (refresh tokens sent), `published` (access token, text) and `revoked` tokens. Set
+    (refresh tokens sent), `published` (access token, text), `published_to` (Community ID or
+    None for the profile, share with followers) of each publish, and `revoked` tokens. Set
     `fail_exchange`, `fail_refresh`, `fail_fetch_account` or `fail_publish` to an error to
     raise it, `fail_revoke` or `not_configured` to raise.
     """
@@ -347,6 +372,7 @@ class FakeXPublisher:
     exchanges: list[tuple[str, str]] = field(default_factory=list)
     refreshes: list[str] = field(default_factory=list)
     published: list[tuple[str, str]] = field(default_factory=list)
+    published_to: list[tuple[Optional[str], bool]] = field(default_factory=list)
     revoked: list[str] = field(default_factory=list)
     fail_exchange: Optional[XPublisherError] = None
     fail_refresh: Optional[XPublisherError] = None
@@ -379,8 +405,16 @@ class FakeXPublisher:
             raise self.fail_fetch_account
         return self.account
 
-    async def publish(self, *, access_token: str, text: str) -> str:
+    async def publish(
+        self,
+        *,
+        access_token: str,
+        text: str,
+        community_id: Optional[str] = None,
+        share_with_followers: bool = False,
+    ) -> str:
         self.published.append((access_token, text))
+        self.published_to.append((community_id, share_with_followers))
         if self.fail_publish is not None:
             raise self.fail_publish
         return str(1_890_000_000_000_000_000 + len(self.published))

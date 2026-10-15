@@ -2,12 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
-import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
+import {
+  scheduledPostService,
+  type Destination,
+  type ScheduledPost,
+  type ScheduledPostChanges,
+} from '@/services/scheduledPostService';
 import {
   useCreateScheduledPost,
   X_BUSY_NOTICE,
   type NewScheduledPost,
 } from './useCreateScheduledPost';
+import { pastCommunitiesChanged } from './usePastCommunities';
 
 /** The User's Scheduled posts, loaded on mount, with Post now, Schedule, edit and cancel. */
 export function useScheduledPosts() {
@@ -47,11 +53,15 @@ export function useScheduledPosts() {
     [create],
   );
 
-  const postNow = useCallback((text: string) => add({ text, postNow: true }), [add]);
+  const postNow = useCallback(
+    (text: string, destination: Destination) => add({ text, postNow: true, destination }),
+    [add],
+  );
 
   /** `publishAt` is an ISO instant on a whole minute. */
   const schedule = useCallback(
-    (text: string, publishAt: string) => add({ text, postNow: false, publishAt }),
+    (text: string, publishAt: string, destination: Destination) =>
+      add({ text, postNow: false, publishAt, destination }),
     [add],
   );
 
@@ -80,10 +90,11 @@ export function useScheduledPosts() {
   );
 
   const edit = useCallback(
-    (id: string, changes: { text?: string; publishAt?: string }) =>
+    (id: string, changes: ScheduledPostChanges) =>
       change(async () => {
         const edited = await scheduledPostService.edit(id, changes);
         setScheduledPosts((current) => current?.map((p) => (p.id === id ? edited : p)));
+        if (changes.community) pastCommunitiesChanged();
       }, "Couldn't save the changes. Please try again."),
     [change],
   );

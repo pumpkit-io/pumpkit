@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal, Optional, get_args
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -50,6 +51,13 @@ class ScheduledPost(Base):
     # The X account it goes out on, from the X connection when it was created or rescheduled.
     x_user_id: Mapped[str] = mapped_column(String)
     text: Mapped[str] = mapped_column(Text)
+    # The Community it goes to, None for the profile, with its name as shown when it was picked.
+    community_id: Mapped[Optional[str]] = mapped_column(String)
+    community_name: Mapped[Optional[str]] = mapped_column(String)
+    # When the Community was last set on it, which orders the Communities offered again.
+    community_set_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # With a Community, whether X also shows it on the profile and in the followers' timelines.
+    share_with_followers: Mapped[bool] = mapped_column(Boolean, default=False)
     # UTC, whole minutes.
     publish_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     state: Mapped[ScheduledPostState] = mapped_column(

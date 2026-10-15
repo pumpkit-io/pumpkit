@@ -6,4 +6,4 @@ Scheduled posts are published with the official X API (`POST /2/tweets`), on beh
 
 - Pumpkit holds a refresh token per X connection, encrypted at rest, and rotates it on every refresh. Only one process may refresh a given X connection at a time, because X invalidates the old refresh token.
 - Pumpkit's X developer app pays for every publish, so each User has a monthly cap on Scheduled posts.
-- Pumpkit now depends on two X providers: twitterapi.io for Inspiration authors and the X API for publishing.
+- Pumpkit now depends on two X providers: twitterapi.io for Inspiration authors and Community lookups, and the X API for publishing.

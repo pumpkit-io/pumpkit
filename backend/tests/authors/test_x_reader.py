@@ -7,7 +7,10 @@ import pytest
 import respx
 
 from pumpkit.authors.x_reader import (
+    TWITTERAPI_IO_COMMUNITY_INFO_URL,
     TWITTERAPI_IO_LAST_TWEETS_URL,
+    CommunityNotFoundError,
+    FetchedCommunity,
     FetchedPost,
     HandleNotFoundError,
     TwitterApiIoReader,
@@ -130,5 +133,74 @@ async def test_without_the_key_it_fails_on_use_without_calling_twitterapi_io(mon
 
     with pytest.raises(XReaderNotConfiguredError, match="TWITTERAPI_IO_API_KEY"):
         await TwitterApiIoReader().fetch_recent_posts("levelsio")
+
+    assert not route.called
+
+
+COMMUNITY_ID = "1493446837214187523"
+
+
+def _community_info() -> dict:
+    return json.loads((FIXTURES / "twitterapi_io_community_info.json").read_text())
+
+
+@respx.mock
+async def test_fetches_a_community_s_name():
+    route = respx.get(TWITTERAPI_IO_COMMUNITY_INFO_URL).mock(
+        return_value=httpx.Response(200, json=_community_info())
+    )
+
+    community = await TwitterApiIoReader().fetch_community(COMMUNITY_ID)
+
+    assert community == FetchedCommunity(id=COMMUNITY_ID, name="Build in Public")
+    request = route.calls.last.request
+    assert request.headers["x-api-key"] == "twitterapi-test-key"
+    assert dict(request.url.params) == {"community_id": COMMUNITY_ID}
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(404, text="Not Found"),
+        httpx.Response(200, json={"status": "error", "msg": "Community not found"}),
+        httpx.Response(400, json={"error": 400, "message": "community does not exist"}),
+        httpx.Response(200, json={"community_info": None, "status": "success", "msg": ""}),
+        httpx.Response(200, json={"community_info": {}, "status": "success", "msg": ""}),
+    ],
+)
+@respx.mock
+async def test_an_unknown_community_is_community_not_found(response):
+    respx.get(TWITTERAPI_IO_COMMUNITY_INFO_URL).mock(return_value=response)
+
+    with pytest.raises(CommunityNotFoundError):
+        await TwitterApiIoReader().fetch_community("1")
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(500, text="Internal Server Error"),
+        httpx.Response(429, json={"status": "error", "msg": "Too many requests"}),
+        httpx.Response(200, json={"status": "error", "msg": "Insufficient credits"}),
+        httpx.Response(200, text="<html>not json</html>"),
+    ],
+)
+@respx.mock
+async def test_any_other_community_lookup_failure_is_a_reader_error(response):
+    respx.get(TWITTERAPI_IO_COMMUNITY_INFO_URL).mock(return_value=response)
+
+    with pytest.raises(XReaderError) as raised:
+        await TwitterApiIoReader().fetch_community(COMMUNITY_ID)
+
+    assert not isinstance(raised.value, CommunityNotFoundError)
+
+
+@respx.mock
+async def test_a_community_lookup_without_the_key_does_not_call_twitterapi_io(monkeypatch):
+    monkeypatch.setattr(settings, "TWITTERAPI_IO_API_KEY", None)
+    route = respx.get(TWITTERAPI_IO_COMMUNITY_INFO_URL)
+
+    with pytest.raises(XReaderNotConfiguredError):
+        await TwitterApiIoReader().fetch_community(COMMUNITY_ID)
 
     assert not route.called

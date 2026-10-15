@@ -15,7 +15,7 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `JWT_SECRET_KEY` | Random string of at least 32 characters used to sign tokens (`openssl rand -hex 32`). |
 | `FERNET_ENCRYPTION_KEY` | 32 url-safe base64-encoded bytes that encrypt stored X tokens (`openssl rand -base64 32 \| tr '+/' '-_'`). Changing it makes the stored tokens unreadable. |
 | `LLM_API_KEY` | Key for the LLM endpoint, which writes every Post. The backend boots without it, but writing a Post then fails with a 503 naming the variable. |
-| `TWITTERAPI_IO_API_KEY` | Reads Inspiration authors' posts from twitterapi.io (ADR 0005). The backend boots without it, but adding an author then fails with a 503 naming the variable. |
+| `TWITTERAPI_IO_API_KEY` | Reads Inspiration authors' posts from twitterapi.io (ADR 0005), and the names of Communities Users paste. The backend boots without it, but adding an author then fails with a 503 naming the variable, and a pasted Community shows its ID instead of its name. |
 
 ## URLs derived from `PUBLIC_URL`
 

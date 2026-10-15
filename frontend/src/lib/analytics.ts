@@ -118,13 +118,18 @@ export const EVENTS = {
   // Scheduled (/scheduled) + the X callback
   x_connected: { description: 'Scheduled: connected an X account through X consent screen.' },
   x_disconnected: { description: 'Scheduled: disconnected the X account.' },
+  community_looked_up: {
+    description:
+      'Scheduled: looked up a Community pasted by its URL or ID. Props: found (boolean), named (boolean, only when found).',
+  },
   scheduled_post_created: {
     description:
-      'Scheduled: created a Scheduled post. Props: source (typed | final), post_now (boolean).',
+      'Scheduled: created a Scheduled post. Props: source (typed | final), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).',
   },
   // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
   scheduled_post_published: {
-    description: 'Scheduled: X published a Scheduled post. Props: source (typed | final).',
+    description:
+      'Scheduled: X published a Scheduled post. Props: source (typed | final), destination (profile | community), share_with_followers (boolean, only for a Community).',
   },
   scheduled_post_failed: {
     description:

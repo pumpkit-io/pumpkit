@@ -327,6 +327,30 @@ async def test_publishing_sends_the_text_with_the_access_token_and_returns_the_p
     assert json.loads(request.content) == {"text": "Hello X"}
 
 
+@pytest.mark.parametrize("share_with_followers", [True, False])
+@respx.mock
+async def test_publishing_into_a_community_names_it_and_whether_followers_see_it_too(
+    share_with_followers,
+):
+    route = respx.post(X_TWEETS_URL).mock(
+        return_value=httpx.Response(201, json={"data": {"id": "1890", "text": "Hello X"}})
+    )
+
+    post_id = await OfficialXPublisher().publish(
+        access_token="access-1",
+        text="Hello X",
+        community_id="1493446837214187523",
+        share_with_followers=share_with_followers,
+    )
+
+    assert post_id == "1890"
+    assert json.loads(route.calls.last.request.content) == {
+        "text": "Hello X",
+        "community_id": "1493446837214187523",
+        "share_with_followers": share_with_followers,
+    }
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -342,6 +366,23 @@ async def test_a_refused_post_carries_x_s_own_words(body):
         await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
 
     assert raised.value.message == "You are not allowed to create a Tweet with duplicate content."
+
+
+@pytest.mark.parametrize("status", [400, 403, 404])
+@respx.mock
+async def test_a_refused_post_keeps_x_s_status(status):
+    respx.post(X_TWEETS_URL).mock(
+        return_value=httpx.Response(
+            status, json={"detail": "You do not have permission to create this Tweet."}
+        )
+    )
+
+    with pytest.raises(XPostRejectedError) as raised:
+        await OfficialXPublisher().publish(
+            access_token="access-1", text="Hello X", community_id="1493446837214187523"
+        )
+
+    assert raised.value.x_status == status
 
 
 @respx.mock

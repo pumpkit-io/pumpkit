@@ -5,13 +5,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
+from pumpkit.authors.x_reader import XReader, get_x_reader
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.scheduling import mediator
+from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.schemas import (
+    CommunityLookupRequest,
+    CommunityRequest,
+    CommunityResponse,
+    PastCommunitiesResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
@@ -26,6 +32,10 @@ router = APIRouter(tags=["scheduled-posts"])
 # can mount them around x_connection's router and keep the OpenAPI document's order.
 x_connection_router = APIRouter(tags=["x-connection"])
 x_authorization_router = APIRouter(tags=["x-connection"])
+
+
+def _community(request: Optional[CommunityRequest]) -> Optional[Community]:
+    return Community(id=request.id, name=request.name) if request else None
 
 
 @x_connection_router.get(
@@ -62,6 +72,18 @@ async def complete_x_authorization(
     )
 
 
+@router.post("/community-lookups", response_model=CommunityResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def look_up_community(
+    request: Request,
+    lookup_request: CommunityLookupRequest,
+    current_user: User = Depends(require_subscribed_user),
+    reader: XReader = Depends(get_x_reader),
+) -> CommunityResponse:
+    """Without twitterapi.io, or when it fails, the Community comes back without a name."""
+    return await mediator.look_up_community(reader=reader, pasted=lookup_request.pasted)
+
+
 # Open to Users who aren't Subscribed, so their Published and Failed history stays visible.
 @router.get(
     "/scheduled-posts",
@@ -74,6 +96,18 @@ async def list_scheduled_posts(
     db: AsyncSession = Depends(get_async_db),
 ) -> ScheduledPostsListResponse:
     return await mediator.list_scheduled_posts(db=db, user=current_user, state=state)
+
+
+@router.get(
+    "/scheduled-posts/communities",
+    response_model=PastCommunitiesResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def list_past_communities(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> PastCommunitiesResponse:
+    return await mediator.list_past_communities(db=db, user=current_user)
 
 
 @router.post(
@@ -99,6 +133,10 @@ async def create_scheduled_post(
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
         source_version_id=create_request.source_version_id,
+        destination=Destination(
+            community=_community(create_request.community),
+            share_with_followers=create_request.share_with_followers,
+        ),
         now=clock(),
     )
 
@@ -121,6 +159,9 @@ async def edit_scheduled_post(
         scheduled_post_id=scheduled_post_id,
         text=update_request.text,
         publish_at=update_request.publish_at,
+        changes_community=update_request.changes_community,
+        community=_community(update_request.community),
+        share_with_followers=update_request.share_with_followers,
         now=clock(),
     )
 

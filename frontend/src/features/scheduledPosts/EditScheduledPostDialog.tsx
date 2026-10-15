@@ -11,12 +11,21 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { xWeightedLength } from '@/lib/xLength';
-import type { ScheduledPost } from '@/services/scheduledPostService';
+import type { ScheduledPost, ScheduledPostChanges } from '@/services/scheduledPostService';
+import { destinationFrom, PROFILE_DRAFT, type DestinationDraft } from './communities';
+import { DestinationField } from './DestinationField';
 import { localInputValue } from './localTime';
 import { PublishTimeField } from './PublishTimeField';
 import { XLengthCounter } from './XLengthCounter';
 
-export type ScheduledPostChanges = { text?: string; publishAt?: string };
+function draftOf(post: ScheduledPost): DestinationDraft {
+  if (!post.community) return PROFILE_DRAFT;
+  return {
+    kind: 'pastCommunity',
+    community: { id: post.community.id, name: post.community.name },
+    shareWithFollowers: post.shareWithFollowers,
+  };
+}
 
 function EditForm({
   post,
@@ -34,6 +43,7 @@ function EditForm({
   const originalWhen = failed ? '' : localInputValue(new Date(post.publishAt));
   const [text, setText] = useState(post.text);
   const [when, setWhen] = useState(originalWhen);
+  const [draft, setDraft] = useState(() => draftOf(post));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const length = useMemo(() => xWeightedLength(text), [text]);
@@ -42,7 +52,17 @@ function EditForm({
   if (text !== post.text) changes.text = text;
   // A datetime-local value without an offset parses as local time.
   if (when && when !== originalWhen) changes.publishAt = new Date(when).toISOString();
-  const nothingToSave = failed ? !changes.publishAt : !changes.text && !changes.publishAt;
+  const destination = destinationFrom(draft);
+  if (destination) {
+    const movesCommunity = destination.community?.id !== post.community?.id;
+    // Left out while the Community stays, so the edit keeps its stored name.
+    if (movesCommunity) changes.community = destination.community;
+    const share = destination.shareWithFollowers;
+    if (destination.community && (movesCommunity || share !== post.shareWithFollowers)) {
+      changes.shareWithFollowers = share;
+    }
+  }
+  const nothingToSave = failed ? !changes.publishAt : Object.keys(changes).length === 0;
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -63,7 +83,7 @@ function EditForm({
         <DialogDescription className="font-sans">
           {failed
             ? 'Pick a new time. It goes out on the X account connected now.'
-            : 'Change the text or the time before it goes out.'}
+            : 'Change the text, the time or the Community before it goes out.'}
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3 px-6 pb-4">
@@ -78,6 +98,7 @@ function EditForm({
           disabled={saving}
         />
         <XLengthCounter length={length} limit={charLimit} />
+        <DestinationField value={draft} onChange={setDraft} disabled={saving} />
         <PublishTimeField value={when} onChange={setWhen} disabled={saving} />
         {error && <ErrorBanner message={error} />}
       </div>
@@ -88,7 +109,7 @@ function EditForm({
         <Button
           type="submit"
           className="h-10"
-          disabled={saving || nothingToSave || length > charLimit || !text.trim()}
+          disabled={saving || nothingToSave || !destination || length > charLimit || !text.trim()}
         >
           {failed ? 'Reschedule' : 'Save'}
         </Button>
@@ -97,7 +118,10 @@ function EditForm({
   );
 }
 
-/** Changes the text or time of a scheduled Scheduled post, or reschedules a Failed one. */
+/**
+ * Changes the text, time or Community of a scheduled Scheduled post, or reschedules a Failed
+ * one, with the same changes.
+ */
 export function EditScheduledPostDialog({
   post,
   charLimit,
