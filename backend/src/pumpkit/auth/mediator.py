@@ -398,3 +398,19 @@ async def revoke_api_key(db: AsyncSession, user: User, api_key_id: str, now: dat
         )
     await api_keys.revoke_api_key(db, api_key, now=now)
     await db.commit()
+
+
+async def authenticate_api_key(db: AsyncSession, secret: str, now: datetime) -> Optional[User]:
+    """
+    The User an API key acts for, recording that the key was used; None for an unknown or
+    revoked key, or a User who is Suspended now, as `get_current_user` refuses one.
+    """
+    api_key = await api_keys.get_unrevoked_api_key_by_secret(db, secret=secret)
+    if api_key is None:
+        return None
+    user = await user_service.get_user_by_id(db=db, user_id=api_key.user_id)
+    if user is None or not sessions.may_hold_session(user):
+        return None
+    await api_keys.record_use(db, api_key, now=now)
+    await db.commit()
+    return user

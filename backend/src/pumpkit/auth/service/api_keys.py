@@ -3,7 +3,7 @@ Storage of API keys (ADR 0012). Keys never reach the Sessions module and never m
 access tokens. Flushes, never commits.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -11,11 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import ApiKey
 from pumpkit.core.security import generate_token, hash_token
+from pumpkit.core.time import as_utc
 
 # Fixed, so a leaked key is easy to grep for in logs and repos.
 SECRET_PREFIX = "pumpkit_"
 # The secret prefix plus 8 random characters: enough to tell keys apart, far too few to guess one.
 _DISPLAY_PREFIX_LENGTH = len(SECRET_PREFIX) + 8
+# How stale `last_used_at` may get, so tool calls don't each write a row.
+_LAST_USED_RESOLUTION = timedelta(minutes=1)
 
 
 async def create_api_key(
@@ -68,3 +71,21 @@ async def list_unrevoked_api_keys(db: AsyncSession, *, user_id: str) -> list[Api
         .order_by(ApiKey.created_at, ApiKey.id)
     )
     return list(result.scalars())
+
+
+async def get_unrevoked_api_key_by_secret(db: AsyncSession, *, secret: str) -> Optional[ApiKey]:
+    result = await db.execute(
+        select(ApiKey).where(ApiKey.key_hash == hash_token(secret), ApiKey.revoked_at.is_(None))
+    )
+    return result.scalar_one_or_none()
+
+
+async def record_use(db: AsyncSession, api_key: ApiKey, *, now: datetime) -> None:
+    """Set `last_used_at` to `now`, unless it was set less than a minute before."""
+    if (
+        api_key.last_used_at is not None
+        and now - as_utc(api_key.last_used_at) < _LAST_USED_RESOLUTION
+    ):
+        return
+    api_key.last_used_at = now
+    await db.flush()
