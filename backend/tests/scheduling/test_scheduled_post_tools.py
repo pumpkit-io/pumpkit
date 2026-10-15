@@ -508,3 +508,44 @@ async def test_every_user_schedules_on_an_instance_that_sells_no_plans(
     result = await _schedule(mcp)
 
     assert result["isError"] is False, result
+
+
+FIRST_X_POST = "https://x.com/i/web/status/1890000000000000001"
+
+
+async def test_post_now_publishes_typed_text_and_links_to_it_on_x(
+    connected, mcp, fake_x_publisher, fixed_clock
+):
+    result = await mcp.call_tool("post_now", text="Out now.")
+
+    assert result["isError"] is False, result
+    posted = result["structuredContent"]
+    assert posted["state"] == "published"
+    assert posted["x_post_url"] == FIRST_X_POST
+    assert posted["message"] == f"Published on X: {FIRST_X_POST}"
+    assert posted["scheduled_page_url"] == SCHEDULED_PAGE
+    assert fake_x_publisher.published == [("access-1001-1", "Out now.")]
+
+
+async def test_post_now_publishes_a_versions_final(
+    connected, version, mcp, fake_x_publisher, fixed_clock
+):
+    result = await mcp.call_tool("post_now", version_id=version["id"])
+
+    assert result["structuredContent"]["state"] == "published"
+    assert result["structuredContent"]["source_version_id"] == version["id"]
+    assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
+
+
+async def test_post_now_that_x_refuses_says_it_failed_and_why(
+    connected, mcp, fake_x_publisher, fixed_clock
+):
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Duplicate content.")
+
+    result = await mcp.call_tool("post_now", text="Duplicate.")
+
+    assert result["isError"] is False, result
+    posted = result["structuredContent"]
+    assert posted["state"] == "failed"
+    assert posted["failed_reason"] == "X refused the post: Duplicate content."
+    assert posted["message"] == "Failed. X refused the post: Duplicate content."
