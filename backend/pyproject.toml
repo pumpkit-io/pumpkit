@@ -34,6 +34,7 @@ dependencies = [
     "openai>=2.0.0,<3.0.0",
     "httpx>=0.28.0",
     "posthog>=7.0.0",
+    "mcp>=2.3.0,<3",
 ]
 
 [project.optional-dependencies]
