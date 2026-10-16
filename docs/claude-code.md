@@ -8,8 +8,10 @@ Pumpkit's backend serves an MCP server, so Claude Code and other MCP clients can
 2. Copy the `claude mcp add` command shown next to the new key, and run it once in a terminal. It looks like this:
 
    ```sh
-   claude mcp add --transport http pumpkit https://pumpkit.io/api/v1/mcp --header "Authorization: Bearer pumpkit_..."
+   claude mcp add --scope user --transport http pumpkit https://pumpkit.io/api/v1/mcp --header "Authorization: Bearer pumpkit_..."
    ```
+
+   `--scope user` makes Pumpkit available in Claude Code in every directory. Claude Code saves the URL and the key in plain text in `~/.claude.json`.
 
    Pumpkit shows the key's secret only once. If you lose it, revoke the key and create another.
 3. Start Claude Code and run `/mcp`. **Check:** it lists `pumpkit` as connected.

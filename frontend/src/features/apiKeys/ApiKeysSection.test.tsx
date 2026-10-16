@@ -46,7 +46,7 @@ const HOME_DESKTOP: ApiKey = {
 };
 
 const SECRET = 'pumpkit_ZyXw9876-the-rest-of-the-secret-abcdefghijk';
-const COMMAND = `claude mcp add --transport http pumpkit https://pumpkit.example/api/v1/mcp --header "Authorization: Bearer ${SECRET}"`;
+const COMMAND = `claude mcp add --scope user --transport http pumpkit https://pumpkit.example/api/v1/mcp --header "Authorization: Bearer ${SECRET}"`;
 
 function failure(status: number, detail: string) {
   return Object.assign(new Error(`Request failed with status code ${status}`), {

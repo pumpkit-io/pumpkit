@@ -33,7 +33,7 @@ async def test_creating_a_key_returns_the_secret_and_the_claude_command_once(
         "last_used_at": None,
     }
     assert body["claude_command"] == (
-        "claude mcp add --transport http testapp http://localhost:5173/api/v1/mcp"
+        "claude mcp add --scope user --transport http testapp http://localhost:5173/api/v1/mcp"
         f' --header "Authorization: Bearer {secret}"'
     )
 

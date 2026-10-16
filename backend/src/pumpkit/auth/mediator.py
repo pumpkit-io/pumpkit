@@ -360,7 +360,7 @@ def _claude_command(secret: str) -> str:
     """The `claude mcp add` line that connects Claude Code to this Instance's MCP endpoint."""
     server_name = re.sub(r"[^a-z0-9]+", "-", settings.APP_NAME.lower()).strip("-") or "pumpkit"
     return (
-        f"claude mcp add --transport http {server_name} {settings.api_url()}/mcp"
+        f"claude mcp add --scope user --transport http {server_name} {settings.api_url()}/mcp"
         f' --header "Authorization: Bearer {secret}"'
     )
 
