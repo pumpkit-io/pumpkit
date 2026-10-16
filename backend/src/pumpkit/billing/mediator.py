@@ -24,6 +24,7 @@ from pumpkit.billing.schemas import (
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
+from pumpkit.core.schemas import LinkToolResponse
 
 
 async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
@@ -47,6 +48,20 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
         subscribed=service.is_subscribed(subscription),
         may_subscribe=offer.may_subscribe,
         trial_days=offer.trial_days,
+    )
+
+
+def subscription_link() -> LinkToolResponse:
+    """Where the User subscribes or manages their Subscription, unless the Instance sells no Plans."""
+    if not service.sells_plans():
+        return LinkToolResponse(
+            message="This Instance sells no Plans: you can use all of Pumpkit without a "
+            "Subscription.",
+            url=None,
+        )
+    url = settings.billing_page_url()
+    return LinkToolResponse(
+        message=f"Subscribe or manage your Subscription on the billing page: {url}", url=url
     )
 
 

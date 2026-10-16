@@ -4,9 +4,10 @@
 
 ```
 backend/src/pumpkit/
-  main.py          the FastAPI app: mounts every area's router and registers the error handlers
+  main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
+  mcp_server.py    the MCP server: every area's tools behind API key authentication, the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
-  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids
+  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
   authors/         Inspiration authors and their posts; the X reader (twitterapi.io)
@@ -72,6 +73,20 @@ A Scheduled post for later waits in `scheduled` until the publisher picks it up.
 `scheduling/publishing` owns every commit of a publish: it commits the claim and any rotated refresh token before calling X, calls X once, and commits Published or Failed. Its steps live in `scheduling/publish.py`, which flushes and never commits. A 429 or a refused connection (to publish or to refresh the token) means X surely didn't publish, so it goes back in `scheduled` with a doubling backoff from one minute for the publisher to retry, and becomes Failed if it still can't go out 15 minutes after its publish time. Post now publishes within the request through the same `scheduling/publishing` module; when X doesn't take it, the request returns it in `scheduled` and the publisher retries it like any other.
 
 Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clock)` directly and checking outcomes through `GET /api/v1/scheduled-posts` (see `backend/tests/scheduling/test_publisher.py`). The `fixed_clock` fixture freezes time at a known instant for tests that write out dates. Under SQLite the row lock is a no-op, so tests of concurrent passes exercise the conditional claim.
+
+### Add an MCP tool
+
+Claude Code reaches Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 0012; the user guide is `docs/claude-code.md`). A tool lives in its area's `tools.py`, beside the router, and calls only that area's mediator, as the router does. `authors/tools.py` is the example to copy.
+
+1. Write the tool as an async function whose first parameter is `call: ToolCall[User]` (`core/mcp_tools.py`), followed by the tool's arguments. Its name is the tool's name (a snake_case verb), its docstring is the description Claude Code reads, its arguments become the input schema, and its return type, a response schema, becomes the output schema. `call.user`, `call.db` and `call.now` are what a route gets from `get_current_user`, `get_async_db` and `clock()`; `await call.provide(get_x_reader)` gives any other provider, honouring the app's dependency overrides, so the tests' fakes apply.
+2. Validate input as the route does: build the route's request schema (`InspirationAuthorAddRequest(handle=handle)`) so its checks and messages are the same.
+3. Add an `McpTool(fn, rate=..., annotations=...)` to the module's `TOOLS` list. Use the web route's rate where it has one, through the area's `WRITE_RATE` in `schemas.py`, and `READ_ONLY_RATE` for tools that only read. Pick `READ_ONLY`, `ADDITIVE` or `DESTRUCTIVE`: clients ask the User before a destructive tool, and treat a tool without annotations as destructive. Set `needs_access=False` only for a browser-only tool that just answers with a web app link, as a `LinkToolResponse` (`core/schemas.py`): `connect_x` in `scheduling/tools.py` and `manage_subscription` in `billing/tools.py`.
+
+`pumpkit/mcp_server.py` registers every module's `TOOLS` and wraps each tool: it counts the call against the User's limit for that tool, checks access with `billing/service.has_access` (a tool error with the subscribe link otherwise), opens the call's session, and turns what the tool raises into a tool error. An `HTTPException`, an `AppError` or a request schema's `ValidationError` keeps the web route's `detail` word for word, and `retry_at` when there is one; a reported error goes to PostHog with an `error_id`, as the global handler sends it. So a tool raises the mediator's refusals and never catches them. Tool calls send no product events (ADR 0012).
+
+import-linter lets only `pumpkit.mcp_server` import a tools module, and keeps a tools module from importing its router or the router from importing it.
+
+Test a tool through the endpoint with the `mcp` fixture: Claude Code connected with an API key that `user` created through `POST /api/v1/api-keys` after a real sign-in, on a client without the `get_current_user` override. Request `subscribed` or `sells_no_plans` before it, since creating a key needs access. `await mcp.call_tool("add_inspiration_author", handle="levelsio")` returns the result, with `structuredContent` holding the response schema; `error_text(result)` (`tests/mcp_client.py`) asserts a tool error and returns its text. See `backend/tests/authors/test_inspiration_author_tools.py`.
 
 ### Call an LLM
 

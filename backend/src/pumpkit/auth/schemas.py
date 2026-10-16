@@ -1,7 +1,8 @@
 import re
+from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 # About 200 KB of base64: client-resized 256x256 JPEGs are 30-60 KB, so PNG/webp still fit.
 _MAX_AVATAR_DATA_URL_LEN = 220_000
@@ -64,3 +65,44 @@ class MagicLinkRequest(BaseModel):
     @field_validator("email", mode="after")
     def lowercase_email(cls, v: str) -> str:
         return v.lower()
+
+
+class ApiKeyCreateRequest(BaseModel):
+    """The name a User gives a new API key, such as the machine or tool that will use it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+    @field_validator("name", mode="after")
+    def trim_name(cls, v: str) -> str:
+        trimmed = v.strip()
+        if trimmed == "":
+            raise ValueError("must not be empty")
+        if len(trimmed) > 80:
+            raise ValueError("must be 80 characters or fewer")
+        return trimmed
+
+
+class ApiKeyResponse(BaseModel):
+    """An API key as its owner sees it: never the secret or its hash."""
+
+    id: str
+    name: str
+    prefix: str
+    created_at: datetime
+    last_used_at: Optional[datetime]
+
+
+class ApiKeyCreatedResponse(BaseModel):
+    """A new API key with its secret and the command that adds it to Claude Code, shown once."""
+
+    api_key: ApiKeyResponse
+    secret: str
+    claude_command: str
+
+
+class ApiKeysListResponse(BaseModel):
+    """The User's unrevoked API keys, oldest first."""
+
+    data: list[ApiKeyResponse]

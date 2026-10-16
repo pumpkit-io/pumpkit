@@ -34,6 +34,13 @@ from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
 
+class XConnectionNeeded(HTTPException):
+    """The 409 for a User whose X account is not connected, or must be reconnected, to publish."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:
     return CommunityResponse(
         id=community_id, name=name, url=communities.community_url(community_id)
@@ -104,14 +111,10 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     """The X connection a new or rescheduled Scheduled post targets, or a 409."""
     connection = await x_connections_service.get_connection(db, user_id=user_id)
     if connection is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Connect your X account first.",
-        )
+        raise XConnectionNeeded("Connect your X account first.")
     if connection.needs_reconnect:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="X no longer accepts Pumpkit's access to your account. Reconnect X first.",
+        raise XConnectionNeeded(
+            "X no longer accepts Pumpkit's access to your account. Reconnect X first."
         )
     return connection
 
@@ -162,7 +165,7 @@ async def create_scheduled_post(
     except RuleBroken as rule:
         raise _refused(rule) from None
     if source_version_id is not None:
-        await _check_source_version(db, user_id=user.id, version_id=source_version_id)
+        await source_version_final(db, user=user, version_id=source_version_id)
     scheduled_post = await service.create(
         db,
         user_id=user.id,
@@ -179,11 +182,12 @@ async def create_scheduled_post(
     return scheduled_post_response(scheduled_post)
 
 
-async def _check_source_version(db: AsyncSession, *, user_id: str, version_id: str) -> None:
-    """A 404 unless the source Version is one of the User's."""
-    version = await posts_service.get_user_version(db, user_id=user_id, version_id=version_id)
-    if version is None:
+async def source_version_final(db: AsyncSession, *, user: User, version_id: str) -> str:
+    """The Final a Scheduled post copies from its source Version, or a 404 unless it's the User's."""
+    version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
+    if version is None or version.final is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found.")
+    return version.final
 
 
 async def _post_now(

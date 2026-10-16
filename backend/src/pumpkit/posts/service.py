@@ -53,6 +53,19 @@ async def get_user_post(db: AsyncSession, *, user_id: str, post_id: str) -> Opti
     return result.scalar_one_or_none()
 
 
+async def list_user_posts(db: AsyncSession, *, user_id: str, limit: int, offset: int) -> list[Post]:
+    """A page of the User's Posts with their attempts, newest first."""
+    result = await db.execute(
+        select(Post)
+        .where(Post.user_id == user_id)
+        .order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(limit)
+        .offset(offset)
+        .options(selectinload(Post.attempts))
+    )
+    return list(result.scalars())
+
+
 async def get_user_version(
     db: AsyncSession, *, user_id: str, version_id: str
 ) -> Optional[VersionAttempt]:

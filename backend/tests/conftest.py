@@ -86,6 +86,7 @@ from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
 from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
+from tests.mcp_client import McpClient  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -415,6 +416,26 @@ async def authed_client(new_browser, sign_in_by_magic_link, user) -> AsyncClient
     signed_in = await sign_in_by_magic_link(browser, user.email)
     browser.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     return browser
+
+
+@pytest_asyncio.fixture
+async def api_key(authed_client) -> str:
+    """
+    The secret of an API key `user` creates through `POST /api-keys`, signed in for real.
+    Creating one needs access: request `subscribed` or `sells_no_plans` first.
+    """
+    response = await authed_client.post("/api/v1/api-keys", json={"name": "Claude Code"})
+    assert response.status_code == 201, response.text
+    return response.json()["secret"]
+
+
+@pytest_asyncio.fixture
+async def mcp(new_browser, api_key) -> McpClient:
+    """
+    Claude Code connected to the MCP endpoint with `api_key`, on a client without the
+    `get_current_user` override, so only the API key authenticates it.
+    """
+    return McpClient(new_browser(), api_key)
 
 
 async def _set_suspended_until(db: AsyncSession, email: str, until: Optional[datetime]) -> None:

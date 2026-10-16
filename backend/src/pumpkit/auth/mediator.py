@@ -2,14 +2,16 @@ import base64
 import binascii
 import hashlib
 import json
+import re
 from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import quote, urlencode
 
-from fastapi import Request, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.auth.service.api_keys as api_keys
 import pumpkit.auth.service.google_identities as google_identities_service
 import pumpkit.auth.service.magic_links as magic_links
 import pumpkit.auth.service.sessions as sessions
@@ -23,7 +25,8 @@ from pumpkit.auth.google_config import (
 )
 from pumpkit.auth.google_sign_in import GoogleSignIn, GoogleSignInError
 from pumpkit.auth.mailer import AuthMailer, AuthMailerError, MagicLinkEmail
-from pumpkit.auth.models import User
+from pumpkit.auth.models import ApiKey, User
+from pumpkit.auth.schemas import ApiKeyCreatedResponse, ApiKeyResponse, ApiKeysListResponse
 from pumpkit.auth.sign_up_allowlist import EMAIL_NOT_ALLOWED, EmailNotAllowedError, may_sign_in
 from pumpkit.core.config import settings
 from pumpkit.core.errors import report_unexpected_exception
@@ -34,6 +37,7 @@ from pumpkit.core.security import (
     encode_payload,
     generate_token,
 )
+from pumpkit.core.time import as_utc
 
 # The `flow` the state carries, so a state minted for another Google flow can't sign in.
 _SIGN_IN_FLOW = "sign_in"
@@ -337,3 +341,76 @@ async def logout(request: Request, db: AsyncSession) -> JSONResponse:
     await sessions.end(db, refresh_cookie=sessions.read_refresh_cookie(request))
     await db.commit()
     return sessions.ended_session_response()
+
+
+MAX_API_KEYS = 10
+
+
+def _api_key_response(api_key: ApiKey) -> ApiKeyResponse:
+    return ApiKeyResponse(
+        id=api_key.id,
+        name=api_key.name,
+        prefix=api_key.prefix,
+        created_at=as_utc(api_key.created_at),
+        last_used_at=as_utc(api_key.last_used_at) if api_key.last_used_at else None,
+    )
+
+
+def _claude_command(secret: str) -> str:
+    """The `claude mcp add` line that connects Claude Code to this Instance's MCP endpoint."""
+    server_name = re.sub(r"[^a-z0-9]+", "-", settings.APP_NAME.lower()).strip("-") or "pumpkit"
+    return (
+        f"claude mcp add --scope user --transport http {server_name} {settings.api_url()}/mcp"
+        f' --header "Authorization: Bearer {secret}"'
+    )
+
+
+async def create_api_key(
+    db: AsyncSession, user: User, name: str, now: datetime
+) -> ApiKeyCreatedResponse:
+    if await api_keys.count_unrevoked_api_keys(db, user_id=user.id) >= MAX_API_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"You already have {MAX_API_KEYS} API keys, the most you can hold. "
+                "Revoke one to create another."
+            ),
+        )
+    api_key, secret = await api_keys.create_api_key(db, user_id=user.id, name=name, now=now)
+    await db.commit()
+    return ApiKeyCreatedResponse(
+        api_key=_api_key_response(api_key), secret=secret, claude_command=_claude_command(secret)
+    )
+
+
+async def list_api_keys(db: AsyncSession, user: User) -> ApiKeysListResponse:
+    keys = await api_keys.list_unrevoked_api_keys(db, user_id=user.id)
+    return ApiKeysListResponse(data=[_api_key_response(api_key) for api_key in keys])
+
+
+async def revoke_api_key(db: AsyncSession, user: User, api_key_id: str, now: datetime) -> None:
+    """Revoke one of the User's keys; another User's key and a revoked one both read as a 404."""
+    api_key = await api_keys.get_unrevoked_api_key(db, user_id=user.id, api_key_id=api_key_id)
+    if api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="That API key doesn't exist or was already revoked.",
+        )
+    await api_keys.revoke_api_key(db, api_key, now=now)
+    await db.commit()
+
+
+async def authenticate_api_key(db: AsyncSession, secret: str, now: datetime) -> Optional[User]:
+    """
+    The User an API key acts for, recording that the key was used; None for an unknown or
+    revoked key, or a User who is Suspended now, as `get_current_user` refuses one.
+    """
+    api_key = await api_keys.get_unrevoked_api_key_by_secret(db, secret=secret)
+    if api_key is None:
+        return None
+    user = await user_service.get_user_by_id(db=db, user_id=api_key.user_id)
+    if user is None or not sessions.may_hold_session(user):
+        return None
+    await api_keys.record_use(db, api_key, now=now)
+    await db.commit()
+    return user
