@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,13 +14,13 @@ from pumpkit.authors.x_reader import (
     XReaderNotConfiguredError,
 )
 from pumpkit.core.config import settings
+from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
 from pumpkit.scheduling.publishing import publish_scheduled_post
-from pumpkit.scheduling.rules import MonthFull, RuleBroken
 from pumpkit.scheduling.schemas import (
     CommunityResponse,
     PastCommunitiesResponse,
@@ -33,12 +32,8 @@ from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
-
-class XConnectionNeeded(HTTPException):
-    """The 409 for a User whose X account is not connected, or must be reconnected, to publish."""
-
-    def __init__(self, detail: str) -> None:
-        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+# Where the User connects or reconnects X, which takes a browser.
+SCHEDULED_PAGE = "/scheduled"
 
 
 def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:
@@ -71,17 +66,11 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
 
 async def look_up_community(reader: XReader, pasted: str) -> CommunityResponse:
     """The pasted Community with its name on X, or with no name when X can't be read."""
-    try:
-        community_id = communities.community_id_from(pasted)
-    except RuleBroken as rule:
-        raise _refused(rule) from None
+    community_id = communities.community_id_from(pasted)
     try:
         name: Optional[str] = (await reader.fetch_community(community_id)).name
     except CommunityNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="X has no Community with that ID. Check the URL.",
-        ) from None
+        raise NotFoundError("X has no Community with that ID. Check the URL.") from None
     except XReaderNotConfiguredError:
         name = None
     except XReaderError as error:
@@ -111,18 +100,13 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     """The X connection a new or rescheduled Scheduled post targets, or a 409."""
     connection = await x_connections_service.get_connection(db, user_id=user_id)
     if connection is None:
-        raise XConnectionNeeded("Connect your X account first.")
+        raise ConflictError("Connect your X account first.", fix_page=SCHEDULED_PAGE)
     if connection.needs_reconnect:
-        raise XConnectionNeeded(
-            "X no longer accepts Pumpkit's access to your account. Reconnect X first."
+        raise ConflictError(
+            "X no longer accepts Pumpkit's access to your account. Reconnect X first.",
+            fix_page=SCHEDULED_PAGE,
         )
     return connection
-
-
-def _refused(rule: RuleBroken) -> HTTPException:
-    full = isinstance(rule, MonthFull)
-    code = status.HTTP_409_CONFLICT if full else status.HTTP_422_UNPROCESSABLE_CONTENT
-    return HTTPException(status_code=code, detail=rule.message)
 
 
 async def check_monthly_cap(
@@ -156,14 +140,11 @@ async def create_scheduled_post(
 ) -> ScheduledPostResponse:
     """With `publish_now`, published within the request: Published, Failed, or back in scheduled."""
     connection = await connection_to_publish_on(db, user_id=user.id)
-    try:
-        if destination.community is not None:
-            communities.check_community_id(destination.community.id)
-        rules.check_length(text, limit=x_post_max_chars(connection.subscription_type))
-        publish_at = now if publish_now else rules.check_publish_at(publish_at, now=now)
-        await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
-    except RuleBroken as rule:
-        raise _refused(rule) from None
+    if destination.community is not None:
+        communities.check_community_id(destination.community.id)
+    rules.check_length(text, limit=x_post_max_chars(connection.subscription_type))
+    publish_at = now if publish_now else rules.check_publish_at(publish_at, now=now)
+    await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
     if source_version_id is not None:
         await source_version_final(db, user=user, version_id=source_version_id)
     scheduled_post = await service.create(
@@ -186,7 +167,7 @@ async def source_version_final(db: AsyncSession, *, user: User, version_id: str)
     """The Final a Scheduled post copies from its source Version, or a 404 unless it's the User's."""
     version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
     if version is None or version.final is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found.")
+        raise NotFoundError("Version not found.")
     return version.final
 
 
@@ -203,17 +184,12 @@ async def _post_now(
 async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> ScheduledPost:
     scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
     if scheduled_post is None or scheduled_post.user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled post not found."
-        )
+        raise NotFoundError("Scheduled post not found.")
     return scheduled_post
 
 
-def _publishing_started() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail="Publishing has started, so this Scheduled post can no longer change.",
-    )
+def _publishing_started() -> ConflictError:
+    return ConflictError("Publishing has started, so this Scheduled post can no longer change.")
 
 
 async def edit_scheduled_post(
@@ -237,31 +213,26 @@ async def edit_scheduled_post(
         raise _publishing_started()
     reschedule = None
     destination = None
-    try:
-        if changes_community or share_with_followers is not None:
-            if community is not None:
-                communities.check_community_id(community.id)
-            destination = _destination_after_edit(
-                scheduled_post, changes_community, community, share_with_followers
-            )
-        connection = (
-            await connection_to_publish_on(db, user_id=user.id)
-            if publish_at is not None
-            else await x_connections_service.get_connection(db, user_id=user.id)
+    if changes_community or share_with_followers is not None:
+        if community is not None:
+            communities.check_community_id(community.id)
+        destination = _destination_after_edit(
+            scheduled_post, changes_community, community, share_with_followers
         )
-        if text is not None:
-            subscription_type = connection.subscription_type if connection else None
-            rules.check_length(text, limit=x_post_max_chars(subscription_type))
-        if connection is not None and publish_at is not None:
-            new_publish_at = rules.check_publish_at(publish_at, now=now)
-            await check_monthly_cap(
-                db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id
-            )
-            reschedule = service.Reschedule(
-                publish_at=new_publish_at, x_user_id=connection.x_user_id
-            )
-    except RuleBroken as rule:
-        raise _refused(rule) from None
+    connection = (
+        await connection_to_publish_on(db, user_id=user.id)
+        if publish_at is not None
+        else await x_connections_service.get_connection(db, user_id=user.id)
+    )
+    if text is not None:
+        subscription_type = connection.subscription_type if connection else None
+        rules.check_length(text, limit=x_post_max_chars(subscription_type))
+    if connection is not None and publish_at is not None:
+        new_publish_at = rules.check_publish_at(publish_at, now=now)
+        await check_monthly_cap(
+            db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id
+        )
+        reschedule = service.Reschedule(publish_at=new_publish_at, x_user_id=connection.x_user_id)
     if not await service.edit(
         db,
         scheduled_post_id=scheduled_post_id,
@@ -308,11 +279,8 @@ async def _x_connection_response(db: AsyncSession, connection: XConnection) -> X
     )
 
 
-def _owned_elsewhere(handle: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail=f"@{handle} is already connected to another Pumpkit account.",
-    )
+def _owned_elsewhere(handle: str) -> ConflictError:
+    return ConflictError(f"@{handle} is already connected to another Pumpkit account.")
 
 
 async def get_x_connection(db: AsyncSession, user: User) -> XConnectionResponse:
@@ -332,19 +300,13 @@ async def complete_x_authorization(
     # transaction stays open across X's calls.
     await db.commit()
     if code_verifier is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This X authorization expired or was already used. Connect X again.",
-        )
+        raise BadRequestError("This X authorization expired or was already used. Connect X again.")
 
     try:
         tokens = await publisher.exchange_code(code=code, code_verifier=code_verifier, now=now)
         account = await publisher.fetch_account(access_token=tokens.access_token)
     except XReconnectNeededError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X didn't give Pumpkit access to your account. Connect X again.",
-        )
+        raise BadRequestError("X didn't give Pumpkit access to your account. Connect X again.")
 
     # The grant isn't revoked here: X may scope revocation to the account, cutting off its owner.
     owner = await x_connections_service.get_connection_by_x_user_id(db, x_user_id=account.user_id)

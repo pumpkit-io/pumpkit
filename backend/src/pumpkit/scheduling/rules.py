@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from pumpkit.core.errors import ConflictError, RefusedError
 from pumpkit.x_connection.x_length import x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
@@ -10,13 +11,11 @@ MIN_LEAD_TIME = timedelta(minutes=1)
 MAX_LEAD_TIME = timedelta(days=365)
 
 
-class RuleBroken(Exception):
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-        self.message = message
+class RuleBroken(RefusedError):
+    pass
 
 
-class MonthFull(RuleBroken):
+class MonthFull(ConflictError):
     pass
 
 

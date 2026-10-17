@@ -98,8 +98,9 @@ def tool_error(detail: str, **structured: Any) -> CallToolResult:
 
 def error_result(exc: Exception, request: Request) -> CallToolResult:
     """
-    The tool error for an exception a tool raised, with the web route's `detail` and the rest
-    of its body (`retry_at`, `error_id`). Reported errors go to PostHog as the handlers send them.
+    The tool error for an exception a tool raised, with the web route's `detail`, then its fix
+    page's `url` when it has one, and the rest of its body (`retry_at`, `error_id`). Reported
+    errors go to PostHog as the handlers send them.
     """
     if isinstance(exc, HTTPException):
         return tool_error(str(exc.detail))
@@ -110,6 +111,8 @@ def error_result(exc: Exception, request: Request) -> CallToolResult:
         if exc.reported:
             body["error_id"] = report_unexpected_exception(request, exc)
         detail = body.pop("detail")
+        if "url" in body:
+            detail = f"{detail} {body['url']}"
         return tool_error(detail, **body)
     return tool_error(UNEXPECTED_ERROR_DETAIL, error_id=report_unexpected_exception(request, exc))
 

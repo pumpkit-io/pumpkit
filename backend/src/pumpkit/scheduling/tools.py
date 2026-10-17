@@ -1,14 +1,12 @@
 """The MCP tools for Scheduled posts, over the same mediator as the router."""
 
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, Optional
-
-from fastapi import HTTPException, status
+from typing import Optional
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import get_x_reader
 from pumpkit.core.config import settings
+from pumpkit.core.errors import RefusedError
 from pumpkit.core.mcp_tools import (
     ADDITIVE,
     DESTRUCTIVE,
@@ -38,24 +36,13 @@ from pumpkit.x_connection.x_publisher import get_x_publisher
 
 
 def scheduled_page_url() -> str:
-    return f"{settings.frontend_url()}/scheduled"
+    return f"{settings.frontend_url()}{mediator.SCHEDULED_PAGE}"
 
 
 def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolResponse:
     return ScheduledPostToolResponse(
         **scheduled_post.model_dump(), scheduled_page_url=scheduled_page_url()
     )
-
-
-@contextmanager
-def _x_connection_links_to_scheduled_page() -> Iterator[None]:
-    """Adds the Scheduled page link to the X connection refusals: connecting X needs a browser."""
-    try:
-        yield
-    except mediator.XConnectionNeeded as refusal:
-        raise HTTPException(
-            status_code=refusal.status_code, detail=f"{refusal.detail} {scheduled_page_url()}"
-        ) from None
 
 
 @dataclass(frozen=True)
@@ -76,10 +63,7 @@ async def _post_text(call: ToolCall[User], post: _PostToPublish) -> str:
         return await mediator.source_version_final(
             db=call.db, user=call.user, version_id=post.version_id
         )
-    raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail="Give either the text or a Version id, not both.",
-    )
+    raise RefusedError("Give either the text or a Version id, not both.")
 
 
 async def _community(call: ToolCall[User], pasted: str) -> Community:
@@ -111,18 +95,17 @@ async def _create_scheduled_post(
     )
     destination = await _destination(call, post)
     publisher = await call.provide(get_x_publisher)
-    with _x_connection_links_to_scheduled_page():
-        scheduled_post = await mediator.create_scheduled_post(
-            db=call.db,
-            publisher=publisher,
-            user=call.user,
-            text=create_request.text,
-            publish_at=create_request.publish_at,
-            publish_now=create_request.publish_now,
-            now=call.now,
-            source_version_id=create_request.source_version_id,
-            destination=destination,
-        )
+    scheduled_post = await mediator.create_scheduled_post(
+        db=call.db,
+        publisher=publisher,
+        user=call.user,
+        text=create_request.text,
+        publish_at=create_request.publish_at,
+        publish_now=create_request.publish_now,
+        now=call.now,
+        source_version_id=create_request.source_version_id,
+        destination=destination,
+    )
     return _tool_response(scheduled_post)
 
 
@@ -209,10 +192,7 @@ async def edit_scheduled_post(
     what stays the same.
     """
     if community is not None and to_profile:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Give either a Community or the profile, not both.",
-        )
+        raise RefusedError("Give either a Community or the profile, not both.")
     changes: dict[str, object] = {
         name: value
         for name, value in (
@@ -228,18 +208,17 @@ async def edit_scheduled_post(
     elif to_profile:
         changes["community"] = None
     update_request = ScheduledPostUpdateRequest.model_validate(changes)
-    with _x_connection_links_to_scheduled_page():
-        scheduled_post = await mediator.edit_scheduled_post(
-            db=call.db,
-            user=call.user,
-            scheduled_post_id=scheduled_post_id,
-            text=update_request.text,
-            publish_at=update_request.publish_at,
-            changes_community=update_request.changes_community,
-            community=new_community,
-            share_with_followers=update_request.share_with_followers,
-            now=call.now,
-        )
+    scheduled_post = await mediator.edit_scheduled_post(
+        db=call.db,
+        user=call.user,
+        scheduled_post_id=scheduled_post_id,
+        text=update_request.text,
+        publish_at=update_request.publish_at,
+        changes_community=update_request.changes_community,
+        community=new_community,
+        share_with_followers=update_request.share_with_followers,
+        now=call.now,
+    )
     return _tool_response(scheduled_post)
 
 

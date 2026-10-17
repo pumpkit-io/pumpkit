@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from pumpkit.core.analytics import posthog_client
+from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
 
 
@@ -55,6 +56,45 @@ class RetryLaterError(AppError):
 
     def response_headers(self) -> dict[str, str]:
         return {"Retry-After": str(self.retry_after_seconds)}
+
+
+class RefusalError(AppError):
+    """
+    A request refused in words for the User, from a mediator that serves both the web routes and
+    the MCP tools. `fix_page` is the web app path where the User can fix it, such as `/scheduled`;
+    the HTTP body carries its full URL as `url`, and a tool error appends it to the text.
+    """
+
+    def __init__(self, detail: str, *, fix_page: Optional[str] = None) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.fix_page = fix_page
+
+    def response_body(self) -> dict[str, Any]:
+        body: dict[str, Any] = {"detail": self.detail}
+        if self.fix_page is not None:
+            body["url"] = f"{settings.frontend_url()}{self.fix_page}"
+        return body
+
+
+class BadRequestError(RefusalError):
+    status_code = 400
+
+
+class NotFoundError(RefusalError):
+    status_code = 404
+
+
+class ConflictError(RefusalError):
+    """The request is valid, but what the User already has stands in its way."""
+
+    status_code = 409
+
+
+class RefusedError(RefusalError):
+    """The request breaks a rule the User can meet by changing it."""
+
+    status_code = 422
 
 
 class NotConfiguredError(AppError):
