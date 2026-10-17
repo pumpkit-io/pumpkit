@@ -14,7 +14,6 @@ SmtpSecurity = Literal["starttls", "tls", "none"]
 
 _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "none": 25}
 
-# The web app page where a User subscribes or manages their Subscription.
 BILLING_PAGE = "/billing"
 
 
