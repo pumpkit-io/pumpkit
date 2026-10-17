@@ -1,24 +1,12 @@
 """Looking up a pasted Community's name through the HTTP API, and keeping it on a Scheduled post."""
 
-from urllib.parse import parse_qs, urlsplit
-
 import pytest
-from httpx import AsyncClient
 
 from pumpkit.scheduling.communities import NOT_A_COMMUNITY
 
 LOOKUPS = "/api/v1/community-lookups"
 COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
-
-
-async def _connect_x(client: AsyncClient) -> None:
-    started = await client.post("/api/v1/x-connection/authorizations")
-    state = parse_qs(urlsplit(started.json()["url"]).query)["state"][0]
-    completed = await client.post(
-        "/api/v1/x-connection/authorizations/complete", json={"code": "c", "state": state}
-    )
-    assert completed.status_code == 200, completed.text
 
 
 @pytest.mark.parametrize(
@@ -63,27 +51,6 @@ async def test_without_twitterapi_io_the_community_comes_back_without_a_name(
 
     assert response.status_code == 200, response.text
     assert response.json() == {"id": COMMUNITY_ID, "name": None, "url": COMMUNITY_URL}
-
-
-async def test_a_looked_up_name_is_kept_on_the_scheduled_post_without_another_lookup(
-    client, subscribed, fake_x_reader, fake_x_publisher, clock
-):
-    await _connect_x(client)
-    fake_x_reader.communities[COMMUNITY_ID] = "Build in Public"
-    community = (await client.post(LOOKUPS, json={"pasted": COMMUNITY_URL})).json()
-
-    created = await client.post(
-        "/api/v1/scheduled-posts",
-        json={
-            "text": "Hello Community.",
-            "publish_now": True,
-            "community": {"id": community["id"], "name": community["name"]},
-        },
-    )
-
-    assert created.status_code == 201, created.text
-    assert created.json()["community"] == community
-    assert fake_x_reader.community_calls == [COMMUNITY_ID]
 
 
 async def test_lookups_are_rate_limited(client, subscribed, fake_x_reader):

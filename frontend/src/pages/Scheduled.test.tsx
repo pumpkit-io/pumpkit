@@ -372,8 +372,7 @@ describe('Scheduled', () => {
         'https://x.com/i/web/status/1890000000000000001',
       );
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        'Shipping the new onboarding today.',
-        undefined,
+        { text: 'Shipping the new onboarding today.' },
         { community: null, shareWithFollowers: false },
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
@@ -565,9 +564,8 @@ describe('Scheduled', () => {
       expect(await upcoming.findByText('Monday morning.')).toBeInTheDocument();
       expect(upcoming.getAllByRole('listitem')[0]).toHaveTextContent('Monday morning.');
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        'Monday morning.',
+        { text: 'Monday morning.' },
         '2026-10-12T07:00:00.000Z',
-        undefined,
         { community: null, shareWithFollowers: false },
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
@@ -692,10 +690,13 @@ describe('Scheduled', () => {
       expect(track).toHaveBeenCalledWith('community_looked_up', { found: true, named: true });
       fireEvent.click(box.getByRole('button', { name: 'Post now' }));
       await vi.waitFor(() =>
-        expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello Community.', undefined, {
-          community: { id: COMMUNITY_ID, name: 'Build in Public' },
-          shareWithFollowers: true,
-        }),
+        expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+          { text: 'Hello Community.' },
+          {
+            community: { id: COMMUNITY_ID, name: 'Build in Public' },
+            shareWithFollowers: true,
+          },
+        ),
       );
     });
 
@@ -766,10 +767,13 @@ describe('Scheduled', () => {
       fireEvent.click(box.getByRole('button', { name: 'Post now' }));
 
       await vi.waitFor(() =>
-        expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello', undefined, {
-          community: null,
-          shareWithFollowers: false,
-        }),
+        expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+          { text: 'Hello' },
+          {
+            community: null,
+            shareWithFollowers: false,
+          },
+        ),
       );
     });
 
@@ -787,10 +791,13 @@ describe('Scheduled', () => {
 
       const published = await publishedList();
       expect(await published.findByText('Hello Community.')).toBeInTheDocument();
-      expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello Community.', undefined, {
-        community: { id: COMMUNITY_ID, name: null },
-        shareWithFollowers: true,
-      });
+      expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+        { text: 'Hello Community.' },
+        {
+          community: { id: COMMUNITY_ID, name: null },
+          shareWithFollowers: true,
+        },
+      );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
         source: 'typed',
         post_now: true,
@@ -820,9 +827,8 @@ describe('Scheduled', () => {
       const upcoming = await upcomingList();
       expect(await upcoming.findByText('Monday morning.')).toBeInTheDocument();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        'Monday morning.',
+        { text: 'Monday morning.' },
         '2026-10-12T07:00:00.000Z',
-        undefined,
         { community: { id: '123', name: null }, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
@@ -958,10 +964,13 @@ describe('Scheduled', () => {
       fireEvent.click(box.getByRole('button', { name: 'Post now' }));
 
       await vi.waitFor(() =>
-        expect(scheduledPostService.postNow).toHaveBeenCalledWith('Hello', undefined, {
-          community: { id: MAKERS.id, name: 'Indie makers' },
-          shareWithFollowers: true,
-        }),
+        expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+          { text: 'Hello' },
+          {
+            community: { id: MAKERS.id, name: 'Indie makers' },
+            shareWithFollowers: true,
+          },
+        ),
       );
       expect(scheduledPostService.lookUpCommunity).not.toHaveBeenCalled();
     });

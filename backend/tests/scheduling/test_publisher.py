@@ -9,7 +9,6 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
@@ -29,15 +28,6 @@ CHECK_X_REASON = "X didn't confirm this post. It may have been published. Check 
 X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a few minutes."
 
 
-async def _connect_x(client: AsyncClient) -> None:
-    started = await client.post("/api/v1/x-connection/authorizations")
-    state = parse_qs(urlsplit(started.json()["url"]).query)["state"][0]
-    completed = await client.post(
-        "/api/v1/x-connection/authorizations/complete", json={"code": "c", "state": state}
-    )
-    assert completed.status_code == 200, completed.text
-
-
 async def _schedule(client: AsyncClient, publish_at: str, text: str = "Later today.") -> str:
     response = await client.post(SCHEDULED_POSTS, json={"text": text, "publish_at": publish_at})
     assert response.status_code == 201, response.text
@@ -49,9 +39,9 @@ async def _listed(client: AsyncClient) -> dict[str, dict]:
 
 
 async def test_a_scheduled_post_is_published_once_due_and_never_before(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:05:00Z", "At five past")
     fixed_clock.advance(timedelta(minutes=4, seconds=29))
 
@@ -71,15 +61,16 @@ async def test_a_scheduled_post_is_published_once_due_and_never_before(
 
 
 async def test_a_due_community_post_goes_out_in_its_community(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    fake_x_reader.communities["1493446837214187523"] = "Indie makers"
+    await connect_x()
     response = await client.post(
         SCHEDULED_POSTS,
         json={
             "text": "For the Community",
             "publish_at": "2026-10-10T12:05:00Z",
-            "community": {"id": "1493446837214187523", "name": "Indie makers"},
+            "community": "1493446837214187523",
             "share_with_followers": True,
         },
     )
@@ -99,15 +90,16 @@ async def test_a_due_community_post_goes_out_in_its_community(
 
 
 async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_membership_hint(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    fake_x_reader.communities["1493446837214187523"] = "Indie makers"
+    await connect_x()
     response = await client.post(
         SCHEDULED_POSTS,
         json={
             "text": "Not a member",
             "publish_at": "2026-10-10T12:05:00Z",
-            "community": {"id": "1493446837214187523", "name": "Indie makers"},
+            "community": "1493446837214187523",
         },
     )
     assert response.status_code == 201, response.text
@@ -127,9 +119,9 @@ async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_memb
 
 
 async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_plans_are_sold(
-    client, db_session_maker, sells_no_plans, fake_x_publisher, fixed_clock
+    client, db_session_maker, sells_no_plans, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:05:00Z", "No Plans here")
     fixed_clock.advance(timedelta(minutes=5))
 
@@ -140,9 +132,9 @@ async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_pl
 
 
 async def test_one_pass_publishes_every_due_scheduled_post(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:03:00Z", "First")
     await _schedule(client, "2026-10-10T12:02:00Z", "Second")
     await _schedule(client, "2026-10-10T13:00:00Z", "Later")
@@ -155,9 +147,9 @@ async def test_one_pass_publishes_every_due_scheduled_post(
 
 
 async def test_two_passes_at_once_publish_each_scheduled_post_once(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     for minute in (2, 3, 4):
         await _schedule(client, f"2026-10-10T12:0{minute}:00Z", f"Post {minute}")
     fixed_clock.advance(timedelta(minutes=5))
@@ -186,9 +178,9 @@ async def test_two_passes_at_once_publish_each_scheduled_post_once(
 
 @pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
 async def test_a_post_x_never_took_is_retried_after_a_backoff(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, error
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, error, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:02:00Z", "Busy X")
     fixed_clock.advance(timedelta(minutes=1, seconds=30))
     fake_x_publisher.fail_publish = error
@@ -213,9 +205,9 @@ async def test_a_post_x_never_took_is_retried_after_a_backoff(
 
 
 async def test_a_refresh_x_never_took_is_retried_too(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T14:00:00Z", "Needs a fresh token")
     fixed_clock.advance(timedelta(hours=2))
     fake_x_publisher.fail_refresh = XNotReceivedError("ConnectError")
@@ -230,9 +222,9 @@ async def test_a_refresh_x_never_took_is_retried_too(
 
 
 async def test_a_rate_limited_post_gives_up_as_failed_15_minutes_after_its_publish_time(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:02:00Z", "Never goes out")
     fixed_clock.advance(timedelta(minutes=1, seconds=30))
     fake_x_publisher.fail_publish = XRateLimitedError("429")
@@ -257,9 +249,9 @@ async def test_a_rate_limited_post_gives_up_as_failed_15_minutes_after_its_publi
 
 
 async def test_a_post_whose_outcome_is_unknown_fails_without_a_retry(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:02:00Z", "Timed out")
     fixed_clock.advance(timedelta(minutes=2))
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
@@ -284,11 +276,11 @@ async def _crashed_mid_publish(db_session_maker, scheduled_post_id: str, clock) 
 
 
 async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, monkeypatch
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
 ):
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
-    await _connect_x(client)
+    await connect_x()
     scheduled_post_id = await _schedule(client, "2026-10-10T12:02:00Z", "Stuck")
     fixed_clock.advance(timedelta(minutes=2))
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock)
@@ -313,9 +305,9 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
 
 
 async def test_the_loop_runs_passes_until_it_is_stopped(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:02:00Z", "From the loop")
     fixed_clock.advance(timedelta(minutes=2))
     stop = asyncio.Event()
@@ -388,11 +380,11 @@ def test_the_compose_healthcheck_reads_the_heartbeat_the_publisher_touches():
 
 
 async def test_the_pass_tracks_what_it_publishes(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, monkeypatch
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
 ):
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
-    await _connect_x(client)
+    await connect_x()
     await _schedule(client, "2026-10-10T12:02:00Z")
     fixed_clock.advance(timedelta(minutes=2))
 

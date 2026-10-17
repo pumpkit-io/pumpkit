@@ -96,9 +96,8 @@ function FinalToXDialog({
     if (!destination) return;
     const outcome = await create(
       postNow
-        ? { text: version.final, sourceVersionId: version.id, destination, postNow: true }
+        ? { sourceVersionId: version.id, destination, postNow: true }
         : {
-            text: version.final,
             sourceVersionId: version.id,
             destination,
             postNow: false,

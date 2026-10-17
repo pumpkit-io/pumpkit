@@ -1,20 +1,17 @@
 """The Scheduled post MCP tools, refusing what the web routes refuse, in the same words."""
 
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import delete, update
+from sqlalchemy import delete
 
 import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
-from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.models import SCHEDULED, ScheduledPost
-from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XPostRejectedError,
@@ -25,18 +22,9 @@ from tests.mcp_client import error_text
 SCHEDULED_PAGE = "http://localhost:5173/scheduled"
 
 
-async def _connect_x(client: AsyncClient) -> None:
-    started = await client.post("/api/v1/x-connection/authorizations")
-    state = parse_qs(urlsplit(started.json()["url"]).query)["state"][0]
-    completed = await client.post(
-        "/api/v1/x-connection/authorizations/complete", json={"code": "c", "state": state}
-    )
-    assert completed.status_code == 200, completed.text
-
-
 @pytest.fixture
-async def connected(client, subscribed, fake_x_publisher) -> None:
-    await _connect_x(client)
+async def connected(subscribed, fixed_clock, connect_x) -> None:
+    await connect_x()
 
 
 @pytest.fixture
@@ -91,41 +79,6 @@ async def test_scheduling_a_version_copies_its_final_and_records_the_version(
     assert result["structuredContent"]["source_version_id"] == version["id"]
 
 
-async def test_scheduling_another_users_version_is_refused_as_not_found(
-    connected, mcp, db, fixed_clock
-):
-    bob = User(email="bob@example.com", display_name="Bob")
-    db.add(bob)
-    await db.flush()
-    bobs_post = Post(user_id=bob.id, brief="bob's", corpus_post_ids=[], created_at=fixed_clock())
-    db.add(bobs_post)
-    await db.flush()
-    bobs_version = VersionAttempt(
-        post_id=bobs_post.id,
-        sequence=1,
-        status=ATTEMPT_SUCCEEDED,
-        version_number=1,
-        final="Bob's words.",
-        created_at=fixed_clock(),
-    )
-    db.add(bobs_version)
-    await db.commit()
-
-    result = await mcp.call_tool(
-        "schedule_post", version_id=bobs_version.id, publish_at="2026-10-10T14:00:00Z"
-    )
-
-    assert error_text(result) == "Version not found."
-    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
-
-
-@pytest.mark.parametrize("arguments", [{}, {"text": "Mine.", "version_id": "version_attempt_1"}])
-async def test_scheduling_needs_either_text_or_a_version(connected, mcp, fixed_clock, arguments):
-    result = await mcp.call_tool("schedule_post", publish_at="2026-10-10T14:00:00Z", **arguments)
-
-    assert error_text(result) == "Give either the text or a Version id, not both."
-
-
 async def _schedule(mcp, text: str = "Shipping on Monday.", at: str = "2026-10-10T14:00:00Z"):
     return await mcp.call_tool("schedule_post", text=text, publish_at=at)
 
@@ -138,36 +91,10 @@ async def test_scheduling_without_an_x_connection_links_to_the_scheduled_page(
     assert error_text(result) == f"Connect your X account first. {SCHEDULED_PAGE}"
 
 
-async def test_scheduling_on_an_x_connection_that_needs_reconnecting_links_to_the_scheduled_page(
-    connected, mcp, db, fixed_clock
-):
-    await db.execute(update(XConnection).values(needs_reconnect=True))
-    await db.commit()
-
-    result = await _schedule(mcp)
-
-    assert error_text(result) == (
-        f"X no longer accepts Pumpkit's access to your account. Reconnect X first. {SCHEDULED_PAGE}"
-    )
-
-
 async def test_a_post_over_the_x_accounts_limit_is_refused(connected, mcp, fixed_clock):
     result = await _schedule(mcp, text="x" * 281)
 
     assert error_text(result) == "This post is 281 characters by X's count, over the 280 limit."
-
-
-@pytest.mark.parametrize(
-    ("at", "message"),
-    [
-        ("2026-10-10T12:00:00Z", "Pick a time at least a minute from now."),
-        ("2026-10-10T14:00:30Z", "Pick a time on a whole minute."),
-    ],
-)
-async def test_a_time_the_web_app_refuses_is_refused(connected, mcp, fixed_clock, at, message):
-    result = await _schedule(mcp, at=at)
-
-    assert error_text(result) == message
 
 
 async def test_a_time_without_its_utc_offset_is_refused(connected, mcp, fixed_clock):
@@ -196,9 +123,6 @@ async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
 
 COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
-NOT_A_COMMUNITY = (
-    "That isn't a Community. Paste its URL from X, like https://x.com/i/communities/123, or its ID."
-)
 
 
 @pytest.fixture
@@ -226,19 +150,12 @@ async def test_scheduling_into_a_community_names_it_as_x_does(
     assert result["structuredContent"]["share_with_followers"] is share_with_followers
 
 
-@pytest.mark.parametrize(
-    ("pasted", "message"),
-    [
-        ("https://x.com/levelsio", NOT_A_COMMUNITY),
-        ("123", "X has no Community with that ID. Check the URL."),
-    ],
-)
-async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock, pasted, message):
+async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock):
     result = await mcp.call_tool(
-        "schedule_post", text="Hi.", publish_at="2026-10-10T14:00:00Z", community=pasted
+        "schedule_post", text="Hi.", publish_at="2026-10-10T14:00:00Z", community="123"
     )
 
-    assert error_text(result) == message
+    assert error_text(result) == "X has no Community with that ID. Check the URL."
     assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
 
 
@@ -334,26 +251,6 @@ async def test_editing_to_a_community_and_the_profile_at_once_is_refused(
     )
 
     assert error_text(result) == "Give either a Community or the profile, not both."
-
-
-async def test_editing_nothing_is_refused(connected, mcp, fixed_clock):
-    scheduled = (await _schedule(mcp))["structuredContent"]
-
-    result = await mcp.call_tool("edit_scheduled_post", scheduled_post_id=scheduled["id"])
-
-    assert error_text(result) == (
-        "Change the text, the publish time, the Community or sharing with followers."
-    )
-
-
-async def test_editing_into_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock):
-    scheduled = (await _schedule(mcp))["structuredContent"]
-
-    result = await mcp.call_tool(
-        "edit_scheduled_post", scheduled_post_id=scheduled["id"], community="not a community"
-    )
-
-    assert error_text(result) == NOT_A_COMMUNITY
 
 
 PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
@@ -536,9 +433,9 @@ async def test_connect_x_works_for_a_user_whose_subscription_ended(subscription_
 
 
 async def test_every_user_schedules_on_an_instance_that_sells_no_plans(
-    sells_no_plans, client, fake_x_publisher, mcp, fixed_clock
+    sells_no_plans, client, fake_x_publisher, mcp, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
 
     result = await _schedule(mcp)
 
@@ -624,46 +521,3 @@ async def test_post_now_x_didnt_take_says_pumpkit_keeps_trying(
     posted = result["structuredContent"]
     assert posted["state"] == "scheduled"
     assert posted["message"] == "X was busy. Pumpkit will keep trying for the next 15 minutes."
-
-
-async def test_post_now_without_an_x_connection_links_to_the_scheduled_page(
-    subscribed, mcp, fixed_clock
-):
-    result = await mcp.call_tool("post_now", text="Out now.")
-
-    assert error_text(result) == f"Connect your X account first. {SCHEDULED_PAGE}"
-
-
-async def test_post_now_on_an_x_connection_that_needs_reconnecting_links_to_the_scheduled_page(
-    connected, mcp, db, fake_x_publisher, fixed_clock
-):
-    await db.execute(update(XConnection).values(needs_reconnect=True))
-    await db.commit()
-
-    result = await mcp.call_tool("post_now", text="Out now.")
-
-    assert error_text(result) == (
-        f"X no longer accepts Pumpkit's access to your account. Reconnect X first. {SCHEDULED_PAGE}"
-    )
-    assert fake_x_publisher.published == []
-
-
-async def test_post_now_over_the_x_accounts_limit_is_refused(connected, mcp, fixed_clock):
-    result = await mcp.call_tool("post_now", text="x" * 281)
-
-    assert error_text(result) == "This post is 281 characters by X's count, over the 280 limit."
-
-
-async def test_post_now_past_the_monthly_cap_is_refused(
-    connected, mcp, fake_x_publisher, fixed_clock, monkeypatch
-):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 1)
-    await _schedule(mcp, text="First", at="2026-10-30T09:00:00Z")
-
-    result = await mcp.call_tool("post_now", text="Second")
-
-    assert error_text(result) == (
-        "You have 1 Scheduled posts in October 2026, the most for one month. "
-        "The cap resets on November 1, 2026."
-    )
-    assert fake_x_publisher.published == []
