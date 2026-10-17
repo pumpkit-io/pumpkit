@@ -61,6 +61,14 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
     }
 
 
+async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
+    result = await mcp.call_tool("start_post", brief="ship small things")
+
+    assert error_text(result) == (
+        "Add an Inspiration author with posts before writing a Post. http://localhost:5173/home"
+    )
+
+
 @pytest.fixture
 async def post_id(with_author, mcp, fake_llm) -> str:
     """A Post of the User's with one Version, whose Final is "final 1"."""

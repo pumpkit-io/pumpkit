@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +13,7 @@ from pumpkit.authors.schemas import (
     InspirationAuthorsListResponse,
 )
 from pumpkit.authors.x_reader import FetchedPost, HandleNotFoundError, XReader
-from pumpkit.core.errors import RetryLaterError
+from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 
 MAX_INSPIRATION_AUTHORS = 3
 REFRESH_COOLDOWN = timedelta(hours=1)
@@ -30,10 +29,7 @@ def next_refresh_at(last_fetched_at: Optional[datetime], *, now: datetime) -> Op
 
 async def _listed_author(db: AsyncSession, *, user_id: str, handle: str) -> InspirationAuthor:
     """The User's Inspiration author for `handle` as typed in a URL, or a 404."""
-    not_listed = HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="That handle isn't one of your Inspiration authors.",
-    )
+    not_listed = NotFoundError("That handle isn't one of your Inspiration authors.")
     try:
         handle = normalize_handle(handle)
     except ValueError:
@@ -57,11 +53,8 @@ async def list_authors(db: AsyncSession, user: User) -> InspirationAuthorsListRe
     return InspirationAuthorsListResponse(data=[_response(summary) for summary in summaries])
 
 
-def _already_listed(handle: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail=f"@{handle} is already one of your Inspiration authors.",
-    )
+def _already_listed(handle: str) -> ConflictError:
+    return ConflictError(f"@{handle} is already one of your Inspiration authors.")
 
 
 async def add_author(
@@ -78,10 +71,9 @@ async def add_author(
     if await service.get_author(db, user_id=user_id, handle=handle):
         raise _already_listed(handle)
     if await service.count_authors(db, user_id=user_id) >= MAX_INSPIRATION_AUTHORS:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"You can have up to {MAX_INSPIRATION_AUTHORS} Inspiration authors. "
-            "Remove one to add another.",
+        raise ConflictError(
+            f"You can have up to {MAX_INSPIRATION_AUTHORS} Inspiration authors. "
+            "Remove one to add another."
         )
 
     last_fetched_at = await service.last_fetched_at(db, handle=handle)
@@ -94,10 +86,7 @@ async def add_author(
     else:
         has_posts = await service.count_posts(db, handle=handle) > 0
     if not has_posts:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"@{handle} has no original posts to learn from.",
-        )
+        raise RefusedError(f"@{handle} has no original posts to learn from.")
 
     try:
         await service.add_author(db, user_id=user_id, handle=handle, now=now)
@@ -137,9 +126,7 @@ async def _fetch(reader: XReader, handle: str) -> list[FetchedPost]:
     try:
         return await reader.fetch_recent_posts(handle)
     except HandleNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"@{handle} doesn't exist on X."
-        )
+        raise NotFoundError(f"@{handle} doesn't exist on X.")
 
 
 async def remove_author(db: AsyncSession, user: User, handle: str) -> None:

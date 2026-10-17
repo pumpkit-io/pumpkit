@@ -14,6 +14,9 @@ SmtpSecurity = Literal["starttls", "tls", "none"]
 
 _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "none": 25}
 
+# The web app page where a User subscribes or manages their Subscription.
+BILLING_PAGE = "/billing"
+
 
 class ProviderGroup(StrEnum):
     """An optional provider's settings group (ADR 0011); the value names it in startup errors."""
@@ -228,7 +231,7 @@ class Settings(BaseSettings):
 
     def billing_page_url(self) -> str:
         """The web app page where a User subscribes or manages their Subscription."""
-        return f"{self.frontend_url()}/billing"
+        return f"{self.frontend_url()}{BILLING_PAGE}"
 
     def stripe_billing_portal_return_url(self) -> str:
         return self.billing_page_url()

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncIterator, Awaitable, Callable, Generic, TypeVar, overload
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,8 +102,6 @@ def error_result(exc: Exception, request: Request) -> CallToolResult:
     page's `url` when it has one, and the rest of its body (`retry_at`, `error_id`). Reported
     errors go to PostHog as the handlers send them.
     """
-    if isinstance(exc, HTTPException):
-        return tool_error(str(exc.detail))
     if isinstance(exc, ValidationError):
         return tool_error(_validation_detail(exc))
     if isinstance(exc, AppError):

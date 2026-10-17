@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request, status
 from mcp.server.mcpserver import MCPServer
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
@@ -101,10 +101,7 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
                 clock = await resolve(caller.app, stack, get_clock)
                 user = await user_service.get_user_by_id(db=db, user_id=caller.user_id)
                 if user is None:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=CREDENTIALS_INVALID,
-                    )
+                    return tool_error(CREDENTIALS_INVALID)
                 if tool.needs_access and not await billing_service.has_access(db, user_id=user.id):
                     return _subscription_needed()
                 call = ToolCall(user=user, db=db, now=clock(), app=caller.app, stack=stack)
