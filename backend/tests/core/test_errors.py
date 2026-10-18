@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient, Response
 import pumpkit.core.errors as errors_module
 from pumpkit.authors.x_reader import HandleNotFoundError, XReaderError, XReaderNotConfiguredError
 from pumpkit.billing.gateway import BillingProviderError
-from pumpkit.core.errors import AppError, RetryLaterError
+from pumpkit.core.errors import AppError, ConflictError, RetryLaterError
 from pumpkit.main import app as main_app
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.llm_client import LLMNotConfiguredError
@@ -130,6 +130,21 @@ async def test_main_app_answers_retry_later_with_429_and_retry_after(
         b'{"detail":"Too many Versions. Try again later.","retry_at":"2026-01-01T12:01:30.200000Z"}'
     )
     assert response.headers["retry-after"] == "91"
+    fake_posthog.capture_exception.assert_not_called()
+
+
+async def test_a_refusal_with_a_fix_page_answers_with_its_web_app_url(
+    raise_from_main_app, fake_posthog
+):
+    response = await raise_from_main_app(
+        ConflictError("Connect your X account first.", fix_page="/scheduled")
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Connect your X account first.",
+        "url": "http://localhost:5173/scheduled",
+    }
     fake_posthog.capture_exception.assert_not_called()
 
 

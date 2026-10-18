@@ -15,6 +15,6 @@ def test_pasted_text_reads_as_a_community_id_or_is_refused(case):
     if case["id"] is None:
         with pytest.raises(RuleBroken) as refused:
             community_id_from(case["pasted"])
-        assert refused.value.message == NOT_A_COMMUNITY
+        assert refused.value.detail == NOT_A_COMMUNITY
     else:
         assert community_id_from(case["pasted"]) == case["id"]

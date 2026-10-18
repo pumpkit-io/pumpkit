@@ -22,7 +22,7 @@ _URL = re.compile(
 @dataclass(frozen=True)
 class Community:
     id: str
-    # As the User saw it when they picked it; None when it couldn't be looked up.
+    # As Pumpkit looked it up on X; None when it couldn't be.
     name: Optional[str]
 
 
@@ -36,13 +36,6 @@ class Destination:
 
 def community_url(community_id: str) -> str:
     return f"https://x.com/i/communities/{community_id}"
-
-
-def check_community_id(community_id: str) -> str:
-    """The ID as given when it fits X's pattern; anything else is a `RuleBroken`."""
-    if not _BARE_ID.fullmatch(community_id):
-        raise RuleBroken(NOT_A_COMMUNITY)
-    return community_id
 
 
 def community_id_from(pasted: str) -> str:

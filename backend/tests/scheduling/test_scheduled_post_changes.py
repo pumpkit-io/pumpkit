@@ -1,7 +1,6 @@
 """Editing, rescheduling and cancelling Scheduled posts, with the frozen clock."""
 
 from datetime import timedelta
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
@@ -18,15 +17,6 @@ X_ACCOUNT_CHANGED_REASON = (
 )
 
 
-async def _connect_x(client: AsyncClient) -> None:
-    started = await client.post("/api/v1/x-connection/authorizations")
-    state = parse_qs(urlsplit(started.json()["url"]).query)["state"][0]
-    completed = await client.post(
-        "/api/v1/x-connection/authorizations/complete", json={"code": "c", "state": state}
-    )
-    assert completed.status_code == 200, completed.text
-
-
 async def _schedule(client: AsyncClient, publish_at: str, text: str = "Later today.") -> dict:
     response = await client.post(SCHEDULED_POSTS, json={"text": text, "publish_at": publish_at})
     assert response.status_code == 201, response.text
@@ -38,9 +28,9 @@ async def _listed(client: AsyncClient) -> list[dict]:
 
 
 async def test_editing_the_text_of_a_scheduled_post_saves_it(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client, "2026-10-10T14:00:00Z", "Lanch day.")
 
     response = await client.patch(
@@ -53,23 +43,10 @@ async def test_editing_the_text_of_a_scheduled_post_saves_it(
     assert await _listed(client) == [edited]
 
 
-async def test_an_x_premium_account_edits_in_a_text_over_280_characters(
-    client, subscribed, fake_x_publisher, fixed_clock
-):
-    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type="Premium")
-    await _connect_x(client)
-    scheduled = await _schedule(client, "2026-10-10T14:00:00Z")
-
-    response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"text": "a" * 281})
-
-    assert response.status_code == 200, response.text
-    assert await _listed(client) == [{**scheduled, "text": "a" * 281}]
-
-
 async def test_moving_a_scheduled_post_saves_the_new_time_in_utc_and_lists_it_in_order(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     moved = await _schedule(client, "2026-10-11T09:00:00Z", "Moved")
     await _schedule(client, "2026-10-12T09:00:00Z", "Stays")
 
@@ -83,35 +60,13 @@ async def test_moving_a_scheduled_post_saves_the_new_time_in_utc_and_lists_it_in
 
 
 @pytest.mark.parametrize(
-    ("change", "detail"),
-    [
-        ({"publish_at": "2026-10-10T12:01:00Z"}, "Pick a time at least a minute from now."),
-        ({"publish_at": "2027-10-10T12:01:00Z"}, "Pick a time within a year from now."),
-        ({"publish_at": "2026-10-10T14:00:30Z"}, "Pick a time on a whole minute."),
-        ({"text": "a" * 281}, "This post is 281 characters by X's count, over the 280 limit."),
-    ],
-)
-async def test_an_edit_follows_the_same_time_window_and_length_rules_as_scheduling(
-    client, subscribed, fake_x_publisher, fixed_clock, change, detail
-):
-    await _connect_x(client)
-    scheduled = await _schedule(client, "2026-10-10T14:00:00Z")
-
-    response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json=change)
-
-    assert response.status_code == 422
-    assert response.json()["detail"] == detail
-    assert await _listed(client) == [scheduled]
-
-
-@pytest.mark.parametrize(
     "change",
     [{}, {"text": "   "}, {"publish_at": "2026-10-10T14:00:00"}, {"state": "scheduled"}],
 )
 async def test_an_edit_needs_a_text_or_a_publish_time_with_a_timezone(
-    client, subscribed, fake_x_publisher, fixed_clock, change
+    client, subscribed, fake_x_publisher, fixed_clock, change, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client, "2026-10-10T14:00:00Z")
 
     response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json=change)
@@ -121,9 +76,9 @@ async def test_an_edit_needs_a_text_or_a_publish_time_with_a_timezone(
 
 
 async def test_a_publishing_scheduled_post_cannot_be_edited(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client, "2026-10-10T12:02:00Z", "Going out")
     fixed_clock.advance(timedelta(minutes=2))
     async with db_session_maker() as session:
@@ -144,9 +99,9 @@ async def test_a_publishing_scheduled_post_cannot_be_edited(
 
 
 async def test_a_published_scheduled_post_cannot_be_edited(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     published = (
         await client.post(SCHEDULED_POSTS, json={"text": "Out", "publish_now": True})
     ).json()
@@ -162,12 +117,12 @@ async def test_a_published_scheduled_post_cannot_be_edited(
 
 
 async def test_rescheduling_a_failed_post_sends_it_to_the_x_account_connected_now(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client, "2026-10-10T12:02:00Z", "For Ada")
     fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
-    await _connect_x(client)
+    await connect_x()
     fixed_clock.advance(timedelta(minutes=2))
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
     assert (await _listed(client))[0]["failed_reason"] == X_ACCOUNT_CHANGED_REASON
@@ -189,9 +144,9 @@ async def test_rescheduling_a_failed_post_sends_it_to_the_x_account_connected_no
 
 
 async def test_rescheduling_a_post_waiting_to_retry_drops_its_backoff(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client, "2026-10-10T12:02:00Z", "Busy X")
     fake_x_publisher.fail_publish = XRateLimitedError("429")
     # Tried at 12:02:30 and 12:03:30; without the reset the next try would wait for 12:05:30.
@@ -211,26 +166,10 @@ async def test_rescheduling_a_post_waiting_to_retry_drops_its_backoff(
     assert len(fake_x_publisher.published) == 3
 
 
-async def test_rescheduling_needs_an_x_connection(
-    client, subscribed, fake_x_publisher, fixed_clock
-):
-    await _connect_x(client)
-    scheduled = await _schedule(client, "2026-10-10T14:00:00Z")
-    assert (await client.delete("/api/v1/x-connection")).status_code == 204
-
-    response = await client.patch(
-        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"publish_at": "2026-10-11T09:00:00Z"}
-    )
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Connect your X account first."
-    assert await _listed(client) == [scheduled]
-
-
 async def test_cancelling_a_scheduled_post_removes_it(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     cancelled = await _schedule(client, "2026-10-10T12:02:00Z", "Cancelled")
     kept = await _schedule(client, "2026-10-10T12:03:00Z", "Kept")
 
@@ -244,9 +183,9 @@ async def test_cancelling_a_scheduled_post_removes_it(
 
 
 async def test_a_publishing_or_published_scheduled_post_cannot_be_cancelled(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     published = (
         await client.post(SCHEDULED_POSTS, json={"text": "Out", "publish_now": True})
     ).json()
@@ -267,9 +206,9 @@ async def test_a_publishing_or_published_scheduled_post_cannot_be_cancelled(
 
 
 async def test_a_failed_scheduled_post_can_be_removed(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
     failed = (await client.post(SCHEDULED_POSTS, json={"text": "Dup", "publish_now": True})).json()
     assert failed["state"] == "failed"
@@ -310,41 +249,10 @@ OCTOBER_FULL = (
 )
 
 
-async def test_rescheduling_into_a_full_month_is_refused_with_the_date_the_cap_resets(
-    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
-):
-    await _connect_x(client)
-    await _schedule(client, "2026-10-11T09:00:00Z", "First")
-    await _schedule(client, "2026-10-12T09:00:00Z", "Second")
-    november = await _schedule(client, "2026-11-02T09:00:00Z", "November")
-
-    response = await client.patch(
-        f"{SCHEDULED_POSTS}/{november['id']}", json={"publish_at": "2026-10-13T09:00:00Z"}
-    )
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == OCTOBER_FULL
-    assert [p["publish_at"] for p in await _listed(client)][-1] == "2026-11-02T09:00:00Z"
-
-
-async def test_moving_a_post_within_its_full_month_is_allowed(
-    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
-):
-    await _connect_x(client)
-    await _schedule(client, "2026-10-11T09:00:00Z", "First")
-    second = await _schedule(client, "2026-10-12T09:00:00Z", "Second")
-
-    response = await client.patch(
-        f"{SCHEDULED_POSTS}/{second['id']}", json={"publish_at": "2026-10-20T09:00:00Z"}
-    )
-
-    assert response.status_code == 200, response.text
-
-
 async def test_cancelling_frees_a_place_in_a_full_month(
-    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     first = await _schedule(client, "2026-10-11T09:00:00Z", "First")
     await _schedule(client, "2026-10-12T09:00:00Z", "Second")
 

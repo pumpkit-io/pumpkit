@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.core.errors import RetryLaterError
+from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
 from pumpkit.posts.llm import LLM
@@ -24,6 +23,9 @@ from pumpkit.posts.writing.versions import EarlierVersion, write_first_version, 
 # so one account can't run up an unbounded model bill.
 VERSION_ATTEMPTS_PER_WINDOW = 30
 VERSION_ATTEMPT_WINDOW = timedelta(hours=1)
+
+# Where the User adds Inspiration authors.
+HOME_PAGE = "/home"
 
 
 def next_attempt_at(attempted_at: list[datetime]) -> Optional[datetime]:
@@ -91,7 +93,7 @@ def version_response(attempt: VersionAttempt) -> VersionResponse:
 async def _user_post(db: AsyncSession, *, user: User, post_id: str) -> Post:
     post = await service.get_user_post(db, user_id=user.id, post_id=post_id)
     if post is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
+        raise NotFoundError("Post not found.")
     return post
 
 
@@ -137,9 +139,8 @@ async def start_post(
     user_id = user.id
     corpus = await service.corpus_for_user(db, user_id=user_id)
     if not corpus.post_ids:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Add an Inspiration author with posts before writing a Post.",
+        raise RefusedError(
+            "Add an Inspiration author with posts before writing a Post.", fix_page=HOME_PAGE
         )
     await _check_attempt_limit(db, user_id=user_id, now=now)
     # Ends the read transaction before the calls, which can take minutes.
@@ -170,10 +171,7 @@ async def add_version(
     post = await _user_post(db, user=user, post_id=post_id)
     versions = _versions(post)
     if not versions:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This Post has no Version to give Feedback on. Start a new Post.",
-        )
+        raise ConflictError("This Post has no Version to give Feedback on. Start a new Post.")
     await _check_attempt_limit(db, user_id=user.id, now=now)
     corpus = await service.corpus_for_post(db, post=post)
     earlier = [EarlierVersion(feedback=v.feedback, final=v.final or "") for v in versions]

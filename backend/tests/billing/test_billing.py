@@ -130,9 +130,10 @@ async def test_checkout_for_a_user_with_a_running_subscription_returns_409(
     response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
 
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "You already have a Subscription. Manage it in the billing portal."
-    )
+    assert response.json() == {
+        "detail": "You already have a Subscription. Manage it in the billing portal.",
+        "url": "http://localhost:5173/billing",
+    }
     assert fake_billing.checkouts == []
     assert fake_billing.cancelled_subscriptions == []
 

@@ -85,6 +85,7 @@ from pumpkit.core.rate_limit import limiter  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
 from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
+from pumpkit.x_connection.service import save_connection  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
 from tests.mcp_client import McpClient  # noqa: E402
 
@@ -404,6 +405,24 @@ def sign_in_with_google(fake_google) -> Callable[[AsyncClient, GoogleClaims], Aw
         )
 
     return _sign_in
+
+
+@pytest.fixture
+def connect_x(db, user, fake_x_publisher) -> Callable[[], Awaitable[None]]:
+    """
+    Connect `user` to `fake_x_publisher.account` as completing an authorization would, at the
+    time `get_clock` reads, without the authorization's requests. Call it after setting the clock.
+    """
+
+    async def _connect() -> None:
+        now = app.dependency_overrides.get(get_clock, get_clock)()()
+        tokens = await fake_x_publisher.exchange_code(code="c", code_verifier="v", now=now)
+        await save_connection(
+            db, user_id=user.id, account=fake_x_publisher.account, tokens=tokens, now=now
+        )
+        await db.commit()
+
+    return _connect
 
 
 @pytest_asyncio.fixture
