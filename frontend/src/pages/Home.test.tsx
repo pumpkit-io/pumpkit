@@ -483,9 +483,8 @@ describe('Home', () => {
 
       expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        'the final text',
+        { sourceVersionId: 'version_attempt_01' },
         '2026-10-12T07:00:00.000Z',
-        'version_attempt_01',
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
@@ -542,8 +541,7 @@ describe('Home', () => {
         'https://x.com/i/web/status/1890000000000000001',
       );
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        'the final text',
-        'version_attempt_01',
+        { sourceVersionId: 'version_attempt_01' },
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
@@ -701,8 +699,7 @@ describe('Home', () => {
 
         expect(await dialog.findByText('Published on X.')).toBeInTheDocument();
         expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          'the final text',
-          'version_attempt_01',
+          { sourceVersionId: 'version_attempt_01' },
           { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
         );
         expect(track).toHaveBeenCalledWith('scheduled_post_created', {
@@ -761,9 +758,8 @@ describe('Home', () => {
 
         expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
         expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-          'the final text',
+          { sourceVersionId: 'version_attempt_01' },
           '2026-10-12T07:00:00.000Z',
-          'version_attempt_01',
           { community: { id: '123', name: null }, shareWithFollowers: false },
         );
         expect(track).toHaveBeenCalledWith('scheduled_post_created', {

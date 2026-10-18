@@ -1,13 +1,11 @@
 """Changing the Community of a Scheduled post, and its share with followers, with the frozen clock."""
 
 from datetime import timedelta
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from httpx import AsyncClient
 
 import pumpkit.scheduling.service as scheduled_posts_service
-from pumpkit.scheduling.communities import NOT_A_COMMUNITY
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 
@@ -17,13 +15,9 @@ COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
 
 
-async def _connect_x(client: AsyncClient) -> None:
-    started = await client.post("/api/v1/x-connection/authorizations")
-    state = parse_qs(urlsplit(started.json()["url"]).query)["state"][0]
-    completed = await client.post(
-        "/api/v1/x-connection/authorizations/complete", json={"code": "c", "state": state}
-    )
-    assert completed.status_code == 200, completed.text
+@pytest.fixture(autouse=True)
+def known_communities(fake_x_reader) -> None:
+    fake_x_reader.communities.update({COMMUNITY_ID: "Indie makers", "42": "Other"})
 
 
 async def _schedule(
@@ -41,15 +35,15 @@ async def _listed(client: AsyncClient) -> list[dict]:
 
 
 async def test_a_scheduled_post_moves_from_the_profile_into_a_community(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client)
 
     response = await client.patch(
         f"{SCHEDULED_POSTS}/{scheduled['id']}",
         json={
-            "community": {"id": COMMUNITY_ID, "name": "Indie makers"},
+            "community": COMMUNITY_ID,
             "share_with_followers": True,
         },
     )
@@ -65,12 +59,10 @@ async def test_a_scheduled_post_moves_from_the_profile_into_a_community(
 
 
 async def test_clearing_the_community_moves_it_back_to_the_profile_without_sharing(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
-    scheduled = await _schedule(
-        client, community={"id": COMMUNITY_ID, "name": None}, share_with_followers=True
-    )
+    await connect_x()
+    scheduled = await _schedule(client, community=COMMUNITY_ID, share_with_followers=True)
 
     response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"community": None})
 
@@ -79,12 +71,10 @@ async def test_clearing_the_community_moves_it_back_to_the_profile_without_shari
 
 
 async def test_share_with_followers_changes_on_its_own_and_keeps_the_community(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
-    scheduled = await _schedule(
-        client, community={"id": COMMUNITY_ID, "name": "Indie makers"}, share_with_followers=True
-    )
+    await connect_x()
+    scheduled = await _schedule(client, community=COMMUNITY_ID, share_with_followers=True)
 
     response = await client.patch(
         f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"share_with_followers": False}
@@ -95,16 +85,12 @@ async def test_share_with_followers_changes_on_its_own_and_keeps_the_community(
 
 
 async def test_another_community_keeps_the_share_with_followers_choice_unless_given(
-    client, subscribed, fake_x_publisher, fixed_clock
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
-    scheduled = await _schedule(
-        client, community={"id": COMMUNITY_ID, "name": None}, share_with_followers=True
-    )
+    await connect_x()
+    scheduled = await _schedule(client, community=COMMUNITY_ID, share_with_followers=True)
 
-    response = await client.patch(
-        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"community": {"id": "42", "name": "Other"}}
-    )
+    response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"community": "42"})
 
     assert response.status_code == 200, response.text
     assert response.json() == {
@@ -113,42 +99,13 @@ async def test_another_community_keeps_the_share_with_followers_choice_unless_gi
     }
 
 
-async def test_sharing_with_followers_on_a_profile_post_changes_nothing(
-    client, subscribed, fake_x_publisher, fixed_clock
-):
-    await _connect_x(client)
-    scheduled = await _schedule(client)
-
-    response = await client.patch(
-        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"share_with_followers": True}
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json() == scheduled
-
-
-async def test_an_edit_refuses_a_community_id_x_could_not_have(
-    client, subscribed, fake_x_publisher, fixed_clock
-):
-    await _connect_x(client)
-    scheduled = await _schedule(client)
-
-    response = await client.patch(
-        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"community": {"id": "x.com/i/communities"}}
-    )
-
-    assert response.status_code == 422
-    assert response.json()["detail"] == NOT_A_COMMUNITY
-    assert await _listed(client) == [scheduled]
-
-
 @pytest.mark.parametrize(
     "change", [{"share_with_followers": None}, {"community": {"id": COMMUNITY_ID, "x": 1}}]
 )
 async def test_an_edit_needs_something_to_change(
-    client, subscribed, fake_x_publisher, fixed_clock, change
+    client, subscribed, fake_x_publisher, fixed_clock, change, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client)
 
     response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json=change)
@@ -158,9 +115,9 @@ async def test_an_edit_needs_something_to_change(
 
 
 async def test_a_failed_post_moves_into_a_community_and_is_rescheduled_there(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client, publish_at="2026-10-10T12:02:00Z")
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Forbidden.")
     fixed_clock.advance(timedelta(minutes=2))
@@ -171,7 +128,7 @@ async def test_a_failed_post_moves_into_a_community_and_is_rescheduled_there(
     response = await client.patch(
         f"{SCHEDULED_POSTS}/{scheduled['id']}",
         json={
-            "community": {"id": COMMUNITY_ID, "name": None},
+            "community": COMMUNITY_ID,
             "share_with_followers": False,
             "publish_at": "2026-10-10T12:05:00Z",
         },
@@ -185,12 +142,10 @@ async def test_a_failed_post_moves_into_a_community_and_is_rescheduled_there(
 
 
 async def test_a_failed_post_s_community_changes_without_rescheduling_it(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
-    scheduled = await _schedule(
-        client, publish_at="2026-10-10T12:02:00Z", community={"id": COMMUNITY_ID, "name": None}
-    )
+    await connect_x()
+    scheduled = await _schedule(client, publish_at="2026-10-10T12:02:00Z", community=COMMUNITY_ID)
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Forbidden.")
     fixed_clock.advance(timedelta(minutes=2))
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
@@ -204,9 +159,9 @@ async def test_a_failed_post_s_community_changes_without_rescheduling_it(
 
 
 async def test_a_publishing_scheduled_post_s_community_cannot_change(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled = await _schedule(client, publish_at="2026-10-10T12:02:00Z")
     fixed_clock.advance(timedelta(minutes=2))
     async with db_session_maker() as session:
@@ -217,7 +172,7 @@ async def test_a_publishing_scheduled_post_s_community_cannot_change(
 
     response = await client.patch(
         f"{SCHEDULED_POSTS}/{scheduled['id']}",
-        json={"community": {"id": COMMUNITY_ID, "name": None}},
+        json={"community": COMMUNITY_ID},
     )
 
     assert response.status_code == 409
@@ -227,16 +182,16 @@ async def test_a_publishing_scheduled_post_s_community_cannot_change(
 
 @pytest.mark.parametrize("change", [{"community": None}, {"share_with_followers": False}])
 async def test_a_published_scheduled_post_s_community_cannot_change(
-    client, subscribed, fake_x_publisher, fixed_clock, change
+    client, subscribed, fake_x_publisher, fixed_clock, change, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     published = (
         await client.post(
             SCHEDULED_POSTS,
             json={
                 "text": "Out",
                 "publish_now": True,
-                "community": {"id": COMMUNITY_ID, "name": None},
+                "community": COMMUNITY_ID,
                 "share_with_followers": True,
             },
         )

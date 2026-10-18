@@ -11,12 +11,18 @@ from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.scheduling import mediator
-from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import ScheduledPostState
+from pumpkit.scheduling.rules import (
+    DestinationChange,
+    KeepDestination,
+    NewScheduledPost,
+    ScheduledPostEdit,
+    ToCommunity,
+    ToProfile,
+)
 from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     CommunityLookupRequest,
-    CommunityRequest,
     CommunityResponse,
     PastCommunitiesResponse,
     ScheduledPostCreateRequest,
@@ -33,10 +39,6 @@ router = APIRouter(tags=["scheduled-posts"])
 # can mount them around x_connection's router and keep the OpenAPI document's order.
 x_connection_router = APIRouter(tags=["x-connection"])
 x_authorization_router = APIRouter(tags=["x-connection"])
-
-
-def _community(request: Optional[CommunityRequest]) -> Optional[Community]:
-    return Community(id=request.id, name=request.name) if request else None
 
 
 @x_connection_router.get(
@@ -123,23 +125,30 @@ async def create_scheduled_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
+    reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
     """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
-    return await mediator.create_scheduled_post(
-        db=db,
-        publisher=publisher,
-        user=current_user,
+    new = NewScheduledPost(
         text=create_request.text,
+        version_id=create_request.source_version_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
-        source_version_id=create_request.source_version_id,
-        destination=Destination(
-            community=_community(create_request.community),
-            share_with_followers=create_request.share_with_followers,
-        ),
-        now=clock(),
+        community=create_request.community,
+        share_with_followers=create_request.share_with_followers,
     )
+    return await mediator.create_scheduled_post(
+        db=db, publisher=publisher, reader=reader, user=current_user, new=new, now=clock()
+    )
+
+
+def _destination_change(update_request: ScheduledPostUpdateRequest) -> DestinationChange:
+    """Absent keeps the Destination, null moves to the profile, and a string to that Community."""
+    if "community" not in update_request.model_fields_set:
+        return KeepDestination()
+    if update_request.community is None:
+        return ToProfile()
+    return ToCommunity(pasted=update_request.community)
 
 
 @router.patch(
@@ -152,17 +161,21 @@ async def edit_scheduled_post(
     update_request: ScheduledPostUpdateRequest,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
-    return await mediator.edit_scheduled_post(
-        db=db,
-        user=current_user,
-        scheduled_post_id=scheduled_post_id,
+    edit = ScheduledPostEdit(
         text=update_request.text,
         publish_at=update_request.publish_at,
-        changes_community=update_request.changes_community,
-        community=_community(update_request.community),
+        destination=_destination_change(update_request),
         share_with_followers=update_request.share_with_followers,
+    )
+    return await mediator.edit_scheduled_post(
+        db=db,
+        reader=reader,
+        user=current_user,
+        scheduled_post_id=scheduled_post_id,
+        edit=edit,
         now=clock(),
     )
 

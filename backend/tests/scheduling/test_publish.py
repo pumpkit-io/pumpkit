@@ -3,24 +3,11 @@ Publishing as the publisher will call it: for a Scheduled post it didn't just
 create, in a session of its own. Outcomes are checked through the HTTP API.
 """
 
-from urllib.parse import parse_qs, urlsplit
-
-from httpx import AsyncClient
-
 import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.x_connection.x_publisher import XAccount
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
-
-
-async def _connect_x(client: AsyncClient) -> None:
-    started = await client.post("/api/v1/x-connection/authorizations")
-    state = parse_qs(urlsplit(started.json()["url"]).query)["state"][0]
-    completed = await client.post(
-        "/api/v1/x-connection/authorizations/complete", json={"code": "c", "state": state}
-    )
-    assert completed.status_code == 200, completed.text
 
 
 async def _waiting(db, user, clock, x_user_id: str = "1001") -> str:
@@ -46,9 +33,9 @@ async def _publish(db_session_maker, fake_x_publisher, scheduled_post_id: str, c
 
 
 async def test_a_waiting_scheduled_post_is_published(
-    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock
+    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled_post_id = await _waiting(db, user, clock)
 
     assert await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
@@ -60,9 +47,9 @@ async def test_a_waiting_scheduled_post_is_published(
 
 
 async def test_x_is_called_at_most_once_per_scheduled_post(
-    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock
+    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled_post_id = await _waiting(db, user, clock)
     await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
 
@@ -73,9 +60,9 @@ async def test_x_is_called_at_most_once_per_scheduled_post(
 
 
 async def test_a_user_who_is_no_longer_subscribed_gets_a_failed_post_and_nothing_on_x(
-    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock
+    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled_post_id = await _waiting(db, user, clock)
     subscribed.status = "canceled"
     await db.commit()
@@ -91,12 +78,12 @@ async def test_a_user_who_is_no_longer_subscribed_gets_a_failed_post_and_nothing
 
 
 async def test_a_post_for_another_x_account_fails_instead_of_going_out_on_the_new_one(
-    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock
+    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled_post_id = await _waiting(db, user, clock)
     fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
-    await _connect_x(client)
+    await connect_x()
 
     await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
 
@@ -109,9 +96,9 @@ async def test_a_post_for_another_x_account_fails_instead_of_going_out_on_the_ne
 
 
 async def test_a_post_whose_x_connection_is_gone_fails(
-    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock
+    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
 ):
-    await _connect_x(client)
+    await connect_x()
     scheduled_post_id = await _waiting(db, user, clock)
     assert (await client.delete("/api/v1/x-connection")).status_code == 204
 

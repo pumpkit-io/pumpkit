@@ -1,6 +1,5 @@
 from typing import Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
@@ -22,7 +21,8 @@ from pumpkit.billing.schemas import (
     PlansListResponse,
 )
 from pumpkit.billing.terms import TERMS_VERSION
-from pumpkit.core.config import settings
+from pumpkit.core.config import BILLING_PAGE, settings
+from pumpkit.core.errors import BadRequestError, ConflictError, RefusedError
 from pumpkit.core.logging import logger
 from pumpkit.core.schemas import LinkToolResponse
 
@@ -125,14 +125,10 @@ def _require_terms_acceptance(checkout_request: CheckoutRequest) -> None:
         and checkout_request.approved_specific_clauses
         and checkout_request.terms_version
     ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Accept the Terms to subscribe.",
-        )
+        raise RefusedError("Accept the Terms to subscribe.")
     if checkout_request.terms_version != TERMS_VERSION:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The Terms have changed. Please review the current Terms and accept them again.",
+        raise ConflictError(
+            "The Terms have changed. Please review the current Terms and accept them again."
         )
 
 
@@ -161,7 +157,7 @@ async def create_checkout_session(
         _require_terms_acceptance(checkout_request)
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Plan.")
+        raise BadRequestError("Unknown Plan.")
 
     if terms_apply:
         await service.record_terms_acceptance(
@@ -187,9 +183,9 @@ async def create_checkout_session(
     if not offer.may_subscribe:
         # Commit before raising, or the 409 rolls back the sync of what Stripe just said.
         await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You already have a Subscription. Manage it in the billing portal.",
+        raise ConflictError(
+            "You already have a Subscription. Manage it in the billing portal.",
+            fix_page=BILLING_PAGE,
         )
     for incomplete in await service.list_incomplete_subscriptions(db, user_id=user.id):
         await gateway.cancel_subscription(subscription_id=incomplete.stripe_subscription_id)
@@ -229,16 +225,13 @@ async def handle_webhook(
     the error response (502 for the gateway, else 500) makes Stripe retry.
     """
     if not signature:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing Stripe signature header.",
-        )
+        raise BadRequestError("Missing Stripe signature header.")
 
     try:
         event = gateway.verify_webhook(payload=payload, signature=signature)
     except WebhookSignatureError:
         logger.warning("Rejected a Stripe webhook that failed verification", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature.")
+        raise BadRequestError("Invalid signature.")
 
     try:
         is_new = await service.try_record_event(db, event_id=event.id, event_type=event.type)
