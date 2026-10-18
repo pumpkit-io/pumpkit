@@ -114,8 +114,12 @@ _Avoid_: X login, X identity, linked account, X auth
 An X Community: a group on X whose posts appear in the group rather than on each author's profile. A Scheduled post may go to one Community instead of the User's profile; it is still posted by the X account of the User's X connection, and the User chooses whether it is also shared with that account's followers.
 _Avoid_: group, X group, space
 
+**Destination**:
+Where a Scheduled post goes: the profile of the X account of the User's X connection, or one Community.
+_Avoid_: target, location, channel
+
 **Scheduled post**:
-A text a User has set to be published at a chosen time by the X account of their X connection, either on that account's profile or in one Community. It is either typed by the User or copied from a Version's Final. One Scheduled post is one X post; posting the same text in two places takes two Scheduled posts. It keeps its own copy of the text and stays a Scheduled post after it is Published or Failed.
+A text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is either typed by the User or copied from a Version's Final. One Scheduled post is one X post; posting the same text in two places takes two Scheduled posts. It keeps its own copy of the text and stays a Scheduled post after it is Published or Failed.
 _Avoid_: queued tweet, publication, scheduled tweet
 
 **Published**:

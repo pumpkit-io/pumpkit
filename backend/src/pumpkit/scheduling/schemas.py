@@ -1,14 +1,12 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from pumpkit.scheduling.models import ScheduledPostState
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
-# Far past any Community name X allows; the name is only a label the User sees.
-COMMUNITY_NAME_MAX_CHARS = 200
 COMMUNITY_PASTE_MAX_CHARS = 2_000
 
 
@@ -23,15 +21,6 @@ def _strip_text(value: Optional[str]) -> Optional[str]:
 
 # Per caller, for the create route and the MCP tools that change Scheduled posts.
 WRITE_RATE = "10/minute"
-
-
-class CommunityRequest(BaseModel):
-    """A Community as the client named it: the server checks the ID and trusts the name."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    name: Optional[str] = Field(None, max_length=COMMUNITY_NAME_MAX_CHARS)
 
 
 class CommunityLookupRequest(BaseModel):
@@ -55,26 +44,22 @@ class PastCommunitiesResponse(BaseModel):
 
 
 class ScheduledPostCreateRequest(BaseModel):
+    """`rules.NewScheduledPost` checks which fields go together."""
+
     model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(..., max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
-    # Exactly one of the two: a time with its UTC offset, or publish within the request.
+    # Typed text, or else `source_version_id`, the Version whose Final the server copies.
+    text: Optional[str] = Field(None, max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
+    source_version_id: Optional[str] = None
+    # A time with its UTC offset, or else publish within the request.
     publish_at: Optional[AwareDatetime] = None
     publish_now: bool = False
-    # The Version whose Final the text copies; None for a typed post.
-    source_version_id: Optional[str] = None
-    # The Community it goes to; None for the User's profile.
-    community: Optional[CommunityRequest] = None
+    # The ID or URL of the Community it goes to; None for the User's profile.
+    community: Optional[str] = Field(None, max_length=COMMUNITY_PASTE_MAX_CHARS)
     # With a Community, whether X also shares it with the account's followers; ignored without.
     share_with_followers: bool = False
 
     _strip = field_validator("text")(_strip_text)
-
-    @model_validator(mode="after")
-    def _one_time(self) -> "ScheduledPostCreateRequest":
-        if (self.publish_at is None) == (not self.publish_now):
-            raise ValueError("Give either a publish time or publish now, not both.")
-        return self
 
 
 class ScheduledPostResponse(BaseModel):
@@ -121,30 +106,19 @@ class ScheduledPageMessageToolResponse(BaseModel):
 
 
 class ScheduledPostUpdateRequest(BaseModel):
+    """Leave out what stays the same; `rules.ScheduledPostEdit` refuses an edit of nothing."""
+
     model_config = ConfigDict(extra="forbid")
 
     text: Optional[str] = Field(None, max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
-    # A new Community; an explicit null moves the Scheduled post back to the User's profile.
-    community: Optional[CommunityRequest] = None
+    # The ID or URL of a new Community; an explicit null moves it back to the User's profile.
+    community: Optional[str] = Field(None, max_length=COMMUNITY_PASTE_MAX_CHARS)
     # Ignored when the Scheduled post ends up on the profile.
     share_with_followers: Optional[bool] = None
 
     _strip = field_validator("text")(_strip_text)
-
-    @property
-    def changes_community(self) -> bool:
-        return "community" in self.model_fields_set
-
-    @model_validator(mode="after")
-    def _something_to_change(self) -> "ScheduledPostUpdateRequest":
-        unchanged = self.text is None and self.publish_at is None
-        if unchanged and self.share_with_followers is None and not self.changes_community:
-            raise ValueError(
-                "Change the text, the publish time, the Community or sharing with followers."
-            )
-        return self
 
 
 class XConnectionResponse(BaseModel):

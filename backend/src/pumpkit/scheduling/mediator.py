@@ -21,6 +21,13 @@ from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
 from pumpkit.scheduling.publishing import publish_scheduled_post
+from pumpkit.scheduling.rules import (
+    KeepDestination,
+    NewScheduledPost,
+    ScheduledPostEdit,
+    ToCommunity,
+    ToProfile,
+)
 from pumpkit.scheduling.schemas import (
     CommunityResponse,
     PastCommunitiesResponse,
@@ -66,6 +73,11 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
 
 async def look_up_community(reader: XReader, pasted: str) -> CommunityResponse:
     """The pasted Community with its name on X, or with no name when X can't be read."""
+    community = await _community(reader, pasted)
+    return _community_response(community.id, community.name)
+
+
+async def _community(reader: XReader, pasted: str) -> Community:
     community_id = communities.community_id_from(pasted)
     try:
         name: Optional[str] = (await reader.fetch_community(community_id)).name
@@ -77,7 +89,7 @@ async def look_up_community(reader: XReader, pasted: str) -> CommunityResponse:
         # The name is only a label, so a failed read mustn't stop the User posting.
         logger.warning("Looking up Community %s failed: %s", community_id, error)
         name = None
-    return _community_response(community_id, name)
+    return Community(id=community_id, name=name)
 
 
 async def list_scheduled_posts(
@@ -130,40 +142,42 @@ async def check_monthly_cap(
 async def create_scheduled_post(
     db: AsyncSession,
     publisher: XPublisher,
+    reader: XReader,
     user: User,
-    text: str,
-    publish_at: Optional[datetime],
-    publish_now: bool,
+    new: NewScheduledPost,
     now: datetime,
-    source_version_id: Optional[str] = None,
-    destination: Destination = Destination(),
 ) -> ScheduledPostResponse:
-    """With `publish_now`, published within the request: Published, Failed, or back in scheduled."""
+    """
+    With `publish_now`, published within the request: Published, Failed, or back in scheduled.
+    Every check that needs no twitterapi.io call runs before the Community lookup.
+    """
     connection = await connection_to_publish_on(db, user_id=user.id)
-    if destination.community is not None:
-        communities.check_community_id(destination.community.id)
+    if new.version_id is not None:
+        text = await _source_version_final(db, user=user, version_id=new.version_id)
+    else:
+        assert new.text is not None
+        text = new.text
     rules.check_length(text, limit=x_post_max_chars(connection.subscription_type))
-    publish_at = now if publish_now else rules.check_publish_at(publish_at, now=now)
+    publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
-    if source_version_id is not None:
-        await source_version_final(db, user=user, version_id=source_version_id)
+    community = await _community(reader, new.community) if new.community is not None else None
     scheduled_post = await service.create(
         db,
         user_id=user.id,
         x_user_id=connection.x_user_id,
         text=text,
-        publish_at=publish_at.replace(second=0, microsecond=0) if publish_now else publish_at,
+        publish_at=publish_at.replace(second=0, microsecond=0) if new.publish_now else publish_at,
         now=now,
-        source_version_id=source_version_id,
-        destination=destination,
+        source_version_id=new.version_id,
+        destination=Destination(community=community, share_with_followers=new.share_with_followers),
     )
-    if publish_now:
+    if new.publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
     await db.commit()
     return scheduled_post_response(scheduled_post)
 
 
-async def source_version_final(db: AsyncSession, *, user: User, version_id: str) -> str:
+async def _source_version_final(db: AsyncSession, *, user: User, version_id: str) -> str:
     """The Final a Scheduled post copies from its source Version, or a 404 unless it's the User's."""
     version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
     if version is None or version.final is None:
@@ -194,49 +208,39 @@ def _publishing_started() -> ConflictError:
 
 async def edit_scheduled_post(
     db: AsyncSession,
+    reader: XReader,
     user: User,
     scheduled_post_id: str,
-    text: Optional[str],
-    publish_at: Optional[datetime],
+    edit: ScheduledPostEdit,
     now: datetime,
-    changes_community: bool = False,
-    community: Optional[Community] = None,
-    share_with_followers: Optional[bool] = None,
 ) -> ScheduledPostResponse:
     """
     New text, time, Community or share with followers for a scheduled or Failed Scheduled post.
     A new time reschedules it on the X account connected now, so a Failed one gets another try.
-    With `changes_community`, `community` replaces the current one and None means the profile.
     """
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
         raise _publishing_started()
     reschedule = None
-    destination = None
-    if changes_community or share_with_followers is not None:
-        if community is not None:
-            communities.check_community_id(community.id)
-        destination = _destination_after_edit(
-            scheduled_post, changes_community, community, share_with_followers
-        )
     connection = (
         await connection_to_publish_on(db, user_id=user.id)
-        if publish_at is not None
+        if edit.publish_at is not None
         else await x_connections_service.get_connection(db, user_id=user.id)
     )
-    if text is not None:
+    if edit.text is not None:
         subscription_type = connection.subscription_type if connection else None
-        rules.check_length(text, limit=x_post_max_chars(subscription_type))
-    if connection is not None and publish_at is not None:
-        new_publish_at = rules.check_publish_at(publish_at, now=now)
+        rules.check_length(edit.text, limit=x_post_max_chars(subscription_type))
+    if connection is not None and edit.publish_at is not None:
+        new_publish_at = rules.check_publish_at(edit.publish_at, now=now)
         await check_monthly_cap(
             db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id
         )
         reschedule = service.Reschedule(publish_at=new_publish_at, x_user_id=connection.x_user_id)
+    destination = await _destination_after_edit(reader, scheduled_post, edit)
     if not await service.edit(
         db,
         scheduled_post_id=scheduled_post_id,
-        text=text,
+        text=edit.text,
         reschedule=reschedule,
         destination=destination,
         now=now,
@@ -246,15 +250,26 @@ async def edit_scheduled_post(
     return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
 
 
-def _destination_after_edit(
-    scheduled_post: ScheduledPost,
-    changes_community: bool,
-    community: Optional[Community],
-    share_with_followers: Optional[bool],
-) -> Destination:
-    """Where the Scheduled post goes after the edit, keeping what the edit leaves unsaid."""
-    if not changes_community and scheduled_post.community_id is not None:
-        community = Community(id=scheduled_post.community_id, name=scheduled_post.community_name)
+async def _destination_after_edit(
+    reader: XReader, scheduled_post: ScheduledPost, edit: ScheduledPostEdit
+) -> Optional[Destination]:
+    """Where the Scheduled post goes after the edit, keeping what it leaves unsaid; None if unchanged."""
+    change = edit.destination
+    if isinstance(change, KeepDestination) and edit.share_with_followers is None:
+        return None
+    community: Optional[Community]
+    match change:
+        case ToCommunity(pasted=pasted):
+            community = await _community(reader, pasted)
+        case ToProfile():
+            community = None
+        case KeepDestination():
+            community = (
+                Community(id=scheduled_post.community_id, name=scheduled_post.community_name)
+                if scheduled_post.community_id is not None
+                else None
+            )
+    share_with_followers = edit.share_with_followers
     if share_with_followers is None:
         share_with_followers = scheduled_post.share_with_followers
     return Destination(community=community, share_with_followers=share_with_followers)

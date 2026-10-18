@@ -5,11 +5,14 @@ export type ScheduledPostState = 'scheduled' | 'publishing' | 'published' | 'fai
 /** The X Community a Scheduled post goes to. */
 export interface Community {
   id: string;
-  /** As the User saw it when they picked it; null when it couldn't be looked up. */
+  /** As Pumpkit looked it up on X; null when it couldn't be. */
   name: string | null;
   /** The Community on X. */
   url: string;
 }
+
+/** Typed text, or the Version whose Final the server copies. */
+export type PostText = { text: string } | { sourceVersionId: string };
 
 /** Where a new Scheduled post goes: the User's profile when `community` is null. */
 export interface Destination {
@@ -70,8 +73,12 @@ const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   createdAt: p.created_at,
 });
 
+const postTextBody = (post: PostText) =>
+  'text' in post ? { text: post.text } : { source_version_id: post.sourceVersionId };
+
+// The server looks up the Community's name itself, so only its ID goes.
 const destinationBody = ({ community, shareWithFollowers }: Destination) => ({
-  community,
+  community: community?.id ?? null,
   share_with_followers: shareWithFollowers,
 });
 
@@ -93,17 +100,12 @@ export const scheduledPostService = {
 
   /**
    * Publishes on X before answering: it comes back Published, Failed, or scheduled when X was
-   * busy and the publisher will retry. `sourceVersionId` is the Version whose Final the text is.
+   * busy and the publisher will retry.
    */
-  postNow: async (
-    text: string,
-    sourceVersionId: string | undefined,
-    destination: Destination,
-  ): Promise<ScheduledPost> => {
+  postNow: async (post: PostText, destination: Destination): Promise<ScheduledPost> => {
     const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
-      text,
+      ...postTextBody(post),
       publish_now: true,
-      source_version_id: sourceVersionId,
       ...destinationBody(destination),
     });
     return toScheduledPost(data);
@@ -111,15 +113,13 @@ export const scheduledPostService = {
 
   /** `publishAt` is an ISO instant on a whole minute; it comes back scheduled. */
   schedule: async (
-    text: string,
+    post: PostText,
     publishAt: string,
-    sourceVersionId: string | undefined,
     destination: Destination,
   ): Promise<ScheduledPost> => {
     const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
-      text,
+      ...postTextBody(post),
       publish_at: publishAt,
-      source_version_id: sourceVersionId,
       ...destinationBody(destination),
     });
     return toScheduledPost(data);
@@ -136,7 +136,7 @@ export const scheduledPostService = {
         text: changes.text,
         publish_at: changes.publishAt,
         // Sent only when given: null moves it back to the profile, absent keeps the Community.
-        ...('community' in changes && { community: changes.community }),
+        ...('community' in changes && { community: changes.community?.id ?? null }),
         share_with_followers: changes.shareWithFollowers,
       },
     );
