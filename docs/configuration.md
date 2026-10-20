@@ -69,6 +69,15 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 
 To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`, `SMTP_PASSWORD` to a Resend API key and `EMAIL_FROM` to an address on a domain verified in Resend; the default `starttls` on port 587 works.
 
+### Jev classifier
+
+Jev, TypeSafe's hosted classifier, answers the labelled questions Pumpkit asks before some writing steps (ADR 0013). It is not a provider group: no route depends on it, and without a key each caller takes its cautious path.
+
+| Variable | Meaning |
+| --- | --- |
+| `TYPESAFE_API_KEY` | Key for TypeSafe's API, from the [TypeSafe console](https://console.typesafe.ai/keys). Without it Jev is off: Pumpkit never asks, and on a Feedback Version it skips the hook step. |
+| `TYPESAFE_MODEL` | The Jev version Pumpkit asks. Defaults to `jev-1.13.0`, pinned so a new Jev release cannot change answers without a config change. |
+
 ### Sign-up allowlist
 
 | Variable | Meaning |

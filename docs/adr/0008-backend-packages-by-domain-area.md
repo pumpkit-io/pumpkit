@@ -16,6 +16,8 @@ The backend is one installable package, `src/pumpkit/`, with tests outside it in
 
 Since ADR 0011 made providers optional, `support` has `schemas.py` for the `/instance` response, and `posts` calls any OpenAI-compatible LLM endpoint, OpenRouter by default.
 
+ADR 0013 extends this for a provider no single area owns: its adapter lives in `core`, as the Jev classifier port does in `core/classifier.py`.
+
 ## Considered Options
 
 - **Layer-first, with `core` split into subpackages.** The smallest change, but each feature stays spread across `routers/`, `mediators/`, `services/`, `schemas/` and `db/`.
