@@ -7,7 +7,7 @@ backend/src/pumpkit/
   main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
   mcp_server.py    the MCP server: every area's tools behind API key authentication, the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
-  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools
+  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev)
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
   authors/         Inspiration authors and their posts; the X reader (twitterapi.io)
@@ -103,6 +103,21 @@ Test a tool through the endpoint with the `mcp` fixture: Claude Code connected w
 Set `LLM_API_KEY` (and `LLM_BASE_URL` for an endpoint other than OpenRouter). Mediators reach models through the `LLM` port (`posts/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
 
 The port wraps `llm_client` (`posts/llm_client.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
+
+### Ask Jev a question
+
+A labelled question goes to Jev, not to an LLM (ADR 0013). Set `TYPESAFE_API_KEY` to try it for real. Mediators reach Jev through the `Classifier` port (`core/classifier.py`): the router injects it with `classifier: Classifier = Depends(get_classifier)` and passes it to the mediator, which asks:
+
+```python
+classification = await classifier.classify(
+    state={"conversation": [...], "latest_draft": draft},
+    questions={"opening": ChoiceQuestion(instructions="...", criteria={"new_hook": "...", "keep_hook": "..."})},
+    model=settings.TYPESAFE_MODEL,
+)
+answer = classification.answers["opening"]  # a ChoiceAnswer: choice, confidence, probabilities
+```
+
+`state` is any JSON value, and each question's name keys its answer. `classification.model` is the Jev version that answered, and `classification.usage` its token counts. The adapter waits 5 seconds and retries once on a timeout, a lost connection, a 429 or a 529. Jev is optional, so the caller catches `ClassifierError` (the provider failed or gave an answer that doesn't fit the questions) and `ClassifierNotConfiguredError` (no key), a subclass of it, and takes its cautious path instead of failing the request. Tests get the scripted `FakeClassifier` through the autouse `fake_classifier` fixture: queue `fake_classifier.replies` (answers by question name, or an exception) and read each call's state, questions and model in `fake_classifier.calls`. With no reply queued it raises `ClassifierError`, so a test that doesn't script Jev sees the cautious path. The adapter's own tests are in `backend/tests/core/test_classifier.py`.
 
 ### Add a page to the shell
 

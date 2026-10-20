@@ -91,6 +91,7 @@ Before you invite anyone else, configure SMTP so Magic links arrive by email ([S
 | Stripe | No | Selling Plans | No Plans are sold; every User may use all of Pumpkit |
 | Operator details | No | The company footer, Terms and Privacy Policy pages, and Terms at checkout | Those are hidden |
 | PostHog | No | Product analytics behind a consent banner | No analytics and no banner |
+| TypeSafe (Jev) | No | Deciding whether a Feedback Version needs a new Hook | Feedback Versions keep their opening |
 
 [docs/self-hosting.md](./docs/self-hosting.md#providers) says where to get each key, links each pricing page, and lists the callback URLs to register. [docs/configuration.md](./docs/configuration.md) describes every setting.
 

@@ -269,6 +269,15 @@ curl -s http://localhost:8080/api/v1/instance | grep -o '"analytics":{"key":"[^"
 
 **Check:** it prints `"analytics":{"key":"` and your project key.
 
+### Jev (optional)
+
+TypeSafe's hosted classifier (ADR 0013). On a Feedback Version, Pumpkit asks Jev whether the opening needs a new Hook before it runs the hook step.
+
+- Get a key: [console.typesafe.ai/keys](https://console.typesafe.ai/keys).
+- Pricing: $0.042 per million input tokens, with output free, as ADR 0013 records; TypeSafe's site has the current price.
+- Settings: `TYPESAFE_API_KEY`. `TYPESAFE_MODEL` pins the Jev version (default `jev-1.13.0`).
+- Without it: Feedback Versions keep their opening and never get a new Hook. First Versions still get one.
+
 ## Add or change a setting
 
 To add a setting that `.env` does not hold yet, pass it to `scripts/setup.sh` as an environment variable, then restart the services that changed:
