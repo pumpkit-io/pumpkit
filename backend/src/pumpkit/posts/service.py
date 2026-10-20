@@ -137,12 +137,12 @@ async def record_version(
         humanizing_model=written.humanizing_model,
         writing_usage=written.writing_usage,
         humanizing_usage=written.humanizing_usage,
-        hook_name=written.hook_name,
-        hooking_model=written.hooking_model,
-        hooking_usage=written.hooking_usage,
-        hook_check=written.hook_check,
-        hook_check_probabilities=written.hook_check_probabilities,
-        hook_check_model=written.hook_check_model,
+        hook_name=written.hook.name,
+        hooking_model=written.hook.model,
+        hooking_usage=written.hook.usage,
+        hook_check=written.hook_check.label,
+        hook_check_probabilities=written.hook_check.probabilities,
+        hook_check_model=written.hook_check.model,
         slop_tells=[
             {"name": name, "description": description}
             for name, description in slop.find(written.final)

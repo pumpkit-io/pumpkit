@@ -79,24 +79,6 @@ class EarlierVersion:
 
 
 @dataclass(frozen=True)
-class WrittenVersion:
-    draft: str
-    final: str
-    writing_model: str
-    humanizing_model: str
-    writing_usage: Optional[dict]
-    humanizing_usage: Optional[dict]
-    # None when the hook step didn't run or failed.
-    hook_name: Optional[str]
-    hooking_model: Optional[str]
-    hooking_usage: Optional[dict]
-    # All three None when Jev wasn't asked (the first Version) or didn't answer.
-    hook_check: Optional[str]
-    hook_check_probabilities: Optional[dict[str, float]]
-    hook_check_model: Optional[str]
-
-
-@dataclass(frozen=True)
 class HookCheck:
     label: Optional[str] = None
     probabilities: Optional[dict[str, float]] = None
@@ -105,11 +87,21 @@ class HookCheck:
 
 @dataclass(frozen=True)
 class HookStep:
-    draft: str
-    # None when the step didn't run or failed, and the Draft went on without a Hook.
-    hook_name: Optional[str] = None
+    name: Optional[str] = None
     model: Optional[str] = None
     usage: Optional[dict] = None
+
+
+@dataclass(frozen=True)
+class WrittenVersion:
+    draft: str
+    final: str
+    writing_model: str
+    humanizing_model: str
+    writing_usage: Optional[dict]
+    humanizing_usage: Optional[dict]
+    hook: HookStep
+    hook_check: HookCheck
 
 
 def _system(prompt: str) -> dict:
@@ -214,13 +206,16 @@ async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVe
         max_tokens=MAX_TOKENS,
     )
     draft = scrub(drafted.parsed.post)
-    hooked = await _hook(llm, hook_messages(corpus, brief, draft), draft)
-    messages = humanizer_messages(corpus, brief, hooked.draft)
-    return await _humanize(llm, messages, drafted, hooked, HookCheck())
+    draft, hook = await _hook(llm, hook_messages(corpus, brief, draft), draft)
+    messages = humanizer_messages(corpus, brief, draft)
+    return await _humanize(llm, messages, drafted, draft, hook, HookCheck())
 
 
-async def _hook(llm: LLM, messages: list[dict], draft: str) -> HookStep:
-    """Never raises: a Hook is worth less than the Version, so any failure keeps the Draft."""
+async def _hook(llm: LLM, messages: list[dict], draft: str) -> tuple[str, HookStep]:
+    """
+    The Draft with its Hook, and the step's record. Never raises: a Hook is worth less than the
+    Version, so any failure keeps the Draft.
+    """
     try:
         hooked = await llm.structured(
             model=settings.LLM_HOOKING_MODEL,
@@ -231,16 +226,11 @@ async def _hook(llm: LLM, messages: list[dict], draft: str) -> HookStep:
         spliced = splice(draft, hooked.parsed)
     except HookRefused as refusal:
         logger.warning("Hook step failed, the Draft goes on without a Hook: %s", refusal)
-        return HookStep(draft=draft)
+        return draft, HookStep()
     except Exception:
         logger.exception("Hook step failed, the Draft goes on without a Hook")
-        return HookStep(draft=draft)
-    return HookStep(
-        draft=spliced,
-        hook_name=hooked.parsed.hook_name,
-        model=hooked.model,
-        usage=_usage(hooked),
-    )
+        return draft, HookStep()
+    return spliced, HookStep(name=hooked.parsed.hook_name, model=hooked.model, usage=_usage(hooked))
 
 
 async def _check_hook(classifier: Classifier, state: dict[str, Any]) -> HookCheck:
@@ -282,19 +272,20 @@ async def write_next_version(
     check = await _check_hook(classifier, hook_check_state(brief, earlier, feedback, draft))
     # No confidence threshold: the top label decides.
     if check.label == NEW_HOOK:
-        hooked = await _hook(llm, hook_messages(corpus, brief, draft, feedback), draft)
+        draft, hook = await _hook(llm, hook_messages(corpus, brief, draft, feedback), draft)
     else:
-        hooked = HookStep(draft=draft)
-    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, hooked.draft)
-    return await _humanize(llm, messages, revised, hooked, check)
+        hook = HookStep()
+    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
+    return await _humanize(llm, messages, revised, draft, hook, check)
 
 
 async def _humanize(
     llm: LLM,
     messages: list[dict],
     written: StructuredResult,
-    hooked: HookStep,
-    check: HookCheck,
+    draft: str,
+    hook: HookStep,
+    hook_check: HookCheck,
 ) -> WrittenVersion:
     refined = await llm.structured(
         model=settings.LLM_HUMANIZING_MODEL,
@@ -303,16 +294,12 @@ async def _humanize(
         max_tokens=MAX_TOKENS,
     )
     return WrittenVersion(
-        draft=hooked.draft,
+        draft=draft,
         final=refined.parsed.post,
         writing_model=written.model,
         humanizing_model=refined.model,
         writing_usage=_usage(written),
         humanizing_usage=_usage(refined),
-        hook_name=hooked.hook_name,
-        hooking_model=hooked.model,
-        hooking_usage=hooked.usage,
-        hook_check=check.label,
-        hook_check_probabilities=check.probabilities,
-        hook_check_model=check.model,
+        hook=hook,
+        hook_check=hook_check,
     )
