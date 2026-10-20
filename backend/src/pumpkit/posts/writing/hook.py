@@ -25,6 +25,7 @@ class HookedPost(BaseModel):
     hook: str
 
 
+# The SDK sends the class name as the schema name, snake_case like v6's schemas.
 HookedPost.__name__ = "hooked_post"
 
 

@@ -80,7 +80,7 @@ def test_the_hook_prompt_holds_the_single_post_library_and_the_hooks_to_avoid():
         "cost_before_after",
         "dear_persona",
         "keep_only_three",
-        "show_more_opener",
+        "show_more_hook",
     } <= HOOK_NAMES
     assert "# Hooks to avoid" in HOOK_PROMPT
     assert "| `ultra_short_declarative` | Last resort: " in HOOK_PROMPT

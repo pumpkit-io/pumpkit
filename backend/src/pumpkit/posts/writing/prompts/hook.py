@@ -163,7 +163,7 @@ Only for a post long enough that X cuts it behind "show more" (over 280 characte
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
-| `show_more_opener` | "Show more" opener | [Bold claim in one line]. / blank line / [Specific stakes in one line]. / blank line / Here's the full breakdown: | Most "agentic RAG" demos would fall over in production. / I've rebuilt ours 3 times in 6 months. Here's every failure mode and the fix: | The one, three, one rhythm earns the "show more" tap. Each "/" is a line break. |
+| `show_more_hook` | "Show more" hook | [Bold claim in one line]. / blank line / [Specific stakes in one line]. / blank line / Here's the full breakdown: | Most "agentic RAG" demos would fall over in production. / I've rebuilt ours 3 times in 6 months. Here's every failure mode and the fix: | The one, three, one rhythm earns the "show more" tap. Each "/" is a line break. |
 
 # Hooks to avoid
 
