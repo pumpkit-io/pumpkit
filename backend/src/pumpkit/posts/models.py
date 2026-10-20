@@ -74,6 +74,10 @@ class VersionAttempt(Base):
     humanizing_usage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
+    # The hook step's library id or "none"; all three stay None when the step didn't run or failed.
+    hook_name: Mapped[Optional[str]] = mapped_column(String)
+    hooking_model: Mapped[Optional[str]] = mapped_column(String)
+    hooking_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     # The slop check's tells in the Final, each {"name", "description"}, in the check's order.
     slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")

@@ -1,10 +1,11 @@
 """
 Writing a Version, the pumpkit-v6 way: the writing call (the draft call for the first
-Version, the revision call after Feedback), the scrub, then the humanizer call.
+Version, the revision call after Feedback), the scrub, the hook step on the first Version,
+then the humanizer call.
 
-The scrubbed writing-call text is the Draft and the humanizer's text is the Final. Every
-call gets the system prompt first and the corpus second, as in v6, so the per-call parts
-come after a prefix that stays the same across a Post's Versions.
+The scrubbed writing-call text, with the Hook spliced in, is the Draft and the humanizer's
+text is the Final. Every call gets the system prompt first and the corpus second, as in v6,
+so the per-call parts come after a prefix that stays the same across a Post's Versions.
 """
 
 from dataclasses import dataclass
@@ -13,14 +14,17 @@ from typing import Optional, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
+from pumpkit.core.logging import logger
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.llm_schemas import StructuredResult
 from pumpkit.posts.writing.constants import CACHE_TTL, MAX_TOKENS
 from pumpkit.posts.writing.corpus import Corpus
+from pumpkit.posts.writing.hook import HookedPost, HookRefused, splice
 from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.feedback import feedback_message
+from pumpkit.posts.writing.prompts.hook import HOOK_PROMPT, hook_brief_message, hook_draft_message
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     latest_feedback_message,
@@ -70,6 +74,19 @@ class WrittenVersion:
     humanizing_model: str
     writing_usage: Optional[dict]
     humanizing_usage: Optional[dict]
+    # None when the hook step didn't run or failed.
+    hook_name: Optional[str]
+    hooking_model: Optional[str]
+    hooking_usage: Optional[dict]
+
+
+@dataclass(frozen=True)
+class HookStep:
+    draft: str
+    # None when the step didn't run or failed, and the Draft went on without a Hook.
+    hook_name: Optional[str] = None
+    model: Optional[str] = None
+    usage: Optional[dict] = None
 
 
 def _system(prompt: str) -> dict:
@@ -87,6 +104,15 @@ def _user(content: str) -> dict:
 
 def draft_messages(corpus: Corpus, brief: str) -> list[dict]:
     return [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
+
+
+def hook_messages(corpus: Corpus, brief: str, draft: str) -> list[dict]:
+    return [
+        _system(HOOK_PROMPT),
+        _user(context_message(corpus)),
+        _user(hook_brief_message(brief)),
+        _user(hook_draft_message(draft)),
+    ]
 
 
 def _humanizer_prefix(corpus: Corpus, brief: str) -> list[dict]:
@@ -142,8 +168,33 @@ async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVe
         response_model=DraftedPost,
         max_tokens=MAX_TOKENS,
     )
-    draft = scrub(drafted.parsed.post)
-    return await _humanize(llm, humanizer_messages(corpus, brief, draft), draft, drafted)
+    hooked = await _hook(llm, corpus, brief, scrub(drafted.parsed.post))
+    messages = humanizer_messages(corpus, brief, hooked.draft)
+    return await _humanize(llm, messages, drafted, hooked)
+
+
+async def _hook(llm: LLM, corpus: Corpus, brief: str, draft: str) -> HookStep:
+    """Never raises: a Hook is worth less than the Version, so any failure keeps the Draft."""
+    try:
+        hooked = await llm.structured(
+            model=settings.LLM_HOOKING_MODEL,
+            messages=hook_messages(corpus, brief, draft),
+            response_model=HookedPost,
+            max_tokens=MAX_TOKENS,
+        )
+        spliced = splice(draft, hooked.parsed)
+    except HookRefused as refusal:
+        logger.warning("Hook step failed, the Draft goes on without a Hook: %s", refusal)
+        return HookStep(draft=draft)
+    except Exception:
+        logger.exception("Hook step failed, the Draft goes on without a Hook")
+        return HookStep(draft=draft)
+    return HookStep(
+        draft=spliced,
+        hook_name=hooked.parsed.hook_name,
+        model=hooked.model,
+        usage=_usage(hooked),
+    )
 
 
 async def write_next_version(
@@ -158,11 +209,11 @@ async def write_next_version(
     )
     draft = scrub(revised.parsed.post)
     messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
-    return await _humanize(llm, messages, draft, revised)
+    return await _humanize(llm, messages, revised, HookStep(draft=draft))
 
 
 async def _humanize(
-    llm: LLM, messages: list[dict], draft: str, written: StructuredResult
+    llm: LLM, messages: list[dict], written: StructuredResult, hooked: HookStep
 ) -> WrittenVersion:
     refined = await llm.structured(
         model=settings.LLM_HUMANIZING_MODEL,
@@ -171,10 +222,13 @@ async def _humanize(
         max_tokens=MAX_TOKENS,
     )
     return WrittenVersion(
-        draft=draft,
+        draft=hooked.draft,
         final=refined.parsed.post,
         writing_model=written.model,
         humanizing_model=refined.model,
         writing_usage=_usage(written),
         humanizing_usage=_usage(refined),
+        hook_name=hooked.hook_name,
+        hooking_model=hooked.model,
+        hooking_usage=hooked.usage,
     )

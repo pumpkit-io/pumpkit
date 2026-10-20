@@ -1,7 +1,8 @@
-"""The prompts ported from pumpkit-v6: what they interpolate, and that the corpus stays out."""
+"""The writing prompts: what they interpolate, what they hold, and that the corpus stays out."""
 
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.hook import HOOK_NAMES, HOOK_PROMPT
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 
 
@@ -52,7 +53,49 @@ def test_the_humanizer_prompt_keeps_its_guidelines():
     assert "user turn" in HUMANIZER_PROMPT.lower()
 
 
-def test_neither_prompt_carries_author_posts():
-    for prompt in (DRAFT_POST_PROMPT, HUMANIZER_PROMPT):
+def test_no_system_prompt_carries_author_posts():
+    for prompt in (DRAFT_POST_PROMPT, HUMANIZER_PROMPT, HOOK_PROMPT):
         assert "<creator" not in prompt
         assert "<post>" not in prompt
+
+
+def test_the_humanizer_prompt_keeps_the_openings_claim_numbers_and_structure():
+    assert (
+        "keep the opening's claim, its numbers and its structure, and rewrite only its wording"
+        in HUMANIZER_PROMPT
+    )
+
+
+def test_the_hook_prompt_states_the_hard_rules():
+    assert "Use only facts, numbers and claims that are in the brief" in HOOK_PROMPT
+    assert "A hook that needs a fact you don't have is ruled out" in HOOK_PROMPT
+    assert "the writers of the real posts would plausibly write" in HOOK_PROMPT
+    assert "Name the topic." in HOOK_PROMPT
+    assert "The body must pay the hook off." in HOOK_PROMPT
+
+
+def test_the_hook_prompt_holds_the_single_post_library_and_the_hooks_to_avoid():
+    assert {
+        "cost_before_after",
+        "dear_persona",
+        "keep_only_three",
+        "show_more_opener",
+    } <= HOOK_NAMES
+    assert "# Hooks to avoid" in HOOK_PROMPT
+    assert "| `ultra_short_declarative` | Last resort: " in HOOK_PROMPT
+
+
+def test_the_hook_library_leaves_out_hooks_for_threads_articles_quotes_replies_and_images():
+    for left_out in ("analyzed_n_patterns", "wish_i_knew", "complete_playbook", "one_page_guide"):
+        assert left_out not in HOOK_NAMES
+    for term in ("Quote-post", "chart", "Article", "reply hook", "Closing line", "🧵"):
+        assert term not in HOOK_PROMPT
+
+
+def test_the_length_limit_reaches_the_hook_prompt():
+    assert f"{POST_MAX_CHARS} characters" in HOOK_PROMPT
+    assert "{" not in HOOK_PROMPT
+
+
+def test_the_hook_prompt_has_no_em_dash_for_a_hook_to_copy():
+    assert "—" not in HOOK_PROMPT

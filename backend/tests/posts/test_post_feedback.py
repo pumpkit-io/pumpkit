@@ -12,6 +12,7 @@ from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from tests.posts.hook_replies import keep_hook
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -38,7 +39,7 @@ async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
     """A Post from the Brief "ship small things" whose first Version's Final is "final 1"."""
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [{"post": "draft 1"}, {"post": "final 1"}]
+    fake_llm.replies = [{"post": "draft 1"}, keep_hook(), {"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things"})
     assert response.status_code == 201
     fake_llm.calls.clear()

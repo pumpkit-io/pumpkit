@@ -16,6 +16,7 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
     XReconnectNeededError,
 )
+from tests.posts.hook_replies import keep_hook
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 X_CONNECTION = "/api/v1/x-connection"
@@ -437,7 +438,7 @@ async def final(client, subscribed, fake_x_reader, fake_llm) -> dict:
     ]
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [{"post": "draft one"}, {"post": "The final, version one."}]
+    fake_llm.replies = [{"post": "draft one"}, keep_hook(), {"post": "The final, version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     post = started.json()
