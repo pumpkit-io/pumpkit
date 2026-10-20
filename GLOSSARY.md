@@ -93,8 +93,12 @@ One round of a Post's text. The first comes from the Brief, and each later one c
 _Avoid_: revision, iteration, round
 
 **Draft**:
-The text Pumpkit writes first in a Version, before it is rewritten to sound like a person typed it.
+The text Pumpkit writes first in a Version, Hook included, before it is rewritten to sound like a person typed it.
 _Avoid_: first pass, raw output
+
+**Hook**:
+The opening of a Post's text: the line or lines meant to make a reader stop and read the rest. Pumpkit writes a new one when a Version needs it and the User has not dictated the opening, and never changes the text after it.
+_Avoid_: headline, intro, opener, lede
 
 **Final**:
 The rewritten text of a Version, the one meant to be pasted into X.
