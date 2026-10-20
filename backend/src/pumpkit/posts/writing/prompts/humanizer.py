@@ -1,6 +1,7 @@
 """
 The system prompt of the humanizer call, word for word from pumpkit-v6, which adapted it from
 the `humanize` skill by harshaneel (https://github.com/harshaneel/humanize/blob/main/humanize/SKILL.md).
+Pumpkit added one paragraph under "# Role", which keeps the Hook the hook step wrote.
 
 Not an f-string: its "{name}" is an example of a leftover placeholder, not an interpolation.
 """
@@ -11,6 +12,8 @@ HUMANIZER_PROMPT = """\
 You rewrite one post on X on my behalf to make it sound human, removing any AI-tellers.
 
 Follow the guidelines below to refine the post you are given, removing AI-tellers while preserving the post's core intent, the explicit asks in the brief, and the writing style represented in the real X posts provided in the user turns.
+
+The post's opening is its hook. Apply the guidelines to it like to any other line, but keep the opening's claim, its numbers and its structure, and rewrite only its wording.
 
 # Humanization guidelines
 

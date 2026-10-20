@@ -10,6 +10,7 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.mcp_client import error_text
+from tests.posts.hook_replies import keep_hook
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
 async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
     with_author, mcp, fake_llm
 ):
-    fake_llm.replies = [{"post": "the draft"}, {"post": "the final"}]
+    fake_llm.replies = [{"post": "the draft"}, keep_hook(), {"post": "the final"}]
 
     result = await mcp.call_tool("start_post", brief="  ship small things ")
 
@@ -72,7 +73,7 @@ async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
 @pytest.fixture
 async def post_id(with_author, mcp, fake_llm) -> str:
     """A Post of the User's with one Version, whose Final is "final 1"."""
-    fake_llm.replies = [{"post": "draft 1"}, {"post": "final 1"}]
+    fake_llm.replies = [{"post": "draft 1"}, keep_hook(), {"post": "final 1"}]
     return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
 
 
@@ -140,7 +141,7 @@ async def test_listing_posts_pages_through_the_users_posts_newest_first(
     with_author, mcp, fake_llm, fixed_clock, bobs_post_id
 ):
     for brief in ("first", "second", "third"):
-        fake_llm.replies = [{"post": "draft"}, {"post": "final"}]
+        fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
         await mcp.call_tool("start_post", brief=brief)
         fixed_clock.advance(timedelta(minutes=1))
     fake_llm.replies = [{"post": "draft"}, {"post": "final"}]
@@ -233,7 +234,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
         )
     await db.commit()
     fixed_clock.advance(timedelta(minutes=10))
-    fake_llm.replies = [{"post": "draft"}, {"post": "final"}]
+    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
     assert (await client.post("/api/v1/posts", json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 
