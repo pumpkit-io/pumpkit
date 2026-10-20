@@ -4,9 +4,11 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.core.classifier import ChoiceAnswer
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.mcp_client import error_text
@@ -93,6 +95,32 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "final": "shorter final",
         "final_char_count": 13,
     }
+
+
+async def test_feedback_through_the_tools_asks_jev_and_gets_a_new_hook_as_on_the_web_app(
+    db, post_id, mcp, fake_llm, fake_classifier
+):
+    probabilities = {"new_hook": 0.9, "keep_hook": 0.05, "user_wrote_hook": 0.05}
+    fake_classifier.replies = [
+        {"opening": ChoiceAnswer(choice="new_hook", confidence=0.9, probabilities=probabilities)}
+    ]
+    hook = {"hook_name": "my_rule", "mode": "prepend", "replaced_opening": "", "hook": "My rule."}
+    fake_llm.replies = [{"post": "draft 2"}, hook, {"post": "final 2"}]
+
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="rewrite it all")
+
+    assert result["isError"] is False
+    [call] = fake_classifier.calls
+    assert call.state["conversation"][-1] == {"from": "user", "text": "rewrite it all"}
+    version = await db.scalar(
+        select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
+    )
+    assert version is not None
+    assert (version.draft, version.hook_name, version.hook_check) == (
+        "My rule.\n\ndraft 2",
+        "my_rule",
+        "new_hook",
+    )
 
 
 async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post_id, mcp, fake_llm):

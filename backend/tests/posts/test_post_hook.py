@@ -195,7 +195,9 @@ async def test_a_hooked_draft_of_exactly_the_limit_is_kept(client, with_author, 
     assert version["draft"] == f"{hook}\n\n{DRAFT}"
 
 
-async def test_a_feedback_version_makes_no_hook_call(client, db, with_author, fake_llm):
+async def test_a_feedback_version_jev_did_not_answer_makes_no_hook_call(
+    client, db, with_author, fake_llm
+):
     fake_llm.replies = [{"post": DRAFT}, keep_hook(), {"post": "final 1"}]
     post_id = (await client.post(POSTS, json={"brief": "ship"})).json()["id"]
     fake_llm.calls.clear()

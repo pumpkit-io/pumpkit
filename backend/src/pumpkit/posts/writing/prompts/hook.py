@@ -20,6 +20,7 @@ You write the hook of one post on X on my behalf: the opening line or lines that
 
 - A set of real posts from X authors, grouped by author, representing the writing style the post follows.
 - The brief I wrote the post from.
+- When the post is a revision, my latest feedback on its previous version.
 - The post itself, already written.
 
 # What you do
@@ -194,6 +195,14 @@ def hook_brief_message(brief: str) -> str:
     return (
         "This is the brief the post below was written from. Every fact, number and claim "
         f"the hook states must be in it or in the post.\n\n<brief>\n{brief}\n</brief>"
+    )
+
+
+def hook_feedback_message(feedback: str) -> str:
+    return (
+        "This is my feedback on the previous version of the post. The post below already "
+        "applies it, and its opening needs a new hook. Facts, numbers and claims in my "
+        f"feedback may go in the hook too.\n\n<feedback>\n{feedback}\n</feedback>"
     )
 
 

@@ -140,6 +140,9 @@ async def record_version(
         hook_name=written.hook_name,
         hooking_model=written.hooking_model,
         hooking_usage=written.hooking_usage,
+        hook_check=written.hook_check,
+        hook_check_probabilities=written.hook_check_probabilities,
+        hook_check_model=written.hook_check_model,
         slop_tells=[
             {"name": name, "description": description}
             for name, description in slop.find(written.final)

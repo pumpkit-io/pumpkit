@@ -78,6 +78,13 @@ class VersionAttempt(Base):
     hook_name: Mapped[Optional[str]] = mapped_column(String)
     hooking_model: Mapped[Optional[str]] = mapped_column(String)
     hooking_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    # Jev's top label on a Feedback Version; all three None when it wasn't asked or didn't answer.
+    hook_check: Mapped[Optional[str]] = mapped_column(String)
+    # Every label's probability, to tune the question against real Feedback.
+    hook_check_probabilities: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
+    hook_check_model: Mapped[Optional[str]] = mapped_column(String)
     # The slop check's tells in the Final, each {"name", "description"}, in the check's order.
     slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
