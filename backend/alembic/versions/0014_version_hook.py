@@ -1,8 +1,8 @@
-"""add the hook step's library id, model and usage to Version attempts
+"""add the hook step's and the Jev check's records to Version attempts
 
-A first Version's Draft may open with a Hook from the curated library. Its attempt stores which
-one (or "none") with the hook call's model and usage, like the writing and humanizer calls'. All
-three stay null when the hook step didn't run or failed.
+A first Version's Draft may open with a Hook from the curated library, and a Feedback Version
+asks Jev whether its opening needs a new Hook. The attempt stores the hook step's library id,
+model and usage, and the Jev check's top label, every label's probability and the Jev version.
 
 Revision ID: 0014
 Revises: 0013
@@ -34,10 +34,22 @@ def upgrade() -> None:
                 nullable=True,
             )
         )
+        batch_op.add_column(sa.Column("hook_check", sa.String(), nullable=True))
+        batch_op.add_column(
+            sa.Column(
+                "hook_check_probabilities",
+                sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
+                nullable=True,
+            )
+        )
+        batch_op.add_column(sa.Column("hook_check_model", sa.String(), nullable=True))
 
 
 def downgrade() -> None:
     with op.batch_alter_table("version_attempts", schema=None) as batch_op:
+        batch_op.drop_column("hook_check_model")
+        batch_op.drop_column("hook_check_probabilities")
+        batch_op.drop_column("hook_check")
         batch_op.drop_column("hooking_usage")
         batch_op.drop_column("hooking_model")
         batch_op.drop_column("hook_name")
