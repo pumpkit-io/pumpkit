@@ -1,6 +1,7 @@
 """
 Writing a Version, the pumpkit-v6 way: the writing call (the draft call for the first
-Version, the revision call after Feedback), the scrub, the hook step on the first Version,
+Version, the revision call after Feedback), the scrub, the Jev check on a Feedback Version,
+the hook step (always on the first Version, after Feedback only when Jev asks for a new Hook),
 then the humanizer call.
 
 The scrubbed writing-call text, with the Hook spliced in, is the Draft and the humanizer's
@@ -9,10 +10,11 @@ so the per-call parts come after a prefix that stays the same across a Post's Ve
 """
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
+from pumpkit.core.classifier import Classifier, ClassifierNotConfiguredError
 from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
 from pumpkit.posts.llm import LLM
@@ -24,7 +26,17 @@ from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.feedback import feedback_message
-from pumpkit.posts.writing.prompts.hook import HOOK_PROMPT, hook_brief_message, hook_draft_message
+from pumpkit.posts.writing.prompts.hook import (
+    HOOK_PROMPT,
+    hook_brief_message,
+    hook_draft_message,
+    hook_feedback_message,
+)
+from pumpkit.posts.writing.prompts.hook_check import (
+    HOOK_CHECK_QUESTION,
+    HOOK_CHECK_QUESTION_NAME,
+    NEW_HOOK,
+)
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     latest_feedback_message,
@@ -78,6 +90,17 @@ class WrittenVersion:
     hook_name: Optional[str]
     hooking_model: Optional[str]
     hooking_usage: Optional[dict]
+    # All three None when Jev wasn't asked (the first Version) or didn't answer.
+    hook_check: Optional[str]
+    hook_check_probabilities: Optional[dict[str, float]]
+    hook_check_model: Optional[str]
+
+
+@dataclass(frozen=True)
+class HookCheck:
+    label: Optional[str] = None
+    probabilities: Optional[dict[str, float]] = None
+    model: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -106,13 +129,35 @@ def draft_messages(corpus: Corpus, brief: str) -> list[dict]:
     return [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
 
 
-def hook_messages(corpus: Corpus, brief: str, draft: str) -> list[dict]:
-    return [
+def hook_messages(
+    corpus: Corpus, brief: str, draft: str, feedback: Optional[str] = None
+) -> list[dict]:
+    """On a Feedback Version, the latest Feedback goes before the Draft."""
+    messages = [
         _system(HOOK_PROMPT),
         _user(context_message(corpus)),
         _user(hook_brief_message(brief)),
-        _user(hook_draft_message(draft)),
     ]
+    if feedback is not None:
+        messages.append(_user(hook_feedback_message(feedback)))
+    messages.append(_user(hook_draft_message(draft)))
+    return messages
+
+
+def hook_check_state(
+    brief: str, earlier: Sequence[EarlierVersion], feedback: str, draft: str
+) -> dict[str, Any]:
+    """
+    What Jev reads: the conversation the User saw and the scrubbed revision. The corpus and
+    earlier Drafts stay out, as nothing in them tells whether the User asked for the opening.
+    """
+    conversation = [{"from": "user", "text": brief}]
+    for version in earlier:
+        if version.feedback is not None:
+            conversation.append({"from": "user", "text": version.feedback})
+        conversation.append({"from": "pumpkit", "text": version.final})
+    conversation.append({"from": "user", "text": feedback})
+    return {"conversation": conversation, "latest_draft": draft}
 
 
 def _humanizer_prefix(corpus: Corpus, brief: str) -> list[dict]:
@@ -168,17 +213,18 @@ async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVe
         response_model=DraftedPost,
         max_tokens=MAX_TOKENS,
     )
-    hooked = await _hook(llm, corpus, brief, scrub(drafted.parsed.post))
+    draft = scrub(drafted.parsed.post)
+    hooked = await _hook(llm, hook_messages(corpus, brief, draft), draft)
     messages = humanizer_messages(corpus, brief, hooked.draft)
-    return await _humanize(llm, messages, drafted, hooked)
+    return await _humanize(llm, messages, drafted, hooked, HookCheck())
 
 
-async def _hook(llm: LLM, corpus: Corpus, brief: str, draft: str) -> HookStep:
+async def _hook(llm: LLM, messages: list[dict], draft: str) -> HookStep:
     """Never raises: a Hook is worth less than the Version, so any failure keeps the Draft."""
     try:
         hooked = await llm.structured(
             model=settings.LLM_HOOKING_MODEL,
-            messages=hook_messages(corpus, brief, draft),
+            messages=messages,
             response_model=HookedPost,
             max_tokens=MAX_TOKENS,
         )
@@ -197,8 +243,33 @@ async def _hook(llm: LLM, corpus: Corpus, brief: str, draft: str) -> HookStep:
     )
 
 
+async def _check_hook(classifier: Classifier, state: dict[str, Any]) -> HookCheck:
+    """Never raises: without Jev's answer the hook step is skipped, so no opening is overwritten."""
+    try:
+        classification = await classifier.classify(
+            state=state,
+            questions={HOOK_CHECK_QUESTION_NAME: HOOK_CHECK_QUESTION},
+            model=settings.TYPESAFE_MODEL,
+        )
+    except ClassifierNotConfiguredError:
+        logger.info("Jev is not configured, the Feedback Version keeps its opening")
+        return HookCheck()
+    except Exception:
+        logger.exception("Jev check failed, the Feedback Version keeps its opening")
+        return HookCheck()
+    answer = classification.answers[HOOK_CHECK_QUESTION_NAME]
+    return HookCheck(
+        label=answer.choice, probabilities=answer.probabilities, model=classification.model
+    )
+
+
 async def write_next_version(
-    llm: LLM, corpus: Corpus, brief: str, earlier: Sequence[EarlierVersion], feedback: str
+    llm: LLM,
+    classifier: Classifier,
+    corpus: Corpus,
+    brief: str,
+    earlier: Sequence[EarlierVersion],
+    feedback: str,
 ) -> WrittenVersion:
     """Raises whatever the LLM port raises; nothing is stored here."""
     revised = await llm.structured(
@@ -208,12 +279,22 @@ async def write_next_version(
         max_tokens=MAX_TOKENS,
     )
     draft = scrub(revised.parsed.post)
-    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
-    return await _humanize(llm, messages, revised, HookStep(draft=draft))
+    check = await _check_hook(classifier, hook_check_state(brief, earlier, feedback, draft))
+    # No confidence threshold: the top label decides.
+    if check.label == NEW_HOOK:
+        hooked = await _hook(llm, hook_messages(corpus, brief, draft, feedback), draft)
+    else:
+        hooked = HookStep(draft=draft)
+    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, hooked.draft)
+    return await _humanize(llm, messages, revised, hooked, check)
 
 
 async def _humanize(
-    llm: LLM, messages: list[dict], written: StructuredResult, hooked: HookStep
+    llm: LLM,
+    messages: list[dict],
+    written: StructuredResult,
+    hooked: HookStep,
+    check: HookCheck,
 ) -> WrittenVersion:
     refined = await llm.structured(
         model=settings.LLM_HUMANIZING_MODEL,
@@ -231,4 +312,7 @@ async def _humanize(
         hook_name=hooked.hook_name,
         hooking_model=hooked.model,
         hooking_usage=hooked.usage,
+        hook_check=check.label,
+        hook_check_probabilities=check.probabilities,
+        hook_check_model=check.model,
     )

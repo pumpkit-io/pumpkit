@@ -3,6 +3,7 @@
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.hook import HOOK_NAMES, HOOK_PROMPT
+from pumpkit.posts.writing.prompts.hook_check import HOOK_CHECK_QUESTION
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 
 
@@ -99,3 +100,22 @@ def test_the_length_limit_reaches_the_hook_prompt():
 
 def test_the_hook_prompt_has_no_em_dash_for_a_hook_to_copy():
     assert "—" not in HOOK_PROMPT
+
+
+def test_the_hook_prompt_knows_it_may_get_my_feedback():
+    assert "my latest feedback on its previous version" in HOOK_PROMPT
+
+
+def test_jev_answers_user_wrote_hook_whenever_the_feedback_dictates_or_edits_the_opening():
+    instructions = HOOK_CHECK_QUESTION.instructions
+    assert "dictates the opening" in instructions
+    assert "asks to change it in any way, answer user_wrote_hook" in instructions
+    assert "the user's own opening must never be replaced" in instructions
+
+
+def test_jev_chooses_between_a_new_hook_keeping_it_and_the_users_own():
+    criteria = HOOK_CHECK_QUESTION.criteria
+    assert set(criteria) == {"new_hook", "keep_hook", "user_wrote_hook"}
+    assert "rewrite the whole post" in criteria["new_hook"]
+    assert "only text after the opening" in criteria["keep_hook"]
+    assert "dictates the opening" in criteria["user_wrote_hook"]
