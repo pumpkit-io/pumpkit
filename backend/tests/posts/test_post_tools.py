@@ -106,10 +106,10 @@ async def test_feedback_through_the_tools_asks_jev_and_gets_a_new_hook_as_on_the
     ]
     hook = {
         "current_hook_name": None,
-        "mode": "prepend",
+        "mode": "replace",
         "replacing_hook_name": "my_rule",
-        "replaced_opening": None,
-        "hook": "My rule.",
+        "replaced_text": "draft 2",
+        "replacing_text": "My rule.\n\ndraft 2",
     }
     fake_llm.replies = [{"post": "draft 2"}, hook, {"post": "final 2"}]
 

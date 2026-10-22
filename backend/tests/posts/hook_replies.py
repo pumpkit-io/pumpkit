@@ -7,6 +7,6 @@ def keep_hook() -> dict:
         "current_hook_name": None,
         "mode": "keep",
         "replacing_hook_name": None,
-        "replaced_opening": None,
-        "hook": None,
+        "replaced_text": None,
+        "replacing_text": None,
     }

@@ -45,8 +45,8 @@ async def with_author(client, subscribed, fake_x_reader):
 
 def _hook(
     mode: str,
-    hook: Optional[str] = None,
-    replaced_opening: Optional[str] = None,
+    replaced_text: Optional[str] = None,
+    replacing_text: Optional[str] = None,
     replacing: Optional[str] = "my_rule",
     current: Optional[str] = None,
 ) -> dict:
@@ -54,8 +54,8 @@ def _hook(
         "current_hook_name": current,
         "mode": mode,
         "replacing_hook_name": replacing,
-        "replaced_opening": replaced_opening,
-        "hook": hook,
+        "replaced_text": replaced_text,
+        "replacing_text": replacing_text,
     }
 
 
@@ -104,7 +104,8 @@ async def test_the_hook_call_gets_the_hook_prompt_the_corpus_the_brief_then_the_
         ),
         _user(
             "This is the post to open with a hook. If you replace its opening, copy "
-            "replaced_opening from it exactly, character for character.\n\n"
+            "replaced_text from its start exactly, character for character, and end "
+            "replacing_text with the same lines you carry, copied exactly.\n\n"
             f"<post>\n{DRAFT}\n</post>"
         ),
     ]
@@ -135,8 +136,51 @@ async def test_keep_leaves_the_draft_as_it_is_and_stores_the_hook_call(
     assert attempt.hooking_usage == USAGE
 
 
-async def test_prepend_puts_the_hook_above_the_draft(client, db, with_author, fake_llm):
-    version = await _start(client, fake_llm, _hook("prepend", hook="I ship one tiny thing a week."))
+async def test_replace_swaps_the_opening_and_keeps_every_character_after_it(
+    client, db, with_author, fake_llm
+):
+    version = await _start(
+        client,
+        fake_llm,
+        _hook(
+            "replace",
+            replaced_text=DRAFT,
+            replacing_text="Stop shipping big. Ship small.\n\nevery week i ship one tiny thing",
+            replacing="stop_x_do_y",
+        ),
+    )
+
+    hooked = "Stop shipping big. Ship small.\n\nevery week i ship one tiny thing"
+    assert version["draft"] == hooked
+    assert _humanized_draft(fake_llm) == hooked
+    attempt = await _stored_attempt(db)
+    assert (attempt.current_hook_name, attempt.replacing_hook_name) == (None, "stop_x_do_y")
+
+
+async def test_replace_keeps_the_draft_after_the_replaced_text(client, with_author, fake_llm):
+    draft = "line one\n\nline two\n\nline three"
+    fake_llm.replies = [
+        {"post": draft},
+        _hook("replace", replaced_text="line one\n\nline two", replacing_text="Hook.\nline two"),
+        {"post": "the final"},
+    ]
+    response = await client.post(POSTS, json={"brief": "ship small things"})
+
+    assert response.json()["versions"][0]["draft"] == "Hook.\nline two\n\nline three"
+
+
+async def test_replace_with_nothing_removed_puts_the_hook_above_the_draft(
+    client, db, with_author, fake_llm
+):
+    version = await _start(
+        client,
+        fake_llm,
+        _hook(
+            "replace",
+            replaced_text="shipping small beats shipping big",
+            replacing_text="I ship one tiny thing a week.\n\nshipping small beats shipping big",
+        ),
+    )
 
     hooked = f"I ship one tiny thing a week.\n\n{DRAFT}"
     assert version["draft"] == hooked
@@ -149,35 +193,17 @@ async def test_prepend_puts_the_hook_above_the_draft(client, db, with_author, fa
     )
 
 
-async def test_replace_swaps_the_opening_and_keeps_every_character_after_it(
-    client, db, with_author, fake_llm
-):
-    version = await _start(
-        client,
-        fake_llm,
-        _hook(
-            "replace",
-            replaced_opening="shipping small beats shipping big",
-            hook="Stop shipping big. Ship small.",
-            replacing="stop_x_do_y",
-        ),
-    )
-
-    hooked = "Stop shipping big. Ship small.\n\nevery week i ship one tiny thing"
-    assert version["draft"] == hooked
-    assert _humanized_draft(fake_llm) == hooked
-    attempt = await _stored_attempt(db)
-    assert (attempt.current_hook_name, attempt.replacing_hook_name) == (None, "stop_x_do_y")
-
-
 async def test_replace_may_rewrite_the_opening_as_the_same_hook(client, db, with_author, fake_llm):
     version = await _start(
         client,
         fake_llm,
         _hook(
             "replace",
-            replaced_opening="shipping small beats shipping big",
-            hook="Stop shipping big. Ship one small thing a week.",
+            replaced_text=DRAFT,
+            replacing_text=(
+                "Stop shipping big. Ship one small thing a week.\n\n"
+                "every week i ship one tiny thing"
+            ),
             replacing="stop_x_do_y",
             current="stop_x_do_y",
         ),
@@ -193,13 +219,12 @@ async def test_replace_may_rewrite_the_opening_as_the_same_hook(client, db, with
     )
 
 
+FIRST_LINE = "shipping small beats shipping big"
+ABOVE = f"Ship small.\n\n{FIRST_LINE}"
+
+
 async def test_the_hook_calls_answer_is_stored_as_it_came(client, db, with_author, fake_llm):
-    reply = _hook(
-        "replace",
-        replaced_opening="shipping small beats shipping big",
-        hook="Stop shipping big. Ship small.",
-        replacing="stop_x_do_y",
-    )
+    reply = _hook("replace", replaced_text=FIRST_LINE, replacing_text=ABOVE)
     await _start(client, fake_llm, dict(reply))
 
     assert (await _stored_attempt(db)).hook_answer == reply
@@ -208,7 +233,7 @@ async def test_the_hook_calls_answer_is_stored_as_it_came(client, db, with_autho
 async def test_a_refused_answer_is_stored_though_the_draft_goes_on_without_a_hook(
     client, db, with_author, fake_llm
 ):
-    reply = _hook("replace", replaced_opening="every week", hook="Ship small.")
+    reply = _hook("replace", replaced_text="every week", replacing_text="Ship small.\nevery week")
     await _start(client, fake_llm, dict(reply))
 
     attempt = await _stored_attempt(db)
@@ -227,41 +252,86 @@ async def test_a_hook_call_that_raises_stores_no_answer(client, db, with_author,
         pytest.param(LLMError("provider down"), id="the call raises"),
         pytest.param({"mode": "rewrite"}, id="the answer does not fit the schema"),
         pytest.param(
-            _hook("replace", replaced_opening="every week", hook="Ship small."),
-            id="the replaced opening is not a prefix",
+            _hook("prepend", replaced_text=FIRST_LINE, replacing_text=ABOVE),
+            id="prepend is no mode",
         ),
         pytest.param(
-            _hook("replace", replaced_opening="", hook="Ship small."),
-            id="the replaced opening is empty",
-        ),
-        pytest.param(_hook("prepend", hook="a" * 3000), id="the hooked draft is over the limit"),
-        pytest.param(
-            _hook("replace", replaced_opening=None, hook="Ship small."),
-            id="the replaced opening is null",
+            _hook("replace", replaced_text="every week", replacing_text="Ship small.\nevery week"),
+            id="the replaced text is not a prefix",
         ),
         pytest.param(
-            _hook("prepend", hook="Ship small.", replacing="made_up"), id="unknown replacing hook"
+            _hook("replace", replaced_text="", replacing_text="Ship small."),
+            id="the replaced text is empty",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=None, replacing_text="Ship small."),
+            id="the replaced text is null",
+        ),
+        pytest.param(
+            _hook(
+                "replace",
+                replaced_text="shipping small beats",
+                replacing_text="Ship small.\nshipping small beats",
+            ),
+            id="the replaced text ends mid-line",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=DRAFT, replacing_text="Ship small."),
+            id="no line is carried",
+        ),
+        pytest.param(
+            _hook(
+                "replace",
+                replaced_text=DRAFT,
+                replacing_text="Ship small.\n\nEvery week I ship one tiny thing",
+            ),
+            id="the carried line is reworded",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=f"Ship small. {FIRST_LINE}"),
+            id="the hook runs into the carried line",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=FIRST_LINE),
+            id="no hook before the carried line",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=f"  \n\n{FIRST_LINE}"),
+            id="a blank hook",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=f"\n{ABOVE}"),
+            id="a blank line above the hook",
+        ),
+        pytest.param(
+            _hook(
+                "replace", replaced_text=FIRST_LINE, replacing_text=f"Ship small.\n\n\n{FIRST_LINE}"
+            ),
+            id="more than one blank line after the hook",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=None),
+            id="the replacing text is null",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text="a" * 3000 + ABOVE),
+            id="the hooked draft is over the limit",
+        ),
+        pytest.param(
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=ABOVE, replacing="made_up"),
+            id="unknown replacing hook",
         ),
         pytest.param(
             _hook("keep", replacing=None, current="made_up"), id="unknown current hook on keep"
         ),
         pytest.param(
-            _hook("prepend", hook="Ship small.", current="made_up"), id="unknown current hook"
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=ABOVE, current="made_up"),
+            id="unknown current hook",
         ),
         pytest.param(
-            _hook("prepend", hook="Ship small.", replacing=None), id="no replacing hook to prepend"
+            _hook("replace", replaced_text=FIRST_LINE, replacing_text=ABOVE, replacing=None),
+            id="no replacing hook",
         ),
-        pytest.param(
-            _hook(
-                "replace",
-                replaced_opening="shipping small beats shipping big",
-                hook="Ship small.",
-                replacing=None,
-            ),
-            id="no replacing hook to replace with",
-        ),
-        pytest.param(_hook("prepend", hook="  "), id="a blank hook"),
-        pytest.param(_hook("prepend", hook=None), id="a null hook"),
     ],
 )
 async def test_a_failed_hook_step_writes_the_version_without_a_hook_and_logs_it(
@@ -287,7 +357,11 @@ async def test_a_failed_hook_step_writes_the_version_without_a_hook_and_logs_it(
 async def test_a_hooked_draft_of_exactly_the_limit_is_kept(client, with_author, fake_llm):
     hook = "a" * (3000 - len(DRAFT) - 2)
 
-    version = await _start(client, fake_llm, _hook("prepend", hook=hook))
+    version = await _start(
+        client,
+        fake_llm,
+        _hook("replace", replaced_text=FIRST_LINE, replacing_text=f"{hook}\n\n{FIRST_LINE}"),
+    )
 
     assert version["draft"] == f"{hook}\n\n{DRAFT}"
 

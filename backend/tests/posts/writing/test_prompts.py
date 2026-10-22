@@ -107,10 +107,21 @@ def test_the_hook_prompt_has_no_em_dash_for_a_hook_to_copy():
 
 def test_the_hook_prompt_asks_for_both_hook_names_and_null_where_a_field_does_not_apply():
     output = HOOK_PROMPT.split("# Output", 1)[1]
-    for field in ("current_hook_name", "mode", "replacing_hook_name", "replaced_opening", "hook"):
+    fields = ("current_hook_name", "mode", "replacing_hook_name", "replaced_text", "replacing_text")
+    for field in fields:
         assert f"- {field}:" in output
     assert "null" in output
     assert "Empty" not in output and '"none"' not in output
+
+
+def test_the_hook_prompt_offers_only_keep_and_replace():
+    assert "prepend" not in HOOK_PROMPT
+    assert '"keep" or "replace"' in HOOK_PROMPT
+
+
+def test_the_hook_prompt_has_the_hook_carry_the_lines_after_it_unchanged():
+    assert "at least the first line after the opening" in HOOK_PROMPT
+    assert "copied exactly" in HOOK_PROMPT
 
 
 def test_the_hook_prompt_knows_it_may_get_my_feedback():

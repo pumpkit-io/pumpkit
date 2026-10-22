@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import pytest
 from sqlalchemy import select
@@ -58,15 +57,13 @@ def _answer(choice: str) -> dict[str, ChoiceAnswer]:
     return {"opening": ChoiceAnswer(choice=choice, confidence=0.8, probabilities=probabilities)}
 
 
-def _hook(
-    mode: str, hook: str, replaced_opening: Optional[str] = None, replacing: str = "my_rule"
-) -> dict:
+def _hook(replaced_text: str, replacing_text: str, replacing: str = "my_rule") -> dict:
     return {
         "current_hook_name": None,
-        "mode": mode,
+        "mode": "replace",
         "replacing_hook_name": replacing,
-        "replaced_opening": replaced_opening,
-        "hook": hook,
+        "replaced_text": replaced_text,
+        "replacing_text": replacing_text,
     }
 
 
@@ -154,7 +151,7 @@ async def test_new_hook_runs_the_hook_step_with_the_feedback_before_the_draft(
 ):
     fake_llm.replies = [
         {"post": DRAFT_2},
-        _hook("prepend", hook="I ship one tiny thing a week."),
+        _hook(DRAFT_2, f"I ship one tiny thing a week.\n\n{DRAFT_2}"),
         {"post": "final 2"},
     ]
     fake_classifier.replies = [_answer("new_hook")]
@@ -178,7 +175,8 @@ async def test_new_hook_runs_the_hook_step_with_the_feedback_before_the_draft(
         ),
         _user(
             "This is the post to open with a hook. If you replace its opening, copy "
-            "replaced_opening from it exactly, character for character.\n\n"
+            "replaced_text from its start exactly, character for character, and end "
+            "replacing_text with the same lines you carry, copied exactly.\n\n"
             f"<post>\n{DRAFT_2}\n</post>"
         ),
     ]
@@ -200,9 +198,8 @@ async def test_new_hook_splices_a_replaced_opening_as_on_the_first_version(
     fake_llm.replies = [
         {"post": DRAFT_2},
         _hook(
-            "replace",
-            replaced_opening="shipping small beats shipping big",
-            hook="Stop shipping big. Ship small.",
+            DRAFT_2,
+            "Stop shipping big. Ship small.\n\nevery week i ship one tiny thing",
             replacing="stop_x_do_y",
         ),
         {"post": "final 2"},
@@ -219,7 +216,7 @@ async def test_a_failed_hook_step_after_new_hook_keeps_the_revision_and_logs_it(
 ):
     fake_llm.replies = [
         {"post": DRAFT_2},
-        _hook("replace", replaced_opening="every week", hook="Ship small."),
+        _hook("every week", "Ship small.\nevery week"),
         {"post": "final 2"},
     ]
     fake_classifier.replies = [_answer("new_hook")]

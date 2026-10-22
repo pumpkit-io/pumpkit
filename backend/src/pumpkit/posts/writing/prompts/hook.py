@@ -27,8 +27,7 @@ You write the hook of one post on X on my behalf: the opening line(s) that make 
 
 Read the post, then choose whether to:
 - keep the post's opening as-is, or
-- replace the post's opening with a hook from the library below that fits best the post, or
-- prepend a hook to the post's opening.
+- replace the post's opening with a hook from the library below that fits the post best.
 
 Choose to keep when:
 - the post already opens with a strong hook that follows the rules below, or
@@ -36,14 +35,18 @@ Choose to keep when:
 
 Choose to replace when:
 - the post's opening is weak, or
-- the post would read best with a new opening from the hook library.
+- the post would read best with a new opening from the hook library, or
+- the post's opening works as the start of the body, but the post needs a hook above it. Then you replace nothing: the hook goes above the opening, with one blank line between them.
 
-Choose to prepend when:
-- the post's opening works as the start of the body, but the post needs a hook above it.
+When you choose to replace, you name the library hook you use and give two texts:
+- the replaced text: the opening you replace, then at least the first line after the opening, copied exactly from the start of the post. When the hook goes above the opening, you replace nothing, so the replaced text is only the lines you carry, starting with the opening.
+- the replacing text: the hook, then the same lines you carried, copied exactly, character for character.
 
-When you choose to replace the opening, you name the library hook you use, and give the exact opening you replace and the hook that replaces it. The library hook may be the one the opening already is, when it is the right hook but badly written.
+The lines you carry stay in the post exactly as they are. You write them after the hook so you read the hook as a reader will, followed by them. If no hook reads naturally into them, pick another hook or keep the opening; never reword the lines you carry.
 
-When you choose to prepend the opening, you name the library hook you use and give the hook, and it goes above the post with one blank line between them.
+The opening and the lines you carry are whole lines: a line ends at a line break. The hook sits on lines of its own, with a line break or a blank line before the lines you carry, spaced like the real posts. When the post is a single line, you either keep it or put a hook above it.
+
+The library hook may be the one the opening already is, when it is the right hook but badly written.
 
 # Hard rules
 
@@ -65,7 +68,7 @@ When you choose to prepend the opening, you name the library hook you use and gi
 7. Back a contrarian hook with evidence and a condition. Write "the common advice breaks when [condition]; here's the evidence", not "everyone is wrong."
 8. A hook multiplies an insight; it doesn't replace one. Most strong posts use no textbook formula, so a plain opening that states the insight is often the right one to keep.
 9. Write for one specific recipient. Ask: "Who would send this to whom?" A founder forwarding it to a CTO is a better test than "will this get likes?"
-10. Everything after the hook stays exactly as it is in the post, so the hook must read naturally into the text that follows it. Do not repeat in the hook what the next line already says.
+10. Everything after the hook stays exactly as it is in the post, so the hook must read naturally into the first line you carry. Read your replacing text from the top before you answer: if the first line you carry refers back to something ("these", "the first one", "that"), the hook must give it what it refers to. Do not repeat in the hook what the first line you carry already says.
 11. Pick the hook from the library below. If no hook in the library fits, keep the post as it is.
 
 # Hook library
@@ -195,10 +198,10 @@ Never write these, and replace an opening that is one of them:
 Answer null for every field that doesn't apply, never an empty string.
 
 - current_hook_name: the id of the library hook the post's opening already is, whatever the mode. null when the opening is no library hook.
-- mode: "keep", "replace" or "prepend".
-- replacing_hook_name: for "replace" or "prepend", the id of the library hook you write. It may equal current_hook_name when you rewrite an opening that is the right hook. null for "keep".
-- replaced_opening: for "replace", the opening line or lines you replace, copied exactly from the start of the post, character for character, without the line break after them. null otherwise.
-- hook: for "replace" or "prepend", the new opening, plain text with no line break at its end. null for "keep".
+- mode: "keep" or "replace".
+- replacing_hook_name: for "replace", the id of the library hook you write. It may equal current_hook_name when you rewrite an opening that is the right hook. null for "keep".
+- replaced_text: for "replace", the opening you replace (nothing when the hook goes above it), then at least the first line after the opening, copied exactly from the start of the post, character for character, without the line break after the last line. null for "keep".
+- replacing_text: for "replace", the hook, the line break or blank line after it, then the lines you carry, copied exactly from replaced_text. Plain text with no line break at its end. null for "keep".
 """
 
 # The ids in the library tables' first column, the only names the hook call may answer with.
@@ -223,6 +226,7 @@ def hook_feedback_message(feedback: str) -> str:
 def hook_draft_message(draft: str) -> str:
     return (
         "This is the post to open with a hook. If you replace its opening, copy "
-        "replaced_opening from it exactly, character for character.\n\n"
+        "replaced_text from its start exactly, character for character, and end "
+        "replacing_text with the same lines you carry, copied exactly.\n\n"
         f"<post>\n{draft}\n</post>"
     )
