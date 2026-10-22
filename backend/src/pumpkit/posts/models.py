@@ -74,8 +74,11 @@ class VersionAttempt(Base):
     humanizing_usage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
-    # The hook step's library id or "none"; all three stay None when the step didn't run or failed.
-    hook_name: Mapped[Optional[str]] = mapped_column(String)
+    # The library ids of the opening the Draft had and of the Hook the step wrote, each None when
+    # it isn't one. Both names, hooking_model and hooking_usage stay None when the step didn't run
+    # or failed; hooking_model tells that apart from an opening that is no library Hook.
+    current_hook_name: Mapped[Optional[str]] = mapped_column(String)
+    replacing_hook_name: Mapped[Optional[str]] = mapped_column(String)
     hooking_model: Mapped[Optional[str]] = mapped_column(String)
     hooking_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     # The hook call's answer as it came, kept when the splice refused it too; None when the call

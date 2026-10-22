@@ -3,14 +3,12 @@ Splicing the hook call's answer into the Draft. Code does the splice, not the mo
 character after the Hook stays as the draft call wrote it.
 """
 
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
 from pumpkit.posts.writing.prompts.hook import HOOK_NAMES
-
-NO_HOOK = "none"
 
 # The prompt tells the model a prepended Hook sits one blank line above the Draft.
 PREPEND_SEPARATOR = "\n\n"
@@ -19,10 +17,11 @@ PREPEND_SEPARATOR = "\n\n"
 class HookedPost(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    hook_name: str
+    current_hook_name: Optional[str]
     mode: Literal["keep", "replace", "prepend"]
-    replaced_opening: str
-    hook: str
+    replacing_hook_name: Optional[str]
+    replaced_opening: Optional[str]
+    hook: Optional[str]
 
 
 # The SDK sends the class name as the schema name, snake_case like v6's schemas.
@@ -35,13 +34,13 @@ class HookRefused(Exception):
 
 def splice(draft: str, answer: HookedPost) -> str:
     """The Draft with the answer's Hook in it. Raises `HookRefused` when the answer can't be used."""
-    if answer.hook_name != NO_HOOK and answer.hook_name not in HOOK_NAMES:
-        raise HookRefused(f"unknown hook {answer.hook_name!r}")
+    if answer.current_hook_name is not None and answer.current_hook_name not in HOOK_NAMES:
+        raise HookRefused(f"unknown current hook {answer.current_hook_name!r}")
     if answer.mode == "keep":
         return draft
-    if answer.hook_name == NO_HOOK:
-        raise HookRefused(f"hook_name 'none' with mode {answer.mode!r}")
-    hook = answer.hook.rstrip()
+    if answer.replacing_hook_name not in HOOK_NAMES:
+        raise HookRefused(f"unknown replacing hook {answer.replacing_hook_name!r}")
+    hook = (answer.hook or "").rstrip()
     if not hook.strip():
         raise HookRefused(f"blank hook with mode {answer.mode!r}")
     if answer.mode == "prepend":

@@ -28,8 +28,10 @@ You write the hook of one post on X on my behalf: the opening line or lines that
 Read the post, then choose one of three things:
 
 - keep: the post already opens with a strong hook that follows the rules below. Leave it alone. Do not replace a good opening for the sake of it.
-- replace: the opening is weak, but the post reads best when a new opening takes its place. You give the exact opening you replace and the hook that replaces it.
-- prepend: the opening works as the start of the body, but the post needs a hook above it. You give the hook, and it goes above the post with one blank line between them.
+- replace: the opening is weak, but the post reads best when a new opening takes its place. You name the library hook you use, and give the exact opening you replace and the hook that replaces it. The library hook may be the one the opening already is, when it is the right hook but badly written.
+- prepend: the opening works as the start of the body, but the post needs a hook above it. You name the library hook you use and give the hook, and it goes above the post with one blank line between them.
+
+Whatever you choose, first name the library hook the post's opening already is, if it is one.
 
 Everything after the hook stays exactly as it is in the post, so the hook must read naturally into the text that follows it. Do not repeat in the hook what the next line already says.
 
@@ -181,10 +183,13 @@ Never write these, and replace an opening that is one of them:
 
 # Output
 
-- hook_name: the id of the library hook you used, or of the hook the opening already is when you keep it. "none" when you keep an opening that is no library hook.
+Answer null for every field that doesn't apply, never an empty string.
+
+- current_hook_name: the id of the library hook the post's opening already is, whatever the mode. null when the opening is no library hook.
 - mode: "keep", "replace" or "prepend".
-- replaced_opening: for "replace", the opening line or lines you replace, copied exactly from the start of the post, character for character, without the line break after them. Empty otherwise.
-- hook: for "replace" or "prepend", the new opening, plain text with no line break at its end. Empty for "keep".
+- replacing_hook_name: for "replace" or "prepend", the id of the library hook you write. It may equal current_hook_name when you rewrite an opening that is the right hook. null for "keep".
+- replaced_opening: for "replace", the opening line or lines you replace, copied exactly from the start of the post, character for character, without the line break after them. null otherwise.
+- hook: for "replace" or "prepend", the new opening, plain text with no line break at its end. null for "keep".
 """
 
 # The ids in the library tables' first column, the only names the hook call may answer with.

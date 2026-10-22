@@ -104,7 +104,13 @@ async def test_feedback_through_the_tools_asks_jev_and_gets_a_new_hook_as_on_the
     fake_classifier.replies = [
         {"opening": ChoiceAnswer(choice="new_hook", confidence=0.9, probabilities=probabilities)}
     ]
-    hook = {"hook_name": "my_rule", "mode": "prepend", "replaced_opening": "", "hook": "My rule."}
+    hook = {
+        "current_hook_name": None,
+        "mode": "prepend",
+        "replacing_hook_name": "my_rule",
+        "replaced_opening": None,
+        "hook": "My rule.",
+    }
     fake_llm.replies = [{"post": "draft 2"}, hook, {"post": "final 2"}]
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="rewrite it all")
@@ -116,7 +122,7 @@ async def test_feedback_through_the_tools_asks_jev_and_gets_a_new_hook_as_on_the
         select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
     )
     assert version is not None
-    assert (version.draft, version.hook_name, version.hook_check) == (
+    assert (version.draft, version.replacing_hook_name, version.hook_check) == (
         "My rule.\n\ndraft 2",
         "my_rule",
         "new_hook",

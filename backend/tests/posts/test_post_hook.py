@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import pytest
 from sqlalchemy import select
@@ -42,8 +43,20 @@ async def with_author(client, subscribed, fake_x_reader):
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
-def _hook(mode: str, hook: str = "", replaced_opening: str = "", name: str = "my_rule") -> dict:
-    return {"hook_name": name, "mode": mode, "replaced_opening": replaced_opening, "hook": hook}
+def _hook(
+    mode: str,
+    hook: Optional[str] = None,
+    replaced_opening: Optional[str] = None,
+    replacing: Optional[str] = "my_rule",
+    current: Optional[str] = None,
+) -> dict:
+    return {
+        "current_hook_name": current,
+        "mode": mode,
+        "replacing_hook_name": replacing,
+        "replaced_opening": replaced_opening,
+        "hook": hook,
+    }
 
 
 async def _start(client, fake_llm, hook_reply) -> dict:
@@ -108,29 +121,32 @@ async def test_the_hook_call_uses_the_configured_model(client, with_author, fake
 async def test_keep_leaves_the_draft_as_it_is_and_stores_the_hook_call(
     client, db, with_author, fake_llm
 ):
-    version = await _start(client, fake_llm, _hook("keep", name="my_rule"))
+    version = await _start(client, fake_llm, _hook("keep", replacing=None, current="my_rule"))
 
     assert version["draft"] == DRAFT
     assert _humanized_draft(fake_llm) == DRAFT
     attempt = await _stored_attempt(db)
-    assert (attempt.draft, attempt.hook_name, attempt.hooking_model) == (
-        DRAFT,
-        "my_rule",
-        DEFAULT_MODEL,
-    )
+    assert (
+        attempt.draft,
+        attempt.current_hook_name,
+        attempt.replacing_hook_name,
+        attempt.hooking_model,
+    ) == (DRAFT, "my_rule", None, DEFAULT_MODEL)
     assert attempt.hooking_usage == USAGE
 
 
 async def test_prepend_puts_the_hook_above_the_draft(client, db, with_author, fake_llm):
-    version = await _start(
-        client, fake_llm, _hook("prepend", hook="I ship one tiny thing a week.", name="my_rule")
-    )
+    version = await _start(client, fake_llm, _hook("prepend", hook="I ship one tiny thing a week."))
 
     hooked = f"I ship one tiny thing a week.\n\n{DRAFT}"
     assert version["draft"] == hooked
     assert _humanized_draft(fake_llm) == hooked
     attempt = await _stored_attempt(db)
-    assert (attempt.draft, attempt.hook_name) == (hooked, "my_rule")
+    assert (attempt.draft, attempt.current_hook_name, attempt.replacing_hook_name) == (
+        hooked,
+        None,
+        "my_rule",
+    )
 
 
 async def test_replace_swaps_the_opening_and_keeps_every_character_after_it(
@@ -143,14 +159,38 @@ async def test_replace_swaps_the_opening_and_keeps_every_character_after_it(
             "replace",
             replaced_opening="shipping small beats shipping big",
             hook="Stop shipping big. Ship small.",
-            name="stop_x_do_y",
+            replacing="stop_x_do_y",
         ),
     )
 
     hooked = "Stop shipping big. Ship small.\n\nevery week i ship one tiny thing"
     assert version["draft"] == hooked
     assert _humanized_draft(fake_llm) == hooked
-    assert (await _stored_attempt(db)).hook_name == "stop_x_do_y"
+    attempt = await _stored_attempt(db)
+    assert (attempt.current_hook_name, attempt.replacing_hook_name) == (None, "stop_x_do_y")
+
+
+async def test_replace_may_rewrite_the_opening_as_the_same_hook(client, db, with_author, fake_llm):
+    version = await _start(
+        client,
+        fake_llm,
+        _hook(
+            "replace",
+            replaced_opening="shipping small beats shipping big",
+            hook="Stop shipping big. Ship one small thing a week.",
+            replacing="stop_x_do_y",
+            current="stop_x_do_y",
+        ),
+    )
+
+    assert version["draft"] == (
+        "Stop shipping big. Ship one small thing a week.\n\nevery week i ship one tiny thing"
+    )
+    attempt = await _stored_attempt(db)
+    assert (attempt.current_hook_name, attempt.replacing_hook_name) == (
+        "stop_x_do_y",
+        "stop_x_do_y",
+    )
 
 
 async def test_the_hook_calls_answer_is_stored_as_it_came(client, db, with_author, fake_llm):
@@ -158,7 +198,7 @@ async def test_the_hook_calls_answer_is_stored_as_it_came(client, db, with_autho
         "replace",
         replaced_opening="shipping small beats shipping big",
         hook="Stop shipping big. Ship small.",
-        name="stop_x_do_y",
+        replacing="stop_x_do_y",
     )
     await _start(client, fake_llm, dict(reply))
 
@@ -172,7 +212,7 @@ async def test_a_refused_answer_is_stored_though_the_draft_goes_on_without_a_hoo
     await _start(client, fake_llm, dict(reply))
 
     attempt = await _stored_attempt(db)
-    assert (attempt.draft, attempt.hook_name, attempt.hook_answer) == (DRAFT, None, reply)
+    assert (attempt.draft, attempt.replacing_hook_name, attempt.hook_answer) == (DRAFT, None, reply)
 
 
 async def test_a_hook_call_that_raises_stores_no_answer(client, db, with_author, fake_llm):
@@ -195,9 +235,33 @@ async def test_a_hook_call_that_raises_stores_no_answer(client, db, with_author,
             id="the replaced opening is empty",
         ),
         pytest.param(_hook("prepend", hook="a" * 3000), id="the hooked draft is over the limit"),
-        pytest.param(_hook("prepend", hook="Ship small.", name="made_up"), id="unknown hook"),
-        pytest.param(_hook("prepend", hook="Ship small.", name="none"), id="none that changes"),
+        pytest.param(
+            _hook("replace", replaced_opening=None, hook="Ship small."),
+            id="the replaced opening is null",
+        ),
+        pytest.param(
+            _hook("prepend", hook="Ship small.", replacing="made_up"), id="unknown replacing hook"
+        ),
+        pytest.param(
+            _hook("keep", replacing=None, current="made_up"), id="unknown current hook on keep"
+        ),
+        pytest.param(
+            _hook("prepend", hook="Ship small.", current="made_up"), id="unknown current hook"
+        ),
+        pytest.param(
+            _hook("prepend", hook="Ship small.", replacing=None), id="no replacing hook to prepend"
+        ),
+        pytest.param(
+            _hook(
+                "replace",
+                replaced_opening="shipping small beats shipping big",
+                hook="Ship small.",
+                replacing=None,
+            ),
+            id="no replacing hook to replace with",
+        ),
         pytest.param(_hook("prepend", hook="  "), id="a blank hook"),
+        pytest.param(_hook("prepend", hook=None), id="a null hook"),
     ],
 )
 async def test_a_failed_hook_step_writes_the_version_without_a_hook_and_logs_it(
@@ -211,7 +275,12 @@ async def test_a_failed_hook_step_writes_the_version_without_a_hook_and_logs_it(
     assert _humanized_draft(fake_llm) == DRAFT
     attempt = await _stored_attempt(db)
     assert attempt.status == "succeeded"
-    assert (attempt.hook_name, attempt.hooking_model, attempt.hooking_usage) == (None, None, None)
+    assert (
+        attempt.current_hook_name,
+        attempt.replacing_hook_name,
+        attempt.hooking_model,
+        attempt.hooking_usage,
+    ) == (None, None, None, None)
     assert "Hook step failed" in caplog.text
 
 
@@ -241,5 +310,5 @@ async def test_a_feedback_version_jev_did_not_answer_makes_no_hook_call(
     result = await db.execute(select(Post).options(selectinload(Post.attempts)))
     [post] = result.scalars()
     feedback_version = post.attempts[1]
-    assert (feedback_version.hook_name, feedback_version.hooking_model) == (None, None)
+    assert (feedback_version.replacing_hook_name, feedback_version.hooking_model) == (None, None)
     assert feedback_version.hooking_usage is None

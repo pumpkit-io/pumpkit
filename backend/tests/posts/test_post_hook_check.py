@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import pytest
 from sqlalchemy import select
@@ -57,8 +58,16 @@ def _answer(choice: str) -> dict[str, ChoiceAnswer]:
     return {"opening": ChoiceAnswer(choice=choice, confidence=0.8, probabilities=probabilities)}
 
 
-def _hook(mode: str, hook: str = "", replaced_opening: str = "", name: str = "my_rule") -> dict:
-    return {"hook_name": name, "mode": mode, "replaced_opening": replaced_opening, "hook": hook}
+def _hook(
+    mode: str, hook: str, replaced_opening: Optional[str] = None, replacing: str = "my_rule"
+) -> dict:
+    return {
+        "current_hook_name": None,
+        "mode": mode,
+        "replacing_hook_name": replacing,
+        "replaced_opening": replaced_opening,
+        "hook": hook,
+    }
 
 
 def _system(prompt: str) -> dict:
@@ -145,7 +154,7 @@ async def test_new_hook_runs_the_hook_step_with_the_feedback_before_the_draft(
 ):
     fake_llm.replies = [
         {"post": DRAFT_2},
-        _hook("prepend", hook="I ship one tiny thing a week.", name="my_rule"),
+        _hook("prepend", hook="I ship one tiny thing a week."),
         {"post": "final 2"},
     ]
     fake_classifier.replies = [_answer("new_hook")]
@@ -177,7 +186,7 @@ async def test_new_hook_runs_the_hook_step_with_the_feedback_before_the_draft(
     assert version["draft"] == hooked
     assert _humanized_draft(fake_llm).endswith(f"<post>\n{hooked}\n</post>")
     attempt = (await _stored_attempts(db))[-1]
-    assert (attempt.draft, attempt.hook_name, attempt.hooking_model) == (
+    assert (attempt.draft, attempt.replacing_hook_name, attempt.hooking_model) == (
         hooked,
         "my_rule",
         DEFAULT_MODEL,
@@ -194,7 +203,7 @@ async def test_new_hook_splices_a_replaced_opening_as_on_the_first_version(
             "replace",
             replaced_opening="shipping small beats shipping big",
             hook="Stop shipping big. Ship small.",
-            name="stop_x_do_y",
+            replacing="stop_x_do_y",
         ),
         {"post": "final 2"},
     ]
@@ -221,7 +230,7 @@ async def test_a_failed_hook_step_after_new_hook_keeps_the_revision_and_logs_it(
     assert version["draft"] == DRAFT_2
     assert "Hook step failed" in caplog.text
     attempt = (await _stored_attempts(db))[-1]
-    assert (attempt.hook_name, attempt.hook_check) == (None, "new_hook")
+    assert (attempt.replacing_hook_name, attempt.hook_check) == (None, "new_hook")
 
 
 @pytest.mark.parametrize("label", ["keep_hook", "user_wrote_hook"])
@@ -236,7 +245,11 @@ async def test_any_other_label_skips_the_hook_step(
     assert _calls(fake_llm) == ["revised_post", "refined_post"]
     assert version["draft"] == DRAFT_2
     attempt = (await _stored_attempts(db))[-1]
-    assert (attempt.hook_name, attempt.hooking_model, attempt.hooking_usage) == (None, None, None)
+    assert (attempt.replacing_hook_name, attempt.hooking_model, attempt.hooking_usage) == (
+        None,
+        None,
+        None,
+    )
     assert attempt.hook_check == label
 
 

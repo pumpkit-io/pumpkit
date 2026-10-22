@@ -3,4 +3,10 @@
 
 def keep_hook() -> dict:
     """The hook call's answer that leaves the Draft as it is."""
-    return {"hook_name": "none", "mode": "keep", "replaced_opening": "", "hook": ""}
+    return {
+        "current_hook_name": None,
+        "mode": "keep",
+        "replacing_hook_name": None,
+        "replaced_opening": None,
+        "hook": None,
+    }

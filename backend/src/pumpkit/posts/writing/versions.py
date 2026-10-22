@@ -87,7 +87,8 @@ class HookCheck:
 
 @dataclass(frozen=True)
 class HookStep:
-    name: Optional[str] = None
+    current_name: Optional[str] = None
+    replacing_name: Optional[str] = None
     model: Optional[str] = None
     usage: Optional[dict] = None
     answer: Optional[dict] = None
@@ -234,7 +235,11 @@ async def _hook(llm: LLM, messages: list[dict], draft: str) -> tuple[str, HookSt
         logger.warning("Hook step failed, the Draft goes on without a Hook: %s", refusal)
         return draft, HookStep(answer=answer)
     return spliced, HookStep(
-        name=hooked.parsed.hook_name, model=hooked.model, usage=_usage(hooked), answer=answer
+        current_name=hooked.parsed.current_hook_name,
+        replacing_name=hooked.parsed.replacing_hook_name,
+        model=hooked.model,
+        usage=_usage(hooked),
+        answer=answer,
     )
 
 
