@@ -140,6 +140,7 @@ async def record_version(
         hook_name=written.hook.name,
         hooking_model=written.hook.model,
         hooking_usage=written.hook.usage,
+        hook_answer=written.hook.answer,
         hook_check=written.hook_check.label,
         hook_check_probabilities=written.hook_check.probabilities,
         hook_check_model=written.hook_check.model,

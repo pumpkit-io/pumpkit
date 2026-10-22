@@ -78,6 +78,9 @@ class VersionAttempt(Base):
     hook_name: Mapped[Optional[str]] = mapped_column(String)
     hooking_model: Mapped[Optional[str]] = mapped_column(String)
     hooking_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    # The hook call's answer as it came, kept when the splice refused it too; None when the call
+    # didn't run or raised.
+    hook_answer: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     # Jev's top label on a Feedback Version; all three None when it wasn't asked or didn't answer.
     hook_check: Mapped[Optional[str]] = mapped_column(String)
     # Every label's probability, to tune the question against real Feedback.

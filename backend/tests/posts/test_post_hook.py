@@ -153,6 +153,34 @@ async def test_replace_swaps_the_opening_and_keeps_every_character_after_it(
     assert (await _stored_attempt(db)).hook_name == "stop_x_do_y"
 
 
+async def test_the_hook_calls_answer_is_stored_as_it_came(client, db, with_author, fake_llm):
+    reply = _hook(
+        "replace",
+        replaced_opening="shipping small beats shipping big",
+        hook="Stop shipping big. Ship small.",
+        name="stop_x_do_y",
+    )
+    await _start(client, fake_llm, dict(reply))
+
+    assert (await _stored_attempt(db)).hook_answer == reply
+
+
+async def test_a_refused_answer_is_stored_though_the_draft_goes_on_without_a_hook(
+    client, db, with_author, fake_llm
+):
+    reply = _hook("replace", replaced_opening="every week", hook="Ship small.")
+    await _start(client, fake_llm, dict(reply))
+
+    attempt = await _stored_attempt(db)
+    assert (attempt.draft, attempt.hook_name, attempt.hook_answer) == (DRAFT, None, reply)
+
+
+async def test_a_hook_call_that_raises_stores_no_answer(client, db, with_author, fake_llm):
+    await _start(client, fake_llm, LLMError("provider down"))
+
+    assert (await _stored_attempt(db)).hook_answer is None
+
+
 @pytest.mark.parametrize(
     "reply",
     [
