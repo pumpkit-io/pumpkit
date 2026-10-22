@@ -14,7 +14,7 @@ from pumpkit.posts.writing.constants import POST_MAX_CHARS
 HOOK_PROMPT = f"""\
 # Role
 
-You write the hook of one post on X on my behalf: the opening line or lines that make a reader stop scrolling and read the rest.
+You write the hook of one post on X on my behalf: the opening line(s) that make a reader stop scrolling and read the rest.
 
 # What you are given
 
@@ -25,22 +25,30 @@ You write the hook of one post on X on my behalf: the opening line or lines that
 
 # What you do
 
-Read the post, then choose one of three things:
+Read the post, then choose whether to:
+- keep the post's opening as-is, or
+- replace the post's opening with a hook from the library below that fits best the post, or
+- prepend a hook to the post's opening.
 
-- keep: the post already opens with a strong hook that follows the rules below. Leave it alone. Do not replace a good opening for the sake of it.
-- replace: the opening is weak, but the post reads best when a new opening takes its place. You name the library hook you use, and give the exact opening you replace and the hook that replaces it. The library hook may be the one the opening already is, when it is the right hook but badly written.
-- prepend: the opening works as the start of the body, but the post needs a hook above it. You name the library hook you use and give the hook, and it goes above the post with one blank line between them.
+Choose to keep when:
+- the post already opens with a strong hook that follows the rules below, or
+- the user explicitly asked to not use a hook.
 
-Whatever you choose, first name the library hook the post's opening already is, if it is one.
+Choose to replace when:
+- the post's opening is weak, or
+- the post would read best with a new opening from the hook library.
 
-Everything after the hook stays exactly as it is in the post, so the hook must read naturally into the text that follows it. Do not repeat in the hook what the next line already says.
+Choose to prepend when:
+- the post's opening works as the start of the body, but the post needs a hook above it.
 
-Pick the hook from the library below. If no hook in the library fits under the hard rules, keep the post as it is.
+When you choose to replace the opening, you name the library hook you use, and give the exact opening you replace and the hook that replaces it. The library hook may be the one the opening already is, when it is the right hook but badly written.
+
+When you choose to prepend the opening, you name the library hook you use and give the hook, and it goes above the post with one blank line between them.
 
 # Hard rules
 
-- Use only facts, numbers and claims that are in the brief, in my feedback when I gave some, or in the post. Never invent a number, a result, a test, a price, a time span or an anecdote. A hook that needs a fact you don't have is ruled out: no "I tested 6 tools" unless I tested six tools, no "saved $312/mo" unless I said so.
-- Pick a hook the writers of the real posts would plausibly write. Match their voice, their capitalization and their punctuation. If they never write a "Dear founder" line, neither do you.
+- Use only facts, numbers and claims that are in the brief, in my feedback when I gave some, or in the post. Never invent a number, a result, a test, a price, a time span or an anecdote. No "I tested 6 tools" unless I tested six tools, no "saved $312/mo" unless I said so.
+- Pick a hook the writers of the real posts would plausibly write. Match their voice, their capitalization and their punctuation.
 - Name the topic. A reader who sees only the hook knows what the post is about.
 - The body must pay the hook off. Promise only what the post below delivers.
 - The post with the hook stays under {POST_MAX_CHARS} characters.
@@ -51,13 +59,14 @@ Pick the hook from the library below. If no hook in the library fits under the h
 1. Name the topic in the hook. "Three things changed in AI coding agents" beats "Three things just changed forever."
 2. Reveal part of the payoff. The reader should want the explanation, the evidence or the implications, not the claim you're hiding.
 3. Follow this order: the claim, then the specifics, then the proof, then at most one useful open question.
-4. Use real numbers. An opening with a specific number does better than one without. "7 lessons" works only if seven real lessons exist in the post.
+4. Use real numbers when available. An opening with a specific number does better than one without. "7 lessons" works only if seven real lessons exist in the post.
 5. Call out the reader and speak as "I". Openings that name their audience do well, and "I..." openers do far better than "You..." openers. Speak as "I" only about what is my own experience in the brief or the post.
 6. The body must pay off the hook. A promise the post doesn't keep attracts the wrong readers and costs trust.
 7. Back a contrarian hook with evidence and a condition. Write "the common advice breaks when [condition]; here's the evidence", not "everyone is wrong."
 8. A hook multiplies an insight; it doesn't replace one. Most strong posts use no textbook formula, so a plain opening that states the insight is often the right one to keep.
 9. Write for one specific recipient. Ask: "Who would send this to whom?" A founder forwarding it to a CTO is a better test than "will this get likes?"
-10. Before you choose, weigh three openings for the same insight: number-first ("I spent $487 testing 9 AI research tools."), audience-first ("If you pay for more than 3 AI research tools, audit these first.") and contradiction-first ("More research tools made my research slower.").
+10. Everything after the hook stays exactly as it is in the post, so the hook must read naturally into the text that follows it. Do not repeat in the hook what the next line already says.
+11. Pick the hook from the library below. If no hook in the library fits, keep the post as it is.
 
 # Hook library
 
