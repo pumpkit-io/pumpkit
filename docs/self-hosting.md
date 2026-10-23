@@ -168,7 +168,7 @@ Pumpkit needs two providers. Every other one is optional: with none of its setti
 Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](https://openrouter.ai) by default.
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
-- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. A first Version makes three model calls: draft, hook and humanizer. A Feedback Version makes two, revision and humanizer, plus a hook call when [Jev](#jev-optional) is configured and says the opening needs a new Hook; Jev's question is billed by TypeSafe, not your LLM endpoint.
+- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. A first Version makes three model calls: hook, draft and humanizer. A Feedback Version makes two, revision and humanizer, plus a hook call before them when [Jev](#jev-optional) is configured and says the opening needs a new Hook; Jev's question is billed by TypeSafe, not your LLM endpoint.
 - Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the four models it serves: `LLM_DRAFTING_MODEL`, `LLM_HOOKING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).
@@ -271,7 +271,7 @@ curl -s http://localhost:8080/api/v1/instance | grep -o '"analytics":{"key":"[^"
 
 ### Jev (optional)
 
-TypeSafe's hosted classifier (ADR 0013). On a Feedback Version, Pumpkit asks Jev whether the opening needs a new Hook before it runs the hook step.
+TypeSafe's hosted classifier (ADR 0013). On a Feedback Version, Pumpkit asks Jev whether the opening needs a new Hook before it runs the hook call.
 
 - Get a key: [console.typesafe.ai/keys](https://console.typesafe.ai/keys).
 - Pricing: $0.042 per million input tokens, with output free, as ADR 0013 records; TypeSafe's site has the current price.

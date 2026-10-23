@@ -1,7 +1,16 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal, Optional, get_args
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as PgEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -74,14 +83,15 @@ class VersionAttempt(Base):
     humanizing_usage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
-    # The library ids of the opening the Draft had and of the Hook the step wrote, each None when
-    # it isn't one. Both names, hooking_model and hooking_usage stay None when the step didn't run
-    # or failed; hooking_model tells that apart from an opening that is no library Hook.
-    current_hook_name: Mapped[Optional[str]] = mapped_column(String)
-    replacing_hook_name: Mapped[Optional[str]] = mapped_column(String)
+    # The library id and text of the Hook the writing call was told to start with, None when the
+    # hook call didn't run, failed or wrote none; hooking_model tells the last case apart.
+    hook_name: Mapped[Optional[str]] = mapped_column(String)
+    hook_text: Mapped[Optional[str]] = mapped_column(Text)
+    # Whether the writing call's text started with the Hook before the scrub; None with no Hook.
+    hook_followed: Mapped[Optional[bool]] = mapped_column(Boolean)
     hooking_model: Mapped[Optional[str]] = mapped_column(String)
     hooking_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
-    # The hook call's answer as it came, kept when the splice refused it too; None when the call
+    # The hook call's answer as it came, kept when it was refused too; None when the call
     # didn't run or raised.
     hook_answer: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     # Jev's top label on a Feedback Version; all three None when it wasn't asked or didn't answer.

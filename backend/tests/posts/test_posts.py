@@ -13,7 +13,7 @@ from pumpkit.posts.llm_client import LLMNotConfiguredError
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
-from tests.posts.hook_replies import keep_hook
+from tests.posts.hook_replies import no_hook
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -40,7 +40,7 @@ async def with_author(client, subscribed, fake_x_reader):
 
 
 async def test_starting_a_post_returns_it_with_its_first_version(client, with_author, fake_llm):
-    fake_llm.replies = [{"post": "the draft—with a dash"}, keep_hook(), {"post": "the final"}]
+    fake_llm.replies = [no_hook(), {"post": "the draft—with a dash"}, {"post": "the final"}]
 
     response = await client.post(POSTS, json={"brief": "ship small things"})
 
@@ -67,8 +67,8 @@ async def test_a_version_reports_the_tells_the_slop_check_found_in_its_final(
     client, db, with_author, fake_llm
 ):
     fake_llm.replies = [
+        no_hook(),
         {"post": "draft"},
-        keep_hook(),
         {"post": "the unfair advantage was distribution — and this is why i keep saying it"},
     ]
 
@@ -106,11 +106,11 @@ LEVELSIO_CORPUS = (
 async def test_the_draft_call_gets_the_draft_prompt_then_the_corpus_then_the_brief(
     client, with_author, fake_llm
 ):
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
 
     await client.post(POSTS, json={"brief": "  ship small things\n"})
 
-    draft_call = fake_llm.calls[0]
+    draft_call = fake_llm.calls[1]
     assert draft_call.model == DEFAULT_MODEL
     assert draft_call.response_model.__name__ == "drafted_post"
     assert draft_call.messages == [
@@ -120,23 +120,23 @@ async def test_the_draft_call_gets_the_draft_prompt_then_the_corpus_then_the_bri
     ]
 
 
-async def test_the_draft_hook_and_humanizer_calls_use_the_configured_models(
+async def test_the_hook_draft_and_humanizer_calls_use_the_configured_models(
     client, with_author, fake_llm, monkeypatch
 ):
     monkeypatch.setattr(settings, "LLM_DRAFTING_MODEL", "llama3.3")
     monkeypatch.setattr(settings, "LLM_HOOKING_MODEL", "mistral")
     monkeypatch.setattr(settings, "LLM_HUMANIZING_MODEL", "qwen3")
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
 
     await client.post(POSTS, json={"brief": "ship"})
 
-    assert [call.model for call in fake_llm.calls] == ["llama3.3", "mistral", "qwen3"]
+    assert [call.model for call in fake_llm.calls] == ["mistral", "llama3.3", "qwen3"]
 
 
 async def test_the_humanizer_gets_its_prompt_the_corpus_the_brief_message_then_the_scrubbed_draft(
     client, with_author, fake_llm
 ):
-    fake_llm.replies = [{"post": "it’s a draft—really"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "it’s a draft—really"}, {"post": "final"}]
 
     await client.post(POSTS, json={"brief": "ship small things"})
 
@@ -163,7 +163,7 @@ async def test_the_corpus_is_the_newest_20_posts_of_each_author_in_list_order(
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 1)
     await client.post(AUTHORS, json={"handle": "paulg"})
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
 
     await client.post(POSTS, json={"brief": "ship"})
 
@@ -183,7 +183,7 @@ async def test_posts_posted_in_the_same_second_are_ordered_by_post_id_descending
         FetchedPost(post_id="bbb", text="higher id", posted_at=same_time),
     ]
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
 
     await client.post(POSTS, json={"brief": "ship"})
 
@@ -195,7 +195,7 @@ async def test_the_final_is_counted_in_characters_and_kept_when_over_the_limit(
     client, with_author, fake_llm
 ):
     long_final = "🚀" + "a" * 3000
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": long_final}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": long_final}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
@@ -215,7 +215,7 @@ async def test_a_brief_over_200000_characters_returns_422_without_calling_the_mo
 
 
 async def test_a_brief_of_exactly_200000_characters_is_accepted(client, with_author, fake_llm):
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "a" * 200_000})
 
@@ -265,7 +265,7 @@ async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_so
 ):
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
@@ -281,7 +281,7 @@ async def _stored_posts(db) -> list[Post]:
 async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
     client, db, with_author, fake_llm, clock
 ):
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
@@ -306,7 +306,7 @@ async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
 async def test_a_post_keeps_its_corpus_when_the_users_authors_change(
     client, db, with_author, fake_x_reader, fake_llm
 ):
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), {"post": "final"}]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, {"post": "final"}]
     await client.post(POSTS, json={"brief": "ship"})
 
     await client.delete(f"{AUTHORS}/levelsio")
@@ -320,7 +320,7 @@ async def test_a_post_keeps_its_corpus_when_the_users_authors_change(
 async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns_502(
     client, db, with_author, fake_llm, assert_reported_502
 ):
-    fake_llm.replies = [{"post": "draft"}, keep_hook(), LLMError("provider timed out")]
+    fake_llm.replies = [no_hook(), {"post": "draft"}, LLMError("provider timed out")]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
@@ -336,9 +336,10 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns
 
 async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_author, fake_llm):
     fake_llm.replies = [
+        no_hook(),
         LLMError("provider down"),
+        no_hook(),
         {"post": "draft"},
-        keep_hook(),
         {"post": "final"},
     ]
     await client.post(POSTS, json={"brief": "ship"})
@@ -354,7 +355,7 @@ async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_autho
 async def test_writing_without_the_llm_key_fails_clearly_and_stores_the_attempt(
     client, db, with_author, fake_llm
 ):
-    fake_llm.replies = [LLMNotConfiguredError("LLM_API_KEY is not set. Add it to .env.")]
+    fake_llm.replies = [no_hook(), LLMNotConfiguredError("LLM_API_KEY is not set. Add it to .env.")]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 

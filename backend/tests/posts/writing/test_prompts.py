@@ -69,6 +69,7 @@ def test_the_humanizer_prompt_keeps_the_openings_claim_numbers_and_structure():
 
 def test_the_hook_prompt_states_the_hard_rules():
     assert "Use only facts, numbers and claims that are in the brief" in HOOK_PROMPT
+    assert "in the previous version when there is one" not in HOOK_PROMPT
     assert (
         "Never invent a number, a result, a test, a price, a time span or an anecdote"
         in HOOK_PROMPT
@@ -105,16 +106,23 @@ def test_the_hook_prompt_has_no_em_dash_for_a_hook_to_copy():
     assert "—" not in HOOK_PROMPT
 
 
-def test_the_hook_prompt_asks_for_both_hook_names_and_null_where_a_field_does_not_apply():
+def test_the_hook_prompt_asks_for_the_hook_and_its_name_or_null_for_both():
     output = HOOK_PROMPT.split("# Output", 1)[1]
-    for field in ("current_hook_name", "mode", "replacing_hook_name", "replaced_opening", "hook"):
+    for field in ("hook_name", "hook"):
         assert f"- {field}:" in output
-    assert "null" in output
-    assert "Empty" not in output and '"none"' not in output
+    assert "null for both fields or for neither" in output
+    for gone in ("mode", "replaced_text", "replacing_text", "current_hook_name"):
+        assert f"- {gone}:" not in output
 
 
-def test_the_hook_prompt_knows_it_may_get_my_feedback():
-    assert "my latest feedback on its previous version" in HOOK_PROMPT
+def test_the_hook_prompt_writes_the_hook_before_the_post():
+    assert "The post isn't written yet." in HOOK_PROMPT
+    assert "starting with your hook word for word" in HOOK_PROMPT
+    assert "Write only the hook, never the post" in HOOK_PROMPT
+
+
+def test_the_hook_prompt_knows_it_may_get_the_previous_version_and_my_feedback():
+    assert "its previous version and my latest feedback on it" in HOOK_PROMPT
 
 
 def test_jev_answers_user_wrote_hook_whenever_the_feedback_dictates_or_edits_the_opening():
@@ -128,5 +136,12 @@ def test_jev_chooses_between_a_new_hook_keeping_it_and_the_users_own():
     criteria = HOOK_CHECK_QUESTION.criteria
     assert set(criteria) == {"new_hook", "keep_hook", "user_wrote_hook"}
     assert "rewrite the whole post" in criteria["new_hook"]
+    assert "no longer fits" not in criteria["new_hook"]
     assert "only text after the opening" in criteria["keep_hook"]
     assert "dictates the opening" in criteria["user_wrote_hook"]
+
+
+def test_jev_judges_before_the_post_is_rewritten_from_the_last_feedback():
+    instructions = HOOK_CHECK_QUESTION.instructions
+    assert "latest_draft" not in instructions
+    assert "will now rewrite the post from the user's last feedback" in instructions
