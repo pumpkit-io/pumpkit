@@ -2,8 +2,7 @@
 
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
-from pumpkit.posts.writing.prompts.hook import HOOK_NAMES, HOOK_PROMPT
-from pumpkit.posts.writing.prompts.hook_check import HOOK_CHECK_QUESTION
+from pumpkit.posts.writing.prompts.hook import HOOK_NAMES, HOOK_SECTION
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 
 
@@ -23,10 +22,10 @@ def test_the_draft_prompt_asks_for_one_post():
     assert "thread" in prompt
 
 
-def test_the_draft_prompt_starts_and_ends_as_v6s_does():
+def test_the_draft_prompt_starts_as_v6s_does_and_ends_on_the_post_field():
     assert DRAFT_POST_PROMPT.startswith("# Role\n\nYou write one post on X on my behalf.\n")
     assert DRAFT_POST_PROMPT.endswith(
-        "Return the post text and nothing else - no preamble, no quotes around it, "
+        "The post field holds the post text and nothing else - no preamble, no quotes around it, "
         "no notes about what you did.\n"
     )
 
@@ -55,7 +54,7 @@ def test_the_humanizer_prompt_keeps_its_guidelines():
 
 
 def test_no_system_prompt_carries_author_posts():
-    for prompt in (DRAFT_POST_PROMPT, HUMANIZER_PROMPT, HOOK_PROMPT):
+    for prompt in (DRAFT_POST_PROMPT, HUMANIZER_PROMPT):
         assert "<creator" not in prompt
         assert "<post>" not in prompt
 
@@ -67,81 +66,63 @@ def test_the_humanizer_prompt_keeps_the_openings_claim_numbers_and_structure():
     )
 
 
-def test_the_hook_prompt_states_the_hard_rules():
-    assert "Use only facts, numbers and claims that are in the brief" in HOOK_PROMPT
-    assert "in the previous version when there is one" not in HOOK_PROMPT
-    assert (
-        "Never invent a number, a result, a test, a price, a time span or an anecdote"
-        in HOOK_PROMPT
+def test_the_draft_prompt_holds_the_hook_section_after_the_writing_style():
+    assert HOOK_SECTION in DRAFT_POST_PROMPT
+    assert DRAFT_POST_PROMPT.index("# The posts are the writing style") < DRAFT_POST_PROMPT.index(
+        "# The hook"
     )
-    assert "the writers of the real posts would plausibly write" in HOOK_PROMPT
-    assert "Name the topic." in HOOK_PROMPT
-    assert "The body must pay the hook off." in HOOK_PROMPT
 
 
-def test_the_hook_prompt_holds_the_single_post_library_and_the_hooks_to_avoid():
-    assert {
-        "cost_before_after",
-        "dear_persona",
+def test_the_hook_section_leaves_the_choice_of_a_library_hook_to_the_model():
+    assert "Open with a hook from the library below when one fits what the brief says." in (
+        HOOK_SECTION
+    )
+    assert "open the way the writers of the real posts would" in HOOK_SECTION
+    assert "When I say how to open the post, do that." in HOOK_SECTION
+
+
+def test_a_revision_keeps_its_opening_unless_the_feedback_asks_to_change_it():
+    assert "keep its opening unless my feedback asks to change it" in HOOK_SECTION
+
+
+def test_a_library_hook_states_only_what_the_brief_gives_and_the_post_pays_it_off():
+    assert "it names the topic" in HOOK_SECTION
+    assert "numbers, results and claims the brief gives" in HOOK_SECTION
+    assert "the rest of the post pays it off" in HOOK_SECTION
+
+
+def test_the_hook_section_holds_the_single_post_library_and_the_hooks_to_avoid():
+    assert {"cost_before_after", "dear_persona", "show_more_hook"} <= HOOK_NAMES
+    assert "## Hooks to avoid" in HOOK_SECTION
+    assert "| `ultra_short_declarative` | Last resort: " in HOOK_SECTION
+
+
+def test_the_hook_library_leaves_out_question_hooks_the_engagement_bait_rule_bans():
+    assert "Questions that start conversations" not in HOOK_SECTION
+    for left_out in (
+        "trade_off_question",
+        "experience_question",
+        "value_then_ask",
         "keep_only_three",
-        "show_more_hook",
-    } <= HOOK_NAMES
-    assert "# Hooks to avoid" in HOOK_PROMPT
-    assert "| `ultra_short_declarative` | Last resort: " in HOOK_PROMPT
+    ):
+        assert left_out not in HOOK_NAMES
 
 
 def test_the_hook_library_leaves_out_hooks_for_threads_articles_quotes_replies_and_images():
     for left_out in ("analyzed_n_patterns", "wish_i_knew", "complete_playbook", "one_page_guide"):
         assert left_out not in HOOK_NAMES
     for term in ("Quote-post", "chart", "Article", "reply hook", "Closing line", "🧵"):
-        assert term not in HOOK_PROMPT
+        assert term not in HOOK_SECTION
 
 
-def test_the_length_limit_reaches_the_hook_prompt():
-    assert f"{POST_MAX_CHARS} characters" in HOOK_PROMPT
-    assert "{" not in HOOK_PROMPT
+def test_the_hook_section_has_no_em_dash_for_a_post_to_copy():
+    assert "—" not in HOOK_SECTION
 
 
-def test_the_hook_prompt_has_no_em_dash_for_a_hook_to_copy():
-    assert "—" not in HOOK_PROMPT
-
-
-def test_the_hook_prompt_asks_for_the_hook_and_its_name_or_null_for_both():
-    output = HOOK_PROMPT.split("# Output", 1)[1]
-    for field in ("hook_name", "hook"):
-        assert f"- {field}:" in output
-    assert "null for both fields or for neither" in output
-    for gone in ("mode", "replaced_text", "replacing_text", "current_hook_name"):
-        assert f"- {gone}:" not in output
-
-
-def test_the_hook_prompt_writes_the_hook_before_the_post():
-    assert "The post isn't written yet." in HOOK_PROMPT
-    assert "starting with your hook word for word" in HOOK_PROMPT
-    assert "Write only the hook, never the post" in HOOK_PROMPT
-
-
-def test_the_hook_prompt_knows_it_may_get_the_previous_version_and_my_feedback():
-    assert "its previous version and my latest feedback on it" in HOOK_PROMPT
-
-
-def test_jev_answers_user_wrote_hook_whenever_the_feedback_dictates_or_edits_the_opening():
-    instructions = HOOK_CHECK_QUESTION.instructions
-    assert "dictates the opening" in instructions
-    assert "asks to change it in any way, answer user_wrote_hook" in instructions
-    assert "the user's own opening must never be replaced" in instructions
-
-
-def test_jev_chooses_between_a_new_hook_keeping_it_and_the_users_own():
-    criteria = HOOK_CHECK_QUESTION.criteria
-    assert set(criteria) == {"new_hook", "keep_hook", "user_wrote_hook"}
-    assert "rewrite the whole post" in criteria["new_hook"]
-    assert "no longer fits" not in criteria["new_hook"]
-    assert "only text after the opening" in criteria["keep_hook"]
-    assert "dictates the opening" in criteria["user_wrote_hook"]
-
-
-def test_jev_judges_before_the_post_is_rewritten_from_the_last_feedback():
-    instructions = HOOK_CHECK_QUESTION.instructions
-    assert "latest_draft" not in instructions
-    assert "will now rewrite the post from the user's last feedback" in instructions
+def test_the_draft_prompt_asks_for_the_hook_reasoning_first_then_the_hook_name_then_the_post():
+    output = DRAFT_POST_PROMPT.split("# Output", 1)[1]
+    positions = [output.index(f"- {field}:") for field in ("hook_reasoning", "hook_name", "post")]
+    assert positions == sorted(positions)
+    assert "one to three sentences" in output
+    assert "more natural, casual opening" in output
+    assert "null when it opens with none" in output

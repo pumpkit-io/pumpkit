@@ -4,7 +4,6 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.core.classifier import Classifier
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
@@ -163,13 +162,7 @@ async def start_post(
 
 
 async def add_version(
-    db: AsyncSession,
-    llm: LLM,
-    classifier: Classifier,
-    user: User,
-    post_id: str,
-    feedback: str,
-    now: datetime,
+    db: AsyncSession, llm: LLM, user: User, post_id: str, feedback: str, now: datetime
 ) -> VersionResponse:
     """
     Write the next Version of the User's Post from Feedback, with the corpus the Post started
@@ -187,7 +180,7 @@ async def add_version(
     await db.commit()
 
     try:
-        written = await write_next_version(llm, classifier, corpus, post.brief, earlier, feedback)
+        written = await write_next_version(llm, corpus, post.brief, earlier, feedback)
     except Exception as error:
         await _keep_failed_attempt(
             db, post=post, sequence=sequence, feedback=feedback, error=error, now=now

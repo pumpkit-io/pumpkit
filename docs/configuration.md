@@ -56,7 +56,7 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 | Variable | Meaning |
 | --- | --- |
 | `LLM_BASE_URL` | Any OpenAI-compatible chat completions endpoint, such as `https://api.openai.com/v1` or a local Ollama at `http://localhost:11434/v1`. Defaults to OpenRouter (`https://openrouter.ai/api/v1`). Prompt cache hints are sent only to OpenRouter. |
-| `LLM_DRAFTING_MODEL`, `LLM_HOOKING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` | The model for each writing call: the draft call, the hook call that writes the Hook the Draft starts with, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all four to models it serves. |
+| `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` | The model for each writing call: the draft call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
 
 ### SMTP
 
@@ -68,15 +68,6 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP login; leave empty for a server that needs none. |
 
 To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`, `SMTP_PASSWORD` to a Resend API key and `EMAIL_FROM` to an address on a domain verified in Resend; the default `starttls` on port 587 works.
-
-### Jev classifier
-
-Jev, TypeSafe's hosted classifier, answers the labelled questions Pumpkit asks before some writing steps (ADR 0013). It is not a provider group: no route depends on it, and without a key each caller takes its cautious path.
-
-| Variable | Meaning |
-| --- | --- |
-| `TYPESAFE_API_KEY` | Key for TypeSafe's API, from the [TypeSafe console](https://console.typesafe.ai/keys). Without it Jev is off: Pumpkit never asks, and on a Feedback Version it skips the hook call. |
-| `TYPESAFE_MODEL` | The Jev version Pumpkit asks. Defaults to `jev-1.13.0`, pinned so a new Jev release cannot change answers without a config change. |
 
 ### Sign-up allowlist
 

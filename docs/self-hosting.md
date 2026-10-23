@@ -168,8 +168,8 @@ Pumpkit needs two providers. Every other one is optional: with none of its setti
 Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](https://openrouter.ai) by default.
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
-- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. A first Version makes three model calls: hook, draft and humanizer. A Feedback Version makes two, revision and humanizer, plus a hook call before them when [Jev](#jev-optional) is configured and says the opening needs a new Hook; Jev's question is billed by TypeSafe, not your LLM endpoint.
-- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the four models it serves: `LLM_DRAFTING_MODEL`, `LLM_HOOKING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
+- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls.
+- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the three models it serves: `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).
 
@@ -268,15 +268,6 @@ curl -s http://localhost:8080/api/v1/instance | grep -o '"analytics":{"key":"[^"
 ```
 
 **Check:** it prints `"analytics":{"key":"` and your project key.
-
-### Jev (optional)
-
-TypeSafe's hosted classifier (ADR 0013). On a Feedback Version, Pumpkit asks Jev whether the opening needs a new Hook before it runs the hook call.
-
-- Get a key: [console.typesafe.ai/keys](https://console.typesafe.ai/keys).
-- Pricing: $0.042 per million input tokens, with output free, as ADR 0013 records; TypeSafe's site has the current price.
-- Settings: `TYPESAFE_API_KEY`. `TYPESAFE_MODEL` pins the Jev version (default `jev-1.13.0`).
-- Without it: Feedback Versions keep their opening and never get a new Hook. First Versions still get one.
 
 ## Add or change a setting
 
@@ -445,7 +436,7 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **Adding an Inspiration author shows "X can't be read right now. Please try again later."** twitterapi.io refused the request. `docker compose logs backend | grep "twitterapi.io returned" | tail -1` prints the status: `twitterapi.io returned HTTP 401` means `TWITTERAPI_IO_API_KEY` is wrong; for another status, check your account and credit on the twitterapi.io dashboard.
 
-**Writing a Post fails.** The LLM key is wrong or has no credit, or `LLM_BASE_URL` and the four models don't match. `docker compose logs --tail 50 backend` shows the endpoint's error.
+**Writing a Post fails.** The LLM key is wrong or has no credit, or `LLM_BASE_URL` and the three models don't match. `docker compose logs --tail 50 backend` shows the endpoint's error.
 
 **Connecting X fails.** The X group is unset, or the X app's callback URL is not exactly `PUBLIC_URL/oauth/x/callback`, or the app is not an OAuth 2.0 confidential client with read and write permissions.
 

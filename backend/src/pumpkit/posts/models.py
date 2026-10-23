@@ -1,16 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal, Optional, get_args
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-)
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as PgEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -83,24 +74,10 @@ class VersionAttempt(Base):
     humanizing_usage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
-    # The library id and text of the Hook the writing call was told to start with, None when the
-    # hook call didn't run, failed or wrote none; hooking_model tells the last case apart.
+    # Why the writing call opened the post as it did, and the library Hook it opened with; the
+    # name is None for an opening with no library Hook or one the library doesn't have.
+    hook_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     hook_name: Mapped[Optional[str]] = mapped_column(String)
-    hook_text: Mapped[Optional[str]] = mapped_column(Text)
-    # Whether the writing call's text started with the Hook before the scrub; None with no Hook.
-    hook_followed: Mapped[Optional[bool]] = mapped_column(Boolean)
-    hooking_model: Mapped[Optional[str]] = mapped_column(String)
-    hooking_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
-    # The hook call's answer as it came, kept when it was refused too; None when the call
-    # didn't run or raised.
-    hook_answer: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
-    # Jev's top label on a Feedback Version; all three None when it wasn't asked or didn't answer.
-    hook_check: Mapped[Optional[str]] = mapped_column(String)
-    # Every label's probability, to tune the question against real Feedback.
-    hook_check_probabilities: Mapped[Optional[dict]] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql")
-    )
-    hook_check_model: Mapped[Optional[str]] = mapped_column(String)
     # The slop check's tells in the Final, each {"name", "description"}, in the check's order.
     slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")

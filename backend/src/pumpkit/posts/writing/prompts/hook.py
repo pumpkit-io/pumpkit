@@ -1,68 +1,33 @@
 """
-The system prompt and user messages of the hook call, and the message that hands its Hook to
-the draft or revision call. Written for Pumpkit, not ported: the library is curated from the
-User's research on X hooks, keeping only what fits a single post or a long post with no image.
+The hook section of the draft and revision calls' system prompt. Written for Pumpkit, not ported:
+the library is curated from the User's research on X hooks, keeping only what fits a single post
+or a long post with no image, and leaving out question hooks, which the engagement-bait rule bans.
 
-The templates avoid em dashes: the draft call copies the Hook as it is written.
+The templates avoid em dashes: the post copies a template's punctuation.
 """
 
 import re
 
-from pumpkit.posts.writing.constants import POST_MAX_CHARS
+HOOK_SECTION = """\
+# The hook
 
-HOOK_PROMPT = f"""\
-# Role
+The hook is the post's opening: the line or lines that make a reader stop scrolling and read the rest.
 
-You write the hook of one post on X on my behalf: the opening line(s) that make a reader stop scrolling and read the rest.
+Open with a hook from the library below when one fits what the brief says. When none fits, or the brief reads best stated plainly, open the way the writers of the real posts would. When I say how to open the post, do that.
 
-# What you are given
+When you revise the post from my feedback, keep its opening unless my feedback asks to change it.
 
-- A set of real posts from X authors, grouped by author, representing the writing style the post follows.
-- The brief I write the post from.
-- When the post is a revision, its previous version and my latest feedback on it.
+A library hook works when:
+- it names the topic, so a reader who sees only the hook knows what the post is about.
+- it states only numbers, results and claims the brief gives. "7 lessons" works only if the brief has seven lessons; no "I tested 6 tools" unless I tested six.
+- the rest of the post pays it off. Promise only what the brief gives the post to deliver.
+- it leaves the explanation, the evidence and the details to the lines after it.
 
-# What you do
-
-The post isn't written yet. After you answer, it is written from the same brief, starting with your hook word for word. When the post is a revision, it is rewritten from my feedback, and your hook replaces the opening of its previous version.
-
-Pick the hook from the library below that fits what the post will say best, fill in its template, and write it so the writers of the real posts could have written it.
-
-Write no hook when:
-- the brief or my feedback explicitly asks for no hook, or
-- no hook in the library fits what the post will say.
-
-The hook sits on lines of its own and the post goes on after it. Write only the hook, never the post or the line after it.
-
-When the post is a revision, the library hook may be the one its previous version opens with, when it is still the right hook but needs rewriting for my feedback.
-
-# Hard rules
-
-- Use only facts, numbers and claims that are in the brief or in my feedback when I gave some. Never invent a number, a result, a test, a price, a time span or an anecdote. No "I tested 6 tools" unless I tested six tools, no "saved $312/mo" unless I said so.
-- Pick a hook the writers of the real posts would plausibly write. Match their voice, their capitalization and their punctuation.
-- Name the topic. A reader who sees only the hook knows what the post is about.
-- The body must pay the hook off. Promise only what the brief, and my feedback when I gave some, give the post to deliver.
-- The hook leaves the post room to say the rest: the whole post stays under {POST_MAX_CHARS} characters.
-- Plain text. No markdown, no hashtags, no emoji unless the real posts use them.
-
-# Hook rules
-
-1. Name the topic in the hook. "Three things changed in AI coding agents" beats "Three things just changed forever."
-2. Reveal part of the payoff. The reader should want the explanation, the evidence or the implications, not the claim you're hiding.
-3. Follow this order: the claim, then the specifics, then the proof, then at most one useful open question.
-4. Use real numbers when available. An opening with a specific number does better than one without. "7 lessons" works only if the brief has seven real lessons.
-5. Call out the reader and speak as "I". Openings that name their audience do well, and "I..." openers do far better than "You..." openers. Speak as "I" only about what is my own experience in the brief.
-6. The body must pay off the hook. A promise the post doesn't keep attracts the wrong readers and costs trust.
-7. Back a contrarian hook with evidence and a condition. Write "the common advice breaks when [condition]; here's the evidence", not "everyone is wrong."
-8. A hook multiplies an insight; it doesn't replace one. Most strong posts use no textbook formula, so when the brief's insight reads best stated plainly, write no hook.
-9. Write for one specific recipient. Ask: "Who would send this to whom?" A founder forwarding it to a CTO is a better test than "will this get likes?"
-10. The post is written after the hook, so leave it the explanation, the evidence and the details to deliver. Do not write them into the hook as well.
-11. Pick the hook from the library below. If no hook in the library fits, write no hook.
-
-# Hook library
+## Hook library
 
 Each hook has an id, a template (fill in the [brackets]), an example and why it works. The examples show the shape only: never take their numbers, tools or topics. A variant is another phrasing of the same hook. Within each family, the most widely recommended hooks come first. A hook marked "Last resort" has mixed evidence: use it only when nothing else fits.
 
-## Money and time saved
+### Money and time saved
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
@@ -77,7 +42,7 @@ Each hook has an id, a template (fill in the [brackets]), an example and why it 
 | `manual_work_to_remove` | Manual work to remove | Three things you're probably doing manually that [simple method] can remove today: | none | Time-saving relevance the reader feels immediately. |
 | `delete_dont_speed_up` | Delete, don't speed up | The fastest productivity win isn't doing something faster. It's deleting [category of work]. | none | A contrarian principle that pays off in simplification. |
 
-## Tested so you don't have to
+### Tested so you don't have to
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
@@ -90,7 +55,7 @@ Each hook has an id, a template (fill in the [brackets]), an example and why it 
 | `tracked_n_days` | Tracked for N days | I tracked every [expense/task] for [N days]. One thing accounted for [X]% of the waste. | none | A clear topic, measured stakes and one concrete mystery. |
 | `cheap_recreation` | Cheap recreation | I recreated [expensive workflow] for [$X]. Here's what I kept, and what I couldn't replace. | none | Admitting what you couldn't replace keeps it from sounding like hype. |
 
-## Decision shortcuts and checklists
+### Decision shortcuts and checklists
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
@@ -104,7 +69,7 @@ Each hook has an id, a template (fill in the [brackets]), an example and why it 
 | `common_question` | Common question, unexpected reason | A lot of people are asking [question]. The answer is [answer], but for an unexpected reason: | A lot of founders are asking whether they should build an AI agent or a traditional workflow. My answer: start with the workflow. | Answering right away builds trust; the reason keeps people reading. Variant: "What's the best [choice] for [constraint]? My answer: [choice]. Here's why:" |
 | `sorted_resource_list` | Sorted resource list | [N] [repos/tools/papers] for [specific job], sorted by [what matters]: | 9 open-source repos for building LLM agents, sorted by how production-ready they actually are: | Lists get forwarded, and "sorted by what matters" adds your own judgment. |
 
-## Mistakes and failure stories
+### Mistakes and failure stories
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
@@ -112,7 +77,7 @@ Each hook has an id, a template (fill in the [brackets]), an example and why it 
 | `story_mid_scene` | Story opened mid-scene | [Time marker], [tense moment]. [Hint of resolution]. | Tuesday 2am. Production agent stuck in a tool-call loop, 14,000 calls deep. The fix wasn't in the prompt. | Opening in the middle of the action leaves a gap the reader wants filled, and it reaches far beyond the account's followers, which suits small accounts. Only for a moment the brief or the post describes. |
 | `biggest_mistake` | Biggest mistake I see | The biggest mistake I see in [topic] is [mistake]. Here's what works instead: | The biggest mistake I see in AI prompting is asking for the final answer too early. | It targets a clear audience and offers a correction. |
 
-## Contrarian and reframe
+### Contrarian and reframe
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
@@ -126,7 +91,7 @@ Each hook has an id, a template (fill in the [brackets]), an example and why it 
 | `free_cost_more` | "Free" cost more | The "free" option cost me more than the paid one. | none | It shifts attention from sticker price to total cost. Variants: "Cheap software can be more expensive than expensive software. Here's the calculation people miss:" and "I found a [$X/year] leak hiding inside a [$Y/month] "cheap" workflow." |
 | `when_not_to` | When not to | [Common solution] is not always a [benefit]. I have a rule for knowing when not to [use it]. | Automation is not always a time saver. I have a rule for knowing when not to automate. | A nuanced contrarian claim makes you look careful. |
 
-## Research summaries and what just changed
+### Research summaries and what just changed
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
@@ -135,30 +100,21 @@ Each hook has an id, a template (fill in the [brackets]), an example and why it 
 | `skip_the_rabbit_hole` | Skip the rabbit hole | Everything you need to know about [topic], without the [N]-hour research rabbit hole: | none | It spells out the effort the reader avoids. Variant: "The 5-minute version of [complex topic]:" |
 | `simplest_accurate_version` | Simplest accurate version | I compared [N] explanations of [topic]. Here is the simplest version that's actually accurate: | none | Synthesis plus your editorial judgment. |
 
-## Curiosity and calling out the reader
+### Curiosity and calling out the reader
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
 | `dear_persona` | Dear [persona] | Dear [very specific person] who [specific situation]: [one-line truth]. | Dear solo founder paying $400/mo for a vector DB with 20k documents: Postgres + pgvector will do. Here's the setup. | It qualifies the reader instantly; the named persona replies "this is me" and tags friends. Variant: "If you [specific situation], [do/check] these first." |
 | `found_a_way` | I found a way | I found a way to [desirable outcome] without [expected cost/pain]. | I found a way to cut embedding costs 80% without re-indexing anything. | The strongest curiosity hook, as long as the post closes the gap. |
 
-## Building in public
+### Building in public
 
 | Id | Hook | Template | Example | Why it works |
 |---|---|---|---|---|
 | `build_log` | Build log | Day [N] of building [product]: [metric]. [Honest lesson]. | Week 6 building my retrieval API: 41 users, 3 paying, 1 churned yesterday. Their reason changed my roadmap: | A recurring series with real numbers builds trust; people follow to see what happens next. Variant: "I made $[X] in [month] from [product]. [One-line breakdown or lesson]." |
 | `decision_log` | Decision log | We almost [chose A]. We chose [B]. Here's the reasoning, with numbers: | We almost fine-tuned. We shipped prompt caching and a router instead: 3 weeks saved, 70% cheaper. | Founders forward decision frameworks; showing your reasoning builds authority. |
 
-## Questions that start conversations
-
-| Id | Hook | Template | Example | Why it works |
-|---|---|---|---|---|
-| `trade_off_question` | Trade-off, with your data | [Option A] or [option B]: which actually [moved X] more? I'll share our numbers after. | Reranker or bigger top-k: which actually moved your RAG eval more? I'll share our numbers after. | It asks for an opinion people already hold and gives them a reason to come back. Only when the post has the numbers. Variants: "Which saves you more time: A or B? I've measured mine below." and "Camp A: [belief]. Camp B: [opposite]. Which one are you in?" |
-| `experience_question` | Question that taps experience | What's the [most underrated/worst] [tool/decision] you've [used/made] in [specific context]? | What's the most underrated piece of your RAG stack that nobody talks about? | It draws replies from people with real experience. Variants: "What's one tool you happily pay for because it saves more than it costs?" and "[Audience]: what's the one [expense/task] you'd pay to never deal with again?" |
-| `value_then_ask` | Value first, then ask | [Your rule or finding]. What's the one [thing] that [meets/breaks] it for you? | My rule: a $50/month tool needs to save at least one hour if I value that hour at $50. What's the one tool that massively clears that bar for you? | You give value before you ask, so the question doesn't feel like farming. |
-| `keep_only_three` | Keep only 3 | You get to keep only 3 [tools]. Which ones survive? | none | The tight constraint makes replying easy. |
-
-## Long post
+### Long post
 
 Only for a post long enough that X cuts it behind "show more" (over 280 characters).
 
@@ -166,7 +122,7 @@ Only for a post long enough that X cuts it behind "show more" (over 280 characte
 |---|---|---|---|---|
 | `show_more_hook` | "Show more" hook | [Bold claim in one line]. / blank line / [Specific stakes in one line]. / blank line / Here's the full breakdown: | Most "agentic RAG" demos would fall over in production. / I've rebuilt ours 3 times in 6 months. Here's every failure mode and the fix: | The one, three, one rhythm earns the "show more" tap. Each "/" is a line break. |
 
-# Hooks to avoid
+## Hooks to avoid
 
 Never write these:
 
@@ -179,54 +135,7 @@ Never write these:
 | Contempt-flavored contrarianism | "RAG is dead", "AI is a scam", "devs are cooked" | Gets replies from the wrong people and mutes from the right ones. Make the claim specific, with evidence. |
 | Aggregation without judgment | "Here are 10 AI tools everybody is talking about" | Interchangeable with anyone else's list. A test, a ranking or a calculation from the post makes it yours. |
 | Generic one-line wisdom | Platitudes with no number, audience or proof | It rarely does well and says nothing distinctive. |
-
-# Output
-
-- hook_name: the id of the library hook you write. null when you write no hook.
-- hook: the hook, its template filled in, on lines of its own, with no line break at its start or its end. null when you write no hook.
-
-Answer null for both fields or for neither, never an empty string.
 """
 
-# The ids in the library tables' first column, the only names the hook call may answer with.
-HOOK_NAMES = frozenset(re.findall(r"^\| `([a-z_]+)` \|", HOOK_PROMPT, flags=re.MULTILINE))
-
-
-def hook_brief_message(brief: str) -> str:
-    return (
-        "This is the brief the post will be written from. Every fact, number and claim "
-        "the hook states must be in it, or in my feedback when I give some."
-        f"\n\n<brief>\n{brief}\n</brief>"
-    )
-
-
-def hook_previous_final_message(previous_final: str) -> str:
-    return (
-        "This is the previous version of the post, the one my feedback below is about."
-        f"\n\n<post>\n{previous_final}\n</post>"
-    )
-
-
-def hook_feedback_message(feedback: str) -> str:
-    return (
-        "This is my feedback on the previous version of the post. The post will be rewritten "
-        "from it, and its opening needs a new hook. Facts, numbers and claims in my feedback "
-        f"may go in the hook too.\n\n<feedback>\n{feedback}\n</feedback>"
-    )
-
-
-_START_WITH_HOOK = "Start the post with this hook, exactly as written, on its own line or lines."
-_PAY_IT_OFF = "Then write the rest of the post so it pays the hook off."
-
-
-def start_with_hook_message(hook: str) -> str:
-    """The draft call's last message when the hook call wrote a Hook."""
-    return f"{_START_WITH_HOOK} {_PAY_IT_OFF}\n\n<hook>\n{hook}\n</hook>"
-
-
-def revision_start_with_hook_message(hook: str) -> str:
-    """The revision call's last message when the hook call wrote a Hook."""
-    return (
-        f"{_START_WITH_HOOK} It replaces the post's current opening. {_PAY_IT_OFF}"
-        f"\n\n<hook>\n{hook}\n</hook>"
-    )
+# The ids in the library tables' first column, the only names the writing call may answer with.
+HOOK_NAMES = frozenset(re.findall(r"^\| `([a-z_]+)` \|", HOOK_SECTION, flags=re.MULTILINE))

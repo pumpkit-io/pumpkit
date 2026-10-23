@@ -97,7 +97,7 @@ The text Pumpkit writes first in a Version, Hook included, before it is rewritte
 _Avoid_: first pass, raw output
 
 **Hook**:
-The opening of a Post's text: the line or lines meant to make a reader stop and read the rest. Pumpkit writes a new one before the Draft when a Version needs it and the User has not dictated the opening, and the Draft is written to start with it.
+The opening of a Post's text: the line or lines meant to make a reader stop and read the rest. Pumpkit writes it as part of the Draft, from its library of proven openings when one fits, and changes it in a later Version only when the Feedback asks.
 _Avoid_: headline, intro, opener, lede
 
 **Final**:

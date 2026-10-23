@@ -16,7 +16,7 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
     XReconnectNeededError,
 )
-from tests.posts.hook_replies import no_hook
+from tests.posts.writing_replies import written
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 X_CONNECTION = "/api/v1/x-connection"
@@ -438,7 +438,7 @@ async def final(client, subscribed, fake_x_reader, fake_llm) -> dict:
     ]
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [no_hook(), {"post": "draft one"}, {"post": "The final, version one."}]
+    fake_llm.replies = [written("draft one"), {"post": "The final, version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     post = started.json()
@@ -471,7 +471,7 @@ async def test_feedback_on_the_post_afterwards_leaves_the_scheduled_post_s_text_
         SCHEDULED_POSTS,
         json={"publish_at": "2026-10-10T14:00:00Z", "source_version_id": final["id"]},
     )
-    fake_llm.replies = [{"post": "draft two"}, {"post": "The final, version two."}]
+    fake_llm.replies = [written("draft two"), {"post": "The final, version two."}]
 
     revised = await client.post(
         f"/api/v1/posts/{final['post_id']}/versions", json={"feedback": "punchier"}

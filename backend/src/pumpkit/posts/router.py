@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
 from pumpkit.billing.dependencies import require_subscribed_user
-from pumpkit.core.classifier import Classifier, get_classifier
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
@@ -30,7 +29,7 @@ async def start_post(
     llm: LLM = Depends(get_llm),
     clock: Clock = Depends(get_clock),
 ) -> PostResponse:
-    """Writes the first Version before answering, which takes three model calls."""
+    """Writes the first Version before answering, which takes two model calls."""
     return await mediator.start_post(
         db=db, llm=llm, user=current_user, brief=start_request.brief, now=clock()
     )
@@ -49,14 +48,12 @@ async def add_version(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     llm: LLM = Depends(get_llm),
-    classifier: Classifier = Depends(get_classifier),
     clock: Clock = Depends(get_clock),
 ) -> VersionResponse:
-    """Writes the Version before answering: a Jev question and two or three model calls."""
+    """Writes the Version before answering, which takes two model calls."""
     return await mediator.add_version(
         db=db,
         llm=llm,
-        classifier=classifier,
         user=current_user,
         post_id=post_id,
         feedback=feedback_request.feedback,
