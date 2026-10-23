@@ -69,6 +69,7 @@ def test_the_humanizer_prompt_keeps_the_openings_claim_numbers_and_structure():
 
 def test_the_hook_prompt_states_the_hard_rules():
     assert "Use only facts, numbers and claims that are in the brief" in HOOK_PROMPT
+    assert "in the previous version when there is one" not in HOOK_PROMPT
     assert (
         "Never invent a number, a result, a test, a price, a time span or an anecdote"
         in HOOK_PROMPT

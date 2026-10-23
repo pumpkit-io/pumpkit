@@ -160,7 +160,7 @@ async def test_new_hook_runs_the_hook_call_on_the_previous_final_and_the_feedbac
         _user(LEVELSIO_CORPUS),
         _user(
             "This is the brief the post will be written from. Every fact, number and claim "
-            "the hook states must be in it.\n\n"
+            "the hook states must be in it, or in my feedback when I give some.\n\n"
             "<brief>\nship small things\n</brief>"
         ),
         _user(
@@ -183,6 +183,32 @@ async def test_new_hook_runs_the_hook_call_on_the_previous_final_and_the_feedbac
         attempt.hooking_model,
     ) == ("my_rule", HOOK, True, DEFAULT_MODEL)
     assert attempt.hooking_usage is not None
+
+
+async def test_the_hook_call_leaves_earlier_feedback_to_the_previous_final(
+    client, post_id, fake_llm, fake_classifier
+):
+    fake_llm.replies = [{"post": "draft 2"}, {"post": "final 2"}]
+    fake_classifier.replies = [_answer("keep_hook")]
+    await _feedback_version(client, post_id, feedback="shorter")
+    fake_llm.calls.clear()
+    fake_llm.replies = [_hook(), {"post": DRAFT_2}, {"post": "final 3"}]
+    fake_classifier.replies = [_answer("new_hook")]
+
+    await _feedback_version(client, post_id, feedback="make it about weekly shipping")
+
+    assert fake_llm.calls[0].messages[3:] == [
+        _user(
+            "This is the previous version of the post, the one my feedback below is about."
+            "\n\n<post>\nfinal 2\n</post>"
+        ),
+        _user(
+            "This is my feedback on the previous version of the post. The post will be rewritten "
+            "from it, and its opening needs a new hook. Facts, numbers and claims in my feedback "
+            "may go in the hook too.\n\n"
+            "<feedback>\nmake it about weekly shipping\n</feedback>"
+        ),
+    ]
 
 
 async def test_the_revision_call_is_told_to_start_with_the_new_hook_after_the_feedback(

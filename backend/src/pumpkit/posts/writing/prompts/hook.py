@@ -37,7 +37,7 @@ When the post is a revision, the library hook may be the one its previous versio
 
 # Hard rules
 
-- Use only facts, numbers and claims that are in the brief, in my feedback when I gave some, or in the previous version when there is one. Never invent a number, a result, a test, a price, a time span or an anecdote. No "I tested 6 tools" unless I tested six tools, no "saved $312/mo" unless I said so.
+- Use only facts, numbers and claims that are in the brief or in my feedback when I gave some. Never invent a number, a result, a test, a price, a time span or an anecdote. No "I tested 6 tools" unless I tested six tools, no "saved $312/mo" unless I said so.
 - Pick a hook the writers of the real posts would plausibly write. Match their voice, their capitalization and their punctuation.
 - Name the topic. A reader who sees only the hook knows what the post is about.
 - The body must pay the hook off. Promise only what the brief, and my feedback when I gave some, give the post to deliver.
@@ -195,7 +195,8 @@ HOOK_NAMES = frozenset(re.findall(r"^\| `([a-z_]+)` \|", HOOK_PROMPT, flags=re.M
 def hook_brief_message(brief: str) -> str:
     return (
         "This is the brief the post will be written from. Every fact, number and claim "
-        f"the hook states must be in it.\n\n<brief>\n{brief}\n</brief>"
+        "the hook states must be in it, or in my feedback when I give some."
+        f"\n\n<brief>\n{brief}\n</brief>"
     )
 
 

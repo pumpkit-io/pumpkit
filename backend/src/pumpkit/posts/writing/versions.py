@@ -4,8 +4,9 @@ Version, the hook call (always on the first Version, after Feedback only when Je
 Hook), the writing call (the draft call for the first Version, the revision call after
 Feedback), told to start with the Hook when there is one, the scrub, then the humanizer call.
 
-The scrubbed writing-call text is the Draft and the humanizer's text is the Final. Every call gets the system prompt first and the corpus second, as in v6,
-so the per-call parts come after a prefix that stays the same across a Post's Versions.
+The scrubbed writing-call text is the Draft and the humanizer's text is the Final. Every call
+gets the system prompt first and the corpus second, as in v6, so the per-call parts come after a
+prefix that stays the same across a Post's Versions.
 """
 
 from dataclasses import dataclass, replace
@@ -87,10 +88,9 @@ class HookCheck:
 
 
 @dataclass(frozen=True)
-class HookStep:
+class HookCall:
     name: Optional[str] = None
     text: Optional[str] = None
-    # Whether the writing call's text, before the scrub, starts with the Hook; None with no Hook.
     followed: Optional[bool] = None
     model: Optional[str] = None
     usage: Optional[dict] = None
@@ -105,7 +105,7 @@ class WrittenVersion:
     humanizing_model: str
     writing_usage: Optional[dict]
     humanizing_usage: Optional[dict]
-    hook: HookStep
+    hook: HookCall
     hook_check: HookCheck
 
 
@@ -214,23 +214,23 @@ def _usage(result: StructuredResult) -> Optional[dict]:
 
 async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVersion:
     """Raises whatever the LLM port raises; nothing is stored here."""
-    hook, step = await _hook(llm, hook_messages(corpus, brief))
+    hook = await _hook(llm, hook_messages(corpus, brief))
     drafted = await llm.structured(
         model=settings.LLM_DRAFTING_MODEL,
-        messages=draft_messages(corpus, brief, hook),
+        messages=draft_messages(corpus, brief, hook.text),
         response_model=DraftedPost,
         max_tokens=MAX_TOKENS,
     )
-    step = _followed(step, drafted.parsed.post)
+    hook = _check_followed(hook, drafted.parsed.post)
     draft = scrub(drafted.parsed.post)
     messages = humanizer_messages(corpus, brief, draft)
-    return await _humanize(llm, messages, drafted, draft, step, HookCheck())
+    return await _humanize(llm, messages, drafted, draft, hook, HookCheck())
 
 
-async def _hook(llm: LLM, messages: list[dict]) -> tuple[Optional[str], HookStep]:
+async def _hook(llm: LLM, messages: list[dict]) -> HookCall:
     """
-    The Hook for the writing call, None when there is none, and the call's record. Never raises:
-    a Hook is worth less than the Version, so any failure writes the Version without one.
+    The hook call's record, whose text is None when there is no Hook. Never raises: a Hook is
+    worth less than the Version, so any failure writes the Version without one.
     """
     try:
         written = await llm.structured(
@@ -241,31 +241,30 @@ async def _hook(llm: LLM, messages: list[dict]) -> tuple[Optional[str], HookStep
         )
     except Exception:
         logger.exception("Hook call failed, the Version is written without a Hook")
-        return None, HookStep()
+        return HookCall()
     answer = written.parsed.model_dump()
     try:
         hook = usable_hook(written.parsed)
     except HookRefused as refusal:
         logger.warning("Hook call failed, the Version is written without a Hook: %s", refusal)
-        return None, HookStep(answer=answer)
-    step = HookStep(
+        return HookCall(answer=answer)
+    return HookCall(
         name=written.parsed.hook_name,
         text=hook,
         model=written.model,
         usage=_usage(written),
         answer=answer,
     )
-    return hook, step
 
 
-def _followed(step: HookStep, written: str) -> HookStep:
+def _check_followed(hook: HookCall, written: str) -> HookCall:
     """Checked before the scrub, which may change the Hook's punctuation."""
-    if step.text is None:
-        return step
-    followed = written.lstrip().startswith(step.text)
+    if hook.text is None:
+        return hook
+    followed = written.lstrip().startswith(hook.text)
     if not followed:
         logger.warning("The writing call's text doesn't start with the Hook it was given")
-    return replace(step, followed=followed)
+    return replace(hook, followed=followed)
 
 
 async def _check_hook(classifier: Classifier, state: dict[str, Any]) -> HookCheck:
@@ -301,19 +300,19 @@ async def write_next_version(
     # No confidence threshold: the top label decides.
     if check.label == NEW_HOOK:
         messages = revision_hook_messages(corpus, brief, earlier[-1].final, feedback)
-        hook, step = await _hook(llm, messages)
+        hook = await _hook(llm, messages)
     else:
-        hook, step = None, HookStep()
+        hook = HookCall()
     revised = await llm.structured(
         model=settings.LLM_REVISING_MODEL,
-        messages=revision_messages(corpus, brief, earlier, feedback, hook),
+        messages=revision_messages(corpus, brief, earlier, feedback, hook.text),
         response_model=RevisedPost,
         max_tokens=MAX_TOKENS,
     )
-    step = _followed(step, revised.parsed.post)
+    hook = _check_followed(hook, revised.parsed.post)
     draft = scrub(revised.parsed.post)
     messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
-    return await _humanize(llm, messages, revised, draft, step, check)
+    return await _humanize(llm, messages, revised, draft, hook, check)
 
 
 async def _humanize(
@@ -321,7 +320,7 @@ async def _humanize(
     messages: list[dict],
     written: StructuredResult,
     draft: str,
-    hook: HookStep,
+    hook: HookCall,
     hook_check: HookCheck,
 ) -> WrittenVersion:
     refined = await llm.structured(

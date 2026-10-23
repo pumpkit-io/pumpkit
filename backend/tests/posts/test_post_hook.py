@@ -96,7 +96,7 @@ async def test_the_hook_call_comes_first_with_the_hook_prompt_the_corpus_and_the
         _user(LEVELSIO_CORPUS),
         _user(
             "This is the brief the post will be written from. Every fact, number and claim "
-            "the hook states must be in it.\n\n"
+            "the hook states must be in it, or in my feedback when I give some.\n\n"
             "<brief>\nship small things\n</brief>"
         ),
     ]
