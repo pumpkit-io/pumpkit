@@ -1,7 +1,6 @@
 """The MCP tools for writing Posts, over the same mediator as the router."""
 
 from pumpkit.auth.models import User
-from pumpkit.core.classifier import get_classifier
 from pumpkit.core.mcp_tools import ADDITIVE, READ_ONLY, READ_ONLY_RATE, McpTool, ToolCall
 from pumpkit.posts import mediator
 from pumpkit.posts.llm import get_llm
@@ -43,11 +42,9 @@ async def give_feedback(call: ToolCall[User], post_id: str, feedback: str) -> Ve
     """
     feedback_request = FeedbackRequest(feedback=feedback)
     llm = await call.provide(get_llm)
-    classifier = await call.provide(get_classifier)
     version = await mediator.add_version(
         db=call.db,
         llm=llm,
-        classifier=classifier,
         user=call.user,
         post_id=post_id,
         feedback=feedback_request.feedback,

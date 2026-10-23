@@ -12,7 +12,7 @@ from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
-from tests.posts.hook_replies import no_hook
+from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -39,7 +39,7 @@ async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
     """A Post from the Brief "ship small things" whose first Version's Final is "final 1"."""
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [no_hook(), {"post": "draft 1"}, {"post": "final 1"}]
+    fake_llm.replies = [written("draft 1"), {"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things"})
     assert response.status_code == 201
     fake_llm.calls.clear()
@@ -47,7 +47,7 @@ async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
 
 
 async def test_feedback_returns_a_new_version_with_the_next_number(client, post_id, fake_llm):
-    fake_llm.replies = [{"post": "draft 2—shorter"}, {"post": "final 2"}]
+    fake_llm.replies = [written("draft 2—shorter"), {"post": "final 2"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "make it shorter"})
 
@@ -63,7 +63,7 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
 
 
 async def test_a_feedback_version_reports_the_tells_in_its_final(client, post_id, fake_llm):
-    fake_llm.replies = [{"post": "draft 2"}, {"post": "distribution — that's it"}]
+    fake_llm.replies = [written("draft 2"), {"post": "distribution — that's it"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -107,9 +107,9 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     client, post_id, fake_llm
 ):
     fake_llm.replies = [
-        {"post": "draft 2"},
+        written("draft 2"),
         {"post": "final 2"},
-        {"post": "draft 3"},
+        written("draft 3"),
         {"post": "final 3"},
     ]
 
@@ -139,7 +139,7 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
 
 async def test_the_revision_call_uses_the_configured_model(client, post_id, fake_llm, monkeypatch):
     monkeypatch.setattr(settings, "LLM_REVISING_MODEL", "llama3.3")
-    fake_llm.replies = [{"post": "draft 2"}, {"post": "final 2"}]
+    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
 
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -184,7 +184,7 @@ def _to_rewrite(draft: str) -> str:
 async def test_the_humanizer_gets_the_previous_final_the_feedback_and_the_scrubbed_revision(
     client, post_id, fake_llm
 ):
-    fake_llm.replies = [{"post": "it’s shorter—now"}, {"post": "final 2"}]
+    fake_llm.replies = [written("it’s shorter—now"), {"post": "final 2"}]
 
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -205,9 +205,9 @@ async def test_the_humanizer_gets_only_the_latest_feedback_and_the_latest_final(
     client, post_id, fake_llm
 ):
     fake_llm.replies = [
-        {"post": "draft 2"},
+        written("draft 2"),
         {"post": "final 2"},
-        {"post": "draft 3"},
+        written("draft 3"),
         {"post": "final 3"},
     ]
 
@@ -227,7 +227,7 @@ async def test_the_revision_uses_the_posts_corpus_after_the_users_authors_change
     await client.delete(f"{AUTHORS}/levelsio")
     fake_x_reader.posts["paulg"] = _posts("paulg", 1)
     assert (await client.post(AUTHORS, json={"handle": "paulg"})).status_code == 201
-    fake_llm.replies = [{"post": "draft 2"}, {"post": "final 2"}]
+    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -246,7 +246,7 @@ async def test_feedback_over_100000_characters_returns_422_without_calling_the_m
 
 
 async def test_feedback_of_exactly_100000_characters_is_accepted(client, post_id, fake_llm):
-    fake_llm.replies = [{"post": "draft 2"}, {"post": "final 2"}]
+    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "a" * 100_000})
 
@@ -295,14 +295,14 @@ async def test_feedback_on_a_post_with_no_version_returns_409(
 ):
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 1)
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    fake_llm.replies = [no_hook(), LLMError("provider down")]
+    fake_llm.replies = [LLMError("provider down")]
     await client.post(POSTS, json={"brief": "ship"})
     failed_post_id = (await db.execute(select(Post.id))).scalar_one()
 
     response = await client.post(_versions_url(failed_post_id), json={"feedback": "shorter"})
 
     assert response.status_code == 409
-    assert len(fake_llm.calls) == 2
+    assert len(fake_llm.calls) == 1
 
 
 async def _stored_post(db, post_id: str) -> Post:
@@ -315,7 +315,7 @@ async def _stored_post(db, post_id: str) -> Post:
 async def test_a_failed_revision_is_stored_as_a_failed_attempt_and_returns_502(
     client, db, post_id, fake_llm, assert_reported_502, clock
 ):
-    fake_llm.replies = [{"post": "draft 2"}, LLMError("provider timed out")]
+    fake_llm.replies = [written("draft 2"), LLMError("provider timed out")]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -333,7 +333,7 @@ async def test_a_failed_revision_is_stored_as_a_failed_attempt_and_returns_502(
 async def test_a_failed_attempt_stays_out_of_the_conversation_and_the_numbering(
     client, db, post_id, fake_llm
 ):
-    fake_llm.replies = [LLMError("provider down"), {"post": "draft 2"}, {"post": "final 2"}]
+    fake_llm.replies = [LLMError("provider down"), written("draft 2"), {"post": "final 2"}]
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
@@ -349,7 +349,7 @@ async def test_a_failed_attempt_stays_out_of_the_conversation_and_the_numbering(
 
 
 async def test_a_version_stores_its_feedback_models_and_usage(client, db, post_id, fake_llm):
-    fake_llm.replies = [{"post": "draft 2"}, {"post": "final 2"}]
+    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
 
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 

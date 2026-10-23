@@ -18,7 +18,7 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
 )
 from tests.mcp_client import error_text
-from tests.posts.hook_replies import no_hook
+from tests.posts.writing_replies import written
 
 SCHEDULED_PAGE = "http://localhost:5173/scheduled"
 
@@ -40,7 +40,7 @@ async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
     ]
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [no_hook(), {"post": "draft one"}, {"post": "The final, version one."}]
+    fake_llm.replies = [written("draft one"), {"post": "The final, version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     return started.json()["versions"][0]

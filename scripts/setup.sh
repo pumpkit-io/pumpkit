@@ -25,8 +25,8 @@ Required, as flags or environment variables of the same name:
 Generated when absent: POSTGRES_PASSWORD, JWT_SECRET_KEY, FERNET_ENCRYPTION_KEY.
 
 Any other setting in .env.example is accepted the same way, for example
---stripe-secret-key or STRIPE_SECRET_KEY, or the optional --typesafe-api-key for Jev.
-Prefer environment variables for keys: flags end up in your shell history.
+--stripe-secret-key or STRIPE_SECRET_KEY. Prefer environment variables for keys:
+flags end up in your shell history.
 
 Without a terminal on stdin, a missing required value fails the run and is named.
 In a terminal, the script asks for it.

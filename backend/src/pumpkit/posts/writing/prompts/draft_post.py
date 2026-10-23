@@ -1,10 +1,12 @@
 """
-The system prompt of the draft call (and of the revision call), word for word from pumpkit-v6.
+The system prompt of the draft call (and of the revision call): pumpkit-v6's, with the hook
+section and an output that names the Hook before the post.
 
 It holds only instructions: the corpus changes per Post, so it travels in a user message.
 """
 
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
+from pumpkit.posts.writing.prompts.hook import HOOK_SECTION
 
 DRAFT_POST_PROMPT = f"""\
 # Role
@@ -36,6 +38,7 @@ Do not take anything else from the posts:
 - Not their phrases, their examples, their numbers or their anecdotes.
 - Do not mention them, address them, quote them or reply to them.
 
+{HOOK_SECTION}
 # Make the post sound human
 
 - Unpolished and sincere. It should read like someone typing on their phone laying on their bed, not like a writer.
@@ -51,9 +54,15 @@ Do not take anything else from the posts:
 
 # Output
 
+- hook_reasoning: one to three sentences on how the post opens, written before the post: which library hook fits and why, or why a more natural, casual opening fits better.
+- hook_name: the id of the library hook the post opens with. null when it opens with none.
+- post: the post.
+
+The post:
+
 - One post. Not a thread, not two options, not a post plus an explanation.
 - Under {POST_MAX_CHARS} characters. The length is flexible, but not unlimited.
 - Plain text. The output goes into a composer, so no markdown, no bold, no bullet characters, no headings.
 
-Return the post text and nothing else - no preamble, no quotes around it, no notes about what you did.
+The post field holds the post text and nothing else - no preamble, no quotes around it, no notes about what you did.
 """
