@@ -1,10 +1,9 @@
 """
-The system prompt and user messages of the hook call. Written for Pumpkit, not ported: the
-library is curated from the User's research on X hooks, keeping only what fits a single post
-or a long post with no image.
+The system prompt and user messages of the hook call, and the message that hands its Hook to
+the draft or revision call. Written for Pumpkit, not ported: the library is curated from the
+User's research on X hooks, keeping only what fits a single post or a long post with no image.
 
-The templates avoid em dashes and arrows: a Hook is spliced in after the scrub, so whatever
-punctuation a template carries reaches the humanizer as it is.
+The templates avoid em dashes: the draft call copies the Hook as it is written.
 """
 
 import re
@@ -19,42 +18,30 @@ You write the hook of one post on X on my behalf: the opening line(s) that make 
 # What you are given
 
 - A set of real posts from X authors, grouped by author, representing the writing style the post follows.
-- The brief I wrote the post from.
-- When the post is a revision, my latest feedback on its previous version.
-- The post itself, already written.
+- The brief I write the post from.
+- When the post is a revision, its previous version and my latest feedback on it.
 
 # What you do
 
-Read the post, then choose whether to:
-- keep the post's opening as-is, or
-- replace the post's opening with a hook from the library below that fits the post best.
+The post isn't written yet. After you answer, it is written from the same brief, starting with your hook word for word. When the post is a revision, it is rewritten from my feedback, and your hook replaces the opening of its previous version.
 
-Choose to keep when:
-- the post already opens with a strong hook that follows the rules below, or
-- the user explicitly asked to not use a hook.
+Pick the hook from the library below that fits what the post will say best, fill in its template, and write it so the writers of the real posts could have written it.
 
-Choose to replace when:
-- the post's opening is weak, or
-- the post would read best with a new opening from the hook library, or
-- the post's opening works as the start of the body, but the post needs a hook above it. Then you replace nothing: the hook goes above the opening, with one blank line between them.
+Write no hook when:
+- the brief or my feedback explicitly asks for no hook, or
+- no hook in the library fits what the post will say.
 
-When you choose to replace, you name the library hook you use and give two texts:
-- the replaced text: the opening you replace, then at least the first line after the opening, copied exactly from the start of the post. When the hook goes above the opening, you replace nothing, so the replaced text is only the lines you carry, starting with the opening.
-- the replacing text: the hook, then the same lines you carried, copied exactly, character for character.
+The hook sits on lines of its own and the post goes on after it. Write only the hook, never the post or the line after it.
 
-The lines you carry stay in the post exactly as they are. You write them after the hook so you read the hook as a reader will, followed by them. If no hook reads naturally into them, pick another hook or keep the opening; never reword the lines you carry.
-
-The opening and the lines you carry are whole lines: a line ends at a line break. The hook sits on lines of its own, with a line break or a blank line before the lines you carry, spaced like the real posts. When the post is a single line, you either keep it or put a hook above it.
-
-The library hook may be the one the opening already is, when it is the right hook but badly written.
+When the post is a revision, the library hook may be the one its previous version opens with, when it is still the right hook but needs rewriting for my feedback.
 
 # Hard rules
 
-- Use only facts, numbers and claims that are in the brief, in my feedback when I gave some, or in the post. Never invent a number, a result, a test, a price, a time span or an anecdote. No "I tested 6 tools" unless I tested six tools, no "saved $312/mo" unless I said so.
+- Use only facts, numbers and claims that are in the brief, in my feedback when I gave some, or in the previous version when there is one. Never invent a number, a result, a test, a price, a time span or an anecdote. No "I tested 6 tools" unless I tested six tools, no "saved $312/mo" unless I said so.
 - Pick a hook the writers of the real posts would plausibly write. Match their voice, their capitalization and their punctuation.
 - Name the topic. A reader who sees only the hook knows what the post is about.
-- The body must pay the hook off. Promise only what the post below delivers.
-- The post with the hook stays under {POST_MAX_CHARS} characters.
+- The body must pay the hook off. Promise only what the brief, and my feedback when I gave some, give the post to deliver.
+- The hook leaves the post room to say the rest: the whole post stays under {POST_MAX_CHARS} characters.
 - Plain text. No markdown, no hashtags, no emoji unless the real posts use them.
 
 # Hook rules
@@ -62,14 +49,14 @@ The library hook may be the one the opening already is, when it is the right hoo
 1. Name the topic in the hook. "Three things changed in AI coding agents" beats "Three things just changed forever."
 2. Reveal part of the payoff. The reader should want the explanation, the evidence or the implications, not the claim you're hiding.
 3. Follow this order: the claim, then the specifics, then the proof, then at most one useful open question.
-4. Use real numbers when available. An opening with a specific number does better than one without. "7 lessons" works only if seven real lessons exist in the post.
-5. Call out the reader and speak as "I". Openings that name their audience do well, and "I..." openers do far better than "You..." openers. Speak as "I" only about what is my own experience in the brief or the post.
+4. Use real numbers when available. An opening with a specific number does better than one without. "7 lessons" works only if the brief has seven real lessons.
+5. Call out the reader and speak as "I". Openings that name their audience do well, and "I..." openers do far better than "You..." openers. Speak as "I" only about what is my own experience in the brief.
 6. The body must pay off the hook. A promise the post doesn't keep attracts the wrong readers and costs trust.
 7. Back a contrarian hook with evidence and a condition. Write "the common advice breaks when [condition]; here's the evidence", not "everyone is wrong."
-8. A hook multiplies an insight; it doesn't replace one. Most strong posts use no textbook formula, so a plain opening that states the insight is often the right one to keep.
+8. A hook multiplies an insight; it doesn't replace one. Most strong posts use no textbook formula, so when the brief's insight reads best stated plainly, write no hook.
 9. Write for one specific recipient. Ask: "Who would send this to whom?" A founder forwarding it to a CTO is a better test than "will this get likes?"
-10. Everything after the hook stays exactly as it is in the post, so the hook must read naturally into the first line you carry. Read your replacing text from the top before you answer: if the first line you carry refers back to something ("these", "the first one", "that"), the hook must give it what it refers to. Do not repeat in the hook what the first line you carry already says.
-11. Pick the hook from the library below. If no hook in the library fits, keep the post as it is.
+10. The post is written after the hook, so leave it the explanation, the evidence and the details to deliver. Do not write them into the hook as well.
+11. Pick the hook from the library below. If no hook in the library fits, write no hook.
 
 # Hook library
 
@@ -181,7 +168,7 @@ Only for a post long enough that X cuts it behind "show more" (over 280 characte
 
 # Hooks to avoid
 
-Never write these, and replace an opening that is one of them:
+Never write these:
 
 | Avoid | Example | Why |
 |---|---|---|
@@ -195,13 +182,10 @@ Never write these, and replace an opening that is one of them:
 
 # Output
 
-Answer null for every field that doesn't apply, never an empty string.
+- hook_name: the id of the library hook you write. null when you write no hook.
+- hook: the hook, its template filled in, on lines of its own, with no line break at its start or its end. null when you write no hook.
 
-- current_hook_name: the id of the library hook the post's opening already is, whatever the mode. null when the opening is no library hook.
-- mode: "keep" or "replace".
-- replacing_hook_name: for "replace", the id of the library hook you write. It may equal current_hook_name when you rewrite an opening that is the right hook. null for "keep".
-- replaced_text: for "replace", the opening you replace (nothing when the hook goes above it), then at least the first line after the opening, copied exactly from the start of the post, character for character, without the line break after the last line. null for "keep".
-- replacing_text: for "replace", the hook, the line break or blank line after it, then the lines you carry, copied exactly from replaced_text. Plain text with no line break at its end. null for "keep".
+Answer null for both fields or for neither, never an empty string.
 """
 
 # The ids in the library tables' first column, the only names the hook call may answer with.
@@ -210,23 +194,38 @@ HOOK_NAMES = frozenset(re.findall(r"^\| `([a-z_]+)` \|", HOOK_PROMPT, flags=re.M
 
 def hook_brief_message(brief: str) -> str:
     return (
-        "This is the brief the post below was written from. Every fact, number and claim "
-        f"the hook states must be in it or in the post.\n\n<brief>\n{brief}\n</brief>"
+        "This is the brief the post will be written from. Every fact, number and claim "
+        f"the hook states must be in it.\n\n<brief>\n{brief}\n</brief>"
+    )
+
+
+def hook_previous_final_message(previous_final: str) -> str:
+    return (
+        "This is the previous version of the post, the one my feedback below is about."
+        f"\n\n<post>\n{previous_final}\n</post>"
     )
 
 
 def hook_feedback_message(feedback: str) -> str:
     return (
-        "This is my feedback on the previous version of the post. The post below already "
-        "applies it, and its opening needs a new hook. Facts, numbers and claims in my "
-        f"feedback may go in the hook too.\n\n<feedback>\n{feedback}\n</feedback>"
+        "This is my feedback on the previous version of the post. The post will be rewritten "
+        "from it, and its opening needs a new hook. Facts, numbers and claims in my feedback "
+        f"may go in the hook too.\n\n<feedback>\n{feedback}\n</feedback>"
     )
 
 
-def hook_draft_message(draft: str) -> str:
+_START_WITH_HOOK = "Start the post with this hook, exactly as written, on its own line or lines."
+_PAY_IT_OFF = "Then write the rest of the post so it pays the hook off."
+
+
+def start_with_hook_message(hook: str) -> str:
+    """The draft call's last message when the hook call wrote a Hook."""
+    return f"{_START_WITH_HOOK} {_PAY_IT_OFF}\n\n<hook>\n{hook}\n</hook>"
+
+
+def revision_start_with_hook_message(hook: str) -> str:
+    """The revision call's last message when the hook call wrote a Hook."""
     return (
-        "This is the post to open with a hook. If you replace its opening, copy "
-        "replaced_text from its start exactly, character for character, and end "
-        "replacing_text with the same lines you carry, copied exactly.\n\n"
-        f"<post>\n{draft}\n</post>"
+        f"{_START_WITH_HOOK} It replaces the post's current opening. {_PAY_IT_OFF}"
+        f"\n\n<hook>\n{hook}\n</hook>"
     )

@@ -12,7 +12,7 @@ from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
-from tests.posts.hook_replies import keep_hook
+from tests.posts.hook_replies import no_hook
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -39,7 +39,7 @@ async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
     """A Post from the Brief "ship small things" whose first Version's Final is "final 1"."""
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [{"post": "draft 1"}, keep_hook(), {"post": "final 1"}]
+    fake_llm.replies = [no_hook(), {"post": "draft 1"}, {"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things"})
     assert response.status_code == 201
     fake_llm.calls.clear()
@@ -295,14 +295,14 @@ async def test_feedback_on_a_post_with_no_version_returns_409(
 ):
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 1)
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    fake_llm.replies = [LLMError("provider down")]
+    fake_llm.replies = [no_hook(), LLMError("provider down")]
     await client.post(POSTS, json={"brief": "ship"})
     failed_post_id = (await db.execute(select(Post.id))).scalar_one()
 
     response = await client.post(_versions_url(failed_post_id), json={"feedback": "shorter"})
 
     assert response.status_code == 409
-    assert len(fake_llm.calls) == 1
+    assert len(fake_llm.calls) == 2
 
 
 async def _stored_post(db, post_id: str) -> Post:

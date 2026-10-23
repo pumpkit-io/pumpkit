@@ -1,9 +1,9 @@
-"""add the hook step's and the Jev check's records to Version attempts
+"""add the hook call's and the Jev check's records to Version attempts
 
-A first Version's Draft may open with a Hook from the curated library, and a Feedback Version
-asks Jev whether its opening needs a new Hook. The attempt stores the library ids of the opening
-the Draft had and of the Hook the step wrote, the hook call's model, usage and raw answer, and
-the Jev check's top label, every label's probability and the Jev version.
+A first Version's Draft is written to start with a Hook from the curated library, and a Feedback
+Version asks Jev whether it needs a new Hook. The attempt stores the Hook's library id and text,
+whether the writing call started with it, the hook call's model, usage and raw answer, and the
+Jev check's top label, every label's probability and the Jev version.
 
 Revision ID: 0014
 Revises: 0013
@@ -26,8 +26,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     with op.batch_alter_table("version_attempts", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("current_hook_name", sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("replacing_hook_name", sa.String(), nullable=True))
+        batch_op.add_column(sa.Column("hook_name", sa.String(), nullable=True))
+        batch_op.add_column(sa.Column("hook_text", sa.Text(), nullable=True))
+        batch_op.add_column(sa.Column("hook_followed", sa.Boolean(), nullable=True))
         batch_op.add_column(sa.Column("hooking_model", sa.String(), nullable=True))
         batch_op.add_column(
             sa.Column(
@@ -62,5 +63,6 @@ def downgrade() -> None:
         batch_op.drop_column("hook_answer")
         batch_op.drop_column("hooking_usage")
         batch_op.drop_column("hooking_model")
-        batch_op.drop_column("replacing_hook_name")
-        batch_op.drop_column("current_hook_name")
+        batch_op.drop_column("hook_followed")
+        batch_op.drop_column("hook_text")
+        batch_op.drop_column("hook_name")
