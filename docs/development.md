@@ -108,7 +108,7 @@ The port wraps `llm_client` (`posts/llm_client.py`), which also has `llm_complet
 
 ### Ask Jev a question
 
-A labelled question goes to Jev, not to an LLM (ADR 0013). Set `TYPESAFE_API_KEY` to try it for real. Mediators reach Jev through the `Classifier` port (`core/classifier.py`): the router injects it with `classifier: Classifier = Depends(get_classifier)` and passes it to the mediator, which asks:
+A labelled question goes to Jev, not to an LLM (ADR 0013). Set `TYPESAFE_API_KEY` to try it for real. Mediators reach Jev through the `Classifier` port (`core/classifier.py`): a router injects it with `classifier: Classifier = Depends(get_classifier)` and passes it to the mediator, which asks:
 
 ```python
 classification = await classifier.classify(

@@ -115,7 +115,7 @@ async def test_an_unknown_hook_name_is_logged_and_stored_as_none(
     assert "made_up" in caplog.text
 
 
-async def test_a_feedback_version_stores_the_revision_calls_hook_and_never_asks_jev(
+async def test_a_feedback_version_stores_the_revision_calls_hook_without_a_classifier_question(
     client, db, with_author, fake_llm, fake_classifier
 ):
     post_id = (await _start(client, fake_llm, written("draft 1")))["id"]

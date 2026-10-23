@@ -139,7 +139,7 @@ def revision_messages(
     the Feedback that asked for it, then the new Feedback. Drafts stay out: the User never
     reacted to them.
     """
-    messages = [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
+    messages = draft_messages(corpus, brief)
     for version in earlier:
         if version.feedback is not None:
             messages.append(_user(feedback_message(version.feedback)))

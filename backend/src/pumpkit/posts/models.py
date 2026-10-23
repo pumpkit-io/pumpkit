@@ -75,7 +75,7 @@ class VersionAttempt(Base):
         JSON().with_variant(JSONB, "postgresql")
     )
     # Why the writing call opened the post as it did, and the library Hook it opened with; the
-    # name is None for an opening with no library Hook.
+    # name is None for an opening with no library Hook or one the library doesn't have.
     hook_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     hook_name: Mapped[Optional[str]] = mapped_column(String)
     # The slop check's tells in the Final, each {"name", "description"}, in the check's order.
