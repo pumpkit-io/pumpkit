@@ -7,7 +7,7 @@ backend/src/pumpkit/
   main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
   mcp_server.py    the MCP server: every area's tools behind API key authentication, the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
-  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools
+  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev)
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
   authors/         Inspiration authors and their posts; the X reader (twitterapi.io)
@@ -56,7 +56,9 @@ Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answer
 
 `POST /api/v1/posts/{id}/versions` takes Feedback and answers with the next Version. `posts/mediator.add_version` reads the Post's stored corpus (not the User's current Inspiration authors) and its Versions, then runs the revision call: the draft prompt, the corpus, the Brief, each Final as an assistant turn after the Feedback that produced it, and the new Feedback last. Drafts and failed attempts stay out of that conversation. A Post with no Version (its first attempt failed) answers 409.
 
-The prompts in `src/pumpkit/posts/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included: change them only on purpose, as a prompt change. The writing, humanizing and revising models are constants in `src/pumpkit/posts/writing/constants.py`.
+The draft and revision calls also choose and write the Hook. Their shared system prompt (`prompts/draft_post.py`) says when to open with a library Hook and what makes one work, then holds the curated library and the hooks to avoid from `prompts/hook.py`. Both calls answer `hook_reasoning` (one to three sentences on the opening, generated first), `hook_name` (the library id, or null for an opening with no library Hook) and `post`. The attempt stores `hook_reasoning` and `hook_name`; `writing/versions.py` logs a name the library doesn't have and stores null in its place, and the Version is written either way. Tests script the writing call's reply with `written()` from `tests/posts/writing_replies.py`.
+
+The prompts in `src/pumpkit/posts/writing/prompts/` are copied word for word from pumpkit-v6, `<creator>` corpus markup included, except for the draft prompt's hook section and output fields and the humanizer's paragraph that keeps the Hook, which were written for Pumpkit. Change them only on purpose, as a prompt change. Each call's model is an `LLM_*_MODEL` setting (`core/config.py`).
 
 ### Schedule a post
 
@@ -103,6 +105,21 @@ Test a tool through the endpoint with the `mcp` fixture: Claude Code connected w
 Set `LLM_API_KEY` (and `LLM_BASE_URL` for an endpoint other than OpenRouter). Mediators reach models through the `LLM` port (`posts/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
 
 The port wraps `llm_client` (`posts/llm_client.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
+
+### Ask Jev a question
+
+A labelled question goes to Jev, not to an LLM (ADR 0013). Set `TYPESAFE_API_KEY` to try it for real. Mediators reach Jev through the `Classifier` port (`core/classifier.py`): a router injects it with `classifier: Classifier = Depends(get_classifier)` and passes it to the mediator, which asks:
+
+```python
+classification = await classifier.classify(
+    state={"conversation": [...]},
+    questions={"opening": ChoiceQuestion(instructions="...", criteria={"new_hook": "...", "keep_hook": "..."})},
+    model=settings.TYPESAFE_MODEL,
+)
+answer = classification.answers["opening"]  # a ChoiceAnswer: choice, confidence, probabilities
+```
+
+`state` is any JSON value, and each question's name keys its answer. `classification.model` is the Jev version that answered, and `classification.usage` its token counts. The adapter waits 5 seconds and retries once on a timeout, a lost connection, a 429 or a 529. Jev is optional, so the caller catches `ClassifierError` (the provider failed or gave an answer that doesn't fit the questions) and `ClassifierNotConfiguredError` (no key), a subclass of it, and takes its cautious path instead of failing the request. Tests get the scripted `FakeClassifier` through the autouse `fake_classifier` fixture: queue `fake_classifier.replies` (answers by question name, or an exception) and read each call's state, questions and model in `fake_classifier.calls`. With no reply queued it raises `ClassifierError`, so a test that doesn't script Jev sees the cautious path. The adapter's own tests are in `backend/tests/core/test_classifier.py`.
 
 ### Add a page to the shell
 

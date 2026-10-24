@@ -311,3 +311,10 @@ def test_an_unset_scheduled_posts_cap_defaults_to_100(monkeypatch):
     monkeypatch.delenv("SCHEDULED_POSTS_MONTHLY_CAP", raising=False)
     s = Settings()  # pyright: ignore[reportCallIssue]
     assert s.SCHEDULED_POSTS_MONTHLY_CAP == 100
+
+
+def test_jev_is_off_without_a_typesafe_key_and_pins_its_model(instance_env):
+    s = instance_env()
+
+    assert s.TYPESAFE_API_KEY is None
+    assert s.TYPESAFE_MODEL == "jev-1.13.0"

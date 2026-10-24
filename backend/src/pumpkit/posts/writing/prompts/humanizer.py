@@ -1,8 +1,9 @@
 """
-The system prompt of the humanizer call, word for word from pumpkit-v6, which adapted it from
-the `humanize` skill by harshaneel (https://github.com/harshaneel/humanize/blob/main/humanize/SKILL.md).
+The system prompt used by the humanizer call. This text is a set of guidelines and examples
+for making posts sound more human, by removing AI-generated patterns and language while
+keeping the core intent and original style.
 
-Not an f-string: its "{name}" is an example of a leftover placeholder, not an interpolation.
+Not an f-string: the "{name}" is a leftover placeholder, not an interpolation.
 """
 
 HUMANIZER_PROMPT = """\

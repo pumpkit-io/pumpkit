@@ -78,6 +78,7 @@ from pumpkit.auth.models import MagicLink, User  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
+from pumpkit.core.classifier import FakeClassifier, get_classifier  # noqa: E402
 from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402
@@ -201,6 +202,18 @@ def fake_llm():
     app.dependency_overrides[get_llm] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_llm, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_classifier():
+    """
+    Every test asks Jev through a scripted fake instead of TypeSafe. Request it by name to queue
+    `fake_classifier.replies` (answers by question name, or exceptions) and read its `calls`.
+    """
+    fake = FakeClassifier()
+    app.dependency_overrides[get_classifier] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_classifier, None)
 
 
 @pytest.fixture(autouse=True)

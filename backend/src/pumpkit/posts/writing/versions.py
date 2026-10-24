@@ -1,10 +1,11 @@
 """
-Writing a Version, the pumpkit-v6 way: the writing call (the draft call for the first
-Version, the revision call after Feedback), the scrub, then the humanizer call.
+Writing a Version, the pumpkit-v6 way: the writing call (the draft call for the first Version,
+the revision call after Feedback), which chooses and writes the Hook too, the scrub, then the
+humanizer call.
 
-The scrubbed writing-call text is the Draft and the humanizer's text is the Final. Every
-call gets the system prompt first and the corpus second, as in v6, so the per-call parts
-come after a prefix that stays the same across a Post's Versions.
+The scrubbed writing-call text is the Draft and the humanizer's text is the Final. Every call
+gets the system prompt first and the corpus second, as in v6, so the per-call parts come after a
+prefix that stays the same across a Post's Versions.
 """
 
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from typing import Optional, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
+from pumpkit.core.logging import logger
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.llm_schemas import StructuredResult
 from pumpkit.posts.writing.constants import CACHE_TTL, MAX_TOKENS
@@ -21,6 +23,7 @@ from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
 from pumpkit.posts.writing.prompts.feedback import feedback_message
+from pumpkit.posts.writing.prompts.hook import HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     latest_feedback_message,
@@ -30,11 +33,17 @@ from pumpkit.posts.writing.prompts.revision_humanizer import (
 from pumpkit.posts.writing.scrub import scrub
 
 
-class DraftedPost(BaseModel):
-    # A single field leaves the model no room for commentary around the post.
+class WrittenPost(BaseModel):
+    # hook_reasoning comes first so the model settles the opening before it writes the post.
     model_config = ConfigDict(extra="forbid")
 
+    hook_reasoning: str
+    hook_name: Optional[str]
     post: str
+
+
+class DraftedPost(WrittenPost):
+    pass
 
 
 class FinalPost(BaseModel):
@@ -43,10 +52,8 @@ class FinalPost(BaseModel):
     post: str
 
 
-class RevisedPost(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    post: str
+class RevisedPost(WrittenPost):
+    pass
 
 
 # The SDK names the structured-output schema after the class; these are v6's schema names.
@@ -63,6 +70,13 @@ class EarlierVersion:
 
 
 @dataclass(frozen=True)
+class Hook:
+    reasoning: str
+    # None when the post opens with no library Hook, or names one the library doesn't have.
+    name: Optional[str]
+
+
+@dataclass(frozen=True)
 class WrittenVersion:
     draft: str
     final: str
@@ -70,6 +84,7 @@ class WrittenVersion:
     humanizing_model: str
     writing_usage: Optional[dict]
     humanizing_usage: Optional[dict]
+    hook: Hook
 
 
 def _system(prompt: str) -> dict:
@@ -114,14 +129,17 @@ def revision_humanizer_messages(
 
 
 def revision_messages(
-    corpus: Corpus, brief: str, earlier: Sequence[EarlierVersion], feedback: str
+    corpus: Corpus,
+    brief: str,
+    earlier: Sequence[EarlierVersion],
+    feedback: str,
 ) -> list[dict]:
     """
     The draft call's conversation continued: the Brief, each Final as the model's answer after
     the Feedback that asked for it, then the new Feedback. Drafts stay out: the User never
     reacted to them.
     """
-    messages = [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
+    messages = draft_messages(corpus, brief)
     for version in earlier:
         if version.feedback is not None:
             messages.append(_user(feedback_message(version.feedback)))
@@ -143,11 +161,16 @@ async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVe
         max_tokens=MAX_TOKENS,
     )
     draft = scrub(drafted.parsed.post)
-    return await _humanize(llm, humanizer_messages(corpus, brief, draft), draft, drafted)
+    messages = humanizer_messages(corpus, brief, draft)
+    return await _humanize(llm, messages, drafted, draft, _hook(drafted.parsed))
 
 
 async def write_next_version(
-    llm: LLM, corpus: Corpus, brief: str, earlier: Sequence[EarlierVersion], feedback: str
+    llm: LLM,
+    corpus: Corpus,
+    brief: str,
+    earlier: Sequence[EarlierVersion],
+    feedback: str,
 ) -> WrittenVersion:
     """Raises whatever the LLM port raises; nothing is stored here."""
     revised = await llm.structured(
@@ -158,11 +181,24 @@ async def write_next_version(
     )
     draft = scrub(revised.parsed.post)
     messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
-    return await _humanize(llm, messages, draft, revised)
+    return await _humanize(llm, messages, revised, draft, _hook(revised.parsed))
+
+
+def _hook(written: WrittenPost) -> Hook:
+    """An unknown name is dropped, not refused: the post is worth more than its Hook's label."""
+    name = written.hook_name
+    if name is not None and name not in HOOK_NAMES:
+        logger.warning("The writing call named an unknown hook %r, stored as none", name)
+        name = None
+    return Hook(reasoning=written.hook_reasoning, name=name)
 
 
 async def _humanize(
-    llm: LLM, messages: list[dict], draft: str, written: StructuredResult
+    llm: LLM,
+    messages: list[dict],
+    written: StructuredResult,
+    draft: str,
+    hook: Hook,
 ) -> WrittenVersion:
     refined = await llm.structured(
         model=settings.LLM_HUMANIZING_MODEL,
@@ -177,4 +213,5 @@ async def _humanize(
         humanizing_model=refined.model,
         writing_usage=_usage(written),
         humanizing_usage=_usage(refined),
+        hook=hook,
     )

@@ -112,6 +112,11 @@ class Settings(BaseSettings):
     # Optional: when unset, pumpkit.authors.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None
 
+    # Optional: when unset, pumpkit.core.classifier raises ClassifierNotConfiguredError on use.
+    TYPESAFE_API_KEY: Optional[str] = None
+    # Pinned, so a new Jev release changes no answer without a config change (ADR 0013).
+    TYPESAFE_MODEL: str = "jev-1.13.0"
+
     # Optional: when unset, pumpkit.x_connection.x_publisher raises XPublisherNotConfiguredError on use.
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
