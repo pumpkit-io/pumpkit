@@ -2,7 +2,7 @@
 
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
-from pumpkit.posts.writing.prompts.hook import HOOK_NAMES, HOOK_SECTION
+from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY, HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 
 
@@ -66,57 +66,21 @@ def test_the_humanizer_prompt_keeps_the_openings_claim_numbers_and_structure():
     )
 
 
-def test_the_draft_prompt_holds_the_hook_section_after_the_writing_style():
-    assert HOOK_SECTION in DRAFT_POST_PROMPT
-    assert DRAFT_POST_PROMPT.index("# The posts are the writing style") < DRAFT_POST_PROMPT.index(
-        "# The hook"
-    )
+def test_the_draft_prompt_holds_the_hook_library_after_its_instructions():
+    assert HOOK_LIBRARY in DRAFT_POST_PROMPT
+    positions = [
+        DRAFT_POST_PROMPT.index(marker)
+        for marker in ("# The posts are the writing style", "## Hook library", HOOK_LIBRARY)
+    ]
+    assert positions == sorted(positions)
 
 
-def test_the_hook_section_leaves_the_choice_of_a_library_hook_to_the_model():
-    assert "Open with a hook from the library below when one fits what the brief says." in (
-        HOOK_SECTION
-    )
-    assert "open the way the writers of the real posts would" in HOOK_SECTION
-    assert "When I say how to open the post, do that." in HOOK_SECTION
-
-
-def test_a_revision_keeps_its_opening_unless_the_feedback_asks_to_change_it():
-    assert "keep its opening unless my feedback asks to change it" in HOOK_SECTION
-
-
-def test_a_library_hook_states_only_what_the_brief_gives_and_the_post_pays_it_off():
-    assert "it names the topic" in HOOK_SECTION
-    assert "numbers, results and claims the brief gives" in HOOK_SECTION
-    assert "the rest of the post pays it off" in HOOK_SECTION
-
-
-def test_the_hook_section_holds_the_single_post_library_and_the_hooks_to_avoid():
+def test_the_hook_names_are_the_library_ids():
     assert {"cost_before_after", "dear_persona", "show_more_hook"} <= HOOK_NAMES
-    assert "## Hooks to avoid" in HOOK_SECTION
-    assert "| `ultra_short_declarative` | Last resort: " in HOOK_SECTION
 
 
-def test_the_hook_library_leaves_out_question_hooks_the_engagement_bait_rule_bans():
-    assert "Questions that start conversations" not in HOOK_SECTION
-    for left_out in (
-        "trade_off_question",
-        "experience_question",
-        "value_then_ask",
-        "keep_only_three",
-    ):
-        assert left_out not in HOOK_NAMES
-
-
-def test_the_hook_library_leaves_out_hooks_for_threads_articles_quotes_replies_and_images():
-    for left_out in ("analyzed_n_patterns", "wish_i_knew", "complete_playbook", "one_page_guide"):
-        assert left_out not in HOOK_NAMES
-    for term in ("Quote-post", "chart", "Article", "reply hook", "Closing line", "🧵"):
-        assert term not in HOOK_SECTION
-
-
-def test_the_hook_section_has_no_em_dash_for_a_post_to_copy():
-    assert "—" not in HOOK_SECTION
+def test_the_hook_library_has_no_em_dash_for_a_post_to_copy():
+    assert "—" not in HOOK_LIBRARY
 
 
 def test_the_draft_prompt_asks_for_the_hook_reasoning_first_then_the_hook_name_then_the_post():

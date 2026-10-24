@@ -1,5 +1,5 @@
 """
-The hook section of the draft and revision calls' system prompt. Written for Pumpkit, not ported:
+The hook library of the draft and revision calls' system prompt. Written for Pumpkit, not ported:
 the library is curated from the User's research on X hooks, keeping only what fits a single post
 or a long post with no image, and leaving out question hooks, which the engagement-bait rule bans.
 
@@ -8,25 +8,7 @@ The templates avoid em dashes: the post copies a template's punctuation.
 
 import re
 
-HOOK_SECTION = """\
-# The hook
-
-The hook is the post's opening: the line or lines that make a reader stop scrolling and read the rest.
-
-Open with a hook from the library below when one fits what the brief says. When none fits, or the brief reads best stated plainly, open the way the writers of the real posts would. When I say how to open the post, do that.
-
-When you revise the post from my feedback, keep its opening unless my feedback asks to change it.
-
-A library hook works when:
-- it names the topic, so a reader who sees only the hook knows what the post is about.
-- it states only numbers, results and claims the brief gives. "7 lessons" works only if the brief has seven lessons; no "I tested 6 tools" unless I tested six.
-- the rest of the post pays it off. Promise only what the brief gives the post to deliver.
-- it leaves the explanation, the evidence and the details to the lines after it.
-
-## Hook library
-
-Each hook has an id, a template (fill in the [brackets]), an example and why it works. The examples show the shape only: never take their numbers, tools or topics. A variant is another phrasing of the same hook. Within each family, the most widely recommended hooks come first. A hook marked "Last resort" has mixed evidence: use it only when nothing else fits.
-
+HOOK_LIBRARY = """\
 ### Money and time saved
 
 | Id | Hook | Template | Example | Why it works |
@@ -138,4 +120,4 @@ Never write these:
 """
 
 # The ids in the library tables' first column, the only names the writing call may answer with.
-HOOK_NAMES = frozenset(re.findall(r"^\| `([a-z_]+)` \|", HOOK_SECTION, flags=re.MULTILINE))
+HOOK_NAMES = frozenset(re.findall(r"^\| `([a-z_]+)` \|", HOOK_LIBRARY, flags=re.MULTILINE))

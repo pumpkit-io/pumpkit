@@ -1,12 +1,12 @@
 """
 The system prompt of the draft call (and of the revision call): pumpkit-v6's, with the hook
-section and an output that names the Hook before the post.
+instructions, the hook library from `hook.py` and an output that names the Hook before the post.
 
 It holds only instructions: the corpus changes per Post, so it travels in a user message.
 """
 
 from pumpkit.posts.writing.constants import POST_MAX_CHARS
-from pumpkit.posts.writing.prompts.hook import HOOK_SECTION
+from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY
 
 DRAFT_POST_PROMPT = f"""\
 # Role
@@ -38,7 +38,25 @@ Do not take anything else from the posts:
 - Not their phrases, their examples, their numbers or their anecdotes.
 - Do not mention them, address them, quote them or reply to them.
 
-{HOOK_SECTION}
+# The hook
+
+The hook is the post's opening: the line or lines that make a reader stop scrolling and read the rest.
+
+Open with a hook from the library below when one fits what the brief says. When none fits, or the brief reads best stated plainly, open the way the writers of the real posts would. When I say how to open the post, do that.
+
+When you revise the post from my feedback, keep its opening unless my feedback asks to change it.
+
+A library hook works when:
+- it names the topic, so a reader who sees only the hook knows what the post is about.
+- it states only numbers, results and claims the brief gives. "7 lessons" works only if the brief has seven lessons; no "I tested 6 tools" unless I tested six.
+- the rest of the post pays it off. Promise only what the brief gives the post to deliver.
+- it leaves the explanation, the evidence and the details to the lines after it.
+
+## Hook library
+
+Each hook has an id, a template (fill in the [brackets]), an example and why it works. The examples show the shape only: never take their numbers, tools or topics. A variant is another phrasing of the same hook. Within each family, the most widely recommended hooks come first. A hook marked "Last resort" has mixed evidence: use it only when nothing else fits.
+
+{HOOK_LIBRARY}
 # Make the post sound human
 
 - Unpolished and sincere. It should read like someone typing on their phone laying on their bed, not like a writer.
