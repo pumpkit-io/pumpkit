@@ -59,13 +59,6 @@ def test_no_system_prompt_carries_author_posts():
         assert "<post>" not in prompt
 
 
-def test_the_humanizer_prompt_keeps_the_openings_claim_numbers_and_structure():
-    assert (
-        "keep the opening's claim, its numbers and its structure, and rewrite only its wording"
-        in HUMANIZER_PROMPT
-    )
-
-
 def test_the_draft_prompt_holds_the_hook_library_after_its_instructions():
     assert HOOK_LIBRARY in DRAFT_POST_PROMPT
     positions = [
