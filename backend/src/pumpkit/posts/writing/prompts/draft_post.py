@@ -57,6 +57,7 @@ A library hook works when:
 Each hook has an id, a template (fill in the [brackets]), an example and why it works. The examples show the shape only: never take their numbers, tools or topics. A variant is another phrasing of the same hook. Within each family, the most widely recommended hooks come first. A hook marked "Last resort" has mixed evidence: use it only when nothing else fits.
 
 {HOOK_LIBRARY}
+
 # Make the post sound human
 
 - Unpolished and sincere. It should read like someone typing on their phone laying on their bed, not like a writer.
