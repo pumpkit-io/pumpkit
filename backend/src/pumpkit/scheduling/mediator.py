@@ -145,17 +145,21 @@ async def check_monthly_cap(
     *,
     user_id: str,
     publish_at: datetime,
+    part_count: int,
     excluding_id: Optional[str] = None,
 ) -> None:
-    """Pass `excluding_id` when moving an existing one, so it doesn't count itself."""
-    cap = settings.SCHEDULED_POSTS_MONTHLY_CAP
+    """
+    Room for `part_count` X posts in the month. Pass `excluding_id` when changing an existing
+    one, so it doesn't count itself.
+    """
+    cap = settings.X_POSTS_MONTHLY_CAP
     if cap is None:
         return
     start, end = rules.month_bounds(publish_at)
-    count = await service.count_publishing_between(
+    count = await service.count_x_posts_between(
         db, user_id=user_id, start=start, end=end, excluding_id=excluding_id
     )
-    rules.check_month_has_room(count, cap=cap, moment=publish_at)
+    rules.check_month_has_room(count, adding=part_count, cap=cap, moment=publish_at)
 
 
 async def create_scheduled_post(
@@ -178,7 +182,7 @@ async def create_scheduled_post(
         parts = new.parts
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
-    await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
+    await check_monthly_cap(db, user_id=user.id, publish_at=publish_at, part_count=len(parts))
     community = await _community(reader, new.community) if new.community is not None else None
     scheduled_post = await service.create(
         db,
@@ -253,12 +257,25 @@ async def edit_scheduled_post(
     if edit.parts is not None:
         subscription_type = connection.subscription_type if connection else None
         rules.check_length(edit.parts, limit=x_post_max_chars(subscription_type))
+    part_count = len(edit.parts if edit.parts is not None else scheduled_post.parts)
     if connection is not None and edit.publish_at is not None:
         new_publish_at = rules.check_publish_at(edit.publish_at, now=now)
         await check_monthly_cap(
-            db, user_id=user.id, publish_at=new_publish_at, excluding_id=scheduled_post_id
+            db,
+            user_id=user.id,
+            publish_at=new_publish_at,
+            part_count=part_count,
+            excluding_id=scheduled_post_id,
         )
         reschedule = service.Reschedule(publish_at=new_publish_at, x_user_id=connection.x_user_id)
+    elif part_count > len(scheduled_post.parts):
+        await check_monthly_cap(
+            db,
+            user_id=user.id,
+            publish_at=as_utc(scheduled_post.publish_at),
+            part_count=part_count,
+            excluding_id=scheduled_post_id,
+        )
     destination = await _destination_after_edit(reader, scheduled_post, edit)
     if not await service.edit(
         db,

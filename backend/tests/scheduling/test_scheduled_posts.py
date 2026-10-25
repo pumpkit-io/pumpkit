@@ -554,13 +554,56 @@ async def test_a_source_version_that_is_not_one_of_the_user_s_versions_is_refuse
 
 @pytest.fixture
 def cap_of_two(monkeypatch):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
 OCTOBER_FULL = (
-    "You have 2 Scheduled posts in October 2026, the most for one month. "
+    "You have 2 X posts in October 2026, the most for one month. "
     "The cap resets on November 1, 2026."
 )
+
+
+async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
+):
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
+    await connect_x()
+    thread = await client.post(
+        SCHEDULED_POSTS, json={"parts": ["One", "Two"], "publish_at": "2026-10-11T09:00:00Z"}
+    )
+    single = await _schedule(client, "2026-10-12T09:00:00Z", "Three")
+
+    refused = await _schedule(client, "2026-10-13T09:00:00Z", "Four")
+
+    assert thread.status_code == single.status_code == 201
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "You have 3 X posts in October 2026, the most for one month. "
+        "The cap resets on November 1, 2026."
+    )
+
+
+async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is_scheduled(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
+):
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
+    await connect_x()
+    first = await _schedule(client, "2026-10-11T09:00:00Z", "First")
+
+    for fields in ({"publish_at": "2026-10-12T09:00:00Z"}, {"publish_now": True}):
+        response = await client.post(
+            SCHEDULED_POSTS, json={"parts": ["One", "Two", "Three"], **fields}
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == (
+            "These 3 Parts would take you over the cap of 3 X posts in October 2026: you have "
+            "1 already. The cap resets on November 1, 2026."
+        )
+    assert [p["id"] for p in (await client.get(SCHEDULED_POSTS)).json()["data"]] == [
+        first.json()["id"]
+    ]
+    assert fake_x_publisher.published == []
 
 
 async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_resets(

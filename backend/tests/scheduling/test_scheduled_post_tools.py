@@ -144,7 +144,7 @@ async def test_a_time_without_its_utc_offset_is_refused(connected, mcp, fixed_cl
 async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
     connected, client, mcp, fixed_clock, monkeypatch
 ):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
     from_web = await client.post(
         "/api/v1/scheduled-posts", json={"parts": ["First"], "publish_at": "2026-10-11T09:00:00Z"}
     )
@@ -154,7 +154,7 @@ async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
     result = await _schedule(mcp, text="Third", at="2026-10-12T09:00:00Z")
 
     assert error_text(result) == (
-        "You have 2 Scheduled posts in October 2026, the most for one month. "
+        "You have 2 X posts in October 2026, the most for one month. "
         "The cap resets on November 1, 2026."
     )
 

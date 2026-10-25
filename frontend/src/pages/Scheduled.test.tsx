@@ -615,7 +615,7 @@ describe('Scheduled', () => {
 
     it('says when the monthly cap resets once a month is full', async () => {
       const full =
-        'You have 100 Scheduled posts in October 2026, the most for one month. ' +
+        'You have 100 X posts in October 2026, the most for one month. ' +
         'The cap resets on November 1, 2026.';
       vi.mocked(scheduledPostService.schedule).mockRejectedValue(apiError(409, full));
       renderScheduled();

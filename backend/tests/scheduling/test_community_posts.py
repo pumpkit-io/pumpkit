@@ -127,7 +127,7 @@ async def test_other_refusals_fail_without_the_membership_hint(
 async def test_community_posts_count_towards_the_monthly_cap(
     client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
 ):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
     await connect_x()
     community = COMMUNITY_ID
     await _post_now(client, "First", community=community)
@@ -139,7 +139,7 @@ async def test_community_posts_count_towards_the_monthly_cap(
     response = await _post_now(client, "Third")
 
     assert response.status_code == 409
-    assert response.json()["detail"].startswith("You have 2 Scheduled posts in October 2026")
+    assert response.json()["detail"].startswith("You have 2 X posts in October 2026")
 
 
 async def test_a_community_post_is_tracked_with_where_it_went(

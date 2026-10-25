@@ -333,13 +333,33 @@ async def test_a_user_who_is_not_subscribed_cannot_edit(client, fake_x_publisher
 
 @pytest.fixture
 def cap_of_two(monkeypatch):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
 OCTOBER_FULL = (
-    "You have 2 Scheduled posts in October 2026, the most for one month. "
+    "You have 2 X posts in October 2026, the most for one month. "
     "The cap resets on November 1, 2026."
 )
+
+
+async def test_adding_parts_that_would_cross_the_monthly_cap_is_refused(
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two, connect_x
+):
+    await connect_x()
+    scheduled = await _schedule(client, "2026-10-11T09:00:00Z", "One")
+    await _schedule(client, "2026-10-12T09:00:00Z", "Other")
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["One", "Two"]}
+    )
+    rewritten = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["Uno"]})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "These 2 Parts would take you over the cap of 2 X posts in October 2026: you have "
+        "1 already. The cap resets on November 1, 2026."
+    )
+    assert rewritten.status_code == 200, rewritten.text
 
 
 async def test_cancelling_frees_a_place_in_a_full_month(

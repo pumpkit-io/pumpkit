@@ -275,7 +275,7 @@ async def past_communities(db: AsyncSession, *, user_id: str, x_user_id: str) ->
     return [Community(id=community_id, name=name) for community_id, name in names.items()]
 
 
-async def count_publishing_between(
+async def count_x_posts_between(
     db: AsyncSession,
     *,
     user_id: str,
@@ -283,10 +283,11 @@ async def count_publishing_between(
     end: datetime,
     excluding_id: Optional[str] = None,
 ) -> int:
-    """The User's Scheduled posts in any state with `start <= publish_at < end`."""
+    """The Parts of the User's Scheduled posts in any state with `start <= publish_at < end`."""
     query = (
         select(func.count())
-        .select_from(ScheduledPost)
+        .select_from(ScheduledPostPart)
+        .join(ScheduledPost)
         .where(
             ScheduledPost.user_id == user_id,
             ScheduledPost.publish_at >= start,
