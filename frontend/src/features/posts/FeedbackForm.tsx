@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { charCount } from '@/lib/characters';
-import { FEEDBACK_MAX_CHARS } from '@/services/postService';
+import { FEEDBACK_MAX_CHARS, type Format } from '@/services/postService';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { FormatSelector } from './FormatSelector';
 import { LengthCounter } from './LengthCounter';
 import { LimitNotice } from '@/components/LimitNotice';
 
@@ -13,13 +14,23 @@ interface FeedbackFormProps {
   isWriting: boolean;
   error: string | null;
   notice: string | null;
+  /** Where the selector starts; the new Version then has the Format sent, so it stays in step. */
+  latestFormat: Format;
   /** Resolves true once the new Version is on screen. */
-  onSend: (feedback: string) => Promise<boolean>;
+  onSend: (feedback: string, format: Format) => Promise<boolean>;
 }
 
 /** Feedback on the latest Version. A failed send keeps the text, so sending again is a retry. */
-export function FeedbackForm({ subscribed, isWriting, error, notice, onSend }: FeedbackFormProps) {
+export function FeedbackForm({
+  subscribed,
+  isWriting,
+  error,
+  notice,
+  latestFormat,
+  onSend,
+}: FeedbackFormProps) {
   const [feedback, setFeedback] = useState('');
+  const [format, setFormat] = useState<Format>(latestFormat);
   const typed = feedback.trim();
   const length = charCount(feedback);
   const canSend = subscribed === true && !!typed && length <= FEEDBACK_MAX_CHARS;
@@ -27,7 +38,7 @@ export function FeedbackForm({ subscribed, isWriting, error, notice, onSend }: F
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSend || isWriting) return;
-    if (await onSend(typed)) setFeedback('');
+    if (await onSend(typed, format)) setFeedback('');
   };
 
   return (
@@ -51,6 +62,7 @@ export function FeedbackForm({ subscribed, isWriting, error, notice, onSend }: F
         />
         <LengthCounter length={length} max={FEEDBACK_MAX_CHARS} />
       </div>
+      <FormatSelector value={format} onChange={setFormat} disabled={isWriting} />
 
       {error && <ErrorBanner message={error} />}
       {notice && <LimitNotice message={notice} />}

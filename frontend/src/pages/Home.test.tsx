@@ -911,7 +911,7 @@ describe('Home', () => {
       expect(area.getByLabelText('Feedback')).toBeDisabled();
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
       expect(area.getByRole('status')).toHaveTextContent(/writing the next version/i);
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter');
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'feedback' });
 
       answer(versionTwo);
@@ -922,6 +922,43 @@ describe('Home', () => {
       expect(latest.getByText('make it shorter')).toBeInTheDocument();
       expect(area.getByLabelText('Feedback')).toHaveValue('');
       expect(area.getByLabelText('Feedback')).toBeEnabled();
+    });
+
+    it("starts the Format on the latest Version's and sends the one the User picks", async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue({
+        ...versionTwo,
+        format: 'thread',
+        parts: [
+          { text: 'part one', charCount: 8, charLimit: 280 },
+          { text: 'part two', charCount: 8, charLimit: 280 },
+        ],
+      });
+      const area = await onFirstVersion();
+      const format = () => within(area.getByRole('radiogroup', { name: 'Format' }));
+      expect(format().getByRole('radio', { name: 'Single post' })).toBeChecked();
+
+      fireEvent.click(format().getByRole('radio', { name: 'Thread' }));
+      sendFeedback(area, 'expand it');
+
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'expand it', 'thread');
+      await area.findByRole('region', { name: 'Version 2' });
+      expect(format().getByRole('radio', { name: 'Thread' })).toBeChecked();
+    });
+
+    it('starts the Format on Thread when the latest Version is a Thread', async () => {
+      vi.mocked(postService.start).mockResolvedValue(
+        threadWith([
+          { text: 'the first part', charCount: 14, charLimit: 280 },
+          { text: 'the second part', charCount: 15, charLimit: 280 },
+        ]),
+      );
+      const area = await readyToWrite();
+      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
+      await writeBrief(area, 'ship small things');
+      await area.findByRole('article', { name: 'Final' });
+
+      const format = within(area.getByRole('radiogroup', { name: 'Format' }));
+      expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
     });
 
     it('keeps earlier Versions above the latest, read-only, each with its Feedback and copy', async () => {

@@ -53,14 +53,14 @@ export function usePostWriter() {
 
   /** Resolves true once the Version is on screen, so the caller can clear its Feedback box. */
   const addFeedback = useCallback(
-    async (feedback: string): Promise<boolean> => {
+    async (feedback: string, format: Format): Promise<boolean> => {
       if (!post) return false;
       setIsWriting(true);
       setError(null);
       setNotice(null);
       track('post_version_requested', { kind: 'feedback' });
       try {
-        const version = await postService.addVersion(post.id, feedback);
+        const version = await postService.addVersion(post.id, feedback, format);
         setPost((current) =>
           current?.id === post.id
             ? { ...current, versions: [...current.versions, version] }
