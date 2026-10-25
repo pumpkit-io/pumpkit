@@ -225,7 +225,7 @@ async def fail_stuck(
 ) -> list[str]:
     """
     Move every Scheduled post in publishing since before `publishing_since` to Failed, and
-    return their Users' ids, one per Scheduled post.
+    return their ids. Parts already live stay live.
     """
     result = await db.execute(
         update(ScheduledPost)
@@ -234,7 +234,7 @@ async def fail_stuck(
             ScheduledPost.publishing_started_at < publishing_since,
         )
         .values(state=FAILED, failed_reason=reason, updated_at=now)
-        .returning(ScheduledPost.user_id)
+        .returning(ScheduledPost.id)
         .execution_options(synchronize_session=False)
     )
     return list(result.scalars())
@@ -311,12 +311,17 @@ async def release_for_retry(
     await db.flush()
 
 
+async def record_part_live(db: AsyncSession, part: ScheduledPostPart, *, x_post_id: str) -> None:
+    """The Part is live as X's post `x_post_id`. Flushes."""
+    part.x_post_id = x_post_id
+    await db.flush()
+
+
 async def record_published(
-    db: AsyncSession, scheduled_post: ScheduledPost, *, x_post_id: str, now: datetime
+    db: AsyncSession, scheduled_post: ScheduledPost, *, now: datetime
 ) -> None:
-    """The first Part is live as X's post `x_post_id`. Flushes."""
+    """Every Part is live, the last one accepted at `now`. Flushes."""
     scheduled_post.state = PUBLISHED
-    scheduled_post.parts[0].x_post_id = x_post_id
     scheduled_post.published_at = now
     scheduled_post.updated_at = now
     await db.flush()

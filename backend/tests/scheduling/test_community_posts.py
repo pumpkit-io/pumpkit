@@ -100,7 +100,7 @@ async def test_a_community_post_x_refuses_for_a_non_member_fails_with_a_membersh
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "refused_by_x"},
+        properties={"reason": "refused_by_x", "format": "post", "part_count": 1},
     )
 
 
@@ -155,7 +155,19 @@ async def test_a_community_post_is_tracked_with_where_it_went(
     await _post_now(client, "On the profile")
 
     assert [call.kwargs["properties"] for call in captured.capture.call_args_list] == [
-        {"source": "typed", "destination": "community", "share_with_followers": True},
-        {"source": "typed", "destination": "community", "share_with_followers": False},
-        {"source": "typed", "destination": "profile"},
+        {
+            "source": "typed",
+            "destination": "community",
+            "share_with_followers": True,
+            "format": "post",
+            "part_count": 1,
+        },
+        {
+            "source": "typed",
+            "destination": "community",
+            "share_with_followers": False,
+            "format": "post",
+            "part_count": 1,
+        },
+        {"source": "typed", "destination": "profile", "format": "post", "part_count": 1},
     ]

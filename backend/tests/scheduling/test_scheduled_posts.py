@@ -330,8 +330,17 @@ async def test_published_and_failed_are_tracked_for_analytics(
         "scheduled_post_failed",
     ]
     published, failed = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "typed", "destination": "profile"}
-    assert failed.kwargs["properties"] == {"reason": "outcome_unknown"}
+    assert published.kwargs["properties"] == {
+        "source": "typed",
+        "destination": "profile",
+        "format": "post",
+        "part_count": 1,
+    }
+    assert failed.kwargs["properties"] == {
+        "reason": "outcome_unknown",
+        "format": "post",
+        "part_count": 1,
+    }
 
 
 async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
@@ -347,7 +356,7 @@ async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "refused_by_x"},
+        properties={"reason": "refused_by_x", "format": "post", "part_count": 1},
     )
 
 
@@ -507,7 +516,12 @@ async def test_post_now_on_a_final_publishes_it_and_tracks_it_as_from_a_final(
     assert response.json()["source_version_id"] == final["id"]
     assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
     [published] = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "final", "destination": "profile"}
+    assert published.kwargs["properties"] == {
+        "source": "final",
+        "destination": "profile",
+        "format": "post",
+        "part_count": 1,
+    }
 
 
 async def test_a_typed_scheduled_post_has_no_source_version(

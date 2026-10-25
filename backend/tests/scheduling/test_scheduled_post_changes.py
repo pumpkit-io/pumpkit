@@ -66,6 +66,54 @@ async def test_editing_the_parts_of_a_scheduled_post_replaces_them_all_in_order(
     assert await _listed(client) == [shortened.json()]
 
 
+async def _failed_after_part_one(client: AsyncClient, fake_x_publisher) -> dict:
+    """A Thread whose Part 1 is live and whose Part 2 X refused."""
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    fake_x_publisher.fail_publish_on = 2
+    response = await client.post(
+        SCHEDULED_POSTS, json={"parts": ["Live one.", "Refused two."], "publish_now": True}
+    )
+    assert response.json()["state"] == "failed", response.text
+    fake_x_publisher.fail_publish = None
+    return response.json()
+
+
+async def test_the_parts_of_a_thread_with_a_live_part_cannot_change(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    failed = await _failed_after_part_one(client, fake_x_publisher)
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{failed['id']}", json={"parts": ["Changed one.", "Fixed two."]}
+    )
+
+    assert response.status_code == 409
+    assert await _listed(client) == [failed]
+
+
+async def test_rescheduling_a_thread_failed_partway_publishes_only_the_parts_not_live(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    failed = await _failed_after_part_one(client, fake_x_publisher)
+    await client.patch(
+        f"{SCHEDULED_POSTS}/{failed['id']}", json={"publish_at": "2026-10-10T13:00:00Z"}
+    )
+    fixed_clock.advance(timedelta(hours=1))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    [published] = await _listed(client)
+    assert published["state"] == "published"
+    assert [text for _, text in fake_x_publisher.published] == [
+        "Live one.",
+        "Refused two.",
+        "Refused two.",
+    ]
+    assert fake_x_publisher.replied_to[-1] == "1890000000000000001"
+
+
 async def test_an_edited_part_over_the_limit_is_refused_naming_the_part(
     client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
