@@ -29,7 +29,7 @@ from pumpkit.x_connection.x_publisher import XAccount, XPostRejectedError
 COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
 OCTOBER_FULL = (
-    "You have 2 Scheduled posts in October 2026, the most for one month. "
+    "You have 2 X posts in October 2026, the most for one month. "
     "The cap resets on November 1, 2026."
 )
 
@@ -80,7 +80,7 @@ async def _listed(db, user) -> list[ScheduledPostResponse]:
 
 @pytest.fixture
 def cap_of_two(monkeypatch):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
 @pytest.mark.parametrize(
@@ -371,7 +371,7 @@ async def test_a_full_december_resets_on_january_1(create, connect_x, cap_of_two
         await create(publish_at=_at("2026-12-15T09:00:00Z"))
 
     assert refused.value.detail == (
-        "You have 2 Scheduled posts in December 2026, the most for one month. "
+        "You have 2 X posts in December 2026, the most for one month. "
         "The cap resets on January 1, 2027."
     )
 
@@ -411,7 +411,7 @@ async def test_rescheduling_into_a_full_month_is_refused_but_moving_within_it_is
 
 
 async def test_with_no_cap_a_month_takes_more_than_100(create, connect_x, monkeypatch):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", None)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", None)
     await connect_x()
     for day in range(11, 31):
         for hour in range(9, 14):
@@ -427,7 +427,7 @@ async def test_with_no_cap_a_month_takes_more_than_100(create, connect_x, monkey
 async def test_with_a_cap_of_0_nothing_can_be_scheduled_or_posted_now(
     create, connect_x, fake_x_publisher, monkeypatch
 ):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 0)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 0)
     await connect_x()
 
     with pytest.raises(MonthFull):
@@ -528,7 +528,7 @@ async def test_without_an_x_connection_the_community_is_not_looked_up(create, fa
 async def test_a_full_month_is_refused_before_the_community_lookup(
     create, connect_x, fake_x_reader, monkeypatch
 ):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 0)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 0)
     await connect_x()
 
     with pytest.raises(MonthFull):

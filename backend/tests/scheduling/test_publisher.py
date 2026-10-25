@@ -60,6 +60,92 @@ async def test_a_scheduled_post_is_published_once_due_and_never_before(
     assert fake_x_publisher.published == [("access-1001-1", "At five past")]
 
 
+async def _schedule_thread(client: AsyncClient, publish_at: str, parts: list[str]) -> str:
+    response = await client.post(SCHEDULED_POSTS, json={"parts": parts, "publish_at": publish_at})
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+async def test_a_due_thread_goes_out_as_a_chain_each_part_replying_to_the_one_before(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    await _schedule_thread(client, "2026-10-10T12:05:00Z", ["Part one", "Part two", "Part three"])
+    fixed_clock.advance(timedelta(minutes=5))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    assert [text for _, text in fake_x_publisher.published] == [
+        "Part one",
+        "Part two",
+        "Part three",
+    ]
+    assert fake_x_publisher.replied_to == [
+        None,
+        "1890000000000000001",
+        "1890000000000000002",
+    ]
+    published = (await _listed(client))["Part one"]
+    assert published["state"] == "published"
+    assert published["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
+    assert [(p["live"], p["x_post_url"]) for p in published["parts"]] == [
+        (True, "https://x.com/i/web/status/1890000000000000001"),
+        (True, "https://x.com/i/web/status/1890000000000000002"),
+        (True, "https://x.com/i/web/status/1890000000000000003"),
+    ]
+
+
+async def test_a_thread_x_rate_limits_partway_goes_on_from_that_part_after_a_backoff(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    await _schedule_thread(client, "2026-10-10T12:02:00Z", ["One", "Two", "Three"])
+    fixed_clock.advance(timedelta(minutes=2))
+    fake_x_publisher.fail_publish = XRateLimitedError("429")
+    fake_x_publisher.fail_publish_on = 2
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    waiting = (await _listed(client))["One"]
+    assert waiting["state"] == "scheduled"
+    assert [p["live"] for p in waiting["parts"]] == [True, False, False]
+
+    fixed_clock.advance(timedelta(minutes=1))
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    assert [text for _, text in fake_x_publisher.published] == ["One", "Two", "Two", "Three"]
+    assert fake_x_publisher.replied_to == [
+        None,
+        "1890000000000000001",
+        "1890000000000000001",
+        "1890000000000000003",
+    ]
+    published = (await _listed(client))["One"]
+    assert published["state"] == "published"
+    # The time of the pass that got the last Part out.
+    assert published["published_at"] == "2026-10-10T12:03:30Z"
+    assert published["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
+
+
+async def test_a_thread_is_not_published_while_a_part_is_not_live(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    await _schedule_thread(client, "2026-10-10T12:02:00Z", ["First", "Second"])
+    fixed_clock.advance(timedelta(minutes=2))
+    fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
+    fake_x_publisher.fail_publish_on = 2
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    failed = (await _listed(client))["First"]
+    assert failed["state"] == "failed"
+    assert failed["published_at"] is None
+    assert failed["x_post_url"] is None
+    assert [p["live"] for p in failed["parts"]] == [True, False]
+    assert len(fake_x_publisher.published) == 2
+
+
 async def test_a_due_community_post_goes_out_in_its_community(
     client, db_session_maker, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, connect_x
 ):
@@ -300,7 +386,7 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "outcome_unknown"},
+        properties={"reason": "outcome_unknown", "format": "post", "part_count": 1},
     )
 
 
@@ -385,7 +471,7 @@ async def test_the_pass_tracks_what_it_publishes(
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
-    await _schedule(client, "2026-10-10T12:02:00Z")
+    await _schedule_thread(client, "2026-10-10T12:02:00Z", ["One", "Two"])
     fixed_clock.advance(timedelta(minutes=2))
 
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
@@ -393,7 +479,12 @@ async def test_the_pass_tracks_what_it_publishes(
     captured.capture.assert_called_once_with(
         "scheduled_post_published",
         distinct_id=subscribed.user_id,
-        properties={"source": "typed", "destination": "profile"},
+        properties={
+            "source": "typed",
+            "destination": "profile",
+            "format": "thread",
+            "part_count": 2,
+        },
     )
 
 

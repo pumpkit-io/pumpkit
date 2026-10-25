@@ -88,7 +88,7 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 | `X_CLIENT_ID` | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the X settings; connecting an X account then fails with a 503 naming them. Register `PUBLIC_URL/oauth/x/callback` as a callback URL on the X app. |
 | `X_CLIENT_SECRET` | That X app's client secret. Pumpkit calls X as a confidential client. |
 | `PUBLISHER_POLL_INTERVAL_SECONDS` | How often the publisher process looks for due Scheduled posts. Defaults to 30, so a Scheduled post goes out within about 30 seconds of its time. |
-| `SCHEDULED_POSTS_MONTHLY_CAP` | Most Scheduled posts a User may have whose publish time falls in one UTC calendar month, counting Published, waiting and Failed ones (a cancelled one frees its place). Creating, Post now or rescheduling into a full month is refused with the date the cap resets. Defaults to 100. It bounds what the Instance's X app pays for publishing (ADR 0006). Set it empty for no cap, when you pay for your own X app; `0` turns scheduling off. |
+| `X_POSTS_MONTHLY_CAP` | Most X posts a User may have whose publish time falls in one UTC calendar month, counting the Parts of Published, waiting and Failed Scheduled posts: a single post is one X post, a Thread one per Part (a cancelled one frees its places). Creating, Post now, rescheduling or adding Parts that would go over is refused with the date the cap resets. Defaults to 100. It bounds what the Instance's X app pays for publishing (ADR 0006). Set it empty for no cap, when you pay for your own X app; `0` turns scheduling off. |
 
 ### Stripe billing
 

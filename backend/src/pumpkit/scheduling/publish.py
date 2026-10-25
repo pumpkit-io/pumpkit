@@ -13,8 +13,9 @@ import pumpkit.billing.service as subscriptions_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.time import as_utc
+from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD
 from pumpkit.scheduling import service
-from pumpkit.scheduling.models import ScheduledPost
+from pumpkit.scheduling.models import ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
@@ -128,15 +129,25 @@ async def fresh_access_token(
     return tokens.access_token
 
 
-async def call_x(publisher: XPublisher, scheduled_post: ScheduledPost, *, access_token: str) -> str:
-    """X's post id, or `Failed`. A "reconnect_needed" one means X refused the access token."""
+async def call_x(
+    publisher: XPublisher,
+    scheduled_post: ScheduledPost,
+    part: ScheduledPostPart,
+    *,
+    reply_to: Optional[str],
+    access_token: str,
+) -> str:
+    """
+    X's post id for `part`, sent as a reply to `reply_to` when given, or `Failed`. A
+    "reconnect_needed" one means X refused the access token.
+    """
     try:
         return await publisher.publish(
             access_token=access_token,
-            # TODO(#152): publish every Part as a chain; only the first goes out until then.
-            text=scheduled_post.parts[0].text,
+            text=part.text,
             community_id=scheduled_post.community_id,
             share_with_followers=scheduled_post.share_with_followers,
+            reply_to=reply_to,
         )
     except XReconnectNeededError:
         raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
@@ -176,6 +187,11 @@ def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optiona
     return min(now + FIRST_BACKOFF * 2**scheduled_post.retry_count, deadline)
 
 
+def _shape(scheduled_post: ScheduledPost) -> dict[str, object]:
+    part_count = len(scheduled_post.parts)
+    return {"format": FORMAT_THREAD if part_count > 1 else FORMAT_POST, "part_count": part_count}
+
+
 def capture_published(scheduled_post: ScheduledPost) -> None:
     properties: dict[str, object] = {
         "source": "final" if scheduled_post.source_version_id else "typed",
@@ -184,11 +200,15 @@ def capture_published(scheduled_post: ScheduledPost) -> None:
     if scheduled_post.community_id:
         properties["share_with_followers"] = scheduled_post.share_with_followers
     posthog_client.capture(
-        "scheduled_post_published", distinct_id=scheduled_post.user_id, properties=properties
+        "scheduled_post_published",
+        distinct_id=scheduled_post.user_id,
+        properties={**properties, **_shape(scheduled_post)},
     )
 
 
-def capture_failed(user_id: str, category: FailureCategory) -> None:
+def capture_failed(scheduled_post: ScheduledPost, category: FailureCategory) -> None:
     posthog_client.capture(
-        "scheduled_post_failed", distinct_id=user_id, properties={"reason": category}
+        "scheduled_post_failed",
+        distinct_id=scheduled_post.user_id,
+        properties={"reason": category, **_shape(scheduled_post)},
     )

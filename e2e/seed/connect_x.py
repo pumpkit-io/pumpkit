@@ -1,0 +1,40 @@
+"""Give the seeded e2e user an X connection, so the Scheduled page lets them schedule.
+
+Its tokens are fakes: nothing in the smoke tests reaches X, and `seed_user.py` removes the
+connection again on the next run. Run it like `seed_user.py`, after it.
+"""
+
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+
+import pumpkit.x_connection.service as x_connections_service
+from pumpkit.auth.models import User
+from pumpkit.core.db.session import _db_session_handler
+from pumpkit.x_connection.x_publisher import XAccount, XTokens
+
+E2E_EMAIL = "e2e@e2e-user.dev"
+
+
+async def main() -> None:
+    now = datetime.now(timezone.utc)
+    async with _db_session_handler.async_session_maker() as db:
+        user = (await db.execute(select(User).where(User.email == E2E_EMAIL))).scalar_one()
+        await x_connections_service.save_connection(
+            db,
+            user_id=user.id,
+            account=XAccount(user_id="e2e-x-user", handle="e2e_user", subscription_type="None"),
+            tokens=XTokens(
+                access_token="e2e-access",
+                refresh_token="e2e-refresh",
+                expires_at=now + timedelta(hours=2),
+                scope="tweet.read tweet.write users.read offline.access",
+            ),
+            now=now,
+        )
+        await db.commit()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

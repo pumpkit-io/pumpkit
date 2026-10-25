@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,14 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { xWeightedLength } from '@/lib/xLength';
 import type { ScheduledPost, ScheduledPostChanges } from '@/services/scheduledPostService';
 import { destinationFrom, PROFILE_DRAFT, type DestinationDraft } from './communities';
 import { DestinationField } from './DestinationField';
 import { localInputValue } from './localTime';
+import { PartEditor } from './PartEditor';
+import { partDrafts, partsSendable, partTexts } from './partDrafts';
 import { PublishTimeField } from './PublishTimeField';
-import { XLengthCounter } from './XLengthCounter';
 
 function draftOf(post: ScheduledPost): DestinationDraft {
   if (!post.community) return PROFILE_DRAFT;
@@ -41,17 +40,20 @@ function EditForm({
   const failed = post.state === 'failed';
   // A Failed one's time has passed: it needs a new one.
   const originalWhen = failed ? '' : localInputValue(new Date(post.publishAt));
-  const [first, ...rest] = post.parts.map((part) => part.text);
-  const [text, setText] = useState(first);
+  const originalTexts = post.parts.map((part) => part.text);
+  // Parts already on X can't change, so a Thread with one live keeps all its Parts.
+  const locked = post.parts.some((part) => part.live);
+  const [parts, setParts] = useState(() => partDrafts(originalTexts));
   const [when, setWhen] = useState(originalWhen);
   const [draft, setDraft] = useState(() => draftOf(post));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const length = useMemo(() => xWeightedLength(text), [text]);
 
   const changes: ScheduledPostChanges = {};
-  // Only the first Part is editable here; the others go back unchanged.
-  if (text !== first) changes.parts = [text, ...rest];
+  const texts = partTexts(parts);
+  if (texts.length !== originalTexts.length || texts.some((t, i) => t !== originalTexts[i])) {
+    changes.parts = texts;
+  }
   // A datetime-local value without an offset parses as local time.
   if (when && when !== originalWhen) changes.publishAt = new Date(when).toISOString();
   const destination = destinationFrom(draft);
@@ -89,17 +91,18 @@ function EditForm({
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3 px-6 pb-4">
-        <label htmlFor="edit-scheduled-post-text" className="sr-only">
-          Post text
-        </label>
-        <Textarea
-          id="edit-scheduled-post-text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={5}
-          disabled={saving}
-        />
-        <XLengthCounter length={length} limit={charLimit} />
+        {locked ? (
+          <ol className="list-decimal space-y-1.5 pl-5 font-sans text-sm text-foreground">
+            {post.parts.map((part, index) => (
+              <li key={index} className="whitespace-pre-wrap break-words">
+                {part.text}
+                {part.live && <span className="text-muted-foreground"> (on X)</span>}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <PartEditor parts={parts} onChange={setParts} charLimit={charLimit} disabled={saving} />
+        )}
         <DestinationField value={draft} onChange={setDraft} disabled={saving} />
         <PublishTimeField value={when} onChange={setWhen} disabled={saving} />
         {error && <ErrorBanner message={error} />}
@@ -111,7 +114,7 @@ function EditForm({
         <Button
           type="submit"
           className="h-10"
-          disabled={saving || nothingToSave || !destination || length > charLimit || !text.trim()}
+          disabled={saving || nothingToSave || !destination || !partsSendable(parts, charLimit)}
         >
           {failed ? 'Reschedule' : 'Save'}
         </Button>

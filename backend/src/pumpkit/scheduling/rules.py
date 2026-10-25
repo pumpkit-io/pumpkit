@@ -55,14 +55,22 @@ def month_bounds(moment: datetime) -> tuple[datetime, datetime]:
     return start, start.replace(month=start.month + 1)
 
 
-def check_month_has_room(count: int, *, cap: int, moment: datetime) -> None:
-    """`count` is the User's Scheduled posts already in the UTC month of `moment`."""
-    if count < cap:
+def check_month_has_room(count: int, *, adding: int, cap: int, moment: datetime) -> None:
+    """
+    `count` is the User's X posts already in the UTC month of `moment`, and `adding` the Parts
+    that would join them.
+    """
+    if count + adding <= cap:
         return
     start, end = month_bounds(moment)
+    resets = f"The cap resets on {end:%B} {end.day}, {end.year}."
+    if count >= cap:
+        raise MonthFull(
+            f"You have {cap} X posts in {start:%B %Y}, the most for one month. {resets}"
+        )
     raise MonthFull(
-        f"You have {cap} Scheduled posts in {start:%B %Y}, the most for one month. "
-        f"The cap resets on {end:%B} {end.day}, {end.year}."
+        f"These {adding} Parts would take you over the cap of {cap} X posts in {start:%B %Y}: "
+        f"you have {count} already. {resets}"
     )
 
 

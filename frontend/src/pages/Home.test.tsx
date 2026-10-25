@@ -569,6 +569,8 @@ describe('Home', () => {
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'final',
         post_now: false,
         destination: 'profile',
@@ -626,6 +628,8 @@ describe('Home', () => {
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'final',
         post_now: true,
         destination: 'profile',
@@ -784,6 +788,8 @@ describe('Home', () => {
           { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
         );
         expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+          format: 'post',
+          part_count: 1,
           source: 'final',
           post_now: true,
           destination: 'community',
@@ -844,6 +850,8 @@ describe('Home', () => {
           { community: { id: '123', name: null }, shareWithFollowers: false },
         );
         expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+          format: 'post',
+          part_count: 1,
           source: 'final',
           post_now: false,
           destination: 'community',

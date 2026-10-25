@@ -330,8 +330,17 @@ async def test_published_and_failed_are_tracked_for_analytics(
         "scheduled_post_failed",
     ]
     published, failed = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "typed", "destination": "profile"}
-    assert failed.kwargs["properties"] == {"reason": "outcome_unknown"}
+    assert published.kwargs["properties"] == {
+        "source": "typed",
+        "destination": "profile",
+        "format": "post",
+        "part_count": 1,
+    }
+    assert failed.kwargs["properties"] == {
+        "reason": "outcome_unknown",
+        "format": "post",
+        "part_count": 1,
+    }
 
 
 async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
@@ -347,7 +356,7 @@ async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "refused_by_x"},
+        properties={"reason": "refused_by_x", "format": "post", "part_count": 1},
     )
 
 
@@ -507,7 +516,12 @@ async def test_post_now_on_a_final_publishes_it_and_tracks_it_as_from_a_final(
     assert response.json()["source_version_id"] == final["id"]
     assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
     [published] = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "final", "destination": "profile"}
+    assert published.kwargs["properties"] == {
+        "source": "final",
+        "destination": "profile",
+        "format": "post",
+        "part_count": 1,
+    }
 
 
 async def test_a_typed_scheduled_post_has_no_source_version(
@@ -540,13 +554,56 @@ async def test_a_source_version_that_is_not_one_of_the_user_s_versions_is_refuse
 
 @pytest.fixture
 def cap_of_two(monkeypatch):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
 OCTOBER_FULL = (
-    "You have 2 Scheduled posts in October 2026, the most for one month. "
+    "You have 2 X posts in October 2026, the most for one month. "
     "The cap resets on November 1, 2026."
 )
+
+
+async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
+):
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
+    await connect_x()
+    thread = await client.post(
+        SCHEDULED_POSTS, json={"parts": ["One", "Two"], "publish_at": "2026-10-11T09:00:00Z"}
+    )
+    single = await _schedule(client, "2026-10-12T09:00:00Z", "Three")
+
+    refused = await _schedule(client, "2026-10-13T09:00:00Z", "Four")
+
+    assert thread.status_code == single.status_code == 201
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "You have 3 X posts in October 2026, the most for one month. "
+        "The cap resets on November 1, 2026."
+    )
+
+
+async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is_scheduled(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
+):
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
+    await connect_x()
+    first = await _schedule(client, "2026-10-11T09:00:00Z", "First")
+
+    for fields in ({"publish_at": "2026-10-12T09:00:00Z"}, {"publish_now": True}):
+        response = await client.post(
+            SCHEDULED_POSTS, json={"parts": ["One", "Two", "Three"], **fields}
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == (
+            "These 3 Parts would take you over the cap of 3 X posts in October 2026: you have "
+            "1 already. The cap resets on November 1, 2026."
+        )
+    assert [p["id"] for p in (await client.get(SCHEDULED_POSTS)).json()["data"]] == [
+        first.json()["id"]
+    ]
+    assert fake_x_publisher.published == []
 
 
 async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_resets(

@@ -84,6 +84,19 @@ async def test_scheduling_parts_answers_with_each_part_in_order_and_none_live(
     ]
 
 
+async def test_post_now_with_parts_publishes_them_as_a_thread(
+    connected, mcp, fake_x_publisher, fixed_clock
+):
+    result = await mcp.call_tool("post_now", parts=["Thread start.", "Thread end."])
+
+    assert result["isError"] is False, result
+    published = result["structuredContent"]
+    assert published["state"] == "published"
+    assert published["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
+    assert [part["live"] for part in published["parts"]] == [True, True]
+    assert fake_x_publisher.replied_to == [None, "1890000000000000001"]
+
+
 async def test_editing_replaces_the_parts_and_refuses_one_over_the_limit_by_name(
     connected, mcp, fixed_clock
 ):
@@ -144,7 +157,7 @@ async def test_a_time_without_its_utc_offset_is_refused(connected, mcp, fixed_cl
 async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
     connected, client, mcp, fixed_clock, monkeypatch
 ):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
     from_web = await client.post(
         "/api/v1/scheduled-posts", json={"parts": ["First"], "publish_at": "2026-10-11T09:00:00Z"}
     )
@@ -154,7 +167,7 @@ async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
     result = await _schedule(mcp, text="Third", at="2026-10-12T09:00:00Z")
 
     assert error_text(result) == (
-        "You have 2 Scheduled posts in October 2026, the most for one month. "
+        "You have 2 X posts in October 2026, the most for one month. "
         "The cap resets on November 1, 2026."
     )
 

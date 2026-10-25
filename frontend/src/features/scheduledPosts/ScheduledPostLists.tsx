@@ -24,12 +24,25 @@ function ListSection({
   );
 }
 
+/** A Thread is one item, its Part count above its Parts. */
 function PostText({ post }: { post: ScheduledPost }) {
-  return post.parts.map((part, index) => (
-    <p key={index} className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
-      {part.text}
-    </p>
-  ));
+  return (
+    <>
+      {post.parts.length > 1 && (
+        <p className="font-sans text-xs font-medium text-muted-foreground">
+          Thread, {post.parts.length} Parts
+        </p>
+      )}
+      {post.parts.map((part, index) => (
+        <p
+          key={index}
+          className="whitespace-pre-wrap break-words font-sans text-sm text-foreground"
+        >
+          {part.text}
+        </p>
+      ))}
+    </>
+  );
 }
 
 /**

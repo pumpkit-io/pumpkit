@@ -383,6 +383,8 @@ describe('Scheduled', () => {
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: true,
         destination: 'profile',
@@ -577,6 +579,8 @@ describe('Scheduled', () => {
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(box.getByLabelText('Date and time')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: false,
         destination: 'profile',
@@ -615,7 +619,7 @@ describe('Scheduled', () => {
 
     it('says when the monthly cap resets once a month is full', async () => {
       const full =
-        'You have 100 Scheduled posts in October 2026, the most for one month. ' +
+        'You have 100 X posts in October 2026, the most for one month. ' +
         'The cap resets on November 1, 2026.';
       vi.mocked(scheduledPostService.schedule).mockRejectedValue(apiError(409, full));
       renderScheduled();
@@ -644,6 +648,181 @@ describe('Scheduled', () => {
       });
 
       expect(box.getByRole('button', { name: 'Schedule' })).toBeDisabled();
+    });
+  });
+
+  describe('Threads', () => {
+    const THREAD: ScheduledPost = {
+      ...MONDAY,
+      id: 'scheduled_post_05',
+      parts: [
+        { text: 'A Thread starts here.', live: false, xPostUrl: null },
+        { text: 'And ends here.', live: false, xPostUrl: null },
+      ],
+    };
+
+    beforeEach(() => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    });
+
+    it('schedules a Thread typed Part by Part', async () => {
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue(THREAD);
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), {
+        target: { value: 'A Thread starts here.' },
+      });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      expect(box.getByLabelText('Part 1')).toHaveValue('A Thread starts here.');
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'And ends here.' } });
+      fireEvent.change(box.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(box.getByRole('button', { name: 'Schedule' }));
+
+      const upcoming = await upcomingList();
+      expect(await upcoming.findByText('Thread, 2 Parts')).toBeInTheDocument();
+      expect(upcoming.getAllByRole('listitem')).toHaveLength(1);
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        { parts: ['A Thread starts here.', 'And ends here.'] },
+        '2026-10-12T07:00:00.000Z',
+        { community: null, shareWithFollowers: false },
+      );
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'thread',
+        part_count: 2,
+        source: 'typed',
+        post_now: false,
+        destination: 'profile',
+      });
+      expect(box.getByLabelText('Post text')).toHaveValue('');
+    });
+
+    it('reorders and removes Parts', async () => {
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'One' } });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'Two' } });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(box.getByLabelText('Part 3'), { target: { value: 'Three' } });
+
+      fireEvent.click(box.getByRole('button', { name: 'Move Part 3 up' }));
+      expect(box.getByLabelText('Part 2')).toHaveValue('Three');
+      expect(box.getByRole('button', { name: 'Move Part 1 up' })).toBeDisabled();
+      expect(box.getByRole('button', { name: 'Move Part 3 down' })).toBeDisabled();
+      fireEvent.click(box.getByRole('button', { name: 'Move Part 1 down' }));
+      expect(box.getByLabelText('Part 1')).toHaveValue('Three');
+      fireEvent.click(box.getByRole('button', { name: 'Remove Part 2' }));
+      expect(box.getByLabelText('Part 1')).toHaveValue('Three');
+      expect(box.getByLabelText('Part 2')).toHaveValue('Two');
+      fireEvent.click(box.getByRole('button', { name: 'Remove Part 1' }));
+
+      expect(box.getByLabelText('Post text')).toHaveValue('Two');
+      expect(box.queryByRole('button', { name: /remove part/i })).not.toBeInTheDocument();
+    });
+
+    it('counts each Part and holds back sending while one is over the limit or empty', async () => {
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'Fine.' } });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'a'.repeat(281) } });
+
+      expect(box.getByText('5 / 280')).toBeInTheDocument();
+      expect(box.getByText('1 character over the 280 limit')).toBeInTheDocument();
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'Fine too.' } });
+      expect(box.getByRole('button', { name: 'Post now' })).toBeEnabled();
+    });
+
+    it('edits, adds and reorders the Parts of an upcoming Thread', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([THREAD]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...THREAD,
+        parts: [
+          { text: 'And ends here.', live: false, xPostUrl: null },
+          { text: 'A Thread starts here!', live: false, xPostUrl: null },
+          { text: 'One more.', live: false, xPostUrl: null },
+        ],
+      });
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      fireEvent.click(
+        within((await upcoming.findByText('A Thread starts here.')).closest('li')!).getByRole(
+          'button',
+          { name: 'Edit' },
+        ),
+      );
+      const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
+      fireEvent.change(dialog.getByLabelText('Part 1'), {
+        target: { value: 'A Thread starts here!' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Move Part 2 up' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(dialog.getByLabelText('Part 3'), { target: { value: 'One more.' } });
+      fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(scheduledPostService.edit).toHaveBeenCalledWith(THREAD.id, {
+        parts: ['And ends here.', 'A Thread starts here!', 'One more.'],
+      });
+      expect(await (await upcomingList()).findByText('Thread, 3 Parts')).toBeInTheDocument();
+    });
+
+    it('shows the Parts of a Thread with one already on X without letting them change', async () => {
+      const failedPartway: ScheduledPost = {
+        ...THREAD,
+        state: 'failed',
+        parts: [
+          { ...THREAD.parts[0], live: true, xPostUrl: 'https://x.com/i/web/status/1' },
+          THREAD.parts[1],
+        ],
+        failedReason:
+          "X didn't confirm this post. It may have been published. Check your X profile.",
+      };
+      vi.mocked(scheduledPostService.list).mockResolvedValue([failedPartway]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({ ...THREAD, state: 'scheduled' });
+      renderScheduled();
+
+      const failedList = within(await screen.findByRole('region', { name: 'Failed' }));
+      fireEvent.click(await failedList.findByRole('button', { name: 'Reschedule' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
+      expect(dialog.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(dialog.getByText('A Thread starts here.')).toBeInTheDocument();
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
+
+      await vi.waitFor(() =>
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(THREAD.id, {
+          publishAt: '2026-10-12T07:00:00.000Z',
+        }),
+      );
+    });
+
+    it('holds back saving a Thread while one of its Parts is over the limit', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([THREAD]);
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      fireEvent.click(
+        within((await upcoming.findByText('And ends here.')).closest('li')!).getByRole('button', {
+          name: 'Edit',
+        }),
+      );
+      const dialog = within(await screen.findByRole('dialog'));
+      fireEvent.change(dialog.getByLabelText('Part 2'), { target: { value: 'a'.repeat(281) } });
+
+      expect(dialog.getByText('1 character over the 280 limit')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
     });
   });
 
@@ -805,6 +984,8 @@ describe('Scheduled', () => {
         },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: true,
         destination: 'community',
@@ -838,6 +1019,8 @@ describe('Scheduled', () => {
         { community: { id: '123', name: null }, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: false,
         destination: 'community',
