@@ -8,6 +8,7 @@ export interface Tell {
 
 /** The shape of a Version's text: a single X post, or a Thread. */
 export type Format = 'post' | 'thread';
+export const FORMAT_POST: Format = 'post';
 
 /** One Part of a Final, in its place in the order. */
 export interface Part {
@@ -71,8 +72,8 @@ export const FEEDBACK_MAX_CHARS = 100_000;
 
 export const postService = {
   /** Writes the first Version before answering, which can take a minute or two. */
-  start: async (brief: string): Promise<Post> => {
-    const { data } = await apiService.post<PostApi>('/posts', { brief });
+  start: async (brief: string, format: Format): Promise<Post> => {
+    const { data } = await apiService.post<PostApi>('/posts', { brief, format });
     return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
   },
   /** Writes the next Version from Feedback before answering, which can take a minute or two. */

@@ -3,7 +3,7 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { track } from '@/lib/analytics';
 import { timeOfDay } from '@/lib/relativeTime';
 import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
-import { postService, type Post } from '@/services/postService';
+import { postService, type Format, type Post } from '@/services/postService';
 
 /** A 4xx: the backend turned the request down before writing anything, so no Version failed. */
 function isRefusal(e: unknown): boolean {
@@ -34,13 +34,13 @@ export function usePostWriter() {
 
   /** Every call starts a new Post, a retry after a failure included. */
   const start = useCallback(
-    async (brief: string) => {
+    async (brief: string, format: Format) => {
       setIsWriting(true);
       setError(null);
       setNotice(null);
       track('post_version_requested', { kind: 'brief' });
       try {
-        setPost(await postService.start(brief));
+        setPost(await postService.start(brief, format));
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
         fail(e, "Couldn't write the Post. Please try again.");
