@@ -29,7 +29,7 @@ async def _post_now_into(
         reader.communities[community_id] = name
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"text": "Hello", "publish_now": True, "community": community_id},
+        json={"parts": ["Hello"], "publish_now": True, "community": community_id},
     )
     assert response.status_code == 201, response.text
 
@@ -64,7 +64,7 @@ async def test_a_scheduled_post_counts_as_a_use_too(
 
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"text": "Later", "publish_at": publish_at, "community": MAKERS},
+        json={"parts": ["Later"], "publish_at": publish_at, "community": MAKERS},
     )
 
     assert response.status_code == 201, response.text
@@ -75,7 +75,7 @@ async def test_editing_a_post_into_a_community_counts_as_its_latest_use(
     client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    later = {"text": "Later", "publish_at": "2026-10-11T09:00:00Z"}
+    later = {"parts": ["Later"], "publish_at": "2026-10-11T09:00:00Z"}
     earlier_post = (await client.post(SCHEDULED_POSTS, json=later)).json()
     fixed_clock.advance(timedelta(minutes=1))
     await client.post(SCHEDULED_POSTS, json={**later, "community": MAKERS})
@@ -93,7 +93,7 @@ async def test_changing_only_the_share_with_followers_choice_is_no_new_use(
     client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    later = {"text": "Later", "publish_at": "2026-10-11T09:00:00Z"}
+    later = {"parts": ["Later"], "publish_at": "2026-10-11T09:00:00Z"}
     makers_post = (await client.post(SCHEDULED_POSTS, json={**later, "community": MAKERS})).json()
     fixed_clock.advance(timedelta(minutes=1))
     await client.post(SCHEDULED_POSTS, json={**later, "community": WRITERS})
@@ -133,7 +133,7 @@ async def test_profile_posts_add_no_past_community(
     client, subscribed, fake_x_publisher, clock, connect_x
 ):
     await connect_x()
-    await client.post(SCHEDULED_POSTS, json={"text": "Hello", "publish_now": True})
+    await client.post(SCHEDULED_POSTS, json={"parts": ["Hello"], "publish_now": True})
 
     assert await _past_communities(client) == []
 

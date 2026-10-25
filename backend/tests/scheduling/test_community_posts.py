@@ -23,7 +23,7 @@ def known_community(fake_x_reader) -> None:
 
 async def _post_now(client: AsyncClient, text: str = "Hello Community.", **destination):
     return await client.post(
-        SCHEDULED_POSTS, json={"text": text, "publish_now": True, **destination}
+        SCHEDULED_POSTS, json={"parts": [text], "publish_now": True, **destination}
     )
 
 
@@ -133,7 +133,7 @@ async def test_community_posts_count_towards_the_monthly_cap(
     await _post_now(client, "First", community=community)
     await client.post(
         SCHEDULED_POSTS,
-        json={"text": "Second", "publish_at": "2026-10-11T09:00:00Z", "community": community},
+        json={"parts": ["Second"], "publish_at": "2026-10-11T09:00:00Z", "community": community},
     )
 
     response = await _post_now(client, "Third")

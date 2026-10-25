@@ -256,9 +256,9 @@ async def test_the_x_connection_counts_the_scheduled_posts_waiting_to_go_out_on_
     await _connect(client)
     for text in ("One", "Two"):
         await client.post(
-            "/api/v1/scheduled-posts", json={"text": text, "publish_at": "2026-10-11T09:00:00Z"}
+            "/api/v1/scheduled-posts", json={"parts": [text], "publish_at": "2026-10-11T09:00:00Z"}
         )
-    await client.post("/api/v1/scheduled-posts", json={"text": "Gone", "publish_now": True})
+    await client.post("/api/v1/scheduled-posts", json={"parts": ["Gone"], "publish_now": True})
 
     response = await client.get(X_CONNECTION)
 
@@ -270,7 +270,7 @@ async def test_scheduled_posts_waiting_for_another_x_account_are_not_counted(
 ):
     await _connect(client)
     await client.post(
-        "/api/v1/scheduled-posts", json={"text": "For ada", "publish_at": "2026-10-11T09:00:00Z"}
+        "/api/v1/scheduled-posts", json={"parts": ["For ada"], "publish_at": "2026-10-11T09:00:00Z"}
     )
     fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
 

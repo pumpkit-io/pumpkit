@@ -133,7 +133,8 @@ async def call_x(publisher: XPublisher, scheduled_post: ScheduledPost, *, access
     try:
         return await publisher.publish(
             access_token=access_token,
-            text=scheduled_post.text,
+            # TODO(#152): publish every Part as a chain; only the first goes out until then.
+            text=scheduled_post.parts[0].text,
             community_id=scheduled_post.community_id,
             share_with_followers=scheduled_post.share_with_followers,
         )

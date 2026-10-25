@@ -41,7 +41,8 @@ function EditForm({
   const failed = post.state === 'failed';
   // A Failed one's time has passed: it needs a new one.
   const originalWhen = failed ? '' : localInputValue(new Date(post.publishAt));
-  const [text, setText] = useState(post.text);
+  const [first, ...rest] = post.parts.map((part) => part.text);
+  const [text, setText] = useState(first);
   const [when, setWhen] = useState(originalWhen);
   const [draft, setDraft] = useState(() => draftOf(post));
   const [saving, setSaving] = useState(false);
@@ -49,7 +50,8 @@ function EditForm({
   const length = useMemo(() => xWeightedLength(text), [text]);
 
   const changes: ScheduledPostChanges = {};
-  if (text !== post.text) changes.text = text;
+  // Only the first Part is editable here; the others go back unchanged.
+  if (text !== first) changes.parts = [text, ...rest];
   // A datetime-local value without an offset parses as local time.
   if (when && when !== originalWhen) changes.publishAt = new Date(when).toISOString();
   const destination = destinationFrom(draft);

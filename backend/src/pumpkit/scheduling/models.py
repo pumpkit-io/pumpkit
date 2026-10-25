@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy import (
     Enum as PgEnum,
@@ -38,8 +39,8 @@ FAILED: ScheduledPostState = "failed"
 
 class ScheduledPost(Base):
     """
-    A text a User set to be published on X at a time, with its own copy of the text. It is
-    claimed into publishing before X is called, so X is called at most once (ADR 0007).
+    A text a User set to be published on X at a time, with its own copy of the text as Parts.
+    It is claimed into publishing before X is called, so X is called at most once (ADR 0007).
     """
 
     __tablename__ = "scheduled_posts"
@@ -50,7 +51,6 @@ class ScheduledPost(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     # The X account it goes out on, from the X connection when it was created or rescheduled.
     x_user_id: Mapped[str] = mapped_column(String)
-    text: Mapped[str] = mapped_column(Text)
     # The Community it goes to, None for the profile, with its name as shown when it was picked.
     community_id: Mapped[Optional[str]] = mapped_column(String)
     community_name: Mapped[Optional[str]] = mapped_column(String)
@@ -64,7 +64,6 @@ class ScheduledPost(Base):
         PgEnum(*get_args(ScheduledPostState), name="scheduled_post_state_enum")
     )
     failed_reason: Mapped[Optional[str]] = mapped_column(Text)
-    x_post_id: Mapped[Optional[str]] = mapped_column(String)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     # The Version whose Final it copied: None when typed, and set to None if the Version goes.
     source_version_id: Mapped[Optional[str]] = mapped_column(
@@ -79,6 +78,37 @@ class ScheduledPost(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship()
+    # One Part is a single X post; several are a Thread.
+    parts: Mapped[list["ScheduledPostPart"]] = relationship(
+        back_populates="scheduled_post",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ScheduledPostPart.position",
+        lazy="selectin",
+    )
 
     # The publisher looks up due Scheduled posts by state and time.
     __table_args__ = (Index("ix_scheduled_posts_state_publish_at", "state", "publish_at"),)
+
+
+class ScheduledPostPart(Base):
+    """One X post of a Scheduled post, in its place in the order."""
+
+    __tablename__ = "scheduled_post_parts"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("scheduled_post_part")
+    )
+    scheduled_post_id: Mapped[str] = mapped_column(
+        ForeignKey("scheduled_posts.id", ondelete="CASCADE")
+    )
+    # From 0, the order the Parts go out in.
+    position: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    # Set once X accepts this Part: it is live and can no longer change.
+    x_post_id: Mapped[Optional[str]] = mapped_column(String)
+
+    scheduled_post: Mapped[ScheduledPost] = relationship(back_populates="parts")
+
+    # The unique index also serves the lookup of a Scheduled post's Parts.
+    __table_args__ = (UniqueConstraint("scheduled_post_id", "position"),)

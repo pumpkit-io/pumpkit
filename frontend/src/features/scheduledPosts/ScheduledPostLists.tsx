@@ -24,10 +24,12 @@ function ListSection({
   );
 }
 
-function PostText({ text }: { text: string }) {
-  return (
-    <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">{text}</p>
-  );
+function PostText({ post }: { post: ScheduledPost }) {
+  return post.parts.map((part, index) => (
+    <p key={index} className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
+      {part.text}
+    </p>
+  ));
 }
 
 /**
@@ -97,7 +99,7 @@ export function ScheduledPostLists({
           <ul className={LIST}>
             {upcoming.map((post) => (
               <li key={post.id} className={ITEM}>
-                <PostText text={post.text} />
+                <PostText post={post} />
                 <CommunityLine post={post} />
                 <p className="font-sans text-xs text-muted-foreground">
                   {post.state === 'publishing'
@@ -128,7 +130,7 @@ export function ScheduledPostLists({
           <ul className={LIST}>
             {failed.map((post) => (
               <li key={post.id} className={ITEM}>
-                <PostText text={post.text} />
+                <PostText post={post} />
                 <CommunityLine post={post} />
                 <p className="font-sans text-xs text-red-700 dark:text-red-300">
                   {post.failedReason}
@@ -161,7 +163,7 @@ export function ScheduledPostLists({
           <ul className={LIST}>
             {published.map((post) => (
               <li key={post.id} className={ITEM}>
-                <PostText text={post.text} />
+                <PostText post={post} />
                 <CommunityLine post={post} followers />
                 <p className="flex flex-wrap gap-x-3 font-sans text-xs text-muted-foreground">
                   {post.publishedAt && (

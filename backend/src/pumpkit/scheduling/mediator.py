@@ -19,7 +19,13 @@ from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
-from pumpkit.scheduling.models import FAILED, SCHEDULED, ScheduledPost, ScheduledPostState
+from pumpkit.scheduling.models import (
+    FAILED,
+    PUBLISHED,
+    SCHEDULED,
+    ScheduledPost,
+    ScheduledPostState,
+)
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import (
     KeepDestination,
@@ -31,6 +37,7 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import (
     CommunityResponse,
     PastCommunitiesResponse,
+    ScheduledPostPartResponse,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
     XConnectionResponse,
@@ -49,18 +56,30 @@ def _community_response(community_id: str, name: Optional[str]) -> CommunityResp
     )
 
 
+def _x_post_url(x_post_id: Optional[str]) -> Optional[str]:
+    # X redirects this to the post under the account's current handle.
+    return f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None
+
+
 def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostResponse:
     published_at = scheduled_post.published_at
-    x_post_id = scheduled_post.x_post_id
     community_id = scheduled_post.community_id
     return ScheduledPostResponse(
         id=scheduled_post.id,
-        text=scheduled_post.text,
+        parts=[
+            ScheduledPostPartResponse(
+                text=part.text,
+                live=part.x_post_id is not None,
+                x_post_url=_x_post_url(part.x_post_id),
+            )
+            for part in scheduled_post.parts
+        ],
         state=scheduled_post.state,
         publish_at=as_utc(scheduled_post.publish_at),
         published_at=as_utc(published_at) if published_at else None,
-        # X redirects this to the post under the account's current handle.
-        x_post_url=f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None,
+        x_post_url=_x_post_url(scheduled_post.parts[0].x_post_id)
+        if scheduled_post.state == PUBLISHED
+        else None,
         failed_reason=scheduled_post.failed_reason,
         source_version_id=scheduled_post.source_version_id,
         community=_community_response(community_id, scheduled_post.community_name)
@@ -153,11 +172,11 @@ async def create_scheduled_post(
     """
     connection = await connection_to_publish_on(db, user_id=user.id)
     if new.version_id is not None:
-        text = await _source_version_final(db, user=user, version_id=new.version_id)
+        parts = await _source_version_final(db, user=user, version_id=new.version_id)
     else:
-        assert new.text is not None
-        text = new.text
-    rules.check_length(text, limit=x_post_max_chars(connection.subscription_type))
+        assert new.parts is not None
+        parts = new.parts
+    rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_monthly_cap(db, user_id=user.id, publish_at=publish_at)
     community = await _community(reader, new.community) if new.community is not None else None
@@ -165,7 +184,7 @@ async def create_scheduled_post(
         db,
         user_id=user.id,
         x_user_id=connection.x_user_id,
-        text=text,
+        parts=parts,
         publish_at=publish_at.replace(second=0, microsecond=0) if new.publish_now else publish_at,
         now=now,
         source_version_id=new.version_id,
@@ -177,13 +196,12 @@ async def create_scheduled_post(
     return scheduled_post_response(scheduled_post)
 
 
-async def _source_version_final(db: AsyncSession, *, user: User, version_id: str) -> str:
-    """The Final a Scheduled post copies from its source Version, or a 404 unless it's the User's."""
+async def _source_version_final(db: AsyncSession, *, user: User, version_id: str) -> list[str]:
+    """The Final's Parts a Scheduled post copies, or a 404 unless the Version is the User's."""
     version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
     if version is None or not version.final_parts:
         raise NotFoundError("Version not found.")
-    # A Scheduled post holds one text until it holds Parts.
-    return version.final_parts[0]
+    return list(version.final_parts)
 
 
 async def _post_now(
@@ -216,7 +234,7 @@ async def edit_scheduled_post(
     now: datetime,
 ) -> ScheduledPostResponse:
     """
-    New text, time, Community or share with followers for a scheduled or Failed Scheduled post.
+    New Parts, time, Community or share with followers for a scheduled or Failed Scheduled post.
     A new time reschedules it on the X account connected now, so a Failed one gets another try.
     """
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
@@ -228,9 +246,9 @@ async def edit_scheduled_post(
         if edit.publish_at is not None
         else await x_connections_service.get_connection(db, user_id=user.id)
     )
-    if edit.text is not None:
+    if edit.parts is not None:
         subscription_type = connection.subscription_type if connection else None
-        rules.check_length(edit.text, limit=x_post_max_chars(subscription_type))
+        rules.check_length(edit.parts, limit=x_post_max_chars(subscription_type))
     if connection is not None and edit.publish_at is not None:
         new_publish_at = rules.check_publish_at(edit.publish_at, now=now)
         await check_monthly_cap(
@@ -241,7 +259,7 @@ async def edit_scheduled_post(
     if not await service.edit(
         db,
         scheduled_post_id=scheduled_post_id,
-        text=edit.text,
+        parts=edit.parts,
         reschedule=reschedule,
         destination=destination,
         now=now,
