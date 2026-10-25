@@ -6,6 +6,17 @@ export interface Tell {
   description: string;
 }
 
+/** The shape of a Version's text: a single X post, or a Thread. */
+export type Format = 'post' | 'thread';
+
+/** One Part of a Final, in its place in the order. */
+export interface Part {
+  text: string;
+  /** Counted by the backend, the way the limit counts; a JS string's length disagrees on emoji. */
+  charCount: number;
+  charLimit: number;
+}
+
 /** One round of a Post's text: the Draft Pumpkit wrote and the Final meant for X. */
 export interface Version {
   /** What a Scheduled post made from this Version's Final records as its source. */
@@ -13,11 +24,11 @@ export interface Version {
   number: number;
   /** Null for the first Version, which comes from the Brief. */
   feedback: string | null;
-  draft: string;
-  final: string;
-  /** Counted by the backend, the way the limit counts; a JS string's length disagrees on emoji. */
-  finalCharCount: number;
-  finalCharLimit: number;
+  format: Format;
+  /** A single X post has one Part. */
+  draftParts: string[];
+  parts: Part[];
+  /** Found in any Part of the Final. */
   tells: Tell[];
 }
 
@@ -31,10 +42,9 @@ interface VersionApi {
   id: string;
   number: number;
   feedback: string | null;
-  draft: string;
-  final: string;
-  final_char_count: number;
-  final_char_limit: number;
+  format: Format;
+  draft_parts: string[];
+  parts: { text: string; char_count: number; char_limit: number }[];
   tells: Tell[];
 }
 
@@ -48,10 +58,9 @@ const toVersion = (v: VersionApi): Version => ({
   id: v.id,
   number: v.number,
   feedback: v.feedback,
-  draft: v.draft,
-  final: v.final,
-  finalCharCount: v.final_char_count,
-  finalCharLimit: v.final_char_limit,
+  format: v.format,
+  draftParts: v.draft_parts,
+  parts: v.parts.map((p) => ({ text: p.text, charCount: p.char_count, charLimit: p.char_limit })),
   tells: v.tells,
 });
 

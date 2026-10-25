@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from pumpkit.core.db.base import Base
 from pumpkit.core.ids import ulid_with_prefix
+from pumpkit.posts.formats import Format
 
 if TYPE_CHECKING:
     from pumpkit.auth.models import User
@@ -58,14 +59,20 @@ class VersionAttempt(Base):
     sequence: Mapped[int] = mapped_column(Integer)
     # None for the first Version, which comes from the Brief.
     feedback: Mapped[Optional[str]] = mapped_column(Text)
+    # Stored on a failed attempt too, so a retry can ask for the same Format.
+    format: Mapped[Format] = mapped_column(PgEnum(*get_args(Format), name="version_format_enum"))
     status: Mapped[VersionAttemptStatus] = mapped_column(
         PgEnum(*get_args(VersionAttemptStatus), name="version_attempt_status_enum")
     )
     # Counts succeeded attempts only: the number the User sees.
     version_number: Mapped[Optional[int]] = mapped_column(Integer)
-    draft: Mapped[Optional[str]] = mapped_column(Text)
-    final: Mapped[Optional[str]] = mapped_column(Text)
-    final_char_count: Mapped[Optional[int]] = mapped_column(Integer)
+    # The Part texts in order; a single X post has one.
+    draft_parts: Mapped[Optional[list[str]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
+    final_parts: Mapped[Optional[list[str]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
     # The draft call's model on a first Version, the revision call's on a later one.
     writing_model: Mapped[Optional[str]] = mapped_column(String)
     humanizing_model: Mapped[Optional[str]] = mapped_column(String)
@@ -78,7 +85,8 @@ class VersionAttempt(Base):
     # name is None for an opening with no library Hook or one the library doesn't have.
     hook_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     hook_name: Mapped[Optional[str]] = mapped_column(String)
-    # The slop check's tells in the Final, each {"name", "description"}, in the check's order.
+    # The slop check's tells in any Part of the Final, each {"name", "description"}, in the
+    # check's order.
     slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )

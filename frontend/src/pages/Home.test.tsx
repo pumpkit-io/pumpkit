@@ -163,10 +163,9 @@ function postWith(final: string, finalCharCount = final.length, tells: Tell[] = 
         id: 'version_attempt_01',
         number: 1,
         feedback: null,
-        draft: 'the draft text',
-        final,
-        finalCharCount,
-        finalCharLimit: 3000,
+        format: 'post',
+        draftParts: ['the draft text'],
+        parts: [{ text: final, charCount: finalCharCount, charLimit: 3000 }],
         tells,
       },
     ],
@@ -798,10 +797,9 @@ describe('Home', () => {
       id: 'version_attempt_02',
       number: 2,
       feedback: 'make it shorter',
-      draft: 'the second draft',
-      final: 'the second final',
-      finalCharCount: 16,
-      finalCharLimit: 3000,
+      format: 'post',
+      draftParts: ['the second draft'],
+      parts: [{ text: 'the second final', charCount: 16, charLimit: 3000 }],
       tells: [],
     };
 
@@ -854,7 +852,7 @@ describe('Home', () => {
           id: 'version_attempt_03',
           number: 3,
           feedback: 'warmer',
-          final: 'the third final',
+          parts: [{ text: 'the third final', charCount: 15, charLimit: 3000 }],
         });
       const area = await onFirstVersion();
       sendFeedback(area, 'make it shorter');

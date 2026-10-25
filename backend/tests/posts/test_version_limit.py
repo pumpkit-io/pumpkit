@@ -44,6 +44,7 @@ async def _store_attempts(db, user_id: str, times: list[datetime], status: str =
             VersionAttempt(
                 post_id=post.id,
                 sequence=sequence,
+                format="post",
                 status=status,
                 error="LLMError: down" if status == "failed" else None,
                 created_at=moment,

@@ -7,16 +7,17 @@ from pumpkit.auth.models import User
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
+from pumpkit.posts.formats import FORMAT_POST, Format, part_char_count, part_char_limit
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.schemas import (
+    PartResponse,
     PostResponse,
     PostsPageResponse,
     PostSummaryResponse,
     TellResponse,
     VersionResponse,
 )
-from pumpkit.posts.writing.constants import POST_MAX_CHARS
 from pumpkit.posts.writing.versions import EarlierVersion, write_first_version, write_next_version
 
 # Starting a Post and giving Feedback share one budget per User, failed attempts included,
@@ -59,6 +60,7 @@ async def _keep_failed_attempt(
     post: Post,
     sequence: int,
     feedback: Optional[str],
+    format: Format,
     error: Exception,
     now: datetime,
 ) -> None:
@@ -67,6 +69,7 @@ async def _keep_failed_attempt(
         post=post,
         sequence=sequence,
         feedback=feedback,
+        format=format,
         error=f"{type(error).__name__}: {error}",
         now=now,
     )
@@ -75,17 +78,23 @@ async def _keep_failed_attempt(
 
 
 def version_response(attempt: VersionAttempt) -> VersionResponse:
-    assert attempt.version_number is not None and attempt.draft is not None
-    assert attempt.final is not None and attempt.final_char_count is not None
-    assert attempt.slop_tells is not None
+    assert attempt.version_number is not None and attempt.draft_parts is not None
+    assert attempt.final_parts is not None and attempt.slop_tells is not None
+    format = attempt.format
     return VersionResponse(
         id=attempt.id,
         number=attempt.version_number,
         feedback=attempt.feedback,
-        draft=attempt.draft,
-        final=attempt.final,
-        final_char_count=attempt.final_char_count,
-        final_char_limit=POST_MAX_CHARS,
+        format=format,
+        draft_parts=attempt.draft_parts,
+        parts=[
+            PartResponse(
+                text=text,
+                char_count=part_char_count(format, text),
+                char_limit=part_char_limit(format),
+            )
+            for text in attempt.final_parts
+        ],
         tells=[TellResponse(**tell) for tell in attempt.slop_tells],
     )
 
@@ -150,7 +159,9 @@ async def start_post(
         written = await write_first_version(llm, corpus, brief)
     except Exception as error:
         post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
-        await _keep_failed_attempt(db, post=post, sequence=1, feedback=None, error=error, now=now)
+        await _keep_failed_attempt(
+            db, post=post, sequence=1, feedback=None, format=FORMAT_POST, error=error, now=now
+        )
         raise
 
     post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
@@ -174,7 +185,10 @@ async def add_version(
         raise ConflictError("This Post has no Version to give Feedback on. Start a new Post.")
     await _check_attempt_limit(db, user_id=user.id, now=now)
     corpus = await service.corpus_for_post(db, post=post)
-    earlier = [EarlierVersion(feedback=v.feedback, final=v.final or "") for v in versions]
+    earlier = [
+        EarlierVersion(feedback=v.feedback, format=v.format, final_parts=v.final_parts or [])
+        for v in versions
+    ]
     sequence = len(post.attempts) + 1
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
@@ -183,7 +197,13 @@ async def add_version(
         written = await write_next_version(llm, corpus, post.brief, earlier, feedback)
     except Exception as error:
         await _keep_failed_attempt(
-            db, post=post, sequence=sequence, feedback=feedback, error=error, now=now
+            db,
+            post=post,
+            sequence=sequence,
+            feedback=feedback,
+            format=FORMAT_POST,
+            error=error,
+            now=now,
         )
         raise
 

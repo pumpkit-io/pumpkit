@@ -88,7 +88,9 @@ function FinalToXDialog({
   const [created, setCreated] = useState<ScheduledPost | null>(null);
   const [draft, setDraft] = useState<DestinationDraft>(PROFILE_DRAFT);
   const destination = destinationFrom(draft);
-  const length = useMemo(() => xWeightedLength(version.final), [version.final]);
+  // A Scheduled post holds one text until it holds Parts.
+  const final = version.parts[0].text;
+  const length = useMemo(() => xWeightedLength(final), [final]);
   const postNow = action === 'postNow';
 
   const send = async (e: FormEvent) => {
@@ -146,7 +148,7 @@ function FinalToXDialog({
       <>
         <div className="space-y-1.5 rounded-lg bg-muted/50 p-3">
           <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-sans text-sm text-foreground">
-            {version.final}
+            {final}
           </p>
           <XLengthCounter length={length} limit={connection.charLimit} />
         </div>

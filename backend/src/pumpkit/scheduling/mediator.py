@@ -180,9 +180,10 @@ async def create_scheduled_post(
 async def _source_version_final(db: AsyncSession, *, user: User, version_id: str) -> str:
     """The Final a Scheduled post copies from its source Version, or a 404 unless it's the User's."""
     version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
-    if version is None or version.final is None:
+    if version is None or not version.final_parts:
         raise NotFoundError("Version not found.")
-    return version.final
+    # A Scheduled post holds one text until it holds Parts.
+    return version.final_parts[0]
 
 
 async def _post_now(

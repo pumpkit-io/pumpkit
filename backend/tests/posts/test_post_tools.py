@@ -56,8 +56,8 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
                 "id": post["versions"][0]["id"],
                 "number": 1,
                 "feedback": None,
-                "final": "the final",
-                "final_char_count": 9,
+                "format": "post",
+                "parts": [{"text": "the final", "char_count": 9, "char_limit": 3000}],
             }
         ],
     }
@@ -91,8 +91,8 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "id": version["id"],
         "number": 2,
         "feedback": "shorter",
-        "final": "shorter final",
-        "final_char_count": 13,
+        "format": "post",
+        "parts": [{"text": "shorter final", "char_count": 13, "char_limit": 3000}],
     }
 
 
@@ -109,8 +109,8 @@ async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_t
         select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
     )
     assert version is not None
-    assert (version.draft, version.hook_name, version.hook_reasoning) == (
-        "My rule.\n\ndraft 2",
+    assert (version.draft_parts, version.hook_name, version.hook_reasoning) == (
+        ["My rule.\n\ndraft 2"],
         "my_rule",
         reasoning,
     )
@@ -129,10 +129,13 @@ async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post
     assert post["id"] == post_id
     assert post["brief"] == "ship small things"
     assert [
-        (version["number"], version["feedback"], version["final"], version["final_char_count"])
+        (version["number"], version["feedback"], version["format"], version["parts"])
         for version in post["versions"]
-    ] == [(1, None, "final 1", 7), (2, "warmer", "final two", 9)]
-    assert "draft" not in post["versions"][0]
+    ] == [
+        (1, None, "post", [{"text": "final 1", "char_count": 7, "char_limit": 3000}]),
+        (2, "warmer", "post", [{"text": "final two", "char_count": 9, "char_limit": 3000}]),
+    ]
+    assert "draft_parts" not in post["versions"][0]
 
 
 @pytest.fixture
@@ -248,6 +251,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
             VersionAttempt(
                 post_id=earlier.id,
                 sequence=sequence,
+                format="post",
                 status="failed",
                 error="LLMError: down",
                 created_at=fixed_clock(),

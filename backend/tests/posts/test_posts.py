@@ -54,10 +54,9 @@ async def test_starting_a_post_returns_it_with_its_first_version(client, with_au
             "id": body["versions"][0]["id"],
             "number": 1,
             "feedback": None,
-            "draft": "the draft - with a dash",
-            "final": "the final",
-            "final_char_count": 9,
-            "final_char_limit": 3000,
+            "format": "post",
+            "draft_parts": ["the draft - with a dash"],
+            "parts": [{"text": "the final", "char_count": 9, "char_limit": 3000}],
             "tells": [],
         }
     ]
@@ -198,9 +197,7 @@ async def test_the_final_is_counted_in_characters_and_kept_when_over_the_limit(
     response = await client.post(POSTS, json={"brief": "ship"})
 
     version = response.json()["versions"][0]
-    assert version["final"] == long_final
-    assert version["final_char_count"] == 3001
-    assert version["final_char_limit"] == 3000
+    assert version["parts"] == [{"text": long_final, "char_count": 3001, "char_limit": 3000}]
 
 
 async def test_a_brief_over_200000_characters_returns_422_without_calling_the_model(
@@ -268,7 +265,7 @@ async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_so
     response = await client.post(POSTS, json={"brief": "ship"})
 
     assert response.status_code == 201
-    assert response.json()["versions"][0]["final"] == "final"
+    assert response.json()["versions"][0]["parts"][0]["text"] == "final"
 
 
 async def _stored_posts(db) -> list[Post]:
@@ -289,7 +286,11 @@ async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
     assert post.corpus_post_ids == ["levelsio-0", "levelsio-1"]
     [attempt] = post.attempts
     assert attempt.status == "succeeded"
-    assert (attempt.draft, attempt.final, attempt.final_char_count) == ("draft", "final", 5)
+    assert (attempt.format, attempt.draft_parts, attempt.final_parts) == (
+        "post",
+        ["draft"],
+        ["final"],
+    )
     assert (attempt.writing_model, attempt.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
     assert attempt.writing_usage == {
         "prompt_tokens": 100,
@@ -329,7 +330,8 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns
     [attempt] = post.attempts
     assert attempt.status == "failed"
     assert attempt.error == "LLMError: provider timed out"
-    assert (attempt.draft, attempt.final, attempt.version_number) == (None, None, None)
+    assert (attempt.draft_parts, attempt.final_parts, attempt.version_number) == (None, None, None)
+    assert attempt.format == "post"
 
 
 async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_author, fake_llm):

@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pumpkit.posts.formats import Format
 from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS, FEEDBACK_MAX_CHARS
 
 # Per caller, for the routes and MCP tools that write a Version.
@@ -42,17 +43,25 @@ class TellResponse(BaseModel):
     description: str
 
 
+class PartResponse(BaseModel):
+    """One Part of a Final."""
+
+    text: str
+    # Counted by the backend the way the limit counts, which a browser's string length doesn't.
+    char_count: int
+    char_limit: int
+
+
 class VersionResponse(BaseModel):
     id: str
     number: int
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]
-    draft: str
-    final: str
-    # Counted by the backend the way the limit counts, which a browser's string length doesn't.
-    final_char_count: int
-    final_char_limit: int
-    # What the slop check found in the Final, for the User to judge.
+    format: Format
+    draft_parts: list[str]
+    # The Final's Parts in order.
+    parts: list[PartResponse]
+    # What the slop check found in any Part of the Final, for the User to judge.
     tells: list[TellResponse]
 
 
@@ -68,8 +77,8 @@ class VersionToolResponse(BaseModel):
     id: str
     number: int
     feedback: Optional[str]
-    final: str
-    final_char_count: int
+    format: Format
+    parts: list[PartResponse]
 
 
 class PostToolResponse(BaseModel):
