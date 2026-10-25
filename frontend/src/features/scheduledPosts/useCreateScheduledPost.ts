@@ -49,6 +49,8 @@ export function useCreateScheduledPost() {
           ? await scheduledPostService.postNow(post, destination)
           : await scheduledPostService.schedule(post, request.publishAt, destination);
         track('scheduled_post_created', {
+          format: created.parts.length > 1 ? 'thread' : 'post',
+          part_count: created.parts.length,
           source: 'sourceVersionId' in post ? 'final' : 'typed',
           post_now: request.postNow,
           ...(destination.community
