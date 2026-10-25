@@ -327,6 +327,23 @@ async def test_publishing_sends_the_text_with_the_access_token_and_returns_the_p
     assert json.loads(request.content) == {"text": "Hello X"}
 
 
+@respx.mock
+async def test_publishing_a_reply_names_the_post_it_replies_to():
+    route = respx.post(X_TWEETS_URL).mock(
+        return_value=httpx.Response(201, json={"data": {"id": "1891", "text": "Part 2"}})
+    )
+
+    post_id = await OfficialXPublisher().publish(
+        access_token="access-1", text="Part 2", reply_to="1890"
+    )
+
+    assert post_id == "1891"
+    assert json.loads(route.calls.last.request.content) == {
+        "text": "Part 2",
+        "reply": {"in_reply_to_tweet_id": "1890"},
+    }
+
+
 @pytest.mark.parametrize("share_with_followers", [True, False])
 @respx.mock
 async def test_publishing_into_a_community_names_it_and_whether_followers_see_it_too(
