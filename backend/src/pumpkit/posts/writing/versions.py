@@ -33,7 +33,7 @@ from pumpkit.posts.writing.prompts.feedback import feedback_message
 from pumpkit.posts.writing.prompts.hook import HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.humanizer_thread import HUMANIZER_THREAD_PROMPT
-from pumpkit.posts.writing.prompts.parts import numbered_parts
+from pumpkit.posts.writing.prompts.parts import format_text
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     latest_feedback_message,
     previous_final_message,
@@ -68,10 +68,18 @@ class RevisedPost(WrittenPost):
     pass
 
 
-class DraftedThread(_HookedWriting):
+class WrittenThread(_HookedWriting):
     # No minItems or maxItems: not every provider's structured output enforces them, so the
     # Part count is checked after the call.
     parts: list[str]
+
+
+class DraftedThread(WrittenThread):
+    pass
+
+
+class RevisedThread(WrittenThread):
+    pass
 
 
 class FinalThread(BaseModel):
@@ -85,6 +93,7 @@ DraftedPost.__name__ = "drafted_post"
 FinalPost.__name__ = "refined_post"
 RevisedPost.__name__ = "revised_post"
 DraftedThread.__name__ = "drafted_thread"
+RevisedThread.__name__ = "revised_thread"
 FinalThread.__name__ = "refined_thread"
 
 _DRAFT_PROMPTS: dict[Format, str] = {
@@ -149,32 +158,31 @@ def _humanizer_prefix(corpus: Corpus, brief: str, format: Format) -> list[dict]:
     ]
 
 
-def _draft_text(format: Format, draft_parts: list[str]) -> str:
-    if format == FORMAT_THREAD:
-        return numbered_parts(draft_parts)
-    [text] = draft_parts
-    return text
-
-
 def humanizer_messages(
     corpus: Corpus, brief: str, format: Format, draft_parts: list[str]
 ) -> list[dict]:
     """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Draft last."""
-    return [*_humanizer_prefix(corpus, brief, format), _user(_draft_text(format, draft_parts))]
+    return [*_humanizer_prefix(corpus, brief, format), _user(format_text(format, draft_parts))]
 
 
 def revision_humanizer_messages(
-    corpus: Corpus, brief: str, previous_final: str, feedback: str, draft: str
+    corpus: Corpus,
+    brief: str,
+    previous: EarlierVersion,
+    feedback: str,
+    format: Format,
+    draft_parts: list[str],
 ) -> list[dict]:
     """
-    The first Version's prefix, then what keeps the humanizer from rewording sentences the
-    Feedback left alone or undoing what it asked for. Earlier asks live on in the previous Final.
+    The first Version's prefix in the new Format, then what keeps the humanizer from rewording
+    sentences the Feedback left alone or undoing what it asked for. Earlier asks live on in the
+    previous Final, which keeps its own Format.
     """
     return [
-        *_humanizer_prefix(corpus, brief, FORMAT_POST),
-        _user(previous_final_message(previous_final)),
-        _user(latest_feedback_message(feedback)),
-        _user(revised_draft_message(draft)),
+        *_humanizer_prefix(corpus, brief, format),
+        _user(previous_final_message(previous.format, previous.final_parts)),
+        _user(latest_feedback_message(feedback, previous.format, format)),
+        _user(revised_draft_message(previous.format, format, draft_parts)),
     ]
 
 
@@ -183,26 +191,25 @@ def revision_messages(
     brief: str,
     earlier: Sequence[EarlierVersion],
     feedback: str,
+    format: Format,
 ) -> list[dict]:
     """
-    The draft call's conversation continued: the Brief, each Final as the model's answer after
-    the Feedback that asked for it, then the new Feedback. Drafts stay out: the User never
+    The draft call's conversation continued, under the new Format's prompt: the Brief, each
+    Final in its own Format as the model's answer after the Feedback that asked for it, then
+    the new Feedback. A Feedback that switched Format says so. Drafts stay out: the User never
     reacted to them.
     """
-    messages = draft_messages(corpus, brief, FORMAT_POST)
+    messages = draft_messages(corpus, brief, format)
+    previous: Optional[EarlierVersion] = None
     for version in earlier:
-        if version.feedback is not None:
-            messages.append(_user(feedback_message(version.feedback)))
-        messages.append({"role": "assistant", "content": _final_text(version)})
-    messages.append(_user(feedback_message(feedback)))
+        if previous is not None and version.feedback is not None:
+            framed = feedback_message(version.feedback, previous.format, version.format)
+            messages.append(_user(framed))
+        content = format_text(version.format, version.final_parts)
+        messages.append({"role": "assistant", "content": content})
+        previous = version
+    messages.append(_user(feedback_message(feedback, earlier[-1].format, format)))
     return messages
-
-
-def _final_text(version: EarlierVersion) -> str:
-    """A single X post's Final as the model wrote it; only that Format is written so far."""
-    assert version.format == FORMAT_POST
-    [text] = version.final_parts
-    return text
 
 
 def _usage(result: StructuredResult) -> Optional[dict]:
@@ -252,18 +259,33 @@ async def write_next_version(
     brief: str,
     earlier: Sequence[EarlierVersion],
     feedback: str,
+    format: Format,
 ) -> WrittenVersion:
-    """Raises whatever the LLM port raises; nothing is stored here."""
-    revised = await llm.structured(
-        model=settings.LLM_REVISING_MODEL,
-        messages=revision_messages(corpus, brief, earlier, feedback),
-        response_model=RevisedPost,
-        max_tokens=MAX_TOKENS,
+    """
+    Write the Version after `earlier` in `format`. Raises whatever the LLM port raises, or an
+    `LLMError` for a Thread of the wrong length; nothing is stored here.
+    """
+    messages = revision_messages(corpus, brief, earlier, feedback, format)
+    if format == FORMAT_THREAD:
+        revised = await llm.structured(
+            model=settings.LLM_REVISING_MODEL,
+            messages=messages,
+            response_model=RevisedThread,
+            max_tokens=MAX_TOKENS,
+        )
+        draft_parts = [scrub(part) for part in _thread_parts("revision", revised.parsed.parts)]
+    else:
+        revised = await llm.structured(
+            model=settings.LLM_REVISING_MODEL,
+            messages=messages,
+            response_model=RevisedPost,
+            max_tokens=MAX_TOKENS,
+        )
+        draft_parts = [scrub(revised.parsed.post)]
+    messages = revision_humanizer_messages(
+        corpus, brief, earlier[-1], feedback, format, draft_parts
     )
-    draft = scrub(revised.parsed.post)
-    previous_final = _final_text(earlier[-1])
-    messages = revision_humanizer_messages(corpus, brief, previous_final, feedback, draft)
-    return await _humanize(llm, FORMAT_POST, messages, revised, [draft], _hook(revised.parsed))
+    return await _humanize(llm, format, messages, revised, draft_parts, _hook(revised.parsed))
 
 
 def _hook(written: _HookedWriting) -> Hook:

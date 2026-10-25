@@ -35,6 +35,7 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
     for name in ("list_posts", "get_post"):
         assert tools[name]["annotations"]["readOnlyHint"] is True
     assert tools["give_feedback"]["inputSchema"]["required"] == ["post_id", "feedback"]
+    assert tools["give_feedback"]["inputSchema"]["properties"]["format"]["default"] is None
     assert "draft" not in json.dumps(tools["get_post"]["outputSchema"])
 
 
@@ -121,6 +122,38 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "format": "post",
         "parts": [{"text": "shorter final", "char_count": 13, "char_limit": 3000}],
     }
+
+
+async def test_feedback_with_a_format_switches_the_post_and_keeps_earlier_versions(
+    post_id, mcp, fake_llm
+):
+    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+
+    result = await mcp.call_tool(
+        "give_feedback", post_id=post_id, feedback="expand it", format="thread"
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["format"] == "thread"
+    versions = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"]
+    assert [(v["format"], [p["text"] for p in v["parts"]]) for v in versions] == [
+        ("post", ["final 1"]),
+        ("thread", ["final one", "final two"]),
+    ]
+
+
+async def test_feedback_without_a_format_keeps_the_latest_versions_thread(post_id, mcp, fake_llm):
+    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="expand it", format="thread")
+    fake_llm.replies = [written_thread(["one", "2"]), {"parts": ["final one", "final 2"]}]
+
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter Part 2")
+
+    version = result["structuredContent"]
+    assert (version["format"], [p["text"] for p in version["parts"]]) == (
+        "thread",
+        ["final one", "final 2"],
+    )
 
 
 async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_the_web_app(
