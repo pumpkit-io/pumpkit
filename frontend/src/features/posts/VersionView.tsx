@@ -5,7 +5,7 @@ import { track } from '@/lib/analytics';
 import { formatCount } from '@/lib/characters';
 import { cn } from '@/lib/utils';
 import { SlopTells } from './SlopTells';
-import type { Version } from '@/services/postService';
+import type { Part, Version } from '@/services/postService';
 
 function CopyFinalButton({ final }: { final: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -40,11 +40,32 @@ function CopyFinalButton({ final }: { final: string }) {
   );
 }
 
+function PartView({ part }: { part: Part }) {
+  const over = part.charCount - part.charLimit;
+
+  return (
+    <>
+      <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-foreground">
+        {part.text}
+      </p>
+      <div className="space-y-0.5 font-sans text-xs tabular-nums">
+        <p className={cn(over > 0 ? 'text-red-700 dark:text-red-300' : 'text-muted-foreground')}>
+          {formatCount(part.charCount)} / {formatCount(part.charLimit)} characters
+        </p>
+        {over > 0 && (
+          <p className="font-medium text-red-700 dark:text-red-300">
+            {`${formatCount(over)} characters over X's ${formatCount(part.charLimit)}-character limit`}
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
+
 /** The Final comes first because it is what goes to X; the Draft below shows what the rewrite changed. */
 export function VersionView({ version }: { version: Version }) {
   const finalId = useId();
   const draftId = useId();
-  const over = version.finalCharCount - version.finalCharLimit;
 
   return (
     <div className="space-y-3">
@@ -58,22 +79,12 @@ export function VersionView({ version }: { version: Version }) {
           </h3>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <FinalToXActions version={version} />
-            <CopyFinalButton final={version.final} />
+            <CopyFinalButton final={version.parts.map((part) => part.text).join('\n\n')} />
           </div>
         </div>
-        <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-foreground">
-          {version.final}
-        </p>
-        <div className="space-y-0.5 font-sans text-xs tabular-nums">
-          <p className={cn(over > 0 ? 'text-red-700 dark:text-red-300' : 'text-muted-foreground')}>
-            {formatCount(version.finalCharCount)} / {formatCount(version.finalCharLimit)} characters
-          </p>
-          {over > 0 && (
-            <p className="font-medium text-red-700 dark:text-red-300">
-              {`${formatCount(over)} characters over X's ${formatCount(version.finalCharLimit)}-character limit`}
-            </p>
-          )}
-        </div>
+        {version.parts.map((part, index) => (
+          <PartView key={index} part={part} />
+        ))}
         <SlopTells tells={version.tells} />
       </article>
 
@@ -86,9 +97,14 @@ export function VersionView({ version }: { version: Version }) {
             Written first, before the rewrite that made it the Final.
           </p>
         </div>
-        <p className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-muted-foreground">
-          {version.draft}
-        </p>
+        {version.draftParts.map((text, index) => (
+          <p
+            key={index}
+            className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-muted-foreground"
+          >
+            {text}
+          </p>
+        ))}
       </article>
     </div>
   );
