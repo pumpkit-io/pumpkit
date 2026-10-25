@@ -84,6 +84,19 @@ async def test_scheduling_parts_answers_with_each_part_in_order_and_none_live(
     ]
 
 
+async def test_post_now_with_parts_publishes_them_as_a_thread(
+    connected, mcp, fake_x_publisher, fixed_clock
+):
+    result = await mcp.call_tool("post_now", parts=["Thread start.", "Thread end."])
+
+    assert result["isError"] is False, result
+    published = result["structuredContent"]
+    assert published["state"] == "published"
+    assert published["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
+    assert [part["live"] for part in published["parts"]] == [True, True]
+    assert fake_x_publisher.replied_to == [None, "1890000000000000001"]
+
+
 async def test_editing_replaces_the_parts_and_refuses_one_over_the_limit_by_name(
     connected, mcp, fixed_clock
 ):

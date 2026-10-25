@@ -134,8 +134,9 @@ async def post_now(
 ) -> PostNowToolResponse:
     """
     Publish a post on the User's connected X account right away. Show the User the exact text
-    and get their yes first. Give `parts`, its text as a list of Parts in order (one Part for a
-    single X post), or the id of a Version to publish its Final. It goes to the User's
+    of every Part and get their yes first. Give `parts`, its text as a list of Parts in order
+    (one Part for a single X post, several for a Thread that X shows as a chain of replies), or
+    the id of a Version to publish its Final. It goes to the User's
     profile, or to the Community whose URL or ID `community` holds, where
     `share_with_followers` also shows it to their followers.
     """
