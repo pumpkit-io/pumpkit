@@ -20,13 +20,15 @@ class MonthFull(ConflictError):
     pass
 
 
-def check_length(text: str, *, limit: int) -> None:
-    """By X's own count."""
-    length = x_weighted_length(text)
-    if length > limit:
-        raise RuleBroken(
-            f"This post is {length:,} characters by X's count, over the {limit:,} limit."
-        )
+def check_length(parts: list[str], *, limit: int) -> None:
+    """Each Part by X's own count; the refusal names the first Part over the limit."""
+    for number, text in enumerate(parts, start=1):
+        length = x_weighted_length(text)
+        if length > limit:
+            subject = "This post" if len(parts) == 1 else f"Part {number}"
+            raise RuleBroken(
+                f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
+            )
 
 
 def check_publish_at(publish_at: Optional[datetime], *, now: datetime) -> datetime:
@@ -67,11 +69,11 @@ def check_month_has_room(count: int, *, cap: int, moment: datetime) -> None:
 @dataclass(frozen=True)
 class NewScheduledPost:
     """
-    A Scheduled post as the web app or an MCP tool asks for it: typed `text` or the Version
+    A Scheduled post as the web app or an MCP tool asks for it: typed `parts` or the Version
     whose Final it copies, and `publish_at` or `publish_now`.
     """
 
-    text: Optional[str] = None
+    parts: Optional[list[str]] = None
     version_id: Optional[str] = None
     publish_at: Optional[datetime] = None
     publish_now: bool = False
@@ -81,8 +83,8 @@ class NewScheduledPost:
     share_with_followers: bool = False
 
     def __post_init__(self) -> None:
-        if (self.text is None) == (self.version_id is None):
-            raise RuleBroken("Give either the text or a Version id, not both.")
+        if (self.parts is None) == (self.version_id is None):
+            raise RuleBroken("Give either the Parts or a Version id, not both.")
         if (self.publish_at is None) == (not self.publish_now):
             raise RuleBroken("Give either a publish time or publish now, not both.")
 
@@ -110,7 +112,8 @@ DestinationChange = Union[KeepDestination, ToProfile, ToCommunity]
 class ScheduledPostEdit:
     """What an edit changes about a Scheduled post; None and `KeepDestination` leave it as is."""
 
-    text: Optional[str] = None
+    # Replaces every Part.
+    parts: Optional[list[str]] = None
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[datetime] = None
     destination: DestinationChange = field(default_factory=KeepDestination)
@@ -119,7 +122,7 @@ class ScheduledPostEdit:
 
     def __post_init__(self) -> None:
         if (
-            self.text is None
+            self.parts is None
             and self.publish_at is None
             and isinstance(self.destination, KeepDestination)
             and self.share_with_followers is None

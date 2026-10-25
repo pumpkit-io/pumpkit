@@ -18,7 +18,7 @@ X_ACCOUNT_CHANGED_REASON = (
 
 
 async def _schedule(client: AsyncClient, publish_at: str, text: str = "Later today.") -> dict:
-    response = await client.post(SCHEDULED_POSTS, json={"text": text, "publish_at": publish_at})
+    response = await client.post(SCHEDULED_POSTS, json={"parts": [text], "publish_at": publish_at})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -34,13 +34,54 @@ async def test_editing_the_text_of_a_scheduled_post_saves_it(
     scheduled = await _schedule(client, "2026-10-10T14:00:00Z", "Lanch day.")
 
     response = await client.patch(
-        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"text": "  Launch day.  "}
+        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["  Launch day.  "]}
     )
 
     assert response.status_code == 200, response.text
     edited = response.json()
-    assert edited == {**scheduled, "text": "Launch day."}
+    assert edited == {
+        **scheduled,
+        "parts": [{"text": "Launch day.", "live": False, "x_post_url": None}],
+    }
     assert await _listed(client) == [edited]
+
+
+async def test_editing_the_parts_of_a_scheduled_post_replaces_them_all_in_order(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    scheduled = await _schedule(client, "2026-10-10T14:00:00Z", "One post.")
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["Now two.", "The second."]}
+    )
+    shortened = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["Back to one."]}
+    )
+
+    assert [part["text"] for part in response.json()["parts"]] == ["Now two.", "The second."]
+    assert shortened.json()["parts"] == [
+        {"text": "Back to one.", "live": False, "x_post_url": None}
+    ]
+    assert await _listed(client) == [shortened.json()]
+
+
+async def test_an_edited_part_over_the_limit_is_refused_naming_the_part(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    scheduled = await _schedule(client, "2026-10-10T14:00:00Z", "Stays as it is.")
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}",
+        json={"parts": ["Fine.", "Fine too.", "a" * 281]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Part 3 is 281 characters by X's count, over the 280 limit."
+    )
+    assert await _listed(client) == [scheduled]
 
 
 async def test_moving_a_scheduled_post_saves_the_new_time_in_utc_and_lists_it_in_order(
@@ -56,12 +97,12 @@ async def test_moving_a_scheduled_post_saves_the_new_time_in_utc_and_lists_it_in
 
     assert response.status_code == 200, response.text
     assert response.json() == {**moved, "publish_at": "2026-10-13T09:30:00Z"}
-    assert [p["text"] for p in await _listed(client)] == ["Stays", "Moved"]
+    assert [p["parts"][0]["text"] for p in await _listed(client)] == ["Stays", "Moved"]
 
 
 @pytest.mark.parametrize(
     "change",
-    [{}, {"text": "   "}, {"publish_at": "2026-10-10T14:00:00"}, {"state": "scheduled"}],
+    [{}, {"parts": ["   "]}, {"publish_at": "2026-10-10T14:00:00"}, {"state": "scheduled"}],
 )
 async def test_an_edit_needs_a_text_or_a_publish_time_with_a_timezone(
     client, subscribed, fake_x_publisher, fixed_clock, change, connect_x
@@ -87,7 +128,7 @@ async def test_a_publishing_scheduled_post_cannot_be_edited(
         )
         await session.commit()
 
-    edited = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"text": "Changed"})
+    edited = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["Changed"]})
     moved = await client.patch(
         f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"publish_at": "2026-10-11T09:00:00Z"}
     )
@@ -95,7 +136,9 @@ async def test_a_publishing_scheduled_post_cannot_be_edited(
     for response in (edited, moved):
         assert response.status_code == 409
         assert response.json()["detail"] == PUBLISHING_STARTED
-    assert [(p["text"], p["state"]) for p in await _listed(client)] == [("Going out", "publishing")]
+    assert [(p["parts"][0]["text"], p["state"]) for p in await _listed(client)] == [
+        ("Going out", "publishing")
+    ]
 
 
 async def test_a_published_scheduled_post_cannot_be_edited(
@@ -103,12 +146,12 @@ async def test_a_published_scheduled_post_cannot_be_edited(
 ):
     await connect_x()
     published = (
-        await client.post(SCHEDULED_POSTS, json={"text": "Out", "publish_now": True})
+        await client.post(SCHEDULED_POSTS, json={"parts": ["Out"], "publish_now": True})
     ).json()
 
     response = await client.patch(
         f"{SCHEDULED_POSTS}/{published['id']}",
-        json={"text": "Changed", "publish_at": "2026-10-11T09:00:00Z"},
+        json={"parts": ["Changed"], "publish_at": "2026-10-11T09:00:00Z"},
     )
 
     assert response.status_code == 409
@@ -129,7 +172,7 @@ async def test_rescheduling_a_failed_post_sends_it_to_the_x_account_connected_no
 
     response = await client.patch(
         f"{SCHEDULED_POSTS}/{scheduled['id']}",
-        json={"text": "For Grace", "publish_at": "2026-10-10T12:05:00Z"},
+        json={"parts": ["For Grace"], "publish_at": "2026-10-10T12:05:00Z"},
     )
 
     assert response.status_code == 200, response.text
@@ -187,7 +230,7 @@ async def test_a_publishing_or_published_scheduled_post_cannot_be_cancelled(
 ):
     await connect_x()
     published = (
-        await client.post(SCHEDULED_POSTS, json={"text": "Out", "publish_now": True})
+        await client.post(SCHEDULED_POSTS, json={"parts": ["Out"], "publish_now": True})
     ).json()
     publishing = await _schedule(client, "2026-10-10T12:02:00Z", "Going out")
     fixed_clock.advance(timedelta(minutes=2))
@@ -210,7 +253,9 @@ async def test_a_failed_scheduled_post_can_be_removed(
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
-    failed = (await client.post(SCHEDULED_POSTS, json={"text": "Dup", "publish_now": True})).json()
+    failed = (
+        await client.post(SCHEDULED_POSTS, json={"parts": ["Dup"], "publish_now": True})
+    ).json()
     assert failed["state"] == "failed"
 
     response = await client.delete(f"{SCHEDULED_POSTS}/{failed['id']}")
@@ -223,7 +268,7 @@ async def test_another_user_s_scheduled_post_is_not_found(
     client, subscribed, fake_x_publisher, fixed_clock
 ):
     edited = await client.patch(
-        f"{SCHEDULED_POSTS}/scheduled_post_01M4JS3D7BER5QZANNA2D0EFRQ", json={"text": "Mine?"}
+        f"{SCHEDULED_POSTS}/scheduled_post_01M4JS3D7BER5QZANNA2D0EFRQ", json={"parts": ["Mine?"]}
     )
     cancelled = await client.delete(f"{SCHEDULED_POSTS}/scheduled_post_01M4JS3D7BER5QZANNA2D0EFRQ")
 
@@ -232,7 +277,7 @@ async def test_another_user_s_scheduled_post_is_not_found(
 
 async def test_a_user_who_is_not_subscribed_cannot_edit(client, fake_x_publisher, fixed_clock):
     response = await client.patch(
-        f"{SCHEDULED_POSTS}/scheduled_post_01M4JS3D7BER5QZANNA2D0EFRQ", json={"text": "Mine?"}
+        f"{SCHEDULED_POSTS}/scheduled_post_01M4JS3D7BER5QZANNA2D0EFRQ", json={"parts": ["Mine?"]}
     )
 
     assert response.status_code == 403
@@ -258,7 +303,7 @@ async def test_cancelling_frees_a_place_in_a_full_month(
 
     await client.delete(f"{SCHEDULED_POSTS}/{first['id']}")
     response = await client.post(
-        SCHEDULED_POSTS, json={"text": "Third", "publish_at": "2026-10-13T09:00:00Z"}
+        SCHEDULED_POSTS, json={"parts": ["Third"], "publish_at": "2026-10-13T09:00:00Z"}
     )
 
     assert response.status_code == 201, response.text

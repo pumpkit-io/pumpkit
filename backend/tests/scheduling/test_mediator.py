@@ -44,7 +44,7 @@ def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock):
 
     async def _create(**fields) -> ScheduledPostResponse:
         if "version_id" not in fields:
-            fields.setdefault("text", "Shipping on Monday.")
+            fields.setdefault("parts", ["Shipping on Monday."])
         if not fields.get("publish_now"):
             fields.setdefault("publish_at", _at("2026-10-10T14:00:00Z"))
         return await mediator.create_scheduled_post(
@@ -87,21 +87,21 @@ def cap_of_two(monkeypatch):
     "fields",
     [
         {"publish_now": True},
-        {"text": "Mine.", "version_id": "version_attempt_1", "publish_now": True},
+        {"parts": ["Mine."], "version_id": "version_attempt_1", "publish_now": True},
     ],
 )
 def test_a_new_scheduled_post_has_either_text_or_a_version(fields):
     with pytest.raises(RuleBroken) as refused:
         NewScheduledPost(**fields)
 
-    assert refused.value.detail == "Give either the text or a Version id, not both."
+    assert refused.value.detail == "Give either the Parts or a Version id, not both."
 
 
 @pytest.mark.parametrize(
     "fields",
     [
-        {"text": "Neither."},
-        {"text": "Both.", "publish_at": _at("2026-10-10T14:00:00Z"), "publish_now": True},
+        {"parts": ["Neither."]},
+        {"parts": ["Both."], "publish_at": _at("2026-10-10T14:00:00Z"), "publish_now": True},
     ],
 )
 def test_a_new_scheduled_post_has_either_a_publish_time_or_publish_now(fields):
@@ -157,11 +157,11 @@ async def test_rescheduling_needs_an_x_connection_but_a_new_text_does_not(
     await db.execute(update(XConnection).values(needs_reconnect=True))
     await db.commit()
 
-    edited = await edit(scheduled.id, text="New words.")
+    edited = await edit(scheduled.id, parts=["New words."])
     with pytest.raises(ConflictError):
         await edit(scheduled.id, publish_at=_at("2026-10-11T14:00:00Z"))
 
-    assert edited.text == "New words."
+    assert edited.parts[0].text == "New words."
 
 
 async def test_a_version_s_final_is_copied_and_the_version_kept(db, user, create, connect_x):
@@ -182,7 +182,7 @@ async def test_a_version_s_final_is_copied_and_the_version_kept(db, user, create
 
     scheduled = await create(version_id=version.id)
 
-    assert scheduled.text == "The final, version one."
+    assert scheduled.parts[0].text == "The final, version one."
     assert scheduled.source_version_id == version.id
 
 
@@ -221,9 +221,9 @@ async def test_a_text_over_the_limit_by_x_s_count_is_refused(create, edit, conne
     text = "a" * 270 + " 日本語のテ"
 
     with pytest.raises(RefusedError) as created:
-        await create(text=text)
+        await create(parts=[text])
     with pytest.raises(RefusedError) as edited:
-        await edit(scheduled.id, text=text)
+        await edit(scheduled.id, parts=[text])
 
     assert (
         created.value.detail
@@ -235,7 +235,7 @@ async def test_a_text_over_the_limit_by_x_s_count_is_refused(create, edit, conne
 async def test_a_text_at_the_limit_by_x_s_count_is_accepted_however_long_its_url(create, connect_x):
     await connect_x()
 
-    scheduled = await create(text="a" * 256 + " https://example.com/" + "x" * 100)
+    scheduled = await create(parts=["a" * 256 + " https://example.com/" + "x" * 100])
 
     assert scheduled.state == "scheduled"
 
@@ -251,12 +251,12 @@ async def test_an_x_premium_account_takes_up_to_25_000_characters_by_x_s_count(
     # 25,077 code points, but the URL counts 23: 25,000 by X's count.
     at_limit = "a" * 24_976 + " https://example.com/" + "x" * 80
 
-    scheduled = await create(text=at_limit)
-    edited = await edit(scheduled.id, text="b" * 281)
+    scheduled = await create(parts=[at_limit])
+    edited = await edit(scheduled.id, parts=["b" * 281])
     with pytest.raises(RefusedError) as refused:
-        await create(text="a" * 24_990 + " 日本語のテ")
+        await create(parts=["a" * 24_990 + " 日本語のテ"])
 
-    assert edited.text == "b" * 281
+    assert edited.parts[0].text == "b" * 281
     assert refused.value.detail == (
         "This post is 25,001 characters by X's count, over the 25,000 limit."
     )
@@ -300,17 +300,17 @@ async def test_a_full_month_is_refused_with_the_date_the_cap_resets(
     db, user, create, connect_x, fake_x_publisher, cap_of_two
 ):
     await connect_x()
-    await create(text="First", publish_at=_at("2026-10-11T09:00:00Z"))
-    await create(text="Second", publish_at=_at("2026-10-30T09:00:00Z"))
+    await create(parts=["First"], publish_at=_at("2026-10-11T09:00:00Z"))
+    await create(parts=["Second"], publish_at=_at("2026-10-30T09:00:00Z"))
 
     with pytest.raises(MonthFull) as scheduled:
-        await create(text="Third", publish_at=_at("2026-10-12T09:00:00Z"))
+        await create(parts=["Third"], publish_at=_at("2026-10-12T09:00:00Z"))
     with pytest.raises(MonthFull) as posted_now:
         await create(publish_now=True)
 
     assert scheduled.value.status_code == 409
     assert scheduled.value.detail == posted_now.value.detail == OCTOBER_FULL
-    assert [p.text for p in await _listed(db, user)] == ["First", "Second"]
+    assert [p.parts[0].text for p in await _listed(db, user)] == ["First", "Second"]
     assert fake_x_publisher.published == []
 
 
@@ -318,9 +318,9 @@ async def test_published_and_failed_scheduled_posts_count_towards_the_cap(
     create, connect_x, fake_x_publisher, cap_of_two
 ):
     await connect_x()
-    published = await create(text="Out", publish_now=True)
+    published = await create(parts=["Out"], publish_now=True)
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
-    failed = await create(text="Refused", publish_now=True)
+    failed = await create(parts=["Refused"], publish_now=True)
 
     with pytest.raises(MonthFull):
         await create()
@@ -495,7 +495,7 @@ async def test_a_community_x_does_not_have_is_refused(db, user, create, edit, co
 @pytest.mark.parametrize(
     "fields",
     [
-        {"text": "a" * 281},
+        {"parts": ["a" * 281]},
         {"publish_at": _at("2026-10-10T12:00:00Z")},
         {"version_id": "version_attempt_someone_else"},
     ],

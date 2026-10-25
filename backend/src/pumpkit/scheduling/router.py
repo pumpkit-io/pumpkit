@@ -130,7 +130,7 @@ async def create_scheduled_post(
 ) -> ScheduledPostResponse:
     """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
     new = NewScheduledPost(
-        text=create_request.text,
+        parts=create_request.parts,
         version_id=create_request.source_version_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
@@ -165,7 +165,7 @@ async def edit_scheduled_post(
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
     edit = ScheduledPostEdit(
-        text=update_request.text,
+        parts=update_request.parts,
         publish_at=update_request.publish_at,
         destination=_destination_change(update_request),
         share_with_followers=update_request.share_with_followers,
