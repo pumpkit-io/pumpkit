@@ -28,8 +28,8 @@ export function Composer({
   error: string | null;
   /** What came of the last send, when it needs saying. */
   notice: string | null;
-  onPostNow: (text: string, destination: Destination) => Promise<boolean>;
-  onSchedule: (text: string, publishAt: string, destination: Destination) => Promise<boolean>;
+  onPostNow: (parts: string[], destination: Destination) => Promise<boolean>;
+  onSchedule: (parts: string[], publishAt: string, destination: Destination) => Promise<boolean>;
 }) {
   const { subscribed } = useSubscribed();
   const { connection } = useXConnectionContext();
@@ -50,12 +50,12 @@ export function Composer({
     e.preventDefault();
     // A datetime-local value without an offset parses as local time.
     if (!destination) return;
-    if (await onSchedule(text, new Date(when).toISOString(), destination)) clear();
+    if (await onSchedule([text], new Date(when).toISOString(), destination)) clear();
   };
 
   const postNow = async () => {
     if (!destination) return;
-    if (await onPostNow(text, destination)) clear();
+    if (await onPostNow([text], destination)) clear();
   };
 
   let action;

@@ -54,14 +54,14 @@ export function useScheduledPosts() {
   );
 
   const postNow = useCallback(
-    (text: string, destination: Destination) => add({ text, postNow: true, destination }),
+    (parts: string[], destination: Destination) => add({ parts, postNow: true, destination }),
     [add],
   );
 
   /** `publishAt` is an ISO instant on a whole minute. */
   const schedule = useCallback(
-    (text: string, publishAt: string, destination: Destination) =>
-      add({ text, postNow: false, publishAt, destination }),
+    (parts: string[], publishAt: string, destination: Destination) =>
+      add({ parts, postNow: false, publishAt, destination }),
     [add],
   );
 
