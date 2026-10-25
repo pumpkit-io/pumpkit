@@ -76,6 +76,10 @@ PATTERNS = (
 TRIPLE = re.compile(
     r"\b(\w+(?:\s+\w+){0,2}),\s+(\w+(?:\s+\w+){0,2}),?\s+and\s+(\w+(?:\s+\w+){0,2})\b"
 )
+TRIPLE_TELL = ("list_of_three", "balanced list of three")
+
+# Every tell in the order `find` reports them.
+_ORDER = [(name, description) for name, _, description in PATTERNS] + [TRIPLE_TELL]
 
 
 def find(text: str) -> list[tuple[str, str]]:
@@ -86,5 +90,11 @@ def find(text: str) -> list[tuple[str, str]]:
     """
     hits = [(name, description) for name, pattern, description in PATTERNS if pattern.search(text)]
     if TRIPLE.search(text):
-        hits.append(("list_of_three", "balanced list of three"))
+        hits.append(TRIPLE_TELL)
     return hits
+
+
+def find_in_parts(parts: list[str]) -> list[tuple[str, str]]:
+    """Every tell in any of the Parts, each once, in the order `find` reports them."""
+    found = {hit for part in parts for hit in find(part)}
+    return [hit for hit in _ORDER if hit in found]

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
+from pumpkit.posts.formats import FORMAT_POST, Format
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.llm_schemas import StructuredResult
 from pumpkit.posts.writing.constants import CACHE_TTL, MAX_TOKENS
@@ -66,7 +67,8 @@ RevisedPost.__name__ = "revised_post"
 class EarlierVersion:
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]
-    final: str
+    format: Format
+    final_parts: list[str]
 
 
 @dataclass(frozen=True)
@@ -78,8 +80,9 @@ class Hook:
 
 @dataclass(frozen=True)
 class WrittenVersion:
-    draft: str
-    final: str
+    format: Format
+    draft_parts: list[str]
+    final_parts: list[str]
     writing_model: str
     humanizing_model: str
     writing_usage: Optional[dict]
@@ -143,9 +146,16 @@ def revision_messages(
     for version in earlier:
         if version.feedback is not None:
             messages.append(_user(feedback_message(version.feedback)))
-        messages.append({"role": "assistant", "content": version.final})
+        messages.append({"role": "assistant", "content": _final_text(version)})
     messages.append(_user(feedback_message(feedback)))
     return messages
+
+
+def _final_text(version: EarlierVersion) -> str:
+    """A single X post's Final as the model wrote it; only that Format is written so far."""
+    assert version.format == FORMAT_POST
+    [text] = version.final_parts
+    return text
 
 
 def _usage(result: StructuredResult) -> Optional[dict]:
@@ -180,7 +190,8 @@ async def write_next_version(
         max_tokens=MAX_TOKENS,
     )
     draft = scrub(revised.parsed.post)
-    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
+    previous_final = _final_text(earlier[-1])
+    messages = revision_humanizer_messages(corpus, brief, previous_final, feedback, draft)
     return await _humanize(llm, messages, revised, draft, _hook(revised.parsed))
 
 
@@ -207,8 +218,9 @@ async def _humanize(
         max_tokens=MAX_TOKENS,
     )
     return WrittenVersion(
-        draft=draft,
-        final=refined.parsed.post,
+        format=FORMAT_POST,
+        draft_parts=[draft],
+        final_parts=[refined.parsed.post],
         writing_model=written.model,
         humanizing_model=refined.model,
         writing_usage=_usage(written),
