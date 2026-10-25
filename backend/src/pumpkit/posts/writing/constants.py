@@ -7,6 +7,11 @@ against them, so changing one is a code change. The models are settings (`LLM_*_
 # larger. The draft prompt interpolates it, which is why it sits apart from the prompts.
 POST_MAX_CHARS = 3000
 
+# How many Parts a written Thread may have. The Thread prompts state it and a reply outside it
+# fails the attempt, so writing costs and the risk of a Thread stopping partway stay bounded.
+THREAD_MIN_PARTS = 2
+THREAD_MAX_PARTS = 10
+
 # How many of each Inspiration author's newest stored posts make a Post's corpus.
 CORPUS_POSTS_PER_AUTHOR = 20
 

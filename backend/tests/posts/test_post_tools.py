@@ -11,7 +11,7 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written
+from tests.posts.writing_replies import written, written_thread
 
 
 @pytest.fixture
@@ -61,6 +61,33 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
             }
         ],
     }
+
+
+async def test_starting_a_post_as_a_thread_returns_its_parts(with_author, mcp, fake_llm):
+    fake_llm.replies = [
+        written_thread(["draft one", "draft two"]),
+        {"parts": ["final one", "final two 🚀"]},
+    ]
+
+    result = await mcp.call_tool("start_post", brief="ship small things", format="thread")
+
+    assert result["isError"] is False
+    [version] = result["structuredContent"]["versions"]
+    assert (version["format"], version["parts"]) == (
+        "thread",
+        [
+            {"text": "final one", "char_count": 9, "char_limit": 280},
+            {"text": "final two 🚀", "char_count": 12, "char_limit": 280},
+        ],
+    )
+
+
+async def test_start_post_takes_an_optional_format_of_post_or_thread(subscribed, mcp):
+    schema = (await mcp.list_tools())["start_post"]["inputSchema"]
+
+    assert schema["required"] == ["brief"]
+    assert schema["properties"]["format"]["enum"] == ["post", "thread"]
+    assert schema["properties"]["format"]["default"] == "post"
 
 
 async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):

@@ -7,13 +7,17 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { FORMAT_POST, type Format } from '@/services/postService';
 import { usePostWriter } from './usePostWriter';
 
 type PostWriterValue = ReturnType<typeof usePostWriter> & {
   brief: string;
   setBrief: (brief: string) => void;
+  /** The Format the Brief form starts the Post in. */
+  format: Format;
+  setFormat: (format: Format) => void;
   briefRef: RefObject<HTMLTextAreaElement>;
-  /** Clears the Post and the Brief, then puts the cursor in the empty Brief box. */
+  /** Clears the Post and the Brief, back to a single post, then puts the cursor in the Brief box. */
   newPost: () => void;
 };
 
@@ -24,6 +28,7 @@ export function PostWriterProvider({ children }: { children: ReactNode }) {
   const writer = usePostWriter();
   const { clear } = writer;
   const [brief, setBrief] = useState('');
+  const [format, setFormat] = useState<Format>(FORMAT_POST);
   const briefRef = useRef<HTMLTextAreaElement>(null);
   const [focusRequest, setFocusRequest] = useState(0);
 
@@ -35,11 +40,14 @@ export function PostWriterProvider({ children }: { children: ReactNode }) {
   const newPost = useCallback(() => {
     clear();
     setBrief('');
+    setFormat(FORMAT_POST);
     setFocusRequest((n) => n + 1);
   }, [clear]);
 
   return (
-    <PostWriterContext.Provider value={{ ...writer, brief, setBrief, briefRef, newPost }}>
+    <PostWriterContext.Provider
+      value={{ ...writer, brief, setBrief, format, setFormat, briefRef, newPost }}
+    >
       {children}
     </PostWriterContext.Provider>
   );

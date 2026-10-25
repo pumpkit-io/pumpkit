@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pumpkit.posts.formats import Format
+from pumpkit.posts.formats import FORMAT_POST, Format
 from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS, FEEDBACK_MAX_CHARS
 
 # Per caller, for the routes and MCP tools that write a Version.
@@ -14,6 +14,7 @@ class PostStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     brief: str = Field(..., max_length=BRIEF_MAX_CHARS)
+    format: Format = FORMAT_POST
 
     @field_validator("brief")
     @classmethod

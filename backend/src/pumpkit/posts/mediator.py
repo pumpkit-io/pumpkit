@@ -137,10 +137,10 @@ async def get_post(db: AsyncSession, user: User, post_id: str) -> PostResponse:
 
 
 async def start_post(
-    db: AsyncSession, llm: LLM, user: User, brief: str, now: datetime
+    db: AsyncSession, llm: LLM, user: User, brief: str, format: Format, now: datetime
 ) -> PostResponse:
     """
-    Start a Post from the Brief and write its first Version.
+    Start a Post from the Brief and write its first Version in `format`.
 
     The Post and its attempt are stored only after the calls, so no transaction stays open
     across them; a failure is stored as a failed attempt before the error is re-raised.
@@ -156,11 +156,11 @@ async def start_post(
     await db.commit()
 
     try:
-        written = await write_first_version(llm, corpus, brief)
+        written = await write_first_version(llm, corpus, brief, format)
     except Exception as error:
         post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
         await _keep_failed_attempt(
-            db, post=post, sequence=1, feedback=None, format=FORMAT_POST, error=error, now=now
+            db, post=post, sequence=1, feedback=None, format=format, error=error, now=now
         )
         raise
 

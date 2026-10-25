@@ -114,6 +114,7 @@ export const EVENTS = {
     description: 'Home: writing a Version failed. Props: kind (brief | feedback).',
   },
   post_final_copied: { description: "Home: copied a Version's Final." },
+  post_part_copied: { description: "Home: copied one Part of a Thread Version's Final." },
 
   // Scheduled (/scheduled) + the X callback
   x_connected: { description: 'Scheduled: connected an X account through X consent screen.' },

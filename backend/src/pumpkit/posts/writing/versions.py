@@ -15,17 +15,25 @@ from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
-from pumpkit.posts.formats import FORMAT_POST, Format
-from pumpkit.posts.llm import LLM
+from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
+from pumpkit.posts.llm import LLM, LLMError
 from pumpkit.posts.llm_schemas import StructuredResult
-from pumpkit.posts.writing.constants import CACHE_TTL, MAX_TOKENS
+from pumpkit.posts.writing.constants import (
+    CACHE_TTL,
+    MAX_TOKENS,
+    THREAD_MAX_PARTS,
+    THREAD_MIN_PARTS,
+)
 from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_thread import DRAFT_THREAD_PROMPT
 from pumpkit.posts.writing.prompts.feedback import feedback_message
 from pumpkit.posts.writing.prompts.hook import HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.posts.writing.prompts.humanizer_thread import HUMANIZER_THREAD_PROMPT
+from pumpkit.posts.writing.prompts.parts import numbered_parts
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     latest_feedback_message,
     previous_final_message,
@@ -34,12 +42,15 @@ from pumpkit.posts.writing.prompts.revision_humanizer import (
 from pumpkit.posts.writing.scrub import scrub
 
 
-class WrittenPost(BaseModel):
-    # hook_reasoning comes first so the model settles the opening before it writes the post.
+class _HookedWriting(BaseModel):
+    # hook_reasoning comes first so the model settles the opening before it writes the text.
     model_config = ConfigDict(extra="forbid")
 
     hook_reasoning: str
     hook_name: Optional[str]
+
+
+class WrittenPost(_HookedWriting):
     post: str
 
 
@@ -57,10 +68,33 @@ class RevisedPost(WrittenPost):
     pass
 
 
-# The SDK names the structured-output schema after the class; these are v6's schema names.
+class DraftedThread(_HookedWriting):
+    # No minItems or maxItems: not every provider's structured output enforces them, so the
+    # Part count is checked after the call.
+    parts: list[str]
+
+
+class FinalThread(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parts: list[str]
+
+
+# The SDK names the structured-output schema after the class; the post ones are v6's names.
 DraftedPost.__name__ = "drafted_post"
 FinalPost.__name__ = "refined_post"
 RevisedPost.__name__ = "revised_post"
+DraftedThread.__name__ = "drafted_thread"
+FinalThread.__name__ = "refined_thread"
+
+_DRAFT_PROMPTS: dict[Format, str] = {
+    FORMAT_POST: DRAFT_POST_PROMPT,
+    FORMAT_THREAD: DRAFT_THREAD_PROMPT,
+}
+_HUMANIZER_PROMPTS: dict[Format, str] = {
+    FORMAT_POST: HUMANIZER_PROMPT,
+    FORMAT_THREAD: HUMANIZER_THREAD_PROMPT,
+}
 
 
 @dataclass(frozen=True)
@@ -103,17 +137,30 @@ def _user(content: str) -> dict:
     return {"role": "user", "content": content}
 
 
-def draft_messages(corpus: Corpus, brief: str) -> list[dict]:
-    return [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
+def draft_messages(corpus: Corpus, brief: str, format: Format) -> list[dict]:
+    return [_system(_DRAFT_PROMPTS[format]), _user(context_message(corpus)), _user(brief)]
 
 
-def _humanizer_prefix(corpus: Corpus, brief: str) -> list[dict]:
-    return [_system(HUMANIZER_PROMPT), _user(context_message(corpus)), _user(brief_message(brief))]
+def _humanizer_prefix(corpus: Corpus, brief: str, format: Format) -> list[dict]:
+    return [
+        _system(_HUMANIZER_PROMPTS[format]),
+        _user(context_message(corpus)),
+        _user(brief_message(brief, format)),
+    ]
 
 
-def humanizer_messages(corpus: Corpus, brief: str, draft: str) -> list[dict]:
+def _draft_text(format: Format, draft_parts: list[str]) -> str:
+    if format == FORMAT_THREAD:
+        return numbered_parts(draft_parts)
+    [text] = draft_parts
+    return text
+
+
+def humanizer_messages(
+    corpus: Corpus, brief: str, format: Format, draft_parts: list[str]
+) -> list[dict]:
     """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Draft last."""
-    return [*_humanizer_prefix(corpus, brief), _user(draft)]
+    return [*_humanizer_prefix(corpus, brief, format), _user(_draft_text(format, draft_parts))]
 
 
 def revision_humanizer_messages(
@@ -124,7 +171,7 @@ def revision_humanizer_messages(
     Feedback left alone or undoing what it asked for. Earlier asks live on in the previous Final.
     """
     return [
-        *_humanizer_prefix(corpus, brief),
+        *_humanizer_prefix(corpus, brief, FORMAT_POST),
         _user(previous_final_message(previous_final)),
         _user(latest_feedback_message(feedback)),
         _user(revised_draft_message(draft)),
@@ -142,7 +189,7 @@ def revision_messages(
     the Feedback that asked for it, then the new Feedback. Drafts stay out: the User never
     reacted to them.
     """
-    messages = draft_messages(corpus, brief)
+    messages = draft_messages(corpus, brief, FORMAT_POST)
     for version in earlier:
         if version.feedback is not None:
             messages.append(_user(feedback_message(version.feedback)))
@@ -162,17 +209,41 @@ def _usage(result: StructuredResult) -> Optional[dict]:
     return None if result.usage is None else result.usage.raw
 
 
-async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVersion:
-    """Raises whatever the LLM port raises; nothing is stored here."""
-    drafted = await llm.structured(
-        model=settings.LLM_DRAFTING_MODEL,
-        messages=draft_messages(corpus, brief),
-        response_model=DraftedPost,
-        max_tokens=MAX_TOKENS,
-    )
-    draft = scrub(drafted.parsed.post)
-    messages = humanizer_messages(corpus, brief, draft)
-    return await _humanize(llm, messages, drafted, draft, _hook(drafted.parsed))
+def _thread_parts(call: str, parts: list[str]) -> list[str]:
+    """A Thread reply's Parts, or an `LLMError` that fails the attempt: a Thread is never cut."""
+    if not THREAD_MIN_PARTS <= len(parts) <= THREAD_MAX_PARTS:
+        raise LLMError(
+            f"The {call} call wrote {len(parts)} Parts; "
+            f"a Thread has {THREAD_MIN_PARTS} to {THREAD_MAX_PARTS}"
+        )
+    if any(not part.strip() for part in parts):
+        raise LLMError(f"The {call} call wrote a blank Part")
+    return parts
+
+
+async def write_first_version(
+    llm: LLM, corpus: Corpus, brief: str, format: Format
+) -> WrittenVersion:
+    """Raises whatever the LLM port raises, or an `LLMError` for a Thread of the wrong length."""
+    messages = draft_messages(corpus, brief, format)
+    if format == FORMAT_THREAD:
+        drafted = await llm.structured(
+            model=settings.LLM_DRAFTING_MODEL,
+            messages=messages,
+            response_model=DraftedThread,
+            max_tokens=MAX_TOKENS,
+        )
+        draft_parts = [scrub(part) for part in _thread_parts("draft", drafted.parsed.parts)]
+    else:
+        drafted = await llm.structured(
+            model=settings.LLM_DRAFTING_MODEL,
+            messages=messages,
+            response_model=DraftedPost,
+            max_tokens=MAX_TOKENS,
+        )
+        draft_parts = [scrub(drafted.parsed.post)]
+    messages = humanizer_messages(corpus, brief, format, draft_parts)
+    return await _humanize(llm, format, messages, drafted, draft_parts, _hook(drafted.parsed))
 
 
 async def write_next_version(
@@ -192,10 +263,10 @@ async def write_next_version(
     draft = scrub(revised.parsed.post)
     previous_final = _final_text(earlier[-1])
     messages = revision_humanizer_messages(corpus, brief, previous_final, feedback, draft)
-    return await _humanize(llm, messages, revised, draft, _hook(revised.parsed))
+    return await _humanize(llm, FORMAT_POST, messages, revised, [draft], _hook(revised.parsed))
 
 
-def _hook(written: WrittenPost) -> Hook:
+def _hook(written: _HookedWriting) -> Hook:
     """An unknown name is dropped, not refused: the post is worth more than its Hook's label."""
     name = written.hook_name
     if name is not None and name not in HOOK_NAMES:
@@ -206,21 +277,32 @@ def _hook(written: WrittenPost) -> Hook:
 
 async def _humanize(
     llm: LLM,
+    format: Format,
     messages: list[dict],
     written: StructuredResult,
-    draft: str,
+    draft_parts: list[str],
     hook: Hook,
 ) -> WrittenVersion:
-    refined = await llm.structured(
-        model=settings.LLM_HUMANIZING_MODEL,
-        messages=messages,
-        response_model=FinalPost,
-        max_tokens=MAX_TOKENS,
-    )
+    if format == FORMAT_THREAD:
+        refined = await llm.structured(
+            model=settings.LLM_HUMANIZING_MODEL,
+            messages=messages,
+            response_model=FinalThread,
+            max_tokens=MAX_TOKENS,
+        )
+        final_parts = _thread_parts("humanizer", refined.parsed.parts)
+    else:
+        refined = await llm.structured(
+            model=settings.LLM_HUMANIZING_MODEL,
+            messages=messages,
+            response_model=FinalPost,
+            max_tokens=MAX_TOKENS,
+        )
+        final_parts = [refined.parsed.post]
     return WrittenVersion(
-        format=FORMAT_POST,
-        draft_parts=[draft],
-        final_parts=[refined.parsed.post],
+        format=format,
+        draft_parts=draft_parts,
+        final_parts=final_parts,
         writing_model=written.model,
         humanizing_model=refined.model,
         writing_usage=_usage(written),
