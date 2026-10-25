@@ -34,7 +34,7 @@ Ask Claude Code to write a Post from an idea, then ask for changes in plain word
 
 | Tool | What it does |
 | --- | --- |
-| `start_post` | Starts a Post from a Brief and writes its first Version in the style of your Inspiration authors. Answers with the Final and its character count. |
+| `start_post` | Starts a Post from a Brief and writes its first Version in the style of your Inspiration authors, as a single post or, with `format: "thread"`, a Thread. Answers with the Final's Parts and each Part's character count. |
 | `give_feedback` | Gives Feedback on the latest Version of a Post, such as "shorter" or "end with a question", and writes the next Version. |
 | `list_posts` | Lists your Posts, newest first, 20 at a time (up to 50), with each one's Brief and how many Versions it has. |
 | `get_post` | Reads one Post with all its Versions, each with its Feedback, Final and character count, so Claude Code can compare them or schedule an earlier one. |

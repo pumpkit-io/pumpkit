@@ -10,3 +10,10 @@ REASONING = (
 def written(post: str, hook_name: Optional[str] = None, hook_reasoning: str = REASONING) -> dict:
     """The writing call's answer, opening with no library Hook unless `hook_name` names one."""
     return {"hook_reasoning": hook_reasoning, "hook_name": hook_name, "post": post}
+
+
+def written_thread(
+    parts: list[str], hook_name: Optional[str] = None, hook_reasoning: str = REASONING
+) -> dict:
+    """The Thread writing call's answer, its Parts in order."""
+    return {"hook_reasoning": hook_reasoning, "hook_name": hook_name, "parts": parts}

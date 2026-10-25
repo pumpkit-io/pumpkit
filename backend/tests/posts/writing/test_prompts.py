@@ -1,9 +1,11 @@
 """The writing prompts: what they interpolate, what they hold, and that the corpus stays out."""
 
-from pumpkit.posts.writing.constants import POST_MAX_CHARS
+from pumpkit.posts.writing.constants import POST_MAX_CHARS, THREAD_MAX_PARTS, THREAD_MIN_PARTS
 from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_thread import DRAFT_THREAD_PROMPT
 from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY, HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.posts.writing.prompts.humanizer_thread import HUMANIZER_THREAD_PROMPT
 
 
 def test_the_length_limit_reaches_the_draft_prompt():
@@ -83,3 +85,22 @@ def test_the_draft_prompt_asks_for_the_hook_reasoning_first_then_the_hook_name_t
     assert "one to three sentences" in output
     assert "more natural, casual opening" in output
     assert "null when it opens with none" in output
+
+
+def test_the_part_bounds_and_the_part_limit_reach_both_thread_prompts():
+    assert (THREAD_MIN_PARTS, THREAD_MAX_PARTS) == (2, 10)
+    for prompt in (DRAFT_THREAD_PROMPT, HUMANIZER_THREAD_PROMPT):
+        assert "between 2 and 10 parts" in prompt
+        assert "at most 280 characters as X counts them" in prompt
+
+
+def test_nothing_is_left_uninterpolated_in_the_thread_prompts():
+    assert "{" not in DRAFT_THREAD_PROMPT
+    assert "{" not in HUMANIZER_THREAD_PROMPT.replace('"{name}"', "")
+
+
+def test_the_thread_prompts_keep_the_hook_library_and_the_humanizer_guidelines():
+    assert HOOK_LIBRARY in DRAFT_THREAD_PROMPT
+    assert "# Humanization guidelines" in HUMANIZER_THREAD_PROMPT
+    for prompt in (DRAFT_THREAD_PROMPT, HUMANIZER_THREAD_PROMPT):
+        assert "<creator" not in prompt

@@ -1,13 +1,21 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { FinalToXActions } from '@/features/scheduledPosts/FinalToX';
-import { track } from '@/lib/analytics';
+import { track, type EventName } from '@/lib/analytics';
 import { formatCount } from '@/lib/characters';
 import { cn } from '@/lib/utils';
 import { SlopTells } from './SlopTells';
 import type { Part, Version } from '@/services/postService';
 
-function CopyFinalButton({ final }: { final: string }) {
+interface CopyButtonProps {
+  text: string;
+  event: EventName;
+  size?: 'sm' | 'xs';
+  /** The button's label until it has copied. */
+  children: ReactNode;
+}
+
+function CopyButton({ text, event, size = 'sm', children }: CopyButtonProps) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   useEffect(() => {
@@ -18,9 +26,9 @@ function CopyFinalButton({ final }: { final: string }) {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(final);
+      await navigator.clipboard.writeText(text);
       setState('copied');
-      track('post_final_copied');
+      track(event);
     } catch {
       setState('failed');
     }
@@ -33,32 +41,69 @@ function CopyFinalButton({ final }: { final: string }) {
           Couldn&apos;t copy. Select the text and copy it yourself.
         </span>
       )}
-      <Button size="sm" className="h-10 shrink-0" onClick={() => void copy()}>
-        {state === 'copied' ? 'Copied' : 'Copy Final'}
+      <Button
+        size="sm"
+        variant={size === 'xs' ? 'ghost' : 'default'}
+        className={cn('shrink-0', size === 'xs' ? 'h-8 px-2.5 text-xs' : 'h-10')}
+        onClick={() => void copy()}
+      >
+        {state === 'copied' ? 'Copied' : children}
       </Button>
     </div>
   );
 }
 
-function PartView({ part }: { part: Part }) {
+function PartText({ part }: { part: Part }) {
+  return (
+    <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-foreground">
+      {part.text}
+    </p>
+  );
+}
+
+function PartCounter({ part }: { part: Part }) {
   const over = part.charCount - part.charLimit;
 
   return (
-    <>
-      <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-foreground">
-        {part.text}
+    <div className="space-y-0.5 font-sans text-xs tabular-nums">
+      <p className={cn(over > 0 ? 'text-red-700 dark:text-red-300' : 'text-muted-foreground')}>
+        {formatCount(part.charCount)} / {formatCount(part.charLimit)} characters
       </p>
-      <div className="space-y-0.5 font-sans text-xs tabular-nums">
-        <p className={cn(over > 0 ? 'text-red-700 dark:text-red-300' : 'text-muted-foreground')}>
-          {formatCount(part.charCount)} / {formatCount(part.charLimit)} characters
+      {over > 0 && (
+        <p className="font-medium text-red-700 dark:text-red-300">
+          {`${formatCount(over)} characters over X's ${formatCount(part.charLimit)}-character limit`}
         </p>
-        {over > 0 && (
-          <p className="font-medium text-red-700 dark:text-red-300">
-            {`${formatCount(over)} characters over X's ${formatCount(part.charLimit)}-character limit`}
-          </p>
-        )}
-      </div>
-    </>
+      )}
+    </div>
+  );
+}
+
+/** Each Part on its own, numbered as X will chain them, so the User can read or copy one. */
+function ThreadParts({ parts }: { parts: Part[] }) {
+  return (
+    <ol aria-label="Parts" className="space-y-3">
+      {parts.map((part, index) => {
+        const number = index + 1;
+        return (
+          <li
+            key={index}
+            aria-label={`Part ${number}`}
+            className="space-y-2 border-l-2 border-border pl-3"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-sans text-xs font-medium tabular-nums text-muted-foreground">
+                Part {number}
+              </p>
+              <CopyButton text={part.text} event="post_part_copied" size="xs">
+                Copy<span className="sr-only"> Part {number}</span>
+              </CopyButton>
+            </div>
+            <PartText part={part} />
+            <PartCounter part={part} />
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -79,12 +124,24 @@ export function VersionView({ version }: { version: Version }) {
           </h3>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <FinalToXActions version={version} />
-            <CopyFinalButton final={version.parts.map((part) => part.text).join('\n\n')} />
+            <CopyButton
+              text={version.parts.map((part) => part.text).join('\n\n')}
+              event="post_final_copied"
+            >
+              Copy Final
+            </CopyButton>
           </div>
         </div>
-        {version.parts.map((part, index) => (
-          <PartView key={index} part={part} />
-        ))}
+        {version.format === 'thread' ? (
+          <ThreadParts parts={version.parts} />
+        ) : (
+          version.parts.map((part, index) => (
+            <div key={index} className="space-y-4">
+              <PartText part={part} />
+              <PartCounter part={part} />
+            </div>
+          ))
+        )}
         <SlopTells tells={version.tells} />
       </article>
 
