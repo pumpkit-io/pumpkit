@@ -852,7 +852,7 @@ describe('Home', () => {
           id: 'version_attempt_03',
           number: 3,
           feedback: 'warmer',
-          final: 'the third final',
+          parts: [{ text: 'the third final', charCount: 15, charLimit: 3000 }],
         });
       const area = await onFirstVersion();
       sendFeedback(area, 'make it shorter');
