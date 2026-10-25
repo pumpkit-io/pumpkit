@@ -88,9 +88,11 @@ function FinalToXDialog({
   const [created, setCreated] = useState<ScheduledPost | null>(null);
   const [draft, setDraft] = useState<DestinationDraft>(PROFILE_DRAFT);
   const destination = destinationFrom(draft);
-  // A Scheduled post holds one text until it holds Parts.
-  const final = version.parts[0].text;
-  const length = useMemo(() => xWeightedLength(final), [final]);
+  // The Scheduled post copies every Part of the Final; X counts each Part on its own.
+  const lengths = useMemo(
+    () => version.parts.map((part) => xWeightedLength(part.text)),
+    [version.parts],
+  );
   const postNow = action === 'postNow';
 
   const send = async (e: FormEvent) => {
@@ -146,11 +148,15 @@ function FinalToXDialog({
     description = `It goes out ${where} ${postNow ? 'straight away' : 'at the time you pick'}.`;
     body = (
       <>
-        <div className="space-y-1.5 rounded-lg bg-muted/50 p-3">
-          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-sans text-sm text-foreground">
-            {final}
-          </p>
-          <XLengthCounter length={length} limit={connection.charLimit} />
+        <div className="max-h-48 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-3">
+          {version.parts.map((part, i) => (
+            <div key={i} className="space-y-1.5">
+              <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
+                {part.text}
+              </p>
+              <XLengthCounter length={lengths[i]} limit={connection.charLimit} />
+            </div>
+          ))}
         </div>
         <DestinationField value={draft} onChange={setDraft} disabled={sending} />
         {!postNow && <PublishTimeField value={when} onChange={setWhen} disabled={sending} />}
@@ -158,7 +164,10 @@ function FinalToXDialog({
       </>
     );
     const unsendable =
-      sending || length > connection.charLimit || (!postNow && !when) || destination === null;
+      sending ||
+      lengths.some((length) => length > connection.charLimit) ||
+      (!postNow && !when) ||
+      destination === null;
     footer = (
       <>
         <Button type="button" variant="outline" className="h-10" onClick={onClose}>

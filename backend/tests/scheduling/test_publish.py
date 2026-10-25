@@ -17,7 +17,7 @@ async def _waiting(db, user, clock, x_user_id: str = "1001") -> str:
         db,
         user_id=user.id,
         x_user_id=x_user_id,
-        text="Due now",
+        parts=["Due now"],
         publish_at=now.replace(second=0, microsecond=0),
         now=now,
     )

@@ -514,7 +514,7 @@ describe('Home', () => {
     // The tests run in Europe/Rome (vitest.config.ts), two hours ahead of UTC in October.
     const SCHEDULED: ScheduledPost = {
       id: 'scheduled_post_01',
-      text: 'the final text',
+      parts: [{ text: 'the final text', live: false, xPostUrl: null }],
       state: 'scheduled',
       publishAt: '2026-10-12T07:00:00Z',
       publishedAt: null,

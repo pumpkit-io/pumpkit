@@ -53,7 +53,7 @@ def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolRe
 async def _create_scheduled_post(
     call: ToolCall[User],
     *,
-    text: Optional[str],
+    parts: Optional[list[str]],
     version_id: Optional[str],
     publish_at: Optional[str],
     community: Optional[str],
@@ -62,7 +62,7 @@ async def _create_scheduled_post(
     """A new Scheduled post, its arguments checked by the create route's request schema."""
     create_request = ScheduledPostCreateRequest.model_validate(
         {
-            "text": text,
+            "parts": parts,
             "source_version_id": version_id,
             "publish_at": publish_at,
             "publish_now": publish_at is None,
@@ -71,7 +71,7 @@ async def _create_scheduled_post(
         }
     )
     new = NewScheduledPost(
-        text=create_request.text,
+        parts=create_request.parts,
         version_id=create_request.source_version_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
@@ -92,20 +92,21 @@ async def _create_scheduled_post(
 async def schedule_post(
     call: ToolCall[User],
     publish_at: str,
-    text: Optional[str] = None,
+    parts: Optional[list[str]] = None,
     version_id: Optional[str] = None,
     community: Optional[str] = None,
     share_with_followers: bool = False,
 ) -> ScheduledPostToolResponse:
     """
     Schedule a post on the User's connected X account for `publish_at`, an ISO 8601 time with
-    its UTC offset, on a whole minute and at least a minute from now. Give the text, or the id
-    of a Version to publish its Final. It goes to the User's profile, or to the Community whose
-    URL or ID `community` holds, where `share_with_followers` also shows it to their followers.
+    its UTC offset, on a whole minute and at least a minute from now. Give `parts`, its text
+    as a list of Parts in order (one Part for a single X post), or the id of a Version to
+    publish its Final. It goes to the User's profile, or to the Community whose URL or ID
+    `community` holds, where `share_with_followers` also shows it to their followers.
     """
     return await _create_scheduled_post(
         call,
-        text=text,
+        parts=parts,
         version_id=version_id,
         publish_at=publish_at,
         community=community,
@@ -126,20 +127,21 @@ def _post_now_message(posted: ScheduledPostToolResponse) -> str:
 
 async def post_now(
     call: ToolCall[User],
-    text: Optional[str] = None,
+    parts: Optional[list[str]] = None,
     version_id: Optional[str] = None,
     community: Optional[str] = None,
     share_with_followers: bool = False,
 ) -> PostNowToolResponse:
     """
     Publish a post on the User's connected X account right away. Show the User the exact text
-    and get their yes first. Give the text, or the id of a Version to publish its Final. It goes
-    to the User's profile, or to the Community whose URL or ID `community` holds, where
+    and get their yes first. Give `parts`, its text as a list of Parts in order (one Part for a
+    single X post), or the id of a Version to publish its Final. It goes to the User's
+    profile, or to the Community whose URL or ID `community` holds, where
     `share_with_followers` also shows it to their followers.
     """
     posted = await _create_scheduled_post(
         call,
-        text=text,
+        parts=parts,
         version_id=version_id,
         publish_at=None,
         community=community,
@@ -181,23 +183,23 @@ def _destination_change(community: Optional[str], to_profile: bool) -> Destinati
 async def edit_scheduled_post(
     call: ToolCall[User],
     scheduled_post_id: str,
-    text: Optional[str] = None,
+    parts: Optional[list[str]] = None,
     publish_at: Optional[str] = None,
     community: Optional[str] = None,
     to_profile: bool = False,
     share_with_followers: Optional[bool] = None,
 ) -> ScheduledPostToolResponse:
     """
-    Change a waiting or Failed Scheduled post: its text, its publish time (an ISO 8601 time
-    with its UTC offset, which gives a Failed one another try), the Community whose URL or ID
-    `community` holds, or, with `to_profile`, send it to the User's profile instead. Leave out
-    what stays the same.
+    Change a waiting or Failed Scheduled post: its text, as `parts` that replace every Part,
+    its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one another
+    try), the Community whose URL or ID `community` holds, or, with `to_profile`, send it to
+    the User's profile instead. Leave out what stays the same.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
-        {"text": text, "publish_at": publish_at, "community": community}
+        {"parts": parts, "publish_at": publish_at, "community": community}
     )
     edit = ScheduledPostEdit(
-        text=update_request.text,
+        parts=update_request.parts,
         publish_at=update_request.publish_at,
         destination=_destination_change(update_request.community, to_profile),
         share_with_followers=share_with_followers,

@@ -41,7 +41,7 @@ export function useCreateScheduledPost() {
       const post: PostText =
         'sourceVersionId' in request
           ? { sourceVersionId: request.sourceVersionId }
-          : { text: request.text };
+          : { parts: request.parts };
       setSending(true);
       setError(null);
       try {

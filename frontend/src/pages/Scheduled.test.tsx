@@ -88,7 +88,13 @@ const CONNECTED: XConnection = {
 const NEEDS_RECONNECT: XConnection = { ...CONNECTED, needsReconnect: true };
 const PUBLISHED: ScheduledPost = {
   id: 'scheduled_post_01',
-  text: 'Shipping the new onboarding today.',
+  parts: [
+    {
+      text: 'Shipping the new onboarding today.',
+      live: true,
+      xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+    },
+  ],
   state: 'published',
   publishAt: '2026-10-10T12:00:00Z',
   publishedAt: '2026-10-10T12:00:14Z',
@@ -101,7 +107,7 @@ const PUBLISHED: ScheduledPost = {
 // The tests run in Europe/Rome (vitest.config.ts), two hours ahead of UTC in October.
 const MONDAY: ScheduledPost = {
   id: 'scheduled_post_03',
-  text: 'Monday morning.',
+  parts: [{ text: 'Monday morning.', live: false, xPostUrl: null }],
   state: 'scheduled',
   publishAt: '2026-10-12T07:00:00Z',
   publishedAt: null,
@@ -114,12 +120,12 @@ const MONDAY: ScheduledPost = {
 const WEDNESDAY: ScheduledPost = {
   ...MONDAY,
   id: 'scheduled_post_04',
-  text: 'Wednesday morning.',
+  parts: [{ text: 'Wednesday morning.', live: false, xPostUrl: null }],
   publishAt: '2026-10-14T07:00:00Z',
 };
 const FAILED: ScheduledPost = {
   id: 'scheduled_post_02',
-  text: 'Shipping again.',
+  parts: [{ text: 'Shipping again.', live: false, xPostUrl: null }],
   state: 'failed',
   publishAt: '2026-10-10T12:01:00Z',
   publishedAt: null,
@@ -372,7 +378,7 @@ describe('Scheduled', () => {
         'https://x.com/i/web/status/1890000000000000001',
       );
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { text: 'Shipping the new onboarding today.' },
+        { parts: ['Shipping the new onboarding today.'] },
         { community: null, shareWithFollowers: false },
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
@@ -564,7 +570,7 @@ describe('Scheduled', () => {
       expect(await upcoming.findByText('Monday morning.')).toBeInTheDocument();
       expect(upcoming.getAllByRole('listitem')[0]).toHaveTextContent('Monday morning.');
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { text: 'Monday morning.' },
+        { parts: ['Monday morning.'] },
         '2026-10-12T07:00:00.000Z',
         { community: null, shareWithFollowers: false },
       );
@@ -647,7 +653,7 @@ describe('Scheduled', () => {
     const IN_COMMUNITY: ScheduledPost = {
       ...PUBLISHED,
       id: 'scheduled_post_06',
-      text: 'Hello Community.',
+      parts: [{ text: 'Hello Community.', live: false, xPostUrl: null }],
       community: { id: COMMUNITY_ID, name: null, url: COMMUNITY_URL },
       shareWithFollowers: true,
     };
@@ -691,7 +697,7 @@ describe('Scheduled', () => {
       fireEvent.click(box.getByRole('button', { name: 'Post now' }));
       await vi.waitFor(() =>
         expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          { text: 'Hello Community.' },
+          { parts: ['Hello Community.'] },
           {
             community: { id: COMMUNITY_ID, name: 'Build in Public' },
             shareWithFollowers: true,
@@ -768,7 +774,7 @@ describe('Scheduled', () => {
 
       await vi.waitFor(() =>
         expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          { text: 'Hello' },
+          { parts: ['Hello'] },
           {
             community: null,
             shareWithFollowers: false,
@@ -792,7 +798,7 @@ describe('Scheduled', () => {
       const published = await publishedList();
       expect(await published.findByText('Hello Community.')).toBeInTheDocument();
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { text: 'Hello Community.' },
+        { parts: ['Hello Community.'] },
         {
           community: { id: COMMUNITY_ID, name: null },
           shareWithFollowers: true,
@@ -827,7 +833,7 @@ describe('Scheduled', () => {
       const upcoming = await upcomingList();
       expect(await upcoming.findByText('Monday morning.')).toBeInTheDocument();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { text: 'Monday morning.' },
+        { parts: ['Monday morning.'] },
         '2026-10-12T07:00:00.000Z',
         { community: { id: '123', name: null }, shareWithFollowers: false },
       );
@@ -882,7 +888,7 @@ describe('Scheduled', () => {
         {
           ...PUBLISHED,
           id: 'scheduled_post_05',
-          text: 'Only there.',
+          parts: [{ text: 'Only there.', live: false, xPostUrl: null }],
           community: IN_COMMUNITY.community,
         },
         PUBLISHED,
@@ -905,7 +911,7 @@ describe('Scheduled', () => {
       expect(shared.getByText('Also shared with followers')).toBeInTheDocument();
       const only = within(published.getByText('Only there.').closest('li')!);
       expect(only.getByText('Not shared with followers')).toBeInTheDocument();
-      const profile = within(published.getByText(PUBLISHED.text).closest('li')!);
+      const profile = within(published.getByText(PUBLISHED.parts[0].text).closest('li')!);
       expect(profile.queryByRole('link', { name: COMMUNITY_ID })).not.toBeInTheDocument();
       expect(profile.queryByText(/followers/)).not.toBeInTheDocument();
     });
@@ -965,7 +971,7 @@ describe('Scheduled', () => {
 
       await vi.waitFor(() =>
         expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          { text: 'Hello' },
+          { parts: ['Hello'] },
           {
             community: { id: MAKERS.id, name: 'Indie makers' },
             shareWithFollowers: true,
@@ -1005,7 +1011,7 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const upcoming = await upcomingList();
-      const item = within((await upcoming.findByText(MONDAY.text)).closest('li')!);
+      const item = within((await upcoming.findByText(MONDAY.parts[0].text)).closest('li')!);
       fireEvent.click(item.getByRole('button', { name: 'Edit' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
       fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
@@ -1027,7 +1033,7 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const upcoming = await upcomingList();
-      const item = within((await upcoming.findByText(MONDAY.text)).closest('li')!);
+      const item = within((await upcoming.findByText(MONDAY.parts[0].text)).closest('li')!);
       fireEvent.click(item.getByRole('button', { name: 'Edit' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
       await dialog.findByRole('option', { name: '123' });
@@ -1046,10 +1052,10 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const published = await publishedList();
-      expect(await published.findByText(PUBLISHED.text)).toBeInTheDocument();
+      expect(await published.findByText(PUBLISHED.parts[0].text)).toBeInTheDocument();
       expect(published.getByRole('link', { name: /view on x/i })).toBeInTheDocument();
       const failed = within(await screen.findByRole('region', { name: 'Failed' }));
-      expect(failed.getByText(FAILED.text)).toBeInTheDocument();
+      expect(failed.getByText(FAILED.parts[0].text)).toBeInTheDocument();
       expect(failed.getByText(FAILED.failedReason!)).toBeInTheDocument();
     });
 
@@ -1063,7 +1069,7 @@ describe('Scheduled', () => {
         expect.stringMatching(/^Monday morning\..*Oct 12, 2026, 9:00/),
         expect.stringMatching(/^Wednesday morning\..*Oct 14, 2026, 9:00/),
       ]);
-      expect(upcoming.queryByText(PUBLISHED.text)).not.toBeInTheDocument();
+      expect(upcoming.queryByText(PUBLISHED.parts[0].text)).not.toBeInTheDocument();
     });
 
     it('still shows the history to a User who is not Subscribed', async () => {
@@ -1072,7 +1078,7 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const published = await publishedList();
-      expect(await published.findByText(PUBLISHED.text)).toBeInTheDocument();
+      expect(await published.findByText(PUBLISHED.parts[0].text)).toBeInTheDocument();
     });
 
     it('says when nothing has been scheduled or published yet', async () => {
@@ -1106,7 +1112,11 @@ describe('Scheduled', () => {
     }
 
     it('edits the text and time of an upcoming one', async () => {
-      const moved = { ...MONDAY, text: 'Tuesday morning.', publishAt: '2026-10-13T08:00:00Z' };
+      const moved = {
+        ...MONDAY,
+        parts: [{ text: 'Tuesday morning.', live: false, xPostUrl: null }],
+        publishAt: '2026-10-13T08:00:00Z',
+      };
       vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY, WEDNESDAY]);
       vi.mocked(scheduledPostService.edit).mockResolvedValue(moved);
       renderScheduled();
@@ -1127,7 +1137,7 @@ describe('Scheduled', () => {
 
       await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, {
-        text: 'Tuesday morning.',
+        parts: ['Tuesday morning.'],
         publishAt: '2026-10-13T08:00:00.000Z',
       });
       const items = (await upcomingList()).getAllByRole('listitem');
@@ -1139,7 +1149,10 @@ describe('Scheduled', () => {
 
     it('sends only the text when the time is left as it was', async () => {
       vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY]);
-      vi.mocked(scheduledPostService.edit).mockResolvedValue({ ...MONDAY, text: 'Fixed.' });
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...MONDAY,
+        parts: [{ text: 'Fixed.', live: false, xPostUrl: null }],
+      });
       renderScheduled();
 
       fireEvent.click(
@@ -1150,7 +1163,7 @@ describe('Scheduled', () => {
       fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
 
       expect(await (await upcomingList()).findByText('Fixed.')).toBeInTheDocument();
-      expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { text: 'Fixed.' });
+      expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { parts: ['Fixed.'] });
     });
 
     it('holds back a text over the limit by X count', async () => {
@@ -1254,7 +1267,7 @@ describe('Scheduled', () => {
       const failed = within(await screen.findByRole('region', { name: 'Failed' }));
       fireEvent.click(await failed.findByRole('button', { name: 'Reschedule' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
-      expect(dialog.getByLabelText('Post text')).toHaveValue(FAILED.text);
+      expect(dialog.getByLabelText('Post text')).toHaveValue(FAILED.parts[0].text);
       expect(dialog.getByLabelText('Date and time')).toHaveValue('');
       expect(dialog.getByRole('button', { name: 'Reschedule' })).toBeDisabled();
       fireEvent.change(dialog.getByLabelText('Date and time'), {
@@ -1262,7 +1275,7 @@ describe('Scheduled', () => {
       });
       fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
 
-      expect(await (await upcomingList()).findByText(FAILED.text)).toBeInTheDocument();
+      expect(await (await upcomingList()).findByText(FAILED.parts[0].text)).toBeInTheDocument();
       expect(scheduledPostService.edit).toHaveBeenCalledWith(FAILED.id, {
         publishAt: '2026-10-12T07:00:00.000Z',
       });
@@ -1342,7 +1355,7 @@ describe('Scheduled', () => {
         vi.mocked(scheduledPostService.list).mockResolvedValue([IN_COMMUNITY]);
         vi.mocked(scheduledPostService.edit).mockResolvedValue({
           ...IN_COMMUNITY,
-          text: 'Edited.',
+          parts: [{ text: 'Edited.', live: false, xPostUrl: null }],
         });
         renderScheduled();
 
@@ -1352,7 +1365,7 @@ describe('Scheduled', () => {
         fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
 
         await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { text: 'Edited.' });
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { parts: ['Edited.'] });
         expect(scheduledPostService.lookUpCommunity).not.toHaveBeenCalled();
       });
 
@@ -1402,7 +1415,7 @@ describe('Scheduled', () => {
         });
         fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
 
-        expect(await (await upcomingList()).findByText(FAILED.text)).toBeInTheDocument();
+        expect(await (await upcomingList()).findByText(FAILED.parts[0].text)).toBeInTheDocument();
         expect(scheduledPostService.edit).toHaveBeenCalledWith(FAILED.id, {
           publishAt: '2026-10-12T07:00:00.000Z',
           community: { id: '123', name: null },

@@ -5,7 +5,7 @@ import { scheduledPostService } from './scheduledPostService';
 const COMMUNITY = { id: '1493446837214187523', name: 'Build in Public' };
 const SCHEDULED = {
   id: 'scheduled_post_1',
-  text: 'The final.',
+  parts: [{ text: 'The final.', live: false, x_post_url: null }],
   state: 'scheduled',
   publish_at: '2026-10-12T07:00:00Z',
   published_at: null,
@@ -41,14 +41,14 @@ describe('scheduledPostService', () => {
     const patch = vi.spyOn(apiService, 'patch').mockResolvedValue({ data: SCHEDULED } as never);
 
     await scheduledPostService.postNow(
-      { text: 'Hello Community.' },
+      { parts: ['Hello Community.'] },
       { community: COMMUNITY, shareWithFollowers: true },
     );
     await scheduledPostService.edit('scheduled_post_1', { community: COMMUNITY });
     await scheduledPostService.edit('scheduled_post_1', { community: null });
 
     expect(post).toHaveBeenCalledWith('/scheduled-posts', {
-      text: 'Hello Community.',
+      parts: ['Hello Community.'],
       publish_now: true,
       community: COMMUNITY.id,
       share_with_followers: true,
@@ -56,6 +56,34 @@ describe('scheduledPostService', () => {
     expect(patch.mock.calls.map(([, body]) => (body as { community: unknown }).community)).toEqual([
       COMMUNITY.id,
       null,
+    ]);
+  });
+
+  it('sends typed Parts in order and reads back each one with whether it is live', async () => {
+    const link = 'https://x.com/i/web/status/1890000000000000001';
+    const post = vi.spyOn(apiService, 'post').mockResolvedValue({
+      data: {
+        ...SCHEDULED,
+        parts: [
+          { text: 'First.', live: true, x_post_url: link },
+          { text: 'Second.', live: false, x_post_url: null },
+        ],
+      },
+    } as never);
+
+    const scheduled = await scheduledPostService.schedule(
+      { parts: ['First.', 'Second.'] },
+      '2026-10-12T07:00:00.000Z',
+      { community: null, shareWithFollowers: false },
+    );
+
+    expect(post).toHaveBeenCalledWith(
+      '/scheduled-posts',
+      expect.objectContaining({ parts: ['First.', 'Second.'] }),
+    );
+    expect(scheduled.parts).toEqual([
+      { text: 'First.', live: true, xPostUrl: link },
+      { text: 'Second.', live: false, xPostUrl: null },
     ]);
   });
 });

@@ -29,13 +29,13 @@ X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a
 
 
 async def _schedule(client: AsyncClient, publish_at: str, text: str = "Later today.") -> str:
-    response = await client.post(SCHEDULED_POSTS, json={"text": text, "publish_at": publish_at})
+    response = await client.post(SCHEDULED_POSTS, json={"parts": [text], "publish_at": publish_at})
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
 
 async def _listed(client: AsyncClient) -> dict[str, dict]:
-    return {p["text"]: p for p in (await client.get(SCHEDULED_POSTS)).json()["data"]}
+    return {p["parts"][0]["text"]: p for p in (await client.get(SCHEDULED_POSTS)).json()["data"]}
 
 
 async def test_a_scheduled_post_is_published_once_due_and_never_before(
@@ -68,7 +68,7 @@ async def test_a_due_community_post_goes_out_in_its_community(
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "text": "For the Community",
+            "parts": ["For the Community"],
             "publish_at": "2026-10-10T12:05:00Z",
             "community": "1493446837214187523",
             "share_with_followers": True,
@@ -97,7 +97,7 @@ async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_memb
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "text": "Not a member",
+            "parts": ["Not a member"],
             "publish_at": "2026-10-10T12:05:00Z",
             "community": "1493446837214187523",
         },

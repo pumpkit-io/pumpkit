@@ -11,7 +11,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
-from pumpkit.scheduling.models import SCHEDULED, ScheduledPost
+from pumpkit.scheduling.models import SCHEDULED, ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XPostRejectedError,
@@ -50,12 +50,12 @@ async def test_scheduling_typed_text_lists_it_with_the_scheduled_page_link(
     connected, mcp, fixed_clock
 ):
     result = await mcp.call_tool(
-        "schedule_post", text="  Shipping on Monday.  ", publish_at="2026-10-10T16:00:00+02:00"
+        "schedule_post", parts=["  Shipping on Monday.  "], publish_at="2026-10-10T16:00:00+02:00"
     )
 
     assert result["isError"] is False, result
     scheduled = result["structuredContent"]
-    assert scheduled["text"] == "Shipping on Monday."
+    assert scheduled["parts"][0]["text"] == "Shipping on Monday."
     assert scheduled["state"] == "scheduled"
     assert scheduled["publish_at"] == "2026-10-10T14:00:00Z"
     assert scheduled["source_version_id"] is None
@@ -68,6 +68,43 @@ async def test_scheduling_typed_text_lists_it_with_the_scheduled_page_link(
     }
 
 
+async def test_scheduling_parts_answers_with_each_part_in_order_and_none_live(
+    connected, mcp, fixed_clock
+):
+    result = await mcp.call_tool(
+        "schedule_post",
+        parts=["The first Part.", "The second Part."],
+        publish_at="2026-10-10T14:00:00Z",
+    )
+
+    assert result["isError"] is False, result
+    assert result["structuredContent"]["parts"] == [
+        {"text": "The first Part.", "live": False, "x_post_url": None},
+        {"text": "The second Part.", "live": False, "x_post_url": None},
+    ]
+
+
+async def test_editing_replaces_the_parts_and_refuses_one_over_the_limit_by_name(
+    connected, mcp, fixed_clock
+):
+    scheduled = (await _schedule(mcp))["structuredContent"]
+
+    edited = await mcp.call_tool(
+        "edit_scheduled_post",
+        scheduled_post_id=scheduled["id"],
+        parts=["New first.", "New second."],
+    )
+    refused = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], parts=["x" * 281, "Fine."]
+    )
+
+    assert [part["text"] for part in edited["structuredContent"]["parts"]] == [
+        "New first.",
+        "New second.",
+    ]
+    assert error_text(refused) == "Part 1 is 281 characters by X's count, over the 280 limit."
+
+
 async def test_scheduling_a_version_copies_its_final_and_records_the_version(
     connected, version, mcp, fixed_clock
 ):
@@ -76,12 +113,12 @@ async def test_scheduling_a_version_copies_its_final_and_records_the_version(
     )
 
     assert result["isError"] is False, result
-    assert result["structuredContent"]["text"] == "The final, version one."
+    assert result["structuredContent"]["parts"][0]["text"] == "The final, version one."
     assert result["structuredContent"]["source_version_id"] == version["id"]
 
 
 async def _schedule(mcp, text: str = "Shipping on Monday.", at: str = "2026-10-10T14:00:00Z"):
-    return await mcp.call_tool("schedule_post", text=text, publish_at=at)
+    return await mcp.call_tool("schedule_post", parts=[text], publish_at=at)
 
 
 async def test_scheduling_without_an_x_connection_links_to_the_scheduled_page(
@@ -109,7 +146,7 @@ async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
 ):
     monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
     from_web = await client.post(
-        "/api/v1/scheduled-posts", json={"text": "First", "publish_at": "2026-10-11T09:00:00Z"}
+        "/api/v1/scheduled-posts", json={"parts": ["First"], "publish_at": "2026-10-11T09:00:00Z"}
     )
     assert from_web.status_code == 201, from_web.text
     await _schedule(mcp, text="Second", at="2026-10-30T09:00:00Z")
@@ -140,7 +177,7 @@ async def test_scheduling_into_a_community_names_it_as_x_does(
 ):
     result = await mcp.call_tool(
         "schedule_post",
-        text="Shipping on Monday.",
+        parts=["Shipping on Monday."],
         publish_at="2026-10-10T14:00:00Z",
         community=f"{COMMUNITY_URL}?s=20",
         share_with_followers=share_with_followers,
@@ -153,7 +190,7 @@ async def test_scheduling_into_a_community_names_it_as_x_does(
 
 async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock):
     result = await mcp.call_tool(
-        "schedule_post", text="Hi.", publish_at="2026-10-10T14:00:00Z", community="123"
+        "schedule_post", parts=["Hi."], publish_at="2026-10-10T14:00:00Z", community="123"
     )
 
     assert error_text(result) == "X has no Community with that ID. Check the URL."
@@ -162,7 +199,7 @@ async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock)
 
 async def _post_now_on_the_web(client: AsyncClient, text: str = "Out now.") -> dict:
     response = await client.post(
-        "/api/v1/scheduled-posts", json={"text": text, "publish_now": True}
+        "/api/v1/scheduled-posts", json={"parts": [text], "publish_now": True}
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -194,14 +231,14 @@ async def test_editing_the_text_and_time_of_a_waiting_scheduled_post_saves_both(
     result = await mcp.call_tool(
         "edit_scheduled_post",
         scheduled_post_id=scheduled["id"],
-        text="  Launch day.  ",
+        parts=["  Launch day.  "],
         publish_at="2026-10-11T11:30:00+02:00",
     )
 
     assert result["isError"] is False, result
     assert result["structuredContent"] == {
         **scheduled,
-        "text": "Launch day.",
+        "parts": [{"text": "Launch day.", "live": False, "x_post_url": None}],
         "publish_at": "2026-10-11T09:30:00Z",
     }
 
@@ -263,7 +300,7 @@ async def test_a_published_scheduled_post_can_be_neither_edited_nor_deleted(
     published = await _post_now_on_the_web(client)
 
     edited = await mcp.call_tool(
-        "edit_scheduled_post", scheduled_post_id=published["id"], text="Changed"
+        "edit_scheduled_post", scheduled_post_id=published["id"], parts=["Changed"]
     )
     deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=published["id"])
 
@@ -282,15 +319,15 @@ async def test_a_scheduled_post_being_published_can_be_neither_edited_nor_delete
         await session.commit()
 
     edited = await mcp.call_tool(
-        "edit_scheduled_post", scheduled_post_id=scheduled["id"], text="Changed"
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], parts=["Changed"]
     )
     deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=scheduled["id"])
 
     assert error_text(edited) == error_text(deleted) == PUBLISHING_STARTED
     listed = await mcp.call_tool("list_scheduled_posts")
-    assert [(post["text"], post["state"]) for post in listed["structuredContent"]["data"]] == [
-        ("Shipping on Monday.", "publishing")
-    ]
+    assert [
+        (post["parts"][0]["text"], post["state"]) for post in listed["structuredContent"]["data"]
+    ] == [("Shipping on Monday.", "publishing")]
 
 
 async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fixed_clock):
@@ -300,7 +337,7 @@ async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fix
     bobs = ScheduledPost(
         user_id=bob.id,
         x_user_id="2002",
-        text="Bob's.",
+        parts=[ScheduledPostPart(position=0, text="Bob's.")],
         publish_at=fixed_clock() + timedelta(hours=2),
         state=SCHEDULED,
         created_at=fixed_clock(),
@@ -309,7 +346,7 @@ async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fix
     db.add(bobs)
     await db.commit()
 
-    edited = await mcp.call_tool("edit_scheduled_post", scheduled_post_id=bobs.id, text="Mine?")
+    edited = await mcp.call_tool("edit_scheduled_post", scheduled_post_id=bobs.id, parts=["Mine?"])
     deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=bobs.id)
 
     assert error_text(edited) == error_text(deleted) == "Scheduled post not found."
@@ -339,7 +376,7 @@ async def test_past_communities_are_the_ones_the_user_posted_to_before(
 ):
     assert (await mcp.call_tool("list_past_communities"))["structuredContent"] == {"data": []}
     await mcp.call_tool(
-        "schedule_post", text="Hi.", publish_at="2026-10-10T14:00:00Z", community=COMMUNITY_ID
+        "schedule_post", parts=["Hi."], publish_at="2026-10-10T14:00:00Z", community=COMMUNITY_ID
     )
 
     result = await mcp.call_tool("list_past_communities")
@@ -373,9 +410,9 @@ async def test_connect_x_links_to_the_scheduled_page(subscribed, mcp):
 )
 async def test_the_write_tools_allow_10_calls_a_minute(connected, mcp, fixed_clock, name):
     arguments = {
-        "schedule_post": {"text": "Hi.", "publish_at": "2026-10-10T14:00:00Z"},
-        "post_now": {"text": "x" * 281},
-        "edit_scheduled_post": {"scheduled_post_id": "scheduled_post_missing", "text": "Hi."},
+        "schedule_post": {"parts": ["Hi."], "publish_at": "2026-10-10T14:00:00Z"},
+        "post_now": {"parts": ["x" * 281]},
+        "edit_scheduled_post": {"scheduled_post_id": "scheduled_post_missing", "parts": ["Hi."]},
         "delete_scheduled_post": {"scheduled_post_id": "scheduled_post_missing"},
     }[name]
     for _ in range(10):
@@ -409,10 +446,10 @@ async def subscription_ended(connected, mcp, db) -> None:
 @pytest.mark.parametrize(
     ("name", "arguments"),
     [
-        ("schedule_post", {"text": "Hi.", "publish_at": "2026-10-10T14:00:00Z"}),
-        ("post_now", {"text": "Hi."}),
+        ("schedule_post", {"parts": ["Hi."], "publish_at": "2026-10-10T14:00:00Z"}),
+        ("post_now", {"parts": ["Hi."]}),
         ("list_scheduled_posts", {}),
-        ("edit_scheduled_post", {"scheduled_post_id": "scheduled_post_missing", "text": "Hi."}),
+        ("edit_scheduled_post", {"scheduled_post_id": "scheduled_post_missing", "parts": ["Hi."]}),
         ("delete_scheduled_post", {"scheduled_post_id": "scheduled_post_missing"}),
         ("list_past_communities", {}),
     ],
@@ -449,7 +486,7 @@ FIRST_X_POST = "https://x.com/i/web/status/1890000000000000001"
 async def test_post_now_publishes_typed_text_and_links_to_it_on_x(
     connected, mcp, fake_x_publisher, fixed_clock
 ):
-    result = await mcp.call_tool("post_now", text="Out now.")
+    result = await mcp.call_tool("post_now", parts=["Out now."])
 
     assert result["isError"] is False, result
     posted = result["structuredContent"]
@@ -475,7 +512,7 @@ async def test_post_now_that_x_refuses_says_it_failed_and_why(
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Duplicate content.")
 
-    result = await mcp.call_tool("post_now", text="Duplicate.")
+    result = await mcp.call_tool("post_now", parts=["Duplicate."])
 
     assert result["isError"] is False, result
     posted = result["structuredContent"]
@@ -488,7 +525,7 @@ async def test_post_now_into_a_community_publishes_it_there(
     connected, known_community, mcp, fake_x_publisher, fixed_clock
 ):
     result = await mcp.call_tool(
-        "post_now", text="Hello Community.", community=COMMUNITY_URL, share_with_followers=True
+        "post_now", parts=["Hello Community."], community=COMMUNITY_URL, share_with_followers=True
     )
 
     assert result["structuredContent"]["state"] == "published"
@@ -501,7 +538,7 @@ async def test_a_community_post_x_refuses_fails_with_the_membership_hint(
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(403, "You are not permitted.")
 
-    result = await mcp.call_tool("post_now", text="Hello Community.", community=COMMUNITY_ID)
+    result = await mcp.call_tool("post_now", parts=["Hello Community."], community=COMMUNITY_ID)
 
     assert result["structuredContent"]["state"] == "failed"
     assert result["structuredContent"]["message"] == (
@@ -516,7 +553,7 @@ async def test_post_now_x_didnt_take_says_pumpkit_keeps_trying(
 ):
     fake_x_publisher.fail_publish = error
 
-    result = await mcp.call_tool("post_now", text="Out now.")
+    result = await mcp.call_tool("post_now", parts=["Out now."])
 
     assert result["isError"] is False, result
     posted = result["structuredContent"]
