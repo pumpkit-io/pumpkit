@@ -340,11 +340,15 @@ async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
     changed = await mcp.call_tool(
         "edit_scheduled_post", scheduled_post_id=failed["id"], parts=["Changed.", "Fixed two."]
     )
+    cut = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=failed["id"], parts=["Live one."]
+    )
     fixed = await mcp.call_tool(
         "edit_scheduled_post", scheduled_post_id=failed["id"], parts=["Live one.", "Fixed two."]
     )
 
     assert error_text(changed) == "Part 1 is already on X, so it can't change."
+    assert error_text(cut) == "Keep at least one Part after the ones already on X."
     assert fixed["isError"] is False, fixed
     assert [(p["text"], p["live"]) for p in fixed["structuredContent"]["parts"]] == [
         ("Live one.", True),

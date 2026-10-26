@@ -38,11 +38,14 @@ def check_length(parts: list[str], *, limit: int) -> None:
 def check_live_parts_kept(live: list[str], parts: list[str]) -> None:
     """
     The texts of the live Parts open `parts` in their order, unchanged: they are on X, and the
-    rest go out as replies to the last of them (ADR 0014).
+    rest go out as replies to the last of them (ADR 0014). At least one Part follows them, or a
+    reschedule would publish nothing.
     """
     for number, text in enumerate(live, start=1):
         if len(parts) < number or parts[number - 1] != text:
             raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
+    if live and len(parts) == len(live):
+        raise LivePartLocked("Keep at least one Part after the ones already on X.")
 
 
 def check_publish_at(publish_at: Optional[datetime], *, now: datetime) -> datetime:
