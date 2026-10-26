@@ -20,8 +20,19 @@ async def test_initialize_returns_the_server_instructions(subscribed, mcp):
     assert result["serverInfo"]["name"] == "pumpkit"
     assert result["capabilities"]["tools"] is not None
     instructions = result["instructions"]
-    for term in ("Brief", "Feedback", "Version", "Final", "Scheduled post", "Post now"):
+    for term in (
+        "Brief",
+        "Feedback",
+        "Version",
+        "Final",
+        "Format",
+        "Thread",
+        "Part",
+        "Scheduled post",
+        "Post now",
+    ):
         assert term in instructions
+    assert "every Part" in instructions
     assert "explicit yes" in instructions
 
 

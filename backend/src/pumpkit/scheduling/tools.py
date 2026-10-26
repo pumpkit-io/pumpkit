@@ -101,7 +101,7 @@ async def schedule_post(
     Schedule a post on the User's connected X account for `publish_at`, an ISO 8601 time with
     its UTC offset, on a whole minute and at least a minute from now. Give `parts`, its text
     as a list of Parts in order (one Part for a single X post), or the id of a Version to
-    publish its Final. It goes to the User's profile, or to the Community whose URL or ID
+    publish its Final, every Part of a Thread's Final in order. It goes to the User's profile, or to the Community whose URL or ID
     `community` holds, where `share_with_followers` also shows it to their followers.
     """
     return await _create_scheduled_post(
@@ -136,8 +136,8 @@ async def post_now(
     Publish a post on the User's connected X account right away. Show the User the exact text
     of every Part and get their yes first. Give `parts`, its text as a list of Parts in order
     (one Part for a single X post, several for a Thread that X shows as a chain of replies), or
-    the id of a Version to publish its Final. It goes to the User's
-    profile, or to the Community whose URL or ID `community` holds, where
+    the id of a Version to publish its Final, every Part of a Thread's Final in order. It goes
+    to the User's profile, or to the Community whose URL or ID `community` holds, where
     `share_with_followers` also shows it to their followers.
     """
     posted = await _create_scheduled_post(

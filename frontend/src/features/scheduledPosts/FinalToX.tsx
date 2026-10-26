@@ -67,6 +67,45 @@ function Outcome({ created, postNow }: { created: ScheduledPost; postNow: boolea
   );
 }
 
+/** The text that goes to X, a Thread as its numbered Parts, each counted against the limit. */
+function FinalPreview({
+  version,
+  lengths,
+  limit,
+}: {
+  version: Version;
+  lengths: number[];
+  limit: number;
+}) {
+  const box = 'max-h-64 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-3';
+  const text = 'whitespace-pre-wrap break-words font-sans text-sm text-foreground';
+  if (version.format !== 'thread') {
+    return (
+      <div className={box}>
+        {version.parts.map((part, i) => (
+          <div key={i} className="space-y-1.5">
+            <p className={text}>{part.text}</p>
+            <XLengthCounter length={lengths[i]} limit={limit} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <ol aria-label="Parts" className={box}>
+      {version.parts.map((part, i) => (
+        <li key={i} className="space-y-1.5 border-l-2 border-border pl-3">
+          <p className="font-sans text-xs font-medium tabular-nums text-muted-foreground">
+            Part {i + 1}
+          </p>
+          <p className={text}>{part.text}</p>
+          <XLengthCounter length={lengths[i]} limit={limit} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /**
  * Schedules the Final for a time the User picks, or posts it now after a confirmation. The
  * Scheduled post keeps its own copy of the text, so later Feedback leaves it alone.
@@ -148,16 +187,7 @@ function FinalToXDialog({
     description = `It goes out ${where} ${postNow ? 'straight away' : 'at the time you pick'}.`;
     body = (
       <>
-        <div className="max-h-48 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-3">
-          {version.parts.map((part, i) => (
-            <div key={i} className="space-y-1.5">
-              <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
-                {part.text}
-              </p>
-              <XLengthCounter length={lengths[i]} limit={connection.charLimit} />
-            </div>
-          ))}
-        </div>
+        <FinalPreview version={version} lengths={lengths} limit={connection.charLimit} />
         <DestinationField value={draft} onChange={setDraft} disabled={sending} />
         {!postNow && <PublishTimeField value={when} onChange={setWhen} disabled={sending} />}
         {error && <ErrorBanner message={error} />}
