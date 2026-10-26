@@ -2,39 +2,54 @@
 What the humanizer call is handed after Feedback, on top of what pumpkit-v6 sent it.
 
 Written for Pumpkit, not ported: these messages carry the rules so `HUMANIZER_PROMPT` stays v6's.
+Each text comes in its own Format, so after a switch the previous Final and the Draft differ.
 """
 
+from pumpkit.posts.formats import FORMAT_THREAD, Format
+from pumpkit.posts.writing.prompts.feedback import format_noun
+from pumpkit.posts.writing.prompts.parts import format_text
 
-def previous_final_message(final: str) -> str:
+
+def previous_final_message(format: Format, parts: list[str]) -> str:
+    noun = format_noun(format)
     return (
-        "This is the post as I last saw it, before my latest feedback.\n\n"
-        f"<previous_post>\n{final}\n</previous_post>"
+        f"This is the {noun} as I last saw it, before my latest feedback.\n\n"
+        f"<previous_{noun}>\n{format_text(format, parts)}\n</previous_{noun}>"
     )
 
 
-def latest_feedback_message(feedback: str) -> str:
+def latest_feedback_message(feedback: str, previous: Format, format: Format) -> str:
     """
     Only the latest, framed as done: handed earlier Feedback as standing asks, the humanizer
     applied "write a much longer version" again on every later Version.
     """
+    noun = format_noun(format)
+    switch = ""
+    if previous != format:
+        switch = f", including turning the {format_noun(previous)} into a {_new_format(format)}"
     return (
-        "This is my latest feedback on that post. The post below already applies it, so "
-        "don't apply it again, and don't add, remove or reorder anything to serve it. If it "
-        "asks for something your guidelines would undo, keep what it asks for.\n\n"
-        f"<feedback>\n{feedback}\n</feedback>"
+        f"This is my latest feedback on that {format_noun(previous)}. The {noun} below already "
+        f"applies it{switch}, so don't apply it again, and don't add, remove or reorder "
+        "anything to serve it. If it asks for something your guidelines would undo, keep what "
+        f"it asks for.\n\n<feedback>\n{feedback}\n</feedback>"
     )
 
 
-def revised_draft_message(draft: str) -> str:
+def _new_format(format: Format) -> str:
+    return "thread" if format == FORMAT_THREAD else "single post"
+
+
+def revised_draft_message(previous: Format, format: Format, draft_parts: list[str]) -> str:
     """
     Punctuation alone doesn't count as a change: the scrub runs on the Draft, not the Final, so
     a sentence the User left alone can differ from the previous Final in a quote or a dash.
     """
+    noun = format_noun(format)
     return (
-        "This is the post to rewrite. Return every sentence that is also in the previous "
-        "post exactly as it is in <post> below, even if it moved. A sentence that differs "
-        "only in punctuation counts as unchanged. Apply your guidelines only to the "
-        "sentences that are new or reworded, and don't add sentences or ideas the post "
-        "doesn't have.\n\n"
-        f"<post>\n{draft}\n</post>"
+        f"This is the {noun} to rewrite. Return every sentence that is also in the previous "
+        f"{format_noun(previous)} exactly as it is in <{noun}> below, even if it moved. A "
+        "sentence that differs only in punctuation counts as unchanged. Apply your guidelines "
+        "only to the sentences that are new or reworded, and don't add sentences or ideas the "
+        f"{noun} doesn't have.\n\n"
+        f"<{noun}>\n{format_text(format, draft_parts)}\n</{noun}>"
     )

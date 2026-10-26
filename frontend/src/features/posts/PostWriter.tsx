@@ -5,7 +5,7 @@ import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { charCount } from '@/lib/characters';
-import { BRIEF_MAX_CHARS } from '@/services/postService';
+import { BRIEF_MAX_CHARS, FORMAT_POST } from '@/services/postService';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FeedbackForm } from './FeedbackForm';
 import { FormatSelector } from './FormatSelector';
@@ -82,6 +82,7 @@ export function PostWriter() {
             isWriting={isWriting}
             error={error}
             notice={notice}
+            latestFormat={post.versions[post.versions.length - 1]?.format ?? FORMAT_POST}
             onSend={addFeedback}
           />
         </div>

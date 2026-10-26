@@ -7,7 +7,7 @@ from pumpkit.auth.models import User
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
-from pumpkit.posts.formats import FORMAT_POST, Format, part_char_count, part_char_limit
+from pumpkit.posts.formats import Format, part_char_count, part_char_limit
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.schemas import (
@@ -173,11 +173,18 @@ async def start_post(
 
 
 async def add_version(
-    db: AsyncSession, llm: LLM, user: User, post_id: str, feedback: str, now: datetime
+    db: AsyncSession,
+    llm: LLM,
+    user: User,
+    post_id: str,
+    feedback: str,
+    format: Optional[Format],
+    now: datetime,
 ) -> VersionResponse:
     """
-    Write the next Version of the User's Post from Feedback, with the corpus the Post started
-    with. Stored after the calls like `start_post`, and a failure likewise.
+    Write the next Version of the User's Post from Feedback, in `format` or else the latest
+    Version's, with the corpus the Post started with. Stored after the calls like `start_post`,
+    and a failure likewise.
     """
     post = await _user_post(db, user=user, post_id=post_id)
     versions = _versions(post)
@@ -189,19 +196,20 @@ async def add_version(
         EarlierVersion(feedback=v.feedback, format=v.format, final_parts=v.final_parts or [])
         for v in versions
     ]
+    format = format or versions[-1].format
     sequence = len(post.attempts) + 1
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
 
     try:
-        written = await write_next_version(llm, corpus, post.brief, earlier, feedback)
+        written = await write_next_version(llm, corpus, post.brief, earlier, feedback, format)
     except Exception as error:
         await _keep_failed_attempt(
             db,
             post=post,
             sequence=sequence,
             feedback=feedback,
-            format=FORMAT_POST,
+            format=format,
             error=error,
             now=now,
         )

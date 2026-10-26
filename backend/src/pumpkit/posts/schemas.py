@@ -29,6 +29,8 @@ class FeedbackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     feedback: str = Field(..., max_length=FEEDBACK_MAX_CHARS)
+    # None keeps the latest Version's Format.
+    format: Optional[Format] = None
 
     @field_validator("feedback")
     @classmethod

@@ -77,8 +77,11 @@ export const postService = {
     return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
   },
   /** Writes the next Version from Feedback before answering, which can take a minute or two. */
-  addVersion: async (postId: string, feedback: string): Promise<Version> => {
-    const { data } = await apiService.post<VersionApi>(`/posts/${postId}/versions`, { feedback });
+  addVersion: async (postId: string, feedback: string, format: Format): Promise<Version> => {
+    const { data } = await apiService.post<VersionApi>(`/posts/${postId}/versions`, {
+      feedback,
+      format,
+    });
     return toVersion(data);
   },
 };

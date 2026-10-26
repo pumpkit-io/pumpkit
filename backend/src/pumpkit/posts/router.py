@@ -62,5 +62,6 @@ async def add_version(
         user=current_user,
         post_id=post_id,
         feedback=feedback_request.feedback,
+        format=feedback_request.format,
         now=clock(),
     )

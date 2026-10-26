@@ -1,5 +1,7 @@
 """The MCP tools for writing Posts, over the same mediator as the router."""
 
+from typing import Optional
+
 from pumpkit.auth.models import User
 from pumpkit.core.mcp_tools import ADDITIVE, READ_ONLY, READ_ONLY_RATE, McpTool, ToolCall
 from pumpkit.posts import mediator
@@ -44,13 +46,17 @@ async def start_post(
     return _post_tool_response(post)
 
 
-async def give_feedback(call: ToolCall[User], post_id: str, feedback: str) -> VersionToolResponse:
+async def give_feedback(
+    call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
+) -> VersionToolResponse:
     """
     Give Feedback in plain words on the latest Version of one of the User's Posts, such as
-    "shorter" or "end with a question", and write its next Version, keeping the earlier ones.
-    Show the User the new Final and its character count. Takes up to a minute.
+    "shorter", "end with a question" or "make Part 3 punchier", and write its next Version,
+    keeping the earlier ones. `format` switches the new Version to "post" (a single X post) or
+    "thread"; leave it out to keep the latest Version's Format. Show the User the new Final,
+    with every Part and its character count. Takes up to a minute.
     """
-    feedback_request = FeedbackRequest(feedback=feedback)
+    feedback_request = FeedbackRequest(feedback=feedback, format=format)
     llm = await call.provide(get_llm)
     version = await mediator.add_version(
         db=call.db,
@@ -58,6 +64,7 @@ async def give_feedback(call: ToolCall[User], post_id: str, feedback: str) -> Ve
         user=call.user,
         post_id=post_id,
         feedback=feedback_request.feedback,
+        format=feedback_request.format,
         now=call.now,
     )
     return VersionToolResponse.model_validate(version.model_dump())
