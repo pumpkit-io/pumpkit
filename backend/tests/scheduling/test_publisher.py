@@ -398,12 +398,25 @@ async def test_a_post_whose_outcome_is_unknown_fails_without_a_retry(
     assert len(fake_x_publisher.published) == 1
 
 
-async def _crashed_mid_publish(db_session_maker, scheduled_post_id: str, clock) -> None:
-    """Claimed into publishing by a publisher that died before recording the outcome."""
+async def _crashed_mid_publish(
+    db_session_maker, scheduled_post_id: str, clock, *, live_parts: int = 0
+) -> None:
+    """
+    Claimed into publishing by a publisher that died before recording the outcome, after
+    recording its first `live_parts` Parts as live.
+    """
     async with db_session_maker() as session:
         assert await scheduled_posts_service.claim(
             session, scheduled_post_id=scheduled_post_id, now=clock()
         )
+        scheduled_post = await scheduled_posts_service.get(
+            session, scheduled_post_id=scheduled_post_id
+        )
+        assert scheduled_post is not None
+        for part in scheduled_post.parts[:live_parts]:
+            await scheduled_posts_service.record_part_live(
+                session, part, x_post_id="1890000000000000777"
+            )
         await session.commit()
 
 
@@ -434,6 +447,32 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
         distinct_id=subscribed.user_id,
         properties={"reason": "outcome_unknown", "format": "post", "part_count": 1},
     )
+
+
+async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_live(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    scheduled_post_id = await _schedule_thread(
+        client, "2026-10-10T12:02:00Z", ["Went out", "Unknown", "Never sent"]
+    )
+    fixed_clock.advance(timedelta(minutes=2))
+    await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=1)
+    fixed_clock.advance(timedelta(minutes=10, seconds=30))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    stuck = (await _listed(client))["Went out"]
+    assert stuck["state"] == "failed"
+    assert stuck["failed_reason"] == (
+        "X didn't confirm Part 2. It may have been published. Check your X profile."
+    )
+    assert [(p["live"], p["x_post_url"]) for p in stuck["parts"]] == [
+        (True, "https://x.com/i/web/status/1890000000000000777"),
+        (False, None),
+        (False, None),
+    ]
+    assert fake_x_publisher.published == []
 
 
 async def test_the_loop_runs_passes_until_it_is_stopped(
