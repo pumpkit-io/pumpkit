@@ -15,7 +15,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.core.logging import logger
 from pumpkit.core.time import Clock, system_clock
-from pumpkit.scheduling.publishing import fail_stuck, publish_next_due
+from pumpkit.scheduling.publishing import publish_next_due, recover_stuck
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
 # compose.yml's publisher healthcheck reads this exact path's age.
@@ -30,7 +30,7 @@ async def run_pass(
 ) -> None:
     """Publish every due Scheduled post. With `stop` set, it returns after the one in hand."""
     async with session_maker() as db:
-        await fail_stuck(db, now=clock())
+        await recover_stuck(db, now=clock())
     while stop is None or not stop.is_set():
         # A session per Scheduled post: `publishing` commits as it goes.
         async with session_maker() as db:

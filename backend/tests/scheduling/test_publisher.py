@@ -475,6 +475,54 @@ async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_li
     assert fake_x_publisher.published == []
 
 
+async def test_a_post_stuck_in_publishing_with_its_part_live_becomes_published(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
+):
+    captured = MagicMock()
+    monkeypatch.setattr(publish_module, "posthog_client", captured)
+    await connect_x()
+    scheduled_post_id = await _schedule(client, "2026-10-10T12:02:00Z", "Went out")
+    fixed_clock.advance(timedelta(minutes=2))
+    await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=1)
+    fixed_clock.advance(timedelta(minutes=10, seconds=30))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    published = (await _listed(client))["Went out"]
+    assert published["state"] == "published"
+    assert published["failed_reason"] is None
+    # The time of the pass that claimed it, as that pass would have recorded.
+    assert published["published_at"] == "2026-10-10T12:02:30Z"
+    assert published["x_post_url"] == "https://x.com/i/web/status/1890000000000000777"
+    assert fake_x_publisher.published == []
+    captured.capture.assert_called_once_with(
+        "scheduled_post_published",
+        distinct_id=subscribed.user_id,
+        properties={"source": "typed", "destination": "profile", "format": "post", "part_count": 1},
+    )
+
+
+async def test_a_thread_stuck_in_publishing_with_every_part_live_becomes_published(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    scheduled_post_id = await _schedule_thread(
+        client, "2026-10-10T12:02:00Z", ["All out", "Also out"]
+    )
+    fixed_clock.advance(timedelta(minutes=2))
+    await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=2)
+    fixed_clock.advance(timedelta(minutes=10, seconds=30))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    published = (await _listed(client))["All out"]
+    assert published["state"] == "published"
+    assert published["failed_reason"] is None
+    assert published["published_at"] == "2026-10-10T12:02:30Z"
+    assert [p["live"] for p in published["parts"]] == [True, True]
+    assert fake_x_publisher.published == []
+
+
 async def test_the_loop_runs_passes_until_it_is_stopped(
     client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):

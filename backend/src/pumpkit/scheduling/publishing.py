@@ -37,13 +37,13 @@ async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: date
     return True
 
 
-async def fail_stuck(db: AsyncSession, *, now: datetime) -> None:
-    scheduled_post_ids = await publish.fail_stuck(db, now=now)
+async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
+    recovered = await publish.recover_stuck(db, now=now)
     await db.commit()
-    for scheduled_post_id in scheduled_post_ids:
-        scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
-        if scheduled_post is not None:
-            publish.capture_failed(scheduled_post, "outcome_unknown")
+    for scheduled_post in recovered.published:
+        publish.capture_published(scheduled_post)
+    for scheduled_post in recovered.failed:
+        publish.capture_failed(scheduled_post, "outcome_unknown")
 
 
 async def _publish_claimed(

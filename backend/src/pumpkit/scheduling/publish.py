@@ -73,24 +73,39 @@ class Failed(Exception):
     reason: str
 
 
-async def fail_stuck(db: AsyncSession, *, now: datetime) -> list[str]:
+@dataclass
+class Recovered:
+    published: list[ScheduledPost]
+    failed: list[ScheduledPost]
+
+
+async def recover_stuck(db: AsyncSession, *, now: datetime) -> Recovered:
     """
-    Fail Scheduled posts a crashed publisher left in publishing: X may have taken them. A
-    Thread's reason names its first Part not recorded as live.
+    Settle Scheduled posts a crashed publisher left in publishing. One with every Part live is
+    Published; any other is Failed, since X may have taken the Part in flight, and a Thread's
+    reason names its first Part not live.
     """
-    scheduled_post_ids = await service.fail_stuck(
-        db, publishing_since=now - STUCK_AFTER, reason=OUTCOME_UNKNOWN_REASON, now=now
+    publishing_since = now - STUCK_AFTER
+    published_ids = await service.publish_stuck(db, publishing_since=publishing_since, now=now)
+    failed_ids = await service.fail_stuck(
+        db, publishing_since=publishing_since, reason=OUTCOME_UNKNOWN_REASON, now=now
     )
-    for scheduled_post_id in scheduled_post_ids:
-        scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
-        assert scheduled_post is not None
-        not_live = next((part for part in scheduled_post.parts if part.x_post_id is None), None)
-        subject = _subject(scheduled_post, not_live) if not_live is not None else None
+    published = [await _reloaded(db, scheduled_post_id) for scheduled_post_id in published_ids]
+    failed = [await _reloaded(db, scheduled_post_id) for scheduled_post_id in failed_ids]
+    for scheduled_post in failed:
+        not_live = next(part for part in scheduled_post.parts if part.x_post_id is None)
+        subject = _subject(scheduled_post, not_live)
         if subject is not None:
             await service.record_failed(
                 db, scheduled_post, reason=_outcome_unknown(subject), now=now
             )
-    return scheduled_post_ids
+    return Recovered(published=published, failed=failed)
+
+
+async def _reloaded(db: AsyncSession, scheduled_post_id: str) -> ScheduledPost:
+    scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
+    assert scheduled_post is not None
+    return scheduled_post
 
 
 async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPost) -> XConnection:

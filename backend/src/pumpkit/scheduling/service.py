@@ -7,7 +7,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, cast
 
-from sqlalchemy import CursorResult, case, delete, func, insert, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    CursorResult,
+    Exists,
+    and_,
+    case,
+    delete,
+    func,
+    insert,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.scheduling.communities import Community, Destination
@@ -229,24 +241,60 @@ async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
     return result.scalar_one_or_none()
 
 
+async def publish_stuck(
+    db: AsyncSession, *, publishing_since: datetime, now: datetime
+) -> list[str]:
+    """
+    Move every Scheduled post in publishing since before `publishing_since` whose Parts are all
+    live to Published, at its claim time, and return their ids.
+    """
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(_stuck(publishing_since), ~_has_part_not_live())
+        .values(
+            state=PUBLISHED,
+            published_at=ScheduledPost.publishing_started_at,
+            updated_at=now,
+        )
+        .returning(ScheduledPost.id)
+        .execution_options(synchronize_session=False)
+    )
+    return list(result.scalars())
+
+
 async def fail_stuck(
     db: AsyncSession, *, publishing_since: datetime, reason: str, now: datetime
 ) -> list[str]:
     """
-    Move every Scheduled post in publishing since before `publishing_since` to Failed, and
-    return their ids. Parts already live stay live.
+    Move every Scheduled post in publishing since before `publishing_since` with a Part not
+    live to Failed, and return their ids. Parts already live stay live.
     """
     result = await db.execute(
         update(ScheduledPost)
-        .where(
-            ScheduledPost.state == PUBLISHING,
-            ScheduledPost.publishing_started_at < publishing_since,
-        )
+        .where(_stuck(publishing_since), _has_part_not_live())
         .values(state=FAILED, failed_reason=reason, updated_at=now)
         .returning(ScheduledPost.id)
         .execution_options(synchronize_session=False)
     )
     return list(result.scalars())
+
+
+def _stuck(publishing_since: datetime) -> ColumnElement[bool]:
+    return and_(
+        ScheduledPost.state == PUBLISHING,
+        ScheduledPost.publishing_started_at < publishing_since,
+    )
+
+
+def _has_part_not_live() -> Exists:
+    return (
+        select(ScheduledPostPart.id)
+        .where(
+            ScheduledPostPart.scheduled_post_id == ScheduledPost.id,
+            ScheduledPostPart.x_post_id.is_(None),
+        )
+        .exists()
+    )
 
 
 async def count_waiting(db: AsyncSession, *, user_id: str, x_user_id: str) -> int:
