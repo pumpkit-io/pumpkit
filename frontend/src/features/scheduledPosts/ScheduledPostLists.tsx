@@ -2,6 +2,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { InTheCommunity } from './InTheCommunity';
+import { LiveOnX } from './LiveOnX';
 
 const dateTime = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -24,8 +25,12 @@ function ListSection({
   );
 }
 
-/** A Thread is one item, its Part count above its Parts. */
+/**
+ * A Thread is one item, its Part count above its Parts. Until it is Published, its live Parts
+ * are marked, as a Thread that failed partway keeps them.
+ */
 function PostText({ post }: { post: ScheduledPost }) {
+  const markLive = post.state !== 'published';
   return (
     <>
       {post.parts.length > 1 && (
@@ -34,12 +39,12 @@ function PostText({ post }: { post: ScheduledPost }) {
         </p>
       )}
       {post.parts.map((part, index) => (
-        <p
-          key={index}
-          className="whitespace-pre-wrap break-words font-sans text-sm text-foreground"
-        >
-          {part.text}
-        </p>
+        <div key={index} className="space-y-0.5">
+          <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
+            {part.text}
+          </p>
+          {markLive && part.live && <LiveOnX number={index + 1} xPostUrl={part.xPostUrl} />}
+        </div>
       ))}
     </>
   );

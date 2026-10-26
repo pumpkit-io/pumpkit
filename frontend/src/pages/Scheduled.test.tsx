@@ -776,26 +776,48 @@ describe('Scheduled', () => {
       expect(await (await upcomingList()).findByText('Thread, 3 Parts')).toBeInTheDocument();
     });
 
-    it('shows the Parts of a Thread with one already on X without letting them change', async () => {
-      const failedPartway: ScheduledPost = {
-        ...THREAD,
-        state: 'failed',
-        parts: [
-          { ...THREAD.parts[0], live: true, xPostUrl: 'https://x.com/i/web/status/1' },
-          THREAD.parts[1],
-        ],
-        failedReason:
-          "X didn't confirm this post. It may have been published. Check your X profile.",
-      };
-      vi.mocked(scheduledPostService.list).mockResolvedValue([failedPartway]);
+    const FAILED_PARTWAY: ScheduledPost = {
+      ...THREAD,
+      state: 'failed',
+      parts: [
+        { ...THREAD.parts[0], live: true, xPostUrl: 'https://x.com/i/web/status/1' },
+        THREAD.parts[1],
+      ],
+      failedReason: 'X refused Part 2: Duplicate content.',
+    };
+
+    it('marks the live Parts of a Thread that failed partway', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED_PARTWAY]);
+      renderScheduled();
+
+      const failedList = within(await screen.findByRole('region', { name: 'Failed' }));
+      expect(
+        await failedList.findByText('X refused Part 2: Duplicate content.'),
+      ).toBeInTheDocument();
+      expect(failedList.getByRole('link', { name: 'Part 1 is live on X' })).toHaveAttribute(
+        'href',
+        'https://x.com/i/web/status/1',
+      );
+      expect(failedList.getAllByRole('link', { name: /live on X/ })).toHaveLength(1);
+    });
+
+    it('keeps the live Parts read-only and lets the others change before a reschedule', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED_PARTWAY]);
       vi.mocked(scheduledPostService.edit).mockResolvedValue({ ...THREAD, state: 'scheduled' });
       renderScheduled();
 
       const failedList = within(await screen.findByRole('region', { name: 'Failed' }));
       fireEvent.click(await failedList.findByRole('button', { name: 'Reschedule' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
-      expect(dialog.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(dialog.queryByLabelText('Part 1')).not.toBeInTheDocument();
       expect(dialog.getByText('A Thread starts here.')).toBeInTheDocument();
+      expect(dialog.getByRole('link', { name: 'Part 1 is live on X' })).toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Remove Part 1' })).not.toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Move Part 1 down' })).not.toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Move Part 2 up' })).toBeDisabled();
+      fireEvent.change(dialog.getByLabelText('Part 2'), { target: { value: 'Fixed two.' } });
+      fireEvent.click(dialog.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(dialog.getByLabelText('Part 3'), { target: { value: 'Three.' } });
       fireEvent.change(dialog.getByLabelText('Date and time'), {
         target: { value: '2026-10-12T09:00' },
       });
@@ -803,6 +825,7 @@ describe('Scheduled', () => {
 
       await vi.waitFor(() =>
         expect(scheduledPostService.edit).toHaveBeenCalledWith(THREAD.id, {
+          parts: ['A Thread starts here.', 'Fixed two.', 'Three.'],
           publishAt: '2026-10-12T07:00:00.000Z',
         }),
       );

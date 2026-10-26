@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { xWeightedLength } from '@/lib/xLength';
+import { LiveOnX } from './LiveOnX';
 import { partDrafts, type PartDraft } from './partDrafts';
 import { XLengthCounter } from './XLengthCounter';
 
@@ -15,7 +16,7 @@ function move(drafts: PartDraft[], from: number, to: number): PartDraft[] {
 /**
  * One text area per Part, with a counter each against `charLimit` (none while it is unknown).
  * A single Part is a single X post; adding a Part makes it a Thread, whose Parts can be moved
- * and removed.
+ * and removed. Live Parts, which open the list, are read-only and nothing moves above them.
  */
 export function PartEditor({
   parts,
@@ -31,7 +32,8 @@ export function PartEditor({
   placeholder?: string;
 }) {
   const id = useId();
-  const thread = parts.length > 1;
+  const liveCount = parts.filter((draft) => draft.live).length;
+  const thread = parts.length > 1 || liveCount > 0;
 
   const setText = (index: number, text: string) =>
     onChange(parts.map((draft, i) => (i === index ? { ...draft, text } : draft)));
@@ -40,6 +42,19 @@ export function PartEditor({
     <div className="space-y-3">
       {parts.map((draft, index) => {
         const number = index + 1;
+        if (draft.live) {
+          return (
+            <div key={draft.key} className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-sans text-sm font-medium text-foreground">Part {number}</span>
+                <LiveOnX number={number} xPostUrl={draft.xPostUrl} />
+              </div>
+              <p className="whitespace-pre-wrap break-words rounded-md bg-muted px-3 py-2 font-sans text-sm text-muted-foreground">
+                {draft.text}
+              </p>
+            </div>
+          );
+        }
         const textId = `${id}-part-${draft.key}`;
         return (
           <div key={draft.key} className="space-y-1.5">
@@ -54,7 +69,7 @@ export function PartEditor({
                     variant="ghost"
                     size="sm"
                     aria-label={`Move Part ${number} up`}
-                    disabled={disabled || index === 0}
+                    disabled={disabled || index === liveCount}
                     onClick={() => onChange(move(parts, index, index - 1))}
                   >
                     Up
