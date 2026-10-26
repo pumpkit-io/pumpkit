@@ -97,7 +97,7 @@ The shape of a Version's text: a single X post, or a Thread. The User picks it w
 _Avoid_: type, mode, kind
 
 **Thread**:
-Text made of several ordered Parts, published on X as a chain in which each Part replies to the one before. A Version or a Scheduled post may be a Thread.
+Text made of several ordered Parts, published on X with each Part replying to the one before. A Version or a Scheduled post may be a Thread.
 _Avoid_: tweetstorm, chain, multi-post
 
 **Part**:

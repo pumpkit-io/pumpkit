@@ -99,10 +99,12 @@ async def schedule_post(
 ) -> ScheduledPostToolResponse:
     """
     Schedule a post on the User's connected X account for `publish_at`, an ISO 8601 time with
-    its UTC offset, on a whole minute and at least a minute from now. Give `parts`, its text
-    as a list of Parts in order (one Part for a single X post), or the id of a Version to
-    publish its Final, every Part of a Thread's Final in order. It goes to the User's profile, or to the Community whose URL or ID
-    `community` holds, where `share_with_followers` also shows it to their followers.
+    its UTC offset, on a whole minute and at least a minute from now. Give either `parts` or
+    `version_id`. `parts` is the User's text as a list of Parts in order: one Part is a single
+    X post, and several are a Thread. `version_id` schedules that Version's Final, and a
+    Thread's Final keeps every Part in order. The post goes to the User's profile, or to the
+    Community whose URL or ID is in `community`. In a Community, `share_with_followers` also
+    shows it to the User's followers.
     """
     return await _create_scheduled_post(
         call,
@@ -134,11 +136,12 @@ async def post_now(
 ) -> PostNowToolResponse:
     """
     Publish a post on the User's connected X account right away. Show the User the exact text
-    of every Part and get their yes first. Give `parts`, its text as a list of Parts in order
-    (one Part for a single X post, several for a Thread that X shows as a chain of replies), or
-    the id of a Version to publish its Final, every Part of a Thread's Final in order. It goes
-    to the User's profile, or to the Community whose URL or ID `community` holds, where
-    `share_with_followers` also shows it to their followers.
+    of every Part and get their yes first. Give either `parts` or `version_id`. `parts` is the
+    User's text as a list of Parts in order: one Part is a single X post, and several are a
+    Thread, in which each Part replies to the one before. `version_id` publishes that
+    Version's Final, and a Thread's Final keeps every Part in order. The post goes to the
+    User's profile, or to the Community whose URL or ID is in `community`. In a Community,
+    `share_with_followers` also shows it to the User's followers.
     """
     posted = await _create_scheduled_post(
         call,

@@ -148,9 +148,8 @@ class XPublisher(Protocol):
         """
         Publish `text` on the account's profile, or in the Community `community_id`, and return
         X's post id; with `reply_to`, as a reply to that X post. Never retried: a retry could
-        post it twice. A reply goes where the post it replies to is, so a reply is sent without
-        `community_id` and `share_with_followers`: a live test on Oct 26, 2026 showed a reply
-        without `community_id` lands in its parent's Community.
+        post it twice. A reply lands in its parent's Community, so it is sent without
+        `community_id` and `share_with_followers` (confirmed live, Oct 2026).
         """
         ...
 
