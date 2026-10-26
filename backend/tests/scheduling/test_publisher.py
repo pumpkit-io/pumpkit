@@ -146,6 +146,52 @@ async def test_a_thread_is_not_published_while_a_part_is_not_live(
     assert len(fake_x_publisher.published) == 2
 
 
+async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_live(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    await _schedule_thread(client, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
+    fixed_clock.advance(timedelta(minutes=2))
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Duplicate content.")
+    fake_x_publisher.fail_publish_on = 3
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    failed = (await _listed(client))["A"]
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == "X refused Part 3: Duplicate content."
+    assert [(p["live"], p["x_post_url"]) for p in failed["parts"]] == [
+        (True, "https://x.com/i/web/status/1890000000000000001"),
+        (True, "https://x.com/i/web/status/1890000000000000002"),
+        (False, None),
+        (False, None),
+        (False, None),
+    ]
+    assert len(fake_x_publisher.published) == 3
+
+
+async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_check_the_profile(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    await _schedule_thread(client, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
+    fixed_clock.advance(timedelta(minutes=2))
+    fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
+    fake_x_publisher.fail_publish_on = 3
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    fixed_clock.advance(timedelta(minutes=5))
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    failed = (await _listed(client))["A"]
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == (
+        "X didn't confirm Part 3. It may have been published. Check your X profile."
+    )
+    assert [p["live"] for p in failed["parts"]] == [True, True, False, False, False]
+    assert len(fake_x_publisher.published) == 3
+
+
 async def test_a_due_community_post_goes_out_in_its_community(
     client, db_session_maker, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, connect_x
 ):
