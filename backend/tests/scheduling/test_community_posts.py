@@ -171,3 +171,65 @@ async def test_a_community_post_is_tracked_with_where_it_went(
         },
         {"source": "typed", "destination": "profile", "format": "post", "part_count": 1},
     ]
+
+
+@pytest.mark.parametrize("share_with_followers", [True, False])
+async def test_a_community_thread_goes_out_in_the_community_as_a_chain(
+    client, subscribed, fake_x_publisher, clock, share_with_followers, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "parts": ["Part one", "Part two", "Part three"],
+            "publish_now": True,
+            "community": COMMUNITY_URL,
+            "share_with_followers": share_with_followers,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["state"] == "published"
+    assert body["community"]["id"] == COMMUNITY_ID
+    assert body["share_with_followers"] is share_with_followers
+    assert [part["live"] for part in body["parts"]] == [True, True, True]
+    assert [text for _, text in fake_x_publisher.published] == [
+        "Part one",
+        "Part two",
+        "Part three",
+    ]
+    assert fake_x_publisher.replied_to == [
+        None,
+        "1890000000000000001",
+        "1890000000000000002",
+    ]
+    assert fake_x_publisher.published_to[0] == (COMMUNITY_ID, share_with_followers)
+
+
+async def test_a_community_thread_x_refuses_partway_fails_with_the_membership_hint(
+    client, subscribed, fake_x_publisher, clock, connect_x
+):
+    await connect_x()
+    fake_x_publisher.fail_publish = NOT_A_MEMBER
+    fake_x_publisher.fail_publish_on = 2
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "parts": ["Part one", "Part two", "Part three"],
+            "publish_now": True,
+            "community": COMMUNITY_ID,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["state"] == "failed"
+    assert "You do not have permission to create this Tweet." in body["failed_reason"]
+    assert body["failed_reason"].endswith(
+        "Check that your X account is a member of this Community and allowed to post in it."
+    )
+    assert [part["live"] for part in body["parts"]] == [True, False, False]
+    assert len(fake_x_publisher.published) == 2

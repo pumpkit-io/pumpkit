@@ -368,6 +368,28 @@ async def test_publishing_into_a_community_names_it_and_whether_followers_see_it
     }
 
 
+@pytest.mark.parametrize("share_with_followers", [True, False])
+@respx.mock
+async def test_a_reply_in_a_community_names_only_the_post_it_replies_to(share_with_followers):
+    route = respx.post(X_TWEETS_URL).mock(
+        return_value=httpx.Response(201, json={"data": {"id": "1891", "text": "Part 2"}})
+    )
+
+    post_id = await OfficialXPublisher().publish(
+        access_token="access-1",
+        text="Part 2",
+        community_id="1493446837214187523",
+        share_with_followers=share_with_followers,
+        reply_to="1890",
+    )
+
+    assert post_id == "1891"
+    assert json.loads(route.calls.last.request.content) == {
+        "text": "Part 2",
+        "reply": {"in_reply_to_tweet_id": "1890"},
+    }
+
+
 @pytest.mark.parametrize(
     "body",
     [

@@ -148,7 +148,9 @@ class XPublisher(Protocol):
         """
         Publish `text` on the account's profile, or in the Community `community_id`, and return
         X's post id; with `reply_to`, as a reply to that X post. Never retried: a retry could
-        post it twice. Whether a reply in a Community must repeat `community_id` is unconfirmed.
+        post it twice. A reply goes where the post it replies to is, so a reply is sent without
+        `community_id` and `share_with_followers`: a live test on Oct 26, 2026 showed a reply
+        without `community_id` lands in its parent's Community.
         """
         ...
 
@@ -241,13 +243,13 @@ class OfficialXPublisher:
         reply_to: Optional[str] = None,
     ) -> str:
         body: dict[str, Any] = {"text": text}
-        if community_id is not None:
+        if reply_to is not None:
+            body["reply"] = {"in_reply_to_tweet_id": reply_to}
+        elif community_id is not None:
             body["community_id"] = community_id
             # Also posts it to the followers' timelines, per X's developer changelog of Jul 28,
             # 2025; the English API reference wrongly ties it to super-follower posts.
             body["share_with_followers"] = share_with_followers
-        if reply_to is not None:
-            body["reply"] = {"in_reply_to_tweet_id": reply_to}
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 response = await client.post(
