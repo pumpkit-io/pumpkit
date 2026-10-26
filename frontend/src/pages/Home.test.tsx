@@ -681,6 +681,69 @@ describe('Home', () => {
       expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
     });
 
+    async function threadFinalWritten(parts: string[]) {
+      vi.mocked(postService.start).mockResolvedValue(
+        threadWith(parts.map((text) => ({ text, charCount: text.length, charLimit: 280 }))),
+      );
+      const area = await readyToWrite();
+      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
+      await writeBrief(area, 'ship');
+      return within(await area.findByRole('article', { name: 'Final' }));
+    }
+
+    it("previews every Part of a Thread's Final with its counter before scheduling it", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue({
+        ...SCHEDULED,
+        parts: [
+          { text: 'the first part', live: false, xPostUrl: null },
+          { text: 'the second part', live: false, xPostUrl: null },
+        ],
+      });
+      const final = await threadFinalWritten(['the first part', 'the second part']);
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
+      const parts = within(dialog.getByRole('list', { name: 'Parts' }))
+        .getAllByRole('listitem')
+        .map((part) => within(part));
+      expect(parts).toHaveLength(2);
+      expect(parts[0].getByText('Part 1')).toBeInTheDocument();
+      expect(parts[0].getByText('the first part')).toBeInTheDocument();
+      expect(parts[0].getByText('14 / 280')).toBeInTheDocument();
+      expect(parts[1].getByText('Part 2')).toBeInTheDocument();
+      expect(parts[1].getByText('the second part')).toBeInTheDocument();
+      expect(parts[1].getByText('15 / 280')).toBeInTheDocument();
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
+
+      expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        { sourceVersionId: 'version_attempt_01' },
+        '2026-10-12T07:00:00.000Z',
+        { community: null, shareWithFollowers: false },
+      );
+    });
+
+    it("keeps Post now disabled while any Part of a Thread's Final is over X's limit", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      const final = await threadFinalWritten(['the first part', 'a'.repeat(290), 'the last part']);
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      const parts = within(dialog.getByRole('list', { name: 'Parts' }))
+        .getAllByRole('listitem')
+        .map((part) => within(part));
+      expect(parts[0].getByText('14 / 280')).toBeInTheDocument();
+      expect(parts[1].getByText('10 characters over the 280 limit')).toBeInTheDocument();
+      expect(parts[2].getByText('13 / 280')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
+    });
+
     it('lets a Final over 280 go to an X Premium account', async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, charLimit: 25_000 });
       const final = await finalWritten('a'.repeat(290));
