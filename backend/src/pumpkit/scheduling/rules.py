@@ -20,6 +20,10 @@ class MonthFull(ConflictError):
     pass
 
 
+class LivePartLocked(ConflictError):
+    pass
+
+
 def check_length(parts: list[str], *, limit: int) -> None:
     """Each Part by X's own count; the refusal names the first Part over the limit."""
     for number, text in enumerate(parts, start=1):
@@ -29,6 +33,16 @@ def check_length(parts: list[str], *, limit: int) -> None:
             raise RuleBroken(
                 f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
             )
+
+
+def check_live_parts_kept(live: list[str], parts: list[str]) -> None:
+    """
+    The texts of the live Parts open `parts` in their order, unchanged: they are on X, and the
+    rest go out as replies to the last of them (ADR 0014).
+    """
+    for number, text in enumerate(live, start=1):
+        if len(parts) < number or parts[number - 1] != text:
+            raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
 
 
 def check_publish_at(publish_at: Optional[datetime], *, now: datetime) -> datetime:
@@ -120,7 +134,7 @@ DestinationChange = Union[KeepDestination, ToProfile, ToCommunity]
 class ScheduledPostEdit:
     """What an edit changes about a Scheduled post; None and `KeepDestination` leave it as is."""
 
-    # Replaces every Part.
+    # Every Part in order, the live ones first and unchanged.
     parts: Optional[list[str]] = None
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[datetime] = None

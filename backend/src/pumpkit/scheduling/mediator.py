@@ -244,10 +244,9 @@ async def edit_scheduled_post(
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
         raise _publishing_started()
-    # Replacing the Parts would drop the X post ids of live ones, and a reschedule would then
-    # publish them twice (ADR 0014).
-    if edit.parts is not None and any(part.x_post_id for part in scheduled_post.parts):
-        raise ConflictError("Some Parts are already on X, so the Parts can no longer change.")
+    if edit.parts is not None:
+        live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
+        rules.check_live_parts_kept(live, edit.parts)
     reschedule = None
     connection = (
         await connection_to_publish_on(db, user_id=user.id)

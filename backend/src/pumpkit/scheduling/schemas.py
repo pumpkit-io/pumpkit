@@ -127,7 +127,7 @@ class ScheduledPostUpdateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # The new Parts in order, replacing all of them.
+    # Every Part in order, replacing those not live; live Parts come first, unchanged.
     parts: Optional[Parts] = None
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None

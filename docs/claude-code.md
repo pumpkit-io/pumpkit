@@ -47,8 +47,8 @@ Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 2
 | --- | --- |
 | `schedule_post` | Schedules your own text, as one Part or several for a Thread, or a Version's Final by the Version's id, every Part of a Thread's Final in order, for a time with its UTC offset. It goes to your profile, or to a Community you name by its URL or ID, optionally shared with your followers too. |
 | `post_now` | Publishes your own text, or a Version's Final, on X right away, a Thread as a chain of replies, to your profile or a Community like `schedule_post`. Claude Code shows you the exact text of every Part and asks before calling it. It answers Published with the link to the post on X, Failed with the reason, or, when X hasn't taken the post yet, that Pumpkit keeps trying for 15 minutes. |
-| `list_scheduled_posts` | Lists your Scheduled posts with their state, time and Community, and why a Failed one failed. |
-| `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. |
+| `list_scheduled_posts` | Lists your Scheduled posts with their state, time and Community, and why a Failed one failed. Each Part says whether it is live on X. |
+| `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. In a Thread that failed partway, the live Parts are locked; the others can be edited, added, removed and reordered, and a new time publishes only them, as replies to the last live Part. |
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post. Claude Code asks before calling it. |
 | `list_past_communities` | Lists the Communities you posted to before from your connected X account. |
 | `connect_x` | Answers with the link to the Scheduled page, where you connect, reconnect or disconnect X. |

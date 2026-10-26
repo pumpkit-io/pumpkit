@@ -146,6 +146,52 @@ async def test_a_thread_is_not_published_while_a_part_is_not_live(
     assert len(fake_x_publisher.published) == 2
 
 
+async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_live(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    await _schedule_thread(client, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
+    fixed_clock.advance(timedelta(minutes=2))
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Duplicate content.")
+    fake_x_publisher.fail_publish_on = 3
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    failed = (await _listed(client))["A"]
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == "X refused Part 3: Duplicate content."
+    assert [(p["live"], p["x_post_url"]) for p in failed["parts"]] == [
+        (True, "https://x.com/i/web/status/1890000000000000001"),
+        (True, "https://x.com/i/web/status/1890000000000000002"),
+        (False, None),
+        (False, None),
+        (False, None),
+    ]
+    assert len(fake_x_publisher.published) == 3
+
+
+async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_check_the_profile(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    await _schedule_thread(client, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
+    fixed_clock.advance(timedelta(minutes=2))
+    fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
+    fake_x_publisher.fail_publish_on = 3
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    fixed_clock.advance(timedelta(minutes=5))
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    failed = (await _listed(client))["A"]
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == (
+        "X didn't confirm Part 3. It may have been published. Check your X profile."
+    )
+    assert [p["live"] for p in failed["parts"]] == [True, True, False, False, False]
+    assert len(fake_x_publisher.published) == 3
+
+
 async def test_a_due_community_post_goes_out_in_its_community(
     client, db_session_maker, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, connect_x
 ):
@@ -352,12 +398,25 @@ async def test_a_post_whose_outcome_is_unknown_fails_without_a_retry(
     assert len(fake_x_publisher.published) == 1
 
 
-async def _crashed_mid_publish(db_session_maker, scheduled_post_id: str, clock) -> None:
-    """Claimed into publishing by a publisher that died before recording the outcome."""
+async def _crashed_mid_publish(
+    db_session_maker, scheduled_post_id: str, clock, *, live_parts: int = 0
+) -> None:
+    """
+    Claimed into publishing by a publisher that died before recording the outcome, after
+    recording its first `live_parts` Parts as live.
+    """
     async with db_session_maker() as session:
         assert await scheduled_posts_service.claim(
             session, scheduled_post_id=scheduled_post_id, now=clock()
         )
+        scheduled_post = await scheduled_posts_service.get(
+            session, scheduled_post_id=scheduled_post_id
+        )
+        assert scheduled_post is not None
+        for part in scheduled_post.parts[:live_parts]:
+            await scheduled_posts_service.record_part_live(
+                session, part, x_post_id="1890000000000000777"
+            )
         await session.commit()
 
 
@@ -388,6 +447,32 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
         distinct_id=subscribed.user_id,
         properties={"reason": "outcome_unknown", "format": "post", "part_count": 1},
     )
+
+
+async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_live(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    scheduled_post_id = await _schedule_thread(
+        client, "2026-10-10T12:02:00Z", ["Went out", "Unknown", "Never sent"]
+    )
+    fixed_clock.advance(timedelta(minutes=2))
+    await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=1)
+    fixed_clock.advance(timedelta(minutes=10, seconds=30))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    stuck = (await _listed(client))["Went out"]
+    assert stuck["state"] == "failed"
+    assert stuck["failed_reason"] == (
+        "X didn't confirm Part 2. It may have been published. Check your X profile."
+    )
+    assert [(p["live"], p["x_post_url"]) for p in stuck["parts"]] == [
+        (True, "https://x.com/i/web/status/1890000000000000777"),
+        (False, None),
+        (False, None),
+    ]
+    assert fake_x_publisher.published == []
 
 
 async def test_the_loop_runs_passes_until_it_is_stopped(

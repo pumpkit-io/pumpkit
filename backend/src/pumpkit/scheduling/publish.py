@@ -49,11 +49,12 @@ NOT_SUBSCRIBED_REASON = "Not published: your Subscription had ended. Subscribe, 
 X_ACCOUNT_CHANGED_REASON = (
     "Not published: the X account it was for is no longer connected to Pumpkit."
 )
-RECONNECT_NEEDED_REASON = (
-    "Not published: X no longer accepts Pumpkit's access to your account. Reconnect X, then "
-    "reschedule it."
+RECONNECT_NEEDED = (
+    "X no longer accepts Pumpkit's access to your account. Reconnect X, then reschedule it."
 )
-X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a few minutes."
+RECONNECT_NEEDED_REASON = f"Not published: {RECONNECT_NEEDED}"
+X_UNAVAILABLE = "X was busy or unreachable. Try again in a few minutes."
+X_UNAVAILABLE_REASON = f"Not published: {X_UNAVAILABLE}"
 OUTCOME_UNKNOWN_REASON = (
     "X didn't confirm this post. It may have been published. Check your X profile."
 )
@@ -73,10 +74,23 @@ class Failed(Exception):
 
 
 async def fail_stuck(db: AsyncSession, *, now: datetime) -> list[str]:
-    """Fail Scheduled posts a crashed publisher left in publishing: X may have taken them."""
-    return await service.fail_stuck(
+    """
+    Fail Scheduled posts a crashed publisher left in publishing: X may have taken them. A
+    Thread's reason names its first Part not recorded as live.
+    """
+    scheduled_post_ids = await service.fail_stuck(
         db, publishing_since=now - STUCK_AFTER, reason=OUTCOME_UNKNOWN_REASON, now=now
     )
+    for scheduled_post_id in scheduled_post_ids:
+        scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
+        assert scheduled_post is not None
+        not_live = next((part for part in scheduled_post.parts if part.x_post_id is None), None)
+        subject = _subject(scheduled_post, not_live) if not_live is not None else None
+        if subject is not None:
+            await service.record_failed(
+                db, scheduled_post, reason=_outcome_unknown(subject), now=now
+            )
+    return scheduled_post_ids
 
 
 async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPost) -> XConnection:
@@ -138,9 +152,10 @@ async def call_x(
     access_token: str,
 ) -> str:
     """
-    X's post id for `part`, sent as a reply to `reply_to` when given, or `Failed`. A
-    "reconnect_needed" one means X refused the access token.
+    X's post id for `part`, sent as a reply to `reply_to` when given, or `Failed`, whose reason
+    names the Part in a Thread. A "reconnect_needed" one means X refused the access token.
     """
+    subject = _subject(scheduled_post, part)
     try:
         return await publisher.publish(
             access_token=access_token,
@@ -150,16 +165,31 @@ async def call_x(
             reply_to=reply_to,
         )
     except XReconnectNeededError:
-        raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
+        raise Failed("reconnect_needed", _not_published(subject, RECONNECT_NEEDED))
     except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
-        raise Failed("x_unavailable", X_UNAVAILABLE_REASON)
+        raise Failed("x_unavailable", _not_published(subject, X_UNAVAILABLE))
     except XPostRejectedError as rejected:
-        reason = f"X refused the post: {rejected.message}"
+        reason = f"X refused {subject or 'the post'}: {rejected.message}"
         if scheduled_post.community_id and rejected.x_status == 403:
             reason = f"{reason} {COMMUNITY_MEMBERSHIP_HINT}"
         raise Failed("refused_by_x", reason)
     except XPublisherError:
-        raise Failed("outcome_unknown", OUTCOME_UNKNOWN_REASON)
+        raise Failed("outcome_unknown", _outcome_unknown(subject))
+
+
+def _subject(scheduled_post: ScheduledPost, part: ScheduledPostPart) -> Optional[str]:
+    """How a failed reason names the Part: None for a single X post."""
+    return f"Part {part.position + 1}" if len(scheduled_post.parts) > 1 else None
+
+
+def _not_published(subject: Optional[str], why: str) -> str:
+    return f"{subject} not published: {why}" if subject else f"Not published: {why}"
+
+
+def _outcome_unknown(subject: Optional[str]) -> str:
+    if subject is None:
+        return OUTCOME_UNKNOWN_REASON
+    return f"X didn't confirm {subject}. It may have been published. Check your X profile."
 
 
 async def record_failure(

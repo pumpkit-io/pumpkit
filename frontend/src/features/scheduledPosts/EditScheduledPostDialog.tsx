@@ -14,7 +14,7 @@ import { destinationFrom, PROFILE_DRAFT, type DestinationDraft } from './communi
 import { DestinationField } from './DestinationField';
 import { localInputValue } from './localTime';
 import { PartEditor } from './PartEditor';
-import { partDrafts, partsSendable, partTexts } from './partDrafts';
+import { partsSendable, partTexts, scheduledPartDrafts } from './partDrafts';
 import { PublishTimeField } from './PublishTimeField';
 
 function draftOf(post: ScheduledPost): DestinationDraft {
@@ -41,9 +41,7 @@ function EditForm({
   // A Failed one's time has passed: it needs a new one.
   const originalWhen = failed ? '' : localInputValue(new Date(post.publishAt));
   const originalTexts = post.parts.map((part) => part.text);
-  // Parts already on X can't change, so a Thread with one live keeps all its Parts.
-  const locked = post.parts.some((part) => part.live);
-  const [parts, setParts] = useState(() => partDrafts(originalTexts));
+  const [parts, setParts] = useState(() => scheduledPartDrafts(post.parts));
   const [when, setWhen] = useState(originalWhen);
   const [draft, setDraft] = useState(() => draftOf(post));
   const [saving, setSaving] = useState(false);
@@ -91,18 +89,7 @@ function EditForm({
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3 px-6 pb-4">
-        {locked ? (
-          <ol className="list-decimal space-y-1.5 pl-5 font-sans text-sm text-foreground">
-            {post.parts.map((part, index) => (
-              <li key={index} className="whitespace-pre-wrap break-words">
-                {part.text}
-                {part.live && <span className="text-muted-foreground"> (on X)</span>}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <PartEditor parts={parts} onChange={setParts} charLimit={charLimit} disabled={saving} />
-        )}
+        <PartEditor parts={parts} onChange={setParts} charLimit={charLimit} disabled={saving} />
         <DestinationField value={draft} onChange={setDraft} disabled={saving} />
         <PublishTimeField value={when} onChange={setWhen} disabled={saving} />
         {error && <ErrorBanner message={error} />}
