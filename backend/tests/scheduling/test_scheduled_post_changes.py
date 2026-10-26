@@ -66,39 +66,77 @@ async def test_editing_the_parts_of_a_scheduled_post_replaces_them_all_in_order(
     assert await _listed(client) == [shortened.json()]
 
 
-async def _failed_after_part_one(client: AsyncClient, fake_x_publisher) -> dict:
+async def _failed_after_part_one(
+    client: AsyncClient, fake_x_publisher, parts: tuple[str, ...] = ("Live one.", "Refused two.")
+) -> dict:
     """A Thread whose Part 1 is live and whose Part 2 X refused."""
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
     fake_x_publisher.fail_publish_on = 2
-    response = await client.post(
-        SCHEDULED_POSTS, json={"parts": ["Live one.", "Refused two."], "publish_now": True}
-    )
+    response = await client.post(SCHEDULED_POSTS, json={"parts": list(parts), "publish_now": True})
     assert response.json()["state"] == "failed", response.text
     fake_x_publisher.fail_publish = None
     return response.json()
 
 
-async def test_the_parts_of_a_thread_with_a_live_part_cannot_change(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+LIVE_PART_LOCKED = "Part 1 is already on X, so it can't change."
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        pytest.param(["Changed one.", "Fixed two."], id="changed"),
+        pytest.param(["Fixed two."], id="removed"),
+        pytest.param(["Refused two.", "Live one."], id="moved"),
+        pytest.param(["New first.", "Live one.", "Refused two."], id="pushed back"),
+    ],
+)
+async def test_a_live_part_of_a_failed_thread_cannot_change(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, parts
 ):
     await connect_x()
     failed = await _failed_after_part_one(client, fake_x_publisher)
 
-    response = await client.patch(
-        f"{SCHEDULED_POSTS}/{failed['id']}", json={"parts": ["Changed one.", "Fixed two."]}
-    )
+    response = await client.patch(f"{SCHEDULED_POSTS}/{failed['id']}", json={"parts": parts})
 
     assert response.status_code == 409
+    assert response.json()["detail"] == LIVE_PART_LOCKED
     assert await _listed(client) == [failed]
+
+
+async def test_the_parts_after_the_live_ones_can_be_edited_added_removed_and_reordered(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    failed = await _failed_after_part_one(
+        client, fake_x_publisher, ("Live one.", "Refused two.", "Three.", "Four.")
+    )
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{failed['id']}",
+        json={"parts": ["Live one.", "Four.", "Fixed two.", "New five."]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["parts"] == [
+        failed["parts"][0],
+        {"text": "Four.", "live": False, "x_post_url": None},
+        {"text": "Fixed two.", "live": False, "x_post_url": None},
+        {"text": "New five.", "live": False, "x_post_url": None},
+    ]
+    assert failed["parts"][0]["live"] is True
+    assert await _listed(client) == [response.json()]
 
 
 async def test_rescheduling_a_thread_failed_partway_publishes_only_the_parts_not_live(
     client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    failed = await _failed_after_part_one(client, fake_x_publisher)
+    failed = await _failed_after_part_one(
+        client, fake_x_publisher, ("Live one.", "Refused two.", "Three.")
+    )
     await client.patch(
-        f"{SCHEDULED_POSTS}/{failed['id']}", json={"publish_at": "2026-10-10T13:00:00Z"}
+        f"{SCHEDULED_POSTS}/{failed['id']}",
+        json={"parts": ["Live one.", "Fixed two.", "Three."], "publish_at": "2026-10-10T13:00:00Z"},
     )
     fixed_clock.advance(timedelta(hours=1))
 
@@ -106,12 +144,31 @@ async def test_rescheduling_a_thread_failed_partway_publishes_only_the_parts_not
 
     [published] = await _listed(client)
     assert published["state"] == "published"
-    assert [text for _, text in fake_x_publisher.published] == [
-        "Live one.",
-        "Refused two.",
-        "Refused two.",
-    ]
-    assert fake_x_publisher.replied_to[-1] == "1890000000000000001"
+    assert [text for _, text in fake_x_publisher.published[2:]] == ["Fixed two.", "Three."]
+    assert fake_x_publisher.replied_to[2:] == ["1890000000000000001", "1890000000000000003"]
+    assert published["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
+
+
+async def test_rescheduling_a_thread_that_failed_on_part_1_publishes_it_from_the_start(
+    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    failed = (
+        await client.post(SCHEDULED_POSTS, json={"parts": ["One.", "Two."], "publish_now": True})
+    ).json()
+    assert failed["state"] == "failed"
+    fake_x_publisher.fail_publish = None
+    await client.patch(
+        f"{SCHEDULED_POSTS}/{failed['id']}", json={"publish_at": "2026-10-10T13:00:00Z"}
+    )
+    fixed_clock.advance(timedelta(hours=1))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    assert [text for _, text in fake_x_publisher.published[1:]] == ["One.", "Two."]
+    assert fake_x_publisher.replied_to[1:] == [None, "1890000000000000002"]
+    assert (await _listed(client))[0]["state"] == "published"
 
 
 async def test_an_edited_part_over_the_limit_is_refused_naming_the_part(

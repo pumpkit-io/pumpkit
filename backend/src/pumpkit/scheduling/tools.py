@@ -157,7 +157,8 @@ async def list_scheduled_posts(
     """
     List the User's Scheduled posts with their state, publish time and Community: waiting ones
     soonest first, then Published and Failed ones newest first. A Failed one says why it
-    failed, and a Published one links to the post on X.
+    failed, and a Published one links to the post on X. Each Part says whether it is live on
+    X, with its link: a Thread that failed partway keeps its live Parts.
     """
     listed = await mediator.list_scheduled_posts(db=call.db, user=call.user, state=state)
     return ScheduledPostsListToolResponse(data=listed.data, scheduled_page_url=scheduled_page_url())
@@ -191,10 +192,12 @@ async def edit_scheduled_post(
     share_with_followers: Optional[bool] = None,
 ) -> ScheduledPostToolResponse:
     """
-    Change a waiting or Failed Scheduled post: its text, as `parts` that replace every Part,
-    its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one another
-    try), the Community whose URL or ID `community` holds, or, with `to_profile`, send it to
-    the User's profile instead. Leave out what stays the same.
+    Change a waiting or Failed Scheduled post: its text, as `parts` listing every Part in
+    order, its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one
+    another try), the Community whose URL or ID `community` holds, or, with `to_profile`, send
+    it to the User's profile instead. Leave out what stays the same. Live Parts of a Thread
+    that failed partway are on X and locked: keep them first in `parts`, unchanged. A new time
+    publishes only the Parts not live, as replies to the last live one.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
         {"parts": parts, "publish_at": publish_at, "community": community}

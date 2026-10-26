@@ -304,6 +304,33 @@ async def test_editing_to_a_community_and_the_profile_at_once_is_refused(
     assert error_text(result) == "Give either a Community or the profile, not both."
 
 
+async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
+    connected, mcp, fake_x_publisher, fixed_clock
+):
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    fake_x_publisher.fail_publish_on = 2
+    failed = (await mcp.call_tool("post_now", parts=["Live one.", "Refused two."]))[
+        "structuredContent"
+    ]
+    assert failed["failed_reason"] == "X refused Part 2: Nope"
+
+    changed = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=failed["id"], parts=["Changed.", "Fixed two."]
+    )
+    fixed = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=failed["id"], parts=["Live one.", "Fixed two."]
+    )
+
+    assert error_text(changed) == "Part 1 is already on X, so it can't change."
+    assert fixed["isError"] is False, fixed
+    assert [(p["text"], p["live"]) for p in fixed["structuredContent"]["parts"]] == [
+        ("Live one.", True),
+        ("Fixed two.", False),
+    ]
+    listed = (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"]
+    assert [p["live"] for p in listed[0]["parts"]] == [True, False]
+
+
 PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
 
 

@@ -115,7 +115,8 @@ async def edit(
     back in scheduled for the new time and X account, as if it had never been tried. The state
     check in the update keeps a claim by the publisher between the User's read and this write safe.
     A `destination` of None leaves it where it goes; moving it into another Community is a use.
-    New `parts` replace every Part.
+    New `parts` replace every Part not live; the live ones, which open the list, stay as they
+    are with their X post ids.
     """
     values: dict[str, object] = {"updated_at": now}
     if destination is not None:
@@ -153,16 +154,24 @@ async def edit(
     if parts is not None:
         await db.execute(
             delete(ScheduledPostPart).where(
-                ScheduledPostPart.scheduled_post_id == scheduled_post_id
+                ScheduledPostPart.scheduled_post_id == scheduled_post_id,
+                ScheduledPostPart.x_post_id.is_(None),
             )
         )
-        await db.execute(
-            insert(ScheduledPostPart),
-            [
-                {"scheduled_post_id": scheduled_post_id, "position": position, "text": text}
-                for position, text in enumerate(parts)
-            ],
-        )
+        live_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(ScheduledPostPart)
+                .where(ScheduledPostPart.scheduled_post_id == scheduled_post_id)
+            )
+        ).scalar_one()
+        new_parts = [
+            {"scheduled_post_id": scheduled_post_id, "position": position, "text": text}
+            for position, text in enumerate(parts)
+            if position >= live_count
+        ]
+        if new_parts:
+            await db.execute(insert(ScheduledPostPart), new_parts)
     return True
 
 
