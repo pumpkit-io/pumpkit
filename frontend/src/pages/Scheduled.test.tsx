@@ -831,6 +831,21 @@ describe('Scheduled', () => {
       );
     });
 
+    it('holds back a reschedule that keeps only the live Parts', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED_PARTWAY]);
+      renderScheduled();
+
+      const failedList = within(await screen.findByRole('region', { name: 'Failed' }));
+      fireEvent.click(await failedList.findByRole('button', { name: 'Reschedule' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Remove Part 2' }));
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+
+      expect(dialog.getByRole('button', { name: 'Reschedule' })).toBeDisabled();
+    });
+
     it('holds back saving a Thread while one of its Parts is over the limit', async () => {
       vi.mocked(scheduledPostService.list).mockResolvedValue([THREAD]);
       renderScheduled();

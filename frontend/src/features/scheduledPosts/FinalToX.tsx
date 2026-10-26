@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { ThreadParts } from '@/components/ThreadParts';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -92,17 +93,14 @@ function FinalPreview({
     );
   }
   return (
-    <ol aria-label="Parts" className={box}>
-      {version.parts.map((part, i) => (
-        <li key={i} className="space-y-1.5 border-l-2 border-border pl-3">
-          <p className="font-sans text-xs font-medium tabular-nums text-muted-foreground">
-            Part {i + 1}
-          </p>
+    <ThreadParts parts={version.parts} className={box}>
+      {(part, number) => (
+        <>
           <p className={text}>{part.text}</p>
-          <XLengthCounter length={lengths[i]} limit={limit} />
-        </li>
-      ))}
-    </ol>
+          <XLengthCounter length={lengths[number - 1]} limit={limit} />
+        </>
+      )}
+    </ThreadParts>
   );
 }
 

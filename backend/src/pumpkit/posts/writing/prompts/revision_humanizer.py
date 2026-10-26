@@ -5,8 +5,7 @@ Written for Pumpkit, not ported: these messages carry the rules so `HUMANIZER_PR
 Each text comes in its own Format, so after a switch the previous Final and the Draft differ.
 """
 
-from pumpkit.posts.formats import FORMAT_THREAD, Format
-from pumpkit.posts.writing.prompts.feedback import format_noun
+from pumpkit.posts.formats import Format, format_noun
 from pumpkit.posts.writing.prompts.parts import format_text
 
 
@@ -26,17 +25,13 @@ def latest_feedback_message(feedback: str, previous: Format, format: Format) -> 
     noun = format_noun(format)
     switch = ""
     if previous != format:
-        switch = f", including turning the {format_noun(previous)} into a {_new_format(format)}"
+        switch = f", including turning the {format_noun(previous)} into a {noun}"
     return (
         f"This is my latest feedback on that {format_noun(previous)}. The {noun} below already "
         f"applies it{switch}, so don't apply it again, and don't add, remove or reorder "
         "anything to serve it. If it asks for something your guidelines would undo, keep what "
         f"it asks for.\n\n<feedback>\n{feedback}\n</feedback>"
     )
-
-
-def _new_format(format: Format) -> str:
-    return "thread" if format == FORMAT_THREAD else "single post"
 
 
 def revised_draft_message(previous: Format, format: Format, draft_parts: list[str]) -> str:

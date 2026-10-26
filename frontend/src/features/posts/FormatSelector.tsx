@@ -32,7 +32,7 @@ export function FormatSelector({ value, onChange, disabled = false }: FormatSele
           <label
             key={option.format}
             className={cn(
-              'cursor-pointer rounded-[5px] px-3 py-1.5 font-sans text-sm transition-colors motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
+              'cursor-pointer rounded-sm px-3 py-1.5 font-sans text-sm transition-colors motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
               value === option.format
                 ? 'bg-background font-medium text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',

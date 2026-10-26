@@ -30,8 +30,8 @@ async def start_post(
     Start a Post from a Brief, what the Post is about and what the User thinks about it, and
     write its first Version in the style of the User's Inspiration authors. `format` is "post"
     for a single X post, the default, or "thread" for a Thread: several Parts, each one X post
-    that replies to the one before, as many as the Brief needs. Show the User the Final, the text meant for X, with
-    every Part and its character count. Takes up to a minute.
+    that replies to the one before, as many as the Brief needs. Show the User the Final, the
+    text meant for X, with every Part and its character count. Takes up to a minute.
     """
     start_request = PostStartRequest(brief=brief, format=format)
     llm = await call.provide(get_llm)

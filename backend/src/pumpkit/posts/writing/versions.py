@@ -104,6 +104,18 @@ _HUMANIZER_PROMPTS: dict[Format, str] = {
     FORMAT_POST: HUMANIZER_PROMPT,
     FORMAT_THREAD: HUMANIZER_THREAD_PROMPT,
 }
+_DRAFTED: dict[Format, type[_HookedWriting]] = {
+    FORMAT_POST: DraftedPost,
+    FORMAT_THREAD: DraftedThread,
+}
+_REVISED: dict[Format, type[_HookedWriting]] = {
+    FORMAT_POST: RevisedPost,
+    FORMAT_THREAD: RevisedThread,
+}
+_FINAL: dict[Format, type[BaseModel]] = {
+    FORMAT_POST: FinalPost,
+    FORMAT_THREAD: FinalThread,
+}
 
 
 @dataclass(frozen=True)
@@ -228,27 +240,25 @@ def _thread_parts(call: str, parts: list[str]) -> list[str]:
     return parts
 
 
+def _parts_of(call: str, reply: BaseModel) -> list[str]:
+    """A single post's text as its one Part, or a Thread's Parts once checked."""
+    if isinstance(reply, (WrittenThread, FinalThread)):
+        return _thread_parts(call, reply.parts)
+    assert isinstance(reply, (WrittenPost, FinalPost))
+    return [reply.post]
+
+
 async def write_first_version(
     llm: LLM, corpus: Corpus, brief: str, format: Format
 ) -> WrittenVersion:
     """Raises whatever the LLM port raises, or an `LLMError` for a Thread of the wrong length."""
-    messages = draft_messages(corpus, brief, format)
-    if format == FORMAT_THREAD:
-        drafted = await llm.structured(
-            model=settings.LLM_DRAFTING_MODEL,
-            messages=messages,
-            response_model=DraftedThread,
-            max_tokens=MAX_TOKENS,
-        )
-        draft_parts = [scrub(part) for part in _thread_parts("draft", drafted.parsed.parts)]
-    else:
-        drafted = await llm.structured(
-            model=settings.LLM_DRAFTING_MODEL,
-            messages=messages,
-            response_model=DraftedPost,
-            max_tokens=MAX_TOKENS,
-        )
-        draft_parts = [scrub(drafted.parsed.post)]
+    drafted = await llm.structured(
+        model=settings.LLM_DRAFTING_MODEL,
+        messages=draft_messages(corpus, brief, format),
+        response_model=_DRAFTED[format],
+        max_tokens=MAX_TOKENS,
+    )
+    draft_parts = [scrub(part) for part in _parts_of("draft", drafted.parsed)]
     messages = humanizer_messages(corpus, brief, format, draft_parts)
     return await _humanize(llm, format, messages, drafted, draft_parts, _hook(drafted.parsed))
 
@@ -265,23 +275,13 @@ async def write_next_version(
     Write the Version after `earlier` in `format`. Raises whatever the LLM port raises, or an
     `LLMError` for a Thread of the wrong length; nothing is stored here.
     """
-    messages = revision_messages(corpus, brief, earlier, feedback, format)
-    if format == FORMAT_THREAD:
-        revised = await llm.structured(
-            model=settings.LLM_REVISING_MODEL,
-            messages=messages,
-            response_model=RevisedThread,
-            max_tokens=MAX_TOKENS,
-        )
-        draft_parts = [scrub(part) for part in _thread_parts("revision", revised.parsed.parts)]
-    else:
-        revised = await llm.structured(
-            model=settings.LLM_REVISING_MODEL,
-            messages=messages,
-            response_model=RevisedPost,
-            max_tokens=MAX_TOKENS,
-        )
-        draft_parts = [scrub(revised.parsed.post)]
+    revised = await llm.structured(
+        model=settings.LLM_REVISING_MODEL,
+        messages=revision_messages(corpus, brief, earlier, feedback, format),
+        response_model=_REVISED[format],
+        max_tokens=MAX_TOKENS,
+    )
+    draft_parts = [scrub(part) for part in _parts_of("revision", revised.parsed)]
     messages = revision_humanizer_messages(
         corpus, brief, earlier[-1], feedback, format, draft_parts
     )
@@ -305,22 +305,13 @@ async def _humanize(
     draft_parts: list[str],
     hook: Hook,
 ) -> WrittenVersion:
-    if format == FORMAT_THREAD:
-        refined = await llm.structured(
-            model=settings.LLM_HUMANIZING_MODEL,
-            messages=messages,
-            response_model=FinalThread,
-            max_tokens=MAX_TOKENS,
-        )
-        final_parts = _thread_parts("humanizer", refined.parsed.parts)
-    else:
-        refined = await llm.structured(
-            model=settings.LLM_HUMANIZING_MODEL,
-            messages=messages,
-            response_model=FinalPost,
-            max_tokens=MAX_TOKENS,
-        )
-        final_parts = [refined.parsed.post]
+    refined = await llm.structured(
+        model=settings.LLM_HUMANIZING_MODEL,
+        messages=messages,
+        response_model=_FINAL[format],
+        max_tokens=MAX_TOKENS,
+    )
+    final_parts = _parts_of("humanizer", refined.parsed)
     return WrittenVersion(
         format=format,
         draft_parts=draft_parts,

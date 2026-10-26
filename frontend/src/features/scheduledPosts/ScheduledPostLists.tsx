@@ -1,5 +1,7 @@
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { ThreadSize } from '@/components/ThreadParts';
 import { Button } from '@/components/ui/button';
+import { FORMAT_THREAD, formatOf } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { InTheCommunity } from './InTheCommunity';
 import { LiveOnX } from './LiveOnX';
@@ -33,11 +35,7 @@ function PostText({ post }: { post: ScheduledPost }) {
   const markLive = post.state !== 'published';
   return (
     <>
-      {post.parts.length > 1 && (
-        <p className="font-sans text-xs font-medium text-muted-foreground">
-          Thread, {post.parts.length} Parts
-        </p>
-      )}
+      {formatOf(post.parts) === FORMAT_THREAD && <ThreadSize count={post.parts.length} />}
       {post.parts.map((part, index) => (
         <div key={index} className="space-y-0.5">
           <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">

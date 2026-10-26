@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
 from pumpkit.core.errors import ConflictError, RefusedError
+from pumpkit.posts.formats import part_name
 from pumpkit.x_connection.x_length import x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
@@ -29,7 +30,7 @@ def check_length(parts: list[str], *, limit: int) -> None:
     for number, text in enumerate(parts, start=1):
         length = x_weighted_length(text)
         if length > limit:
-            subject = "This post" if len(parts) == 1 else f"Part {number}"
+            subject = part_name(number, len(parts)) or "This post"
             raise RuleBroken(
                 f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
             )
@@ -38,11 +39,14 @@ def check_length(parts: list[str], *, limit: int) -> None:
 def check_live_parts_kept(live: list[str], parts: list[str]) -> None:
     """
     The texts of the live Parts open `parts` in their order, unchanged: they are on X, and the
-    rest go out as replies to the last of them (ADR 0014).
+    rest go out as replies to the last of them (ADR 0014). At least one Part follows them, or a
+    reschedule would publish nothing.
     """
     for number, text in enumerate(live, start=1):
         if len(parts) < number or parts[number - 1] != text:
             raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
+    if live and len(parts) == len(live):
+        raise LivePartLocked("Keep at least one Part after the ones already on X.")
 
 
 def check_publish_at(publish_at: Optional[datetime], *, now: datetime) -> datetime:

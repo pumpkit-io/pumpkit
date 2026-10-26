@@ -103,6 +103,22 @@ async def test_a_live_part_of_a_failed_thread_cannot_change(
     assert await _listed(client) == [failed]
 
 
+async def test_a_failed_thread_cannot_be_cut_down_to_its_live_parts(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    failed = await _failed_after_part_one(client, fake_x_publisher)
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{failed['id']}",
+        json={"parts": ["Live one."], "publish_at": "2026-10-10T13:00:00Z"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Keep at least one Part after the ones already on X."
+    assert await _listed(client) == [failed]
+
+
 async def test_the_parts_after_the_live_ones_can_be_edited_added_removed_and_reordered(
     client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):

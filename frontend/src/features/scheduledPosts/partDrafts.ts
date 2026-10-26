@@ -32,9 +32,15 @@ export function partTexts(drafts: PartDraft[]): string[] {
   return drafts.map((draft) => draft.text);
 }
 
-/** Whether every Part not live has text and fits `charLimit` by X's count. */
+/**
+ * Whether there is a Part not live, and every one has text and fits `charLimit` by X's count.
+ * With only live Parts left, a reschedule would publish nothing.
+ */
 export function partsSendable(drafts: PartDraft[], charLimit: number): boolean {
-  return drafts.every(
-    (draft) => draft.live || (draft.text.trim() && xWeightedLength(draft.text) <= charLimit),
+  return (
+    drafts.some((draft) => !draft.live) &&
+    drafts.every(
+      (draft) => draft.live || (draft.text.trim() && xWeightedLength(draft.text) <= charLimit),
+    )
   );
 }

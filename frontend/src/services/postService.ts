@@ -9,6 +9,12 @@ export interface Tell {
 /** The shape of a Version's text: a single X post, or a Thread. */
 export type Format = 'post' | 'thread';
 export const FORMAT_POST: Format = 'post';
+export const FORMAT_THREAD: Format = 'thread';
+
+/** One Part is a single post; several are a Thread. */
+export function formatOf(parts: readonly unknown[]): Format {
+  return parts.length > 1 ? FORMAT_THREAD : FORMAT_POST;
+}
 
 /** One Part of a Final, in its place in the order. */
 export interface Part {

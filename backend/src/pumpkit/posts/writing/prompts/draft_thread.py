@@ -46,7 +46,7 @@ A thread is a few posts read in order. Each post in it is a part.
 - Each part is at most {X_POST_MAX_CHARS} characters as X counts them: a link counts as 23, an emoji as 2.
 - Each part reads on its own as a post, and leads into the next one. Do not cut a sentence across two parts.
 - The first part carries the hook and makes a reader want the rest. The last part ends on the last real point.
-- No numbering such as "1/7" or "1." and no 🧵, unless the brief asks for them.
+- No numbering such as "1/7" or "1." and no 🧵, unless the brief or my feedback asks for them.
 
 # The hook
 

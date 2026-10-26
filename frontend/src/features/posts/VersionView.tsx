@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
+import { ThreadParts } from '@/components/ThreadParts';
 import { Button } from '@/components/ui/button';
 import { FinalToXActions } from '@/features/scheduledPosts/FinalToX';
 import { track, type EventName } from '@/lib/analytics';
@@ -78,35 +79,6 @@ function PartCounter({ part }: { part: Part }) {
   );
 }
 
-/** Each Part on its own, numbered as X will chain them, so the User can read or copy one. */
-function ThreadParts({ parts }: { parts: Part[] }) {
-  return (
-    <ol aria-label="Parts" className="space-y-3">
-      {parts.map((part, index) => {
-        const number = index + 1;
-        return (
-          <li
-            key={index}
-            aria-label={`Part ${number}`}
-            className="space-y-2 border-l-2 border-border pl-3"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-sans text-xs font-medium tabular-nums text-muted-foreground">
-                Part {number}
-              </p>
-              <CopyButton text={part.text} event="post_part_copied" size="xs">
-                Copy<span className="sr-only"> Part {number}</span>
-              </CopyButton>
-            </div>
-            <PartText part={part} />
-            <PartCounter part={part} />
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 /** The Final comes first because it is what goes to X; the Draft below shows what the rewrite changed. */
 export function VersionView({ version }: { version: Version }) {
   const finalId = useId();
@@ -133,7 +105,21 @@ export function VersionView({ version }: { version: Version }) {
           </div>
         </div>
         {version.format === 'thread' ? (
-          <ThreadParts parts={version.parts} />
+          <ThreadParts
+            parts={version.parts}
+            aside={(part, number) => (
+              <CopyButton text={part.text} event="post_part_copied" size="xs">
+                Copy<span className="sr-only"> Part {number}</span>
+              </CopyButton>
+            )}
+          >
+            {(part) => (
+              <>
+                <PartText part={part} />
+                <PartCounter part={part} />
+              </>
+            )}
+          </ThreadParts>
         ) : (
           version.parts.map((part, index) => (
             <div key={index} className="space-y-4">
