@@ -19,7 +19,7 @@ The thread you are given has its parts numbered in <part> tags. Rewrite each par
 - Keep the parts and their order. Merge or split parts only when the guidelines leave no other fix, and keep between {THREAD_MIN_PARTS} and {THREAD_MAX_PARTS} parts.
 - Keep each part at most {X_POST_MAX_CHARS} characters as X counts them: a link counts as 23, an emoji as 2.
 - Keep the opening of the first part, the hook, unless the guidelines say to fix it.
-- Do not add numbering such as "1/7" or a 🧵 unless the brief asks for them, and keep them if it does.
+- Do not add numbering such as "1/7" or a 🧵 unless the brief or my feedback asks for them, and keep them if it does.
 - Apply the guidelines to the thread as a whole too: a pattern repeated across parts is clustered.
 
 """

@@ -104,3 +104,14 @@ def test_the_thread_prompts_keep_the_hook_library_and_the_humanizer_guidelines()
     assert "# Humanization guidelines" in HUMANIZER_THREAD_PROMPT
     for prompt in (DRAFT_THREAD_PROMPT, HUMANIZER_THREAD_PROMPT):
         assert "<creator" not in prompt
+
+
+def test_the_thread_prompts_allow_numbering_when_the_brief_or_the_feedback_asks():
+    assert (
+        'No numbering such as "1/7" or "1." and no 🧵, unless the brief or my feedback '
+        "asks for them."
+    ) in DRAFT_THREAD_PROMPT
+    assert (
+        'Do not add numbering such as "1/7" or a 🧵 unless the brief or my feedback asks '
+        "for them, and keep them if it does."
+    ) in HUMANIZER_THREAD_PROMPT
