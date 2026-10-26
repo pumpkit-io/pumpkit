@@ -12,7 +12,7 @@ export interface Community {
 }
 
 /** Typed Parts in order, or the Version whose Final the server copies. */
-export type PostText = { parts: string[] } | { sourceVersionId: string };
+export type ScheduledPostSource = { parts: string[] } | { sourceVersionId: string };
 
 /** Where a new Scheduled post goes: the User's profile when `community` is null. */
 export interface Destination {
@@ -23,7 +23,7 @@ export interface Destination {
 
 /** What an edit changes; anything left out stays as it is. */
 export interface ScheduledPostChanges {
-  /** Replaces every Part. */
+  /** Every Part in order, the live ones first and unchanged; the others replace those not live. */
   parts?: string[];
   publishAt?: string;
   /** Null moves it back to the User's profile. */
@@ -84,7 +84,7 @@ const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   createdAt: p.created_at,
 });
 
-const postTextBody = (post: PostText) =>
+const postTextBody = (post: ScheduledPostSource) =>
   'parts' in post ? { parts: post.parts } : { source_version_id: post.sourceVersionId };
 
 // The server looks up the Community's name itself, so only its ID goes.
@@ -113,7 +113,7 @@ export const scheduledPostService = {
    * Publishes on X before answering: it comes back Published, Failed, or scheduled when X was
    * busy and the publisher will retry.
    */
-  postNow: async (post: PostText, destination: Destination): Promise<ScheduledPost> => {
+  postNow: async (post: ScheduledPostSource, destination: Destination): Promise<ScheduledPost> => {
     const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
       ...postTextBody(post),
       publish_now: true,
@@ -124,7 +124,7 @@ export const scheduledPostService = {
 
   /** `publishAt` is an ISO instant on a whole minute; it comes back scheduled. */
   schedule: async (
-    post: PostText,
+    post: ScheduledPostSource,
     publishAt: string,
     destination: Destination,
   ): Promise<ScheduledPost> => {

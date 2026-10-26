@@ -3,10 +3,11 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
+import { formatOf } from '@/services/postService';
 import {
   scheduledPostService,
   type Destination,
-  type PostText,
+  type ScheduledPostSource,
   type ScheduledPost,
 } from '@/services/scheduledPostService';
 import { PROFILE } from './communities';
@@ -15,7 +16,7 @@ import { pastCommunitiesChanged } from './usePastCommunities';
 /** What a Post now that comes back scheduled means: the publisher retries it. */
 export const X_BUSY_NOTICE = 'X was busy. Pumpkit will keep trying for the next 15 minutes.';
 
-export type NewScheduledPost = PostText & {
+export type NewScheduledPost = ScheduledPostSource & {
   /** The User's profile when left out. */
   destination?: Destination;
 } & ({ postNow: true } | { postNow: false; publishAt: string });
@@ -38,7 +39,7 @@ export function useCreateScheduledPost() {
   const create = useCallback(
     async (request: NewScheduledPost): Promise<CreateOutcome> => {
       const { destination = PROFILE } = request;
-      const post: PostText =
+      const post: ScheduledPostSource =
         'sourceVersionId' in request
           ? { sourceVersionId: request.sourceVersionId }
           : { parts: request.parts };
@@ -49,7 +50,7 @@ export function useCreateScheduledPost() {
           ? await scheduledPostService.postNow(post, destination)
           : await scheduledPostService.schedule(post, request.publishAt, destination);
         track('scheduled_post_created', {
-          format: created.parts.length > 1 ? 'thread' : 'post',
+          format: formatOf(created.parts),
           part_count: created.parts.length,
           source: 'sourceVersionId' in post ? 'final' : 'typed',
           post_now: request.postNow,

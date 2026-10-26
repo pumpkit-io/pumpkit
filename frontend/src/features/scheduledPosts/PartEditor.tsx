@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { xWeightedLength } from '@/lib/xLength';
+import { FORMAT_THREAD, formatOf } from '@/services/postService';
 import { LiveOnX } from './LiveOnX';
 import { partDrafts, type PartDraft } from './partDrafts';
 import { XLengthCounter } from './XLengthCounter';
@@ -33,7 +34,7 @@ export function PartEditor({
 }) {
   const id = useId();
   const liveCount = parts.filter((draft) => draft.live).length;
-  const thread = parts.length > 1 || liveCount > 0;
+  const thread = formatOf(parts) === FORMAT_THREAD || liveCount > 0;
 
   const setText = (index: number, text: string) =>
     onChange(parts.map((draft, i) => (i === index ? { ...draft, text } : draft)));
