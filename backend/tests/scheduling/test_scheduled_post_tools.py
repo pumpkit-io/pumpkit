@@ -18,7 +18,7 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
 )
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written
+from tests.posts.writing_replies import written, written_thread
 
 SCHEDULED_PAGE = "http://localhost:5173/scheduled"
 
@@ -66,6 +66,29 @@ async def test_scheduling_typed_text_lists_it_with_the_scheduled_page_link(
         "data": [{key: value for key, value in scheduled.items() if key != "scheduled_page_url"}],
         "scheduled_page_url": SCHEDULED_PAGE,
     }
+
+
+THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
+
+
+@pytest.fixture
+async def thread_version(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """The first Version of a new Post started as a Thread, its Final the three THREAD_FINAL Parts."""
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(
+            post_id="levelsio-0",
+            text="levelsio post",
+            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    ]
+    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    assert added.status_code == 201, added.text
+    fake_llm.replies = [written_thread(["one", "two", "three"]), {"parts": THREAD_FINAL}]
+    started = await client.post(
+        "/api/v1/posts", json={"brief": "ship small things", "format": "thread"}
+    )
+    assert started.status_code == 201, started.text
+    return started.json()["versions"][0]
 
 
 async def test_scheduling_parts_answers_with_each_part_in_order_and_none_live(
@@ -518,6 +541,33 @@ async def test_post_now_publishes_a_versions_final(
     assert result["structuredContent"]["state"] == "published"
     assert result["structuredContent"]["source_version_id"] == version["id"]
     assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
+
+
+async def test_scheduling_a_thread_version_copies_every_part_in_order(
+    connected, thread_version, mcp, fixed_clock
+):
+    result = await mcp.call_tool(
+        "schedule_post", version_id=thread_version["id"], publish_at="2026-10-10T14:00:00Z"
+    )
+
+    assert result["isError"] is False, result
+    scheduled = result["structuredContent"]
+    assert [part["text"] for part in scheduled["parts"]] == THREAD_FINAL
+    assert scheduled["source_version_id"] == thread_version["id"]
+
+
+async def test_post_now_on_a_thread_version_publishes_the_whole_thread(
+    connected, thread_version, mcp, fake_x_publisher, fixed_clock
+):
+    result = await mcp.call_tool("post_now", version_id=thread_version["id"])
+
+    assert result["isError"] is False, result
+    posted = result["structuredContent"]
+    assert posted["state"] == "published"
+    assert [part["live"] for part in posted["parts"]] == [True, True, True]
+    assert posted["message"] == f"Published on X: {FIRST_X_POST}"
+    assert [text for _, text in fake_x_publisher.published] == THREAD_FINAL
+    assert fake_x_publisher.replied_to == [None, "1890000000000000001", "1890000000000000002"]
 
 
 async def test_post_now_that_x_refuses_says_it_failed_and_why(

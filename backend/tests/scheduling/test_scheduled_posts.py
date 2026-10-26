@@ -16,7 +16,7 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
     XReconnectNeededError,
 )
-from tests.posts.writing_replies import written
+from tests.posts.writing_replies import written, written_thread
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 X_CONNECTION = "/api/v1/x-connection"
@@ -522,6 +522,69 @@ async def test_post_now_on_a_final_publishes_it_and_tracks_it_as_from_a_final(
         "format": "post",
         "part_count": 1,
     }
+
+
+THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
+
+
+@pytest.fixture
+async def thread_final(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """The first Version of a new Post started as a Thread, its Final the three THREAD_FINAL Parts."""
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(
+            post_id="levelsio-0",
+            text="levelsio post",
+            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    ]
+    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    assert added.status_code == 201, added.text
+    fake_llm.replies = [written_thread(["one", "two", "three"]), {"parts": THREAD_FINAL}]
+    started = await client.post(
+        "/api/v1/posts", json={"brief": "ship small things", "format": "thread"}
+    )
+    assert started.status_code == 201, started.text
+    return started.json()["versions"][0]
+
+
+async def test_scheduling_a_thread_final_copies_its_parts_in_order_and_publishes_a_chain(
+    client, db_session_maker, thread_final, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={"publish_at": "2026-10-10T12:05:00Z", "source_version_id": thread_final["id"]},
+    )
+
+    assert response.status_code == 201, response.text
+    assert _texts(response.json()) == THREAD_FINAL
+    fixed_clock.advance(timedelta(minutes=5))
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    assert listed["state"] == "published"
+    assert [part["live"] for part in listed["parts"]] == [True, True, True]
+    assert [text for _, text in fake_x_publisher.published] == THREAD_FINAL
+    assert fake_x_publisher.replied_to == [None, "1890000000000000001", "1890000000000000002"]
+
+
+async def test_post_now_on_a_thread_final_publishes_the_whole_thread(
+    client, thread_final, fake_x_publisher, clock, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={"publish_now": True, "source_version_id": thread_final["id"]},
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["state"] == "published"
+    assert _texts(body) == THREAD_FINAL
+    assert body["x_post_url"] == FIRST_X_POST_URL
+    assert [text for _, text in fake_x_publisher.published] == THREAD_FINAL
+    assert fake_x_publisher.replied_to == [None, "1890000000000000001", "1890000000000000002"]
 
 
 async def test_a_typed_scheduled_post_has_no_source_version(
