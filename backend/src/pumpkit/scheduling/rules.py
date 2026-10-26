@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
 from pumpkit.core.errors import ConflictError, RefusedError
+from pumpkit.posts.formats import part_name
 from pumpkit.x_connection.x_length import x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
@@ -29,7 +30,7 @@ def check_length(parts: list[str], *, limit: int) -> None:
     for number, text in enumerate(parts, start=1):
         length = x_weighted_length(text)
         if length > limit:
-            subject = "This post" if len(parts) == 1 else f"Part {number}"
+            subject = part_name(number, len(parts)) or "This post"
             raise RuleBroken(
                 f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
             )

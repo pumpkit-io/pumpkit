@@ -252,7 +252,7 @@ async def test_the_revision_humanizer_gets_the_previous_thread_as_parts_and_the_
         ),
         _user(
             "This is my latest feedback on that thread. The post below already applies it, "
-            "including turning the thread into a single post, so don't apply it again, and "
+            "including turning the thread into a post, so don't apply it again, and "
             "don't add, remove or reorder anything to serve it. If it asks for something your "
             "guidelines would undo, keep what it asks for.\n\n"
             "<feedback>\ncondense it\n</feedback>"

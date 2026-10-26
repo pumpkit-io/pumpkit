@@ -1,10 +1,6 @@
 """Feedback as the revision call is handed it: pumpkit-v6's words, named for the Format."""
 
-from pumpkit.posts.formats import FORMAT_THREAD, Format
-
-
-def format_noun(format: Format) -> str:
-    return "thread" if format == FORMAT_THREAD else "post"
+from pumpkit.posts.formats import FORMAT_THREAD, Format, format_noun
 
 
 def feedback_message(feedback: str, previous: Format, format: Format) -> str:

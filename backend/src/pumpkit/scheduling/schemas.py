@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from pumpkit.posts.formats import part_name
 from pumpkit.scheduling.models import ScheduledPostState
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
@@ -21,9 +22,8 @@ def _strip_parts(value: Optional[list[str]]) -> Optional[list[str]]:
     stripped = [part.strip() for part in value]
     for number, part in enumerate(stripped, start=1):
         if not part:
-            raise ValueError(
-                "Write the post first." if len(stripped) == 1 else f"Write Part {number} first."
-            )
+            name = part_name(number, len(stripped))
+            raise ValueError(f"Write {name} first." if name else "Write the post first.")
     return stripped
 
 

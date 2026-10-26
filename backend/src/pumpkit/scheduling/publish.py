@@ -13,7 +13,7 @@ import pumpkit.billing.service as subscriptions_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.time import as_utc
-from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD
+from pumpkit.posts.formats import format_of, part_name
 from pumpkit.scheduling import service
 from pumpkit.scheduling.models import ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.models import XConnection
@@ -193,8 +193,7 @@ async def call_x(
 
 
 def _subject(scheduled_post: ScheduledPost, part: ScheduledPostPart) -> Optional[str]:
-    """How a failed reason names the Part: None for a single X post."""
-    return f"Part {part.position + 1}" if len(scheduled_post.parts) > 1 else None
+    return part_name(part.position + 1, len(scheduled_post.parts))
 
 
 def _not_published(subject: Optional[str], why: str) -> str:
@@ -233,8 +232,7 @@ def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optiona
 
 
 def _shape(scheduled_post: ScheduledPost) -> dict[str, object]:
-    part_count = len(scheduled_post.parts)
-    return {"format": FORMAT_THREAD if part_count > 1 else FORMAT_POST, "part_count": part_count}
+    return {"format": format_of(scheduled_post.parts), "part_count": len(scheduled_post.parts)}
 
 
 def capture_published(scheduled_post: ScheduledPost) -> None:
