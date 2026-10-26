@@ -1016,6 +1016,25 @@ describe('Home', () => {
       expect(format().getByRole('radio', { name: 'Thread' })).toBeChecked();
     });
 
+    it('shows each Version as a Thread with its Part count, or as nothing for a single post', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue({
+        ...versionTwo,
+        format: 'thread',
+        parts: [
+          { text: 'part one', charCount: 8, charLimit: 280 },
+          { text: 'part two', charCount: 8, charLimit: 280 },
+          { text: 'part three', charCount: 10, charLimit: 280 },
+        ],
+      });
+      const area = await onFirstVersion();
+      sendFeedback(area, 'expand it');
+
+      const threadVersion = within(await area.findByRole('region', { name: 'Version 2' }));
+      expect(threadVersion.getByText('Thread, 3 Parts')).toBeInTheDocument();
+      const postVersion = within(area.getByRole('region', { name: 'Version 1' }));
+      expect(postVersion.queryByText(/Thread, /)).not.toBeInTheDocument();
+    });
+
     it('starts the Format on Thread when the latest Version is a Thread', async () => {
       vi.mocked(postService.start).mockResolvedValue(
         threadWith([
