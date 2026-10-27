@@ -102,7 +102,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development setup. Report secur
 ---
 
 <p align="center">
-  <img src="docs/assets/pumpkit-star.gif" alt="The Pumpkit mascot waving a yellow star" width="312">
+  <img src="docs/assets/pumpkit-star.gif" alt="The Pumpkit mascot waving a yellow star" height="96">
 </p>
 
 <p align="center">
