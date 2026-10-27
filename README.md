@@ -1,4 +1,10 @@
-# Pumpkit
+<h1 align="center">
+  <img src="docs/assets/pumpkit-mascot.gif" alt="" height="100">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pumpkit-wordmark-dark.svg">
+    <img src="docs/assets/pumpkit-wordmark-light.svg" alt="Pumpkit" height="100">
+  </picture>
+</h1>
 
 An open-source AI writing tool for X.
 
