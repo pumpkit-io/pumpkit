@@ -3,10 +3,6 @@ The fixed numbers of writing a Post. They live in code, not settings: the prompt
 against them, so changing one is a code change. The models are settings (`LLM_*_MODEL`).
 """
 
-# X's default post limit. A longer Final is flagged, not refused: a premium account's limit is
-# larger. The draft prompt interpolates it, which is why it sits apart from the prompts.
-POST_MAX_CHARS = 3000
-
 # How many Parts a written Thread may have. The Thread prompts state it and a reply outside it
 # fails the attempt, so writing costs and the risk of a Thread stopping partway stay bounded.
 THREAD_MIN_PARTS = 2

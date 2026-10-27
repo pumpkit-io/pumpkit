@@ -1,16 +1,28 @@
 """The writing prompts: what they interpolate, what they hold, and that the corpus stays out."""
 
-from pumpkit.posts.writing.constants import POST_MAX_CHARS, THREAD_MAX_PARTS, THREAD_MIN_PARTS
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
-from pumpkit.posts.writing.prompts.draft_thread import DRAFT_THREAD_PROMPT
+import pytest
+
+from pumpkit.posts.writing.constants import THREAD_MAX_PARTS, THREAD_MIN_PARTS
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
+from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
 from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY, HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
-from pumpkit.posts.writing.prompts.humanizer_thread import HUMANIZER_THREAD_PROMPT
+from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
+from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
+
+DRAFT_POST_PROMPT = draft_post_prompt(X_POST_MAX_CHARS)
+DRAFT_THREAD_PROMPT = draft_thread_prompt(X_POST_MAX_CHARS)
+HUMANIZER_THREAD_PROMPT = humanizer_thread_prompt(X_POST_MAX_CHARS)
 
 
-def test_the_length_limit_reaches_the_draft_prompt():
-    assert f"Under {POST_MAX_CHARS} characters." in DRAFT_POST_PROMPT
-    assert POST_MAX_CHARS == 3000
+@pytest.mark.parametrize(
+    ("char_limit", "stated"), [(X_POST_MAX_CHARS, "280"), (X_LONG_POST_MAX_CHARS, "25,000")]
+)
+def test_the_accounts_limit_reaches_every_prompt_that_states_one(char_limit, stated):
+    rule = f"most {stated} characters as X counts them"
+    assert rule in draft_post_prompt(char_limit)
+    assert rule in draft_thread_prompt(char_limit)
+    assert rule in humanizer_thread_prompt(char_limit)
 
 
 def test_nothing_is_left_uninterpolated_in_the_draft_prompt():
@@ -87,11 +99,10 @@ def test_the_draft_prompt_asks_for_the_hook_reasoning_first_then_the_hook_name_t
     assert "null when it opens with none" in output
 
 
-def test_the_part_bounds_and_the_part_limit_reach_both_thread_prompts():
+def test_the_part_bounds_reach_both_thread_prompts():
     assert (THREAD_MIN_PARTS, THREAD_MAX_PARTS) == (2, 10)
     for prompt in (DRAFT_THREAD_PROMPT, HUMANIZER_THREAD_PROMPT):
         assert "between 2 and 10 parts" in prompt
-        assert "at most 280 characters as X counts them" in prompt
 
 
 def test_nothing_is_left_uninterpolated_in_the_thread_prompts():

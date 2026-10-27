@@ -9,10 +9,11 @@ from sqlalchemy.orm import selectinload
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
-from pumpkit.posts.writing.prompts.draft_thread import DRAFT_THREAD_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
+from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
-from pumpkit.posts.writing.prompts.humanizer_thread import HUMANIZER_THREAD_PROMPT
+from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -85,7 +86,7 @@ async def test_feedback_with_the_post_format_turns_a_thread_into_a_single_post(
     version = response.json()
     assert (version["format"], version["parts"]) == (
         "post",
-        [{"text": "final post", "char_count": 10, "char_limit": 3000}],
+        [{"text": "final post", "char_count": 10, "char_limit": X_POST_MAX_CHARS}],
     )
     assert [call.response_model.__name__ for call in fake_llm.calls] == [
         "revised_post",
@@ -197,7 +198,7 @@ async def test_the_revision_call_renders_each_final_in_its_own_format_and_states
 
     revision_call = fake_llm.calls[0]
     assert revision_call.messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
@@ -232,7 +233,7 @@ async def test_a_revision_that_keeps_a_thread_is_written_under_the_thread_prompt
 
     await _feedback(client, post_id, "warmer")
 
-    assert fake_llm.calls[0].messages[0] == _system(DRAFT_THREAD_PROMPT)
+    assert fake_llm.calls[0].messages[0] == _system(draft_thread_prompt(X_POST_MAX_CHARS))
     assert fake_llm.calls[0].messages[3] == _assistant(THREAD_FINAL)
 
 
@@ -277,7 +278,7 @@ async def test_the_revision_humanizer_gets_the_previous_post_and_the_new_thread_
     await _feedback(client, post_id, "expand it", "thread")
 
     humanizer_call = fake_llm.calls[1]
-    assert humanizer_call.messages[0] == _system(HUMANIZER_THREAD_PROMPT)
+    assert humanizer_call.messages[0] == _system(humanizer_thread_prompt(X_POST_MAX_CHARS))
     assert humanizer_call.messages[3:] == [
         _user(
             "This is the post as I last saw it, before my latest feedback.\n\n"

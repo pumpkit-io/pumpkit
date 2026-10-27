@@ -8,7 +8,7 @@ const VERSION = {
   feedback: null,
   format: 'post',
   draft_parts: ['the draft'],
-  parts: [{ text: 'the final', char_count: 9, char_limit: 3000 }],
+  parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
   tells: [{ name: 'em_dash', description: 'em dash' }],
 };
 
@@ -30,7 +30,7 @@ describe('postService', () => {
         feedback: null,
         format: 'post',
         draftParts: ['the draft'],
-        parts: [{ text: 'the final', charCount: 9, charLimit: 3000 }],
+        parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
         tells: [{ name: 'em_dash', description: 'em dash' }],
       },
     ]);

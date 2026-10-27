@@ -10,8 +10,9 @@ from pumpkit.core.config import settings
 from pumpkit.core.time import as_utc
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -57,7 +58,9 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
     assert version["feedback"] == "make it shorter"
     assert version["format"] == "post"
     assert version["draft_parts"] == ["draft 2 - shorter"]
-    assert version["parts"] == [{"text": "final 2", "char_count": 7, "char_limit": 3000}]
+    assert version["parts"] == [
+        {"text": "final 2", "char_count": 7, "char_limit": X_POST_MAX_CHARS}
+    ]
     assert version["tells"] == []
 
 
@@ -119,14 +122,14 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     assert first_revision.model == DEFAULT_MODEL
     assert first_revision.response_model.__name__ == "revised_post"
     assert first_revision.messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
         _user(_framed("shorter")),
     ]
     assert second_revision.messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),

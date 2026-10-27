@@ -9,9 +9,10 @@ from sqlalchemy.orm import selectinload
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.constants import THREAD_MAX_PARTS
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
-from pumpkit.posts.writing.prompts.draft_thread import DRAFT_THREAD_PROMPT
-from pumpkit.posts.writing.prompts.humanizer_thread import HUMANIZER_THREAD_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
+from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
+from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -101,13 +102,13 @@ async def test_a_thread_is_drafted_and_humanized_with_the_thread_prompts_and_sch
     draft_call, humanizer_call = fake_llm.calls
     assert draft_call.response_model.__name__ == "drafted_thread"
     assert draft_call.messages == [
-        _system(DRAFT_THREAD_PROMPT),
+        _system(draft_thread_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
     assert humanizer_call.response_model.__name__ == "refined_thread"
     assert humanizer_call.messages == [
-        _system(HUMANIZER_THREAD_PROMPT),
+        _system(humanizer_thread_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user(
             "This is the brief the thread below was written from. Use it only to keep the "
@@ -164,7 +165,7 @@ async def test_a_post_started_with_the_post_format_is_a_single_post(client, with
 
     [version] = response.json()["versions"]
     assert (version["format"], len(version["parts"])) == ("post", 1)
-    assert fake_llm.calls[0].messages[0] == _system(DRAFT_POST_PROMPT)
+    assert fake_llm.calls[0].messages[0] == _system(draft_post_prompt(X_POST_MAX_CHARS))
 
 
 async def test_an_unknown_format_returns_422(client, with_author, fake_llm):

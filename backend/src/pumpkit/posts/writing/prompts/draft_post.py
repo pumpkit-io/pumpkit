@@ -5,10 +5,15 @@ instructions, the hook library from `hook.py` and an output that names the Hook 
 It holds only instructions: the corpus changes per Post, so it travels in a user message.
 """
 
-from pumpkit.posts.writing.constants import POST_MAX_CHARS
+from functools import cache
+
 from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY
 
-DRAFT_POST_PROMPT = f"""\
+
+@cache
+def draft_post_prompt(char_limit: int) -> str:
+    """The prompt for an X account whose posts hold up to `char_limit` characters."""
+    return f"""\
 # Role
 
 You write one post on X on my behalf.
@@ -80,7 +85,7 @@ Each hook has an id, a template (fill in the [brackets]), an example and why it 
 The post:
 
 - One post. Not a thread, not two options, not a post plus an explanation.
-- Under {POST_MAX_CHARS} characters. The length is flexible, but not unlimited.
+- At most {char_limit:,} characters as X counts them: a link counts as 23, an emoji as 2.
 - Plain text. The output goes into a composer, so no markdown, no bold, no bullet characters, no headings.
 
 The post field holds the post text and nothing else - no preamble, no quotes around it, no notes about what you did.

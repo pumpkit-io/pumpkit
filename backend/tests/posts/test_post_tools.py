@@ -10,6 +10,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.mcp_client import error_text
 from tests.posts.writing_replies import written, written_thread
 
@@ -58,7 +59,7 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
                 "number": 1,
                 "feedback": None,
                 "format": "post",
-                "parts": [{"text": "the final", "char_count": 9, "char_limit": 3000}],
+                "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
             }
         ],
     }
@@ -120,7 +121,7 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "number": 2,
         "feedback": "shorter",
         "format": "post",
-        "parts": [{"text": "shorter final", "char_count": 13, "char_limit": 3000}],
+        "parts": [{"text": "shorter final", "char_count": 13, "char_limit": X_POST_MAX_CHARS}],
     }
 
 
@@ -192,8 +193,13 @@ async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post
         (version["number"], version["feedback"], version["format"], version["parts"])
         for version in post["versions"]
     ] == [
-        (1, None, "post", [{"text": "final 1", "char_count": 7, "char_limit": 3000}]),
-        (2, "warmer", "post", [{"text": "final two", "char_count": 9, "char_limit": 3000}]),
+        (1, None, "post", [{"text": "final 1", "char_count": 7, "char_limit": X_POST_MAX_CHARS}]),
+        (
+            2,
+            "warmer",
+            "post",
+            [{"text": "final two", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
+        ),
     ]
     assert "draft_parts" not in post["versions"][0]
 

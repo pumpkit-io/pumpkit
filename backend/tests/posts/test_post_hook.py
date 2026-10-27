@@ -9,7 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -73,7 +74,7 @@ async def test_the_first_version_writes_the_hook_in_the_draft_call_then_humanize
         "refined_post",
     ]
     assert fake_llm.calls[0].messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]

@@ -165,7 +165,7 @@ function postWith(final: string, finalCharCount = final.length, tells: Tell[] = 
         feedback: null,
         format: 'post',
         draftParts: ['the draft text'],
-        parts: [{ text: final, charCount: finalCharCount, charLimit: 3000 }],
+        parts: [{ text: final, charCount: finalCharCount, charLimit: 280 }],
         tells,
       },
     ],
@@ -266,7 +266,7 @@ describe('Home', () => {
 
       const final = within(await area.findByRole('article', { name: 'Final' }));
       expect(final.getByText('the final text')).toBeInTheDocument();
-      expect(final.getByText('14 / 3,000 characters')).toBeInTheDocument();
+      expect(final.getByText('14 / 280 characters')).toBeInTheDocument();
       expect(final.queryByText(/characters over/i)).not.toBeInTheDocument();
       const draft = within(area.getByRole('article', { name: 'Draft' }));
       expect(draft.getByText('the draft text')).toBeInTheDocument();
@@ -342,15 +342,15 @@ describe('Home', () => {
       expect(final.queryByRole('listitem', { name: /^Part/ })).not.toBeInTheDocument();
     });
 
-    it('flags a Final over 3,000 characters', async () => {
-      vi.mocked(postService.start).mockResolvedValue(postWith('x'.repeat(3012)));
+    it("flags a Final over the X account's limit", async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('x'.repeat(292)));
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship');
 
       const final = within(await area.findByRole('article', { name: 'Final' }));
-      expect(final.getByText('3,012 / 3,000 characters')).toBeInTheDocument();
-      expect(final.getByText("12 characters over X's 3,000-character limit")).toBeInTheDocument();
+      expect(final.getByText('292 / 280 characters')).toBeInTheDocument();
+      expect(final.getByText("12 characters over X's 280-character limit")).toBeInTheDocument();
     });
 
     it('lists the tells the slop check found next to the Final', async () => {
@@ -952,7 +952,7 @@ describe('Home', () => {
       feedback: 'make it shorter',
       format: 'post',
       draftParts: ['the second draft'],
-      parts: [{ text: 'the second final', charCount: 16, charLimit: 3000 }],
+      parts: [{ text: 'the second final', charCount: 16, charLimit: 280 }],
       tells: [],
     };
 
@@ -1061,7 +1061,7 @@ describe('Home', () => {
           id: 'version_attempt_03',
           number: 3,
           feedback: 'warmer',
-          parts: [{ text: 'the third final', charCount: 15, charLimit: 3000 }],
+          parts: [{ text: 'the third final', charCount: 15, charLimit: 280 }],
         });
       const area = await onFirstVersion();
       sendFeedback(area, 'make it shorter');

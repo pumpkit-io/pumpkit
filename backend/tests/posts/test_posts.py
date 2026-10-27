@@ -11,8 +11,9 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.llm_client import LLMNotConfiguredError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -56,7 +57,7 @@ async def test_starting_a_post_returns_it_with_its_first_version(client, with_au
             "feedback": None,
             "format": "post",
             "draft_parts": ["the draft - with a dash"],
-            "parts": [{"text": "the final", "char_count": 9, "char_limit": 3000}],
+            "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
             "tells": [],
         }
     ]
@@ -112,7 +113,7 @@ async def test_the_draft_call_gets_the_draft_prompt_then_the_corpus_then_the_bri
     assert draft_call.model == DEFAULT_MODEL
     assert draft_call.response_model.__name__ == "drafted_post"
     assert draft_call.messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
@@ -188,16 +189,19 @@ async def test_posts_posted_in_the_same_second_are_ordered_by_post_id_descending
     assert corpus.index("higher id") < corpus.index("lower id")
 
 
-async def test_the_final_is_counted_in_characters_and_kept_when_over_the_limit(
+async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
     client, with_author, fake_llm
 ):
-    long_final = "🚀" + "a" * 3000
+    # X counts an emoji as 2.
+    long_final = "🚀" + "a" * 300
     fake_llm.replies = [written("draft"), {"post": long_final}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
     version = response.json()["versions"][0]
-    assert version["parts"] == [{"text": long_final, "char_count": 3001, "char_limit": 3000}]
+    assert version["parts"] == [
+        {"text": long_final, "char_count": 302, "char_limit": X_POST_MAX_CHARS}
+    ]
 
 
 async def test_a_brief_over_200000_characters_returns_422_without_calling_the_model(

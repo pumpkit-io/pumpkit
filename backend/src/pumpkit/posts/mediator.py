@@ -3,11 +3,12 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
-from pumpkit.posts.formats import Format, part_char_count, part_char_limit
+from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.schemas import (
@@ -19,6 +20,7 @@ from pumpkit.posts.schemas import (
     VersionResponse,
 )
 from pumpkit.posts.writing.versions import EarlierVersion, write_first_version, write_next_version
+from pumpkit.x_connection.x_length import x_post_max_chars, x_weighted_length
 
 # Starting a Post and giving Feedback share one budget per User, failed attempts included,
 # so one account can't run up an unbounded model bill.
@@ -77,7 +79,16 @@ async def _keep_failed_attempt(
     await db.commit()
 
 
-def version_response(attempt: VersionAttempt) -> VersionResponse:
+async def _char_limit(db: AsyncSession, *, user_id: str) -> int:
+    """
+    The post limit of the User's X account, X's default when none is connected. A Final over it
+    is flagged, not refused, and the limit shown follows the account as it is now.
+    """
+    connection = await x_connections_service.get_connection(db, user_id=user_id)
+    return x_post_max_chars(connection.subscription_type if connection else None)
+
+
+def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:
     assert attempt.version_number is not None and attempt.draft_parts is not None
     assert attempt.final_parts is not None and attempt.slop_tells is not None
     format = attempt.format
@@ -90,8 +101,8 @@ def version_response(attempt: VersionAttempt) -> VersionResponse:
         parts=[
             PartResponse(
                 text=text,
-                char_count=part_char_count(format, text),
-                char_limit=part_char_limit(format),
+                char_count=x_weighted_length(text),
+                char_limit=char_limit,
             )
             for text in attempt.final_parts
         ],
@@ -131,9 +142,9 @@ async def list_posts(db: AsyncSession, user: User, limit: int, offset: int) -> P
 async def get_post(db: AsyncSession, user: User, post_id: str) -> PostResponse:
     """The User's Post with every Version, in order."""
     post = await _user_post(db, user=user, post_id=post_id)
-    return PostResponse(
-        id=post.id, brief=post.brief, versions=[version_response(v) for v in _versions(post)]
-    )
+    char_limit = await _char_limit(db, user_id=user.id)
+    versions = [version_response(v, char_limit) for v in _versions(post)]
+    return PostResponse(id=post.id, brief=post.brief, versions=versions)
 
 
 async def start_post(
@@ -152,11 +163,12 @@ async def start_post(
             "Add an Inspiration author with posts before writing a Post.", fix_page=HOME_PAGE
         )
     await _check_attempt_limit(db, user_id=user_id, now=now)
+    char_limit = await _char_limit(db, user_id=user_id)
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
 
     try:
-        written = await write_first_version(llm, corpus, brief, format)
+        written = await write_first_version(llm, corpus, brief, format, char_limit)
     except Exception as error:
         post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
         await _keep_failed_attempt(
@@ -169,7 +181,9 @@ async def start_post(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now
     )
     await db.commit()
-    return PostResponse(id=post.id, brief=post.brief, versions=[version_response(version)])
+    return PostResponse(
+        id=post.id, brief=post.brief, versions=[version_response(version, char_limit)]
+    )
 
 
 async def add_version(
@@ -198,11 +212,14 @@ async def add_version(
     ]
     format = format or versions[-1].format
     sequence = len(post.attempts) + 1
+    char_limit = await _char_limit(db, user_id=user.id)
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
 
     try:
-        written = await write_next_version(llm, corpus, post.brief, earlier, feedback, format)
+        written = await write_next_version(
+            llm, corpus, post.brief, earlier, feedback, format, char_limit
+        )
     except Exception as error:
         await _keep_failed_attempt(
             db,
@@ -225,4 +242,4 @@ async def add_version(
         now=now,
     )
     await db.commit()
-    return version_response(version)
+    return version_response(version, char_limit)

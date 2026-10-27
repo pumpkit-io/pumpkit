@@ -5,11 +5,16 @@ Thread's structure in place of its "one post" rule and an output of ordered Part
 It holds only instructions: the corpus changes per Post, so it travels in a user message.
 """
 
+from functools import cache
+
 from pumpkit.posts.writing.constants import THREAD_MAX_PARTS, THREAD_MIN_PARTS
 from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY
-from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 
-DRAFT_THREAD_PROMPT = f"""\
+
+@cache
+def draft_thread_prompt(char_limit: int) -> str:
+    """The prompt for an X account whose posts hold up to `char_limit` characters."""
+    return f"""\
 # Role
 
 You write one thread on X on my behalf: a chain of posts, each replying to the one before.
@@ -43,7 +48,7 @@ Do not take anything else from the posts:
 A thread is a few posts read in order. Each post in it is a part.
 
 - Write between {THREAD_MIN_PARTS} and {THREAD_MAX_PARTS} parts. Pick how many the brief needs: one point per part, and no part that only repeats or pads. When I say how many parts I want, write that many, within the same bounds.
-- Each part is at most {X_POST_MAX_CHARS} characters as X counts them: a link counts as 23, an emoji as 2.
+- Each part is at most {char_limit:,} characters as X counts them: a link counts as 23, an emoji as 2.
 - Each part reads on its own as a post, and leads into the next one. Do not cut a sentence across two parts.
 - The first part carries the hook and makes a reader want the rest. The last part ends on the last real point.
 - No numbering such as "1/7" or "1." and no 🧵, unless the brief or my feedback asks for them.
