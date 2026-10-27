@@ -13,8 +13,9 @@ import pumpkit.billing.service as subscriptions_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.time import as_utc
+from pumpkit.posts.formats import format_of, part_name
 from pumpkit.scheduling import service
-from pumpkit.scheduling.models import ScheduledPost
+from pumpkit.scheduling.models import ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
@@ -48,11 +49,12 @@ NOT_SUBSCRIBED_REASON = "Not published: your Subscription had ended. Subscribe, 
 X_ACCOUNT_CHANGED_REASON = (
     "Not published: the X account it was for is no longer connected to Pumpkit."
 )
-RECONNECT_NEEDED_REASON = (
-    "Not published: X no longer accepts Pumpkit's access to your account. Reconnect X, then "
-    "reschedule it."
+RECONNECT_NEEDED = (
+    "X no longer accepts Pumpkit's access to your account. Reconnect X, then reschedule it."
 )
-X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a few minutes."
+RECONNECT_NEEDED_REASON = f"Not published: {RECONNECT_NEEDED}"
+X_UNAVAILABLE = "X was busy or unreachable. Try again in a few minutes."
+X_UNAVAILABLE_REASON = f"Not published: {X_UNAVAILABLE}"
 OUTCOME_UNKNOWN_REASON = (
     "X didn't confirm this post. It may have been published. Check your X profile."
 )
@@ -71,11 +73,39 @@ class Failed(Exception):
     reason: str
 
 
-async def fail_stuck(db: AsyncSession, *, now: datetime) -> list[str]:
-    """Fail Scheduled posts a crashed publisher left in publishing: X may have taken them."""
-    return await service.fail_stuck(
-        db, publishing_since=now - STUCK_AFTER, reason=OUTCOME_UNKNOWN_REASON, now=now
+@dataclass
+class Recovered:
+    published: list[ScheduledPost]
+    failed: list[ScheduledPost]
+
+
+async def recover_stuck(db: AsyncSession, *, now: datetime) -> Recovered:
+    """
+    Settle Scheduled posts a crashed publisher left in publishing. One with every Part live is
+    Published; any other is Failed, since X may have taken the Part in flight, and a Thread's
+    reason names its first Part not live.
+    """
+    publishing_since = now - STUCK_AFTER
+    published_ids = await service.publish_stuck(db, publishing_since=publishing_since, now=now)
+    failed_ids = await service.fail_stuck(
+        db, publishing_since=publishing_since, reason=OUTCOME_UNKNOWN_REASON, now=now
     )
+    published = [await _reloaded(db, scheduled_post_id) for scheduled_post_id in published_ids]
+    failed = [await _reloaded(db, scheduled_post_id) for scheduled_post_id in failed_ids]
+    for scheduled_post in failed:
+        not_live = next(part for part in scheduled_post.parts if part.x_post_id is None)
+        subject = _subject(scheduled_post, not_live)
+        if subject is not None:
+            await service.record_failed(
+                db, scheduled_post, reason=_outcome_unknown(subject), now=now
+            )
+    return Recovered(published=published, failed=failed)
+
+
+async def _reloaded(db: AsyncSession, scheduled_post_id: str) -> ScheduledPost:
+    scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
+    assert scheduled_post is not None
+    return scheduled_post
 
 
 async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPost) -> XConnection:
@@ -128,26 +158,52 @@ async def fresh_access_token(
     return tokens.access_token
 
 
-async def call_x(publisher: XPublisher, scheduled_post: ScheduledPost, *, access_token: str) -> str:
-    """X's post id, or `Failed`. A "reconnect_needed" one means X refused the access token."""
+async def call_x(
+    publisher: XPublisher,
+    scheduled_post: ScheduledPost,
+    part: ScheduledPostPart,
+    *,
+    reply_to: Optional[str],
+    access_token: str,
+) -> str:
+    """
+    X's post id for `part`, sent as a reply to `reply_to` when given, or `Failed`, whose reason
+    names the Part in a Thread. A "reconnect_needed" one means X refused the access token.
+    """
+    subject = _subject(scheduled_post, part)
     try:
         return await publisher.publish(
             access_token=access_token,
-            text=scheduled_post.text,
+            text=part.text,
             community_id=scheduled_post.community_id,
             share_with_followers=scheduled_post.share_with_followers,
+            reply_to=reply_to,
         )
     except XReconnectNeededError:
-        raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
+        raise Failed("reconnect_needed", _not_published(subject, RECONNECT_NEEDED))
     except (XRateLimitedError, XNotReceivedError, XPublisherNotConfiguredError):
-        raise Failed("x_unavailable", X_UNAVAILABLE_REASON)
+        raise Failed("x_unavailable", _not_published(subject, X_UNAVAILABLE))
     except XPostRejectedError as rejected:
-        reason = f"X refused the post: {rejected.message}"
+        reason = f"X refused {subject or 'the post'}: {rejected.message}"
         if scheduled_post.community_id and rejected.x_status == 403:
             reason = f"{reason} {COMMUNITY_MEMBERSHIP_HINT}"
         raise Failed("refused_by_x", reason)
     except XPublisherError:
-        raise Failed("outcome_unknown", OUTCOME_UNKNOWN_REASON)
+        raise Failed("outcome_unknown", _outcome_unknown(subject))
+
+
+def _subject(scheduled_post: ScheduledPost, part: ScheduledPostPart) -> Optional[str]:
+    return part_name(part.position + 1, len(scheduled_post.parts))
+
+
+def _not_published(subject: Optional[str], why: str) -> str:
+    return f"{subject} not published: {why}" if subject else f"Not published: {why}"
+
+
+def _outcome_unknown(subject: Optional[str]) -> str:
+    if subject is None:
+        return OUTCOME_UNKNOWN_REASON
+    return f"X didn't confirm {subject}. It may have been published. Check your X profile."
 
 
 async def record_failure(
@@ -175,6 +231,10 @@ def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optiona
     return min(now + FIRST_BACKOFF * 2**scheduled_post.retry_count, deadline)
 
 
+def _shape(scheduled_post: ScheduledPost) -> dict[str, object]:
+    return {"format": format_of(scheduled_post.parts), "part_count": len(scheduled_post.parts)}
+
+
 def capture_published(scheduled_post: ScheduledPost) -> None:
     properties: dict[str, object] = {
         "source": "final" if scheduled_post.source_version_id else "typed",
@@ -183,11 +243,15 @@ def capture_published(scheduled_post: ScheduledPost) -> None:
     if scheduled_post.community_id:
         properties["share_with_followers"] = scheduled_post.share_with_followers
     posthog_client.capture(
-        "scheduled_post_published", distinct_id=scheduled_post.user_id, properties=properties
+        "scheduled_post_published",
+        distinct_id=scheduled_post.user_id,
+        properties={**properties, **_shape(scheduled_post)},
     )
 
 
-def capture_failed(user_id: str, category: FailureCategory) -> None:
+def capture_failed(scheduled_post: ScheduledPost, category: FailureCategory) -> None:
     posthog_client.capture(
-        "scheduled_post_failed", distinct_id=user_id, properties={"reason": category}
+        "scheduled_post_failed",
+        distinct_id=scheduled_post.user_id,
+        properties={"reason": category, **_shape(scheduled_post)},
     )

@@ -143,10 +143,13 @@ class XPublisher(Protocol):
         text: str,
         community_id: Optional[str] = None,
         share_with_followers: bool = False,
+        reply_to: Optional[str] = None,
     ) -> str:
         """
         Publish `text` on the account's profile, or in the Community `community_id`, and return
-        X's post id. Never retried: a retry could post it twice.
+        X's post id; with `reply_to`, as a reply to that X post. Never retried: a retry could
+        post it twice. A reply lands in its parent's Community, so it is sent without
+        `community_id` and `share_with_followers` (confirmed live, Oct 2026).
         """
         ...
 
@@ -236,9 +239,12 @@ class OfficialXPublisher:
         text: str,
         community_id: Optional[str] = None,
         share_with_followers: bool = False,
+        reply_to: Optional[str] = None,
     ) -> str:
         body: dict[str, Any] = {"text": text}
-        if community_id is not None:
+        if reply_to is not None:
+            body["reply"] = {"in_reply_to_tweet_id": reply_to}
+        elif community_id is not None:
             body["community_id"] = community_id
             # Also posts it to the followers' timelines, per X's developer changelog of Jul 28,
             # 2025; the English API reference wrongly ties it to super-follower posts.
@@ -361,9 +367,12 @@ class FakeXPublisher:
     `refresh-<id>-<n>` for `account`, n counting issues, valid for two hours; the authorize
     URL carries its query like X's. Records `exchanges` (code, verifier), `refreshes`
     (refresh tokens sent), `published` (access token, text), `published_to` (Community ID or
-    None for the profile, share with followers) of each publish, and `revoked` tokens. Set
-    `fail_exchange`, `fail_refresh`, `fail_fetch_account` or `fail_publish` to an error to
-    raise it, `fail_revoke` or `not_configured` to raise.
+    None for the profile, share with followers) and `replied_to` (the X post id or None) of
+    each publish, and `revoked` tokens. Set `fail_exchange`, `fail_refresh`,
+    `fail_fetch_account` or `fail_publish` to an error to raise it, `fail_revoke` or
+    `not_configured` to raise. With `fail_publish_on` set to n, only the nth publish call,
+    counting from 1, raises `fail_publish`. Post ids are `1890000000000000000` plus the call's
+    number.
     """
 
     account: XAccount = field(
@@ -373,10 +382,12 @@ class FakeXPublisher:
     refreshes: list[str] = field(default_factory=list)
     published: list[tuple[str, str]] = field(default_factory=list)
     published_to: list[tuple[Optional[str], bool]] = field(default_factory=list)
+    replied_to: list[Optional[str]] = field(default_factory=list)
     revoked: list[str] = field(default_factory=list)
     fail_exchange: Optional[XPublisherError] = None
     fail_refresh: Optional[XPublisherError] = None
     fail_publish: Optional[XPublisherError] = None
+    fail_publish_on: Optional[int] = None
     fail_fetch_account: Optional[XPublisherError] = None
     fail_revoke: bool = False
     not_configured: bool = False
@@ -412,10 +423,12 @@ class FakeXPublisher:
         text: str,
         community_id: Optional[str] = None,
         share_with_followers: bool = False,
+        reply_to: Optional[str] = None,
     ) -> str:
         self.published.append((access_token, text))
         self.published_to.append((community_id, share_with_followers))
-        if self.fail_publish is not None:
+        self.replied_to.append(reply_to)
+        if self.fail_publish is not None and self.fail_publish_on in (None, len(self.published)):
             raise self.fail_publish
         return str(1_890_000_000_000_000_000 + len(self.published))
 

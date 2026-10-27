@@ -1,21 +1,29 @@
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from pumpkit.posts.formats import part_name
 from pumpkit.scheduling.models import ScheduledPostState
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
+# Bounds the work of counting a whole Scheduled post, well above any Thread worth publishing.
+SCHEDULED_POST_MAX_PARTS = 25
 COMMUNITY_PASTE_MAX_CHARS = 2_000
 
+PartText = Annotated[str, StringConstraints(max_length=SCHEDULED_POST_TEXT_MAX_CHARS)]
+Parts = Annotated[list[PartText], Field(min_length=1, max_length=SCHEDULED_POST_MAX_PARTS)]
 
-def _strip_text(value: Optional[str]) -> Optional[str]:
+
+def _strip_parts(value: Optional[list[str]]) -> Optional[list[str]]:
     if value is None:
         return None
-    stripped = value.strip()
-    if not stripped:
-        raise ValueError("Write the post first.")
+    stripped = [part.strip() for part in value]
+    for number, part in enumerate(stripped, start=1):
+        if not part:
+            name = part_name(number, len(stripped))
+            raise ValueError(f"Write {name} first." if name else "Write the post first.")
     return stripped
 
 
@@ -48,8 +56,8 @@ class ScheduledPostCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Typed text, or else `source_version_id`, the Version whose Final the server copies.
-    text: Optional[str] = Field(None, max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
+    # Typed Parts in order, or else `source_version_id`, the Version whose Final the server copies.
+    parts: Optional[Parts] = None
     source_version_id: Optional[str] = None
     # A time with its UTC offset, or else publish within the request.
     publish_at: Optional[AwareDatetime] = None
@@ -59,16 +67,25 @@ class ScheduledPostCreateRequest(BaseModel):
     # With a Community, whether X also shares it with the account's followers; ignored without.
     share_with_followers: bool = False
 
-    _strip = field_validator("text")(_strip_text)
+    _strip = field_validator("parts")(_strip_parts)
+
+
+class ScheduledPostPartResponse(BaseModel):
+    text: str
+    # Whether X has accepted this Part.
+    live: bool
+    # This Part on X, once live.
+    x_post_url: Optional[str]
 
 
 class ScheduledPostResponse(BaseModel):
     id: str
-    text: str
+    # In the order they go out; one Part is a single X post.
+    parts: list[ScheduledPostPartResponse]
     state: ScheduledPostState
     publish_at: datetime
     published_at: Optional[datetime]
-    # The post on X, once Published.
+    # The first Part on X, once Published.
     x_post_url: Optional[str]
     # Why it Failed, in words for the User.
     failed_reason: Optional[str]
@@ -110,7 +127,8 @@ class ScheduledPostUpdateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    text: Optional[str] = Field(None, max_length=SCHEDULED_POST_TEXT_MAX_CHARS)
+    # Every Part in order, replacing those not live; live Parts come first, unchanged.
+    parts: Optional[Parts] = None
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
     # The ID or URL of a new Community; an explicit null moves it back to the User's profile.
@@ -118,7 +136,7 @@ class ScheduledPostUpdateRequest(BaseModel):
     # Ignored when the Scheduled post ends up on the profile.
     share_with_followers: Optional[bool] = None
 
-    _strip = field_validator("text")(_strip_text)
+    _strip = field_validator("parts")(_strip_parts)
 
 
 class XConnectionResponse(BaseModel):

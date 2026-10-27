@@ -34,8 +34,8 @@ Ask Claude Code to write a Post from an idea, then ask for changes in plain word
 
 | Tool | What it does |
 | --- | --- |
-| `start_post` | Starts a Post from a Brief and writes its first Version in the style of your Inspiration authors. Answers with the Final and its character count. |
-| `give_feedback` | Gives Feedback on the latest Version of a Post, such as "shorter" or "end with a question", and writes the next Version. |
+| `start_post` | Starts a Post from a Brief and writes its first Version in the style of your Inspiration authors, as a single post or, with `format: "thread"`, a Thread. Answers with the Final's Parts and each Part's character count, against your X account's limit: 25,000 with X Premium, 280 otherwise. |
+| `give_feedback` | Gives Feedback on the latest Version of a Post, such as "shorter" or "make Part 3 punchier", and writes the next Version. It keeps the latest Version's Format unless you pass `format: "post"` or `format: "thread"` to switch it. |
 | `list_posts` | Lists your Posts, newest first, 20 at a time (up to 50), with each one's Brief and how many Versions it has. |
 | `get_post` | Reads one Post with all its Versions, each with its Feedback, Final and character count, so Claude Code can compare them or schedule an earlier one. |
 
@@ -45,13 +45,13 @@ Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 2
 
 | Tool | What it does |
 | --- | --- |
-| `schedule_post` | Schedules your own text, or a Version's Final by the Version's id, for a time with its UTC offset. It goes to your profile, or to a Community you name by its URL or ID, optionally shared with your followers too. |
-| `post_now` | Publishes your own text, or a Version's Final, on X right away, to your profile or a Community like `schedule_post`. Claude Code shows you the exact text and asks before calling it. It answers Published with the link to the post on X, Failed with the reason, or, when X hasn't taken the post yet, that Pumpkit keeps trying for 15 minutes. |
-| `list_scheduled_posts` | Lists your Scheduled posts with their state, time and Community, and why a Failed one failed. |
-| `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. |
+| `schedule_post` | Schedules a post for a time you give with its UTC offset. The post is your own text, as one Part or as several for a Thread, or the Final of a Version you name by its id. A Thread's Final keeps every Part in order. It goes to your profile, or to a Community you name by its URL or ID, and can also be shared with your followers. |
+| `post_now` | Publishes your own text, or a Version's Final, on X right away. In a Thread, each Part replies to the one before. It goes to your profile or a Community, as with `schedule_post`. Claude Code shows you the exact text of every Part and asks before calling it. It answers Published with the link to the post on X, Failed with the reason, or, when X hasn't taken the post yet, that Pumpkit keeps trying for 15 minutes. |
+| `list_scheduled_posts` | Lists your Scheduled posts with their state, time and Community, and why a Failed one failed. Each Part says whether it is live on X. |
+| `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. In a Thread that failed partway, the live Parts are locked; the others can be edited, added, removed and reordered, and a new time publishes only them, as replies to the last live Part. |
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post. Claude Code asks before calling it. |
 | `list_past_communities` | Lists the Communities you posted to before from your connected X account. |
 | `connect_x` | Answers with the link to the Scheduled page, where you connect, reconnect or disconnect X. |
 | `manage_subscription` | Answers with the link to the billing page, where you subscribe or manage your Subscription. On an Instance that sells no Plans, it says so instead. |
 
-Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts the Scheduled posts you made in the web app too. The X connection refusals and every Scheduled post answer link to the Scheduled page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.
+Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts X posts, one per Part, including those you scheduled in the web app. The X connection refusals and every Scheduled post answer link to the Scheduled page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.

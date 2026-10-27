@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { ThreadParts } from '@/components/ThreadParts';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -67,6 +68,42 @@ function Outcome({ created, postNow }: { created: ScheduledPost; postNow: boolea
   );
 }
 
+/** The text that goes to X, a Thread as its numbered Parts, each counted against the limit. */
+function FinalPreview({
+  version,
+  lengths,
+  limit,
+}: {
+  version: Version;
+  lengths: number[];
+  limit: number;
+}) {
+  const box = 'max-h-64 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-3';
+  const text = 'whitespace-pre-wrap break-words font-sans text-sm text-foreground';
+  if (version.format !== 'thread') {
+    return (
+      <div className={box}>
+        {version.parts.map((part, i) => (
+          <div key={i} className="space-y-1.5">
+            <p className={text}>{part.text}</p>
+            <XLengthCounter length={lengths[i]} limit={limit} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <ThreadParts parts={version.parts} className={box}>
+      {(part, number) => (
+        <>
+          <p className={text}>{part.text}</p>
+          <XLengthCounter length={lengths[number - 1]} limit={limit} />
+        </>
+      )}
+    </ThreadParts>
+  );
+}
+
 /**
  * Schedules the Final for a time the User picks, or posts it now after a confirmation. The
  * Scheduled post keeps its own copy of the text, so later Feedback leaves it alone.
@@ -88,7 +125,11 @@ function FinalToXDialog({
   const [created, setCreated] = useState<ScheduledPost | null>(null);
   const [draft, setDraft] = useState<DestinationDraft>(PROFILE_DRAFT);
   const destination = destinationFrom(draft);
-  const length = useMemo(() => xWeightedLength(version.final), [version.final]);
+  // The Scheduled post copies every Part of the Final; X counts each Part on its own.
+  const lengths = useMemo(
+    () => version.parts.map((part) => xWeightedLength(part.text)),
+    [version.parts],
+  );
   const postNow = action === 'postNow';
 
   const send = async (e: FormEvent) => {
@@ -144,19 +185,17 @@ function FinalToXDialog({
     description = `It goes out ${where} ${postNow ? 'straight away' : 'at the time you pick'}.`;
     body = (
       <>
-        <div className="space-y-1.5 rounded-lg bg-muted/50 p-3">
-          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-sans text-sm text-foreground">
-            {version.final}
-          </p>
-          <XLengthCounter length={length} limit={connection.charLimit} />
-        </div>
+        <FinalPreview version={version} lengths={lengths} limit={connection.charLimit} />
         <DestinationField value={draft} onChange={setDraft} disabled={sending} />
         {!postNow && <PublishTimeField value={when} onChange={setWhen} disabled={sending} />}
         {error && <ErrorBanner message={error} />}
       </>
     );
     const unsendable =
-      sending || length > connection.charLimit || (!postNow && !when) || destination === null;
+      sending ||
+      lengths.some((length) => length > connection.charLimit) ||
+      (!postNow && !when) ||
+      destination === null;
     footer = (
       <>
         <Button type="button" variant="outline" className="h-10" onClick={onClose}>

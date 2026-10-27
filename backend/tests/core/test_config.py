@@ -301,16 +301,16 @@ def test_settings_boot_without_optional_providers(monkeypatch):
     assert s.POSTHOG_HOST == "https://eu.i.posthog.com"
 
 
-def test_an_empty_scheduled_posts_cap_means_no_cap(monkeypatch):
-    monkeypatch.setenv("SCHEDULED_POSTS_MONTHLY_CAP", "")
+def test_an_empty_x_posts_cap_means_no_cap(monkeypatch):
+    monkeypatch.setenv("X_POSTS_MONTHLY_CAP", "")
     s = Settings()  # pyright: ignore[reportCallIssue]
-    assert s.SCHEDULED_POSTS_MONTHLY_CAP is None
+    assert s.X_POSTS_MONTHLY_CAP is None
 
 
-def test_an_unset_scheduled_posts_cap_defaults_to_100(monkeypatch):
-    monkeypatch.delenv("SCHEDULED_POSTS_MONTHLY_CAP", raising=False)
+def test_an_unset_x_posts_cap_defaults_to_100(monkeypatch):
+    monkeypatch.delenv("X_POSTS_MONTHLY_CAP", raising=False)
     s = Settings()  # pyright: ignore[reportCallIssue]
-    assert s.SCHEDULED_POSTS_MONTHLY_CAP == 100
+    assert s.X_POSTS_MONTHLY_CAP == 100
 
 
 def test_jev_is_off_without_a_typesafe_key_and_pins_its_model(instance_env):

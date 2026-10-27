@@ -23,7 +23,7 @@ def known_community(fake_x_reader) -> None:
 
 async def _post_now(client: AsyncClient, text: str = "Hello Community.", **destination):
     return await client.post(
-        SCHEDULED_POSTS, json={"text": text, "publish_now": True, **destination}
+        SCHEDULED_POSTS, json={"parts": [text], "publish_now": True, **destination}
     )
 
 
@@ -100,7 +100,7 @@ async def test_a_community_post_x_refuses_for_a_non_member_fails_with_a_membersh
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "refused_by_x"},
+        properties={"reason": "refused_by_x", "format": "post", "part_count": 1},
     )
 
 
@@ -127,19 +127,19 @@ async def test_other_refusals_fail_without_the_membership_hint(
 async def test_community_posts_count_towards_the_monthly_cap(
     client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
 ):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
     await connect_x()
     community = COMMUNITY_ID
     await _post_now(client, "First", community=community)
     await client.post(
         SCHEDULED_POSTS,
-        json={"text": "Second", "publish_at": "2026-10-11T09:00:00Z", "community": community},
+        json={"parts": ["Second"], "publish_at": "2026-10-11T09:00:00Z", "community": community},
     )
 
     response = await _post_now(client, "Third")
 
     assert response.status_code == 409
-    assert response.json()["detail"].startswith("You have 2 Scheduled posts in October 2026")
+    assert response.json()["detail"].startswith("You have 2 X posts in October 2026")
 
 
 async def test_a_community_post_is_tracked_with_where_it_went(
@@ -155,7 +155,81 @@ async def test_a_community_post_is_tracked_with_where_it_went(
     await _post_now(client, "On the profile")
 
     assert [call.kwargs["properties"] for call in captured.capture.call_args_list] == [
-        {"source": "typed", "destination": "community", "share_with_followers": True},
-        {"source": "typed", "destination": "community", "share_with_followers": False},
-        {"source": "typed", "destination": "profile"},
+        {
+            "source": "typed",
+            "destination": "community",
+            "share_with_followers": True,
+            "format": "post",
+            "part_count": 1,
+        },
+        {
+            "source": "typed",
+            "destination": "community",
+            "share_with_followers": False,
+            "format": "post",
+            "part_count": 1,
+        },
+        {"source": "typed", "destination": "profile", "format": "post", "part_count": 1},
     ]
+
+
+@pytest.mark.parametrize("share_with_followers", [True, False])
+async def test_a_community_thread_goes_out_in_the_community_as_a_chain(
+    client, subscribed, fake_x_publisher, clock, share_with_followers, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "parts": ["Part one", "Part two", "Part three"],
+            "publish_now": True,
+            "community": COMMUNITY_URL,
+            "share_with_followers": share_with_followers,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["state"] == "published"
+    assert body["community"]["id"] == COMMUNITY_ID
+    assert body["share_with_followers"] is share_with_followers
+    assert [part["live"] for part in body["parts"]] == [True, True, True]
+    assert [text for _, text in fake_x_publisher.published] == [
+        "Part one",
+        "Part two",
+        "Part three",
+    ]
+    assert fake_x_publisher.replied_to == [
+        None,
+        "1890000000000000001",
+        "1890000000000000002",
+    ]
+    assert fake_x_publisher.published_to[0] == (COMMUNITY_ID, share_with_followers)
+
+
+async def test_a_community_thread_x_refuses_partway_fails_with_the_membership_hint(
+    client, subscribed, fake_x_publisher, clock, connect_x
+):
+    await connect_x()
+    fake_x_publisher.fail_publish = NOT_A_MEMBER
+    fake_x_publisher.fail_publish_on = 2
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "parts": ["Part one", "Part two", "Part three"],
+            "publish_now": True,
+            "community": COMMUNITY_ID,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["state"] == "failed"
+    assert "You do not have permission to create this Tweet." in body["failed_reason"]
+    assert body["failed_reason"].endswith(
+        "Check that your X account is a member of this Community and allowed to post in it."
+    )
+    assert [part["live"] for part in body["parts"]] == [True, False, False]
+    assert len(fake_x_publisher.published) == 2

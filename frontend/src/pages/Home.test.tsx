@@ -71,7 +71,7 @@ import {
   inspirationAuthorService,
   type InspirationAuthor,
 } from '@/services/inspirationAuthorService';
-import { postService, type Post, type Tell, type Version } from '@/services/postService';
+import { postService, type Part, type Post, type Tell, type Version } from '@/services/postService';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { AppLayout } from './AppLayout';
@@ -163,11 +163,28 @@ function postWith(final: string, finalCharCount = final.length, tells: Tell[] = 
         id: 'version_attempt_01',
         number: 1,
         feedback: null,
-        draft: 'the draft text',
-        final,
-        finalCharCount,
-        finalCharLimit: 3000,
+        format: 'post',
+        draftParts: ['the draft text'],
+        parts: [{ text: final, charCount: finalCharCount, charLimit: 280 }],
         tells,
+      },
+    ],
+  };
+}
+
+function threadWith(parts: Part[]): Post {
+  return {
+    id: 'post_01',
+    brief: 'ship small things',
+    versions: [
+      {
+        id: 'version_attempt_01',
+        number: 1,
+        feedback: null,
+        format: 'thread',
+        draftParts: parts.map((part) => part.text),
+        parts,
+        tells: [],
       },
     ],
   };
@@ -242,14 +259,14 @@ describe('Home', () => {
       expect(area.getByLabelText('Brief')).toBeDisabled();
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
       expect(area.getByRole('status')).toHaveTextContent(/writing your post/i);
-      expect(postService.start).toHaveBeenCalledWith('ship small things');
+      expect(postService.start).toHaveBeenCalledWith('ship small things', 'post');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'brief' });
 
       answer(postWith('the final text'));
 
       const final = within(await area.findByRole('article', { name: 'Final' }));
       expect(final.getByText('the final text')).toBeInTheDocument();
-      expect(final.getByText('14 / 3,000 characters')).toBeInTheDocument();
+      expect(final.getByText('14 / 280 characters')).toBeInTheDocument();
       expect(final.queryByText(/characters over/i)).not.toBeInTheDocument();
       const draft = within(area.getByRole('article', { name: 'Draft' }));
       expect(draft.getByText('the draft text')).toBeInTheDocument();
@@ -261,15 +278,79 @@ describe('Home', () => {
       ).toBeTruthy();
     });
 
-    it('flags a Final over 3,000 characters', async () => {
-      vi.mocked(postService.start).mockResolvedValue(postWith('x'.repeat(3012)));
+    it('starts on a single post and writes a Thread when the User picks Thread', async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      const area = await readyToWrite();
+      const format = within(area.getByRole('radiogroup', { name: 'Format' }));
+      expect(format.getByRole('radio', { name: 'Single post' })).toBeChecked();
+      expect(format.getByRole('radio', { name: 'Thread' })).not.toBeChecked();
+
+      fireEvent.click(format.getByRole('radio', { name: 'Thread' }));
+      await writeBrief(area, 'ship small things');
+
+      expect(postService.start).toHaveBeenCalledWith('ship small things', 'thread');
+    });
+
+    it('starts a New Post on a single post again', async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      const area = await readyToWrite();
+      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
+      await writeBrief(area, 'ship small things');
+      await area.findByText('the final text');
+
+      fireEvent.click(area.getByRole('button', { name: 'New Post' }));
+
+      expect(area.getByRole('radio', { name: 'Single post' })).toBeChecked();
+    });
+
+    it('shows a Thread as its Parts in order, each with its own counter and copy', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      vi.mocked(postService.start).mockResolvedValue(
+        threadWith([
+          { text: 'the first part', charCount: 14, charLimit: 280 },
+          { text: 'the second part', charCount: 290, charLimit: 280 },
+        ]),
+      );
+      const area = await readyToWrite();
+      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
+      await writeBrief(area, 'ship small things');
+
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+      const parts = final.getAllByRole('listitem', { name: /^Part \d$/ });
+      expect(parts.map((part) => part.getAttribute('aria-label'))).toEqual(['Part 1', 'Part 2']);
+      const [first, second] = parts.map((part) => within(part));
+      expect(first.getByText('the first part')).toBeInTheDocument();
+      expect(first.getByText('14 / 280 characters')).toBeInTheDocument();
+      expect(second.getByText('290 / 280 characters')).toBeInTheDocument();
+      expect(second.getByText("10 characters over X's 280-character limit")).toBeInTheDocument();
+
+      fireEvent.click(second.getByRole('button', { name: 'Copy Part 2' }));
+
+      expect(writeText).toHaveBeenCalledWith('the second part');
+      expect(await second.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('post_part_copied');
+    });
+
+    it('shows a single post with no Part copy buttons', async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship');
+
+      const final = within(await area.findByRole('article', { name: 'Final' }));
+      expect(final.queryByRole('button', { name: /Copy Part/ })).not.toBeInTheDocument();
+      expect(final.queryByRole('listitem', { name: /^Part/ })).not.toBeInTheDocument();
+    });
+
+    it("flags a Final over the X account's limit", async () => {
+      vi.mocked(postService.start).mockResolvedValue(postWith('x'.repeat(292)));
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship');
 
       const final = within(await area.findByRole('article', { name: 'Final' }));
-      expect(final.getByText('3,012 / 3,000 characters')).toBeInTheDocument();
-      expect(final.getByText("12 characters over X's 3,000-character limit")).toBeInTheDocument();
+      expect(final.getByText('292 / 280 characters')).toBeInTheDocument();
+      expect(final.getByText("12 characters over X's 280-character limit")).toBeInTheDocument();
     });
 
     it('lists the tells the slop check found next to the Final', async () => {
@@ -334,7 +415,7 @@ describe('Home', () => {
 
       expect(await area.findByText('the final text')).toBeInTheDocument();
       expect(postService.start).toHaveBeenCalledTimes(2);
-      expect(postService.start).toHaveBeenNthCalledWith(2, 'ship small things');
+      expect(postService.start).toHaveBeenNthCalledWith(2, 'ship small things', 'post');
       expect(area.queryByRole('alert')).not.toBeInTheDocument();
     });
 
@@ -433,7 +514,7 @@ describe('Home', () => {
     // The tests run in Europe/Rome (vitest.config.ts), two hours ahead of UTC in October.
     const SCHEDULED: ScheduledPost = {
       id: 'scheduled_post_01',
-      text: 'the final text',
+      parts: [{ text: 'the final text', live: false, xPostUrl: null }],
       state: 'scheduled',
       publishAt: '2026-10-12T07:00:00Z',
       publishedAt: null,
@@ -488,6 +569,8 @@ describe('Home', () => {
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'final',
         post_now: false,
         destination: 'profile',
@@ -545,6 +628,8 @@ describe('Home', () => {
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'final',
         post_now: true,
         destination: 'profile',
@@ -593,6 +678,69 @@ describe('Home', () => {
 
       const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
       expect(dialog.getByText('10 characters over the 280 limit')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
+    });
+
+    async function threadFinalWritten(parts: string[]) {
+      vi.mocked(postService.start).mockResolvedValue(
+        threadWith(parts.map((text) => ({ text, charCount: text.length, charLimit: 280 }))),
+      );
+      const area = await readyToWrite();
+      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
+      await writeBrief(area, 'ship');
+      return within(await area.findByRole('article', { name: 'Final' }));
+    }
+
+    it("previews every Part of a Thread's Final with its counter before scheduling it", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue({
+        ...SCHEDULED,
+        parts: [
+          { text: 'the first part', live: false, xPostUrl: null },
+          { text: 'the second part', live: false, xPostUrl: null },
+        ],
+      });
+      const final = await threadFinalWritten(['the first part', 'the second part']);
+
+      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
+      const parts = within(dialog.getByRole('list', { name: 'Parts' }))
+        .getAllByRole('listitem')
+        .map((part) => within(part));
+      expect(parts).toHaveLength(2);
+      expect(parts[0].getByText('Part 1')).toBeInTheDocument();
+      expect(parts[0].getByText('the first part')).toBeInTheDocument();
+      expect(parts[0].getByText('14 / 280')).toBeInTheDocument();
+      expect(parts[1].getByText('Part 2')).toBeInTheDocument();
+      expect(parts[1].getByText('the second part')).toBeInTheDocument();
+      expect(parts[1].getByText('15 / 280')).toBeInTheDocument();
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
+
+      expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        { sourceVersionId: 'version_attempt_01' },
+        '2026-10-12T07:00:00.000Z',
+        { community: null, shareWithFollowers: false },
+      );
+    });
+
+    it("keeps Post now disabled while any Part of a Thread's Final is over X's limit", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      const final = await threadFinalWritten(['the first part', 'a'.repeat(290), 'the last part']);
+
+      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+      const parts = within(dialog.getByRole('list', { name: 'Parts' }))
+        .getAllByRole('listitem')
+        .map((part) => within(part));
+      expect(parts[0].getByText('14 / 280')).toBeInTheDocument();
+      expect(parts[1].getByText('10 characters over the 280 limit')).toBeInTheDocument();
+      expect(parts[2].getByText('13 / 280')).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
     });
 
@@ -703,6 +851,8 @@ describe('Home', () => {
           { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
         );
         expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+          format: 'post',
+          part_count: 1,
           source: 'final',
           post_now: true,
           destination: 'community',
@@ -763,6 +913,8 @@ describe('Home', () => {
           { community: { id: '123', name: null }, shareWithFollowers: false },
         );
         expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+          format: 'post',
+          part_count: 1,
           source: 'final',
           post_now: false,
           destination: 'community',
@@ -798,10 +950,9 @@ describe('Home', () => {
       id: 'version_attempt_02',
       number: 2,
       feedback: 'make it shorter',
-      draft: 'the second draft',
-      final: 'the second final',
-      finalCharCount: 16,
-      finalCharLimit: 3000,
+      format: 'post',
+      draftParts: ['the second draft'],
+      parts: [{ text: 'the second final', charCount: 16, charLimit: 280 }],
       tells: [],
     };
 
@@ -831,7 +982,7 @@ describe('Home', () => {
       expect(area.getByLabelText('Feedback')).toBeDisabled();
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
       expect(area.getByRole('status')).toHaveTextContent(/writing the next version/i);
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter');
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'feedback' });
 
       answer(versionTwo);
@@ -844,6 +995,62 @@ describe('Home', () => {
       expect(area.getByLabelText('Feedback')).toBeEnabled();
     });
 
+    it("starts the Format on the latest Version's and sends the one the User picks", async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue({
+        ...versionTwo,
+        format: 'thread',
+        parts: [
+          { text: 'part one', charCount: 8, charLimit: 280 },
+          { text: 'part two', charCount: 8, charLimit: 280 },
+        ],
+      });
+      const area = await onFirstVersion();
+      const format = () => within(area.getByRole('radiogroup', { name: 'Format' }));
+      expect(format().getByRole('radio', { name: 'Single post' })).toBeChecked();
+
+      fireEvent.click(format().getByRole('radio', { name: 'Thread' }));
+      sendFeedback(area, 'expand it');
+
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'expand it', 'thread');
+      await area.findByRole('region', { name: 'Version 2' });
+      expect(format().getByRole('radio', { name: 'Thread' })).toBeChecked();
+    });
+
+    it('shows each Version as a Thread with its Part count, or as nothing for a single post', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue({
+        ...versionTwo,
+        format: 'thread',
+        parts: [
+          { text: 'part one', charCount: 8, charLimit: 280 },
+          { text: 'part two', charCount: 8, charLimit: 280 },
+          { text: 'part three', charCount: 10, charLimit: 280 },
+        ],
+      });
+      const area = await onFirstVersion();
+      sendFeedback(area, 'expand it');
+
+      const threadVersion = within(await area.findByRole('region', { name: 'Version 2' }));
+      expect(threadVersion.getByText('Thread, 3 Parts')).toBeInTheDocument();
+      const postVersion = within(area.getByRole('region', { name: 'Version 1' }));
+      expect(postVersion.queryByText(/Thread, /)).not.toBeInTheDocument();
+    });
+
+    it('starts the Format on Thread when the latest Version is a Thread', async () => {
+      vi.mocked(postService.start).mockResolvedValue(
+        threadWith([
+          { text: 'the first part', charCount: 14, charLimit: 280 },
+          { text: 'the second part', charCount: 15, charLimit: 280 },
+        ]),
+      );
+      const area = await readyToWrite();
+      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
+      await writeBrief(area, 'ship small things');
+      await area.findByRole('article', { name: 'Final' });
+
+      const format = within(area.getByRole('radiogroup', { name: 'Format' }));
+      expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
+    });
+
     it('keeps earlier Versions above the latest, read-only, each with its Feedback and copy', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -854,7 +1061,7 @@ describe('Home', () => {
           id: 'version_attempt_03',
           number: 3,
           feedback: 'warmer',
-          final: 'the third final',
+          parts: [{ text: 'the third final', charCount: 15, charLimit: 280 }],
         });
       const area = await onFirstVersion();
       sendFeedback(area, 'make it shorter');

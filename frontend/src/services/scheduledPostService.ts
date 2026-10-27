@@ -11,8 +11,8 @@ export interface Community {
   url: string;
 }
 
-/** Typed text, or the Version whose Final the server copies. */
-export type PostText = { text: string } | { sourceVersionId: string };
+/** Typed Parts in order, or the Version whose Final the server copies. */
+export type ScheduledPostSource = { parts: string[] } | { sourceVersionId: string };
 
 /** Where a new Scheduled post goes: the User's profile when `community` is null. */
 export interface Destination {
@@ -23,21 +23,32 @@ export interface Destination {
 
 /** What an edit changes; anything left out stays as it is. */
 export interface ScheduledPostChanges {
-  text?: string;
+  /** Every Part in order, the live ones first and unchanged; the others replace those not live. */
+  parts?: string[];
   publishAt?: string;
   /** Null moves it back to the User's profile. */
   community?: Destination['community'];
   shareWithFollowers?: boolean;
 }
 
+/** One X post of a Scheduled post, in its place in the order. */
+export interface ScheduledPostPart {
+  text: string;
+  /** Whether X has accepted it. */
+  live: boolean;
+  /** This Part on X, once live. */
+  xPostUrl: string | null;
+}
+
 /** A text set to be published on the User's X account, with its own copy of the text. */
 export interface ScheduledPost {
   id: string;
-  text: string;
+  /** In the order they go out; one Part is a single X post. */
+  parts: ScheduledPostPart[];
   state: ScheduledPostState;
   publishAt: string;
   publishedAt: string | null;
-  /** The post on X, once Published. */
+  /** The first Part on X, once Published. */
   xPostUrl: string | null;
   /** Why it Failed, in words for the User. */
   failedReason: string | null;
@@ -49,7 +60,7 @@ export interface ScheduledPost {
 
 interface ScheduledPostApi {
   id: string;
-  text: string;
+  parts: { text: string; live: boolean; x_post_url: string | null }[];
   state: ScheduledPostState;
   publish_at: string;
   published_at: string | null;
@@ -62,7 +73,7 @@ interface ScheduledPostApi {
 
 const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   id: p.id,
-  text: p.text,
+  parts: p.parts.map((part) => ({ text: part.text, live: part.live, xPostUrl: part.x_post_url })),
   state: p.state,
   publishAt: p.publish_at,
   publishedAt: p.published_at,
@@ -73,8 +84,8 @@ const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   createdAt: p.created_at,
 });
 
-const postTextBody = (post: PostText) =>
-  'text' in post ? { text: post.text } : { source_version_id: post.sourceVersionId };
+const postTextBody = (post: ScheduledPostSource) =>
+  'parts' in post ? { parts: post.parts } : { source_version_id: post.sourceVersionId };
 
 // The server looks up the Community's name itself, so only its ID goes.
 const destinationBody = ({ community, shareWithFollowers }: Destination) => ({
@@ -102,7 +113,7 @@ export const scheduledPostService = {
    * Publishes on X before answering: it comes back Published, Failed, or scheduled when X was
    * busy and the publisher will retry.
    */
-  postNow: async (post: PostText, destination: Destination): Promise<ScheduledPost> => {
+  postNow: async (post: ScheduledPostSource, destination: Destination): Promise<ScheduledPost> => {
     const { data } = await apiService.post<ScheduledPostApi>('/scheduled-posts', {
       ...postTextBody(post),
       publish_now: true,
@@ -113,7 +124,7 @@ export const scheduledPostService = {
 
   /** `publishAt` is an ISO instant on a whole minute; it comes back scheduled. */
   schedule: async (
-    post: PostText,
+    post: ScheduledPostSource,
     publishAt: string,
     destination: Destination,
   ): Promise<ScheduledPost> => {
@@ -133,7 +144,7 @@ export const scheduledPostService = {
     const { data } = await apiService.patch<ScheduledPostApi>(
       `/scheduled-posts/${encodeURIComponent(id)}`,
       {
-        text: changes.text,
+        parts: changes.parts,
         publish_at: changes.publishAt,
         // Sent only when given: null moves it back to the profile, absent keeps the Community.
         ...('community' in changes && { community: changes.community?.id ?? null }),

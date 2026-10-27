@@ -88,7 +88,13 @@ const CONNECTED: XConnection = {
 const NEEDS_RECONNECT: XConnection = { ...CONNECTED, needsReconnect: true };
 const PUBLISHED: ScheduledPost = {
   id: 'scheduled_post_01',
-  text: 'Shipping the new onboarding today.',
+  parts: [
+    {
+      text: 'Shipping the new onboarding today.',
+      live: true,
+      xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+    },
+  ],
   state: 'published',
   publishAt: '2026-10-10T12:00:00Z',
   publishedAt: '2026-10-10T12:00:14Z',
@@ -101,7 +107,7 @@ const PUBLISHED: ScheduledPost = {
 // The tests run in Europe/Rome (vitest.config.ts), two hours ahead of UTC in October.
 const MONDAY: ScheduledPost = {
   id: 'scheduled_post_03',
-  text: 'Monday morning.',
+  parts: [{ text: 'Monday morning.', live: false, xPostUrl: null }],
   state: 'scheduled',
   publishAt: '2026-10-12T07:00:00Z',
   publishedAt: null,
@@ -114,12 +120,12 @@ const MONDAY: ScheduledPost = {
 const WEDNESDAY: ScheduledPost = {
   ...MONDAY,
   id: 'scheduled_post_04',
-  text: 'Wednesday morning.',
+  parts: [{ text: 'Wednesday morning.', live: false, xPostUrl: null }],
   publishAt: '2026-10-14T07:00:00Z',
 };
 const FAILED: ScheduledPost = {
   id: 'scheduled_post_02',
-  text: 'Shipping again.',
+  parts: [{ text: 'Shipping again.', live: false, xPostUrl: null }],
   state: 'failed',
   publishAt: '2026-10-10T12:01:00Z',
   publishedAt: null,
@@ -372,11 +378,13 @@ describe('Scheduled', () => {
         'https://x.com/i/web/status/1890000000000000001',
       );
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { text: 'Shipping the new onboarding today.' },
+        { parts: ['Shipping the new onboarding today.'] },
         { community: null, shareWithFollowers: false },
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: true,
         destination: 'profile',
@@ -564,13 +572,15 @@ describe('Scheduled', () => {
       expect(await upcoming.findByText('Monday morning.')).toBeInTheDocument();
       expect(upcoming.getAllByRole('listitem')[0]).toHaveTextContent('Monday morning.');
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { text: 'Monday morning.' },
+        { parts: ['Monday morning.'] },
         '2026-10-12T07:00:00.000Z',
         { community: null, shareWithFollowers: false },
       );
       expect(box.getByLabelText('Post text')).toHaveValue('');
       expect(box.getByLabelText('Date and time')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: false,
         destination: 'profile',
@@ -609,7 +619,7 @@ describe('Scheduled', () => {
 
     it('says when the monthly cap resets once a month is full', async () => {
       const full =
-        'You have 100 Scheduled posts in October 2026, the most for one month. ' +
+        'You have 100 X posts in October 2026, the most for one month. ' +
         'The cap resets on November 1, 2026.';
       vi.mocked(scheduledPostService.schedule).mockRejectedValue(apiError(409, full));
       renderScheduled();
@@ -641,13 +651,226 @@ describe('Scheduled', () => {
     });
   });
 
+  describe('Threads', () => {
+    const THREAD: ScheduledPost = {
+      ...MONDAY,
+      id: 'scheduled_post_05',
+      parts: [
+        { text: 'A Thread starts here.', live: false, xPostUrl: null },
+        { text: 'And ends here.', live: false, xPostUrl: null },
+      ],
+    };
+
+    beforeEach(() => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    });
+
+    it('schedules a Thread typed Part by Part', async () => {
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue(THREAD);
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), {
+        target: { value: 'A Thread starts here.' },
+      });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      expect(box.getByLabelText('Part 1')).toHaveValue('A Thread starts here.');
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'And ends here.' } });
+      fireEvent.change(box.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(box.getByRole('button', { name: 'Schedule' }));
+
+      const upcoming = await upcomingList();
+      expect(await upcoming.findByText('Thread, 2 Parts')).toBeInTheDocument();
+      expect(upcoming.getAllByRole('listitem')).toHaveLength(1);
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        { parts: ['A Thread starts here.', 'And ends here.'] },
+        '2026-10-12T07:00:00.000Z',
+        { community: null, shareWithFollowers: false },
+      );
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'thread',
+        part_count: 2,
+        source: 'typed',
+        post_now: false,
+        destination: 'profile',
+      });
+      expect(box.getByLabelText('Post text')).toHaveValue('');
+    });
+
+    it('reorders and removes Parts', async () => {
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'One' } });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'Two' } });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(box.getByLabelText('Part 3'), { target: { value: 'Three' } });
+
+      fireEvent.click(box.getByRole('button', { name: 'Move Part 3 up' }));
+      expect(box.getByLabelText('Part 2')).toHaveValue('Three');
+      expect(box.getByRole('button', { name: 'Move Part 1 up' })).toBeDisabled();
+      expect(box.getByRole('button', { name: 'Move Part 3 down' })).toBeDisabled();
+      fireEvent.click(box.getByRole('button', { name: 'Move Part 1 down' }));
+      expect(box.getByLabelText('Part 1')).toHaveValue('Three');
+      fireEvent.click(box.getByRole('button', { name: 'Remove Part 2' }));
+      expect(box.getByLabelText('Part 1')).toHaveValue('Three');
+      expect(box.getByLabelText('Part 2')).toHaveValue('Two');
+      fireEvent.click(box.getByRole('button', { name: 'Remove Part 1' }));
+
+      expect(box.getByLabelText('Post text')).toHaveValue('Two');
+      expect(box.queryByRole('button', { name: /remove part/i })).not.toBeInTheDocument();
+    });
+
+    it('counts each Part and holds back sending while one is over the limit or empty', async () => {
+      renderScheduled();
+
+      const box = await composer();
+      fireEvent.change(await box.findByLabelText('Post text'), { target: { value: 'Fine.' } });
+      fireEvent.click(box.getByRole('button', { name: 'Add a Part' }));
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'a'.repeat(281) } });
+
+      expect(box.getByText('5 / 280')).toBeInTheDocument();
+      expect(box.getByText('1 character over the 280 limit')).toBeInTheDocument();
+      expect(box.getByRole('button', { name: 'Post now' })).toBeDisabled();
+
+      fireEvent.change(box.getByLabelText('Part 2'), { target: { value: 'Fine too.' } });
+      expect(box.getByRole('button', { name: 'Post now' })).toBeEnabled();
+    });
+
+    it('edits, adds and reorders the Parts of an upcoming Thread', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([THREAD]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...THREAD,
+        parts: [
+          { text: 'And ends here.', live: false, xPostUrl: null },
+          { text: 'A Thread starts here!', live: false, xPostUrl: null },
+          { text: 'One more.', live: false, xPostUrl: null },
+        ],
+      });
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      fireEvent.click(
+        within((await upcoming.findByText('A Thread starts here.')).closest('li')!).getByRole(
+          'button',
+          { name: 'Edit' },
+        ),
+      );
+      const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
+      fireEvent.change(dialog.getByLabelText('Part 1'), {
+        target: { value: 'A Thread starts here!' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Move Part 2 up' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(dialog.getByLabelText('Part 3'), { target: { value: 'One more.' } });
+      fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
+
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(scheduledPostService.edit).toHaveBeenCalledWith(THREAD.id, {
+        parts: ['And ends here.', 'A Thread starts here!', 'One more.'],
+      });
+      expect(await (await upcomingList()).findByText('Thread, 3 Parts')).toBeInTheDocument();
+    });
+
+    const FAILED_PARTWAY: ScheduledPost = {
+      ...THREAD,
+      state: 'failed',
+      parts: [
+        { ...THREAD.parts[0], live: true, xPostUrl: 'https://x.com/i/web/status/1' },
+        THREAD.parts[1],
+      ],
+      failedReason: 'X refused Part 2: Duplicate content.',
+    };
+
+    it('marks the live Parts of a Thread that failed partway', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED_PARTWAY]);
+      renderScheduled();
+
+      const failedList = within(await screen.findByRole('region', { name: 'Failed' }));
+      expect(
+        await failedList.findByText('X refused Part 2: Duplicate content.'),
+      ).toBeInTheDocument();
+      expect(failedList.getByRole('link', { name: 'Part 1 is live on X' })).toHaveAttribute(
+        'href',
+        'https://x.com/i/web/status/1',
+      );
+      expect(failedList.getAllByRole('link', { name: /live on X/ })).toHaveLength(1);
+    });
+
+    it('keeps the live Parts read-only and lets the others change before a reschedule', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED_PARTWAY]);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({ ...THREAD, state: 'scheduled' });
+      renderScheduled();
+
+      const failedList = within(await screen.findByRole('region', { name: 'Failed' }));
+      fireEvent.click(await failedList.findByRole('button', { name: 'Reschedule' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
+      expect(dialog.queryByLabelText('Part 1')).not.toBeInTheDocument();
+      expect(dialog.getByText('A Thread starts here.')).toBeInTheDocument();
+      expect(dialog.getByRole('link', { name: 'Part 1 is live on X' })).toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Remove Part 1' })).not.toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Move Part 1 down' })).not.toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Move Part 2 up' })).toBeDisabled();
+      fireEvent.change(dialog.getByLabelText('Part 2'), { target: { value: 'Fixed two.' } });
+      fireEvent.click(dialog.getByRole('button', { name: 'Add a Part' }));
+      fireEvent.change(dialog.getByLabelText('Part 3'), { target: { value: 'Three.' } });
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
+
+      await vi.waitFor(() =>
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(THREAD.id, {
+          parts: ['A Thread starts here.', 'Fixed two.', 'Three.'],
+          publishAt: '2026-10-12T07:00:00.000Z',
+        }),
+      );
+    });
+
+    it('holds back a reschedule that keeps only the live Parts', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([FAILED_PARTWAY]);
+      renderScheduled();
+
+      const failedList = within(await screen.findByRole('region', { name: 'Failed' }));
+      fireEvent.click(await failedList.findByRole('button', { name: 'Reschedule' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Remove Part 2' }));
+      fireEvent.change(dialog.getByLabelText('Date and time'), {
+        target: { value: '2026-10-12T09:00' },
+      });
+
+      expect(dialog.getByRole('button', { name: 'Reschedule' })).toBeDisabled();
+    });
+
+    it('holds back saving a Thread while one of its Parts is over the limit', async () => {
+      vi.mocked(scheduledPostService.list).mockResolvedValue([THREAD]);
+      renderScheduled();
+
+      const upcoming = await upcomingList();
+      fireEvent.click(
+        within((await upcoming.findByText('And ends here.')).closest('li')!).getByRole('button', {
+          name: 'Edit',
+        }),
+      );
+      const dialog = within(await screen.findByRole('dialog'));
+      fireEvent.change(dialog.getByLabelText('Part 2'), { target: { value: 'a'.repeat(281) } });
+
+      expect(dialog.getByText('1 character over the 280 limit')).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+  });
+
   describe('Communities', () => {
     const COMMUNITY_ID = '1493446837214187523';
     const COMMUNITY_URL = `https://x.com/i/communities/${COMMUNITY_ID}`;
     const IN_COMMUNITY: ScheduledPost = {
       ...PUBLISHED,
       id: 'scheduled_post_06',
-      text: 'Hello Community.',
+      parts: [{ text: 'Hello Community.', live: false, xPostUrl: null }],
       community: { id: COMMUNITY_ID, name: null, url: COMMUNITY_URL },
       shareWithFollowers: true,
     };
@@ -691,7 +914,7 @@ describe('Scheduled', () => {
       fireEvent.click(box.getByRole('button', { name: 'Post now' }));
       await vi.waitFor(() =>
         expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          { text: 'Hello Community.' },
+          { parts: ['Hello Community.'] },
           {
             community: { id: COMMUNITY_ID, name: 'Build in Public' },
             shareWithFollowers: true,
@@ -768,7 +991,7 @@ describe('Scheduled', () => {
 
       await vi.waitFor(() =>
         expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          { text: 'Hello' },
+          { parts: ['Hello'] },
           {
             community: null,
             shareWithFollowers: false,
@@ -792,13 +1015,15 @@ describe('Scheduled', () => {
       const published = await publishedList();
       expect(await published.findByText('Hello Community.')).toBeInTheDocument();
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { text: 'Hello Community.' },
+        { parts: ['Hello Community.'] },
         {
           community: { id: COMMUNITY_ID, name: null },
           shareWithFollowers: true,
         },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: true,
         destination: 'community',
@@ -827,11 +1052,13 @@ describe('Scheduled', () => {
       const upcoming = await upcomingList();
       expect(await upcoming.findByText('Monday morning.')).toBeInTheDocument();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { text: 'Monday morning.' },
+        { parts: ['Monday morning.'] },
         '2026-10-12T07:00:00.000Z',
         { community: { id: '123', name: null }, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
         source: 'typed',
         post_now: false,
         destination: 'community',
@@ -882,7 +1109,7 @@ describe('Scheduled', () => {
         {
           ...PUBLISHED,
           id: 'scheduled_post_05',
-          text: 'Only there.',
+          parts: [{ text: 'Only there.', live: false, xPostUrl: null }],
           community: IN_COMMUNITY.community,
         },
         PUBLISHED,
@@ -905,7 +1132,7 @@ describe('Scheduled', () => {
       expect(shared.getByText('Also shared with followers')).toBeInTheDocument();
       const only = within(published.getByText('Only there.').closest('li')!);
       expect(only.getByText('Not shared with followers')).toBeInTheDocument();
-      const profile = within(published.getByText(PUBLISHED.text).closest('li')!);
+      const profile = within(published.getByText(PUBLISHED.parts[0].text).closest('li')!);
       expect(profile.queryByRole('link', { name: COMMUNITY_ID })).not.toBeInTheDocument();
       expect(profile.queryByText(/followers/)).not.toBeInTheDocument();
     });
@@ -965,7 +1192,7 @@ describe('Scheduled', () => {
 
       await vi.waitFor(() =>
         expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          { text: 'Hello' },
+          { parts: ['Hello'] },
           {
             community: { id: MAKERS.id, name: 'Indie makers' },
             shareWithFollowers: true,
@@ -1005,7 +1232,7 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const upcoming = await upcomingList();
-      const item = within((await upcoming.findByText(MONDAY.text)).closest('li')!);
+      const item = within((await upcoming.findByText(MONDAY.parts[0].text)).closest('li')!);
       fireEvent.click(item.getByRole('button', { name: 'Edit' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
       fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
@@ -1027,7 +1254,7 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const upcoming = await upcomingList();
-      const item = within((await upcoming.findByText(MONDAY.text)).closest('li')!);
+      const item = within((await upcoming.findByText(MONDAY.parts[0].text)).closest('li')!);
       fireEvent.click(item.getByRole('button', { name: 'Edit' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Edit Scheduled post' }));
       await dialog.findByRole('option', { name: '123' });
@@ -1046,10 +1273,10 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const published = await publishedList();
-      expect(await published.findByText(PUBLISHED.text)).toBeInTheDocument();
+      expect(await published.findByText(PUBLISHED.parts[0].text)).toBeInTheDocument();
       expect(published.getByRole('link', { name: /view on x/i })).toBeInTheDocument();
       const failed = within(await screen.findByRole('region', { name: 'Failed' }));
-      expect(failed.getByText(FAILED.text)).toBeInTheDocument();
+      expect(failed.getByText(FAILED.parts[0].text)).toBeInTheDocument();
       expect(failed.getByText(FAILED.failedReason!)).toBeInTheDocument();
     });
 
@@ -1063,7 +1290,7 @@ describe('Scheduled', () => {
         expect.stringMatching(/^Monday morning\..*Oct 12, 2026, 9:00/),
         expect.stringMatching(/^Wednesday morning\..*Oct 14, 2026, 9:00/),
       ]);
-      expect(upcoming.queryByText(PUBLISHED.text)).not.toBeInTheDocument();
+      expect(upcoming.queryByText(PUBLISHED.parts[0].text)).not.toBeInTheDocument();
     });
 
     it('still shows the history to a User who is not Subscribed', async () => {
@@ -1072,7 +1299,7 @@ describe('Scheduled', () => {
       renderScheduled();
 
       const published = await publishedList();
-      expect(await published.findByText(PUBLISHED.text)).toBeInTheDocument();
+      expect(await published.findByText(PUBLISHED.parts[0].text)).toBeInTheDocument();
     });
 
     it('says when nothing has been scheduled or published yet', async () => {
@@ -1106,7 +1333,11 @@ describe('Scheduled', () => {
     }
 
     it('edits the text and time of an upcoming one', async () => {
-      const moved = { ...MONDAY, text: 'Tuesday morning.', publishAt: '2026-10-13T08:00:00Z' };
+      const moved = {
+        ...MONDAY,
+        parts: [{ text: 'Tuesday morning.', live: false, xPostUrl: null }],
+        publishAt: '2026-10-13T08:00:00Z',
+      };
       vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY, WEDNESDAY]);
       vi.mocked(scheduledPostService.edit).mockResolvedValue(moved);
       renderScheduled();
@@ -1127,7 +1358,7 @@ describe('Scheduled', () => {
 
       await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, {
-        text: 'Tuesday morning.',
+        parts: ['Tuesday morning.'],
         publishAt: '2026-10-13T08:00:00.000Z',
       });
       const items = (await upcomingList()).getAllByRole('listitem');
@@ -1139,7 +1370,10 @@ describe('Scheduled', () => {
 
     it('sends only the text when the time is left as it was', async () => {
       vi.mocked(scheduledPostService.list).mockResolvedValue([MONDAY]);
-      vi.mocked(scheduledPostService.edit).mockResolvedValue({ ...MONDAY, text: 'Fixed.' });
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...MONDAY,
+        parts: [{ text: 'Fixed.', live: false, xPostUrl: null }],
+      });
       renderScheduled();
 
       fireEvent.click(
@@ -1150,7 +1384,7 @@ describe('Scheduled', () => {
       fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
 
       expect(await (await upcomingList()).findByText('Fixed.')).toBeInTheDocument();
-      expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { text: 'Fixed.' });
+      expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { parts: ['Fixed.'] });
     });
 
     it('holds back a text over the limit by X count', async () => {
@@ -1254,7 +1488,7 @@ describe('Scheduled', () => {
       const failed = within(await screen.findByRole('region', { name: 'Failed' }));
       fireEvent.click(await failed.findByRole('button', { name: 'Reschedule' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Reschedule' }));
-      expect(dialog.getByLabelText('Post text')).toHaveValue(FAILED.text);
+      expect(dialog.getByLabelText('Post text')).toHaveValue(FAILED.parts[0].text);
       expect(dialog.getByLabelText('Date and time')).toHaveValue('');
       expect(dialog.getByRole('button', { name: 'Reschedule' })).toBeDisabled();
       fireEvent.change(dialog.getByLabelText('Date and time'), {
@@ -1262,7 +1496,7 @@ describe('Scheduled', () => {
       });
       fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
 
-      expect(await (await upcomingList()).findByText(FAILED.text)).toBeInTheDocument();
+      expect(await (await upcomingList()).findByText(FAILED.parts[0].text)).toBeInTheDocument();
       expect(scheduledPostService.edit).toHaveBeenCalledWith(FAILED.id, {
         publishAt: '2026-10-12T07:00:00.000Z',
       });
@@ -1342,7 +1576,7 @@ describe('Scheduled', () => {
         vi.mocked(scheduledPostService.list).mockResolvedValue([IN_COMMUNITY]);
         vi.mocked(scheduledPostService.edit).mockResolvedValue({
           ...IN_COMMUNITY,
-          text: 'Edited.',
+          parts: [{ text: 'Edited.', live: false, xPostUrl: null }],
         });
         renderScheduled();
 
@@ -1352,7 +1586,7 @@ describe('Scheduled', () => {
         fireEvent.click(dialog.getByRole('button', { name: 'Save' }));
 
         await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { text: 'Edited.' });
+        expect(scheduledPostService.edit).toHaveBeenCalledWith(MONDAY.id, { parts: ['Edited.'] });
         expect(scheduledPostService.lookUpCommunity).not.toHaveBeenCalled();
       });
 
@@ -1402,7 +1636,7 @@ describe('Scheduled', () => {
         });
         fireEvent.click(dialog.getByRole('button', { name: 'Reschedule' }));
 
-        expect(await (await upcomingList()).findByText(FAILED.text)).toBeInTheDocument();
+        expect(await (await upcomingList()).findByText(FAILED.parts[0].text)).toBeInTheDocument();
         expect(scheduledPostService.edit).toHaveBeenCalledWith(FAILED.id, {
           publishAt: '2026-10-12T07:00:00.000Z',
           community: { id: '123', name: null },

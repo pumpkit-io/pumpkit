@@ -1,7 +1,10 @@
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { ThreadSize } from '@/components/ThreadParts';
 import { Button } from '@/components/ui/button';
+import { FORMAT_THREAD, formatOf } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { InTheCommunity } from './InTheCommunity';
+import { LiveOnX } from './LiveOnX';
 
 const dateTime = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -24,9 +27,24 @@ function ListSection({
   );
 }
 
-function PostText({ text }: { text: string }) {
+/**
+ * A Thread is one item, its Part count above its Parts. Until it is Published, its live Parts
+ * are marked, as a Thread that failed partway keeps them.
+ */
+function PostText({ post }: { post: ScheduledPost }) {
+  const markLive = post.state !== 'published';
   return (
-    <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">{text}</p>
+    <>
+      {formatOf(post.parts) === FORMAT_THREAD && <ThreadSize count={post.parts.length} />}
+      {post.parts.map((part, index) => (
+        <div key={index} className="space-y-0.5">
+          <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
+            {part.text}
+          </p>
+          {markLive && part.live && <LiveOnX number={index + 1} xPostUrl={part.xPostUrl} />}
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -97,7 +115,7 @@ export function ScheduledPostLists({
           <ul className={LIST}>
             {upcoming.map((post) => (
               <li key={post.id} className={ITEM}>
-                <PostText text={post.text} />
+                <PostText post={post} />
                 <CommunityLine post={post} />
                 <p className="font-sans text-xs text-muted-foreground">
                   {post.state === 'publishing'
@@ -128,7 +146,7 @@ export function ScheduledPostLists({
           <ul className={LIST}>
             {failed.map((post) => (
               <li key={post.id} className={ITEM}>
-                <PostText text={post.text} />
+                <PostText post={post} />
                 <CommunityLine post={post} />
                 <p className="font-sans text-xs text-red-700 dark:text-red-300">
                   {post.failedReason}
@@ -161,7 +179,7 @@ export function ScheduledPostLists({
           <ul className={LIST}>
             {published.map((post) => (
               <li key={post.id} className={ITEM}>
-                <PostText text={post.text} />
+                <PostText post={post} />
                 <CommunityLine post={post} followers />
                 <p className="flex flex-wrap gap-x-3 font-sans text-xs text-muted-foreground">
                   {post.publishedAt && (

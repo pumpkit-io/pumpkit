@@ -24,7 +24,7 @@ async def _schedule(
     client: AsyncClient, publish_at: str = "2026-10-10T14:00:00Z", **destination
 ) -> dict:
     response = await client.post(
-        SCHEDULED_POSTS, json={"text": "Later today.", "publish_at": publish_at, **destination}
+        SCHEDULED_POSTS, json={"parts": ["Later today."], "publish_at": publish_at, **destination}
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -189,7 +189,7 @@ async def test_a_published_scheduled_post_s_community_cannot_change(
         await client.post(
             SCHEDULED_POSTS,
             json={
-                "text": "Out",
+                "parts": ["Out"],
                 "publish_now": True,
                 "community": COMMUNITY_ID,
                 "share_with_followers": True,

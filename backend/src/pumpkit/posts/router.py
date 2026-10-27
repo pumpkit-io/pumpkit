@@ -31,7 +31,12 @@ async def start_post(
 ) -> PostResponse:
     """Writes the first Version before answering, which takes two model calls."""
     return await mediator.start_post(
-        db=db, llm=llm, user=current_user, brief=start_request.brief, now=clock()
+        db=db,
+        llm=llm,
+        user=current_user,
+        brief=start_request.brief,
+        format=start_request.format,
+        now=clock(),
     )
 
 
@@ -57,5 +62,6 @@ async def add_version(
         user=current_user,
         post_id=post_id,
         feedback=feedback_request.feedback,
+        format=feedback_request.format,
         now=clock(),
     )

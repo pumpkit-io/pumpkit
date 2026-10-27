@@ -10,14 +10,16 @@ from pumpkit.x_connection.x_publisher import XAccount
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 
 
-async def _waiting(db, user, clock, x_user_id: str = "1001") -> str:
+async def _waiting(
+    db, user, clock, x_user_id: str = "1001", parts: tuple[str, ...] = ("Due now",)
+) -> str:
     """A Scheduled post in scheduled, due now, as the publisher would find it."""
     now = clock()
     scheduled_post = await scheduled_posts_service.create(
         db,
         user_id=user.id,
         x_user_id=x_user_id,
-        text="Due now",
+        parts=list(parts),
         publish_at=now.replace(second=0, microsecond=0),
         now=now,
     )
@@ -57,6 +59,19 @@ async def test_x_is_called_at_most_once_per_scheduled_post(
 
     assert published_again is False
     assert len(fake_x_publisher.published) == 1
+
+
+async def test_x_is_called_at_most_once_per_part_of_a_thread(
+    client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
+):
+    await connect_x()
+    scheduled_post_id = await _waiting(db, user, clock, parts=("One", "Two", "Three"))
+    await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+
+    published_again = await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+
+    assert published_again is False
+    assert [text for _, text in fake_x_publisher.published] == ["One", "Two", "Three"]
 
 
 async def test_a_user_who_is_no_longer_subscribed_gets_a_failed_post_and_nothing_on_x(

@@ -9,22 +9,31 @@ prefix that stays the same across a Post's Versions.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
-from pumpkit.posts.llm import LLM
+from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
+from pumpkit.posts.llm import LLM, LLMError
 from pumpkit.posts.llm_schemas import StructuredResult
-from pumpkit.posts.writing.constants import CACHE_TTL, MAX_TOKENS
+from pumpkit.posts.writing.constants import (
+    CACHE_TTL,
+    MAX_TOKENS,
+    THREAD_MAX_PARTS,
+    THREAD_MIN_PARTS,
+)
 from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
+from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
 from pumpkit.posts.writing.prompts.feedback import feedback_message
 from pumpkit.posts.writing.prompts.hook import HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
+from pumpkit.posts.writing.prompts.parts import format_text
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     latest_feedback_message,
     previous_final_message,
@@ -33,12 +42,15 @@ from pumpkit.posts.writing.prompts.revision_humanizer import (
 from pumpkit.posts.writing.scrub import scrub
 
 
-class WrittenPost(BaseModel):
-    # hook_reasoning comes first so the model settles the opening before it writes the post.
+class _HookedWriting(BaseModel):
+    # hook_reasoning comes first so the model settles the opening before it writes the text.
     model_config = ConfigDict(extra="forbid")
 
     hook_reasoning: str
     hook_name: Optional[str]
+
+
+class WrittenPost(_HookedWriting):
     post: str
 
 
@@ -56,17 +68,63 @@ class RevisedPost(WrittenPost):
     pass
 
 
-# The SDK names the structured-output schema after the class; these are v6's schema names.
+class WrittenThread(_HookedWriting):
+    # No minItems or maxItems: not every provider's structured output enforces them, so the
+    # Part count is checked after the call.
+    parts: list[str]
+
+
+class DraftedThread(WrittenThread):
+    pass
+
+
+class RevisedThread(WrittenThread):
+    pass
+
+
+class FinalThread(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parts: list[str]
+
+
+# The SDK names the structured-output schema after the class; the post ones are v6's names.
 DraftedPost.__name__ = "drafted_post"
 FinalPost.__name__ = "refined_post"
 RevisedPost.__name__ = "revised_post"
+DraftedThread.__name__ = "drafted_thread"
+RevisedThread.__name__ = "revised_thread"
+FinalThread.__name__ = "refined_thread"
+
+# Each takes the account's character limit. The single-post humanizer states none: it stays v6's.
+_DRAFT_PROMPTS: dict[Format, Callable[[int], str]] = {
+    FORMAT_POST: draft_post_prompt,
+    FORMAT_THREAD: draft_thread_prompt,
+}
+_HUMANIZER_PROMPTS: dict[Format, Callable[[int], str]] = {
+    FORMAT_POST: lambda _char_limit: HUMANIZER_PROMPT,
+    FORMAT_THREAD: humanizer_thread_prompt,
+}
+_DRAFTED: dict[Format, type[_HookedWriting]] = {
+    FORMAT_POST: DraftedPost,
+    FORMAT_THREAD: DraftedThread,
+}
+_REVISED: dict[Format, type[_HookedWriting]] = {
+    FORMAT_POST: RevisedPost,
+    FORMAT_THREAD: RevisedThread,
+}
+_FINAL: dict[Format, type[BaseModel]] = {
+    FORMAT_POST: FinalPost,
+    FORMAT_THREAD: FinalThread,
+}
 
 
 @dataclass(frozen=True)
 class EarlierVersion:
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]
-    final: str
+    format: Format
+    final_parts: list[str]
 
 
 @dataclass(frozen=True)
@@ -78,8 +136,9 @@ class Hook:
 
 @dataclass(frozen=True)
 class WrittenVersion:
-    draft: str
-    final: str
+    format: Format
+    draft_parts: list[str]
+    final_parts: list[str]
     writing_model: str
     humanizing_model: str
     writing_usage: Optional[dict]
@@ -100,31 +159,51 @@ def _user(content: str) -> dict:
     return {"role": "user", "content": content}
 
 
-def draft_messages(corpus: Corpus, brief: str) -> list[dict]:
-    return [_system(DRAFT_POST_PROMPT), _user(context_message(corpus)), _user(brief)]
+def draft_messages(corpus: Corpus, brief: str, format: Format, char_limit: int) -> list[dict]:
+    return [
+        _system(_DRAFT_PROMPTS[format](char_limit)),
+        _user(context_message(corpus)),
+        _user(brief),
+    ]
 
 
-def _humanizer_prefix(corpus: Corpus, brief: str) -> list[dict]:
-    return [_system(HUMANIZER_PROMPT), _user(context_message(corpus)), _user(brief_message(brief))]
+def _humanizer_prefix(corpus: Corpus, brief: str, format: Format, char_limit: int) -> list[dict]:
+    return [
+        _system(_HUMANIZER_PROMPTS[format](char_limit)),
+        _user(context_message(corpus)),
+        _user(brief_message(brief, format)),
+    ]
 
 
-def humanizer_messages(corpus: Corpus, brief: str, draft: str) -> list[dict]:
+def humanizer_messages(
+    corpus: Corpus, brief: str, format: Format, char_limit: int, draft_parts: list[str]
+) -> list[dict]:
     """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Draft last."""
-    return [*_humanizer_prefix(corpus, brief), _user(draft)]
+    return [
+        *_humanizer_prefix(corpus, brief, format, char_limit),
+        _user(format_text(format, draft_parts)),
+    ]
 
 
 def revision_humanizer_messages(
-    corpus: Corpus, brief: str, previous_final: str, feedback: str, draft: str
+    corpus: Corpus,
+    brief: str,
+    previous: EarlierVersion,
+    feedback: str,
+    format: Format,
+    char_limit: int,
+    draft_parts: list[str],
 ) -> list[dict]:
     """
-    The first Version's prefix, then what keeps the humanizer from rewording sentences the
-    Feedback left alone or undoing what it asked for. Earlier asks live on in the previous Final.
+    The first Version's prefix in the new Format, then what keeps the humanizer from rewording
+    sentences the Feedback left alone or undoing what it asked for. Earlier asks live on in the
+    previous Final, which keeps its own Format.
     """
     return [
-        *_humanizer_prefix(corpus, brief),
-        _user(previous_final_message(previous_final)),
-        _user(latest_feedback_message(feedback)),
-        _user(revised_draft_message(draft)),
+        *_humanizer_prefix(corpus, brief, format, char_limit),
+        _user(previous_final_message(previous.format, previous.final_parts)),
+        _user(latest_feedback_message(feedback, previous.format, format)),
+        _user(revised_draft_message(previous.format, format, draft_parts)),
     ]
 
 
@@ -133,18 +212,25 @@ def revision_messages(
     brief: str,
     earlier: Sequence[EarlierVersion],
     feedback: str,
+    format: Format,
+    char_limit: int,
 ) -> list[dict]:
     """
-    The draft call's conversation continued: the Brief, each Final as the model's answer after
-    the Feedback that asked for it, then the new Feedback. Drafts stay out: the User never
+    The draft call's conversation continued, under the new Format's prompt: the Brief, each
+    Final in its own Format as the model's answer after the Feedback that asked for it, then
+    the new Feedback. A Feedback that switched Format says so. Drafts stay out: the User never
     reacted to them.
     """
-    messages = draft_messages(corpus, brief)
+    messages = draft_messages(corpus, brief, format, char_limit)
+    previous: Optional[EarlierVersion] = None
     for version in earlier:
-        if version.feedback is not None:
-            messages.append(_user(feedback_message(version.feedback)))
-        messages.append({"role": "assistant", "content": version.final})
-    messages.append(_user(feedback_message(feedback)))
+        if previous is not None and version.feedback is not None:
+            framed = feedback_message(version.feedback, previous.format, version.format)
+            messages.append(_user(framed))
+        content = format_text(version.format, version.final_parts)
+        messages.append({"role": "assistant", "content": content})
+        previous = version
+    messages.append(_user(feedback_message(feedback, earlier[-1].format, format)))
     return messages
 
 
@@ -152,17 +238,42 @@ def _usage(result: StructuredResult) -> Optional[dict]:
     return None if result.usage is None else result.usage.raw
 
 
-async def write_first_version(llm: LLM, corpus: Corpus, brief: str) -> WrittenVersion:
-    """Raises whatever the LLM port raises; nothing is stored here."""
+def _thread_parts(call: str, parts: list[str]) -> list[str]:
+    """A Thread reply's Parts, or an `LLMError` that fails the attempt: a Thread is never cut."""
+    if not THREAD_MIN_PARTS <= len(parts) <= THREAD_MAX_PARTS:
+        raise LLMError(
+            f"The {call} call wrote {len(parts)} Parts; "
+            f"a Thread has {THREAD_MIN_PARTS} to {THREAD_MAX_PARTS}"
+        )
+    if any(not part.strip() for part in parts):
+        raise LLMError(f"The {call} call wrote a blank Part")
+    return parts
+
+
+def _parts_of(call: str, reply: BaseModel) -> list[str]:
+    """A single post's text as its one Part, or a Thread's Parts once checked."""
+    if isinstance(reply, (WrittenThread, FinalThread)):
+        return _thread_parts(call, reply.parts)
+    assert isinstance(reply, (WrittenPost, FinalPost))
+    return [reply.post]
+
+
+async def write_first_version(
+    llm: LLM, corpus: Corpus, brief: str, format: Format, char_limit: int
+) -> WrittenVersion:
+    """
+    Write it for an X account whose posts hold up to `char_limit` characters. Raises whatever
+    the LLM port raises, or an `LLMError` for a Thread of the wrong length.
+    """
     drafted = await llm.structured(
         model=settings.LLM_DRAFTING_MODEL,
-        messages=draft_messages(corpus, brief),
-        response_model=DraftedPost,
+        messages=draft_messages(corpus, brief, format, char_limit),
+        response_model=_DRAFTED[format],
         max_tokens=MAX_TOKENS,
     )
-    draft = scrub(drafted.parsed.post)
-    messages = humanizer_messages(corpus, brief, draft)
-    return await _humanize(llm, messages, drafted, draft, _hook(drafted.parsed))
+    draft_parts = [scrub(part) for part in _parts_of("draft", drafted.parsed)]
+    messages = humanizer_messages(corpus, brief, format, char_limit, draft_parts)
+    return await _humanize(llm, format, messages, drafted, draft_parts, _hook(drafted.parsed))
 
 
 async def write_next_version(
@@ -171,20 +282,28 @@ async def write_next_version(
     brief: str,
     earlier: Sequence[EarlierVersion],
     feedback: str,
+    format: Format,
+    char_limit: int,
 ) -> WrittenVersion:
-    """Raises whatever the LLM port raises; nothing is stored here."""
+    """
+    Write the Version after `earlier` in `format`, for an X account whose posts hold up to
+    `char_limit` characters. Raises whatever the LLM port raises, or an
+    `LLMError` for a Thread of the wrong length; nothing is stored here.
+    """
     revised = await llm.structured(
         model=settings.LLM_REVISING_MODEL,
-        messages=revision_messages(corpus, brief, earlier, feedback),
-        response_model=RevisedPost,
+        messages=revision_messages(corpus, brief, earlier, feedback, format, char_limit),
+        response_model=_REVISED[format],
         max_tokens=MAX_TOKENS,
     )
-    draft = scrub(revised.parsed.post)
-    messages = revision_humanizer_messages(corpus, brief, earlier[-1].final, feedback, draft)
-    return await _humanize(llm, messages, revised, draft, _hook(revised.parsed))
+    draft_parts = [scrub(part) for part in _parts_of("revision", revised.parsed)]
+    messages = revision_humanizer_messages(
+        corpus, brief, earlier[-1], feedback, format, char_limit, draft_parts
+    )
+    return await _humanize(llm, format, messages, revised, draft_parts, _hook(revised.parsed))
 
 
-def _hook(written: WrittenPost) -> Hook:
+def _hook(written: _HookedWriting) -> Hook:
     """An unknown name is dropped, not refused: the post is worth more than its Hook's label."""
     name = written.hook_name
     if name is not None and name not in HOOK_NAMES:
@@ -195,20 +314,23 @@ def _hook(written: WrittenPost) -> Hook:
 
 async def _humanize(
     llm: LLM,
+    format: Format,
     messages: list[dict],
     written: StructuredResult,
-    draft: str,
+    draft_parts: list[str],
     hook: Hook,
 ) -> WrittenVersion:
     refined = await llm.structured(
         model=settings.LLM_HUMANIZING_MODEL,
         messages=messages,
-        response_model=FinalPost,
+        response_model=_FINAL[format],
         max_tokens=MAX_TOKENS,
     )
+    final_parts = _parts_of("humanizer", refined.parsed)
     return WrittenVersion(
-        draft=draft,
-        final=refined.parsed.post,
+        format=format,
+        draft_parts=draft_parts,
+        final_parts=final_parts,
         writing_model=written.model,
         humanizing_model=refined.model,
         writing_usage=_usage(written),

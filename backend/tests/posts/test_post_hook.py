@@ -9,7 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -73,11 +74,11 @@ async def test_the_first_version_writes_the_hook_in_the_draft_call_then_humanize
         "refined_post",
     ]
     assert fake_llm.calls[0].messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
-    assert version["draft"] == DRAFT
+    assert version["draft_parts"] == [DRAFT]
     assert fake_llm.calls[1].messages[-1] == _user(DRAFT)
 
 
@@ -108,7 +109,7 @@ async def test_an_unknown_hook_name_is_logged_and_stored_as_none(
             "versions"
         ][0]
 
-    assert version["final"] == "the final"
+    assert version["parts"][0]["text"] == "the final"
     [attempt] = await _attempts(db)
     assert (attempt.status, attempt.hook_name) == ("succeeded", None)
     assert attempt.hook_reasoning == HOOK_REASONING
@@ -133,8 +134,8 @@ async def test_a_feedback_version_stores_the_revision_calls_hook_without_a_class
     ]
     assert fake_classifier.calls == []
     second = (await _attempts(db))[1]
-    assert (second.hook_reasoning, second.hook_name, second.draft) == (
+    assert (second.hook_reasoning, second.hook_name, second.draft_parts) == (
         HOOK_REASONING,
         "stop_x_do_y",
-        DRAFT,
+        [DRAFT],
     )

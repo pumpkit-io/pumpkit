@@ -5,9 +5,10 @@ import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { charCount } from '@/lib/characters';
-import { BRIEF_MAX_CHARS } from '@/services/postService';
+import { BRIEF_MAX_CHARS, FORMAT_POST } from '@/services/postService';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FeedbackForm } from './FeedbackForm';
+import { FormatSelector } from './FormatSelector';
 import { LengthCounter } from './LengthCounter';
 import { LimitNotice } from '@/components/LimitNotice';
 import { NumberedVersion } from './NumberedVersion';
@@ -16,8 +17,20 @@ import { usePostWriterContext } from './usePostWriterContext';
 export function PostWriter() {
   const { subscribed } = useSubscribed();
   const { authors } = useInspirationAuthorsContext();
-  const { post, isWriting, error, notice, start, addFeedback, brief, setBrief, briefRef, newPost } =
-    usePostWriterContext();
+  const {
+    post,
+    isWriting,
+    error,
+    notice,
+    start,
+    addFeedback,
+    brief,
+    setBrief,
+    format,
+    setFormat,
+    briefRef,
+    newPost,
+  } = usePostWriterContext();
 
   const noCorpus = authors !== null && !authors.some((a) => a.postCount > 0);
   const briefLength = charCount(brief);
@@ -27,7 +40,7 @@ export function PostWriter() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (canWrite && typed && !isWriting) void start(typed);
+    if (canWrite && typed && !isWriting) void start(typed, format);
   };
 
   return (
@@ -69,6 +82,7 @@ export function PostWriter() {
             isWriting={isWriting}
             error={error}
             notice={notice}
+            latestFormat={post.versions[post.versions.length - 1]?.format ?? FORMAT_POST}
             onSend={addFeedback}
           />
         </div>
@@ -91,8 +105,13 @@ export function PostWriter() {
             <LengthCounter length={briefLength} max={BRIEF_MAX_CHARS} />
           </div>
 
+          <FormatSelector value={format} onChange={setFormat} disabled={isWriting} />
+
           {error && (
-            <ErrorBanner message={error} onRetry={typed ? () => void start(typed) : undefined} />
+            <ErrorBanner
+              message={error}
+              onRetry={typed ? () => void start(typed, format) : undefined}
+            />
           )}
           {notice && <LimitNotice message={notice} />}
 

@@ -10,8 +10,9 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written
+from tests.posts.writing_replies import written, written_thread
 
 
 @pytest.fixture
@@ -35,6 +36,7 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
     for name in ("list_posts", "get_post"):
         assert tools[name]["annotations"]["readOnlyHint"] is True
     assert tools["give_feedback"]["inputSchema"]["required"] == ["post_id", "feedback"]
+    assert tools["give_feedback"]["inputSchema"]["properties"]["format"]["default"] is None
     assert "draft" not in json.dumps(tools["get_post"]["outputSchema"])
 
 
@@ -56,11 +58,38 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
                 "id": post["versions"][0]["id"],
                 "number": 1,
                 "feedback": None,
-                "final": "the final",
-                "final_char_count": 9,
+                "format": "post",
+                "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
             }
         ],
     }
+
+
+async def test_starting_a_post_as_a_thread_returns_its_parts(with_author, mcp, fake_llm):
+    fake_llm.replies = [
+        written_thread(["draft one", "draft two"]),
+        {"parts": ["final one", "final two 🚀"]},
+    ]
+
+    result = await mcp.call_tool("start_post", brief="ship small things", format="thread")
+
+    assert result["isError"] is False
+    [version] = result["structuredContent"]["versions"]
+    assert (version["format"], version["parts"]) == (
+        "thread",
+        [
+            {"text": "final one", "char_count": 9, "char_limit": 280},
+            {"text": "final two 🚀", "char_count": 12, "char_limit": 280},
+        ],
+    )
+
+
+async def test_start_post_takes_an_optional_format_of_post_or_thread(subscribed, mcp):
+    schema = (await mcp.list_tools())["start_post"]["inputSchema"]
+
+    assert schema["required"] == ["brief"]
+    assert schema["properties"]["format"]["enum"] == ["post", "thread"]
+    assert schema["properties"]["format"]["default"] == "post"
 
 
 async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
@@ -91,9 +120,41 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "id": version["id"],
         "number": 2,
         "feedback": "shorter",
-        "final": "shorter final",
-        "final_char_count": 13,
+        "format": "post",
+        "parts": [{"text": "shorter final", "char_count": 13, "char_limit": X_POST_MAX_CHARS}],
     }
+
+
+async def test_feedback_with_a_format_switches_the_post_and_keeps_earlier_versions(
+    post_id, mcp, fake_llm
+):
+    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+
+    result = await mcp.call_tool(
+        "give_feedback", post_id=post_id, feedback="expand it", format="thread"
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["format"] == "thread"
+    versions = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"]
+    assert [(v["format"], [p["text"] for p in v["parts"]]) for v in versions] == [
+        ("post", ["final 1"]),
+        ("thread", ["final one", "final two"]),
+    ]
+
+
+async def test_feedback_without_a_format_keeps_the_latest_versions_thread(post_id, mcp, fake_llm):
+    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="expand it", format="thread")
+    fake_llm.replies = [written_thread(["one", "2"]), {"parts": ["final one", "final 2"]}]
+
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter Part 2")
+
+    version = result["structuredContent"]
+    assert (version["format"], [p["text"] for p in version["parts"]]) == (
+        "thread",
+        ["final one", "final 2"],
+    )
 
 
 async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_the_web_app(
@@ -109,8 +170,8 @@ async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_t
         select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
     )
     assert version is not None
-    assert (version.draft, version.hook_name, version.hook_reasoning) == (
-        "My rule.\n\ndraft 2",
+    assert (version.draft_parts, version.hook_name, version.hook_reasoning) == (
+        ["My rule.\n\ndraft 2"],
         "my_rule",
         reasoning,
     )
@@ -129,10 +190,18 @@ async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post
     assert post["id"] == post_id
     assert post["brief"] == "ship small things"
     assert [
-        (version["number"], version["feedback"], version["final"], version["final_char_count"])
+        (version["number"], version["feedback"], version["format"], version["parts"])
         for version in post["versions"]
-    ] == [(1, None, "final 1", 7), (2, "warmer", "final two", 9)]
-    assert "draft" not in post["versions"][0]
+    ] == [
+        (1, None, "post", [{"text": "final 1", "char_count": 7, "char_limit": X_POST_MAX_CHARS}]),
+        (
+            2,
+            "warmer",
+            "post",
+            [{"text": "final two", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
+        ),
+    ]
+    assert "draft_parts" not in post["versions"][0]
 
 
 @pytest.fixture
@@ -248,6 +317,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
             VersionAttempt(
                 post_id=earlier.id,
                 sequence=sequence,
+                format="post",
                 status="failed",
                 error="LLMError: down",
                 created_at=fixed_clock(),

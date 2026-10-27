@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.models import AuthorPost, InspirationAuthor
 from pumpkit.core.time import as_utc
+from pumpkit.posts.formats import Format
 from pumpkit.posts.models import (
     ATTEMPT_FAILED,
     ATTEMPT_SUCCEEDED,
@@ -128,11 +129,11 @@ async def record_version(
         post_id=post.id,
         sequence=sequence,
         feedback=feedback,
+        format=written.format,
         status=ATTEMPT_SUCCEEDED,
         version_number=version_number,
-        draft=written.draft,
-        final=written.final,
-        final_char_count=_final_char_count(written.final),
+        draft_parts=written.draft_parts,
+        final_parts=written.final_parts,
         writing_model=written.writing_model,
         humanizing_model=written.humanizing_model,
         writing_usage=written.writing_usage,
@@ -141,7 +142,7 @@ async def record_version(
         hook_name=written.hook.name,
         slop_tells=[
             {"name": name, "description": description}
-            for name, description in slop.find(written.final)
+            for name, description in slop.find_in_parts(written.final_parts)
         ],
         created_at=now,
     )
@@ -156,6 +157,7 @@ async def record_failed_attempt(
     post: Post,
     sequence: int,
     feedback: Optional[str],
+    format: Format,
     error: str,
     now: datetime,
 ) -> VersionAttempt:
@@ -164,6 +166,7 @@ async def record_failed_attempt(
         post_id=post.id,
         sequence=sequence,
         feedback=feedback,
+        format=format,
         status=ATTEMPT_FAILED,
         error=error,
         created_at=now,
@@ -171,8 +174,3 @@ async def record_failed_attempt(
     db.add(attempt)
     await db.flush()
     return attempt
-
-
-def _final_char_count(final: str) -> int:
-    # Code points, as pumpkit-v6 counted against the limit the draft prompt states.
-    return len(final)

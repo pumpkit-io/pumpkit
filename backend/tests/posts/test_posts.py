@@ -11,8 +11,9 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.llm_client import LLMNotConfiguredError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -54,10 +55,9 @@ async def test_starting_a_post_returns_it_with_its_first_version(client, with_au
             "id": body["versions"][0]["id"],
             "number": 1,
             "feedback": None,
-            "draft": "the draft - with a dash",
-            "final": "the final",
-            "final_char_count": 9,
-            "final_char_limit": 3000,
+            "format": "post",
+            "draft_parts": ["the draft - with a dash"],
+            "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
             "tells": [],
         }
     ]
@@ -113,7 +113,7 @@ async def test_the_draft_call_gets_the_draft_prompt_then_the_corpus_then_the_bri
     assert draft_call.model == DEFAULT_MODEL
     assert draft_call.response_model.__name__ == "drafted_post"
     assert draft_call.messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
@@ -189,18 +189,19 @@ async def test_posts_posted_in_the_same_second_are_ordered_by_post_id_descending
     assert corpus.index("higher id") < corpus.index("lower id")
 
 
-async def test_the_final_is_counted_in_characters_and_kept_when_over_the_limit(
+async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
     client, with_author, fake_llm
 ):
-    long_final = "🚀" + "a" * 3000
+    # X counts an emoji as 2.
+    long_final = "🚀" + "a" * 300
     fake_llm.replies = [written("draft"), {"post": long_final}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
     version = response.json()["versions"][0]
-    assert version["final"] == long_final
-    assert version["final_char_count"] == 3001
-    assert version["final_char_limit"] == 3000
+    assert version["parts"] == [
+        {"text": long_final, "char_count": 302, "char_limit": X_POST_MAX_CHARS}
+    ]
 
 
 async def test_a_brief_over_200000_characters_returns_422_without_calling_the_model(
@@ -268,7 +269,7 @@ async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_so
     response = await client.post(POSTS, json={"brief": "ship"})
 
     assert response.status_code == 201
-    assert response.json()["versions"][0]["final"] == "final"
+    assert response.json()["versions"][0]["parts"][0]["text"] == "final"
 
 
 async def _stored_posts(db) -> list[Post]:
@@ -289,7 +290,11 @@ async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
     assert post.corpus_post_ids == ["levelsio-0", "levelsio-1"]
     [attempt] = post.attempts
     assert attempt.status == "succeeded"
-    assert (attempt.draft, attempt.final, attempt.final_char_count) == ("draft", "final", 5)
+    assert (attempt.format, attempt.draft_parts, attempt.final_parts) == (
+        "post",
+        ["draft"],
+        ["final"],
+    )
     assert (attempt.writing_model, attempt.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
     assert attempt.writing_usage == {
         "prompt_tokens": 100,
@@ -329,7 +334,8 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns
     [attempt] = post.attempts
     assert attempt.status == "failed"
     assert attempt.error == "LLMError: provider timed out"
-    assert (attempt.draft, attempt.final, attempt.version_number) == (None, None, None)
+    assert (attempt.draft_parts, attempt.final_parts, attempt.version_number) == (None, None, None)
+    assert attempt.format == "post"
 
 
 async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_author, fake_llm):

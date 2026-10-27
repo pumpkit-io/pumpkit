@@ -37,11 +37,13 @@ async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: date
     return True
 
 
-async def fail_stuck(db: AsyncSession, *, now: datetime) -> None:
-    user_ids = await publish.fail_stuck(db, now=now)
+async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
+    recovered = await publish.recover_stuck(db, now=now)
     await db.commit()
-    for user_id in user_ids:
-        publish.capture_failed(user_id, "outcome_unknown")
+    for scheduled_post in recovered.published:
+        publish.capture_published(scheduled_post)
+    for scheduled_post in recovered.failed:
+        publish.capture_failed(scheduled_post, "outcome_unknown")
 
 
 async def _publish_claimed(
@@ -51,31 +53,43 @@ async def _publish_claimed(
     assert scheduled_post is not None
 
     try:
-        x_post_id = await _publish(db, publisher, scheduled_post, now=now)
+        await _publish(db, publisher, scheduled_post, now=now)
     except publish.Failed as failed:
         failed_for_good = await publish.record_failure(db, scheduled_post, failed, now=now)
         await db.commit()
         if failed_for_good:
-            publish.capture_failed(scheduled_post.user_id, failed.category)
+            publish.capture_failed(scheduled_post, failed.category)
         return
 
-    await service.record_published(db, scheduled_post, x_post_id=x_post_id, now=now)
+    await service.record_published(db, scheduled_post, now=now)
     await db.commit()
     publish.capture_published(scheduled_post)
 
 
 async def _publish(
     db: AsyncSession, publisher: XPublisher, scheduled_post: ScheduledPost, *, now: datetime
-) -> str:
-    """X's post id, or `publish.Failed`. The caller commits whatever it flushed, either way."""
+) -> None:
+    """
+    Every Part not yet live, in order, each as a reply to the one before (ADR 0014), or
+    `publish.Failed`. The caller commits whatever it flushed, either way.
+    """
     connection = await publish.connection_to_publish_on(db, scheduled_post)
     access_token = await publish.fresh_access_token(db, publisher, connection, now=now)
     # Commit the rotated tokens, or end the read, before the call to X: it releases the lock.
     await db.commit()
 
-    try:
-        return await publish.call_x(publisher, scheduled_post, access_token=access_token)
-    except publish.Failed as failed:
-        if failed.category == "reconnect_needed":
-            await x_connections_service.flag_needs_reconnect(db, connection, now=now)
-        raise
+    reply_to = None
+    for part in scheduled_post.parts:
+        if part.x_post_id is None:
+            try:
+                x_post_id = await publish.call_x(
+                    publisher, scheduled_post, part, reply_to=reply_to, access_token=access_token
+                )
+            except publish.Failed as failed:
+                if failed.category == "reconnect_needed":
+                    await x_connections_service.flag_needs_reconnect(db, connection, now=now)
+                raise
+            await service.record_part_live(db, part, x_post_id=x_post_id)
+            # Commit before the next Part, so a crash leaves a true record of what is live.
+            await db.commit()
+        reply_to = part.x_post_id

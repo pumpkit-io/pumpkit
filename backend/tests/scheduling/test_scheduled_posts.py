@@ -16,7 +16,7 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
     XReconnectNeededError,
 )
-from tests.posts.writing_replies import written
+from tests.posts.writing_replies import written, written_thread
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 X_CONNECTION = "/api/v1/x-connection"
@@ -26,12 +26,19 @@ RECONNECT_REASON = (
 )
 
 
+FIRST_X_POST_URL = "https://x.com/i/web/status/1890000000000000001"
+
+
 def _iso(dt) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
 async def _post_now(client: AsyncClient, text: str = "Shipping today."):
-    return await client.post(SCHEDULED_POSTS, json={"text": text, "publish_now": True})
+    return await client.post(SCHEDULED_POSTS, json={"parts": [text], "publish_now": True})
+
+
+def _texts(scheduled_post: dict) -> list[str]:
+    return [part["text"] for part in scheduled_post["parts"]]
 
 
 async def test_post_now_publishes_the_text_and_lists_it_as_published(
@@ -44,7 +51,7 @@ async def test_post_now_publishes_the_text_and_lists_it_as_published(
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["state"] == "published"
-    assert body["text"] == "Shipping the new onboarding today."
+    assert _texts(body) == ["Shipping the new onboarding today."]
     assert body["published_at"] == _iso(clock())
     assert body["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
     assert body["failed_reason"] is None
@@ -323,8 +330,17 @@ async def test_published_and_failed_are_tracked_for_analytics(
         "scheduled_post_failed",
     ]
     published, failed = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "typed", "destination": "profile"}
-    assert failed.kwargs["properties"] == {"reason": "outcome_unknown"}
+    assert published.kwargs["properties"] == {
+        "source": "typed",
+        "destination": "profile",
+        "format": "post",
+        "part_count": 1,
+    }
+    assert failed.kwargs["properties"] == {
+        "reason": "outcome_unknown",
+        "format": "post",
+        "part_count": 1,
+    }
 
 
 async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
@@ -340,12 +356,12 @@ async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "refused_by_x"},
+        properties={"reason": "refused_by_x", "format": "post", "part_count": 1},
     )
 
 
 async def _schedule(client: AsyncClient, publish_at: str, text: str = "Later today."):
-    return await client.post(SCHEDULED_POSTS, json={"text": text, "publish_at": publish_at})
+    return await client.post(SCHEDULED_POSTS, json={"parts": [text], "publish_at": publish_at})
 
 
 async def test_a_post_scheduled_for_later_is_listed_as_upcoming_and_not_published(
@@ -358,7 +374,7 @@ async def test_a_post_scheduled_for_later_is_listed_as_upcoming_and_not_publishe
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["state"] == "scheduled"
-    assert body["text"] == "Launch day."
+    assert _texts(body) == ["Launch day."]
     assert body["publish_at"] == "2026-10-10T14:00:00Z"
     assert body["published_at"] is None and body["x_post_url"] is None
     assert fake_x_publisher.published == []
@@ -385,16 +401,16 @@ async def test_upcoming_scheduled_posts_are_listed_soonest_first(
 
     listed = (await client.get(SCHEDULED_POSTS)).json()["data"]
 
-    assert [p["text"] for p in listed] == ["Sunday", "Monday", "Tuesday"]
+    assert [p["parts"][0]["text"] for p in listed] == ["Sunday", "Monday", "Tuesday"]
 
 
 # A minute and a half, and a year less half a minute, after the frozen 12:00:30.
 @pytest.mark.parametrize(
     "payload",
     [
-        {"text": "Both", "publish_at": "2026-10-10T14:00:00Z", "publish_now": True},
-        {"text": "Neither"},
-        {"text": "No timezone", "publish_at": "2026-10-10T14:00:00"},
+        {"parts": ["Both"], "publish_at": "2026-10-10T14:00:00Z", "publish_now": True},
+        {"parts": ["Neither"]},
+        {"parts": ["No timezone"], "publish_at": "2026-10-10T14:00:00"},
     ],
 )
 async def test_a_request_needs_either_a_publish_time_with_a_timezone_or_publish_now(
@@ -457,7 +473,7 @@ async def test_scheduling_a_final_records_its_text_time_and_source_version(
 
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["text"] == "The final, version one."
+    assert _texts(body) == ["The final, version one."]
     assert body["publish_at"] == "2026-10-10T14:00:00Z"
     assert body["source_version_id"] == final["id"]
     assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [body]
@@ -479,7 +495,7 @@ async def test_feedback_on_the_post_afterwards_leaves_the_scheduled_post_s_text_
 
     assert revised.status_code == 201, revised.text
     [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
-    assert listed["text"] == "The final, version one."
+    assert _texts(listed) == ["The final, version one."]
     assert listed["source_version_id"] == final["id"]
 
 
@@ -500,7 +516,75 @@ async def test_post_now_on_a_final_publishes_it_and_tracks_it_as_from_a_final(
     assert response.json()["source_version_id"] == final["id"]
     assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
     [published] = captured.capture.call_args_list
-    assert published.kwargs["properties"] == {"source": "final", "destination": "profile"}
+    assert published.kwargs["properties"] == {
+        "source": "final",
+        "destination": "profile",
+        "format": "post",
+        "part_count": 1,
+    }
+
+
+THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
+
+
+@pytest.fixture
+async def thread_final(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """The first Version of a new Post started as a Thread, its Final the three THREAD_FINAL Parts."""
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(
+            post_id="levelsio-0",
+            text="levelsio post",
+            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    ]
+    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    assert added.status_code == 201, added.text
+    fake_llm.replies = [written_thread(["one", "two", "three"]), {"parts": THREAD_FINAL}]
+    started = await client.post(
+        "/api/v1/posts", json={"brief": "ship small things", "format": "thread"}
+    )
+    assert started.status_code == 201, started.text
+    return started.json()["versions"][0]
+
+
+async def test_scheduling_a_thread_final_copies_its_parts_in_order_and_publishes_a_chain(
+    client, db_session_maker, thread_final, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={"publish_at": "2026-10-10T12:05:00Z", "source_version_id": thread_final["id"]},
+    )
+
+    assert response.status_code == 201, response.text
+    assert _texts(response.json()) == THREAD_FINAL
+    fixed_clock.advance(timedelta(minutes=5))
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    assert listed["state"] == "published"
+    assert [part["live"] for part in listed["parts"]] == [True, True, True]
+    assert [text for _, text in fake_x_publisher.published] == THREAD_FINAL
+    assert fake_x_publisher.replied_to == [None, "1890000000000000001", "1890000000000000002"]
+
+
+async def test_post_now_on_a_thread_final_publishes_the_whole_thread(
+    client, thread_final, fake_x_publisher, clock, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={"publish_now": True, "source_version_id": thread_final["id"]},
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["state"] == "published"
+    assert _texts(body) == THREAD_FINAL
+    assert body["x_post_url"] == FIRST_X_POST_URL
+    assert [text for _, text in fake_x_publisher.published] == THREAD_FINAL
+    assert fake_x_publisher.replied_to == [None, "1890000000000000001", "1890000000000000002"]
 
 
 async def test_a_typed_scheduled_post_has_no_source_version(
@@ -533,13 +617,56 @@ async def test_a_source_version_that_is_not_one_of_the_user_s_versions_is_refuse
 
 @pytest.fixture
 def cap_of_two(monkeypatch):
-    monkeypatch.setattr(settings, "SCHEDULED_POSTS_MONTHLY_CAP", 2)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
 OCTOBER_FULL = (
-    "You have 2 Scheduled posts in October 2026, the most for one month. "
+    "You have 2 X posts in October 2026, the most for one month. "
     "The cap resets on November 1, 2026."
 )
+
+
+async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
+):
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
+    await connect_x()
+    thread = await client.post(
+        SCHEDULED_POSTS, json={"parts": ["One", "Two"], "publish_at": "2026-10-11T09:00:00Z"}
+    )
+    single = await _schedule(client, "2026-10-12T09:00:00Z", "Three")
+
+    refused = await _schedule(client, "2026-10-13T09:00:00Z", "Four")
+
+    assert thread.status_code == single.status_code == 201
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "You have 3 X posts in October 2026, the most for one month. "
+        "The cap resets on November 1, 2026."
+    )
+
+
+async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is_scheduled(
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x
+):
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
+    await connect_x()
+    first = await _schedule(client, "2026-10-11T09:00:00Z", "First")
+
+    for fields in ({"publish_at": "2026-10-12T09:00:00Z"}, {"publish_now": True}):
+        response = await client.post(
+            SCHEDULED_POSTS, json={"parts": ["One", "Two", "Three"], **fields}
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == (
+            "These 3 Parts would take you over the cap of 3 X posts in October 2026: you have "
+            "1 already. The cap resets on November 1, 2026."
+        )
+    assert [p["id"] for p in (await client.get(SCHEDULED_POSTS)).json()["data"]] == [
+        first.json()["id"]
+    ]
+    assert fake_x_publisher.published == []
 
 
 async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_resets(
@@ -554,7 +681,7 @@ async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_res
     assert response.status_code == 409
     assert response.json()["detail"] == OCTOBER_FULL
     listed = (await client.get(SCHEDULED_POSTS)).json()["data"]
-    assert [p["text"] for p in listed] == ["First", "Second"]
+    assert [p["parts"][0]["text"] for p in listed] == ["First", "Second"]
 
 
 async def test_scheduled_posts_can_be_listed_by_state_in_the_same_order(
@@ -572,12 +699,76 @@ async def test_scheduled_posts_can_be_listed_by_state_in_the_same_order(
     failed = (await client.get(SCHEDULED_POSTS, params={"state": "failed"})).json()["data"]
     published = (await client.get(SCHEDULED_POSTS, params={"state": "published"})).json()["data"]
 
-    assert [p["text"] for p in scheduled] == ["Sunday", "Monday"]
-    assert [p["text"] for p in failed] == ["Refused"]
-    assert [p["text"] for p in published] == ["Went out"]
+    assert [p["parts"][0]["text"] for p in scheduled] == ["Sunday", "Monday"]
+    assert [p["parts"][0]["text"] for p in failed] == ["Refused"]
+    assert [p["parts"][0]["text"] for p in published] == ["Went out"]
 
 
 async def test_listing_by_an_unknown_state_is_refused(client, subscribed):
     response = await client.get(SCHEDULED_POSTS, params={"state": "posted"})
 
     assert response.status_code == 422
+
+
+async def test_a_post_scheduled_in_parts_keeps_them_in_order_with_none_live(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={
+            "parts": ["  The first Part.  ", "The second Part."],
+            "publish_at": "2026-10-10T14:00:00Z",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["parts"] == [
+        {"text": "The first Part.", "live": False, "x_post_url": None},
+        {"text": "The second Part.", "live": False, "x_post_url": None},
+    ]
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [response.json()]
+
+
+async def test_post_now_makes_its_one_part_live_with_its_link_on_x(
+    client, subscribed, fake_x_publisher, clock, connect_x
+):
+    await connect_x()
+
+    response = await _post_now(client, "Out now.")
+
+    assert response.json()["parts"] == [
+        {"text": "Out now.", "live": True, "x_post_url": FIRST_X_POST_URL}
+    ]
+
+
+async def test_a_part_over_the_limit_is_refused_naming_the_part(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={"parts": ["Fine.", "a" * 281], "publish_at": "2026-10-10T14:00:00Z"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Part 2 is 281 characters by X's count, over the 280 limit."
+    )
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+
+
+@pytest.mark.parametrize("parts", [[], ["Fine.", "   "]])
+async def test_no_parts_or_a_blank_part_is_refused(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, parts
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS, json={"parts": parts, "publish_at": "2026-10-10T14:00:00Z"}
+    )
+
+    assert response.status_code == 422
+    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []

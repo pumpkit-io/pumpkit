@@ -7,7 +7,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, cast
 
-from sqlalchemy import CursorResult, case, delete, func, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    CursorResult,
+    Exists,
+    and_,
+    case,
+    delete,
+    func,
+    insert,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.scheduling.communities import Community, Destination
@@ -17,6 +29,7 @@ from pumpkit.scheduling.models import (
     PUBLISHING,
     SCHEDULED,
     ScheduledPost,
+    ScheduledPostPart,
     ScheduledPostState,
 )
 
@@ -26,7 +39,7 @@ async def create(
     *,
     user_id: str,
     x_user_id: str,
-    text: str,
+    parts: list[str],
     publish_at: datetime,
     now: datetime,
     source_version_id: Optional[str] = None,
@@ -36,7 +49,7 @@ async def create(
     scheduled_post = ScheduledPost(
         user_id=user_id,
         x_user_id=x_user_id,
-        text=text,
+        parts=_parts(parts),
         **_destination_columns(destination),
         community_set_at=now if destination.community else None,
         publish_at=publish_at,
@@ -49,6 +62,10 @@ async def create(
     db.add(scheduled_post)
     await db.flush()
     return scheduled_post
+
+
+def _parts(parts: list[str]) -> list[ScheduledPostPart]:
+    return [ScheduledPostPart(position=position, text=text) for position, text in enumerate(parts)]
 
 
 def _destination_columns(destination: Destination) -> dict[str, Any]:
@@ -100,7 +117,7 @@ async def edit(
     db: AsyncSession,
     *,
     scheduled_post_id: str,
-    text: Optional[str],
+    parts: Optional[list[str]],
     reschedule: Optional[Reschedule],
     now: datetime,
     destination: Optional[Destination] = None,
@@ -110,10 +127,10 @@ async def edit(
     back in scheduled for the new time and X account, as if it had never been tried. The state
     check in the update keeps a claim by the publisher between the User's read and this write safe.
     A `destination` of None leaves it where it goes; moving it into another Community is a use.
+    New `parts` replace every Part not live; the live ones, which open the list, stay as they
+    are with their X post ids.
     """
     values: dict[str, object] = {"updated_at": now}
-    if text is not None:
-        values["text"] = text
     if destination is not None:
         community = destination.community
         values.update(_destination_columns(destination))
@@ -144,7 +161,30 @@ async def edit(
         .values(**values)
         .execution_options(synchronize_session=False)
     )
-    return cast(CursorResult, result).rowcount == 1
+    if cast(CursorResult, result).rowcount != 1:
+        return False
+    if parts is not None:
+        await db.execute(
+            delete(ScheduledPostPart).where(
+                ScheduledPostPart.scheduled_post_id == scheduled_post_id,
+                ScheduledPostPart.x_post_id.is_(None),
+            )
+        )
+        live_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(ScheduledPostPart)
+                .where(ScheduledPostPart.scheduled_post_id == scheduled_post_id)
+            )
+        ).scalar_one()
+        new_parts = [
+            {"scheduled_post_id": scheduled_post_id, "position": position, "text": text}
+            for position, text in enumerate(parts)
+            if position >= live_count
+        ]
+        if new_parts:
+            await db.execute(insert(ScheduledPostPart), new_parts)
+    return True
 
 
 async def cancel(db: AsyncSession, *, scheduled_post_id: str) -> bool:
@@ -201,24 +241,60 @@ async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
     return result.scalar_one_or_none()
 
 
+async def publish_stuck(
+    db: AsyncSession, *, publishing_since: datetime, now: datetime
+) -> list[str]:
+    """
+    Move every Scheduled post in publishing since before `publishing_since` whose Parts are all
+    live to Published, at its claim time, and return their ids.
+    """
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(_stuck(publishing_since), ~_has_part_not_live())
+        .values(
+            state=PUBLISHED,
+            published_at=ScheduledPost.publishing_started_at,
+            updated_at=now,
+        )
+        .returning(ScheduledPost.id)
+        .execution_options(synchronize_session=False)
+    )
+    return list(result.scalars())
+
+
 async def fail_stuck(
     db: AsyncSession, *, publishing_since: datetime, reason: str, now: datetime
 ) -> list[str]:
     """
-    Move every Scheduled post in publishing since before `publishing_since` to Failed, and
-    return their Users' ids, one per Scheduled post.
+    Move every Scheduled post in publishing since before `publishing_since` with a Part not
+    live to Failed, and return their ids. Parts already live stay live.
     """
     result = await db.execute(
         update(ScheduledPost)
-        .where(
-            ScheduledPost.state == PUBLISHING,
-            ScheduledPost.publishing_started_at < publishing_since,
-        )
+        .where(_stuck(publishing_since), _has_part_not_live())
         .values(state=FAILED, failed_reason=reason, updated_at=now)
-        .returning(ScheduledPost.user_id)
+        .returning(ScheduledPost.id)
         .execution_options(synchronize_session=False)
     )
     return list(result.scalars())
+
+
+def _stuck(publishing_since: datetime) -> ColumnElement[bool]:
+    return and_(
+        ScheduledPost.state == PUBLISHING,
+        ScheduledPost.publishing_started_at < publishing_since,
+    )
+
+
+def _has_part_not_live() -> Exists:
+    return (
+        select(ScheduledPostPart.id)
+        .where(
+            ScheduledPostPart.scheduled_post_id == ScheduledPost.id,
+            ScheduledPostPart.x_post_id.is_(None),
+        )
+        .exists()
+    )
 
 
 async def count_waiting(db: AsyncSession, *, user_id: str, x_user_id: str) -> int:
@@ -256,7 +332,7 @@ async def past_communities(db: AsyncSession, *, user_id: str, x_user_id: str) ->
     return [Community(id=community_id, name=name) for community_id, name in names.items()]
 
 
-async def count_publishing_between(
+async def count_x_posts_between(
     db: AsyncSession,
     *,
     user_id: str,
@@ -264,10 +340,11 @@ async def count_publishing_between(
     end: datetime,
     excluding_id: Optional[str] = None,
 ) -> int:
-    """The User's Scheduled posts in any state with `start <= publish_at < end`."""
+    """The Parts of the User's Scheduled posts in any state with `start <= publish_at < end`."""
     query = (
         select(func.count())
-        .select_from(ScheduledPost)
+        .select_from(ScheduledPostPart)
+        .join(ScheduledPost)
         .where(
             ScheduledPost.user_id == user_id,
             ScheduledPost.publish_at >= start,
@@ -292,12 +369,17 @@ async def release_for_retry(
     await db.flush()
 
 
+async def record_part_live(db: AsyncSession, part: ScheduledPostPart, *, x_post_id: str) -> None:
+    """The Part is live as X's post `x_post_id`. Flushes."""
+    part.x_post_id = x_post_id
+    await db.flush()
+
+
 async def record_published(
-    db: AsyncSession, scheduled_post: ScheduledPost, *, x_post_id: str, now: datetime
+    db: AsyncSession, scheduled_post: ScheduledPost, *, now: datetime
 ) -> None:
-    """Flushes."""
+    """Every Part is live, the last one accepted at `now`. Flushes."""
     scheduled_post.state = PUBLISHED
-    scheduled_post.x_post_id = x_post_id
     scheduled_post.published_at = now
     scheduled_post.updated_at = now
     await db.flush()

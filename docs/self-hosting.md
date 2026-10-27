@@ -229,7 +229,7 @@ curl -s http://localhost:8080/api/v1/instance | grep -o '"sign_in_methods":[^]]*
 Lets Users connect their X account, then schedule Finals or post them now (ADR 0006). Your X app pays for every publish.
 
 - Get credentials: in the [X developer portal](https://developer.x.com/en/portal/dashboard), create an app and set up its user authentication: OAuth 2.0, app type **Web App, Automated App or Bot** (a confidential client), permissions **Read and write**. Register this callback URL: `PUBLIC_URL/oauth/x/callback` (for example `https://pumpkit.example.org/oauth/x/callback`), and use `PUBLIC_URL` as the website URL. Copy the OAuth 2.0 client ID and client secret.
-- Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `SCHEDULED_POSTS_MONTHLY_CAP` (default 100 per User per month) bounds what each User can cost you; set it empty for no cap.
+- Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `X_POSTS_MONTHLY_CAP` (default 100 X posts per User per month, each Part of a Thread counting as one) bounds what each User can cost you; set it empty for no cap.
 - Settings: `X_CLIENT_ID` and `X_CLIENT_SECRET`.
 - Without it: connecting an X account fails, so nobody can schedule or publish to X. Writing Posts still works; Users copy the Final instead.
 - **Check:** on the **Scheduled** page, connecting X sends you to X to authorise the app and back to the Scheduled page, connected.

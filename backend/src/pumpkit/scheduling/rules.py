@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
 from pumpkit.core.errors import ConflictError, RefusedError
+from pumpkit.posts.formats import part_name
 from pumpkit.x_connection.x_length import x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
@@ -20,13 +21,32 @@ class MonthFull(ConflictError):
     pass
 
 
-def check_length(text: str, *, limit: int) -> None:
-    """By X's own count."""
-    length = x_weighted_length(text)
-    if length > limit:
-        raise RuleBroken(
-            f"This post is {length:,} characters by X's count, over the {limit:,} limit."
-        )
+class LivePartLocked(ConflictError):
+    pass
+
+
+def check_length(parts: list[str], *, limit: int) -> None:
+    """Each Part by X's own count; the refusal names the first Part over the limit."""
+    for number, text in enumerate(parts, start=1):
+        length = x_weighted_length(text)
+        if length > limit:
+            subject = part_name(number, len(parts)) or "This post"
+            raise RuleBroken(
+                f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
+            )
+
+
+def check_live_parts_kept(live: list[str], parts: list[str]) -> None:
+    """
+    The texts of the live Parts open `parts` in their order, unchanged: they are on X, and the
+    rest go out as replies to the last of them (ADR 0014). At least one Part follows them, or a
+    reschedule would publish nothing.
+    """
+    for number, text in enumerate(live, start=1):
+        if len(parts) < number or parts[number - 1] != text:
+            raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
+    if live and len(parts) == len(live):
+        raise LivePartLocked("Keep at least one Part after the ones already on X.")
 
 
 def check_publish_at(publish_at: Optional[datetime], *, now: datetime) -> datetime:
@@ -53,25 +73,33 @@ def month_bounds(moment: datetime) -> tuple[datetime, datetime]:
     return start, start.replace(month=start.month + 1)
 
 
-def check_month_has_room(count: int, *, cap: int, moment: datetime) -> None:
-    """`count` is the User's Scheduled posts already in the UTC month of `moment`."""
-    if count < cap:
+def check_month_has_room(count: int, *, adding: int, cap: int, moment: datetime) -> None:
+    """
+    `count` is the User's X posts already in the UTC month of `moment`, and `adding` the Parts
+    that would join them.
+    """
+    if count + adding <= cap:
         return
     start, end = month_bounds(moment)
+    resets = f"The cap resets on {end:%B} {end.day}, {end.year}."
+    if count >= cap:
+        raise MonthFull(
+            f"You have {cap} X posts in {start:%B %Y}, the most for one month. {resets}"
+        )
     raise MonthFull(
-        f"You have {cap} Scheduled posts in {start:%B %Y}, the most for one month. "
-        f"The cap resets on {end:%B} {end.day}, {end.year}."
+        f"These {adding} Parts would take you over the cap of {cap} X posts in {start:%B %Y}: "
+        f"you have {count} already. {resets}"
     )
 
 
 @dataclass(frozen=True)
 class NewScheduledPost:
     """
-    A Scheduled post as the web app or an MCP tool asks for it: typed `text` or the Version
+    A Scheduled post as the web app or an MCP tool asks for it: typed `parts` or the Version
     whose Final it copies, and `publish_at` or `publish_now`.
     """
 
-    text: Optional[str] = None
+    parts: Optional[list[str]] = None
     version_id: Optional[str] = None
     publish_at: Optional[datetime] = None
     publish_now: bool = False
@@ -81,8 +109,8 @@ class NewScheduledPost:
     share_with_followers: bool = False
 
     def __post_init__(self) -> None:
-        if (self.text is None) == (self.version_id is None):
-            raise RuleBroken("Give either the text or a Version id, not both.")
+        if (self.parts is None) == (self.version_id is None):
+            raise RuleBroken("Give either the Parts or a Version id, not both.")
         if (self.publish_at is None) == (not self.publish_now):
             raise RuleBroken("Give either a publish time or publish now, not both.")
 
@@ -110,7 +138,8 @@ DestinationChange = Union[KeepDestination, ToProfile, ToCommunity]
 class ScheduledPostEdit:
     """What an edit changes about a Scheduled post; None and `KeepDestination` leave it as is."""
 
-    text: Optional[str] = None
+    # Every Part in order, the live ones first and unchanged.
+    parts: Optional[list[str]] = None
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[datetime] = None
     destination: DestinationChange = field(default_factory=KeepDestination)
@@ -119,7 +148,7 @@ class ScheduledPostEdit:
 
     def __post_init__(self) -> None:
         if (
-            self.text is None
+            self.parts is None
             and self.publish_at is None
             and isinstance(self.destination, KeepDestination)
             and self.share_with_followers is None

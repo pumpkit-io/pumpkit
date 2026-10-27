@@ -49,12 +49,17 @@ Pumpkit writes X posts in the style of X accounts the User picks, their Inspirat
 - A Brief says what a Post is about and what the User thinks about it. Starting a Post from \
 a Brief makes its first Version.
 - Feedback says what to change about the latest Version, and makes the next Version.
-- Each Version has a Final, the text meant for X. A Final, or text the User typed, can become \
-a Scheduled post, published at a chosen time.
+- Each Version has a Format: a single X post, or a Thread. A Thread is several ordered Parts, \
+each one X post, published on X with each Part replying to the one before. A \
+Post starts as a single X post unless the User asks for a Thread, and Feedback may switch the \
+Format.
+- Each Version has a Final, the text meant for X, with one text per Part for a Thread. A Final, \
+or text the User typed as one or more Parts, can become a Scheduled post, published at a \
+chosen time. A Scheduled post copied from a Thread's Final keeps every Part, in order.
 - Connecting X and subscribing happen in the Pumpkit web app. The tools for them answer with \
 a link to open.
-- Before Post now, show the User the exact text that will be published and get their explicit \
-yes. Post now publishes at once and can't be undone.
+- Before Post now, show the User the exact text of every Part that will be published, in \
+order, and get their explicit yes. Post now publishes at once and can't be undone.
 """
 
 # A Bearer key guards the endpoint, so a rebinding attack has nothing to reach; the default

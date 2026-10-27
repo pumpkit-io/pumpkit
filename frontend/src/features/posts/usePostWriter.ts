@@ -3,7 +3,7 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { track } from '@/lib/analytics';
 import { timeOfDay } from '@/lib/relativeTime';
 import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
-import { postService, type Post } from '@/services/postService';
+import { postService, type Format, type Post } from '@/services/postService';
 
 /** A 4xx: the backend turned the request down before writing anything, so no Version failed. */
 function isRefusal(e: unknown): boolean {
@@ -34,13 +34,13 @@ export function usePostWriter() {
 
   /** Every call starts a new Post, a retry after a failure included. */
   const start = useCallback(
-    async (brief: string) => {
+    async (brief: string, format: Format) => {
       setIsWriting(true);
       setError(null);
       setNotice(null);
       track('post_version_requested', { kind: 'brief' });
       try {
-        setPost(await postService.start(brief));
+        setPost(await postService.start(brief, format));
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
         fail(e, "Couldn't write the Post. Please try again.");
@@ -53,14 +53,14 @@ export function usePostWriter() {
 
   /** Resolves true once the Version is on screen, so the caller can clear its Feedback box. */
   const addFeedback = useCallback(
-    async (feedback: string): Promise<boolean> => {
+    async (feedback: string, format: Format): Promise<boolean> => {
       if (!post) return false;
       setIsWriting(true);
       setError(null);
       setNotice(null);
       track('post_version_requested', { kind: 'feedback' });
       try {
-        const version = await postService.addVersion(post.id, feedback);
+        const version = await postService.addVersion(post.id, feedback, format);
         setPost((current) =>
           current?.id === post.id
             ? { ...current, versions: [...current.versions, version] }

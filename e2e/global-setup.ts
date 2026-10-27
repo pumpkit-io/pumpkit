@@ -1,23 +1,12 @@
 import { chromium, type FullConfig } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { runSeedScript } from './backend';
 
-const REPO_ROOT = path.resolve(__dirname, '..');
-const SEED_SCRIPT = path.join(REPO_ROOT, 'e2e', 'seed', 'seed_user.py');
 const STORAGE_STATE = path.join(__dirname, 'storageState.json');
 const APP_ORIGIN = 'http://localhost:5173';
 
 function seedUserAndGetToken(): string {
-  const out = execFileSync(
-    'docker',
-    ['compose', '-f', 'compose.dev.yml', 'exec', '-T', 'backend', 'python', '-'],
-    {
-      cwd: REPO_ROOT,
-      input: readFileSync(SEED_SCRIPT, 'utf8'),
-      encoding: 'utf8',
-    },
-  );
+  const out = runSeedScript('seed_user.py');
   const match = out.match(/E2E_ACCESS_TOKEN=(\S+)/);
   if (!match) throw new Error(`Seed script did not print a token. Output:\n${out}`);
   return match[1];

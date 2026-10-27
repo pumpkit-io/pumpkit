@@ -1,18 +1,12 @@
 """
 The system prompt used by the humanizer call. This text is a set of guidelines and examples
 for making posts sound more human, by removing AI-generated patterns and language while
-keeping the core intent and original style.
+keeping the core intent and original style. The Thread humanizer shares the guidelines.
 
-Not an f-string: the "{name}" is a leftover placeholder, not an interpolation.
+Not f-strings: the "{name}" is a leftover placeholder, not an interpolation.
 """
 
-HUMANIZER_PROMPT = """\
-# Role
-
-You rewrite one post on X on my behalf to make it sound human, removing any AI-tellers.
-
-Follow the guidelines below to refine the post you are given, removing AI-tellers while preserving the post's core intent, the explicit asks in the brief, and the writing style represented in the real X posts provided in the user turns.
-
+HUMANIZATION_GUIDELINES = """\
 # Humanization guidelines
 
 ## 1. Rhetorical structure
@@ -93,7 +87,21 @@ Follow the guidelines below to refine the post you are given, removing AI-teller
 | Polished storytime | Fix if clustered | A personal story that reads like a crafted short story. | Scene-setting, dialogue tags, a moral at the end. | Tell it in the plain order it happened, with less description and no moral. |
 | Style mismatch with the account | Light touch | Much more polished than the writer's usual posts. | A sudden jump in vocabulary and structure. | If samples of the writer's past posts are available, match their usual length, punctuation, capitalization and vocabulary. |
 
+"""
+
+HUMANIZER_PROMPT = (
+    """\
+# Role
+
+You rewrite one post on X on my behalf to make it sound human, removing any AI-tellers.
+
+Follow the guidelines below to refine the post you are given, removing AI-tellers while preserving the post's core intent, the explicit asks in the brief, and the writing style represented in the real X posts provided in the user turns.
+
+"""
+    + HUMANIZATION_GUIDELINES
+    + """\
 # Output
 
 Return the rewritten post text and nothing else - no preamble, no quotes around it, no notes about what you changed.
 """
+)

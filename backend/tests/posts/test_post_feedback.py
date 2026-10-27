@@ -10,8 +10,9 @@ from pumpkit.core.config import settings
 from pumpkit.core.time import as_utc
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import DRAFT_POST_PROMPT
+from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -55,10 +56,11 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
     version = response.json()
     assert version["number"] == 2
     assert version["feedback"] == "make it shorter"
-    assert version["draft"] == "draft 2 - shorter"
-    assert version["final"] == "final 2"
-    assert version["final_char_count"] == 7
-    assert version["final_char_limit"] == 3000
+    assert version["format"] == "post"
+    assert version["draft_parts"] == ["draft 2 - shorter"]
+    assert version["parts"] == [
+        {"text": "final 2", "char_count": 7, "char_limit": X_POST_MAX_CHARS}
+    ]
     assert version["tells"] == []
 
 
@@ -120,14 +122,14 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     assert first_revision.model == DEFAULT_MODEL
     assert first_revision.response_model.__name__ == "revised_post"
     assert first_revision.messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
         _user(_framed("shorter")),
     ]
     assert second_revision.messages == [
-        _system(DRAFT_POST_PROMPT),
+        _system(draft_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
@@ -326,7 +328,7 @@ async def test_a_failed_revision_is_stored_as_a_failed_attempt_and_returns_502(
     assert failed.sequence == 2
     assert failed.feedback == "shorter"
     assert failed.error == "LLMError: provider timed out"
-    assert (failed.version_number, failed.final) == (None, None)
+    assert (failed.version_number, failed.final_parts, failed.format) == (None, None, "post")
     assert as_utc(failed.created_at) == clock()
 
 
@@ -355,6 +357,10 @@ async def test_a_version_stores_its_feedback_models_and_usage(client, db, post_i
 
     post = await _stored_post(db, post_id)
     version = post.attempts[1]
-    assert (version.feedback, version.draft, version.final) == ("shorter", "draft 2", "final 2")
+    assert (version.feedback, version.draft_parts, version.final_parts) == (
+        "shorter",
+        ["draft 2"],
+        ["final 2"],
+    )
     assert (version.writing_model, version.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
     assert version.writing_usage is not None and version.humanizing_usage is not None
