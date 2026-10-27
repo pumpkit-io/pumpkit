@@ -1,107 +1,94 @@
 # Pumpkit
 
-Pumpkit is an open-source AI writing tool for X. You write a Brief saying what a post is about and what you think, pick up to three X authors whose style you like, and Pumpkit writes the post in their style, then revises it with your Feedback. It can also schedule the result on your X account. The hosted Instance is at https://pumpkit.io; this repository runs your own.
+An open-source AI writing tool for X.
 
-**Status:** pre-1.0: upgrades may need manual steps, read the [CHANGELOG](./CHANGELOG.md).
+- Write a Brief: what the post is about and what you think about it.
+- Pick up to three X authors whose style you like. Pumpkit writes the post the way they would.
+- Give Feedback in plain words, such as "shorter" or "drop the last line", and get a new Version each time.
+- Schedule the result on your X account, or post it now.
 
-## Self-host with an AI agent
+Use the hosted Instance at [pumpkit.io](https://pumpkit.io), or run your own from this repository.
 
-Open a Claude Code chat on your laptop, in an empty folder or in a clone of this repository, and paste:
+> [!NOTE]
+> Pumpkit is pre-1.0. Upgrades may need manual steps, listed in the [CHANGELOG](./CHANGELOG.md).
+
+## Self-host
+
+You need Docker with Compose v2, git and openssl, plus two API keys:
+
+- an **LLM key**, for [OpenRouter](https://openrouter.ai/settings/keys) or any other OpenAI-compatible endpoint;
+- a **[twitterapi.io](https://twitterapi.io/dashboard) key**, to read the posts of the authors you pick.
+
+The full guide, covering servers, HTTPS, every provider, backups, upgrades and troubleshooting, is [docs/self-hosting.md](./docs/self-hosting.md).
+
+### With an AI agent
+
+Paste this into Claude Code or another coding agent, in an empty folder:
 
 ```
-I want to self-host Pumpkit (https://github.com/pumpkit-io/pumpkit), an open-source AI writing tool for X.
-
-1. Clone the repository into a new folder, or use this folder if it is already a clone.
-2. Read docs/self-hosting.md and follow it. It is the source of truth for every step.
-3. Before changing anything, ask me whether to run Pumpkit on this computer or on a server I can reach over SSH. For a server, ask for the SSH host and the domain name.
-4. Ask me for each provider key one at a time. For each, tell me where to get it, what it costs, and what stops working if I skip it. Skip the optional providers I don't want.
-5. Never print my secrets or keys back to me, and never commit the .env file.
-6. After each step, run the check the guide gives. If a check fails, stop and tell me what went wrong.
-7. When you finish, run the health check, then tell me the URL to open and how to sign in.
+Self-host Pumpkit for me from https://github.com/pumpkit-io/pumpkit.
+Clone it, check out the latest release tag, then follow docs/self-hosting.md,
+starting with its "For agents" section. Ask me before changing anything,
+and never print my keys or commit .env.
 ```
 
-## Self-host by hand
+> [!IMPORTANT]
+> **AI agents reading this file:** to self-host Pumpkit, clone this repository, run `git checkout "$(git describe --tags --abbrev=0)"`, then open `docs/self-hosting.md` and follow its **For agents** section. That guide is the source of truth: run each step's **Check** before moving on, and ask the user for keys one provider at a time. Pass keys to `scripts/setup.sh` as environment variables, never print them, and never commit `.env`.
 
-These steps run Pumpkit on your computer at http://localhost:8080. For a server with a domain and HTTPS, and for every optional provider, follow [docs/self-hosting.md](./docs/self-hosting.md). You need Docker with Compose v2, git, an LLM API key and a twitterapi.io API key (see [Providers](#providers)).
+### By hand, on your computer
 
-1. Check Docker Compose:
+```sh
+git clone https://github.com/pumpkit-io/pumpkit.git
+cd pumpkit
+git checkout "$(git describe --tags --abbrev=0)"   # the latest release
 
-   ```sh
-   docker compose version
-   ```
+# Writes .env and generates every secret
+LLM_API_KEY='<your LLM key>' TWITTERAPI_IO_API_KEY='<your twitterapi.io key>' \
+  sh scripts/setup.sh --public-url http://localhost:8080 </dev/null
 
-   **Check:** it prints `Docker Compose version v2.` and the rest of the version.
+docker compose up -d --wait          # the first start takes a minute or two
+curl -s http://localhost:8080/api/v1/health
+```
 
-2. Get the code:
+The last command prints `{"status":"ok"}`.
 
-   ```sh
-   git clone https://github.com/pumpkit-io/pumpkit.git
-   cd pumpkit
-   ls compose.yml .env.example
-   ```
+To sign in, open http://localhost:8080, choose **Get started** and send yourself a Magic link. Until you set up SMTP, the link goes to the backend log instead of your inbox:
 
-   **Check:** `ls` prints `.env.example` and `compose.yml`.
+```sh
+docker compose logs backend | grep "Magic link for"
+```
 
-3. Write `.env`, with the secrets generated for you:
+Open the link in the same browser. On Home, add an X handle under **Inspiration authors**, type a Brief and choose **Write the Post**.
 
-   ```sh
-   LLM_API_KEY='<your LLM key>' TWITTERAPI_IO_API_KEY='<your twitterapi.io key>' \
-     sh scripts/setup.sh --public-url http://localhost:8080 </dev/null
-   ```
-
-   **Check:** it prints `Wrote /path/to/pumpkit/.env (mode 600).`, then `Generated: POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY` and `Set: PUBLIC_URL LLM_API_KEY TWITTERAPI_IO_API_KEY`. Run `sh scripts/setup.sh` with no arguments instead and it asks for each value.
-
-4. Start Pumpkit:
-
-   ```sh
-   docker compose up -d --wait
-   ```
-
-   **Check:** it exits once every service is healthy, and `docker compose ps --format 'table {{.Service}}\t{{.Status}}'` lists `backend`, `db`, `publisher` and `web`, each `Up` and `(healthy)`.
-
-5. Check its health:
-
-   ```sh
-   curl -s http://localhost:8080/api/v1/health
-   ```
-
-   **Check:** it prints `{"status":"ok"}`.
-
-6. Sign in. Open http://localhost:8080, choose **Get started**, enter your email address and send the Magic link. Without SMTP, the link goes to the backend log:
-
-   ```sh
-   docker compose logs backend | grep "Magic link for"
-   ```
-
-   **Check:** it prints `... [WARNING] Magic link for you@example.com (expires in 15 minutes): http://localhost:8080/api/v1/login/magic-link?token=...`. Open that URL in the same browser; it lands on Home, with your address in the sidebar.
-
-7. Write a Post: add an X handle under **Inspiration authors**, type a Brief and choose **Write the Post**. **Check:** after a minute or two, a Version appears with its Final and Draft.
-
-Before you invite anyone else, configure SMTP so Magic links arrive by email ([SMTP](./docs/self-hosting.md#smtp)). To upgrade, read the CHANGELOG, then follow [Upgrades](./docs/self-hosting.md#upgrades).
+To run Pumpkit on a server with your own domain and HTTPS, follow [the guide](./docs/self-hosting.md). [Configure SMTP](./docs/self-hosting.md#smtp) before you invite anyone else.
 
 ## Providers
 
-| Provider | Required | What it enables | Without it |
-| --- | --- | --- | --- |
-| LLM endpoint (OpenRouter or any OpenAI-compatible endpoint) | Yes | Writing and revising Posts | `scripts/setup.sh` stops and asks for `LLM_API_KEY` |
-| twitterapi.io | Yes | Reading Inspiration authors' posts, which set the writing style, and Community names | `scripts/setup.sh` stops and asks for `TWITTERAPI_IO_API_KEY` |
-| SMTP | No | Emailing Magic links | Magic links go to the backend log, so only you can sign in |
-| Google | No | Signing in with Google | Users sign in with a Magic link only |
-| X app | No | Connecting an X account to schedule Posts or post them now | Users copy the Final into X themselves |
-| Stripe | No | Selling Plans | No Plans are sold; every User may use all of Pumpkit |
-| Operator details | No | The company footer, Terms and Privacy Policy pages, and Terms at checkout | Those are hidden |
-| PostHog | No | Product analytics behind a consent banner | No analytics and no banner |
+Only the first two are required. Each optional provider stays off until you set its keys.
 
-[docs/self-hosting.md](./docs/self-hosting.md#providers) says where to get each key, links each pricing page, and lists the callback URLs to register. [docs/configuration.md](./docs/configuration.md) describes every setting.
+| Provider | Required | What it adds |
+| --- | --- | --- |
+| LLM endpoint | Yes | Writes and revises Posts |
+| twitterapi.io | Yes | Reads your Inspiration authors' posts, which set the style |
+| SMTP | No | Emails Magic links. Without it, links go to the backend log and only you can sign in |
+| Google | No | "Continue with Google" on the sign-in page |
+| X app | No | Connects X accounts to schedule Posts or post now. Without it, Users copy the Final into X |
+| Stripe | No | Sells Plans. Without it, every User can use all of Pumpkit |
+| Operator details | No | Company footer, Terms and Privacy Policy pages |
+| PostHog | No | Product analytics, behind a consent banner |
+
+The guide's [Providers](./docs/self-hosting.md#providers) section says where to get each key, links each pricing page and lists the callback URLs to register. [docs/configuration.md](./docs/configuration.md) describes every setting.
 
 ## Use Pumpkit from Claude Code
 
-Every Instance serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in your account dialog, run the `claude mcp add` command it shows, and Claude Code can write Posts from a Brief, revise them with your Feedback, manage your Inspiration authors, schedule posts and Post now for you. See [docs/claude-code.md](./docs/claude-code.md) for the steps and the tools.
+Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in your account dialog and run the `claude mcp add` command it shows. Claude Code can then write and revise Posts, manage your Inspiration authors, and schedule or publish posts. See [docs/claude-code.md](./docs/claude-code.md).
+
+Self-hosted Instances get the MCP server in the first release after 0.1.0.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development setup. Security issues: [SECURITY.md](./SECURITY.md).
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development setup. Report security issues as described in [SECURITY.md](./SECURITY.md).
 
 ## License
 
-GNU Affero General Public License v3.0, copyright Francesco Paoli Leonardi (@prafaolo on X). See [LICENSE](./LICENSE).
+[GNU AGPL v3.0](./LICENSE), copyright Francesco Paoli Leonardi ([@prafaolo](https://x.com/prafaolo) on X).
