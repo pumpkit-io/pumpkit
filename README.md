@@ -98,3 +98,14 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development setup. Report secur
 ## License
 
 [GNU AGPL v3.0](./LICENSE), copyright Francesco Paoli Leonardi ([@prafaolo](https://x.com/prafaolo) on X).
+
+---
+
+<p align="center">
+  <img src="docs/assets/pumpkit-star.gif" alt="The Pumpkit mascot waving a yellow star" width="312">
+</p>
+
+<p align="center">
+  <b>Every star is a blessing for this little pumpkin.</b><br>
+  If Pumpkit helps you, leave a ⭐ on the repository. It helps other people find it.
+</p>
