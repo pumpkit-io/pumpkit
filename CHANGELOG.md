@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Changed
+
+- Install and upgrade from the latest release tag instead of `main`, so the compose file, `setup.sh` and the docs match the release images. **Upgrade notes:** upgrade with `git fetch --tags && git checkout vX.Y.Z` instead of `git pull` (see Upgrades in `docs/self-hosting.md`).
+
 ## [0.1.0] - 2026-10-12
 
 The first release that a Self-hoster can install.

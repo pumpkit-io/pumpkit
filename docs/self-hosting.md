@@ -17,14 +17,15 @@ Run the [install](#install) steps in order, with these rules:
 
 ### 1. Check the prerequisites
 
-You need Docker with Compose v2 and git. On a laptop, install [Docker Desktop](https://docs.docker.com/desktop/); on a Linux server, [Docker Engine](https://docs.docker.com/engine/install/) with its Compose plugin, and run Docker as root or as a user in the `docker` group.
+You need Docker with Compose v2, git and openssl (macOS and most Linux distributions include it). On a laptop, install [Docker Desktop](https://docs.docker.com/desktop/); on a Linux server, [Docker Engine](https://docs.docker.com/engine/install/) with its Compose plugin, and run Docker as root or as a user in the `docker` group.
 
 ```sh
 docker compose version
 git --version
+openssl version
 ```
 
-**Check:** the first line reads `Docker Compose version v2.` followed by the rest of the version (for example `Docker Compose version v2.31.0`); the second reads `git version` and a version.
+**Check:** the first line reads `Docker Compose version v2.` followed by the rest of the version (for example `Docker Compose version v2.31.0`); the second reads `git version` and a version; the third reads `OpenSSL` or `LibreSSL` and a version.
 
 **Server path only.** Point the domain at the server with an `A` record (and an `AAAA` record if the server has IPv6), and open ports 80 and 443 in the server's firewall and in the cloud provider's firewall. Caddy, inside the web container, serves Pumpkit on 443 and redirects HTTP to HTTPS on 80; it gets its certificate through either port. On this computer:
 
@@ -39,10 +40,13 @@ dig +short pumpkit.example.org
 ```sh
 git clone https://github.com/pumpkit-io/pumpkit.git
 cd pumpkit
+git checkout "$(git describe --tags --abbrev=0)"
 ls compose.yml .env.example
 ```
 
-**Check:** `ls` prints `.env.example` and `compose.yml`. If the folder is already a clone, skip `git clone` and run the rest inside it.
+The `git checkout` moves to the latest release, so the compose file, `setup.sh` and this guide match the release images that `.env` pins. `main` can be ahead of them.
+
+**Check:** `git describe --tags` prints a release tag such as `v0.1.0`, and `ls` prints `.env.example` and `compose.yml`. If the folder is already a clone, skip `git clone`, run `git fetch --tags`, and run the rest inside it.
 
 ### 3. Write `.env`
 
@@ -374,15 +378,16 @@ Before 1.0, an upgrade may need manual steps. Each release lists them under **Up
 1. Read every CHANGELOG section between your version and the new one, and follow its **Upgrade notes**. Your version is `PUMPKIT_VERSION` in `.env`; releases are listed on [GitHub](https://github.com/pumpkit-io/pumpkit/releases).
 2. [Back up](#backups-and-restore) the database.
 3. Set `PUMPKIT_VERSION` in `.env` to the new version, without the `v` (for example `PUMPKIT_VERSION=0.2.0`).
-4. Pull the new images and restart:
+4. Check out the new release, pull its images and restart:
 
    ```sh
-   git pull
+   git fetch --tags
+   git checkout v0.2.0
    docker compose pull
    docker compose up -d --wait
    ```
 
-   `git pull` keeps the compose files in step with the images. The backend applies new migrations when it starts.
+   Checking out the release keeps the compose files in step with the images. The backend applies new migrations when it starts.
 5. Check the health and the running version:
 
    ```sh
