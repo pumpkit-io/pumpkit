@@ -78,7 +78,7 @@ The mediator then checks, in order, the X connection (`connection_to_publish_on`
 
 Test a rule in `backend/tests/scheduling/test_mediator.py`, and keep one case of each refusal in the route and tool suites. `await connect_x()` (a fixture in `tests/conftest.py`) gives `user` an X connection to `fake_x_publisher.account` without the authorization's requests, at the time `get_clock` reads, so request the clock fixture first.
 
-A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send only `source_version_id`, the Version's id, and the backend copies its Final. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so every page and the Reconnect X banner share it.
+A Version goes to X through the same endpoint: the "Post to…" dialog on a Draft's page (`features/posts/postTo/`) sends only `source_version_id`, the id of the Version on screen, and the backend copies its text. The dialog sends through a `PostToSender`, so a Failed Post can patch its Scheduled post through the same dialog. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so every page and the Reconnect X banner share it.
 
 A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m pumpkit.scheduling.publisher`, the `publisher` service in `compose.dev.yml` and `compose.yml`. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
 

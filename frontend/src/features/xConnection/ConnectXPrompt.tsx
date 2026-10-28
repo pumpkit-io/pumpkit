@@ -4,7 +4,7 @@ import { useXConnectionContext } from './useXConnectionContext';
 
 /**
  * Asks the User to connect X, or to reconnect it once X stopped accepting Pumpkit's access.
- * `what` names what they are about to post, as in "this Final".
+ * `what` names what they are about to post, as in "this Post".
  */
 export function ConnectXPrompt({ what, showError }: { what?: string; showError?: boolean }) {
   const { connection, busy, error, connect } = useXConnectionContext();
