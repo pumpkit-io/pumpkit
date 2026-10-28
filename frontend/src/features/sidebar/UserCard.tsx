@@ -35,12 +35,12 @@ export function UserCard() {
     <Link
       to="/settings"
       aria-label={['Your account', display, ...details].join(', ')}
-      className="flex h-16 shrink-0 items-center gap-3 border-t border-border px-3 transition-colors hover:bg-[var(--hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="mx-3 mb-3 flex h-14 shrink-0 items-center gap-3 rounded-lg px-2 transition-colors hover:bg-[var(--hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span
         data-avatar
         aria-hidden
-        className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-gradient-soft text-sm text-foreground ring-1 ring-inset ring-primary/25"
+        className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-gradient-soft text-sm text-foreground ring-1 ring-inset ring-border"
       >
         {avatarUrl ? (
           <img

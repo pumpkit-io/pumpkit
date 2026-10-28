@@ -103,7 +103,7 @@ export function PostWriter() {
         <div className="space-y-1">
           <h2
             id="write-a-post-heading"
-            className="font-sans text-base font-semibold text-foreground"
+            className="font-sans text-xl font-semibold tracking-[-0.015em] text-foreground"
           >
             Write a Post
           </h2>

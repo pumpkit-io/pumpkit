@@ -74,7 +74,7 @@ function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; cha
           <li
             key={i}
             aria-label={thread ? `Part ${i + 1} of ${post.parts.length}` : 'Post'}
-            className="space-y-1 rounded-lg border border-border bg-background px-3 py-2"
+            className="space-y-1 rounded-lg bg-muted/60 px-3 py-2"
           >
             <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
               {text}

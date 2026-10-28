@@ -163,7 +163,7 @@ export function InspirationAuthorsPanel() {
         <div className="space-y-1">
           <h2
             id="inspiration-authors-heading"
-            className="font-sans text-base font-semibold text-foreground"
+            className="font-sans text-xl font-semibold tracking-[-0.015em] text-foreground"
           >
             How your posts sound
           </h2>

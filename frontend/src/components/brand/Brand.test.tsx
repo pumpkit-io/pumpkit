@@ -6,13 +6,13 @@ import { DEFAULT_INSTANCE } from '@/lib/instance';
 import { Brand } from './Brand';
 
 describe('Brand', () => {
-  it('shows the app name by default', () => {
+  it('shows the wordmark under the default app name', () => {
     render(
       <ThemeProvider>
         <Brand />
       </ThemeProvider>,
     );
-    expect(screen.getByText('Pumpkit')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Pumpkit' })).toBeInTheDocument();
   });
 
   it("shows the Instance's app name with its casing", () => {
@@ -32,6 +32,6 @@ describe('Brand', () => {
         <Brand showName={false} />
       </ThemeProvider>,
     );
-    expect(screen.queryByText('Pumpkit')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Pumpkit' })).not.toBeInTheDocument();
   });
 });

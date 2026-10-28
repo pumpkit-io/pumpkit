@@ -9,7 +9,7 @@ import { useSidebar } from '@/features/sidebar/useSidebar';
 export function Topbar({ title, actions }: { title: ReactNode; actions?: ReactNode }) {
   const { setMobileOpen } = useSidebar();
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 sm:px-6">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/75 sm:px-6">
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
@@ -18,9 +18,7 @@ export function Topbar({ title, actions }: { title: ReactNode; actions?: ReactNo
       >
         <Menu className="h-5 w-5" aria-hidden />
       </button>
-      <h1 className="min-w-0 truncate font-sans text-base font-semibold text-foreground">
-        {title}
-      </h1>
+      <h1 className="min-w-0 truncate font-sans text-sm font-semibold text-foreground">{title}</h1>
       {actions && <div className="ml-auto flex min-w-0 items-center gap-2">{actions}</div>}
     </header>
   );
