@@ -11,7 +11,7 @@ import { PublishedPanel } from '@/features/posts/panels/PublishedPanel';
 import { ScheduledPanel } from '@/features/posts/panels/ScheduledPanel';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { hasScheduledPost, postTitle } from '@/features/posts/postStatus';
-import { copiedText, shownParts } from '@/features/posts/shownText';
+import { copiedText, retryParts, shownParts } from '@/features/posts/shownText';
 import { usePost } from '@/features/posts/usePost';
 import { VersionCard } from '@/features/posts/VersionCard';
 import { VersionPager } from '@/features/posts/VersionPager';
@@ -96,9 +96,12 @@ function LoadedPost({
       {post.status === 'failed' && scheduledPost && (
         <FailedPanel
           scheduledPost={scheduledPost}
+          shownVersion={shown}
+          retryParts={retryParts(shown, scheduledPost, connection?.charLimit ?? null)}
           shownText={text}
           latestVersion={latest}
           feedback={feedback}
+          onRetried={onScheduledPost}
         />
       )}
     </Page>

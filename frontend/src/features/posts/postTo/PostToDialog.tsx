@@ -17,6 +17,7 @@ import {
   type DestinationDraft,
 } from '@/features/scheduledPosts/communities';
 import { X_BUSY_NOTICE } from '@/features/scheduledPosts/useCreateScheduledPost';
+import { LiveOnX } from '@/features/scheduledPosts/LiveOnX';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
@@ -37,11 +38,41 @@ function partCount(count: number): string {
   return `${count} ${count === 1 ? 'Part' : 'Parts'}`;
 }
 
-/** Each Part over X's limit by X's count, as a sentence naming it. */
-function overLimit(lengths: number[], limit: number, thread: boolean): string[] {
+/** Parts `first` to `last`, by their numbers in the Thread. */
+function partRange(first: number, last: number): string {
+  return first === last ? `Part ${first}` : `Parts ${first} to ${last}`;
+}
+
+/**
+ * What a retry of a Thread that failed partway does with its live Parts, or why this Version
+ * can't retry it; null without live Parts.
+ */
+function liveNote(liveCount: number, total: number): { text: string; blocks: boolean } | null {
+  if (liveCount === 0) return null;
+  const live = `${partRange(1, liveCount)} ${liveCount === 1 ? 'is' : 'are'} already on X`;
+  if (liveCount >= total) {
+    const after = liveCount === 1 ? 'it' : 'them';
+    return {
+      text: `${live}, and this Version has no Part after ${after}. Pick a longer Version.`,
+      blocks: true,
+    };
+  }
+  const rest = partRange(liveCount + 1, total);
+  const go = total - liveCount === 1 ? 'goes' : 'go';
+  const to = liveCount === 1 ? 'it' : `Part ${liveCount}`;
+  return { text: `${live}, so only ${rest} ${go} out, as replies to ${to}.`, blocks: false };
+}
+
+/** Each Part not yet live over X's limit by X's count, as a sentence naming it. */
+function overLimit(
+  parts: ShownPart[],
+  lengths: number[],
+  limit: number,
+  thread: boolean,
+): string[] {
   return lengths.flatMap((length, i) => {
     const over = length - limit;
-    if (over <= 0) return [];
+    if (over <= 0 || parts[i]?.live) return [];
     const what = thread ? `Part ${i + 1}` : 'The post';
     const characters = `${formatCount(over)} ${over === 1 ? 'character' : 'characters'}`;
     return [`${what} is ${characters} over X's ${formatCount(limit)}-character limit.`];
@@ -51,7 +82,10 @@ function overLimit(lengths: number[], limit: number, thread: boolean): string[] 
 const PART_TEXT = 'whitespace-pre-wrap break-words font-sans text-sm text-foreground';
 const PARTS_BOX = 'max-h-72 space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-3';
 
-/** Every Part in the order X publishes them, each counted against the limit. */
+/**
+ * Every Part in the order X publishes them, each counted against the limit. A live Part is
+ * locked: it is on X already and only the Parts after it go out.
+ */
 function PartsToPost({
   parts,
   lengths,
@@ -76,13 +110,28 @@ function PartsToPost({
     );
   }
   return (
-    <ThreadParts parts={parts} className={PARTS_BOX}>
-      {(part, number) => (
-        <>
-          <p className={PART_TEXT}>{part.text}</p>
-          <XLengthCounter length={lengths[number - 1] ?? 0} limit={limit} />
-        </>
-      )}
+    <ThreadParts
+      parts={parts}
+      className={PARTS_BOX}
+      aside={(part, number) =>
+        part.live ? <LiveOnX number={number} xPostUrl={part.xPostUrl} /> : null
+      }
+    >
+      {(part, number) =>
+        part.live ? (
+          <>
+            <p className={`${PART_TEXT} text-muted-foreground`}>{part.text}</p>
+            <p className="font-sans text-xs text-muted-foreground">
+              Already on X, so it can’t change.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className={PART_TEXT}>{part.text}</p>
+            <XLengthCounter length={lengths[number - 1] ?? 0} limit={limit} />
+          </>
+        )
+      }
     </ThreadParts>
   );
 }
@@ -97,13 +146,15 @@ export function PostToDialog({
   version,
   parts,
   sender,
+  initialWhere = PROFILE_DRAFT,
   onClose,
   onDone,
 }: {
   version: Version;
-  /** The text that goes out, in order. */
+  /** The text that goes out, in order, after any Parts already live, which come first. */
   parts: ShownPart[];
   sender: PostToSender;
+  initialWhere?: DestinationDraft;
   onClose: () => void;
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
@@ -111,15 +162,29 @@ export function PostToDialog({
   const { connection } = useXConnectionContext();
   const { sending, error, send } = sender;
   const [step, setStep] = useState<Step>({ kind: 'choose' });
-  const [where, setWhere] = useState<DestinationDraft>(PROFILE_DRAFT);
+  const [where, setWhere] = useState<DestinationDraft>(initialWhere);
   const [when, setWhen] = useState<WhenDraft>(initialWhen);
 
-  const thread = version.format === FORMAT_THREAD;
+  const liveCount = parts.filter((part) => part.live).length;
+  const thread = version.format === FORMAT_THREAD || liveCount > 0;
+  const live = liveNote(liveCount, parts.length);
+  const toSend = parts.length - liveCount;
   const destination = destinationFrom(where);
   const publishAt = publishAtFrom(when);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
-  const tooLong = ready ? overLimit(lengths, connection.charLimit, thread) : [];
+  const tooLong = ready ? overLimit(parts, lengths, connection.charLimit, thread) : [];
+  const liveLine = live && (
+    <p
+      className={
+        live.blocks
+          ? 'font-sans text-sm font-medium text-destructive'
+          : 'font-sans text-sm text-foreground'
+      }
+    >
+      {live.text}
+    </p>
+  );
 
   const close = () => {
     if (step.kind === 'busy') onDone(step.scheduledPost);
@@ -191,9 +256,10 @@ export function PostToDialog({
     body = (
       <>
         <p className="font-sans text-sm text-foreground">
-          {thread ? `These ${partCount(parts.length)} go` : 'This goes'} out {target} straight away,
-          in this order. Posting can&apos;t be undone.
+          {!thread ? 'This goes' : toSend === 1 ? 'This Part goes' : `These ${toSend} Parts go`} out{' '}
+          {target} straight away, in this order. Posting can&apos;t be undone.
         </p>
+        {liveLine}
         <PartsToPost parts={parts} lengths={lengths} limit={connection.charLimit} thread={thread} />
         {error && <ErrorBanner message={error} />}
       </>
@@ -216,9 +282,14 @@ export function PostToDialog({
     );
   } else {
     const unsendable =
-      sending || tooLong.length > 0 || destination === null || (!when.now && !publishAt);
+      sending ||
+      tooLong.length > 0 ||
+      Boolean(live?.blocks) ||
+      destination === null ||
+      (!when.now && !publishAt);
     body = (
       <>
+        {liveLine}
         <WhereField value={where} onChange={setWhere} disabled={sending} />
         <WhenField value={when} onChange={setWhen} disabled={sending} />
         {tooLong.map((problem) => (

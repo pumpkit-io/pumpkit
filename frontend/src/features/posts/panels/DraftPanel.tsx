@@ -3,6 +3,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import { CopyPostButton } from '../CopyPostButton';
 import { FeedbackBar } from '../FeedbackBar';
 import { PostToButton } from '../postTo/PostToButton';
+import { useCreateFromVersion } from '../postTo/senders';
 import type { ShownPart } from '../shownText';
 import type { FeedbackSending } from './feedback';
 import { Panel } from './panelParts';
@@ -23,6 +24,7 @@ export function DraftPanel({
   feedback: FeedbackSending;
   onScheduled: (scheduledPost: ScheduledPost) => void;
 }) {
+  const sender = useCreateFromVersion(shownVersion.id);
   return (
     <Panel name="Draft">
       <FeedbackBar
@@ -31,7 +33,12 @@ export function DraftPanel({
         actions={
           <>
             <CopyPostButton text={shownText} />
-            <PostToButton version={shownVersion} parts={shownParts} onDone={onScheduled} />
+            <PostToButton
+              version={shownVersion}
+              parts={shownParts}
+              sender={sender}
+              onDone={onScheduled}
+            />
           </>
         }
       />
