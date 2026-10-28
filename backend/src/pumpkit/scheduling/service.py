@@ -21,7 +21,10 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Subquery
 
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
@@ -30,7 +33,13 @@ from pumpkit.scheduling.models import (
     SCHEDULED,
     ScheduledPost,
     ScheduledPostPart,
-    ScheduledPostState,
+)
+from pumpkit.scheduling.post_status import (
+    DRAFT,
+    FAILED_STATUS,
+    PUBLISHED_STATUS,
+    SCHEDULED_STATUS,
+    PostStatus,
 )
 
 
@@ -82,24 +91,89 @@ def _destination_columns(destination: Destination) -> dict[str, Any]:
     }
 
 
-async def list_for_user(
-    db: AsyncSession, *, user_id: str, state: Optional[ScheduledPostState] = None
-) -> list[ScheduledPost]:
-    """Waiting ones first, soonest first; then Published and Failed ones, newest first."""
-    waiting = ScheduledPost.state.in_([SCHEDULED, PUBLISHING])
-    query = select(ScheduledPost).where(ScheduledPost.user_id == user_id)
-    if state is not None:
-        query = query.where(ScheduledPost.state == state)
-    result = await db.execute(
-        query.order_by(
-            case((waiting, 0), else_=1),
-            case((waiting, ScheduledPost.publish_at)),
-            ScheduledPost.publish_at.desc(),
-            ScheduledPost.created_at.desc(),
-            ScheduledPost.id.desc(),
-        )
+def _post_status_column() -> ColumnElement[str]:
+    """`post_status` in SQL, for a Post outer-joined to its Scheduled post."""
+    return case(
+        (ScheduledPost.id.is_(None), DRAFT),
+        (ScheduledPost.state == PUBLISHED, PUBLISHED_STATUS),
+        (ScheduledPost.state == FAILED, FAILED_STATUS),
+        else_=SCHEDULED_STATUS,
     )
-    return list(result.scalars())
+
+
+def _latest_versions() -> Subquery:
+    """Each Post with a Version, and when its latest Version was written."""
+    return (
+        select(
+            VersionAttempt.post_id.label("post_id"),
+            func.max(VersionAttempt.created_at).label("latest_at"),
+        )
+        .where(VersionAttempt.status == ATTEMPT_SUCCEEDED)
+        .group_by(VersionAttempt.post_id)
+        .subquery()
+    )
+
+
+@dataclass(frozen=True)
+class ListedPost:
+    post: Post
+    # None while the Post is a Draft.
+    scheduled_post: Optional[ScheduledPost]
+
+
+async def list_posts(
+    db: AsyncSession, *, user_id: str, status: Optional[PostStatus], limit: int, offset: int
+) -> list[ListedPost]:
+    """
+    A page of the User's Posts with a Version, with their attempts and Scheduled post, in
+    `status` or every one. Scheduled ones go soonest first, Published ones most recently
+    published first, Failed ones most recently due first, and Drafts, like every Post listed
+    together, by their latest Version, newest first.
+    """
+    latest = _latest_versions()
+    query = (
+        select(Post, ScheduledPost)
+        .join(latest, latest.c.post_id == Post.id)
+        .outerjoin(ScheduledPost, ScheduledPost.post_id == Post.id)
+        .where(Post.user_id == user_id)
+        .options(selectinload(Post.attempts))
+    )
+    if status is not None:
+        query = query.where(_post_status_column() == status)
+    match status:
+        case "scheduled":
+            order = [ScheduledPost.publish_at, ScheduledPost.id]
+        case "published":
+            order = [ScheduledPost.published_at.desc(), ScheduledPost.id.desc()]
+        case "failed":
+            order = [ScheduledPost.publish_at.desc(), ScheduledPost.id.desc()]
+        case _:
+            order = [latest.c.latest_at.desc(), Post.id.desc()]
+    result = await db.execute(query.order_by(*order).limit(limit).offset(offset))
+    return [ListedPost(post=post, scheduled_post=scheduled) for post, scheduled in result.tuples()]
+
+
+async def count_posts(db: AsyncSession, *, user_id: str) -> dict[PostStatus, int]:
+    """How many of the User's Posts with a Version each status holds."""
+    latest = _latest_versions()
+    status = _post_status_column()
+    result = await db.execute(
+        select(status, func.count())
+        .select_from(Post)
+        .join(latest, latest.c.post_id == Post.id)
+        .outerjoin(ScheduledPost, ScheduledPost.post_id == Post.id)
+        .where(Post.user_id == user_id)
+        .group_by(status)
+    )
+    counts: dict[PostStatus, int] = {
+        DRAFT: 0,
+        SCHEDULED_STATUS: 0,
+        PUBLISHED_STATUS: 0,
+        FAILED_STATUS: 0,
+    }
+    for listed_status, count in result.tuples():
+        counts[cast(PostStatus, listed_status)] = count
+    return counts
 
 
 async def get(db: AsyncSession, *, scheduled_post_id: str) -> Optional[ScheduledPost]:

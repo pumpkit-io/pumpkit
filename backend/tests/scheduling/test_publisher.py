@@ -22,6 +22,7 @@ from pumpkit.x_connection.x_publisher import (
     XPostRejectedError,
     XRateLimitedError,
 )
+from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 CHECK_X_REASON = "X didn't confirm this post. It may have been published. Check your X profile."
@@ -40,7 +41,7 @@ async def _schedule(
 
 
 async def _listed(client: AsyncClient) -> dict[str, dict]:
-    return {p["parts"][0]["text"]: p for p in (await client.get(SCHEDULED_POSTS)).json()["data"]}
+    return {p["parts"][0]["text"]: p for p in await scheduled_posts(client)}
 
 
 async def test_a_scheduled_post_is_published_once_due_and_never_before(

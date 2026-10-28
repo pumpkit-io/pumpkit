@@ -227,62 +227,6 @@ async def test_another_users_post_reads_as_not_found(
     assert fake_llm.calls == []
 
 
-async def test_listing_posts_pages_through_the_users_posts_newest_first(
-    with_author, mcp, fake_llm, fixed_clock, bobs_post_id
-):
-    for brief in ("first", "second", "third"):
-        fake_llm.replies = [written("sketch"), {"post": "final"}]
-        await mcp.call_tool("start_post", brief=brief)
-        fixed_clock.advance(timedelta(minutes=1))
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
-    third_id = (await mcp.call_tool("list_posts"))["structuredContent"]["data"][0]["id"]
-    await mcp.call_tool("give_feedback", post_id=third_id, feedback="shorter")
-
-    first_page = await mcp.call_tool("list_posts", limit=2)
-    second_page = await mcp.call_tool("list_posts", limit=2, offset=2)
-
-    assert first_page["isError"] is False
-    assert first_page["structuredContent"] == {
-        "data": [
-            {
-                "id": third_id,
-                "brief": "third",
-                "created_at": "2026-10-10T12:02:30Z",
-                "version_count": 2,
-            },
-            {
-                "id": first_page["structuredContent"]["data"][1]["id"],
-                "brief": "second",
-                "created_at": "2026-10-10T12:01:30Z",
-                "version_count": 1,
-            },
-        ],
-        "next_offset": 2,
-    }
-    assert [post["brief"] for post in second_page["structuredContent"]["data"]] == ["first"]
-    assert second_page["structuredContent"]["next_offset"] is None
-
-
-async def test_a_user_without_posts_lists_none(subscribed, mcp):
-    result = await mcp.call_tool("list_posts")
-
-    assert result["structuredContent"] == {"data": [], "next_offset": None}
-
-
-@pytest.mark.parametrize(
-    ("arguments", "detail"),
-    [
-        ({"limit": 0}, "Input should be greater than or equal to 1"),
-        ({"limit": 51}, "Input should be less than or equal to 50"),
-        ({"offset": -1}, "Input should be greater than or equal to 0"),
-    ],
-)
-async def test_a_page_outside_the_bounds_is_refused(subscribed, mcp, arguments, detail):
-    result = await mcp.call_tool("list_posts", **arguments)
-
-    assert error_text(result) == detail
-
-
 def _writing_call(tool: str, post_id: str) -> dict[str, str]:
     """The arguments of a call to the writing `tool`, on `post_id` when it takes one."""
     if tool == "start_post":

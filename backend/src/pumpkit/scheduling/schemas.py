@@ -3,7 +3,7 @@ from typing import Annotated, Optional
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
-from pumpkit.posts.formats import part_name
+from pumpkit.posts.formats import Format, part_name
 from pumpkit.posts.schemas import VersionResponse, VersionToolResponse
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
@@ -117,8 +117,57 @@ class PostDetailToolResponse(BaseModel):
     scheduled_post: Optional[ScheduledPostResponse]
 
 
-class ScheduledPostsListResponse(BaseModel):
-    data: list[ScheduledPostResponse]
+MAX_POSTS_PAGE_SIZE = 50
+
+
+class PostsPageRequest(BaseModel):
+    # None lists every Post, the newest Version first.
+    status: Optional[PostStatus] = None
+    limit: int = Field(20, ge=1, le=MAX_POSTS_PAGE_SIZE)
+    offset: int = Field(0, ge=0)
+
+
+class ScheduledPostSummaryResponse(BaseModel):
+    """What a listed Post shows of its Scheduled post; `GET /posts/{id}` has the rest."""
+
+    id: str
+    state: ScheduledPostState
+    publish_at: datetime
+    published_at: Optional[datetime]
+    # The Community it goes to; None for the User's profile.
+    community: Optional[CommunityResponse]
+    share_with_followers: bool
+    failed_reason: Optional[str]
+    # The first Part on X, once it is live.
+    x_post_url: Optional[str]
+
+
+class PostListItemResponse(BaseModel):
+    id: str
+    brief: str
+    status: PostStatus
+    # The Scheduled post's text when it has one, else the latest Version's; the first Part's
+    # first line is the Post's title.
+    parts: list[str]
+    format: Format
+    version_count: int
+    latest_version_at: datetime
+    scheduled_post: Optional[ScheduledPostSummaryResponse]
+
+
+class PostCountsResponse(BaseModel):
+    draft: int
+    scheduled: int
+    published: int
+    failed: int
+
+
+class PostsPageResponse(BaseModel):
+    data: list[PostListItemResponse]
+    # Every status's, whichever one the page lists, for the tabs and the sidebar's badge.
+    counts: PostCountsResponse
+    # The offset of the next page, or None on the last one.
+    next_offset: Optional[int]
 
 
 class ScheduledPostToolResponse(ScheduledPostResponse):
@@ -131,10 +180,6 @@ class PostNowToolResponse(ScheduledPostToolResponse):
     """`message` says how Post now ended, as the web app tells the User after Post now."""
 
     message: str
-
-
-class ScheduledPostsListToolResponse(ScheduledPostsListResponse):
-    scheduled_page_url: str
 
 
 class ScheduledPageMessageToolResponse(BaseModel):

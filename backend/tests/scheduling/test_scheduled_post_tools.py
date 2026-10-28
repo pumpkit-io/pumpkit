@@ -19,6 +19,7 @@ from pumpkit.x_connection.x_publisher import (
 )
 from tests.mcp_client import error_text
 from tests.posts.writing_replies import written, written_thread
+from tests.scheduling.reading import scheduled_posts_through_mcp
 
 SCHEDULED_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
@@ -48,7 +49,7 @@ async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
     return {"post_id": post["id"], **post["versions"][0]}
 
 
-async def test_scheduling_a_version_lists_it_with_the_scheduled_page_link(
+async def test_scheduling_a_version_answers_with_the_scheduled_page_link(
     connected, mcp, version_of, fixed_clock
 ):
     version_id = await version_of("Shipping on Monday.")
@@ -65,11 +66,9 @@ async def test_scheduling_a_version_lists_it_with_the_scheduled_page_link(
     assert scheduled["source_version_id"] == version_id
     assert scheduled["community"] is None
     assert scheduled["scheduled_page_url"] == SCHEDULED_PAGE
-    listed = await mcp.call_tool("list_scheduled_posts")
-    assert listed["structuredContent"] == {
-        "data": [{key: value for key, value in scheduled.items() if key != "scheduled_page_url"}],
-        "scheduled_page_url": SCHEDULED_PAGE,
-    }
+    assert await scheduled_posts_through_mcp(mcp) == [
+        {key: value for key, value in scheduled.items() if key != "scheduled_page_url"}
+    ]
 
 
 THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
@@ -243,7 +242,7 @@ async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock,
     )
 
     assert error_text(result) == "X has no Community with that ID. Check the URL."
-    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
+    assert (await scheduled_posts_through_mcp(mcp)) == []
 
 
 async def _post_now_on_the_web(client: AsyncClient, version_id: str) -> dict:
@@ -264,12 +263,12 @@ async def failed(connected, client, version_of, fake_x_publisher, fixed_clock) -
     return failed
 
 
-async def test_the_list_says_why_a_scheduled_post_failed(failed, mcp, fixed_clock):
-    listed = await mcp.call_tool("list_scheduled_posts", state="failed")
+async def test_listing_failed_posts_says_why_each_failed(failed, mcp, fixed_clock):
+    listed = await mcp.call_tool("list_posts", status="failed")
 
-    [scheduled] = listed["structuredContent"]["data"]
-    assert scheduled["state"] == "failed"
-    assert scheduled["failed_reason"] == "X refused the post: Duplicate content."
+    [post] = listed["structuredContent"]["data"]
+    assert post["scheduled_post"]["state"] == "failed"
+    assert post["scheduled_post"]["failed_reason"] == "X refused the post: Duplicate content."
 
 
 async def test_editing_the_text_and_time_of_a_waiting_scheduled_post_saves_both(
@@ -367,7 +366,7 @@ async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
         ("Live one.", True),
         ("Fixed two.", False),
     ]
-    listed = (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"]
+    listed = await scheduled_posts_through_mcp(mcp)
     assert [p["live"] for p in listed[0]["parts"]] == [True, False]
 
 
@@ -404,9 +403,8 @@ async def test_a_scheduled_post_being_published_can_be_neither_edited_nor_delete
     deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=scheduled["id"])
 
     assert error_text(edited) == error_text(deleted) == PUBLISHING_STARTED
-    listed = await mcp.call_tool("list_scheduled_posts")
     assert [
-        (post["parts"][0]["text"], post["state"]) for post in listed["structuredContent"]["data"]
+        (post["parts"][0]["text"], post["state"]) for post in await scheduled_posts_through_mcp(mcp)
     ] == [("Shipping on Monday.", "publishing")]
 
 
@@ -443,14 +441,14 @@ async def test_deleting_a_waiting_scheduled_post_takes_it_off_the_list(
         "message": "The Scheduled post is deleted.",
         "scheduled_page_url": SCHEDULED_PAGE,
     }
-    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
+    assert (await scheduled_posts_through_mcp(mcp)) == []
 
 
 async def test_deleting_a_failed_scheduled_post_takes_it_off_the_list(failed, mcp, fixed_clock):
     result = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=failed["id"])
 
     assert result["isError"] is False, result
-    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
+    assert (await scheduled_posts_through_mcp(mcp)) == []
 
 
 async def test_past_communities_are_the_ones_the_user_posted_to_before(
@@ -478,7 +476,7 @@ async def test_tools_list_shows_post_now_and_deleting_a_scheduled_post_as_destru
         assert tools[name]["annotations"]["destructiveHint"] is True
     for name in ("schedule_post", "edit_scheduled_post"):
         assert tools[name]["annotations"] == {"readOnlyHint": False, "destructiveHint": False}
-    for name in ("list_scheduled_posts", "list_past_communities", "connect_x"):
+    for name in ("list_past_communities", "connect_x"):
         assert tools[name]["annotations"]["readOnlyHint"] is True
 
 
@@ -511,7 +509,7 @@ async def test_the_write_tools_allow_10_calls_a_minute(connected, mcp, fixed_clo
     assert result["structuredContent"]["retry_at"].endswith("Z")
 
 
-@pytest.mark.parametrize("name", ["list_scheduled_posts", "list_past_communities", "connect_x"])
+@pytest.mark.parametrize("name", ["list_past_communities", "connect_x"])
 async def test_the_read_only_and_link_tools_allow_60_calls_a_minute(subscribed, mcp, name):
     for _ in range(60):
         assert (await mcp.call_tool(name))["isError"] is False
@@ -533,7 +531,7 @@ async def subscription_ended(connected, mcp, db) -> None:
     [
         ("schedule_post", {"version_id": "version_missing", "publish_at": "2026-10-10T14:00:00Z"}),
         ("post_now", {"version_id": "version_missing"}),
-        ("list_scheduled_posts", {}),
+        ("list_posts", {}),
         ("edit_scheduled_post", {"scheduled_post_id": "scheduled_post_missing", "parts": ["Hi."]}),
         ("delete_scheduled_post", {"scheduled_post_id": "scheduled_post_missing"}),
         ("list_past_communities", {}),
@@ -694,7 +692,7 @@ async def test_typed_parts_instead_of_a_version_are_refused_and_nothing_is_store
     result = await mcp.call_tool(name, **arguments)
 
     assert result["isError"] is True, result
-    assert (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"] == []
+    assert (await scheduled_posts_through_mcp(mcp)) == []
     assert fake_x_publisher.published == []
 
 
@@ -729,7 +727,7 @@ async def test_a_second_scheduled_post_for_the_same_post_is_refused(
     result = await mcp.call_tool(name, version_id=version_id, **arguments)
 
     assert error_text(result) == ALREADY_SCHEDULED
-    listed = (await mcp.call_tool("list_scheduled_posts"))["structuredContent"]["data"]
+    listed = await scheduled_posts_through_mcp(mcp)
     assert [s["id"] for s in listed] == [first["id"]]
     assert fake_x_publisher.published == published_before
 

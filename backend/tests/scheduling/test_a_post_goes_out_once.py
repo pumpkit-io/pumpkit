@@ -11,6 +11,7 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.posts.writing_replies import written
+from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
@@ -59,7 +60,7 @@ async def test_creating_a_scheduled_post_without_a_version_is_refused(
     response = await client.post(SCHEDULED_POSTS, json={"publish_at": LATER})
 
     assert response.status_code == 422
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert (await scheduled_posts(client)) == []
 
 
 async def test_typed_parts_are_refused_on_creation(client, post):
@@ -69,7 +70,7 @@ async def test_typed_parts_are_refused_on_creation(client, post):
     )
 
     assert response.status_code == 422
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert (await scheduled_posts(client)) == []
 
 
 async def test_a_second_scheduled_post_for_the_same_post_is_refused(client, fake_llm, post):
@@ -84,9 +85,7 @@ async def test_a_second_scheduled_post_for_the_same_post_is_refused(client, fake
 
     assert again.status_code == 409
     assert again.json()["detail"] == ALREADY_SCHEDULED
-    assert [s["id"] for s in (await client.get(SCHEDULED_POSTS)).json()["data"]] == [
-        first.json()["id"]
-    ]
+    assert [s["id"] for s in (await scheduled_posts(client))] == [first.json()["id"]]
 
 
 async def test_a_published_post_cannot_be_scheduled_again(client, fake_x_publisher, post):

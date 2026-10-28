@@ -36,10 +36,10 @@ Ask Claude Code to write a Post from an idea, then ask for changes in plain word
 | --- | --- |
 | `start_post` | Starts a Post from a Brief and writes its first Version in the style of your Inspiration authors, as a single post or, with `format: "thread"`, a Thread. Answers with the Final's Parts and each Part's character count, against your X account's limit: 25,000 with X Premium, 280 otherwise. |
 | `give_feedback` | Gives Feedback on the latest Version of a Post, such as "shorter" or "make Part 3 punchier", and writes the next Version. It keeps the latest Version's Format unless you pass `format: "post"` or `format: "thread"` to switch it. |
-| `list_posts` | Lists your Posts, newest first, 20 at a time (up to 50), with each one's Brief and how many Versions it has. |
+| `list_posts` | Lists your Posts of one status, or all of them, 20 at a time (up to 50), with each one's Brief, text, number of Versions and Scheduled post (its state, time, Community, why it failed and its link on X), plus how many Posts each status holds. Scheduled Posts come soonest first, Drafts and the full list by their latest Version, newest first, Published ones most recently published first, and Failed ones most recently due first. |
 | `get_post` | Reads one Post with all its Versions, each with its Feedback, text and character count, plus its status (Draft, Scheduled, Published or Failed) and its Scheduled post, so Claude Code can compare Versions, schedule one of a Draft, or see what went out. |
 
-Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code don't show up in the web app, which shows only the Post you are writing on New post.
+Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code show up on the web app's Posts page like any other.
 
 ## Scheduled post and link tools
 
@@ -47,7 +47,6 @@ Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 2
 | --- | --- |
 | `schedule_post` | Schedules a post for a time you give with its UTC offset. The post is your own text, as one Part or as several for a Thread, or the Final of a Version you name by its id. A Thread's Final keeps every Part in order. It goes to your profile, or to a Community you name by its URL or ID, and can also be shared with your followers. |
 | `post_now` | Publishes your own text, or a Version's Final, on X right away. In a Thread, each Part replies to the one before. It goes to your profile or a Community, as with `schedule_post`. Claude Code shows you the exact text of every Part and asks before calling it. It answers Published with the link to the post on X, Failed with the reason, or, when X hasn't taken the post yet, that Pumpkit keeps trying for 15 minutes. |
-| `list_scheduled_posts` | Lists your Scheduled posts with their state, time and Community, and why a Failed one failed. Each Part says whether it is live on X. |
 | `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. In a Thread that failed partway, the live Parts are locked; the others can be edited, added, removed and reordered, and a new time publishes only them, as replies to the last live Part. |
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post. Claude Code asks before calling it. |
 | `list_past_communities` | Lists the Communities you posted to before from your connected X account. |
