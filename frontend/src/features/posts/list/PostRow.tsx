@@ -3,15 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { InTheCommunity } from '@/features/scheduledPosts/InTheCommunity';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { xWeightedLength } from '@/lib/xLength';
 import { cn } from '@/lib/utils';
-import type { PostListItem, ScheduledPostSummary } from '@/services/postService';
+import type { PostListItem } from '@/services/postService';
 import type { PostPageState } from '../edit/scheduledPostEdit';
 import { formatWhen } from '../panels/panelFacts';
-import { Facts } from '../panels/panelParts';
+import { DestinationName, Facts } from '../panels/panelParts';
 import { postTitle } from '../postStatus';
 import { rowMoment, rowWhen } from './rowWhen';
 
@@ -19,14 +18,6 @@ import { rowMoment, rowWhen } from './rowWhen';
 const DEFAULT_CHAR_LIMIT = 280;
 
 const EDIT_STATE: PostPageState = { edit: true };
-
-function Destination({ scheduledPost }: { scheduledPost: ScheduledPostSummary }) {
-  return scheduledPost.community ? (
-    <InTheCommunity community={scheduledPost.community} />
-  ) : (
-    <>Your profile</>
-  );
-}
 
 function shape(post: PostListItem): string {
   return post.format === 'thread' ? `Thread · ${post.parts.length} Parts` : 'Single post';
@@ -37,7 +28,7 @@ function rowFacts(post: PostListItem) {
   const scheduled = post.scheduledPost;
   const versions = `${post.versionCount} ${post.versionCount === 1 ? 'Version' : 'Versions'}`;
   if (!scheduled) return [shape(post), versions];
-  const facts = [shape(post), <Destination key="destination" scheduledPost={scheduled} />];
+  const facts = [shape(post), <DestinationName key="destination" scheduledPost={scheduled} />];
   if (post.status === 'published' && scheduled.community && scheduled.shareWithFollowers) {
     facts.push('Shared with followers');
   }
@@ -95,7 +86,7 @@ function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; cha
       {scheduled && (
         <Facts
           items={[
-            <Destination key="destination" scheduledPost={scheduled} />,
+            <DestinationName key="destination" scheduledPost={scheduled} />,
             `${formatWhen(rowMoment(post))} (${TIME_ZONE})`,
           ]}
         />

@@ -3,7 +3,11 @@ import { InTheCommunity } from '@/features/scheduledPosts/InTheCommunity';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
 /** Where the Scheduled post goes or went. */
-export function DestinationName({ scheduledPost }: { scheduledPost: ScheduledPost }) {
+export function DestinationName({
+  scheduledPost,
+}: {
+  scheduledPost: Pick<ScheduledPost, 'community'>;
+}) {
   return scheduledPost.community ? (
     <InTheCommunity community={scheduledPost.community} />
   ) : (
