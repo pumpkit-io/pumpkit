@@ -280,6 +280,64 @@ describe('Posts page', () => {
       expect(thread.queryByRole('listitem', { name: 'Part 1 of 2' })).not.toBeInTheDocument();
     });
 
+    it("opens the Post's page with the editor open from Edit on an expanded row", async () => {
+      vi.mocked(postService.list).mockResolvedValue(page([item('post_01', ['Ship small.'])]));
+      vi.mocked(postService.get).mockResolvedValue({
+        id: 'post_01',
+        brief: 'ship small things',
+        status: 'scheduled',
+        versions: [
+          {
+            id: 'version_attempt_01',
+            number: 1,
+            feedback: null,
+            format: 'post',
+            parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
+            tells: [],
+          },
+        ],
+        scheduledPost: {
+          id: 'scheduled_post_01',
+          parts: [{ text: 'Ship small.', live: false, xPostUrl: null }],
+          state: 'scheduled',
+          publishAt: at(1, 9),
+          publishedAt: null,
+          xPostUrl: null,
+          failedReason: null,
+          sourceVersionId: 'version_attempt_01',
+          community: null,
+          shareWithFollowers: false,
+          createdAt: at(-1, 15),
+        },
+      });
+      renderSignedIn('/posts/scheduled');
+      const scheduled = await row('Ship small.');
+      expect(scheduled.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+
+      fireEvent.click(scheduled.getByRole('button', { name: 'Show every Part' }));
+      fireEvent.click(scheduled.getByRole('button', { name: 'Edit' }));
+
+      expect(currentPath()).toBe('/posts/post_01');
+      expect(
+        await screen.findByRole('region', { name: 'Edit the Scheduled post' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Post text' })).toHaveValue('Ship small.');
+    });
+
+    it('offers no Edit on a row being published', async () => {
+      vi.mocked(postService.list).mockResolvedValue(
+        page([
+          item('post_01', ['Ship small.'], { scheduledPost: summary({ state: 'publishing' }) }),
+        ]),
+      );
+      renderSignedIn('/posts/scheduled');
+      const scheduled = await row('Ship small.');
+
+      fireEvent.click(scheduled.getByRole('button', { name: 'Show every Part' }));
+
+      expect(scheduled.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    });
+
     it("opens the Post's page from the row's title", async () => {
       vi.mocked(postService.list).mockResolvedValue(page([item('post_01', ['Ship small.'])]));
       vi.mocked(postService.get).mockReturnValue(new Promise(() => undefined));

@@ -62,6 +62,7 @@ vi.mock('@/services/scheduledPostService', () => ({
     postNow: vi.fn(),
     schedule: vi.fn(),
     edit: vi.fn(),
+    cancel: vi.fn(),
     lookUpCommunity: vi.fn(),
   },
 }));
@@ -88,7 +89,11 @@ import {
   type Tell,
   type Version,
 } from '@/services/postService';
-import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
+import {
+  scheduledPostService,
+  type Community,
+  type ScheduledPost,
+} from '@/services/scheduledPostService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import {
   LEVELSIO,
@@ -611,6 +616,246 @@ describe('Post page', () => {
       expect(panel('Scheduled').getByRole('link', { name: 'Indie makers' })).toHaveAttribute(
         'href',
         'https://x.com/i/communities/123',
+      );
+    });
+  });
+
+  describe('Scheduled: edit', () => {
+    const COMMUNITY: Community = {
+      id: '1493446837214187523',
+      name: 'Indie makers',
+      url: 'https://x.com/i/communities/1493446837214187523',
+    };
+
+    beforeEach(() => {
+      vi.mocked(scheduledPostService.edit).mockReset();
+      vi.mocked(scheduledPostService.cancel).mockReset();
+      vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);
+      vi.mocked(scheduledPostService.lookUpCommunity).mockReset();
+    });
+
+    async function startEditing(scheduledPost: ScheduledPost = SCHEDULED) {
+      renderPost(withScheduledPost(scheduledPost));
+      await versionCard();
+      fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
+      return within(await screen.findByRole('region', { name: 'Edit the Scheduled post' }));
+    }
+
+    it('turns the Parts into text boxes and saves the edited text', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...SCHEDULED,
+        parts: [{ text: 'the edited text', live: false, xPostUrl: null }],
+      });
+      const editor = await startEditing();
+
+      const card = await versionCard();
+      const text = card.getByRole('textbox', { name: 'Post text' });
+      expect(text).toHaveValue('the final text');
+      fireEvent.change(text, { target: { value: 'the edited text' } });
+      expect(card.getByText('15 / 280')).toBeInTheDocument();
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() =>
+        expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+          parts: ['the edited text'],
+        }),
+      );
+      expect(await panel('Scheduled').findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect((await versionCard()).getByText('the edited text')).toBeInTheDocument();
+      expect(screen.queryByRole('textbox', { name: 'Post text' })).not.toBeInTheDocument();
+    });
+
+    it('edits each Part of a Thread, keeping a Part already live on X as it is', async () => {
+      const thread: ScheduledPost = {
+        ...SCHEDULED,
+        parts: [
+          { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
+          { text: 'Two.', live: false, xPostUrl: null },
+        ],
+      };
+      vi.mocked(scheduledPostService.edit).mockResolvedValue(thread);
+      const editor = await startEditing(thread);
+
+      const card = await versionCard();
+      expect(card.queryByRole('textbox', { name: 'Part 1 text' })).not.toBeInTheDocument();
+      expect(card.getByRole('link', { name: 'Part 1 is live on X' })).toBeInTheDocument();
+      fireEvent.change(card.getByRole('textbox', { name: 'Part 2 text' }), {
+        target: { value: 'Two, edited.' },
+      });
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() =>
+        expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+          parts: ['Live one.', 'Two, edited.'],
+        }),
+      );
+    });
+
+    it('moves it to another time', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...SCHEDULED,
+        publishAt: '2026-10-13T08:30:00Z',
+      });
+      const editor = await startEditing();
+
+      expect(editor.getByLabelText('Date')).toHaveValue('2026-10-12');
+      expect(editor.getByLabelText('Time')).toHaveValue('09:00');
+      fireEvent.change(editor.getByLabelText('Date'), { target: { value: '2026-10-13' } });
+      fireEvent.change(editor.getByLabelText('Time'), { target: { value: '10:30' } });
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() =>
+        expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+          publishAt: '2026-10-13T08:30:00.000Z',
+        }),
+      );
+      expect(
+        await panel('Scheduled').findByText('Scheduled for Tue, Oct 13, 10:30 AM'),
+      ).toBeInTheDocument();
+    });
+
+    it('moves it to a Community, shared with followers', async () => {
+      vi.mocked(scheduledPostService.lookUpCommunity).mockResolvedValue(COMMUNITY);
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...SCHEDULED,
+        community: COMMUNITY,
+        shareWithFollowers: true,
+      });
+      const editor = await startEditing();
+
+      fireEvent.click(editor.getByRole('radio', { name: 'Community' }));
+      fireEvent.change(editor.getByLabelText('Community URL or ID'), {
+        target: { value: COMMUNITY.url },
+      });
+      expect(await editor.findByRole('link', { name: 'Indie makers' })).toBeInTheDocument();
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() =>
+        expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+          community: { id: COMMUNITY.id, name: 'Indie makers' },
+          shareWithFollowers: true,
+        }),
+      );
+      expect(await panel('Scheduled').findByRole('link', { name: 'Indie makers' })).toHaveAttribute(
+        'href',
+        COMMUNITY.url,
+      );
+    });
+
+    it('moves a Community post back to the profile', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue(SCHEDULED);
+      const editor = await startEditing({
+        ...SCHEDULED,
+        community: COMMUNITY,
+        shareWithFollowers: true,
+      });
+
+      fireEvent.click(editor.getByRole('radio', { name: 'My profile' }));
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() =>
+        expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+          community: null,
+        }),
+      );
+      expect(
+        await panel('Scheduled').findByText('Version 1 · Your profile · Europe/Rome'),
+      ).toBeInTheDocument();
+    });
+
+    it('throws the edits away on Cancel', async () => {
+      const editor = await startEditing();
+
+      fireEvent.change((await versionCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'never mind' },
+      });
+      fireEvent.change(editor.getByLabelText('Time'), { target: { value: '11:00' } });
+      fireEvent.click(editor.getByRole('button', { name: 'Cancel' }));
+
+      expect(
+        await panel('Scheduled').findByText('Scheduled for Mon, Oct 12, 9:00 AM'),
+      ).toBeInTheDocument();
+      expect((await versionCard()).getByText('the final text')).toBeInTheDocument();
+      expect(screen.queryByText('never mind')).not.toBeInTheDocument();
+      expect(scheduledPostService.edit).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'Part 1 is empty. Write something or remove it.',
+      'Part 1 is 12 characters over the 280-character limit.',
+      'Pick a time in the future.',
+    ])('shows the API refusing the edit (%s) and stays in the editor', async (detail) => {
+      vi.mocked(scheduledPostService.edit).mockRejectedValue(apiError(422, detail));
+      const editor = await startEditing();
+
+      fireEvent.change(editor.getByLabelText('Time'), { target: { value: '11:00' } });
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      expect(await editor.findByText(detail)).toBeInTheDocument();
+      expect(editor.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+      expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toBeInTheDocument();
+    });
+
+    it('unschedules it, which makes the Post a Draft that takes Feedback again', async () => {
+      vi.mocked(scheduledPostService.cancel).mockResolvedValue(undefined);
+      const editor = await startEditing();
+      vi.mocked(postService.list).mockClear();
+
+      fireEvent.click(editor.getByRole('button', { name: 'Unschedule' }));
+
+      await waitFor(() =>
+        expect(scheduledPostService.cancel).toHaveBeenCalledWith('scheduled_post_01'),
+      );
+      expect(await panel('Draft').findByLabelText('Feedback')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+        'Posts / Drafts / the second text',
+      );
+      expect(screen.getByRole('link', { name: 'Drafts' })).toHaveAttribute('href', '/posts/drafts');
+      expect(postService.list).toHaveBeenCalled();
+    });
+
+    it('shows why it could not be unscheduled', async () => {
+      vi.mocked(scheduledPostService.cancel).mockRejectedValue(
+        apiError(409, 'It is being published now, so it can no longer change.'),
+      );
+      const editor = await startEditing();
+
+      fireEvent.click(editor.getByRole('button', { name: 'Unschedule' }));
+
+      expect(
+        await editor.findByText('It is being published now, so it can no longer change.'),
+      ).toBeInTheDocument();
+    });
+
+    it('offers no Edit while it is being published', async () => {
+      renderPost(withScheduledPost({ ...SCHEDULED, state: 'publishing' }));
+      await versionCard();
+
+      expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    });
+
+    it('sends a User who is not Subscribed to Choose a Plan instead of editing', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+      renderPost(withScheduledPost(SCHEDULED));
+      await versionCard();
+
+      fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
+
+      expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
+        source: 'scheduled_post_edit',
+      });
+    });
+
+    it('opens on the editor when it comes from Edit on the Posts page', async () => {
+      vi.mocked(postService.get).mockResolvedValue(withScheduledPost(SCHEDULED));
+      renderSignedIn('/posts/post_01', { state: { edit: true } });
+
+      expect(
+        await screen.findByRole('region', { name: 'Edit the Scheduled post' }),
+      ).toBeInTheDocument();
+      expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
+        'the final text',
       );
     });
   });

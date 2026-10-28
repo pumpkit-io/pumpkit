@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { UserAvatar } from '@/components/UserAvatar';
 import { Badge } from '@/components/ui/badge';
 import { LiveOnX } from '@/features/scheduledPosts/LiveOnX';
@@ -67,6 +67,7 @@ function XPart({
   name,
   handle,
   avatarUrl,
+  text,
 }: {
   part: ShownPart;
   number: number;
@@ -74,6 +75,7 @@ function XPart({
   name: string;
   handle: string | null;
   avatarUrl: string | null;
+  text?: ReactNode;
 }) {
   const inThread = total > 1;
   return (
@@ -92,9 +94,11 @@ function XPart({
             </span>
           )}
         </div>
-        <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-foreground">
-          {part.text}
-        </p>
+        {text ?? (
+          <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-foreground">
+            {part.text}
+          </p>
+        )}
         <div className="flex flex-wrap items-start justify-between gap-2">
           <PartCounter part={part} />
           {part.live && <LiveOnX number={number} xPostUrl={part.xPostUrl} />}
@@ -107,8 +111,17 @@ function XPart({
 /**
  * A Version under its number, Format and Part count, with its text drawn as the X posts it
  * makes. `parts` is the text on screen (see `shownParts`), which may be its Scheduled post's.
+ * `renderText` replaces a Part's text, as the inline edit does with a text box.
  */
-export function VersionCard({ version, parts }: { version: Version; parts: ShownPart[] }) {
+export function VersionCard({
+  version,
+  parts,
+  renderText,
+}: {
+  version: Version;
+  parts: ShownPart[];
+  renderText?: (part: ShownPart, index: number) => ReactNode;
+}) {
   const headingId = useId();
   const profile = useProfile();
   const { connection } = useXConnectionContext();
@@ -143,6 +156,7 @@ export function VersionCard({ version, parts }: { version: Version; parts: Shown
             name={name}
             handle={connection?.handle ?? null}
             avatarUrl={profile?.avatarUrl ?? null}
+            text={renderText?.(part, index)}
           />
         ))}
       </ol>

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { BriefBlock } from '@/features/posts/BriefBlock';
+import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
+import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
 import { DraftPanel } from '@/features/posts/panels/DraftPanel';
 import { FailedPanel } from '@/features/posts/panels/FailedPanel';
 import type { FeedbackSending } from '@/features/posts/panels/feedback';
@@ -18,6 +20,7 @@ import { VersionPager } from '@/features/posts/VersionPager';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import type { PostDetail } from '@/services/postService';
+import type { ScheduledPost } from '@/services/scheduledPostService';
 
 /** The Version a Post opens on: the one its Scheduled post came from, else the latest. */
 function openingIndex(post: PostDetail): number {
@@ -45,10 +48,14 @@ function LoadedPost({
 }: {
   post: PostDetail;
   feedback: FeedbackSending;
-  onScheduledPost: Parameters<typeof DraftPanel>[0]['onScheduled'];
+  onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
   const { connection } = useXConnectionContext();
+  const location = useLocation();
   const [index, setIndex] = useState(() => openingIndex(post));
+  const [editing, setEditing] = useState(
+    () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
+  );
   const versionCount = useRef(post.versions.length);
 
   // A new Version from Feedback goes on screen as soon as it is in the Post.
@@ -64,9 +71,37 @@ function LoadedPost({
   const parts = shownParts(shown, scheduledPost, connection?.charLimit ?? null);
   const text = copiedText(parts);
   const title = postTitle(scheduledPost?.parts[0]?.text ?? latest.parts[0]?.text ?? post.brief);
+  const breadcrumb = <PostBreadcrumb status={post.status} title={title} />;
+
+  if (editing && scheduledPost?.state === 'scheduled') {
+    const source = post.versions.findIndex((v) => v.id === scheduledPost.sourceVersionId);
+    const stopEditing = () => {
+      if (source >= 0) setIndex(source);
+      setEditing(false);
+    };
+    return (
+      <Page title={breadcrumb}>
+        <BriefBlock brief={post.brief} />
+        <ScheduledPostEditor
+          version={post.versions[source] ?? shown}
+          scheduledPost={scheduledPost}
+          charLimit={connection?.charLimit ?? shown.parts[0]?.charLimit ?? 280}
+          onSaved={(saved) => {
+            onScheduledPost(saved);
+            stopEditing();
+          }}
+          onUnscheduled={() => {
+            onScheduledPost(null);
+            stopEditing();
+          }}
+          onCancel={stopEditing}
+        />
+      </Page>
+    );
+  }
 
   return (
-    <Page title={<PostBreadcrumb status={post.status} title={title} />}>
+    <Page title={breadcrumb}>
       <BriefBlock brief={post.brief} />
       <div className="space-y-3">
         <VersionCard version={shown} parts={parts} />
@@ -88,7 +123,12 @@ function LoadedPost({
         />
       )}
       {post.status === 'scheduled' && scheduledPost && (
-        <ScheduledPanel post={post} scheduledPost={scheduledPost} shownText={text} />
+        <ScheduledPanel
+          post={post}
+          scheduledPost={scheduledPost}
+          shownText={text}
+          onEdit={() => setEditing(true)}
+        />
       )}
       {post.status === 'published' && scheduledPost && (
         <PublishedPanel post={post} scheduledPost={scheduledPost} shownText={text} />
