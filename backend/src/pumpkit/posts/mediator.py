@@ -13,7 +13,6 @@ from pumpkit.posts.version_writing import (
     char_limit_for,
     check_attempt_limit,
     keep_failed_attempt,
-    user_post,
     version_response,
     versions_of,
 )
@@ -39,14 +38,6 @@ async def list_posts(db: AsyncSession, user: User, limit: int, offset: int) -> P
         ],
         next_offset=offset + limit if len(posts) > limit else None,
     )
-
-
-async def get_post(db: AsyncSession, user: User, post_id: str) -> PostResponse:
-    """The User's Post with every Version, in order."""
-    post = await user_post(db, user=user, post_id=post_id)
-    char_limit = await char_limit_for(db, user_id=user.id)
-    versions = [version_response(v, char_limit) for v in versions_of(post)]
-    return PostResponse(id=post.id, brief=post.brief, versions=versions)
 
 
 async def start_post(

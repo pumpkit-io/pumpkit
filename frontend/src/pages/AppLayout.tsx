@@ -2,7 +2,6 @@ import { Outlet } from 'react-router-dom';
 import { BillingProvider } from '@/features/billing/BillingProvider';
 import { SubscribedProvider } from '@/features/billing/SubscribedProvider';
 import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
-import { PostWriterProvider } from '@/features/posts/PostWriterProvider';
 import { Sidebar } from '@/features/sidebar/Sidebar';
 import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
 import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
@@ -19,14 +18,12 @@ function AppLayoutInner() {
     <ProfileProvider value={profile} setValue={setProfile}>
       <XConnectionProvider>
         <InspirationAuthorsProvider>
-          <PostWriterProvider>
-            <Shell
-              banner={<ReconnectXBanner />}
-              sidebar={<Sidebar />}
-              sidebarDrawer={<SidebarMobileDrawer />}
-              main={<Outlet />}
-            />
-          </PostWriterProvider>
+          <Shell
+            banner={<ReconnectXBanner />}
+            sidebar={<Sidebar />}
+            sidebarDrawer={<SidebarMobileDrawer />}
+            main={<Outlet />}
+          />
         </InspirationAuthorsProvider>
       </XConnectionProvider>
     </ProfileProvider>
@@ -34,9 +31,8 @@ function AppLayoutInner() {
 }
 
 /**
- * The signed-in shell around every page in `signedInRoutes`. The Post lives in its
- * PostWriterProvider, so it stays on /new while the User visits another page and comes back.
- * The Persona lives here too, for the sidebar's count, the Persona chip and the Persona page.
+ * The signed-in shell around every page in `signedInRoutes`. The Persona lives here, for the
+ * sidebar's count, the Persona chip and the Persona page; each Post is read by its own page.
  */
 export function AppLayout() {
   return (

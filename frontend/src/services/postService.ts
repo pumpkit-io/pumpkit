@@ -1,6 +1,7 @@
 import { apiService } from './apiService';
+import { toScheduledPost, type ScheduledPost, type ScheduledPostApi } from './scheduledPostService';
 
-/** A machine-written pattern the slop check found in a Final. */
+/** A machine-written pattern the slop check found in a Version's text. */
 export interface Tell {
   name: string;
   description: string;
@@ -16,7 +17,7 @@ export function formatOf(parts: readonly unknown[]): Format {
   return parts.length > 1 ? FORMAT_THREAD : FORMAT_POST;
 }
 
-/** One Part of a Final, in its place in the order. */
+/** One Part of a Version's text, in its place in the order. */
 export interface Part {
   text: string;
   /** Counted by the backend, the way the limit counts; a JS string's length disagrees on emoji. */
@@ -24,9 +25,9 @@ export interface Part {
   charLimit: number;
 }
 
-/** One round of a Post's text, the Final meant for X. */
+/** One round of a Post's text, the text meant for X. */
 export interface Version {
-  /** What a Scheduled post made from this Version's Final records as its source. */
+  /** What a Scheduled post copied from this Version records as its source. */
   id: string;
   number: number;
   /** Null for the first Version, which comes from the Brief. */
@@ -34,7 +35,7 @@ export interface Version {
   format: Format;
   /** A single X post has one Part. */
   parts: Part[];
-  /** Found in any Part of the Final. */
+  /** Found in any Part of the text. */
   tells: Tell[];
 }
 
@@ -42,6 +43,16 @@ export interface Post {
   id: string;
   brief: string;
   versions: Version[];
+}
+
+/** Where a Post stands, from its one Scheduled post (ADR 0015): none makes it a Draft. */
+export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
+
+/** A Post as its page shows it, read from the server. */
+export interface PostDetail extends Post {
+  status: PostStatus;
+  /** Null while the Post is a Draft. */
+  scheduledPost: ScheduledPost | null;
 }
 
 interface VersionApi {
@@ -59,6 +70,11 @@ interface PostApi {
   versions: VersionApi[];
 }
 
+interface PostDetailApi extends PostApi {
+  status: PostStatus;
+  scheduled_post: ScheduledPostApi | null;
+}
+
 const toVersion = (v: VersionApi): Version => ({
   id: v.id,
   number: v.number,
@@ -74,6 +90,17 @@ export const BRIEF_MAX_CHARS = 200_000;
 export const FEEDBACK_MAX_CHARS = 100_000;
 
 export const postService = {
+  /** Open to a User who isn't Subscribed, so their history stays readable. */
+  get: async (postId: string): Promise<PostDetail> => {
+    const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);
+    return {
+      id: data.id,
+      brief: data.brief,
+      versions: data.versions.map(toVersion),
+      status: data.status,
+      scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
+    };
+  },
   /** Writes the first Version before answering, which can take a minute or two. */
   start: async (brief: string, format: Format): Promise<Post> => {
     const { data } = await apiService.post<PostApi>('/posts', { brief, format });

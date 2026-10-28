@@ -108,8 +108,9 @@ export const EVENTS = {
   post_version_failed: {
     description: 'Home: writing a Version failed. Props: kind (brief | feedback).',
   },
-  post_final_copied: { description: "Home: copied a Version's Final." },
-  post_part_copied: { description: "Home: copied one Part of a Thread Version's Final." },
+  post_final_copied: {
+    description: 'Post page: copied the text on screen with Copy post, every Part of it.',
+  },
 
   // Scheduled (/scheduled) + the X callback
   x_connected: { description: 'Settings: connected an X account through X consent screen.' },

@@ -4,7 +4,9 @@ from typing import Annotated, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from pumpkit.posts.formats import part_name
+from pumpkit.posts.schemas import VersionResponse, VersionToolResponse
 from pumpkit.scheduling.models import ScheduledPostState
+from pumpkit.scheduling.post_status import PostStatus
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
@@ -92,6 +94,27 @@ class ScheduledPostResponse(BaseModel):
     community: Optional[CommunityResponse]
     share_with_followers: bool
     created_at: datetime
+
+
+class PostDetailResponse(BaseModel):
+    """One Post with its Versions in order, and the status its one Scheduled post gives it."""
+
+    id: str
+    brief: str
+    versions: list[VersionResponse]
+    status: PostStatus
+    # None while the Post is a Draft.
+    scheduled_post: Optional[ScheduledPostResponse]
+
+
+class PostDetailToolResponse(BaseModel):
+    """A Post as the `get_post` tool answers with it, without the tells."""
+
+    id: str
+    brief: str
+    versions: list[VersionToolResponse]
+    status: PostStatus
+    scheduled_post: Optional[ScheduledPostResponse]
 
 
 class ScheduledPostsListResponse(BaseModel):

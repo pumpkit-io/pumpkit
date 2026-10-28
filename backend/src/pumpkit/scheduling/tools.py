@@ -33,6 +33,7 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     PastCommunitiesResponse,
+    PostDetailToolResponse,
     PostNowToolResponse,
     ScheduledPageMessageToolResponse,
     ScheduledPostCreateRequest,
@@ -231,6 +232,18 @@ async def delete_scheduled_post(
     )
 
 
+async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse:
+    """
+    Read one of the User's Posts: its Brief and every Version in order, each with the Feedback
+    that made it, its text and each Part's character count. `status` is "draft" with no
+    Scheduled post, else "scheduled", "published" or "failed" from its one Scheduled post,
+    returned in `scheduled_post` with its text, which the User may have edited, and the
+    Version it was copied from. A Draft has no Scheduled post, so its Versions can be scheduled.
+    """
+    post = await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
+    return PostDetailToolResponse.model_validate(post.model_dump())
+
+
 async def give_feedback(
     call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
 ) -> VersionToolResponse:
@@ -269,6 +282,8 @@ async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
 
 
 TOOLS = [
+    # Reading a Post sits here because its Scheduled post gives it its status.
+    McpTool(get_post, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     # Feedback sits with the Scheduled post tools because a Post's Scheduled post gates it.
     McpTool(give_feedback, rate=VERSION_WRITE_RATE, annotations=ADDITIVE),
     McpTool(schedule_post, rate=WRITE_RATE, annotations=ADDITIVE),

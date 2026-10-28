@@ -54,13 +54,15 @@ export interface ScheduledPost {
   xPostUrl: string | null;
   /** Why it Failed, in words for the User. */
   failedReason: string | null;
+  /** The Version whose text it copied; null only for one typed before ADR 0015. */
+  sourceVersionId: string | null;
   /** The Community it goes to; null for the User's profile. */
   community: Community | null;
   shareWithFollowers: boolean;
   createdAt: string;
 }
 
-interface ScheduledPostApi {
+export interface ScheduledPostApi {
   id: string;
   parts: { text: string; live: boolean; x_post_url: string | null }[];
   state: ScheduledPostState;
@@ -68,12 +70,13 @@ interface ScheduledPostApi {
   published_at: string | null;
   x_post_url: string | null;
   failed_reason: string | null;
+  source_version_id: string | null;
   community: Community | null;
   share_with_followers: boolean;
   created_at: string;
 }
 
-const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
+export const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   id: p.id,
   parts: p.parts.map((part) => ({ text: part.text, live: part.live, xPostUrl: part.x_post_url })),
   state: p.state,
@@ -81,6 +84,7 @@ const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   publishedAt: p.published_at,
   xPostUrl: p.x_post_url,
   failedReason: p.failed_reason,
+  sourceVersionId: p.source_version_id,
   community: p.community,
   shareWithFollowers: p.share_with_followers,
   createdAt: p.created_at,

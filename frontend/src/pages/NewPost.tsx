@@ -2,7 +2,7 @@ import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { PostWriter } from '@/features/posts/PostWriter';
 import { Topbar } from '@/features/topbar/Topbar';
 
-/** Rendered inside AppLayout, which holds the shell, the Persona and the Post. */
+/** The Brief form; writing a Post opens the Post's page. */
 export function NewPost() {
   return (
     <>
