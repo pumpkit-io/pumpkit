@@ -468,6 +468,36 @@ def version_of(db, user) -> Callable[..., Awaitable[str]]:
     return _version_of
 
 
+@pytest.fixture
+def next_version(db) -> Callable[..., Awaitable[str]]:
+    """
+    Store the next Version of the Post that `version_id` belongs to, as Feedback would, with
+    the given Parts, and return its id.
+    """
+
+    async def _next_version(version_id: str, *parts: str) -> str:
+        now = datetime.now(timezone.utc)
+        previous = await db.get(VersionAttempt, version_id)
+        assert previous is not None
+        version = VersionAttempt(
+            post_id=previous.post_id,
+            sequence=previous.sequence + 1,
+            format=format_of(parts),
+            status=ATTEMPT_SUCCEEDED,
+            version_number=(previous.version_number or 0) + 1,
+            feedback="Try again",
+            sketch_parts=list(parts),
+            final_parts=list(parts),
+            slop_tells=[],
+            created_at=now,
+        )
+        db.add(version)
+        await db.commit()
+        return version.id
+
+    return _next_version
+
+
 @pytest_asyncio.fixture
 async def authed_client(new_browser, sign_in_by_magic_link, user) -> AsyncClient:
     """

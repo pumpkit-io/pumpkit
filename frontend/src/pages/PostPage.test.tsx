@@ -57,6 +57,7 @@ vi.mock('@/services/scheduledPostService', () => ({
     list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),
+    edit: vi.fn(),
     lookUpCommunity: vi.fn(),
   },
 }));
@@ -179,6 +180,18 @@ async function versionCard() {
 
 function panel(name: string) {
   return within(screen.getByRole('region', { name }));
+}
+
+type Dialog = BoundFunctions<typeof queries>;
+
+function scheduleAt(dialog: Dialog, date: string, time: string) {
+  fireEvent.click(dialog.getByRole('radio', { name: 'Schedule' }));
+  fireEvent.change(dialog.getByLabelText('Date'), { target: { value: date } });
+  fireEvent.change(dialog.getByLabelText('Time'), { target: { value: time } });
+}
+
+async function dialogClosed() {
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 }
 
 describe('Post page', () => {
@@ -725,20 +738,12 @@ describe('Post page', () => {
       vi.mocked(redirectTo).mockReset();
     });
 
-    type Dialog = BoundFunctions<typeof queries>;
-
     /** Opens "Post to…" on the Draft `post`, once its Version is on screen. */
     async function openPostTo(post: PostDetail = postWith('the final text')): Promise<Dialog> {
       renderPost(post);
       await versionCard();
       fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
-    }
-
-    function scheduleAt(dialog: Dialog, date: string, time: string) {
-      fireEvent.click(dialog.getByRole('radio', { name: 'Schedule' }));
-      fireEvent.change(dialog.getByLabelText('Date'), { target: { value: date } });
-      fireEvent.change(dialog.getByLabelText('Time'), { target: { value: time } });
     }
 
     async function pasteCommunity(dialog: Dialog, pasted: string) {
@@ -749,10 +754,6 @@ describe('Post page', () => {
       await vi.waitFor(() =>
         expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
       );
-    }
-
-    async function dialogClosed() {
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     }
 
     it('replaces Schedule and Post now with "Post to…"', async () => {
@@ -1114,6 +1115,251 @@ describe('Post page', () => {
       fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
 
       expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
+    });
+  });
+
+  describe('Failed: Post to…', () => {
+    const FAILED: ScheduledPost = {
+      ...SCHEDULED,
+      state: 'failed',
+      failedReason: 'X refused the post: duplicate content.',
+    };
+    const COMMUNITY_ID = '1493446837214187523';
+    const LIVE_ONE = { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' };
+    /** A Thread whose Part 1 went out from Version 1 and whose Part 2 X refused. */
+    const FAILED_PARTWAY: ScheduledPost = {
+      ...FAILED,
+      parts: [LIVE_ONE, { text: 'Refused two.', live: false, xPostUrl: null }],
+      failedReason: 'X refused Part 2: Nope',
+    };
+
+    function failedThread(latest: Version): PostDetail {
+      return {
+        ...withScheduledPost(FAILED_PARTWAY),
+        versions: [version(1, ['Live one.', 'Refused two.']), latest],
+      };
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-10T12:00'));
+      vi.mocked(scheduledPostService.edit).mockReset();
+      vi.mocked(scheduledPostService.schedule).mockReset();
+      vi.mocked(scheduledPostService.postNow).mockReset();
+      vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);
+    });
+
+    /** Opens "Post to…" on the Failed `post`, on its latest Version. */
+    async function openRetry(post: PostDetail = withScheduledPost(FAILED)): Promise<Dialog> {
+      renderPost(post);
+      await versionCard();
+      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
+      fireEvent.click(pager.getByRole('button', { name: `Version ${post.versions.length}` }));
+      fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
+      return within(await screen.findByRole('dialog', { name: 'Post to…' }));
+    }
+
+    it('reschedules the Failed one with the latest Version, and the pager marks that Version', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...SCHEDULED,
+        parts: [{ text: 'the second text', live: false, xPostUrl: null }],
+        sourceVersionId: 'version_attempt_02',
+      });
+      const dialog = await openRetry();
+
+      expect(dialog.getByText('Version 2 · Single post · 1 Part · as @ada')).toBeInTheDocument();
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
+
+      await dialogClosed();
+      expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+        sourceVersionId: 'version_attempt_02',
+        community: null,
+        shareWithFollowers: false,
+        publishAt: '2026-10-12T07:00:00.000Z',
+      });
+      expect(scheduledPostService.schedule).not.toHaveBeenCalled();
+      expect(
+        panel('Scheduled').getByText('Scheduled for Mon, Oct 12, 9:00 AM'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Scheduled /');
+      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
+      expect(pager.getByRole('button', { name: 'Version 2, Scheduled' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      );
+      expect(pager.getByRole('button', { name: 'Version 1' })).toBeInTheDocument();
+    });
+
+    it('posts the latest Version now and shows the Published Post', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...SCHEDULED,
+        state: 'published',
+        publishedAt: '2026-10-10T12:00:14Z',
+        xPostUrl: 'https://x.com/i/web/status/1890000000000000002',
+        parts: [{ text: 'the second text', live: true, xPostUrl: 'https://x.com/i/web/status/2' }],
+        sourceVersionId: 'version_attempt_02',
+      });
+      const dialog = await openRetry();
+
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      expect(dialog.getByText('the second text')).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      await dialogClosed();
+      expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+        sourceVersionId: 'version_attempt_02',
+        community: null,
+        shareWithFollowers: false,
+        publishNow: true,
+      });
+      expect(panel('Published').getByRole('link', { name: 'View on X' })).toHaveAttribute(
+        'href',
+        'https://x.com/i/web/status/1890000000000000002',
+      );
+      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
+      expect(pager.getByRole('button', { name: 'Version 2, Published' })).toBeInTheDocument();
+    });
+
+    it('retries the Version it failed with as it stands, keeping its text', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue(SCHEDULED);
+      renderPost(withScheduledPost(FAILED));
+      await versionCard();
+
+      fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
+
+      await dialogClosed();
+      expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+        community: null,
+        shareWithFollowers: false,
+        publishAt: '2026-10-12T07:00:00.000Z',
+      });
+    });
+
+    it('starts on the Community the Failed one was for', async () => {
+      const dialog = await openRetry(
+        withScheduledPost({
+          ...FAILED,
+          community: {
+            id: COMMUNITY_ID,
+            name: 'Build in Public',
+            url: `https://x.com/i/communities/${COMMUNITY_ID}`,
+          },
+          shareWithFollowers: false,
+        }),
+      );
+
+      expect(dialog.getByRole('radio', { name: 'Community' })).toBeChecked();
+      expect(dialog.getByLabelText('Community URL or ID')).toHaveValue(
+        `https://x.com/i/communities/${COMMUNITY_ID}`,
+      );
+      expect(dialog.getByRole('checkbox', { name: 'Also share with followers' })).not.toBeChecked();
+    });
+
+    it('shows the live Parts of a Thread first and locked, and sends only the rest', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...FAILED_PARTWAY,
+        state: 'published',
+        xPostUrl: 'https://x.com/i/web/status/1',
+        parts: [
+          LIVE_ONE,
+          { text: 'Fixed two.', live: true, xPostUrl: 'https://x.com/i/web/status/3' },
+          { text: 'New three.', live: true, xPostUrl: 'https://x.com/i/web/status/4' },
+        ],
+        sourceVersionId: 'version_attempt_02',
+      });
+      const dialog = await openRetry(
+        failedThread(version(2, ['Rewritten one.', 'Fixed two.', 'New three.'])),
+      );
+
+      expect(dialog.getByText('Version 2 · Thread · 3 Parts · as @ada')).toBeInTheDocument();
+      expect(
+        dialog.getByText('Part 1 is already on X, so only Parts 2 to 3 go out, as replies to it.'),
+      ).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+
+      expect(dialog.getByText(/These 2 Parts go out/)).toBeInTheDocument();
+      const [first, second, third] = within(dialog.getByRole('list', { name: 'Parts' }))
+        .getAllByRole('listitem')
+        .map((item) => within(item));
+      expect(first!.getByText('Live one.')).toBeInTheDocument();
+      expect(first!.getByRole('link', { name: 'Part 1 is live on X' })).toHaveAttribute(
+        'href',
+        'https://x.com/i/web/status/1',
+      );
+      expect(first!.getByText('Already on X, so it can’t change.')).toBeInTheDocument();
+      expect(first!.queryByText(/\/ 280/)).not.toBeInTheDocument();
+      expect(dialog.queryByText('Rewritten one.')).not.toBeInTheDocument();
+      expect(second!.getByText('Fixed two.')).toBeInTheDocument();
+      expect(second!.getByText('10 / 280')).toBeInTheDocument();
+      expect(third!.getByText('New three.')).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      await dialogClosed();
+      expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+        sourceVersionId: 'version_attempt_02',
+        community: null,
+        shareWithFollowers: false,
+        publishNow: true,
+      });
+      expect(panel('Published')).toBeTruthy();
+    });
+
+    it('refuses a Version with no Part after the live ones', async () => {
+      const dialog = await openRetry(failedThread(version(2, ['Just one now.'])));
+
+      expect(
+        dialog.getByText(
+          'Part 1 is already on X, and this Version has no Part after it. Pick a longer Version.',
+        ),
+      ).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();
+    });
+
+    it('does not count a live Part against the limit', async () => {
+      const longLive = { ...LIVE_ONE, text: 'a'.repeat(300) };
+      const dialog = await openRetry({
+        ...withScheduledPost({ ...FAILED_PARTWAY, parts: [longLive, FAILED_PARTWAY.parts[1]!] }),
+        versions: [version(1, [longLive.text, 'Refused two.']), version(2, ['x', 'Fixed two.'])],
+      });
+
+      expect(dialog.queryByText(/over X's/)).not.toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Review and post' })).toBeEnabled();
+    });
+
+    it('shows why the retry was refused and keeps the dialog open', async () => {
+      vi.mocked(scheduledPostService.edit).mockRejectedValue(
+        apiError(409, 'Publishing has started, so this Scheduled post can no longer change.'),
+      );
+      const dialog = await openRetry();
+
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
+
+      expect(
+        await dialog.findByText(
+          'Publishing has started, so this Scheduled post can no longer change.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('sends a User who is no longer Subscribed to Choose a Plan', async () => {
+      vi.mocked(scheduledPostService.edit).mockRejectedValue(apiError(403, 'Subscribe first.'));
+      const dialog = await openRetry();
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
     });
   });
 });

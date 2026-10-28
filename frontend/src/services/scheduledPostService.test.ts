@@ -59,6 +59,23 @@ describe('scheduledPostService', () => {
     ]);
   });
 
+  it('retries one with a Version, now or at a time', async () => {
+    const patch = vi.spyOn(apiService, 'patch').mockResolvedValue({ data: SCHEDULED } as never);
+
+    await scheduledPostService.edit('scheduled_post_1', {
+      sourceVersionId: 'version_attempt_02',
+      publishNow: true,
+    });
+    await scheduledPostService.edit('scheduled_post_1', {
+      publishAt: '2026-10-12T07:00:00.000Z',
+    });
+
+    expect(patch.mock.calls.map(([, body]) => body)).toEqual([
+      { source_version_id: 'version_attempt_02', publish_now: true },
+      { publish_at: '2026-10-12T07:00:00.000Z' },
+    ]);
+  });
+
   it('reads back each Part in order with whether it is live', async () => {
     const link = 'https://x.com/i/web/status/1890000000000000001';
     vi.spyOn(apiService, 'post').mockResolvedValue({

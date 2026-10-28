@@ -27,7 +27,11 @@ export interface Destination {
 export interface ScheduledPostChanges {
   /** Every Part in order, the live ones first and unchanged; the others replace those not live. */
   parts?: string[];
+  /** A Version of the same Post, in place of `parts`: its Parts after the live ones go out. */
+  sourceVersionId?: string;
   publishAt?: string;
+  /** Publishes it within the request, in place of `publishAt`. */
+  publishNow?: boolean;
   /** Null moves it back to the User's profile. */
   community?: Destination['community'];
   shareWithFollowers?: boolean;
@@ -150,7 +154,9 @@ export const scheduledPostService = {
       `/scheduled-posts/${encodeURIComponent(id)}`,
       {
         parts: changes.parts,
+        source_version_id: changes.sourceVersionId,
         publish_at: changes.publishAt,
+        publish_now: changes.publishNow,
         // Sent only when given: null moves it back to the profile, absent keeps the Community.
         ...('community' in changes && { community: changes.community?.id ?? null }),
         share_with_followers: changes.shareWithFollowers,
