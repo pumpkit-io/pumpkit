@@ -4,7 +4,7 @@ Pumpkit's backend serves an MCP server, so Claude Code and other MCP clients can
 
 ## Connect Claude Code
 
-1. In Pumpkit, open your account dialog and create an API key in the API keys section. Name it after the machine or tool that will use it, such as "Work laptop".
+1. In Pumpkit, open Settings and create an API key in the API keys card. Name it after the machine or tool that will use it, such as "Work laptop".
 2. Copy the `claude mcp add` command shown next to the new key, and run it once in a terminal. It looks like this:
 
    ```sh
@@ -16,7 +16,7 @@ Pumpkit's backend serves an MCP server, so Claude Code and other MCP clients can
    Pumpkit shows the key's secret only once. If you lose it, revoke the key and create another.
 3. Start Claude Code and run `/mcp`. **Check:** it lists `pumpkit` as connected.
 
-On an Instance that sells Plans, creating a key and using the tools need a Subscription. When yours ends, every tool answers with a link to subscribe, and your keys work again once you resubscribe. Revoking a key in the account dialog stops it at once.
+On an Instance that sells Plans, creating a key and using the tools need a Subscription. When yours ends, every tool answers with a link to subscribe, and your keys work again once you resubscribe. Revoking a key in Settings stops it at once.
 
 ## Inspiration author tools
 
@@ -51,7 +51,7 @@ Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 2
 | `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. In a Thread that failed partway, the live Parts are locked; the others can be edited, added, removed and reordered, and a new time publishes only them, as replies to the last live Part. |
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post. Claude Code asks before calling it. |
 | `list_past_communities` | Lists the Communities you posted to before from your connected X account. |
-| `connect_x` | Answers with the link to the Posts page, where you connect, reconnect or disconnect X. |
+| `connect_x` | Answers with the link to the Settings page, where you connect, reconnect or disconnect X. |
 | `manage_subscription` | Answers with the link to the billing page, where you subscribe or manage your Subscription. On an Instance that sells no Plans, it says so instead. |
 
-Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts X posts, one per Part, including those you scheduled in the web app. The X connection refusals and every Scheduled post answer link to the Posts page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.
+Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts X posts, one per Part, including those you scheduled in the web app. The X connection refusals link to the Settings page, and every Scheduled post answer to the Posts page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.

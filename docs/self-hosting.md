@@ -305,7 +305,7 @@ Turn this on only if you charge Users. You are then the seller: your own Terms, 
    **Check:** it prints `"sells_plans":true`, and `curl -s PUBLIC_URL/api/v1/billing/plans` lists each Plan with its price.
 5. **Set the Operator details and replace the legal documents**, below, so Users accept your Terms at checkout.
 
-Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.stripe.com/testing), and check that the Billing dialog shows the Subscription.
+Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.stripe.com/testing), and check that the Plan card in Settings shows the Subscription.
 
 ### Replace the legal documents
 
