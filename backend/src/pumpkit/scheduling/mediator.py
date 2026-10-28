@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.posts.service as posts_service
+import pumpkit.posts.version_writing as version_writing
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import (
@@ -17,6 +18,10 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
+from pumpkit.posts.formats import Format
+from pumpkit.posts.llm import LLM
+from pumpkit.posts.models import VersionAttempt
+from pumpkit.posts.schemas import VersionResponse
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -26,6 +31,7 @@ from pumpkit.scheduling.models import (
     ScheduledPost,
     ScheduledPostState,
 )
+from pumpkit.scheduling.post_status import check_takes_feedback, post_status
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import (
     KeepDestination,
@@ -175,37 +181,49 @@ async def create_scheduled_post(
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     connection = await connection_to_publish_on(db, user_id=user.id)
-    if new.version_id is not None:
-        parts = await _source_version_final(db, user=user, version_id=new.version_id)
-    else:
-        assert new.parts is not None
-        parts = new.parts
+    version = await _source_version(db, user=user, version_id=new.version_id)
+    if await service.get_for_post(db, post_id=version.post_id) is not None:
+        raise _already_scheduled()
+    parts = list(version.final_parts or [])
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_monthly_cap(db, user_id=user.id, publish_at=publish_at, part_count=len(parts))
     community = await _community(reader, new.community) if new.community is not None else None
-    scheduled_post = await service.create(
-        db,
-        user_id=user.id,
-        x_user_id=connection.x_user_id,
-        parts=parts,
-        publish_at=publish_at.replace(second=0, microsecond=0) if new.publish_now else publish_at,
-        now=now,
-        source_version_id=new.version_id,
-        destination=Destination(community=community, share_with_followers=new.share_with_followers),
-    )
+    try:
+        scheduled_post = await service.create(
+            db,
+            user_id=user.id,
+            x_user_id=connection.x_user_id,
+            post_id=version.post_id,
+            source_version_id=version.id,
+            parts=parts,
+            publish_at=publish_at.replace(second=0, microsecond=0)
+            if new.publish_now
+            else publish_at,
+            now=now,
+            destination=Destination(
+                community=community, share_with_followers=new.share_with_followers
+            ),
+        )
+    except IntegrityError:
+        # Another request scheduled the same Post between the check and the insert.
+        raise _already_scheduled()
     if new.publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
     await db.commit()
     return scheduled_post_response(scheduled_post)
 
 
-async def _source_version_final(db: AsyncSession, *, user: User, version_id: str) -> list[str]:
-    """The Final's Parts a Scheduled post copies, or a 404 unless the Version is the User's."""
+def _already_scheduled() -> ConflictError:
+    return ConflictError("This Post already has a Scheduled post. Edit it, or unschedule it first.")
+
+
+async def _source_version(db: AsyncSession, *, user: User, version_id: str) -> VersionAttempt:
+    """The Version a Scheduled post copies, or a 404 unless the Version is the User's."""
     version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
     if version is None or not version.final_parts:
         raise NotFoundError("Version not found.")
-    return list(version.final_parts)
+    return version
 
 
 async def _post_now(
@@ -315,11 +333,32 @@ async def _destination_after_edit(
 
 
 async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:
-    """Delete a scheduled or Failed Scheduled post."""
+    """Delete a scheduled or Failed Scheduled post, which makes its Post a Draft again."""
     await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()
+
+
+async def give_feedback(
+    db: AsyncSession,
+    llm: LLM,
+    user: User,
+    post_id: str,
+    feedback: str,
+    format: Optional[Format],
+    now: datetime,
+) -> VersionResponse:
+    """
+    Write the Post's next Version from Feedback, once its Scheduled post shows it takes Feedback:
+    only a Draft or a Failed Post does.
+    """
+    await version_writing.user_post(db, user=user, post_id=post_id)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_takes_feedback(post_status(scheduled_post.state if scheduled_post else None))
+    return await version_writing.add_version(
+        db, llm, user=user, post_id=post_id, feedback=feedback, format=format, now=now
+    )
 
 
 async def _x_connection_response(db: AsyncSession, connection: XConnection) -> XConnectionResponse:

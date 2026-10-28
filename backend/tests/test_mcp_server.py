@@ -24,7 +24,6 @@ async def test_initialize_returns_the_server_instructions(subscribed, mcp):
         "Brief",
         "Feedback",
         "Version",
-        "Final",
         "Format",
         "Thread",
         "Part",
@@ -34,6 +33,16 @@ async def test_initialize_returns_the_server_instructions(subscribed, mcp):
         assert term in instructions
     assert "every Part" in instructions
     assert "explicit yes" in instructions
+    assert "at most one Scheduled post" in instructions
+    assert "Only a Draft or a Failed Post takes Feedback" in instructions
+
+
+async def test_no_instruction_or_tool_description_says_final(subscribed, mcp):
+    instructions = (await mcp.initialize())["instructions"]
+    tools = await mcp.list_tools()
+
+    assert "Final" not in instructions
+    assert [name for name, tool in tools.items() if "Final" in tool["description"]] == []
 
 
 async def test_tools_list_shows_the_inspiration_author_tools_with_their_annotations(
