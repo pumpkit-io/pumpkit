@@ -1,13 +1,15 @@
 import { useId, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { InTheCommunity } from '@/features/scheduledPosts/InTheCommunity';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { xWeightedLength } from '@/lib/xLength';
 import { cn } from '@/lib/utils';
 import type { PostListItem, ScheduledPostSummary } from '@/services/postService';
+import type { PostPageState } from '../edit/scheduledPostEdit';
 import { formatWhen } from '../panels/panelFacts';
 import { Facts } from '../panels/panelParts';
 import { postTitle } from '../postStatus';
@@ -15,6 +17,8 @@ import { rowMoment, rowWhen } from './rowWhen';
 
 /** X's limit for an account without Premium, when no X account is connected to say otherwise. */
 const DEFAULT_CHAR_LIMIT = 280;
+
+const EDIT_STATE: PostPageState = { edit: true };
 
 function Destination({ scheduledPost }: { scheduledPost: ScheduledPostSummary }) {
   return scheduledPost.community ? (
@@ -64,8 +68,12 @@ function When({ iso }: { iso: string }) {
   );
 }
 
-/** Every Part with its length, then where and when it goes; the moment is in `TIME_ZONE`. */
+/**
+ * Every Part with its length, then where and when it goes; the moment is in `TIME_ZONE`. Edit
+ * opens the Post page on the inline edit while the Scheduled post still waits.
+ */
 function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; charLimit: number }) {
+  const navigate = useNavigate();
   const scheduled = post.scheduledPost;
   const thread = post.parts.length > 1;
   return (
@@ -91,6 +99,16 @@ function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; cha
             `${formatWhen(rowMoment(post))} (${TIME_ZONE})`,
           ]}
         />
+      )}
+      {post.status === 'scheduled' && scheduled?.state === 'scheduled' && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => navigate(`/posts/${post.id}`, { state: EDIT_STATE })}
+        >
+          Edit
+        </Button>
       )}
     </div>
   );
