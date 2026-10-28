@@ -5,27 +5,15 @@ vi.mock('@/services/apiKeyService', () => ({
   apiKeyService: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
 }));
 
-import type { ComponentProps } from 'react';
-import { BillingContext } from '@/features/billing/BillingProvider';
+import { MemoryRouter } from 'react-router-dom';
 import { apiKeyService, type ApiKey } from '@/services/apiKeyService';
 import { ApiKeysSection } from './ApiKeysSection';
 
-const openBilling = vi.fn();
-const billing: ComponentProps<typeof BillingContext.Provider>['value'] = {
-  isOpen: false,
-  error: null,
-  data: null,
-  isLoading: false,
-  open: openBilling,
-  openWithError: vi.fn(),
-  close: vi.fn(),
-};
-
 function renderSection() {
   return render(
-    <BillingContext.Provider value={billing}>
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ApiKeysSection />
-    </BillingContext.Provider>,
+    </MemoryRouter>,
   );
 }
 
@@ -191,8 +179,10 @@ describe('ApiKeysSection', () => {
 
     expect(await screen.findByText('Creating API keys needs a Subscription.')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
-    expect(openBilling).toHaveBeenCalledWith('account_api_keys');
+    expect(screen.getByRole('link', { name: 'Subscribe' })).toHaveAttribute(
+      'href',
+      '/settings#choose-a-plan',
+    );
   });
 
   it('says when the keys couldn’t be loaded', async () => {

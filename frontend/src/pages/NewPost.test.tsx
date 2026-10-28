@@ -77,6 +77,10 @@ import {
   renderSignedIn,
 } from './testing/signedInApp';
 
+function currentPath() {
+  return screen.getByRole('status', { name: 'Current path' }).textContent;
+}
+
 function renderNewPost(state?: unknown, instance: Instance = SELLS_PLANS) {
   return renderSignedIn('/new', { state, instance });
 }
@@ -199,20 +203,24 @@ describe('New post', () => {
       renderNewPost();
 
       const area = await writer();
-      const subscribe = await area.findByRole('button', { name: 'Subscribe to write' });
+      const subscribe = await area.findByRole('link', { name: 'Subscribe to write' });
       expect(area.getByText('Your Drafts, schedule and Persona are kept.')).toBeInTheDocument();
       expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
 
       fireEvent.click(subscribe);
 
-      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
+      expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+      expect(currentPath()).toBe('/settings');
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
+        source: 'new_post_write',
+      });
     });
 
     it('asks a User who is neither Subscribed nor set up to subscribe first', async () => {
       renderNewPost();
 
       const area = await writer();
-      expect(await area.findByRole('button', { name: 'Subscribe to write' })).toBeInTheDocument();
+      expect(await area.findByRole('link', { name: 'Subscribe to write' })).toBeInTheDocument();
       expect(area.queryByRole('link', { name: 'Set up your Persona' })).not.toBeInTheDocument();
     });
 
@@ -884,7 +892,7 @@ describe('New post', () => {
       });
     });
 
-    it('points a User who is no longer Subscribed to Billing', async () => {
+    it('sends a User who is no longer Subscribed to Choose a Plan', async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
       vi.mocked(scheduledPostService.postNow).mockRejectedValue(apiError(403, 'Subscribe first.'));
       const final = await finalWritten();
@@ -894,15 +902,11 @@ describe('New post', () => {
       const confirm = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
       fireEvent.click(confirm.getByRole('button', { name: 'Post now' }));
 
-      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
-      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-
-      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
-
-      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
-      expect(screen.queryByRole('dialog', { name: 'Schedule this Final' })).not.toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('billing_dialog_opened', { source: 'final_schedule' });
+      expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
+        source: 'final_post_now',
+      });
     });
   });
 
@@ -1128,12 +1132,6 @@ describe('New post', () => {
     });
   });
 
-  it('opens the billing dialog after a successful checkout', async () => {
-    renderNewPost({ checkoutStatus: 'success' });
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Billing')).toBeInTheDocument();
-  });
-
   describe('On an Instance that sells no Plans', () => {
     const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
 
@@ -1143,11 +1141,11 @@ describe('New post', () => {
 
       const area = await writer();
       expect(await area.findByRole('button', { name: 'Write the Post' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /subscribe/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /subscribe/i })).not.toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
     });
 
-    it('opens Schedule on a Final instead of Billing', async () => {
+    it('opens Schedule on a Final instead of Choose a Plan', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
       renderNewPost(undefined, NO_PLANS);
@@ -1160,24 +1158,6 @@ describe('New post', () => {
       expect(
         await screen.findByRole('dialog', { name: 'Schedule this Final' }),
       ).toBeInTheDocument();
-      expect(screen.queryByRole('dialog', { name: 'Billing' })).not.toBeInTheDocument();
-    });
-
-    it('offers no Billing in the user menu', async () => {
-      renderNewPost(undefined, NO_PLANS);
-      const [menuButton] = await screen.findAllByRole('button', { name: 'User menu' });
-
-      fireEvent.keyDown(menuButton, { key: 'Enter' });
-
-      expect(await screen.findByRole('menuitem', { name: 'Account' })).toBeInTheDocument();
-      expect(screen.queryByRole('menuitem', { name: 'Billing' })).not.toBeInTheDocument();
-    });
-
-    it('opens no Billing dialog when sent back from a checkout', async () => {
-      renderNewPost({ checkoutStatus: 'success' }, NO_PLANS);
-
-      expect(await writer()).toBeTruthy();
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 });

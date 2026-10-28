@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
+import { SettingsCard } from '@/components/SettingsCard';
 import { Button } from '@/components/ui/button';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
@@ -8,7 +9,7 @@ import { DisconnectXDialog } from './DisconnectXDialog';
 import { useXConnectionContext } from './useXConnectionContext';
 
 /** The X account Scheduled posts go out on, with connect and disconnect. */
-export function XConnectionPanel({ notice }: { notice: string | null }) {
+export function XAccountCard({ notice }: { notice: string | null }) {
   const { subscribed } = useSubscribed();
   const { connection, loadFailed, busy, error, connect, disconnect, reload } =
     useXConnectionContext();
@@ -29,17 +30,10 @@ export function XConnectionPanel({ notice }: { notice: string | null }) {
   };
 
   return (
-    <section aria-labelledby="x-connection-heading" className="space-y-4">
-      <div className="space-y-1">
-        <h2 id="x-connection-heading" className="font-sans text-base font-semibold text-foreground">
-          X connection
-        </h2>
-        <p className="font-sans text-sm text-muted-foreground">
-          The X account Pumpkit publishes your Scheduled posts on. Pumpkit never sees your X
-          password.
-        </p>
-      </div>
-
+    <SettingsCard
+      title="X account"
+      description="The X account Pumpkit publishes your Scheduled posts on. Pumpkit never sees your X password."
+    >
       {notice && <LimitNotice message={notice} />}
       {error && <ErrorBanner message={error} />}
 
@@ -74,7 +68,7 @@ export function XConnectionPanel({ notice }: { notice: string | null }) {
           />
           {connection.needsReconnect && (
             <div className="flex flex-col gap-3 border-t border-border pt-3 pb-1 sm:flex-row sm:items-center sm:justify-between">
-              <p className="font-sans text-sm text-red-700 dark:text-red-300">
+              <p className="font-sans text-sm text-destructive">
                 X no longer accepts Pumpkit&apos;s access to @{connection.handle}. Reconnect it to
                 keep posting.
               </p>
@@ -85,15 +79,12 @@ export function XConnectionPanel({ notice }: { notice: string | null }) {
           )}
         </div>
       ) : subscribed === false ? (
-        <SubscribePrompt
-          message="Connecting X needs a Subscription."
-          source="scheduled_x_connection"
-        />
+        <SubscribePrompt message="Connecting X needs a Subscription." source="settings_x_account" />
       ) : subscribed === true ? (
         <Button className="h-10" disabled={busy} onClick={() => void connect()}>
           {busy ? 'Opening X…' : 'Connect X'}
         </Button>
       ) : null}
-    </section>
+    </SettingsCard>
   );
 }

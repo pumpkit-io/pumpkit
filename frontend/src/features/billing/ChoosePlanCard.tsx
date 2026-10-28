@@ -1,0 +1,89 @@
+import { useState } from 'react';
+import { ErrorBanner } from '@/components/ErrorBanner';
+import { SettingsCard } from '@/components/SettingsCard';
+import { track } from '@/lib/analytics';
+import { redirectTo } from '@/lib/navigation';
+import { errorMessage } from '@/services/apiErrors';
+import { billingService, type TermsAcceptance } from '@/services/billingService';
+import type { BillingData } from './BillingProvider';
+import { CHOOSE_PLAN_ID } from './choosePlan';
+import { PlanCard, recurringLabel } from './PlanCard';
+import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
+import { TermsAcceptanceFields } from './TermsAcceptanceFields';
+
+/**
+ * The Plans for a User who may subscribe, behind the acceptance boxes where the Instance has
+ * Terms (ADR 0010). Remount it with a new `key` when the Terms version changes, so every
+ * version is accepted afresh. `notice` is an error to start with, such as a cancelled checkout.
+ */
+export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: string | null }) {
+  const [acceptance, setAcceptance] = useState<TermsAcceptance>(NOTHING_ACCEPTED);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(notice);
+  const hasTerms = data.termsVersion !== null;
+  const accepted = !hasTerms || acceptsAll(acceptance);
+  const trialDays = data.me.trialDays;
+
+  const subscribe = async (planKey: string) => {
+    track('billing_subscription_checkout_started', { plan_key: planKey });
+    setPendingKey(planKey);
+    setError(null);
+    try {
+      redirectTo(
+        await billingService.startSubscriptionCheckout(planKey, data.termsVersion, acceptance),
+      );
+    } catch (e) {
+      const message = errorMessage(e, 'Could not start checkout. Please try again.');
+      track('billing_checkout_redirect_failed', { error_message: message });
+      setError(message);
+      setPendingKey(null);
+    }
+  };
+
+  return (
+    <SettingsCard
+      id={CHOOSE_PLAN_ID}
+      title="Choose a Plan"
+      description="Writing, scheduling and your Persona need a Subscription."
+      className="border-primary/40"
+    >
+      {error && <ErrorBanner message={error} />}
+      {data.plans.length === 0 ? (
+        <p className="font-sans text-sm text-muted-foreground">No Plans are available yet.</p>
+      ) : (
+        <>
+          {hasTerms && (
+            <div className="space-y-2">
+              <p className="font-sans text-xs text-muted-foreground">
+                Tick the three boxes, then choose a Plan.
+              </p>
+              <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} />
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {data.plans.map((plan) => {
+              const action = trialDays === null ? 'Subscribe' : 'Start free Trial';
+              return (
+                <PlanCard
+                  key={plan.key}
+                  title={plan.productName}
+                  priceLabel={recurringLabel(
+                    plan.amount,
+                    plan.currency,
+                    plan.interval,
+                    plan.intervalCount,
+                  )}
+                  note={trialDays === null ? undefined : `${trialDays}-day free Trial`}
+                  actionLabel={pendingKey === plan.key ? 'Redirecting…' : action}
+                  ariaLabel={`${trialDays === null ? 'Subscribe to' : 'Start free Trial of'} ${plan.productName}`}
+                  disabled={!accepted || pendingKey !== null}
+                  onAction={() => void subscribe(plan.key)}
+                />
+              );
+            })}
+          </div>
+        </>
+      )}
+    </SettingsCard>
+  );
+}

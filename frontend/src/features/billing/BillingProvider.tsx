@@ -1,7 +1,5 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
-import { errorMessage } from '@/services/apiErrors';
 import { billingService, type BillingMe, type Plan } from '@/services/billingService';
-import { track } from '@/lib/analytics';
 
 export interface BillingData {
   me: BillingMe;
@@ -10,63 +8,40 @@ export interface BillingData {
 }
 
 interface BillingContextValue {
-  isOpen: boolean;
-  error: string | null;
   data: BillingData | null;
   isLoading: boolean;
-  open: (source?: string) => void;
-  openWithError: (message: string, source?: string) => void;
-  close: () => void;
+  /** Why the last load failed, or null. */
+  loadError: string | null;
+  load: () => Promise<void>;
 }
 
 export const BillingContext = createContext<BillingContextValue | null>(null);
 
+/** The User's Subscription and the Plans on sale, for the Settings cards and the user card. */
 export function BillingProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<BillingData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Billing state changes outside the app (Stripe), so refetch on every open.
   const load = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [me, { plans, termsVersion }] = await Promise.all([
         billingService.fetchBillingMe(),
         billingService.fetchPlans(),
       ]);
       setData({ me, plans, termsVersion });
-    } catch (e) {
-      setError(errorMessage(e, 'Could not load billing information.'));
+    } catch {
+      setLoadError('Could not load billing information. Reload the page to try again.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const openInternal = useCallback(
-    (message: string | null, source?: string) => {
-      setError(message);
-      setIsOpen(true);
-      track('billing_dialog_opened', { source: source ?? 'unknown' });
-      void load();
-    },
-    [load],
-  );
-
-  const open = useCallback((source?: string) => openInternal(null, source), [openInternal]);
-  const openWithError = useCallback(
-    (message: string, source?: string) => openInternal(message, source),
-    [openInternal],
-  );
-  const close = useCallback(() => {
-    setIsOpen(false);
-    setError(null);
-    track('billing_dialog_closed');
-  }, []);
-
   const value = useMemo<BillingContextValue>(
-    () => ({ isOpen, error, data, isLoading, open, openWithError, close }),
-    [isOpen, error, data, isLoading, open, openWithError, close],
+    () => ({ data, isLoading, loadError, load }),
+    [data, isLoading, loadError, load],
   );
 
   return <BillingContext.Provider value={value}>{children}</BillingContext.Provider>;

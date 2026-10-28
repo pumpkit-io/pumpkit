@@ -87,7 +87,7 @@ function AppRoutes() {
             path="/billing"
             element={
               <ProtectedRoute>
-                <Navigate to="/new" replace state={{ openBilling: true }} />
+                <Navigate to="/settings" replace />
               </ProtectedRoute>
             }
           />

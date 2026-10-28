@@ -2,7 +2,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { useBilling } from '@/features/billing/useBilling';
+import { CHOOSE_PLAN_PATH, trackChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { charCount } from '@/lib/characters';
@@ -27,7 +27,6 @@ function WriteGate({ action, note }: { action: ReactNode; note: string }) {
 
 export function PostWriter() {
   const { subscribed } = useSubscribed();
-  const billing = useBilling();
   const { authors } = useInspirationAuthorsContext();
   const {
     post,
@@ -130,12 +129,10 @@ export function PostWriter() {
           {subscribed === false ? (
             <WriteGate
               action={
-                <Button
-                  type="button"
-                  className="h-10 shrink-0"
-                  onClick={() => billing.open('new_post_write')}
-                >
-                  Subscribe to write
+                <Button asChild className="h-10 shrink-0">
+                  <Link to={CHOOSE_PLAN_PATH} onClick={() => trackChoosePlan('new_post_write')}>
+                    Subscribe to write
+                  </Link>
                 </Button>
               }
               note="Your Drafts, schedule and Persona are kept."

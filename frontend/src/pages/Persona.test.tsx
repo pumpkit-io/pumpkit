@@ -199,7 +199,7 @@ describe('Persona', () => {
     expect(track).toHaveBeenCalledWith('inspiration_author_removed');
   });
 
-  it('shows a User who is not Subscribed their authors and a prompt to subscribe that opens Billing', async () => {
+  it('shows a User who is not Subscribed their authors and a prompt that leads to Choose a Plan', async () => {
     vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
     renderPersona();
 
@@ -210,8 +210,8 @@ describe('Persona', () => {
     expect(panel.queryByRole('button', { name: 'Remove @levelsio' })).not.toBeInTheDocument();
     expect(panel.queryByRole('button', { name: 'Refresh @levelsio' })).not.toBeInTheDocument();
 
-    fireEvent.click(panel.getByRole('button', { name: 'Subscribe' }));
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(panel.getByRole('link', { name: 'Subscribe' }));
+    expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
   });
 
   it('shows the prompt to subscribe when adding is refused with a 403', async () => {
@@ -227,7 +227,7 @@ describe('Persona', () => {
     fireEvent.change(await panel.findByLabelText('X handle'), { target: { value: 'levelsio' } });
     fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
 
-    expect(await panel.findByRole('button', { name: 'Subscribe' })).toBeInTheDocument();
+    expect(await panel.findByRole('link', { name: 'Subscribe' })).toBeInTheDocument();
   });
 
   it('refreshes an author and shows its new fetch time and post count', async () => {

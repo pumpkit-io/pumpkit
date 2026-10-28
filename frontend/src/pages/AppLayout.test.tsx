@@ -61,21 +61,12 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
-import type { Instance } from '@/lib/instance';
+import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { postService, type Post } from '@/services/postService';
 import { xConnectionService } from '@/services/xConnectionService';
 import { LEVELSIO, NOT_SUBSCRIBED, PAULG, SUBSCRIBED, renderSignedIn } from './testing/signedInApp';
-
-const WITH_ANALYTICS: Instance = {
-  ...SELLS_PLANS,
-  analytics: {
-    key: 'phc_test',
-    host: 'https://eu.i.posthog.com',
-    ui_host: 'https://eu.posthog.com',
-  },
-};
 
 const POST: Post = {
   id: 'post_01',
@@ -191,7 +182,7 @@ describe('The signed-in shell', () => {
       });
       renderSignedIn('/new');
 
-      const card = within(await screen.findByRole('group', { name: 'Your account' }));
+      const card = within(await screen.findByRole('link', { name: /^Your account/ }));
       expect(await card.findByText('Ada Lovelace')).toBeInTheDocument();
       expect(await card.findByText('@ada')).toBeInTheDocument();
       expect(await card.findByText('Pumpkit Pro')).toBeInTheDocument();
@@ -200,27 +191,25 @@ describe('The signed-in shell', () => {
     it('says "No Subscription" in the user card of a User who is not Subscribed', async () => {
       renderSignedIn('/new');
 
-      const card = within(await screen.findByRole('group', { name: 'Your account' }));
+      const card = within(await screen.findByRole('link', { name: /^Your account/ }));
       expect(await card.findByText('No Subscription')).toBeInTheDocument();
     });
 
     it('shows no Plan in the user card on an Instance that sells no Plans', async () => {
       renderSignedIn('/new', { instance: { ...SELLS_PLANS, sells_plans: false } });
 
-      const card = within(await screen.findByRole('group', { name: 'Your account' }));
+      const card = within(await screen.findByRole('link', { name: /^Your account/ }));
       expect(await card.findByText('Ada Lovelace')).toBeInTheDocument();
       expect(card.queryByText('No Subscription')).not.toBeInTheDocument();
     });
 
-    it('keeps the user menu in the user card', async () => {
+    it('opens Settings from the user card', async () => {
       renderSignedIn('/new');
 
-      fireEvent.keyDown(await screen.findByRole('button', { name: 'User menu' }), {
-        key: 'Enter',
-      });
+      fireEvent.click(await screen.findByRole('link', { name: /^Your account/ }));
 
-      expect(await screen.findByRole('menuitem', { name: 'Account' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument();
+      expect(currentPath()).toBe('/settings');
+      expect(screen.queryByRole('button', { name: 'User menu' })).not.toBeInTheDocument();
     });
 
     it('has no collapse toggle', async () => {
@@ -231,43 +220,64 @@ describe('The signed-in shell', () => {
       expect(screen.queryByRole('navigation', { name: 'Sidebar rail' })).not.toBeInTheDocument();
     });
 
-    it('links to the Privacy Policy and the Terms at the bottom, in a new tab', async () => {
+    it('leaves the legal links to the Settings footer', async () => {
       renderSignedIn('/new', { instance: WITH_OPERATOR });
       await sidebar();
 
-      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
-      const privacy = legal.getByRole('link', { name: 'Privacy Policy' });
-      const terms = legal.getByRole('link', { name: 'Terms' });
-      expect(privacy).toHaveAttribute('href', '/privacy');
-      expect(terms).toHaveAttribute('href', '/terms');
-      for (const link of [privacy, terms]) expect(link).toHaveAttribute('target', '_blank');
+      expect(screen.queryByRole('navigation', { name: 'Legal' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Reconnect X banner', () => {
+    const NEEDS_RECONNECT = {
+      handle: 'ada',
+      charLimit: 280,
+      needsReconnect: true,
+      scheduledPostsWaiting: 2,
+    };
+
+    it.each(['/new', '/posts', '/persona', '/settings'])(
+      'says on %s that Scheduled posts wait for X to be reconnected',
+      async (path) => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(NEEDS_RECONNECT);
+        renderSignedIn(path);
+
+        const banner = within(await screen.findByRole('region', { name: 'Reconnect X' }));
+        expect(
+          banner.getByText("X no longer accepts Pumpkit's access to @ada."),
+        ).toBeInTheDocument();
+        expect(
+          banner.getByText(/Scheduled posts won't go out until you reconnect/),
+        ).toBeInTheDocument();
+      },
+    );
+
+    it('starts reconnecting from its button', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(NEEDS_RECONNECT);
+      vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
+        'https://x.com/i/oauth2/authorize?state=s',
+      );
+      renderSignedIn('/persona');
+
+      const banner = within(await screen.findByRole('region', { name: 'Reconnect X' }));
+      fireEvent.click(banner.getByRole('button', { name: 'Reconnect X' }));
+
+      await waitFor(() =>
+        expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
+      );
     });
 
-    it('offers Cookie settings next to the legal links', async () => {
-      renderSignedIn('/new', {
-        instance: { ...WITH_OPERATOR, analytics: WITH_ANALYTICS.analytics },
+    it('stays away while X accepts the X connection', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...NEEDS_RECONNECT,
+        needsReconnect: false,
       });
-      await sidebar();
-
-      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
-      expect(legal.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
-    });
-
-    it('offers only Cookie settings on an Instance with analytics but no Operator details', async () => {
-      renderSignedIn('/new', { instance: WITH_ANALYTICS });
-      await sidebar();
-
-      expect(screen.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
-    });
-
-    it('has no legal links or Cookie settings on an Instance with neither', async () => {
       renderSignedIn('/new');
-      await sidebar();
 
-      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: /^Your account/ })).toHaveAccessibleName(/@ada/),
+      );
+      expect(screen.queryByRole('region', { name: 'Reconnect X' })).not.toBeInTheDocument();
     });
   });
 
@@ -336,8 +346,8 @@ describe('The signed-in shell', () => {
       renderSignedIn('/new');
       const brief = await screen.findByLabelText('Brief');
       fireEvent.change(brief, { target: { value: 'half a thought' } });
-      fireEvent.click(await screen.findByRole('button', { name: 'Subscribe to write' }));
-      await screen.findByRole('dialog');
+      fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }));
+      await screen.findByRole('dialog', { name: 'Sidebar' });
 
       newPostShortcut();
 

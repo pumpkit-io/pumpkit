@@ -113,14 +113,14 @@ def test_an_edit_changes_something():
     )
 
 
-async def test_without_an_x_connection_connecting_x_is_asked_for_on_the_scheduled_page(
+async def test_without_an_x_connection_connecting_x_is_asked_for_on_the_settings_page(
     create, fake_x_publisher
 ):
     with pytest.raises(ConflictError) as refused:
         await create(publish_now=True)
 
     assert refused.value.detail == "Connect your X account first."
-    assert refused.value.fix_page == "/posts"
+    assert refused.value.fix_page == "/settings"
     assert fake_x_publisher.published == []
 
 
@@ -139,7 +139,7 @@ async def test_an_x_connection_x_no_longer_accepts_must_be_reconnected_first(
     assert refused.value.detail == (
         "X no longer accepts Pumpkit's access to your account. Reconnect X first."
     )
-    assert refused.value.fix_page == "/posts"
+    assert refused.value.fix_page == "/settings"
 
 
 async def test_rescheduling_needs_an_x_connection_but_a_new_text_does_not(

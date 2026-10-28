@@ -12,7 +12,6 @@ test.describe('logged out', () => {
 
 test.describe('logged in', () => {
   const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Main' }).first();
-  const userMenu = (page: Page) => page.getByRole('button', { name: 'User menu' }).first();
 
   // A stored refusal keeps the Analytics consent banner, shown only with PostHog configured, off the page.
   test.beforeEach(async ({ page }) => {
@@ -98,29 +97,38 @@ test.describe('logged in', () => {
     });
   });
 
-  test('user menu opens Account and Billing dialogs', async ({ page }) => {
+  test('the user card opens Settings, with the Profile, Plan and Appearance cards', async ({
+    page,
+  }) => {
     await page.goto('/new');
-    await userMenu(page).click();
-    await page.getByRole('menuitem', { name: 'Account' }).click();
-    await expect(page.getByRole('dialog').getByText('Account', { exact: true })).toBeVisible();
-    // Radix may ignore the first Escape while the dropdown's focus restore settles.
-    await expect(async () => {
-      await page.keyboard.press('Escape');
-      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 1_000 });
-    }).toPass();
+    await page.getByRole('link', { name: /^Your account/ }).click();
 
-    await userMenu(page).click();
-    await page.getByRole('menuitem', { name: 'Billing' }).click();
-    await expect(page.getByRole('dialog').getByText('Billing', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    const profile = page.getByRole('region', { name: 'Profile' });
+    await expect(profile.getByLabel('Email')).toHaveValue(/@/);
+    await expect(page.getByRole('region', { name: 'Plan' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Appearance' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  });
+
+  test('/billing lands on Settings', async ({ page }) => {
+    await page.goto('/billing');
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByRole('region', { name: 'Plan' })).toBeVisible();
   });
 
   test('theme choice persists across reloads', async ({ page }) => {
-    await page.goto('/new');
-    await userMenu(page).click();
-    await page.getByRole('menuitem', { name: 'Theme' }).hover();
-    await page.getByRole('menuitemradio', { name: 'Dark' }).click();
+    await page.goto('/settings');
+    await page
+      .getByRole('region', { name: 'Appearance' })
+      .getByText('Dark', { exact: true })
+      .click();
     await expect(page.locator('html')).toHaveClass(/dark/);
     await page.reload();
     await expect(page.locator('html')).toHaveClass(/dark/);
+    await expect(
+      page.getByRole('region', { name: 'Appearance' }).getByRole('radio', { name: 'Dark' }),
+    ).toBeChecked();
   });
 });

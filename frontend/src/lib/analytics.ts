@@ -59,7 +59,6 @@ export const EVENTS = {
   },
 
   // App shell
-  sidebar_user_menu_opened: { description: 'Sidebar: opened the user menu.' },
   sidebar_new_post_clicked: {
     description: 'New post from the sidebar or the shortcut. Props: source (sidebar | shortcut).',
   },
@@ -67,24 +66,20 @@ export const EVENTS = {
   sidebar_mobile_drawer_closed: {
     description: 'Mobile sidebar: closed the drawer. Props: via_backdrop.',
   },
-  user_menu_account_clicked: { description: 'User menu: clicked "Account".' },
-  user_menu_billing_clicked: { description: 'User menu: clicked "Billing".' },
-  user_menu_theme_changed: {
-    description: 'User menu: changed the theme. Props: theme (system/light/dark).',
-  },
-  user_menu_logout_clicked: { description: 'User menu: clicked "Sign out".' },
 
-  account_dialog_opened: { description: 'Account: opened the account dialog.' },
-  account_dialog_closed: {
-    description: 'Account: closed the account dialog. Props: unsaved_changes.',
+  // Settings (/settings)
+  settings_theme_changed: {
+    description: 'Settings: changed the theme in Appearance. Props: theme (system/light/dark).',
   },
+  settings_sign_out_clicked: { description: 'Settings: clicked "Sign out" in the header.' },
   account_profile_saved: { description: 'Account: saved profile changes. Props: fields_changed.' },
   account_profile_save_failed: {
     description: 'Account: profile save failed. Props: error_message.',
   },
 
-  billing_dialog_opened: { description: 'Billing: opened the billing dialog. Props: source.' },
-  billing_dialog_closed: { description: 'Billing: closed the billing dialog.' },
+  billing_choose_plan_opened: {
+    description: 'Billing: a prompt to subscribe sent the User to Choose a Plan. Props: source.',
+  },
   billing_subscription_checkout_started: {
     description: 'Billing: started a Subscription checkout. Props: plan_key.',
   },
@@ -117,8 +112,8 @@ export const EVENTS = {
   post_part_copied: { description: "Home: copied one Part of a Thread Version's Final." },
 
   // Scheduled (/scheduled) + the X callback
-  x_connected: { description: 'Scheduled: connected an X account through X consent screen.' },
-  x_disconnected: { description: 'Scheduled: disconnected the X account.' },
+  x_connected: { description: 'Settings: connected an X account through X consent screen.' },
+  x_disconnected: { description: 'Settings: disconnected the X account.' },
   community_looked_up: {
     description:
       'Scheduled: looked up a Community pasted by its URL or ID. Props: found (boolean), named (boolean, only when found).',

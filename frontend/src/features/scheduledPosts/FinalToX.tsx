@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useBilling } from '@/features/billing/useBilling';
+import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
@@ -117,7 +117,7 @@ function FinalToXDialog({
   version: Version;
   onClose: () => void;
 }) {
-  const billing = useBilling();
+  const goToChoosePlan = useGoToChoosePlan();
   const { connection } = useXConnectionContext();
   const { sending, error, create } = useCreateScheduledPost();
   /** The picked time as the input holds it, in the browser's timezone; '' when none. */
@@ -149,7 +149,7 @@ function FinalToXDialog({
     if (outcome.kind === 'created') setCreated(outcome.scheduledPost);
     if (outcome.kind === 'notSubscribed') {
       onClose();
-      billing.open(BILLING_SOURCE[action]);
+      goToChoosePlan(BILLING_SOURCE[action]);
     }
   };
 
@@ -226,14 +226,14 @@ function FinalToXDialog({
   );
 }
 
-/** Schedule and Post now on a Version's Final; a User who isn't Subscribed gets Billing. */
+/** Schedule and Post now on a Version's Final; a User who isn't Subscribed goes to Choose a Plan. */
 export function FinalToXActions({ version }: { version: Version }) {
   const { subscribed } = useSubscribed();
-  const billing = useBilling();
+  const goToChoosePlan = useGoToChoosePlan();
   const [action, setAction] = useState<Action | null>(null);
 
   const start = (next: Action) => {
-    if (subscribed === false) billing.open(BILLING_SOURCE[next]);
+    if (subscribed === false) goToChoosePlan(BILLING_SOURCE[next]);
     else setAction(next);
   };
 
