@@ -830,6 +830,25 @@ describe('Post page', () => {
       expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toBeInTheDocument();
     });
 
+    it('says the save failed and to try again when the API gives no reason', async () => {
+      vi.mocked(scheduledPostService.edit).mockRejectedValue(
+        Object.assign(new Error('Network Error'), { isAxiosError: true }),
+      );
+      const editor = await startEditing();
+
+      fireEvent.change((await versionCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'the edited text' },
+      });
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      expect(await editor.findByText("Couldn't save the changes. Try again.")).toBeInTheDocument();
+      expect(editor.queryByText('Network Error')).not.toBeInTheDocument();
+      expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
+        'the edited text',
+      );
+      expect(editor.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    });
+
     it('unschedules it, which makes the Post a Draft that takes Feedback again', async () => {
       vi.mocked(scheduledPostService.cancel).mockResolvedValue(undefined);
       const editor = await startEditing();
