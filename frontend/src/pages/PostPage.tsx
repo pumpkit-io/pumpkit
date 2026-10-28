@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
@@ -59,6 +59,13 @@ function LoadedPost({
     () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
   );
   const versionCount = useRef(post.versions.length);
+  const navigate = useNavigate();
+  const opensEditor = opensEditing(location.state);
+
+  // The request to edit is read once: a reload or a step back shows the Post, not the editor.
+  useEffect(() => {
+    if (opensEditor) navigate(location.pathname, { replace: true, state: null });
+  }, [opensEditor, location.pathname, navigate]);
 
   // A new Version from Feedback goes on screen as soon as it is in the Post.
   useEffect(() => {

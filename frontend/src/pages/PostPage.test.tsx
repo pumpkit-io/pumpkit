@@ -860,6 +860,21 @@ describe('Post page', () => {
         'the final text',
       );
     });
+
+    it('clears the request to edit once the editor is open, so a reload shows the Post', async () => {
+      vi.mocked(postService.get).mockResolvedValue(withScheduledPost(SCHEDULED));
+      renderSignedIn('/posts/post_01', { state: { edit: true } });
+
+      await screen.findByRole('region', { name: 'Edit the Scheduled post' });
+
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Current state' })).toHaveTextContent('null'),
+      );
+      expect(screen.getByRole('status', { name: 'Current path' })).toHaveTextContent(
+        '/posts/post_01',
+      );
+      expect(screen.getByRole('region', { name: 'Edit the Scheduled post' })).toBeInTheDocument();
+    });
   });
 
   describe('Published', () => {
