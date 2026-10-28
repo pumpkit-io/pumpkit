@@ -31,13 +31,13 @@ function renderCallback(search: string) {
   render(
     <StrictMode>
       <MemoryRouter
-        initialEntries={['/scheduled', `/oauth/x/callback${search}`]}
+        initialEntries={['/posts', `/oauth/x/callback${search}`]}
         initialIndex={1}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/oauth/x/callback" element={<XConnectionCallback />} />
-          <Route path="/scheduled" element={<Destination />} />
+          <Route path="/posts" element={<Destination />} />
         </Routes>
       </MemoryRouter>
     </StrictMode>,
@@ -67,9 +67,7 @@ describe('the X callback', () => {
 
     renderCallback('?state=the-state&code=the-code');
 
-    expect(
-      await screen.findByText('at /scheduled via REPLACE: Connected @ada.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('at /posts via REPLACE: Connected @ada.')).toBeInTheDocument();
     expect(xConnectionService.complete).toHaveBeenCalledTimes(1);
     expect(xConnectionService.complete).toHaveBeenCalledWith('the-code', 'the-state');
     expect(track).toHaveBeenCalledWith('x_connected');
@@ -80,7 +78,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        'at /scheduled via REPLACE: You cancelled connecting X. Connect it again whenever you like.',
+        'at /posts via REPLACE: You cancelled connecting X. Connect it again whenever you like.',
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();
@@ -95,7 +93,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        'at /scheduled via REPLACE: @ada is already connected to another Pumpkit account.',
+        'at /posts via REPLACE: @ada is already connected to another Pumpkit account.',
       ),
     ).toBeInTheDocument();
     expect(track).not.toHaveBeenCalledWith('x_connected');
@@ -106,7 +104,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        "at /scheduled via REPLACE: X didn't finish connecting your account. Please try again.",
+        "at /posts via REPLACE: X didn't finish connecting your account. Please try again.",
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();

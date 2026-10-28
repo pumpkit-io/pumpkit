@@ -9,7 +9,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAccount } from './useAccount';
-import { useProfile, useProfileMutator } from '@/pages/Home/ProfileContext';
+import { useProfile, useProfileMutator } from '@/pages/layout/ProfileContext';
 import { userService } from '@/services/userService';
 import { AvatarEditor } from './AvatarEditor';
 import { track } from '@/lib/analytics';

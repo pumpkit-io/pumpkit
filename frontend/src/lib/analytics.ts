@@ -61,7 +61,7 @@ export const EVENTS = {
   // App shell
   sidebar_user_menu_opened: { description: 'Sidebar: opened the user menu.' },
   sidebar_new_post_clicked: {
-    description: 'Sidebar: started a New Post. Props: source (sidebar | rail | shortcut).',
+    description: 'New post from the sidebar or the shortcut. Props: source (sidebar | shortcut).',
   },
   sidebar_mobile_drawer_opened: { description: 'Mobile sidebar: opened the drawer.' },
   sidebar_mobile_drawer_closed: {

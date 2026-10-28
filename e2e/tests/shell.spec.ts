@@ -1,18 +1,18 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test.describe('logged out', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('visiting /home redirects to /login', async ({ page }) => {
-    await page.goto('/home');
+  test('visiting /new redirects to /login', async ({ page }) => {
+    await page.goto('/new');
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
   });
 });
 
 test.describe('logged in', () => {
-  const userMenu = (page: import('@playwright/test').Page) =>
-    page.getByRole('button', { name: 'User menu' }).last();
+  const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Main' }).first();
+  const userMenu = (page: Page) => page.getByRole('button', { name: 'User menu' }).first();
 
   // A stored refusal keeps the Analytics consent banner, shown only with PostHog configured, off the page.
   test.beforeEach(async ({ page }) => {
@@ -21,223 +21,85 @@ test.describe('logged in', () => {
     );
   });
 
-  test('home shows the authors panel, the Brief box and the user name', async ({ page }) => {
-    await page.goto('/home');
-    await expect(page.getByRole('region', { name: 'Inspiration authors' })).toBeVisible();
-    const writer = page.getByRole('region', { name: 'Write a Post' });
-    await expect(writer.getByLabel('Brief')).toBeVisible();
-    await expect(page.getByText('E2E User').first()).toBeVisible();
-  });
-
-  test('writing a Post is disabled with no Inspiration authors', async ({ page }) => {
-    await page.goto('/home');
-    const writer = page.getByRole('region', { name: 'Write a Post' });
-    await expect(writer.getByText('Add an Inspiration author to write a Post.')).toBeVisible();
-    await writer.getByLabel('Brief').fill('ship small things');
-    await expect(writer.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
-  });
-
-  test('the sidebar logo slides and fades without a jump or flash', async ({ page }) => {
-    await page.goto('/home');
-    const aside = page.locator('aside').first();
-    await expect(aside.locator('img').first()).toBeVisible();
-    const box = (await aside.boundingBox())!;
-
-    // Samples the logo every frame: position, the opacity it renders at, and the wordmark's.
-    const framesWhile = async (toggle: () => Promise<void>) => {
-      await page.evaluate(() => {
-        const aside = document.querySelector('aside')!;
-        const img = aside.querySelector('img')!;
-        const frames: { x: number; op: number; name: number }[] = [];
-        (window as unknown as { frames_: typeof frames }).frames_ = frames;
-        const t0 = performance.now();
-        const tick = () => {
-          let op = 1;
-          for (let el: Element | null = img; el && el !== aside; el = el.parentElement)
-            op *= parseFloat(getComputedStyle(el).opacity);
-          const name = img.nextElementSibling;
-          frames.push({
-            x: img.getBoundingClientRect().x,
-            op,
-            name: name ? parseFloat(getComputedStyle(name).opacity) : 0,
-          });
-          if (performance.now() - t0 < 600) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      });
-      await toggle();
-      await page.waitForTimeout(700);
-      return page.evaluate(
-        () => (window as unknown as { frames_: { x: number; op: number; name: number }[] }).frames_,
-      );
-    };
-
-    await page.mouse.move(box.x + 100, box.y + 300);
-    const closing = await framesWhile(() =>
-      page.getByRole('button', { name: 'Close sidebar' }).click(),
-    );
-    await page.mouse.move(box.x + 28, box.y + 300);
-    const opening = await framesWhile(() =>
-      aside.getByRole('button', { name: 'Open sidebar' }).click(),
-    );
-
-    for (const frames of [closing, opening]) {
-      for (let i = 1; i < frames.length; i++) {
-        const [prev, cur] = [frames[i - 1], frames[i]];
-        if (prev.op > 0.05) expect(Math.abs(cur.x - prev.x)).toBeLessThanOrEqual(2);
-        if (cur.op > 0.05) expect(prev.name - cur.name).toBeLessThanOrEqual(0.5);
-        const next = frames[i + 1];
-        if (next) {
-          const flash =
-            Math.abs(cur.op - prev.op) > 0.3 &&
-            Math.abs(next.op - cur.op) > 0.3 &&
-            Math.sign(cur.op - prev.op) !== Math.sign(next.op - cur.op);
-          expect(flash).toBe(false);
-        }
-      }
+  test('/ and /home open New post, with the Brief box and the user name', async ({ page }) => {
+    for (const path of ['/', '/home']) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/new$/);
+      await expect(page.getByRole('heading', { level: 1, name: 'New post' })).toBeVisible();
+      await expect(
+        page.getByRole('region', { name: 'Write a Post' }).getByLabel('Brief'),
+      ).toBeVisible();
+      await expect(page.getByText('E2E User').first()).toBeVisible();
     }
   });
 
-  test('a closed sidebar shows the logo, with the toggle in the New Post column', async ({
-    page,
-  }) => {
-    await page.goto('/home');
-    const aside = page.locator('aside').first();
-    const logo = aside.locator('img').first();
-    await expect(logo).toBeVisible();
-
-    await page.getByRole('button', { name: 'Close sidebar' }).click();
-    await page.mouse.move(900, 400);
-
-    const toggle = aside.getByRole('button', { name: 'Open sidebar' });
-    const opacity = (l: typeof logo) =>
-      l.evaluate((el) => {
-        let op = 1;
-        for (let e: Element | null = el; e && e.tagName !== 'ASIDE'; e = e.parentElement)
-          op *= parseFloat(getComputedStyle(e).opacity);
-        return op;
-      });
-    await expect.poll(() => opacity(logo)).toBe(1);
-    await expect.poll(() => opacity(toggle)).toBe(0);
-
-    const centre = async (l: typeof logo) => {
-      const b = (await l.boundingBox())!;
-      return b.x + b.width / 2;
-    };
-    const newPost = await centre(aside.getByRole('button', { name: 'New Post' }).first());
-    // The toggle and logo slide into the rail, so wait for them to settle.
-    await expect.poll(() => centre(toggle)).toBe(newPost);
-    await expect.poll(() => centre(logo)).toBe(newPost);
-  });
-
-  test('sidebar icons share one column, evenly spaced, at the same height open and closed', async ({
-    page,
-  }) => {
-    await page.goto('/home');
-    const aside = page.locator('aside').first();
-    await expect(aside.locator('img').first()).toBeVisible();
-
-    type Icon = { label: string; x: number; y: number };
-    // Every icon in a sidebar nav, by its button's label, with its centre.
-    const icons = (nav: string) =>
-      aside.getByRole('navigation', { name: nav }).evaluate((el) =>
-        Array.from(el.querySelectorAll('button')).map((button) => {
-          const r = button.querySelector('svg')!.getBoundingClientRect();
-          // A row's text without its aria-hidden shortcut hint, which differs per platform.
-          const visible = button.cloneNode(true) as HTMLElement;
-          visible.querySelectorAll('[aria-hidden="true"]').forEach((hint) => hint.remove());
-          return {
-            label: button.getAttribute('aria-label') ?? visible.textContent!.trim(),
-            x: r.x + r.width / 2,
-            y: r.y + r.height / 2,
-          };
-        }),
-      );
-    const expectOneEvenColumn = (column: Icon[]) => {
-      expect(column.length).toBeGreaterThan(1);
-      for (const icon of column) expect(icon.x).toBe(column[0].x);
-      const gaps = column.slice(1).map((icon, i) => icon.y - column[i].y);
-      for (const gap of gaps) expect(gap).toBe(gaps[0]);
-    };
-
-    const open = await icons('Main');
-    expectOneEvenColumn(open);
-
-    await page.getByRole('button', { name: 'Close sidebar' }).click();
-    await page.mouse.move(900, 400);
-    const closed = await icons('Sidebar rail');
-    expectOneEvenColumn(closed);
-    // The logo slides into the rail, so wait for it to settle.
-    await expect
-      .poll(async () => {
-        const logo = (await aside.locator('img').first().boundingBox())!;
-        return logo.x + logo.width / 2;
-      })
-      .toBe(closed[0].x);
-
-    // The two navs cross-fade, so each icon has to sit where its row was.
-    expect(closed.map((icon) => icon.label)).toEqual(open.map((icon) => icon.label));
-    for (const [i, icon] of closed.entries()) expect(icon.y).toBe(open[i].y);
-  });
-
-  test('the sidebar avatar stays put and visible while the sidebar opens and closes', async ({
-    page,
-  }) => {
-    await page.goto('/home');
-    const aside = page.locator('aside').first();
-    await expect(aside.locator('[data-avatar]').first()).toBeVisible();
-    const box = (await aside.boundingBox())!;
-
-    type Avatar = { x: number; y: number; op: number };
-    // Samples every avatar in the aside each frame, with the opacity it renders at.
-    const framesWhile = async (toggle: () => Promise<void>) => {
-      await page.evaluate(() => {
-        const aside = document.querySelector('aside')!;
-        const frames: Avatar[][] = [];
-        (window as unknown as { avatars_: typeof frames }).avatars_ = frames;
-        const t0 = performance.now();
-        const tick = () => {
-          frames.push(
-            Array.from(aside.querySelectorAll('[data-avatar]')).map((el) => {
-              let op = 1;
-              for (let e: Element | null = el; e && e !== aside; e = e.parentElement)
-                op *= parseFloat(getComputedStyle(e).opacity);
-              const r = el.getBoundingClientRect();
-              return { x: r.x, y: r.y, op };
-            }),
-          );
-          if (performance.now() - t0 < 600) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      });
-      await toggle();
-      await page.waitForTimeout(700);
-      return page.evaluate(() => (window as unknown as { avatars_: Avatar[][] }).avatars_);
-    };
-
-    await page.mouse.move(box.x + 100, box.y + 300);
-    const closing = await framesWhile(() =>
-      page.getByRole('button', { name: 'Close sidebar' }).click(),
-    );
-    await page.mouse.move(box.x + 28, box.y + 300);
-    const opening = await framesWhile(() =>
-      aside.getByRole('button', { name: 'Open sidebar' }).click(),
+  test('the sidebar leads to every page and marks the one on screen', async ({ page }) => {
+    await page.goto('/new');
+    const nav = sidebar(page);
+    await expect(nav.getByRole('link', { name: 'New post' })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
 
-    for (const frames of [closing, opening]) {
-      const [start] = frames[0].filter((a) => a.op > 0.95);
-      for (const frame of frames) {
-        const shown = frame.filter((a) => a.op > 0.05);
-        expect(shown).toHaveLength(1);
-        expect(shown[0].op).toBeGreaterThan(0.95);
-        expect(Math.abs(shown[0].x - start.x)).toBeLessThanOrEqual(1);
-        expect(Math.abs(shown[0].y - start.y)).toBeLessThanOrEqual(1);
-      }
+    for (const [name, path, title] of [
+      [/^Persona/, '/persona', 'Persona'],
+      ['Posts', '/posts', 'Posts'],
+      ['Settings', '/settings', 'Settings'],
+    ] as const) {
+      await nav.getByRole('link', { name }).click();
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+      await expect(nav.getByRole('link', { name })).toHaveAttribute('aria-current', 'page');
     }
+  });
+
+  test('with an empty Persona, New post offers to set it up and Persona counts 0/3', async ({
+    page,
+  }) => {
+    await page.goto('/new');
+    const writer = page.getByRole('region', { name: 'Write a Post' });
+    await expect(
+      sidebar(page).getByRole('link', { name: 'Persona, 0 of 3 Inspiration authors' }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Persona: empty, set it up' })).toBeVisible();
+
+    await writer.getByRole('link', { name: 'Set up your Persona' }).click();
+
+    await expect(page).toHaveURL(/\/persona$/);
+    await expect(page.getByRole('region', { name: 'How your posts sound' })).toBeVisible();
+  });
+
+  test('the New Post shortcut opens an empty New post from another page', async ({ page }) => {
+    await page.goto('/persona');
+    await expect(page.getByRole('heading', { level: 1, name: 'Persona' })).toBeVisible();
+
+    await page.keyboard.press('ControlOrMeta+Shift+O');
+
+    await expect(page).toHaveURL(/\/new$/);
+    await expect(page.getByLabel('Brief')).toHaveValue('');
+  });
+
+  test.describe('on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('the sidebar is a drawer opened from the header', async ({ page }) => {
+      await page.goto('/new');
+      await expect(page.getByRole('heading', { level: 1, name: 'New post' })).toBeVisible();
+      await expect(sidebar(page)).toBeHidden();
+
+      await page.getByRole('button', { name: 'Open sidebar' }).click();
+      const drawer = page.getByRole('dialog', { name: 'Sidebar' });
+      await drawer.getByRole('link', { name: /^Persona/ }).click();
+
+      await expect(page).toHaveURL(/\/persona$/);
+      await expect(drawer).toBeHidden();
+      const width = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(width).toBeLessThanOrEqual(390);
+    });
   });
 
   test('user menu opens Account and Billing dialogs', async ({ page }) => {
-    await page.goto('/home');
+    await page.goto('/new');
     await userMenu(page).click();
     await page.getByRole('menuitem', { name: 'Account' }).click();
     await expect(page.getByRole('dialog').getByText('Account', { exact: true })).toBeVisible();
@@ -253,7 +115,7 @@ test.describe('logged in', () => {
   });
 
   test('theme choice persists across reloads', async ({ page }) => {
-    await page.goto('/home');
+    await page.goto('/new');
     await userMenu(page).click();
     await page.getByRole('menuitem', { name: 'Theme' }).hover();
     await page.getByRole('menuitemradio', { name: 'Dark' }).click();

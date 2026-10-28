@@ -148,12 +148,12 @@ function renderScheduled(state?: unknown, instance: Instance = SELLS_PLANS) {
       <AuthProvider>
         <ThemeProvider>
           <MemoryRouter
-            initialEntries={[{ pathname: '/scheduled', state }]}
+            initialEntries={[{ pathname: '/posts', state }]}
             future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
           >
             <Routes>
               <Route element={<AppLayout />}>
-                <Route path="/scheduled" element={<Scheduled />} />
+                <Route path="/posts" element={<Scheduled />} />
               </Route>
             </Routes>
           </MemoryRouter>

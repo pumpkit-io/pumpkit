@@ -1,7 +1,8 @@
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
+import { useBilling } from '@/features/billing/useBilling';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { charCount } from '@/lib/characters';
@@ -14,8 +15,19 @@ import { LimitNotice } from '@/components/LimitNotice';
 import { NumberedVersion } from './NumberedVersion';
 import { usePostWriterContext } from './usePostWriterContext';
 
+/** Where the write button goes when the User can't write yet, with the note beside it. */
+function WriteGate({ action, note }: { action: ReactNode; note: string }) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      {action}
+      <p className="font-sans text-sm text-muted-foreground">{note}</p>
+    </div>
+  );
+}
+
 export function PostWriter() {
   const { subscribed } = useSubscribed();
+  const billing = useBilling();
   const { authors } = useInspirationAuthorsContext();
   const {
     post,
@@ -116,9 +128,26 @@ export function PostWriter() {
           {notice && <LimitNotice message={notice} />}
 
           {subscribed === false ? (
-            <SubscribePrompt
-              message="Writing Posts needs a Subscription."
-              source="home_write_post"
+            <WriteGate
+              action={
+                <Button
+                  type="button"
+                  className="h-10 shrink-0"
+                  onClick={() => billing.open('new_post_write')}
+                >
+                  Subscribe to write
+                </Button>
+              }
+              note="Your Drafts, schedule and Persona are kept."
+            />
+          ) : noCorpus ? (
+            <WriteGate
+              action={
+                <Button asChild className="h-10 shrink-0">
+                  <Link to="/persona">Set up your Persona</Link>
+                </Button>
+              }
+              note="Add at least one Inspiration author first: Pumpkit writes in their style."
             />
           ) : (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -129,16 +158,10 @@ export function PostWriter() {
               >
                 {isWriting ? 'Writing…' : 'Write the Post'}
               </Button>
-              {isWriting ? (
+              {isWriting && (
                 <p role="status" className="font-sans text-sm text-muted-foreground">
                   Writing your Post. This can take a minute or two.
                 </p>
-              ) : (
-                noCorpus && (
-                  <p className="font-sans text-sm text-muted-foreground">
-                    Add an Inspiration author to write a Post.
-                  </p>
-                )
               )}
             </div>
           )}

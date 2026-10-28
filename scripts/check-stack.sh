@@ -38,7 +38,7 @@ else
 fi
 
 # A built index.html loads hashed bundles from /assets/; the dev one loads /src/main.tsx.
-for path in / /home; do
+for path in / /new; do
   get "$path"
   if [ "$code" = 200 ] && is_app_html && grep -q 'src="/assets/' "$body"; then
     pass "$path serves the built app's HTML"

@@ -134,7 +134,7 @@ The defaults reach the compose stack's bundled Postgres; set these only for an e
 
 | Variable | Meaning |
 | --- | --- |
-| `ALLOW_SEARCH_INDEXING` | `false` (default) or `true`, read by the web container when it starts. `false` serves `index.html` with `<meta name="robots" content="noindex,nofollow">` and a `robots.txt` that disallows every path, so the Instance stays out of search engines. `true` serves `index,follow` and a `robots.txt` that allows crawling (except `/home` and `/billing`) and names `PUBLIC_URL/sitemap.xml`. The hosted Instance at pumpkit.io sets `true`. |
+| `ALLOW_SEARCH_INDEXING` | `false` (default) or `true`, read by the web container when it starts. `false` serves `index.html` with `<meta name="robots" content="noindex,nofollow">` and a `robots.txt` that disallows every path, so the Instance stays out of search engines. `true` serves `index,follow` and a `robots.txt` that allows crawling (except the signed-in pages and `/billing`) and names `PUBLIC_URL/sitemap.xml`. The hosted Instance at pumpkit.io sets `true`. |
 
 ### Instance and internal tunables
 

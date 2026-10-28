@@ -20,7 +20,7 @@ from pumpkit.posts.version_writing import (
 from pumpkit.posts.writing.versions import write_first_version
 
 # Where the User adds Inspiration authors.
-HOME_PAGE = "/home"
+PERSONA_PAGE = "/persona"
 
 
 async def list_posts(db: AsyncSession, user: User, limit: int, offset: int) -> PostsPageResponse:
@@ -62,7 +62,7 @@ async def start_post(
     corpus = await service.corpus_for_user(db, user_id=user_id)
     if not corpus.post_ids:
         raise RefusedError(
-            "Add an Inspiration author with posts before writing a Post.", fix_page=HOME_PAGE
+            "Add an Inspiration author with posts before writing a Post.", fix_page=PERSONA_PAGE
         )
     await check_attempt_limit(db, user_id=user_id, now=now)
     char_limit = await char_limit_for(db, user_id=user_id)
