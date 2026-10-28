@@ -36,6 +36,16 @@ vi.mock('@/services/xConnectionService', () => ({
     disconnect: vi.fn(),
   },
 }));
+vi.mock('@/services/postService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/postService')>()),
+  postService: {
+    list: vi.fn().mockResolvedValue({
+      posts: [],
+      counts: { draft: 0, scheduled: 0, published: 0, failed: 0 },
+      nextOffset: null,
+    }),
+  },
+}));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),

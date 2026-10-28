@@ -31,6 +31,11 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
+    list: vi.fn().mockResolvedValue({
+      posts: [],
+      counts: { draft: 0, scheduled: 0, published: 0, failed: 0 },
+      nextOffset: null,
+    }),
     get: vi.fn(),
     start: vi.fn(),
     addVersion: vi.fn(),
@@ -47,7 +52,6 @@ vi.mock('@/services/xConnectionService', () => ({
 vi.mock('@/services/scheduledPostService', () => ({
   scheduledPostService: {
     pastCommunities: vi.fn().mockResolvedValue([]),
-    list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),
     lookUpCommunity: vi.fn(),
@@ -77,6 +81,7 @@ import { xConnectionService, type XConnection } from '@/services/xConnectionServ
 import {
   LEVELSIO,
   NOT_SUBSCRIBED,
+  NO_POSTS,
   SUBSCRIBED,
   apiError,
   renderSignedIn,
@@ -177,6 +182,7 @@ describe('Post page', () => {
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.addVersion).mockReset();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
     vi.mocked(track).mockClear();
   });
@@ -1102,5 +1108,29 @@ describe('Post page', () => {
     fireEvent.click(await panel('Draft').findByRole('button', { name: 'Schedule' }));
 
     expect(await screen.findByRole('dialog', { name: 'Schedule this Final' })).toBeInTheDocument();
+  });
+
+  // Whatever sends the Post out on this page passes its answer to usePost's setScheduledPost.
+  it("updates the sidebar's Failed badge once the Post's Scheduled post Fails", async () => {
+    vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+      ...SCHEDULED,
+      state: 'failed',
+      failedReason: 'X refused the post: duplicate content.',
+    });
+    renderPost(postWith('the final text'));
+    await versionCard();
+    const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
+    expect(sidebar.getByRole('link', { name: 'Posts' })).toBeInTheDocument();
+    vi.mocked(postService.list).mockResolvedValue({
+      ...NO_POSTS,
+      counts: { ...NO_POSTS.counts, failed: 1 },
+    });
+
+    fireEvent.click(panel('Draft').getByRole('button', { name: 'Post now' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+    fireEvent.click(await dialog.findByRole('button', { name: 'Close' }));
+
+    expect(await sidebar.findByRole('link', { name: 'Posts, 1 Failed' })).toBeInTheDocument();
   });
 });

@@ -42,7 +42,7 @@ test.describe('logged in', () => {
 
     for (const [name, path, title] of [
       [/^Persona/, '/persona', 'Persona'],
-      ['Posts', '/posts', 'Posts'],
+      ['Posts', '/posts/scheduled', 'Posts'],
       ['Settings', '/settings', 'Settings'],
     ] as const) {
       await nav.getByRole('link', { name }).click();

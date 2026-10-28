@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import type { Instance } from '@/lib/instance';
 import type { BillingMe } from '@/services/billingService';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
+import type { PostsPage } from '@/services/postService';
 import { AppLayout } from '../AppLayout';
 import { signedInRoutes } from '../signedInRoutes';
 
@@ -84,3 +85,10 @@ export function apiError(status: number, detail: string, extra: Record<string, u
     response: { status, data: { detail, ...extra } },
   });
 }
+
+/** `postService.list`'s answer for a User with no Posts. */
+export const NO_POSTS: PostsPage = {
+  posts: [],
+  counts: { draft: 0, scheduled: 0, published: 0, failed: 0 },
+  nextOffset: null,
+};

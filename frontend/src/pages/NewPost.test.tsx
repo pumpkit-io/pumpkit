@@ -31,6 +31,11 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
+    list: vi.fn().mockResolvedValue({
+      posts: [],
+      counts: { draft: 0, scheduled: 0, published: 0, failed: 0 },
+      nextOffset: null,
+    }),
     get: vi.fn(),
     start: vi.fn(),
     addVersion: vi.fn(),
@@ -47,7 +52,6 @@ vi.mock('@/services/xConnectionService', () => ({
 vi.mock('@/services/scheduledPostService', () => ({
   scheduledPostService: {
     pastCommunities: vi.fn().mockResolvedValue([]),
-    list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),
     lookUpCommunity: vi.fn(),
