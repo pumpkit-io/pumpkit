@@ -12,9 +12,8 @@ import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
 import { TermsAcceptanceFields } from './TermsAcceptanceFields';
 
 /**
- * The Plans for a User who may subscribe, behind the acceptance boxes where the Instance has
- * Terms (ADR 0010). Remount it with a new `key` when the Terms version changes, so every
- * version is accepted afresh. `notice` is an error to start with, such as a cancelled checkout.
+ * The Plans, behind the Terms boxes (ADR 0010). Remount with a new `key` per Terms version.
+ * `notice` is the error it opens with, such as a cancelled checkout.
  */
 export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: string | null }) {
   const [acceptance, setAcceptance] = useState<TermsAcceptance>(NOTHING_ACCEPTED);
