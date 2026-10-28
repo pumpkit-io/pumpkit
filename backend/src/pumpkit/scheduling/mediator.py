@@ -43,6 +43,7 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import (
     CommunityResponse,
     PastCommunitiesResponse,
+    PostDetailResponse,
     ScheduledPostPartResponse,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
@@ -338,6 +339,23 @@ async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id:
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()
+
+
+async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResponse:
+    """The User's Post with every Version in order, its status and its Scheduled post."""
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    char_limit = await version_writing.char_limit_for(db, user_id=user.id)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    return PostDetailResponse(
+        id=post.id,
+        brief=post.brief,
+        versions=[
+            version_writing.version_response(v, char_limit)
+            for v in version_writing.versions_of(post)
+        ],
+        status=post_status(scheduled_post.state if scheduled_post else None),
+        scheduled_post=scheduled_post_response(scheduled_post) if scheduled_post else None,
+    )
 
 
 async def give_feedback(

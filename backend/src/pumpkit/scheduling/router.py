@@ -28,6 +28,7 @@ from pumpkit.scheduling.schemas import (
     CommunityLookupRequest,
     CommunityResponse,
     PastCommunitiesResponse,
+    PostDetailResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostsListResponse,
@@ -38,8 +39,9 @@ from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
 router = APIRouter(tags=["scheduled-posts"])
-# Served here, not from posts: whether a Post takes Feedback depends on its Scheduled post.
-feedback_router = APIRouter(tags=["posts"])
+# Served here, not from posts: a Post's status, and so whether it takes Feedback, comes from
+# its Scheduled post.
+posts_router = APIRouter(tags=["posts"])
 # The X connection routes that answer with the Scheduled posts waiting. Two routers, so main.py
 # can mount them around x_connection's router and keep the OpenAPI document's order.
 x_connection_router = APIRouter(tags=["x-connection"])
@@ -198,7 +200,19 @@ async def cancel_scheduled_post(
     )
 
 
-@feedback_router.post(
+# Open to Users who aren't Subscribed, like their Scheduled posts.
+@posts_router.get(
+    "/posts/{post_id}", response_model=PostDetailResponse, status_code=status.HTTP_200_OK
+)
+async def get_post(
+    post_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> PostDetailResponse:
+    return await mediator.get_post(db=db, user=current_user, post_id=post_id)
+
+
+@posts_router.post(
     "/posts/{post_id}/versions",
     response_model=VersionResponse,
     status_code=status.HTTP_201_CREATED,

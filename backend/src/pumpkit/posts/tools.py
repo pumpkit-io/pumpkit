@@ -54,17 +54,7 @@ async def list_posts(call: ToolCall[User], limit: int = 20, offset: int = 0) -> 
     )
 
 
-async def get_post(call: ToolCall[User], post_id: str) -> PostToolResponse:
-    """
-    Read one of the User's Posts: its Brief and every Version in order, each with the Feedback
-    that made it, its text and each Part's character count. A Version's id can be scheduled,
-    once per Post.
-    """
-    return _post_tool_response(await mediator.get_post(db=call.db, user=call.user, post_id=post_id))
-
-
 TOOLS = [
     McpTool(start_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(list_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
-    McpTool(get_post, rate=READ_ONLY_RATE, annotations=READ_ONLY),
 ]

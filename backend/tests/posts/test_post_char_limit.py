@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import pumpkit.posts.mediator as posts_mediator
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
@@ -125,7 +124,5 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
     assert _limits(response.json()) == [X_LONG_POST_MAX_CHARS, X_LONG_POST_MAX_CHARS]
     assert _system_text(fake_llm.calls[2]) == sketch_thread_prompt(X_LONG_POST_MAX_CHARS)
     assert _system_text(fake_llm.calls[3]) == humanizer_thread_prompt(X_LONG_POST_MAX_CHARS)
-    read = await posts_mediator.get_post(db, user, post_id)
-    assert [[part.char_limit for part in v.parts] for v in read.versions] == [
-        [X_LONG_POST_MAX_CHARS] * 2
-    ] * 2
+    read = (await client.get(f"{POSTS}/{post_id}")).json()
+    assert [_limits(v) for v in read["versions"]] == [[X_LONG_POST_MAX_CHARS] * 2] * 2
