@@ -37,7 +37,7 @@ def _posts(handle: str, count: int) -> list[FetchedPost]:
 
 @pytest.fixture
 async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
-    """A Post from the Brief "ship small things" whose first Version's Final is "final 1"."""
+    """A Post from the Brief "ship small things" whose first Version's text is "final 1"."""
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
     fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]

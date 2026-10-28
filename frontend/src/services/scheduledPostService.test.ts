@@ -19,7 +19,7 @@ const SCHEDULED = {
 describe('scheduledPostService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('sends a Final as its Version alone, for the server to copy', async () => {
+  it('sends only the Version, for the server to copy', async () => {
     const post = vi.spyOn(apiService, 'post').mockResolvedValue({ data: SCHEDULED } as never);
 
     await scheduledPostService.schedule(

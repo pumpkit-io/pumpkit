@@ -32,7 +32,7 @@ async def connected(subscribed, fixed_clock, connect_x) -> None:
 
 @pytest.fixture
 async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post, whose Final is "The final, version one."."""
+    """The first Version of a new Post, whose text is "The final, version one."."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
@@ -76,7 +76,7 @@ THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
 
 @pytest.fixture
 async def thread_version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post started as a Thread, its Final the three THREAD_FINAL Parts."""
+    """The first Version of a new Post started as a Thread, its text the three THREAD_FINAL Parts."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
