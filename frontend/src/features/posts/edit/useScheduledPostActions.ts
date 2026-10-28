@@ -49,7 +49,7 @@ export function useScheduledPostActions(scheduledPost: ScheduledPost) {
         if (changes.community) pastCommunitiesChanged();
         return saved;
       } catch (e) {
-        refused(e, "Couldn't save the changes. Please try again.");
+        refused(e, "Couldn't save the changes. Try again.");
         return null;
       } finally {
         setBusy(false);
@@ -66,7 +66,7 @@ export function useScheduledPostActions(scheduledPost: ScheduledPost) {
       await scheduledPostService.cancel(id);
       return true;
     } catch (e) {
-      refused(e, "Couldn't unschedule it. Please try again.");
+      refused(e, "Couldn't unschedule it. Try again.");
       return false;
     } finally {
       setBusy(false);

@@ -327,7 +327,7 @@ async def test_a_failed_revision_is_stored_as_a_failed_attempt_and_returns_502(
     assert failed.sequence == 2
     assert failed.feedback == "shorter"
     assert failed.error == "LLMError: provider timed out"
-    assert (failed.version_number, failed.final_parts, failed.format) == (None, None, "post")
+    assert (failed.version_number, failed.parts, failed.format) == (None, None, "post")
     assert as_utc(failed.created_at) == clock()
 
 
@@ -356,7 +356,7 @@ async def test_a_version_stores_its_feedback_models_and_usage(client, db, post_i
 
     post = await _stored_post(db, post_id)
     version = post.attempts[1]
-    assert (version.feedback, version.sketch_parts, version.final_parts) == (
+    assert (version.feedback, version.sketch_parts, version.parts) == (
         "shorter",
         ["sketch 2"],
         ["final 2"],

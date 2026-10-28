@@ -106,7 +106,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        "at /settings via REPLACE: X didn't finish connecting your account. Please try again.",
+        "at /settings via REPLACE: X didn't finish connecting your account. Try again.",
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();

@@ -35,10 +35,15 @@ export function renderSignedIn(
   );
 }
 
-/** Shows the router's path so a test can read where a click or a redirect landed. */
+/** Shows the router's path and state so a test can read where a click or a redirect landed. */
 function CurrentPath() {
-  const { pathname } = useLocation();
-  return <output aria-label="Current path">{pathname}</output>;
+  const { pathname, state } = useLocation();
+  return (
+    <>
+      <output aria-label="Current path">{pathname}</output>
+      <output aria-label="Current state">{JSON.stringify(state ?? null)}</output>
+    </>
+  );
 }
 
 export const NOT_SUBSCRIBED: BillingMe = {

@@ -340,6 +340,38 @@ describe('Post page', () => {
 
       expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
     });
+
+    it("gives the Format and Part count of the Scheduled post's edited text, and claims no tells for it", async () => {
+      renderPost({
+        ...withScheduledPost({
+          ...SCHEDULED,
+          parts: [
+            { text: 'part one', live: false, xPostUrl: null },
+            { text: 'part two', live: false, xPostUrl: null },
+          ],
+        }),
+        versions: [
+          version(1, ['the final text'], { tells: [{ name: 'em_dash', description: 'em dash' }] }),
+        ],
+      });
+
+      const card = await versionCard();
+      expect(card.getByText('Thread · 2 Parts')).toBeInTheDocument();
+      expect(card.getByText('Edited, not checked for tells')).toBeInTheDocument();
+      expect(card.queryByText('1 machine-written tell')).not.toBeInTheDocument();
+      expect(card.queryByRole('list', { name: 'Machine-written tells' })).not.toBeInTheDocument();
+    });
+
+    it("keeps the Version's tells on a Scheduled post with its text unedited", async () => {
+      renderPost({
+        ...withScheduledPost(SCHEDULED),
+        versions: [
+          version(1, ['the final text'], { tells: [{ name: 'em_dash', description: 'em dash' }] }),
+        ],
+      });
+
+      expect((await versionCard()).getByText('1 machine-written tell')).toBeInTheDocument();
+    });
   });
 
   describe('Pager', () => {
@@ -375,6 +407,8 @@ describe('Post page', () => {
 
         await versionCard();
         const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
+        // A Failed Post opens on its latest Version, so go back to the one that failed.
+        fireEvent.click(pager.getByRole('button', { name: `Version 1, ${label}` }));
         expect(pager.getByRole('button', { name: `Version 1, ${label}` })).toHaveAttribute(
           'aria-current',
           'true',
@@ -796,6 +830,25 @@ describe('Post page', () => {
       expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toBeInTheDocument();
     });
 
+    it('says the save failed and to try again when the API gives no reason', async () => {
+      vi.mocked(scheduledPostService.edit).mockRejectedValue(
+        Object.assign(new Error('Network Error'), { isAxiosError: true }),
+      );
+      const editor = await startEditing();
+
+      fireEvent.change((await versionCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'the edited text' },
+      });
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+      expect(await editor.findByText("Couldn't save the changes. Try again.")).toBeInTheDocument();
+      expect(editor.queryByText('Network Error')).not.toBeInTheDocument();
+      expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
+        'the edited text',
+      );
+      expect(editor.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    });
+
     it('unschedules it, which makes the Post a Draft that takes Feedback again', async () => {
       vi.mocked(scheduledPostService.cancel).mockResolvedValue(undefined);
       const editor = await startEditing();
@@ -857,6 +910,21 @@ describe('Post page', () => {
       expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
         'the final text',
       );
+    });
+
+    it('clears the request to edit once the editor is open, so a reload shows the Post', async () => {
+      vi.mocked(postService.get).mockResolvedValue(withScheduledPost(SCHEDULED));
+      renderSignedIn('/posts/post_01', { state: { edit: true } });
+
+      await screen.findByRole('region', { name: 'Edit the Scheduled post' });
+
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Current state' })).toHaveTextContent('null'),
+      );
+      expect(screen.getByRole('status', { name: 'Current path' })).toHaveTextContent(
+        '/posts/post_01',
+      );
+      expect(screen.getByRole('region', { name: 'Edit the Scheduled post' })).toBeInTheDocument();
     });
   });
 
@@ -943,6 +1011,9 @@ describe('Post page', () => {
           ],
         }),
       );
+      await versionCard();
+      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
+      fireEvent.click(pager.getByRole('button', { name: 'Version 1, Failed' }));
 
       const card = await versionCard();
       const [first, second] = card
@@ -1404,15 +1475,21 @@ describe('Post page', () => {
       vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);
     });
 
-    /** Opens "Post to…" on the Failed `post`, on its latest Version. */
+    /** Opens "Post to…" on the Failed `post` as it loads, on its latest Version. */
     async function openRetry(post: PostDetail = withScheduledPost(FAILED)): Promise<Dialog> {
       renderPost(post);
       await versionCard();
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      fireEvent.click(pager.getByRole('button', { name: `Version ${post.versions.length}` }));
       fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
     }
+
+    it('opens on the latest Version, not the one that failed', async () => {
+      renderPost(withScheduledPost(FAILED));
+
+      expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
+      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
+      expect(pager.getByText('Version 2 of 2')).toBeInTheDocument();
+    });
 
     it('reschedules the Failed one with the latest Version, and the pager marks that Version', async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
@@ -1480,6 +1557,8 @@ describe('Post page', () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue(SCHEDULED);
       renderPost(withScheduledPost(FAILED));
       await versionCard();
+      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
+      fireEvent.click(pager.getByRole('button', { name: 'Version 1, Failed' }));
 
       fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));

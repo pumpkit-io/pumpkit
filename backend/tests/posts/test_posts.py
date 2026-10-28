@@ -310,7 +310,7 @@ async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
     assert post.corpus_post_ids == ["levelsio-0", "levelsio-1"]
     [attempt] = post.attempts
     assert attempt.status == "succeeded"
-    assert (attempt.format, attempt.sketch_parts, attempt.final_parts) == (
+    assert (attempt.format, attempt.sketch_parts, attempt.parts) == (
         "post",
         ["sketch"],
         ["final"],
@@ -354,7 +354,7 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns
     [attempt] = post.attempts
     assert attempt.status == "failed"
     assert attempt.error == "LLMError: provider timed out"
-    assert (attempt.sketch_parts, attempt.final_parts, attempt.version_number) == (None, None, None)
+    assert (attempt.sketch_parts, attempt.parts, attempt.version_number) == (None, None, None)
     assert attempt.format == "post"
 
 

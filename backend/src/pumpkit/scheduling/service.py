@@ -39,6 +39,7 @@ from pumpkit.scheduling.post_status import (
     FAILED_STATUS,
     PUBLISHED_STATUS,
     SCHEDULED_STATUS,
+    STATUS_OF_STATE,
     PostStatus,
 )
 
@@ -93,12 +94,7 @@ def _destination_columns(destination: Destination) -> dict[str, Any]:
 
 def _post_status_column() -> ColumnElement[str]:
     """`post_status` in SQL, for a Post outer-joined to its Scheduled post."""
-    return case(
-        (ScheduledPost.id.is_(None), DRAFT),
-        (ScheduledPost.state == PUBLISHED, PUBLISHED_STATUS),
-        (ScheduledPost.state == FAILED, FAILED_STATUS),
-        else_=SCHEDULED_STATUS,
-    )
+    return case(STATUS_OF_STATE, value=ScheduledPost.state, else_=DRAFT)
 
 
 def _latest_versions() -> Subquery:
@@ -124,12 +120,7 @@ class ListedPost:
 async def list_posts(
     db: AsyncSession, *, user_id: str, status: Optional[PostStatus], limit: int, offset: int
 ) -> list[ListedPost]:
-    """
-    A page of the User's Posts with a Version, with their attempts and Scheduled post, in
-    `status` or every one. Scheduled ones go soonest first, Published ones most recently
-    published first, Failed ones most recently due first, and Drafts, like every Post listed
-    together, by their latest Version, newest first.
-    """
+    """A page of the User's Posts with a Version, in `status` or every one, in its tab's order."""
     latest = _latest_versions()
     query = (
         select(Post, ScheduledPost)
@@ -140,15 +131,15 @@ async def list_posts(
     )
     if status is not None:
         query = query.where(_post_status_column() == status)
-    match status:
-        case "scheduled":
-            order = [ScheduledPost.publish_at, ScheduledPost.id]
-        case "published":
-            order = [ScheduledPost.published_at.desc(), ScheduledPost.id.desc()]
-        case "failed":
-            order = [ScheduledPost.publish_at.desc(), ScheduledPost.id.desc()]
-        case _:
-            order = [latest.c.latest_at.desc(), Post.id.desc()]
+    # Drafts, like every Post listed together, go by their latest Version, newest first.
+    if status == SCHEDULED_STATUS:
+        order = [ScheduledPost.publish_at, ScheduledPost.id]
+    elif status == PUBLISHED_STATUS:
+        order = [ScheduledPost.published_at.desc(), ScheduledPost.id.desc()]
+    elif status == FAILED_STATUS:
+        order = [ScheduledPost.publish_at.desc(), ScheduledPost.id.desc()]
+    else:
+        order = [latest.c.latest_at.desc(), Post.id.desc()]
     result = await db.execute(query.order_by(*order).limit(limit).offset(offset))
     return [ListedPost(post=post, scheduled_post=scheduled) for post, scheduled in result.tuples()]
 

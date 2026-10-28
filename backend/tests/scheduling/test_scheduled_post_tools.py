@@ -11,6 +11,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.models import SCHEDULED, ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
@@ -21,7 +22,7 @@ from tests.mcp_client import error_text
 from tests.posts.writing_replies import written, written_thread
 from tests.scheduling.reading import scheduled_posts_through_mcp
 
-SCHEDULED_PAGE = "http://localhost:5173/posts"
+POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
 
 
@@ -65,9 +66,9 @@ async def test_scheduling_a_version_answers_with_the_scheduled_page_link(
     assert scheduled["publish_at"] == "2026-10-10T14:00:00Z"
     assert scheduled["source_version_id"] == version_id
     assert scheduled["community"] is None
-    assert scheduled["scheduled_page_url"] == SCHEDULED_PAGE
+    assert scheduled["post_url"] == f"{POSTS_PAGE}/{scheduled['post_id']}"
     assert await scheduled_posts_through_mcp(mcp) == [
-        {key: value for key, value in scheduled.items() if key != "scheduled_page_url"}
+        {key: value for key, value in scheduled.items() if key != "post_url"}
     ]
 
 
@@ -460,8 +461,23 @@ async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fix
     bob = User(email="bob@example.com", display_name="Bob")
     db.add(bob)
     await db.flush()
+    bobs_post = Post(user_id=bob.id, brief="Bob's", corpus_post_ids=[], created_at=fixed_clock())
+    bobs_version = VersionAttempt(
+        post=bobs_post,
+        sequence=1,
+        format="post",
+        status=ATTEMPT_SUCCEEDED,
+        version_number=1,
+        parts=["Bob's."],
+        slop_tells=[],
+        created_at=fixed_clock(),
+    )
+    db.add_all([bobs_post, bobs_version])
+    await db.flush()
     bobs = ScheduledPost(
         user_id=bob.id,
+        post_id=bobs_post.id,
+        source_version_id=bobs_version.id,
         x_user_id="2002",
         parts=[ScheduledPostPart(position=0, text="Bob's.")],
         publish_at=fixed_clock() + timedelta(hours=2),
@@ -487,7 +503,7 @@ async def test_deleting_a_waiting_scheduled_post_takes_it_off_the_list(
 
     assert result["structuredContent"] == {
         "message": "The Scheduled post is deleted.",
-        "scheduled_page_url": SCHEDULED_PAGE,
+        "post_url": f"{POSTS_PAGE}/{scheduled['post_id']}",
     }
     assert (await scheduled_posts_through_mcp(mcp)) == []
 
@@ -624,7 +640,7 @@ async def test_post_now_publishes_a_version_and_links_to_it_on_x(
     assert posted["state"] == "published"
     assert posted["x_post_url"] == FIRST_X_POST
     assert posted["message"] == f"Published on X: {FIRST_X_POST}"
-    assert posted["scheduled_page_url"] == SCHEDULED_PAGE
+    assert posted["post_url"] == f"{POSTS_PAGE}/{posted['post_id']}"
     assert fake_x_publisher.published == [("access-1001-1", "Out now.")]
 
 

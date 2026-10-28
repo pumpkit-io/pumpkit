@@ -1,9 +1,9 @@
 """
-Writing a Version and storing the attempt. Starting a Post and giving Feedback both write one;
-Feedback is served from scheduling, which gates it, so this sits outside the mediator. Like
-scheduling's `publishing`, it commits: around the model calls, which can take minutes.
+The steps of writing a Version, shared by posts' mediator (a Post's first Version) and
+scheduling's (Feedback, which it gates). Flush-only: the mediators commit around the model calls.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -14,10 +14,10 @@ from pumpkit.auth.models import User
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
-from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.schemas import PartResponse, TellResponse, VersionResponse
-from pumpkit.posts.writing.versions import EarlierVersion, write_next_version
+from pumpkit.posts.writing.corpus import Corpus
+from pumpkit.posts.writing.versions import EarlierVersion
 from pumpkit.x_connection.x_length import x_post_max_chars, x_weighted_length
 
 # Starting a Post and giving Feedback share one budget per User, failed attempts included,
@@ -51,7 +51,7 @@ async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) 
         )
 
 
-async def keep_failed_attempt(
+async def record_failed_attempt(
     db: AsyncSession,
     *,
     post: Post,
@@ -70,8 +70,6 @@ async def keep_failed_attempt(
         error=f"{type(error).__name__}: {error}",
         now=now,
     )
-    # Commit before the caller re-raises, or the request session rolls the failed attempt back.
-    await db.commit()
 
 
 async def char_limit_for(db: AsyncSession, *, user_id: str) -> int:
@@ -84,7 +82,7 @@ async def char_limit_for(db: AsyncSession, *, user_id: str) -> int:
 
 
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:
-    assert attempt.version_number is not None and attempt.final_parts is not None
+    assert attempt.version_number is not None and attempt.parts is not None
     assert attempt.slop_tells is not None
     format = attempt.format
     return VersionResponse(
@@ -98,7 +96,7 @@ def version_response(attempt: VersionAttempt, char_limit: int) -> VersionRespons
                 char_count=x_weighted_length(text),
                 char_limit=char_limit,
             )
-            for text in attempt.final_parts
+            for text in attempt.parts
         ],
         tells=[TellResponse(**tell) for tell in attempt.slop_tells],
     )
@@ -115,61 +113,37 @@ def versions_of(post: Post) -> list[VersionAttempt]:
     return [attempt for attempt in post.attempts if attempt.status == ATTEMPT_SUCCEEDED]
 
 
-async def add_version(
-    db: AsyncSession,
-    llm: LLM,
-    user: User,
-    post_id: str,
-    feedback: str,
-    format: Optional[Format],
-    now: datetime,
-) -> VersionResponse:
+@dataclass(frozen=True)
+class NextVersion:
+    """What writing the Version after a Post's latest needs, read before the model calls."""
+
+    corpus: Corpus
+    earlier: list[EarlierVersion]
+    format: Format
+    sequence: int
+    number: int
+    char_limit: int
+
+
+async def prepare_next_version(
+    db: AsyncSession, *, user: User, post: Post, format: Optional[Format], now: datetime
+) -> NextVersion:
     """
-    Write the next Version of the User's Post from Feedback, in `format` or else the latest
-    Version's, with the corpus the Post started with. Stored after the calls like starting a
-    Post, and a failure likewise. Scheduling gates it first: a Scheduled or Published Post takes
-    no Feedback, and only scheduling knows a Post's Scheduled post (ADR 0008, ADR 0015).
+    For Feedback on `post`, in `format` or else the latest Version's, with the corpus the Post
+    started with. Raises when the Post has no Version yet or the User is over the attempt limit.
     """
-    post = await user_post(db, user=user, post_id=post_id)
     versions = versions_of(post)
     if not versions:
         raise ConflictError("This Post has no Version to give Feedback on. Start a new Post.")
     await check_attempt_limit(db, user_id=user.id, now=now)
-    corpus = await service.corpus_for_post(db, post=post)
-    earlier = [
-        EarlierVersion(feedback=v.feedback, format=v.format, final_parts=v.final_parts or [])
-        for v in versions
-    ]
-    format = format or versions[-1].format
-    sequence = len(post.attempts) + 1
-    char_limit = await char_limit_for(db, user_id=user.id)
-    # Ends the read transaction before the calls, which can take minutes.
-    await db.commit()
-
-    try:
-        written = await write_next_version(
-            llm, corpus, post.brief, earlier, feedback, format, char_limit
-        )
-    except Exception as error:
-        await keep_failed_attempt(
-            db,
-            post=post,
-            sequence=sequence,
-            feedback=feedback,
-            format=format,
-            error=error,
-            now=now,
-        )
-        raise
-
-    version = await service.record_version(
-        db,
-        post=post,
-        sequence=sequence,
-        version_number=len(versions) + 1,
-        feedback=feedback,
-        written=written,
-        now=now,
+    return NextVersion(
+        corpus=await service.corpus_for_post(db, post=post),
+        earlier=[
+            EarlierVersion(feedback=v.feedback, format=v.format, parts=v.parts or [])
+            for v in versions
+        ],
+        format=format or versions[-1].format,
+        sequence=len(post.attempts) + 1,
+        number=len(versions) + 1,
+        char_limit=await char_limit_for(db, user_id=user.id),
     )
-    await db.commit()
-    return version_response(version, char_limit)

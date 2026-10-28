@@ -172,7 +172,7 @@ async def test_every_part_of_a_version_s_final_is_copied_and_the_version_kept(
         status=ATTEMPT_SUCCEEDED,
         version_number=1,
         format="thread",
-        final_parts=["The final, Part one.", "The final, Part two."],
+        parts=["The final, Part one.", "The final, Part two."],
         created_at=_at("2026-10-01"),
     )
     db.add(version)
@@ -203,7 +203,7 @@ async def test_another_user_s_version_is_not_found(db, user, create, connect_x):
         status=ATTEMPT_SUCCEEDED,
         version_number=1,
         format="post",
-        final_parts=["Bob's words."],
+        parts=["Bob's words."],
         created_at=_at("2026-10-01"),
     )
     db.add(bobs_version)

@@ -58,8 +58,8 @@ export interface ScheduledPost {
   xPostUrl: string | null;
   /** Why it Failed, in words for the User. */
   failedReason: string | null;
-  /** The Version whose text it copied; null only for one typed before ADR 0015. */
-  sourceVersionId: string | null;
+  /** The Version whose text it copied. */
+  sourceVersionId: string;
   /** The Community it goes to; null for the User's profile. */
   community: Community | null;
   shareWithFollowers: boolean;
@@ -74,7 +74,7 @@ export interface ScheduledPostApi {
   published_at: string | null;
   x_post_url: string | null;
   failed_reason: string | null;
-  source_version_id: string | null;
+  source_version_id: string;
   community: Community | null;
   share_with_followers: boolean;
   created_at: string;

@@ -441,7 +441,7 @@ describe('Settings', () => {
       renderSettings();
 
       expect(await (await card('Plan')).findByRole('alert')).toHaveTextContent(
-        'Could not load billing information.',
+        "Couldn't load billing information.",
       );
     });
   });

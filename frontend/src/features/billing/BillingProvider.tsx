@@ -33,7 +33,7 @@ export function BillingProvider({ children }: { children: ReactNode }) {
       ]);
       setData({ me, plans, termsVersion });
     } catch {
-      setLoadError('Could not load billing information. Reload the page to try again.');
+      setLoadError("Couldn't load billing information. Reload the page to try again.");
     } finally {
       setIsLoading(false);
     }

@@ -125,7 +125,7 @@ class EarlierVersion:
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]
     format: Format
-    final_parts: list[str]
+    parts: list[str]
 
 
 @dataclass(frozen=True)
@@ -139,7 +139,7 @@ class Hook:
 class WrittenVersion:
     format: Format
     sketch_parts: list[str]
-    final_parts: list[str]
+    parts: list[str]
     sketch_model: str
     humanizing_model: str
     sketch_usage: Optional[dict]
@@ -202,7 +202,7 @@ def revision_humanizer_messages(
     """
     return [
         *_humanizer_prefix(corpus, brief, format, char_limit),
-        _user(previous_final_message(previous.format, previous.final_parts)),
+        _user(previous_final_message(previous.format, previous.parts)),
         _user(latest_feedback_message(feedback, previous.format, format)),
         _user(revised_sketch_message(previous.format, format, sketch_parts)),
     ]
@@ -228,7 +228,7 @@ def revision_messages(
         if previous is not None and version.feedback is not None:
             framed = feedback_message(version.feedback, previous.format, version.format)
             messages.append(_user(framed))
-        content = format_text(version.format, version.final_parts)
+        content = format_text(version.format, version.parts)
         messages.append({"role": "assistant", "content": content})
         previous = version
     messages.append(_user(feedback_message(feedback, earlier[-1].format, format)))
@@ -327,11 +327,11 @@ async def _humanize(
         response_model=_FINAL[format],
         max_tokens=MAX_TOKENS,
     )
-    final_parts = _parts_of("humanizer", refined.parsed)
+    parts = _parts_of("humanizer", refined.parsed)
     return WrittenVersion(
         format=format,
         sketch_parts=sketch_parts,
-        final_parts=final_parts,
+        parts=parts,
         sketch_model=written.model,
         humanizing_model=refined.model,
         sketch_usage=_usage(written),

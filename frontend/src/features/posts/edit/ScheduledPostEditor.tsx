@@ -14,11 +14,7 @@ import { VersionCard } from '../VersionCard';
 import { changesFrom, type ScheduledPostEdit } from './scheduledPostEdit';
 import { useScheduledPostActions } from './useScheduledPostActions';
 
-/**
- * A waiting Scheduled post edited in place: its Parts as text boxes in the Version card, then
- * its time and Destination, with Unschedule, Cancel and Save changes. The Version keeps its
- * own text; only the Scheduled post's copy changes. Parts already live on X stay locked.
- */
+/** A waiting Scheduled post edited in place; only its copy changes, never the Version's text. */
 export function ScheduledPostEditor({
   version,
   scheduledPost,

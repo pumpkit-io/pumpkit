@@ -31,7 +31,7 @@ async def main() -> None:
             status=ATTEMPT_SUCCEEDED,
             version_number=1,
             sketch_parts=PARTS,
-            final_parts=PARTS,
+            parts=PARTS,
             slop_tells=[],
             created_at=now,
         )

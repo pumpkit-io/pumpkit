@@ -46,7 +46,7 @@ function changedFields(form: FormState, profile: UserProfile): string[] {
 function saveError(e: unknown): string {
   const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
   if (Array.isArray(detail) && typeof detail[0]?.msg === 'string') return detail[0].msg;
-  return errorMessage(e, 'Could not save your changes.');
+  return errorMessage(e, "Couldn't save your changes. Try again.");
 }
 
 const LABEL = 'font-sans text-xs font-medium text-muted-foreground';
