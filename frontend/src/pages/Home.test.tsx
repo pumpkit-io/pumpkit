@@ -164,7 +164,6 @@ function postWith(final: string, finalCharCount = final.length, tells: Tell[] = 
         number: 1,
         feedback: null,
         format: 'post',
-        draftParts: ['the draft text'],
         parts: [{ text: final, charCount: finalCharCount, charLimit: 280 }],
         tells,
       },
@@ -182,7 +181,6 @@ function threadWith(parts: Part[]): Post {
         number: 1,
         feedback: null,
         format: 'thread',
-        draftParts: parts.map((part) => part.text),
         parts,
         tells: [],
       },
@@ -249,7 +247,7 @@ describe('Home', () => {
       expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
     });
 
-    it('writes the first Version, disabling the Brief while it waits, then shows Final and Draft', async () => {
+    it('writes the first Version, disabling the Brief while it waits, then shows only the Final', async () => {
       let answer: (post: Post) => void = () => {};
       vi.mocked(postService.start).mockReturnValue(new Promise((resolve) => (answer = resolve)));
       const area = await readyToWrite();
@@ -268,14 +266,8 @@ describe('Home', () => {
       expect(final.getByText('the final text')).toBeInTheDocument();
       expect(final.getByText('14 / 280 characters')).toBeInTheDocument();
       expect(final.queryByText(/characters over/i)).not.toBeInTheDocument();
-      const draft = within(area.getByRole('article', { name: 'Draft' }));
-      expect(draft.getByText('the draft text')).toBeInTheDocument();
-      expect(
-        area
-          .getByRole('article', { name: 'Final' })
-          .compareDocumentPosition(area.getByRole('article', { name: 'Draft' })) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      expect(area.getAllByRole('article')).toHaveLength(1);
+      expect(area.queryByText(/written first/i)).not.toBeInTheDocument();
     });
 
     it('starts on a single post and writes a Thread when the User picks Thread', async () => {
@@ -951,7 +943,6 @@ describe('Home', () => {
       number: 2,
       feedback: 'make it shorter',
       format: 'post',
-      draftParts: ['the second draft'],
       parts: [{ text: 'the second final', charCount: 16, charLimit: 280 }],
       tells: [],
     };
@@ -989,7 +980,6 @@ describe('Home', () => {
 
       const latest = within(await area.findByRole('region', { name: 'Version 2' }));
       expect(latest.getByText('the second final')).toBeInTheDocument();
-      expect(latest.getByText('the second draft')).toBeInTheDocument();
       expect(latest.getByText('make it shorter')).toBeInTheDocument();
       expect(area.getByLabelText('Feedback')).toHaveValue('');
       expect(area.getByLabelText('Feedback')).toBeEnabled();
