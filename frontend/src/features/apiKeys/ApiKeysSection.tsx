@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SettingsCard } from '@/components/SettingsCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
@@ -149,7 +150,7 @@ function KeyRow({
   );
 }
 
-/** The account dialog's API keys: its actions apply at once, apart from the profile's Save. */
+/** The Settings card for API keys: creating and revoking one apply at once. */
 export function ApiKeysSection() {
   const [keys, setKeys] = useState<ApiKey[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -206,17 +207,10 @@ export function ApiKeysSection() {
   };
 
   return (
-    <section aria-labelledby="api-keys-heading" className="space-y-3">
-      <div className="space-y-1">
-        <h3 id="api-keys-heading" className="font-sans text-sm font-semibold text-foreground">
-          API keys
-        </h3>
-        <p className="font-sans text-xs text-muted-foreground">
-          A key lets Claude Code or another MCP client write and schedule posts as you. Creating or
-          revoking one takes effect at once.
-        </p>
-      </div>
-
+    <SettingsCard
+      title="API keys"
+      description="A key lets Claude Code or another MCP client write and schedule posts as you. Creating or revoking one takes effect at once."
+    >
       {created && <NewKeyReveal created={created} onDone={() => setCreated(null)} />}
 
       <form onSubmit={create} className="flex gap-2">
@@ -241,13 +235,13 @@ export function ApiKeysSection() {
       {needsSubscription && (
         <SubscribePrompt
           message="Creating API keys needs a Subscription."
-          source="account_api_keys"
+          source="settings_api_keys"
         />
       )}
       {error && <ErrorBanner message={error} />}
 
       {loadFailed ? (
-        <ErrorBanner message="Couldn’t load your API keys. Close and reopen this dialog to try again." />
+        <ErrorBanner message="Couldn’t load your API keys. Reload the page to try again." />
       ) : keys === null ? (
         <p role="status" className="font-sans text-xs text-muted-foreground">
           Loading your API keys…
@@ -268,6 +262,6 @@ export function ApiKeysSection() {
           ))}
         </ul>
       )}
-    </section>
+    </SettingsCard>
   );
 }

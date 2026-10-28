@@ -3,11 +3,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { track } from '@/lib/analytics';
 import { errorMessage } from '@/services/apiErrors';
 import { xConnectionService } from '@/services/xConnectionService';
-import type { ScheduledLocationState } from './Scheduled';
+import type { SettingsLocationState } from './Settings';
 
 /**
  * Where X's consent screen sends the browser back. Completes the authorization with the
- * query's code and state, then returns to Scheduled with a message, replacing this entry.
+ * query's code and state, then returns to Settings with a message, replacing this entry.
  */
 export function XConnectionCallback() {
   const navigate = useNavigate();
@@ -20,8 +20,8 @@ export function XConnectionCallback() {
     handled.current = true;
 
     const back = (xConnectionNotice: string) => {
-      const state: ScheduledLocationState = { xConnectionNotice };
-      navigate('/posts', { replace: true, state });
+      const state: SettingsLocationState = { xConnectionNotice };
+      navigate('/settings', { replace: true, state });
     };
     const params = new URLSearchParams(search);
     const code = params.get('code');

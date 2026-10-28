@@ -20,7 +20,7 @@ function planNameOf(me: BillingMe, plans: Plan[]): string | null {
 export const SubscribedContext = createContext<SubscribedContextValue | null>(null);
 
 /**
- * Whether the User is Subscribed, for Home to show writing tools or a prompt to subscribe.
+ * Whether the User is Subscribed, for a page to show writing tools or a prompt to subscribe.
  * It is a hint only: the backend's 403 is the real gate. Must sit inside a BillingProvider.
  * On an Instance that sells no Plans every User counts as Subscribed, so no prompt shows.
  */
@@ -47,7 +47,7 @@ export function SubscribedProvider({ children }: { children: ReactNode }) {
 
   useEffect(refresh, [refresh]);
 
-  // The Billing dialog refetches on every open, after a checkout too: take its answer.
+  // Settings reloads billing on every visit, after a checkout too: take its answer.
   const billingData = billing.data;
   useEffect(() => {
     if (!billingData) return;

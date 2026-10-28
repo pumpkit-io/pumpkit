@@ -549,7 +549,7 @@ describe('Post page', () => {
       renderPost(postWith('the first final'));
       await versionCard();
 
-      expect(await panel('Draft').findByRole('button', { name: /subscribe/i })).toBeInTheDocument();
+      expect(await panel('Draft').findByRole('link', { name: /subscribe/i })).toBeInTheDocument();
       expect(panel('Draft').queryByRole('button', { name: 'Rewrite' })).not.toBeInTheDocument();
     });
   });
@@ -1077,7 +1077,7 @@ describe('Post page', () => {
       });
     });
 
-    it('points a User who is no longer Subscribed to Billing', async () => {
+    it('sends a User who is no longer Subscribed to Choose a Plan', async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
       vi.mocked(scheduledPostService.postNow).mockRejectedValue(apiError(403, 'Subscribe first.'));
       const final = await finalWritten();
@@ -1087,25 +1087,20 @@ describe('Post page', () => {
       const confirm = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
       fireEvent.click(confirm.getByRole('button', { name: 'Post now' }));
 
-      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
-      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-
-      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
-
-      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
-      expect(screen.queryByRole('dialog', { name: 'Schedule this Final' })).not.toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('billing_dialog_opened', { source: 'final_schedule' });
+      expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
+        source: 'final_post_now',
+      });
     });
   });
 
-  it('opens Schedule on a Version instead of Billing on an Instance that sells no Plans', async () => {
+  it('opens Schedule on a Version instead of Choose a Plan on an Instance that sells no Plans', async () => {
     renderPost(postWith('the final text'), { ...SELLS_PLANS, sells_plans: false });
     await versionCard();
 
     fireEvent.click(await panel('Draft').findByRole('button', { name: 'Schedule' }));
 
     expect(await screen.findByRole('dialog', { name: 'Schedule this Final' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Billing' })).not.toBeInTheDocument();
   });
 });

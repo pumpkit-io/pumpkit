@@ -87,7 +87,7 @@ The guide's [Providers](./docs/self-hosting.md#providers) section says where to 
 
 ## Use Pumpkit from Claude Code
 
-Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in your account dialog and run the `claude mcp add` command it shows. Claude Code can then write and revise Posts, manage your Inspiration authors, and schedule or publish posts. See [docs/claude-code.md](./docs/claude-code.md).
+Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in Settings and run the `claude mcp add` command it shows. Claude Code can then write and revise Posts, manage your Inspiration authors, and schedule or publish posts. See [docs/claude-code.md](./docs/claude-code.md).
 
 Self-hosted Instances get the MCP server in the first release after 0.1.0.
 
