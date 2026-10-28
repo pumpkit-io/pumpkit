@@ -65,9 +65,13 @@ class ScheduledPost(Base):
     )
     failed_reason: Mapped[Optional[str]] = mapped_column(Text)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    # The Version whose Final it copied: None when typed, and set to None if the Version goes.
+    # The Version whose text it copied: None only for one typed before ADR 0015.
     source_version_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("version_attempts.id", ondelete="SET NULL")
+    )
+    # That Version's Post. Unique, so a Post goes out at most once (ADR 0015).
+    post_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("posts.id", ondelete="CASCADE"), unique=True
     )
     # 429 backoff: the attempts so far and when the publisher may try again.
     retry_count: Mapped[int] = mapped_column(Integer, default=0)

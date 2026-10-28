@@ -4,26 +4,18 @@ import { useXConnectionContext } from '@/features/xConnection/useXConnectionCont
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import {
   scheduledPostService,
-  type Destination,
   type ScheduledPost,
   type ScheduledPostChanges,
 } from '@/services/scheduledPostService';
-import {
-  useCreateScheduledPost,
-  X_BUSY_NOTICE,
-  type NewScheduledPost,
-} from './useCreateScheduledPost';
 import { pastCommunitiesChanged } from './usePastCommunities';
 
-/** The User's Scheduled posts, loaded on mount, with Post now, Schedule, edit and cancel. */
+/** The User's Scheduled posts, loaded on mount, with edit and cancel. */
 export function useScheduledPosts() {
   const { refresh: refreshSubscribed } = useSubscribed();
   const { reload: reloadXConnection } = useXConnectionContext();
-  const { sending: posting, error, create } = useCreateScheduledPost();
   /** Undefined while loading. */
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[] | undefined>(undefined);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,35 +27,6 @@ export function useScheduledPosts() {
       cancelled = true;
     };
   }, []);
-
-  /**
-   * Sends a new Scheduled post and lists it. Resolves to whether it is on its way (Published,
-   * or scheduled), so the composer knows to clear itself.
-   */
-  const add = useCallback(
-    async (request: NewScheduledPost): Promise<boolean> => {
-      setNotice(null);
-      const outcome = await create(request);
-      if (outcome.kind !== 'created') return false;
-      const created = outcome.scheduledPost;
-      setScheduledPosts((current) => [created, ...(current ?? [])]);
-      if (request.postNow && created.state === 'scheduled') setNotice(X_BUSY_NOTICE);
-      return created.state !== 'failed';
-    },
-    [create],
-  );
-
-  const postNow = useCallback(
-    (parts: string[], destination: Destination) => add({ parts, postNow: true, destination }),
-    [add],
-  );
-
-  /** `publishAt` is an ISO instant on a whole minute. */
-  const schedule = useCallback(
-    (parts: string[], publishAt: string, destination: Destination) =>
-      add({ parts, postNow: false, publishAt, destination }),
-    [add],
-  );
 
   /**
    * Runs a change to a listed Scheduled post. Resolves to null once done, or to why it was
@@ -109,5 +72,5 @@ export function useScheduledPosts() {
     [change],
   );
 
-  return { scheduledPosts, loadFailed, posting, error, notice, postNow, schedule, edit, cancel };
+  return { scheduledPosts, loadFailed, edit, cancel };
 }

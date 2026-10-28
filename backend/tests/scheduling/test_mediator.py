@@ -39,12 +39,15 @@ def _at(iso: str) -> datetime:
 
 
 @pytest.fixture
-def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock):
-    """A new Scheduled post for `user`: typed text for 14:00 UTC unless the fields say otherwise."""
+def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, version_of):
+    """
+    A new Scheduled post for `user` for 14:00 UTC unless the fields say otherwise, copied from a
+    new Post's Version of `parts` unless `version_id` names one.
+    """
 
     async def _create(**fields) -> ScheduledPostResponse:
         if "version_id" not in fields:
-            fields.setdefault("parts", ["Shipping on Monday."])
+            fields["version_id"] = await version_of(*fields.pop("parts", ["Shipping on Monday."]))
         if not fields.get("publish_now"):
             fields.setdefault("publish_at", _at("2026-10-10T14:00:00Z"))
         return await mediator.create_scheduled_post(
@@ -86,22 +89,12 @@ def cap_of_two(monkeypatch):
 @pytest.mark.parametrize(
     "fields",
     [
-        {"publish_now": True},
-        {"parts": ["Mine."], "version_id": "version_attempt_1", "publish_now": True},
-    ],
-)
-def test_a_new_scheduled_post_has_either_text_or_a_version(fields):
-    with pytest.raises(RuleBroken) as refused:
-        NewScheduledPost(**fields)
-
-    assert refused.value.detail == "Give either the Parts or a Version id, not both."
-
-
-@pytest.mark.parametrize(
-    "fields",
-    [
-        {"parts": ["Neither."]},
-        {"parts": ["Both."], "publish_at": _at("2026-10-10T14:00:00Z"), "publish_now": True},
+        {"version_id": "version_attempt_1"},
+        {
+            "version_id": "version_attempt_1",
+            "publish_at": _at("2026-10-10T14:00:00Z"),
+            "publish_now": True,
+        },
     ],
 )
 def test_a_new_scheduled_post_has_either_a_publish_time_or_publish_now(fields):

@@ -11,8 +11,10 @@ export interface Community {
   url: string;
 }
 
-/** Typed Parts in order, or the Version whose Final the server copies. */
-export type ScheduledPostSource = { parts: string[] } | { sourceVersionId: string };
+/** The Version whose text the server copies: a Scheduled post is never typed (ADR 0015). */
+export interface ScheduledPostSource {
+  sourceVersionId: string;
+}
 
 /** Where a new Scheduled post goes: the User's profile when `community` is null. */
 export interface Destination {
@@ -84,8 +86,7 @@ const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   createdAt: p.created_at,
 });
 
-const postTextBody = (post: ScheduledPostSource) =>
-  'parts' in post ? { parts: post.parts } : { source_version_id: post.sourceVersionId };
+const postTextBody = (post: ScheduledPostSource) => ({ source_version_id: post.sourceVersionId });
 
 // The server looks up the Community's name itself, so only its ID goes.
 const destinationBody = ({ community, shareWithFollowers }: Destination) => ({

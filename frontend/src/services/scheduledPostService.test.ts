@@ -41,14 +41,14 @@ describe('scheduledPostService', () => {
     const patch = vi.spyOn(apiService, 'patch').mockResolvedValue({ data: SCHEDULED } as never);
 
     await scheduledPostService.postNow(
-      { parts: ['Hello Community.'] },
+      { sourceVersionId: 'version_attempt_01' },
       { community: COMMUNITY, shareWithFollowers: true },
     );
     await scheduledPostService.edit('scheduled_post_1', { community: COMMUNITY });
     await scheduledPostService.edit('scheduled_post_1', { community: null });
 
     expect(post).toHaveBeenCalledWith('/scheduled-posts', {
-      parts: ['Hello Community.'],
+      source_version_id: 'version_attempt_01',
       publish_now: true,
       community: COMMUNITY.id,
       share_with_followers: true,
@@ -59,9 +59,9 @@ describe('scheduledPostService', () => {
     ]);
   });
 
-  it('sends typed Parts in order and reads back each one with whether it is live', async () => {
+  it('reads back each Part in order with whether it is live', async () => {
     const link = 'https://x.com/i/web/status/1890000000000000001';
-    const post = vi.spyOn(apiService, 'post').mockResolvedValue({
+    vi.spyOn(apiService, 'post').mockResolvedValue({
       data: {
         ...SCHEDULED,
         parts: [
@@ -72,15 +72,11 @@ describe('scheduledPostService', () => {
     } as never);
 
     const scheduled = await scheduledPostService.schedule(
-      { parts: ['First.', 'Second.'] },
+      { sourceVersionId: 'version_attempt_01' },
       '2026-10-12T07:00:00.000Z',
       { community: null, shareWithFollowers: false },
     );
 
-    expect(post).toHaveBeenCalledWith(
-      '/scheduled-posts',
-      expect.objectContaining({ parts: ['First.', 'Second.'] }),
-    );
     expect(scheduled.parts).toEqual([
       { text: 'First.', live: true, xPostUrl: link },
       { text: 'Second.', live: false, xPostUrl: null },
