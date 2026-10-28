@@ -1,4 +1,4 @@
-import { PROFILE_DRAFT, type DestinationDraft } from '@/features/scheduledPosts/communities';
+import { destinationDraftOf } from '@/features/scheduledPosts/communities';
 import type { Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { CopyPostButton } from '../CopyPostButton';
@@ -9,18 +9,6 @@ import type { ShownPart } from '../shownText';
 import type { FeedbackSending } from './feedback';
 import { formatWhen } from './panelFacts';
 import { Panel } from './panelParts';
-
-/** Where the Failed one was going, so a retry starts there. */
-function whereItWent(scheduledPost: ScheduledPost): DestinationDraft {
-  const { community, shareWithFollowers } = scheduledPost;
-  if (!community) return PROFILE_DRAFT;
-  return {
-    kind: 'community',
-    pasted: community.url,
-    shareWithFollowers,
-    lookup: { state: 'found', ...community },
-  };
-}
 
 /**
  * Why the Post didn't go out, then Feedback for a Version X will take, and "Post to…", which
@@ -66,7 +54,7 @@ export function FailedPanel({
                 version={shownVersion}
                 parts={retryParts}
                 sender={sender}
-                initialWhere={whereItWent(scheduledPost)}
+                initialWhere={destinationDraftOf(scheduledPost)}
                 onDone={onRetried}
               />
             </>
