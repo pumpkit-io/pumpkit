@@ -1,23 +1,23 @@
-import { FinalToXActions } from '@/features/scheduledPosts/FinalToX';
 import type { Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { CopyPostButton } from '../CopyPostButton';
 import { FeedbackBar } from '../FeedbackBar';
+import { PostToButton } from '../postTo/PostToButton';
+import type { ShownPart } from '../shownText';
 import type { FeedbackSending } from './feedback';
 import { Panel } from './panelParts';
 
-/**
- * A Draft takes Feedback. Schedule and Post now send the Version on screen until the
- * "Post to…" dialog replaces them.
- */
+/** A Draft takes Feedback, and "Post to…" sends the Version on screen. */
 export function DraftPanel({
   shownVersion,
+  shownParts,
   shownText,
   latestVersion,
   feedback,
   onScheduled,
 }: {
   shownVersion: Version;
+  shownParts: ShownPart[];
   shownText: string;
   latestVersion: Version;
   feedback: FeedbackSending;
@@ -31,7 +31,7 @@ export function DraftPanel({
         actions={
           <>
             <CopyPostButton text={shownText} />
-            <FinalToXActions version={shownVersion} onCreated={onScheduled} />
+            <PostToButton version={shownVersion} parts={shownParts} onDone={onScheduled} />
           </>
         }
       />

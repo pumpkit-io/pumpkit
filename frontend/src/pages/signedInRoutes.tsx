@@ -1,6 +1,5 @@
 import { Navigate, Route } from 'react-router-dom';
-import { STATUS_TAB } from '@/features/posts/postStatus';
-import { TAB_ORDER } from '@/features/posts/list/PostsTabs';
+import { STATUS_TAB, TAB_ORDER } from '@/features/posts/postStatus';
 import { NewPost } from './NewPost';
 import { Persona } from './Persona';
 import { PostPage } from './PostPage';

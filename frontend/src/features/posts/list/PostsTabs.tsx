@@ -1,18 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import type { PostCounts, PostStatus } from '@/services/postService';
-import { STATUS_TAB } from '../postStatus';
-
-/** The tabs in the order they sit, Scheduled first: what goes out next is what to check. */
-export const TAB_ORDER: PostStatus[] = ['scheduled', 'draft', 'published', 'failed'];
-
-/** How each tab orders its Posts, as the line under the tabs says it. */
-export const TAB_ORDER_LINE: Record<PostStatus, string> = {
-  scheduled: 'Next to go out first.',
-  draft: 'Newest Version first.',
-  published: 'Most recently published first.',
-  failed: 'Most recently due first.',
-};
+import type { PostCounts } from '@/services/postService';
+import { STATUS_TAB, TAB_ORDER } from '../postStatus';
 
 /** One link per status, each to its own address, with its count once known. */
 export function PostsTabs({ counts }: { counts: PostCounts | null }) {

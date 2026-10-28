@@ -1,4 +1,11 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+  type BoundFunctions,
+  type queries,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -56,6 +63,10 @@ vi.mock('@/services/scheduledPostService', () => ({
     schedule: vi.fn(),
     lookUpCommunity: vi.fn(),
   },
+}));
+// Choose a Plan lands on Settings, which lists the API keys.
+vi.mock('@/services/apiKeyService', () => ({
+  apiKeyService: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), revoke: vi.fn() },
 }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
@@ -687,7 +698,16 @@ describe('Post page', () => {
     });
   });
 
-  describe('Draft: Schedule and Post now, until "Post to…"', () => {
+  describe('Draft: Post to…', () => {
+    const COMMUNITY_ID = '1493446837214187523';
+    const COMMUNITY_URL = `https://x.com/i/communities/${COMMUNITY_ID}`;
+    const PUBLISHED: ScheduledPost = {
+      ...SCHEDULED,
+      state: 'published',
+      publishedAt: '2026-10-10T12:00:14Z',
+      xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+    };
+
     afterEach(() => {
       vi.useRealTimers();
     });
@@ -698,34 +718,75 @@ describe('Post page', () => {
       vi.setSystemTime(new Date('2026-10-10T12:00'));
       vi.mocked(scheduledPostService.schedule).mockReset();
       vi.mocked(scheduledPostService.postNow).mockReset();
+      vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);
+      // As when the Instance has no twitterapi.io: the Community comes back without a name.
+      vi.mocked(scheduledPostService.lookUpCommunity)
+        .mockReset()
+        .mockImplementation(async (id) => ({
+          id,
+          name: null,
+          url: `https://x.com/i/communities/${id}`,
+        }));
       vi.mocked(xConnectionService.startAuthorization).mockReset();
       vi.mocked(redirectTo).mockReset();
     });
 
-    /** The Draft panel of a Post whose one Version is `final`, with Schedule and Post now. */
-    async function finalWritten(final = 'the final text') {
-      renderPost(postWith(final));
+    type Dialog = BoundFunctions<typeof queries>;
+
+    /** Opens "Post to…" on the Draft `post`, once its Version is on screen. */
+    async function openPostTo(post: PostDetail = postWith('the final text')): Promise<Dialog> {
+      renderPost(post);
       await versionCard();
-      return panel('Draft');
+      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      return within(await screen.findByRole('dialog', { name: 'Post to…' }));
     }
 
-    it("schedules the Final for a time in the User's timezone, recording its Version", async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
-      const final = await finalWritten();
+    function scheduleAt(dialog: Dialog, date: string, time: string) {
+      fireEvent.click(dialog.getByRole('radio', { name: 'Schedule' }));
+      fireEvent.change(dialog.getByLabelText('Date'), { target: { value: date } });
+      fireEvent.change(dialog.getByLabelText('Time'), { target: { value: time } });
+    }
 
-      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
-
-      const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
-      expect(dialog.getByText('the final text')).toBeInTheDocument();
-      expect(dialog.getByText('14 / 280')).toBeInTheDocument();
-      expect(dialog.getByRole('button', { name: 'Schedule' })).toBeDisabled();
-      fireEvent.change(dialog.getByLabelText('Date and time'), {
-        target: { value: '2026-10-12T09:00' },
+    async function pasteCommunity(dialog: Dialog, pasted: string) {
+      fireEvent.click(dialog.getByRole('radio', { name: 'Community' }));
+      fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
+        target: { value: pasted },
       });
-      fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
+      await vi.waitFor(() =>
+        expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
+      );
+    }
 
-      expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
+    async function dialogClosed() {
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    }
+
+    it('replaces Schedule and Post now with "Post to…"', async () => {
+      renderPost(postWith('the final text'));
+      await versionCard();
+
+      const draftPanel = panel('Draft');
+      expect(await draftPanel.findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      expect(draftPanel.queryByRole('button', { name: 'Schedule' })).not.toBeInTheDocument();
+      expect(draftPanel.queryByRole('button', { name: 'Post now' })).not.toBeInTheDocument();
+    });
+
+    it('names the Version, its Format, its Part count and the X account it posts as', async () => {
+      const dialog = await openPostTo(threadWith([part('the first part'), part('the second')]));
+
+      expect(dialog.getByText('Version 1 · Thread · 2 Parts · as @ada')).toBeInTheDocument();
+    });
+
+    it("schedules the Version to the User's profile for a day and time in their time zone", async () => {
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+      const dialog = await openPostTo();
+
+      expect(dialog.getByRole('radio', { name: 'My profile' })).toBeChecked();
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      expect(dialog.getByText('In your time zone, Europe/Rome.')).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
+
+      await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
         { sourceVersionId: 'version_attempt_01' },
         '2026-10-12T07:00:00.000Z',
@@ -738,148 +799,25 @@ describe('Post page', () => {
         post_now: false,
         destination: 'profile',
       });
-      expect(dialog.getByRole('link', { name: 'See Scheduled posts' })).toHaveAttribute(
-        'href',
-        '/posts/scheduled',
-      );
-    });
-
-    it('shows why scheduling was refused and keeps the dialog open', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      vi.mocked(scheduledPostService.schedule).mockRejectedValue(
-        apiError(422, 'Pick a time at least a minute from now.'),
-      );
-      const final = await finalWritten();
-
-      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
-      fireEvent.change(dialog.getByLabelText('Date and time'), {
-        target: { value: '2026-10-12T09:00' },
-      });
-      fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
-
       expect(
-        await dialog.findByText('Pick a time at least a minute from now.'),
+        panel('Scheduled').getByText('Scheduled for Mon, Oct 12, 9:00 AM'),
       ).toBeInTheDocument();
-      expect(dialog.getByRole('button', { name: 'Schedule' })).toBeEnabled();
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Scheduled /');
     });
 
-    it('posts the Final now after a confirmation and links to it on X', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
-        ...SCHEDULED,
-        state: 'published',
-        publishedAt: '2026-10-10T12:00:14Z',
-        xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
-      });
-      const final = await finalWritten();
-
-      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-
-      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-      expect(dialog.getByText(/goes out on @ada straight away/i)).toBeInTheDocument();
-      expect(scheduledPostService.postNow).not.toHaveBeenCalled();
-      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
-
-      expect(await dialog.findByText('Published on X.')).toBeInTheDocument();
-      expect(dialog.getByRole('link', { name: 'View on X' })).toHaveAttribute(
-        'href',
-        'https://x.com/i/web/status/1890000000000000001',
-      );
-      expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
-        { community: null, shareWithFollowers: false },
-      );
-      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
-        format: 'post',
-        part_count: 1,
-        source: 'final',
-        post_now: true,
-        destination: 'profile',
-      });
-    });
-
-    it('shows the reason when posting the Final now Failed', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
-        ...SCHEDULED,
-        state: 'failed',
-        failedReason: 'X refused the post: duplicate content.',
-      });
-      const final = await finalWritten();
-
-      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
-
-      expect(await dialog.findByText('X refused the post: duplicate content.')).toBeInTheDocument();
-      expect(dialog.getByText('This Scheduled post Failed.')).toBeInTheDocument();
-      expect(dialog.queryByText(/sent to x/i)).not.toBeInTheDocument();
-      expect(dialog.queryByRole('link', { name: 'View on X' })).not.toBeInTheDocument();
-    });
-
-    it('says Pumpkit will retry when X was busy for a Final posted now', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      vi.mocked(scheduledPostService.postNow).mockResolvedValue(SCHEDULED);
-      const final = await finalWritten();
-
-      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
-
-      expect(
-        await dialog.findByText('X was busy. Pumpkit will keep trying for the next 15 minutes.'),
-      ).toBeInTheDocument();
-      expect(dialog.getByRole('link', { name: 'See Scheduled posts' })).toBeInTheDocument();
-    });
-
-    it("refuses a Final over X's limit by X's count", async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      const final = await finalWritten('a'.repeat(290));
-
-      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-
-      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-      expect(dialog.getByText('10 characters over the 280 limit')).toBeInTheDocument();
-      expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
-    });
-
-    async function threadFinalWritten(parts: string[]) {
-      renderPost(threadWith(parts.map((text) => part(text))));
+    it('sends the Version on screen, not the latest', async () => {
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+      renderPost(draft([version(1, ['the final text']), version(2, ['the second text'])]));
       await versionCard();
-      return panel('Draft');
-    }
+      fireEvent.click(screen.getByRole('button', { name: 'Previous Version' }));
+      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
 
-    it("previews every Part of a Thread's Final with its counter before scheduling it", async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      vi.mocked(scheduledPostService.schedule).mockResolvedValue({
-        ...SCHEDULED,
-        parts: [
-          { text: 'the first part', live: false, xPostUrl: null },
-          { text: 'the second part', live: false, xPostUrl: null },
-        ],
-      });
-      const final = await threadFinalWritten(['the first part', 'the second part']);
+      expect(dialog.getByText('Version 1 · Single post · 1 Part · as @ada')).toBeInTheDocument();
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
 
-      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
-
-      const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
-      const parts = within(dialog.getByRole('list', { name: 'Parts' }))
-        .getAllByRole('listitem')
-        .map((part) => within(part));
-      expect(parts).toHaveLength(2);
-      expect(parts[0].getByText('Part 1')).toBeInTheDocument();
-      expect(parts[0].getByText('the first part')).toBeInTheDocument();
-      expect(parts[0].getByText('14 / 280')).toBeInTheDocument();
-      expect(parts[1].getByText('Part 2')).toBeInTheDocument();
-      expect(parts[1].getByText('the second part')).toBeInTheDocument();
-      expect(parts[1].getByText('15 / 280')).toBeInTheDocument();
-      fireEvent.change(dialog.getByLabelText('Date and time'), {
-        target: { value: '2026-10-12T09:00' },
-      });
-      fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
-
-      expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
+      await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
         { sourceVersionId: 'version_attempt_01' },
         '2026-10-12T07:00:00.000Z',
@@ -887,227 +825,302 @@ describe('Post page', () => {
       );
     });
 
-    it("keeps Post now disabled while any Part of a Thread's Final is over X's limit", async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      const final = await threadFinalWritten(['the first part', 'a'.repeat(290), 'the last part']);
+    it('shows why scheduling was refused and keeps the dialog open', async () => {
+      vi.mocked(scheduledPostService.schedule).mockRejectedValue(
+        apiError(422, 'Pick a time at least a minute from now.'),
+      );
+      const dialog = await openPostTo();
 
-      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
 
-      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-      const parts = within(dialog.getByRole('list', { name: 'Parts' }))
-        .getAllByRole('listitem')
-        .map((part) => within(part));
-      expect(parts[0].getByText('14 / 280')).toBeInTheDocument();
-      expect(parts[1].getByText('10 characters over the 280 limit')).toBeInTheDocument();
-      expect(parts[2].getByText('13 / 280')).toBeInTheDocument();
-      expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
+      expect(
+        await dialog.findByText('Pick a time at least a minute from now.'),
+      ).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: /^Schedule for/ })).toBeEnabled();
     });
 
-    it('lets a Final over 280 go to an X Premium account', async () => {
+    it('schedules into a pasted Community, shared with followers unless unticked', async () => {
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue({
+        ...SCHEDULED,
+        community: { id: COMMUNITY_ID, name: null, url: COMMUNITY_URL },
+      });
+      const dialog = await openPostTo();
+
+      expect(dialog.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
+      await pasteCommunity(dialog, COMMUNITY_URL);
+      expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
+      fireEvent.click(dialog.getByLabelText('Also share with followers'));
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
+
+      await dialogClosed();
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        { sourceVersionId: 'version_attempt_01' },
+        '2026-10-12T07:00:00.000Z',
+        { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: false },
+      );
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'post',
+        part_count: 1,
+        source: 'final',
+        post_now: false,
+        destination: 'community',
+        share_with_followers: false,
+      });
+    });
+
+    it('schedules into a Community picked from the past ones, shared with followers', async () => {
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([
+        { id: COMMUNITY_ID, name: 'Indie makers', url: COMMUNITY_URL },
+      ]);
+      vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+      const dialog = await openPostTo();
+
+      fireEvent.click(dialog.getByRole('radio', { name: 'Community' }));
+      expect(await dialog.findByLabelText('Which Community')).toHaveDisplayValue('Indie makers');
+      expect(dialog.queryByLabelText('Community URL or ID')).not.toBeInTheDocument();
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
+
+      await dialogClosed();
+      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+        { sourceVersionId: 'version_attempt_01' },
+        '2026-10-12T07:00:00.000Z',
+        { community: { id: COMMUNITY_ID, name: 'Indie makers' }, shareWithFollowers: true },
+      );
+    });
+
+    it('adds a Community by URL when the User has past ones', async () => {
+      vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([
+        { id: COMMUNITY_ID, name: 'Indie makers', url: COMMUNITY_URL },
+      ]);
+      const dialog = await openPostTo();
+
+      fireEvent.click(dialog.getByRole('radio', { name: 'Community' }));
+      const option = await dialog.findByRole<HTMLOptionElement>('option', {
+        name: 'Add one by URL',
+      });
+      fireEvent.change(dialog.getByLabelText('Which Community'), {
+        target: { value: option.value },
+      });
+
+      expect(dialog.getByLabelText('Community URL or ID')).toHaveValue('');
+    });
+
+    it('waits for a pasted Community to be one before it sends', async () => {
+      const dialog = await openPostTo();
+
+      fireEvent.click(dialog.getByRole('radio', { name: 'Community' }));
+      fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
+        target: { value: 'not a community' },
+      });
+
+      expect(dialog.getByText(/that isn.t a community/i)).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();
+    });
+
+    it('shows every Part in order before posting now, then shows the Published Post', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...PUBLISHED,
+        parts: [
+          { text: 'the first part', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
+          { text: 'the second part', live: true, xPostUrl: 'https://x.com/i/web/status/2' },
+        ],
+      });
+      const dialog = await openPostTo(
+        threadWith([part('the first part'), part('the second part')]),
+      );
+
+      expect(dialog.getByRole('radio', { name: 'Now' })).toBeChecked();
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+
+      expect(dialog.getByText(/can.t be undone/i)).toBeInTheDocument();
+      const parts = within(dialog.getByRole('list', { name: 'Parts' }))
+        .getAllByRole('listitem')
+        .map((item) => within(item));
+      expect(parts).toHaveLength(2);
+      expect(parts[0]!.getByText('Part 1')).toBeInTheDocument();
+      expect(parts[0]!.getByText('the first part')).toBeInTheDocument();
+      expect(parts[0]!.getByText('14 / 280')).toBeInTheDocument();
+      expect(parts[1]!.getByText('Part 2')).toBeInTheDocument();
+      expect(parts[1]!.getByText('the second part')).toBeInTheDocument();
+      expect(scheduledPostService.postNow).not.toHaveBeenCalled();
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      await dialogClosed();
+      expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+        { sourceVersionId: 'version_attempt_01' },
+        { community: null, shareWithFollowers: false },
+      );
+      expect(track).toHaveBeenCalledWith('scheduled_post_created', {
+        format: 'thread',
+        part_count: 2,
+        source: 'final',
+        post_now: true,
+        destination: 'profile',
+      });
+      expect(panel('Published').getByRole('link', { name: 'View on X' })).toHaveAttribute(
+        'href',
+        'https://x.com/i/web/status/1890000000000000001',
+      );
+    });
+
+    it('goes back from the confirmation without posting', async () => {
+      const dialog = await openPostTo();
+
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Back' }));
+
+      expect(dialog.getByRole('radio', { name: 'Now' })).toBeChecked();
+      expect(scheduledPostService.postNow).not.toHaveBeenCalled();
+    });
+
+    it('posts now into a Community, saying where it goes before the final yes', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...PUBLISHED,
+        community: { id: COMMUNITY_ID, name: null, url: COMMUNITY_URL },
+        shareWithFollowers: true,
+      });
+      const dialog = await openPostTo();
+
+      await pasteCommunity(dialog, COMMUNITY_URL);
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      expect(dialog.getByText(/from @ada into the Community/i)).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      await dialogClosed();
+      expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+        { sourceVersionId: 'version_attempt_01' },
+        { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
+      );
+      expect(panel('Published').getByText('Shared with your followers')).toBeInTheDocument();
+    });
+
+    it('shows a Community X refuses in the dialog without closing it', async () => {
+      vi.mocked(scheduledPostService.postNow).mockRejectedValue(
+        apiError(422, "X won't let @ada post in that Community. Join it on X first."),
+      );
+      const dialog = await openPostTo();
+
+      await pasteCommunity(dialog, COMMUNITY_URL);
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      expect(
+        await dialog.findByText("X won't let @ada post in that Community. Join it on X first."),
+      ).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Post now' })).toBeEnabled();
+    });
+
+    it('shows the Failed Post when posting now Failed', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+        ...SCHEDULED,
+        state: 'failed',
+        failedReason: 'X refused the post: duplicate content.',
+      });
+      const dialog = await openPostTo();
+
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      await dialogClosed();
+      expect(
+        panel('Failed').getByText('X refused the post: duplicate content.'),
+      ).toBeInTheDocument();
+    });
+
+    it('says Pumpkit will retry when X was busy, then shows the Scheduled Post', async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue(SCHEDULED);
+      const dialog = await openPostTo();
+
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      expect(
+        await dialog.findByText('X was busy. Pumpkit will keep trying for the next 15 minutes.'),
+      ).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Done' }));
+
+      await dialogClosed();
+      expect(screen.getByRole('region', { name: 'Scheduled' })).toBeInTheDocument();
+    });
+
+    it("refuses a Part over X's limit by X's count", async () => {
+      const dialog = await openPostTo(postWith('a'.repeat(290)));
+
+      expect(
+        dialog.getByText("The post is 10 characters over X's 280-character limit."),
+      ).toBeInTheDocument();
+      expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();
+    });
+
+    it('lets a Part over 280 go to an X Premium account', async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, charLimit: 25_000 });
-      const final = await finalWritten('a'.repeat(290));
+      const dialog = await openPostTo(postWith('a'.repeat(290)));
 
-      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
 
-      const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
       expect(dialog.getByText('290 / 25,000')).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Post now' })).toBeEnabled();
     });
 
-    it.each(['Schedule', 'Post now'])(
-      'sends the User to connect X first when %s is pressed without an X connection',
-      async (action) => {
-        vi.mocked(xConnectionService.get).mockResolvedValue(null);
-        vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
-          'https://x.com/i/oauth2/authorize?state=s',
-        );
-        const final = await finalWritten();
+    it('offers Connect X in place of Where and When without an X connection', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(null);
+      vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
+        'https://x.com/i/oauth2/authorize?state=s',
+      );
+      const dialog = await openPostTo();
 
-        fireEvent.click(final.getByRole('button', { name: action }));
-
-        const dialog = within(await screen.findByRole('dialog'));
-        expect(dialog.getByText('Connect your X account to post this Final.')).toBeInTheDocument();
-        expect(dialog.queryByLabelText('Date and time')).not.toBeInTheDocument();
-        fireEvent.click(dialog.getByRole('button', { name: 'Connect X' }));
-        await waitFor(() =>
-          expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
-        );
-        expect(scheduledPostService.schedule).not.toHaveBeenCalled();
-        expect(scheduledPostService.postNow).not.toHaveBeenCalled();
-      },
-    );
+      expect(dialog.getByText('Connect your X account to post this Post.')).toBeInTheDocument();
+      expect(dialog.queryByRole('radio', { name: 'My profile' })).not.toBeInTheDocument();
+      expect(dialog.queryByRole('radio', { name: 'Now' })).not.toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Connect X' }));
+      await waitFor(() =>
+        expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
+      );
+    });
 
     it('asks the User to reconnect X when X no longer accepts its access', async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, needsReconnect: true });
-      const final = await finalWritten();
+      const dialog = await openPostTo();
 
-      fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
-
-      const dialog = within(await screen.findByRole('dialog'));
-      expect(dialog.getByText('Reconnect X to post this Final.')).toBeInTheDocument();
+      expect(dialog.getByText('Reconnect X to post this Post.')).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Reconnect X' })).toBeInTheDocument();
     });
 
-    describe('into a Community', () => {
-      const COMMUNITY_ID = '1493446837214187523';
-      const COMMUNITY_URL = `https://x.com/i/communities/${COMMUNITY_ID}`;
+    it('sends a User who is not Subscribed to Choose a Plan', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+      renderPost(postWith('the final text'));
+      await versionCard();
 
-      beforeEach(() => {
-        // As when the Instance has no twitterapi.io: the Community comes back without a name.
-        vi.mocked(scheduledPostService.lookUpCommunity)
-          .mockReset()
-          .mockImplementation(async (id) => ({
-            id,
-            name: null,
-            url: `https://x.com/i/communities/${id}`,
-          }));
-      });
+      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
 
-      it('offers My profile first, and the followers checkbox only while a Community is chosen', async () => {
-        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-        const final = await finalWritten();
-
-        fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-
-        const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-        expect(dialog.getByLabelText('Post to')).toHaveDisplayValue('My profile');
-        expect(dialog.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
-        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
-        expect(dialog.getByLabelText('Also share with followers')).toBeChecked();
-        expect(dialog.getByRole('button', { name: 'Post now' })).toBeDisabled();
-        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'profile' } });
-        expect(dialog.queryByLabelText('Also share with followers')).not.toBeInTheDocument();
-      });
-
-      it('posts the Final now into a pasted Community, shared with followers by default', async () => {
-        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-        vi.mocked(scheduledPostService.postNow).mockResolvedValue({
-          ...SCHEDULED,
-          state: 'published',
-          publishedAt: '2026-10-10T12:00:14Z',
-          xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
-          community: { id: COMMUNITY_ID, name: null, url: COMMUNITY_URL },
-          shareWithFollowers: true,
-        });
-        const final = await finalWritten();
-
-        fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-        const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
-        fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
-          target: { value: COMMUNITY_URL },
-        });
-        await vi.waitFor(() =>
-          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
-        );
-        expect(
-          dialog.getByText(/goes out from @ada into the Community straight away/i),
-        ).toBeInTheDocument();
-        fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
-
-        expect(await dialog.findByText('Published on X.')).toBeInTheDocument();
-        expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-          { sourceVersionId: 'version_attempt_01' },
-          { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
-        );
-        expect(track).toHaveBeenCalledWith('scheduled_post_created', {
-          format: 'post',
-          part_count: 1,
-          source: 'final',
-          post_now: true,
-          destination: 'community',
-          share_with_followers: true,
-        });
-      });
-
-      it('says a Final goes into a Community picked from the past ones', async () => {
-        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-        vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([
-          { id: COMMUNITY_ID, name: 'Indie makers', url: COMMUNITY_URL },
-        ]);
-        const final = await finalWritten();
-
-        fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-        const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-        const option = await dialog.findByRole<HTMLOptionElement>('option', {
-          name: 'Indie makers',
-        });
-        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: option.value } });
-
-        expect(
-          dialog.getByText(/goes out from @ada into the Community straight away/i),
-        ).toBeInTheDocument();
-        vi.mocked(scheduledPostService.pastCommunities).mockResolvedValue([]);
-      });
-
-      it('schedules the Final into a Community kept from the followers', async () => {
-        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-        vi.mocked(scheduledPostService.schedule).mockResolvedValue({
-          ...SCHEDULED,
-          community: { id: '123', name: null, url: 'https://x.com/i/communities/123' },
-        });
-        const final = await finalWritten();
-
-        fireEvent.click(final.getByRole('button', { name: 'Schedule' }));
-        const dialog = within(await screen.findByRole('dialog', { name: 'Schedule this Final' }));
-        fireEvent.change(dialog.getByLabelText('Post to'), { target: { value: 'community' } });
-        fireEvent.change(dialog.getByLabelText('Community URL or ID'), {
-          target: { value: '123' },
-        });
-        await vi.waitFor(() =>
-          expect(dialog.queryByText('Looking up the Community…')).not.toBeInTheDocument(),
-        );
-        fireEvent.click(dialog.getByLabelText('Also share with followers'));
-        fireEvent.change(dialog.getByLabelText('Date and time'), {
-          target: { value: '2026-10-12T09:00' },
-        });
-        expect(
-          dialog.getByText(/goes out from @ada into the Community at the time you pick/i),
-        ).toBeInTheDocument();
-        fireEvent.click(dialog.getByRole('button', { name: 'Schedule' }));
-
-        expect(await dialog.findByText(/scheduled for oct 12, 2026, 9:00/i)).toBeInTheDocument();
-        expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-          { sourceVersionId: 'version_attempt_01' },
-          '2026-10-12T07:00:00.000Z',
-          { community: { id: '123', name: null }, shareWithFollowers: false },
-        );
-        expect(track).toHaveBeenCalledWith('scheduled_post_created', {
-          format: 'post',
-          part_count: 1,
-          source: 'final',
-          post_now: false,
-          destination: 'community',
-          share_with_followers: false,
-        });
-      });
+      expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
     });
 
     it('sends a User who is no longer Subscribed to Choose a Plan', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
       vi.mocked(scheduledPostService.postNow).mockRejectedValue(apiError(403, 'Subscribe first.'));
-      const final = await finalWritten();
+      const dialog = await openPostTo();
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
 
-      fireEvent.click(final.getByRole('button', { name: 'Post now' }));
-      const confirm = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
-      fireEvent.click(confirm.getByRole('button', { name: 'Post now' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
 
       expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
-        source: 'final_post_now',
-      });
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
     });
-  });
 
-  it('opens Schedule on a Version instead of Choose a Plan on an Instance that sells no Plans', async () => {
-    renderPost(postWith('the final text'), { ...SELLS_PLANS, sells_plans: false });
-    await versionCard();
+    it('opens "Post to…" on an Instance that sells no Plans', async () => {
+      renderPost(postWith('the final text'), { ...SELLS_PLANS, sells_plans: false });
+      await versionCard();
 
-    fireEvent.click(await panel('Draft').findByRole('button', { name: 'Schedule' }));
+      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Schedule this Final' })).toBeInTheDocument();
+      expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
+    });
   });
 
   // Whatever sends the Post out on this page passes its answer to usePost's setScheduledPost.
@@ -1126,10 +1139,10 @@ describe('Post page', () => {
       counts: { ...NO_POSTS.counts, failed: 1 },
     });
 
-    fireEvent.click(panel('Draft').getByRole('button', { name: 'Post now' }));
-    const dialog = within(await screen.findByRole('dialog', { name: 'Post this Final now?' }));
+    fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
     fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
-    fireEvent.click(await dialog.findByRole('button', { name: 'Close' }));
 
     expect(await sidebar.findByRole('link', { name: 'Posts, 1 Failed' })).toBeInTheDocument();
   });

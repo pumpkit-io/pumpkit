@@ -24,6 +24,17 @@ export const STATUS_TAB: Record<PostStatus, { label: string; path: string }> = {
   failed: { label: 'Failed', path: '/posts/failed' },
 };
 
+/** The Posts tabs in the order they sit, Scheduled first: what goes out next is what to check. */
+export const TAB_ORDER: PostStatus[] = ['scheduled', 'draft', 'published', 'failed'];
+
+/** How each tab orders its Posts, as the line under the tabs says it. */
+export const TAB_ORDER_LINE: Record<PostStatus, string> = {
+  scheduled: 'Next to go out first.',
+  draft: 'Newest Version first.',
+  published: 'Most recently published first.',
+  failed: 'Most recently due first.',
+};
+
 const TITLE_MAX_CHARS = 60;
 
 /** The first line of the text, cut on a word with an ellipsis when it runs long. */
