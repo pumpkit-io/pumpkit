@@ -5,7 +5,7 @@ import { LiveOnX } from '@/features/scheduledPosts/LiveOnX';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { formatCount } from '@/lib/characters';
 import { useProfile } from '@/pages/layout/ProfileContext';
-import { FORMAT_THREAD, type Tell, type Version } from '@/services/postService';
+import { FORMAT_THREAD, formatOf, type Tell, type Version } from '@/services/postService';
 import type { ShownPart } from './shownText';
 
 function partCount(count: number): string {
@@ -108,11 +108,7 @@ function XPart({
   );
 }
 
-/**
- * A Version under its number, Format and Part count, with its text drawn as the X posts it
- * makes. `parts` is the text on screen (see `shownParts`), which may be its Scheduled post's.
- * `renderText` replaces a Part's text, as the inline edit does with a text box.
- */
+/** A Version with the text on screen (`shownParts`) drawn as the X posts it makes. */
 export function VersionCard({
   version,
   parts,
@@ -128,6 +124,10 @@ export function VersionCard({
   const name = profile
     ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email
     : 'You';
+  // The slop check ran on the Version's text; text edited since has no tells to claim.
+  const edited =
+    parts.length !== version.parts.length ||
+    parts.some((part, index) => part.text !== version.parts[index]?.text);
 
   return (
     <article
@@ -140,11 +140,17 @@ export function VersionCard({
             Version {version.number}
           </h2>
           <p className="font-sans text-xs text-muted-foreground">
-            {version.format === FORMAT_THREAD ? 'Thread' : 'Single post'} ·{' '}
+            {formatOf(parts) === FORMAT_THREAD ? 'Thread' : 'Single post'} ·{' '}
             {partCount(parts.length)}
           </p>
         </div>
-        <TellsBadge tells={version.tells} />
+        {edited ? (
+          <span className="font-sans text-xs text-muted-foreground">
+            Edited, not checked for tells
+          </span>
+        ) : (
+          <TellsBadge tells={version.tells} />
+        )}
       </div>
       <ol className="divide-y divide-border">
         {parts.map((part, index) => (
@@ -160,7 +166,7 @@ export function VersionCard({
           />
         ))}
       </ol>
-      <TellList tells={version.tells} />
+      {!edited && <TellList tells={version.tells} />}
     </article>
   );
 }

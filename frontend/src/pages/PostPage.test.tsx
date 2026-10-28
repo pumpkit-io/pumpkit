@@ -340,6 +340,38 @@ describe('Post page', () => {
 
       expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
     });
+
+    it("gives the Format and Part count of the Scheduled post's edited text, and claims no tells for it", async () => {
+      renderPost({
+        ...withScheduledPost({
+          ...SCHEDULED,
+          parts: [
+            { text: 'part one', live: false, xPostUrl: null },
+            { text: 'part two', live: false, xPostUrl: null },
+          ],
+        }),
+        versions: [
+          version(1, ['the final text'], { tells: [{ name: 'em_dash', description: 'em dash' }] }),
+        ],
+      });
+
+      const card = await versionCard();
+      expect(card.getByText('Thread · 2 Parts')).toBeInTheDocument();
+      expect(card.getByText('Edited, not checked for tells')).toBeInTheDocument();
+      expect(card.queryByText('1 machine-written tell')).not.toBeInTheDocument();
+      expect(card.queryByRole('list', { name: 'Machine-written tells' })).not.toBeInTheDocument();
+    });
+
+    it("keeps the Version's tells on a Scheduled post with its text unedited", async () => {
+      renderPost({
+        ...withScheduledPost(SCHEDULED),
+        versions: [
+          version(1, ['the final text'], { tells: [{ name: 'em_dash', description: 'em dash' }] }),
+        ],
+      });
+
+      expect((await versionCard()).getByText('1 machine-written tell')).toBeInTheDocument();
+    });
   });
 
   describe('Pager', () => {
