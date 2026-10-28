@@ -46,8 +46,10 @@ from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
-# Where the User connects or reconnects X, which takes a browser.
+# Where the User sees their Scheduled posts.
 SCHEDULED_PAGE = "/posts"
+# Where the User connects or reconnects X, which takes a browser.
+X_CONNECTION_PAGE = "/settings"
 
 
 def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:
@@ -131,11 +133,11 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     """The X connection a new or rescheduled Scheduled post targets, or a 409."""
     connection = await x_connections_service.get_connection(db, user_id=user_id)
     if connection is None:
-        raise ConflictError("Connect your X account first.", fix_page=SCHEDULED_PAGE)
+        raise ConflictError("Connect your X account first.", fix_page=X_CONNECTION_PAGE)
     if connection.needs_reconnect:
         raise ConflictError(
             "X no longer accepts Pumpkit's access to your account. Reconnect X first.",
-            fix_page=SCHEDULED_PAGE,
+            fix_page=X_CONNECTION_PAGE,
         )
     return connection
 

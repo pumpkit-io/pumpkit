@@ -21,6 +21,7 @@ from tests.mcp_client import error_text
 from tests.posts.writing_replies import written, written_thread
 
 SCHEDULED_PAGE = "http://localhost:5173/posts"
+SETTINGS_PAGE = "http://localhost:5173/settings"
 
 
 @pytest.fixture
@@ -157,12 +158,12 @@ async def _schedule(mcp, text: str = "Shipping on Monday.", at: str = "2026-10-1
     return await mcp.call_tool("schedule_post", parts=[text], publish_at=at)
 
 
-async def test_scheduling_without_an_x_connection_links_to_the_scheduled_page(
+async def test_scheduling_without_an_x_connection_links_to_the_settings_page(
     subscribed, mcp, fixed_clock
 ):
     result = await _schedule(mcp)
 
-    assert error_text(result) == f"Connect your X account first. {SCHEDULED_PAGE}"
+    assert error_text(result) == f"Connect your X account first. {SETTINGS_PAGE}"
 
 
 async def test_a_post_over_the_x_accounts_limit_is_refused(connected, mcp, fixed_clock):
@@ -464,12 +465,12 @@ async def test_tools_list_shows_post_now_and_deleting_a_scheduled_post_as_destru
         assert tools[name]["annotations"]["readOnlyHint"] is True
 
 
-async def test_connect_x_links_to_the_scheduled_page(subscribed, mcp):
+async def test_connect_x_links_to_the_settings_page(subscribed, mcp):
     result = await mcp.call_tool("connect_x")
 
     assert result["isError"] is False, result
-    assert result["structuredContent"]["url"] == SCHEDULED_PAGE
-    assert SCHEDULED_PAGE in result["structuredContent"]["message"]
+    assert result["structuredContent"]["url"] == SETTINGS_PAGE
+    assert SETTINGS_PAGE in result["structuredContent"]["message"]
 
 
 @pytest.mark.parametrize(
@@ -534,7 +535,7 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link(
 async def test_connect_x_works_for_a_user_whose_subscription_ended(subscription_ended, mcp):
     result = await mcp.call_tool("connect_x")
 
-    assert result["structuredContent"]["url"] == SCHEDULED_PAGE
+    assert result["structuredContent"]["url"] == SETTINGS_PAGE
 
 
 async def test_every_user_schedules_on_an_instance_that_sells_no_plans(

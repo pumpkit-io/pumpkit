@@ -236,12 +236,12 @@ async def delete_scheduled_post(
 
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
-    Where the User connects, reconnects or disconnects their X account: the Posts page of
+    Where the User connects, reconnects or disconnects their X account: the Settings page of
     the Pumpkit web app, since X asks them to sign in and approve in a browser.
     """
-    url = scheduled_page_url()
+    url = f"{settings.frontend_url()}{mediator.X_CONNECTION_PAGE}"
     return LinkToolResponse(
-        message=f"Connect, reconnect or disconnect your X account on the Posts page: {url}",
+        message=f"Connect, reconnect or disconnect your X account on the Settings page: {url}",
         url=url,
     )
 
