@@ -80,6 +80,7 @@ function LoadedPost({
       {post.status === 'draft' && (
         <DraftPanel
           shownVersion={shown}
+          shownParts={parts}
           shownText={text}
           latestVersion={latest}
           feedback={feedback}
