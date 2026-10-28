@@ -22,6 +22,7 @@ from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import VersionAttempt
 from pumpkit.posts.schemas import VersionResponse
+from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -438,15 +439,58 @@ async def give_feedback(
     now: datetime,
 ) -> VersionResponse:
     """
-    Write the Post's next Version from Feedback, once its Scheduled post shows it takes Feedback:
-    only a Draft or a Failed Post does.
+    Write the Post's next Version from Feedback. Only a Draft or a Failed Post takes Feedback,
+    checked again after the model calls in case the Post was scheduled meanwhile.
     """
-    await version_writing.user_post(db, user=user, post_id=post_id)
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    await _check_takes_feedback(db, post_id=post_id)
+    next_version = await version_writing.prepare_next_version(
+        db, user=user, post=post, format=format, now=now
+    )
+    # Ends the read transaction before the calls, which can take minutes.
+    await db.commit()
+
+    try:
+        written = await write_next_version(
+            llm,
+            next_version.corpus,
+            post.brief,
+            next_version.earlier,
+            feedback,
+            next_version.format,
+            next_version.char_limit,
+        )
+        await _check_takes_feedback(db, post_id=post_id)
+    except Exception as error:
+        await version_writing.record_failed_attempt(
+            db,
+            post=post,
+            sequence=next_version.sequence,
+            feedback=feedback,
+            format=next_version.format,
+            error=error,
+            now=now,
+        )
+        # Commit before re-raising, or the request session rolls the failed attempt back.
+        await db.commit()
+        raise
+
+    version = await posts_service.record_version(
+        db,
+        post=post,
+        sequence=next_version.sequence,
+        version_number=next_version.number,
+        feedback=feedback,
+        written=written,
+        now=now,
+    )
+    await db.commit()
+    return version_writing.version_response(version, next_version.char_limit)
+
+
+async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_takes_feedback(post_status(scheduled_post.state if scheduled_post else None))
-    return await version_writing.add_version(
-        db, llm, user=user, post_id=post_id, feedback=feedback, format=format, now=now
-    )
 
 
 async def _x_connection_response(db: AsyncSession, connection: XConnection) -> XConnectionResponse:

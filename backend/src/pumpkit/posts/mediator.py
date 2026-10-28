@@ -11,7 +11,7 @@ from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
     check_attempt_limit,
-    keep_failed_attempt,
+    record_failed_attempt,
     version_response,
 )
 from pumpkit.posts.writing.versions import write_first_version
@@ -44,9 +44,11 @@ async def start_post(
         written = await write_first_version(llm, corpus, brief, format, char_limit)
     except Exception as error:
         post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
-        await keep_failed_attempt(
+        await record_failed_attempt(
             db, post=post, sequence=1, feedback=None, format=format, error=error, now=now
         )
+        # Commit before re-raising, or the request session rolls the failed attempt back.
+        await db.commit()
         raise
 
     post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)

@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.main import app
+from pumpkit.posts.llm import FakeLLM, get_llm
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.posts.writing_replies import written
@@ -217,3 +219,32 @@ async def test_feedback_on_someone_else_s_post_is_not_found(client, subscribed, 
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Post not found."
+
+
+async def test_a_post_scheduled_while_its_feedback_version_is_written_does_not_take_it(
+    client, fake_llm, post
+):
+    scheduled_mid_write = []
+
+    class SchedulingLLM(FakeLLM):
+        async def structured(self, **kwargs):
+            if not scheduled_mid_write:
+                scheduled_mid_write.append(
+                    await client.post(
+                        SCHEDULED_POSTS,
+                        json={"source_version_id": _version_id(post), "publish_at": LATER},
+                    )
+                )
+            return await super().structured(**kwargs)
+
+    llm = SchedulingLLM(replies=[written("sketch next"), {"post": "Version after punchier."}])
+    app.dependency_overrides[get_llm] = lambda: llm
+    response = await client.post(
+        f"/api/v1/posts/{post['id']}/versions", json={"feedback": "punchier"}
+    )
+    read = await client.get(f"/api/v1/posts/{post['id']}")
+
+    assert scheduled_mid_write[0].status_code == 201, scheduled_mid_write[0].text
+    assert response.status_code == 409
+    assert response.json()["detail"] == SCHEDULED_TAKES_NO_FEEDBACK
+    assert [version["number"] for version in read.json()["versions"]] == [1]

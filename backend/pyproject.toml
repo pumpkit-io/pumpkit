@@ -194,12 +194,11 @@ containers = [
     "pumpkit.posts",
     "pumpkit.scheduling",
 ]
-# MCP tools sit beside the router; scheduling's publisher sits beside the mediator. Posts'
-# version_writing, which scheduling's mediator calls for Feedback, sits below the mediator.
+# MCP tools sit beside the router; scheduling's publisher sits beside the mediator.
 layers = [
     "router | (tools)",
     "(mediator) | (publisher)",
-    "(publishing) | (version_writing)",
+    "(publishing)",
     "(publish)",
     "(service)",
 ]
