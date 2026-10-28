@@ -90,6 +90,7 @@ class ScheduledPostResponse(BaseModel):
     failed_reason: Optional[str]
     # The Version whose text it copied.
     source_version_id: str
+    post_id: str
     # The Community it goes to; None for the User's profile.
     community: Optional[CommunityResponse]
     share_with_followers: bool
@@ -171,9 +172,9 @@ class PostsPageResponse(BaseModel):
 
 
 class ScheduledPostToolResponse(ScheduledPostResponse):
-    """A Scheduled post as an MCP tool answers with it, linking to the web app's Posts page."""
+    """A Scheduled post as an MCP tool answers with it, linking to its Post in the web app."""
 
-    scheduled_page_url: str
+    post_url: str
 
 
 class PostNowToolResponse(ScheduledPostToolResponse):
@@ -182,9 +183,9 @@ class PostNowToolResponse(ScheduledPostToolResponse):
     message: str
 
 
-class ScheduledPageMessageToolResponse(BaseModel):
+class PostMessageToolResponse(BaseModel):
     message: str
-    scheduled_page_url: str
+    post_url: str
 
 
 class ScheduledPostUpdateRequest(BaseModel):

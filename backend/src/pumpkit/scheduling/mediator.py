@@ -56,8 +56,8 @@ from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
-# Where the User sees their Scheduled posts.
-SCHEDULED_PAGE = "/posts"
+# Where the User sees their Posts; one Post's page is under it.
+POSTS_PAGE = "/posts"
 # Where the User connects or reconnects X, which takes a browser.
 X_CONNECTION_PAGE = "/settings"
 
@@ -94,6 +94,7 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         else None,
         failed_reason=scheduled_post.failed_reason,
         source_version_id=scheduled_post.source_version_id,
+        post_id=scheduled_post.post_id,
         community=_community_response(community_id, scheduled_post.community_name)
         if community_id
         else None,
@@ -349,12 +350,17 @@ async def _destination_after_edit(
     return Destination(community=community, share_with_followers=share_with_followers)
 
 
-async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:
-    """Delete a scheduled or Failed Scheduled post, which makes its Post a Draft again."""
-    await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
+async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> str:
+    """
+    Delete a scheduled or Failed Scheduled post, which makes its Post a Draft again. Returns the
+    Post's id.
+    """
+    scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
+    post_id = scheduled_post.post_id
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()
+    return post_id
 
 
 async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResponse:

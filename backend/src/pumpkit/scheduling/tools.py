@@ -35,10 +35,10 @@ from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     PastCommunitiesResponse,
     PostDetailToolResponse,
+    PostMessageToolResponse,
     PostNowToolResponse,
     PostsPageRequest,
     PostsPageResponse,
-    ScheduledPageMessageToolResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostToolResponse,
@@ -47,13 +47,14 @@ from pumpkit.scheduling.schemas import (
 from pumpkit.x_connection.x_publisher import get_x_publisher
 
 
-def scheduled_page_url() -> str:
-    return f"{settings.frontend_url()}{mediator.SCHEDULED_PAGE}"
+def post_url(post_id: str) -> str:
+    """The Post's page in the web app."""
+    return f"{settings.frontend_url()}{mediator.POSTS_PAGE}/{post_id}"
 
 
 def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolResponse:
     return ScheduledPostToolResponse(
-        **scheduled_post.model_dump(), scheduled_page_url=scheduled_page_url()
+        **scheduled_post.model_dump(), post_url=post_url(scheduled_post.post_id)
     )
 
 
@@ -218,16 +219,16 @@ async def edit_scheduled_post(
 
 async def delete_scheduled_post(
     call: ToolCall[User], scheduled_post_id: str
-) -> ScheduledPageMessageToolResponse:
+) -> PostMessageToolResponse:
     """
     Delete a waiting or Failed Scheduled post, so it is never published, and its Post is a Draft
     again: it takes Feedback and can be scheduled anew. It can't be undone.
     """
-    await mediator.cancel_scheduled_post(
+    post_id = await mediator.cancel_scheduled_post(
         db=call.db, user=call.user, scheduled_post_id=scheduled_post_id
     )
-    return ScheduledPageMessageToolResponse(
-        message="The Scheduled post is deleted.", scheduled_page_url=scheduled_page_url()
+    return PostMessageToolResponse(
+        message="The Scheduled post is deleted.", post_url=post_url(post_id)
     )
 
 

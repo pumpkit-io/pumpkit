@@ -22,7 +22,7 @@ from tests.mcp_client import error_text
 from tests.posts.writing_replies import written, written_thread
 from tests.scheduling.reading import scheduled_posts_through_mcp
 
-SCHEDULED_PAGE = "http://localhost:5173/posts"
+POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
 
 
@@ -66,9 +66,9 @@ async def test_scheduling_a_version_answers_with_the_scheduled_page_link(
     assert scheduled["publish_at"] == "2026-10-10T14:00:00Z"
     assert scheduled["source_version_id"] == version_id
     assert scheduled["community"] is None
-    assert scheduled["scheduled_page_url"] == SCHEDULED_PAGE
+    assert scheduled["post_url"] == f"{POSTS_PAGE}/{scheduled['post_id']}"
     assert await scheduled_posts_through_mcp(mcp) == [
-        {key: value for key, value in scheduled.items() if key != "scheduled_page_url"}
+        {key: value for key, value in scheduled.items() if key != "post_url"}
     ]
 
 
@@ -503,7 +503,7 @@ async def test_deleting_a_waiting_scheduled_post_takes_it_off_the_list(
 
     assert result["structuredContent"] == {
         "message": "The Scheduled post is deleted.",
-        "scheduled_page_url": SCHEDULED_PAGE,
+        "post_url": f"{POSTS_PAGE}/{scheduled['post_id']}",
     }
     assert (await scheduled_posts_through_mcp(mcp)) == []
 
@@ -640,7 +640,7 @@ async def test_post_now_publishes_a_version_and_links_to_it_on_x(
     assert posted["state"] == "published"
     assert posted["x_post_url"] == FIRST_X_POST
     assert posted["message"] == f"Published on X: {FIRST_X_POST}"
-    assert posted["scheduled_page_url"] == SCHEDULED_PAGE
+    assert posted["post_url"] == f"{POSTS_PAGE}/{posted['post_id']}"
     assert fake_x_publisher.published == [("access-1001-1", "Out now.")]
 
 
