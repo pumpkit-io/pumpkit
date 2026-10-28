@@ -21,12 +21,15 @@ interface BrandProps {
 export function Brand({ className, showName = true, nameHidden = false, size = 'md' }: BrandProps) {
   const { resolved } = useTheme();
   const { app_name } = useInstance();
+  // The stem is thin, so the mascot's weight is its body, centred below the image's middle:
+  // the name drops to meet it rather than the image.
   const nameClass = cn(
     'select-none transition-opacity duration-150 ease-out motion-reduce:transition-none',
+    size === 'sm' ? 'translate-y-[3px]' : 'translate-y-1',
     nameHidden && 'opacity-0',
   );
   return (
-    <span className={cn('flex items-center gap-2', className)}>
+    <span className={cn('flex items-center', size === 'sm' ? 'gap-3' : 'gap-3.5', className)}>
       <img
         src={mascot}
         alt=""
@@ -39,7 +42,7 @@ export function Brand({ className, showName = true, nameHidden = false, size = '
             src={resolved === 'dark' ? wordmarkDark : wordmarkLight}
             alt={nameHidden ? '' : app_name}
             aria-hidden={nameHidden || undefined}
-            className={cn('w-auto', size === 'sm' ? 'h-[19px]' : 'h-6', nameClass)}
+            className={cn('w-auto', size === 'sm' ? 'h-[22px]' : 'h-7', nameClass)}
             draggable={false}
           />
         ) : (
