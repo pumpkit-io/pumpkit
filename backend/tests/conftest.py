@@ -457,7 +457,7 @@ def version_of(db, user) -> Callable[..., Awaitable[str]]:
             status=ATTEMPT_SUCCEEDED,
             version_number=1,
             sketch_parts=list(parts),
-            final_parts=list(parts),
+            parts=list(parts),
             slop_tells=[],
             created_at=now,
         )
@@ -487,7 +487,7 @@ def next_version(db) -> Callable[..., Awaitable[str]]:
             version_number=(previous.version_number or 0) + 1,
             feedback="Try again",
             sketch_parts=list(parts),
-            final_parts=list(parts),
+            parts=list(parts),
             slop_tells=[],
             created_at=now,
         )

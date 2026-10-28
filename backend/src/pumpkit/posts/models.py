@@ -70,9 +70,7 @@ class VersionAttempt(Base):
     sketch_parts: Mapped[Optional[list[str]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
-    final_parts: Mapped[Optional[list[str]]] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql")
-    )
+    parts: Mapped[Optional[list[str]]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     # The sketch call's model on a first Version, the revision call's on a later one.
     sketch_model: Mapped[Optional[str]] = mapped_column(String)
     humanizing_model: Mapped[Optional[str]] = mapped_column(String)

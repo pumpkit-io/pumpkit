@@ -88,8 +88,8 @@ class ScheduledPostResponse(BaseModel):
     x_post_url: Optional[str]
     # Why it Failed, in words for the User.
     failed_reason: Optional[str]
-    # The Version whose text it copied; None only for one typed before ADR 0015.
-    source_version_id: Optional[str]
+    # The Version whose text it copied.
+    source_version_id: str
     # The Community it goes to; None for the User's profile.
     community: Optional[CommunityResponse]
     share_with_followers: bool

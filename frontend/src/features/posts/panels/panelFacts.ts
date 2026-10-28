@@ -14,7 +14,7 @@ export function formatWhen(iso: string): string {
   return when.format(new Date(iso));
 }
 
-/** "Version n" of the Version the Scheduled post came from, or null for one typed before it. */
+/** "Version n" of the Version the Scheduled post came from, null when it isn't in `post`. */
 export function sourceVersionLabel(post: PostDetail, scheduledPost: ScheduledPost): string | null {
   const source = post.versions.find((v) => v.id === scheduledPost.sourceVersionId);
   return source ? `Version ${source.number}` : null;

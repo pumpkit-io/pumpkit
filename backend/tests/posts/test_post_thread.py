@@ -64,7 +64,7 @@ async def test_starting_a_post_as_a_thread_returns_a_first_version_of_parts(
         },
     ]
     [attempt] = await _stored_attempts(db)
-    assert (attempt.format, attempt.sketch_parts, attempt.final_parts) == (
+    assert (attempt.format, attempt.sketch_parts, attempt.parts) == (
         "thread",
         ["Ship small - every week", "it's how you learn"],
         ["Ship small every week 🚀", "it's how you learn https://pumpkit.io/a/long/link"],
@@ -155,7 +155,7 @@ async def test_a_thread_reply_outside_the_part_bounds_fails_the_attempt(
     assert_reported_502(response)
     assert fake_llm.replies == []
     [attempt] = await _stored_attempts(db)
-    assert (attempt.status, attempt.format, attempt.final_parts) == ("failed", "thread", None)
+    assert (attempt.status, attempt.format, attempt.parts) == ("failed", "thread", None)
 
 
 async def test_a_post_started_with_the_post_format_is_a_single_post(client, with_author, fake_llm):

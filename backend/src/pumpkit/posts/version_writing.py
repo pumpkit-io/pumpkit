@@ -82,7 +82,7 @@ async def char_limit_for(db: AsyncSession, *, user_id: str) -> int:
 
 
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:
-    assert attempt.version_number is not None and attempt.final_parts is not None
+    assert attempt.version_number is not None and attempt.parts is not None
     assert attempt.slop_tells is not None
     format = attempt.format
     return VersionResponse(
@@ -96,7 +96,7 @@ def version_response(attempt: VersionAttempt, char_limit: int) -> VersionRespons
                 char_count=x_weighted_length(text),
                 char_limit=char_limit,
             )
-            for text in attempt.final_parts
+            for text in attempt.parts
         ],
         tells=[TellResponse(**tell) for tell in attempt.slop_tells],
     )
@@ -139,7 +139,7 @@ async def prepare_next_version(
     return NextVersion(
         corpus=await service.corpus_for_post(db, post=post),
         earlier=[
-            EarlierVersion(feedback=v.feedback, format=v.format, final_parts=v.final_parts or [])
+            EarlierVersion(feedback=v.feedback, format=v.format, parts=v.parts or [])
             for v in versions
         ],
         format=format or versions[-1].format,

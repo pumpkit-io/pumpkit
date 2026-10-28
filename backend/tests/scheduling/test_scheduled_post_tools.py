@@ -11,6 +11,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.models import SCHEDULED, ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
@@ -460,8 +461,23 @@ async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fix
     bob = User(email="bob@example.com", display_name="Bob")
     db.add(bob)
     await db.flush()
+    bobs_post = Post(user_id=bob.id, brief="Bob's", corpus_post_ids=[], created_at=fixed_clock())
+    bobs_version = VersionAttempt(
+        post=bobs_post,
+        sequence=1,
+        format="post",
+        status=ATTEMPT_SUCCEEDED,
+        version_number=1,
+        parts=["Bob's."],
+        slop_tells=[],
+        created_at=fixed_clock(),
+    )
+    db.add_all([bobs_post, bobs_version])
+    await db.flush()
     bobs = ScheduledPost(
         user_id=bob.id,
+        post_id=bobs_post.id,
+        source_version_id=bobs_version.id,
         x_user_id="2002",
         parts=[ScheduledPostPart(position=0, text="Bob's.")],
         publish_at=fixed_clock() + timedelta(hours=2),

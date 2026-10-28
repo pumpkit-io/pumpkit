@@ -183,7 +183,7 @@ async def create_scheduled_post(
     version = await _source_version(db, user=user, version_id=new.version_id)
     if await service.get_for_post(db, post_id=version.post_id) is not None:
         raise _already_scheduled()
-    parts = list(version.final_parts or [])
+    parts = list(version.parts or [])
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_monthly_cap(db, user_id=user.id, publish_at=publish_at, part_count=len(parts))
@@ -220,7 +220,7 @@ def _already_scheduled() -> ConflictError:
 async def _source_version(db: AsyncSession, *, user: User, version_id: str) -> VersionAttempt:
     """The Version a Scheduled post copies, or a 404 unless the Version is the User's."""
     version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
-    if version is None or not version.final_parts:
+    if version is None or not version.parts:
         raise NotFoundError("Version not found.")
     return version
 
@@ -271,7 +271,7 @@ async def edit_scheduled_post(
         if version.post_id != scheduled_post.post_id:
             raise rules.RuleBroken("Choose a Version of this Post.")
         # The Version's Parts in the places of the live ones are already on X as they were.
-        parts = live + list(version.final_parts or [])[len(live) :]
+        parts = live + list(version.parts or [])[len(live) :]
         version_id = version.id
     if parts is not None:
         rules.check_live_parts_kept(live, parts)
@@ -399,7 +399,7 @@ def _post_list_item(listed: service.ListedPost) -> PostListItemResponse:
         parts = [part.text for part in scheduled_post.parts]
         format = format_of(parts)
     else:
-        parts = list(latest.final_parts or [])
+        parts = list(latest.parts or [])
         format = latest.format
     return PostListItemResponse(
         id=post.id,

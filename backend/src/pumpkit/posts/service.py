@@ -120,7 +120,7 @@ async def record_version(
         status=ATTEMPT_SUCCEEDED,
         version_number=version_number,
         sketch_parts=written.sketch_parts,
-        final_parts=written.final_parts,
+        parts=written.parts,
         sketch_model=written.sketch_model,
         humanizing_model=written.humanizing_model,
         sketch_usage=written.sketch_usage,
@@ -129,7 +129,7 @@ async def record_version(
         hook_name=written.hook.name,
         slop_tells=[
             {"name": name, "description": description}
-            for name, description in slop.find_in_parts(written.final_parts)
+            for name, description in slop.find_in_parts(written.parts)
         ],
         created_at=now,
     )

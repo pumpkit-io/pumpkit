@@ -237,7 +237,8 @@ def _shape(scheduled_post: ScheduledPost) -> dict[str, object]:
 
 def capture_published(scheduled_post: ScheduledPost) -> None:
     properties: dict[str, object] = {
-        "source": "final" if scheduled_post.source_version_id else "typed",
+        # Kept as "final" for the event's history: every Scheduled post is copied from a Version.
+        "source": "final",
         "destination": "community" if scheduled_post.community_id else "profile",
     }
     if scheduled_post.community_id:
