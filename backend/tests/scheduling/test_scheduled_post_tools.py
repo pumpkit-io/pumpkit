@@ -371,6 +371,54 @@ async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
     assert [p["live"] for p in listed[0]["parts"]] == [True, False]
 
 
+async def test_a_thread_failed_partway_is_rescheduled_with_a_version_of_its_post(
+    connected, mcp, fake_x_publisher, fixed_clock, version_of, next_version
+):
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    fake_x_publisher.fail_publish_on = 2
+    first = await version_of("Live one.", "Refused two.")
+    failed = (await mcp.call_tool("post_now", version_id=first))["structuredContent"]
+    fake_x_publisher.fail_publish = None
+    latest = await next_version(first, "Rewritten one.", "Fixed two.", "New three.")
+
+    rescheduled = await mcp.call_tool(
+        "edit_scheduled_post",
+        scheduled_post_id=failed["id"],
+        version_id=latest,
+        publish_at="2026-10-10T14:00:00Z",
+    )
+
+    assert rescheduled["isError"] is False, rescheduled
+    answer = rescheduled["structuredContent"]
+    assert answer["state"] == "scheduled"
+    assert answer["source_version_id"] == latest
+    assert [(p["text"], p["live"]) for p in answer["parts"]] == [
+        ("Live one.", True),
+        ("Fixed two.", False),
+        ("New three.", False),
+    ]
+
+
+async def test_editing_with_a_version_of_another_post_or_with_parts_too_is_refused(
+    connected, mcp, version_of
+):
+    scheduled = (await _schedule(mcp, version_of))["structuredContent"]
+    elsewhere = await version_of("Another Post.")
+
+    other_post = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], version_id=elsewhere
+    )
+    both = await mcp.call_tool(
+        "edit_scheduled_post",
+        scheduled_post_id=scheduled["id"],
+        version_id=scheduled["source_version_id"],
+        parts=["Typed."],
+    )
+
+    assert error_text(other_post) == "Choose a Version of this Post."
+    assert error_text(both) == "Give either the Parts or a Version, not both."
+
+
 PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
 
 

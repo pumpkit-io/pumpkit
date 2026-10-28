@@ -63,10 +63,11 @@ def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, v
 
 
 @pytest.fixture
-def edit(db, user, fake_x_reader, fixed_clock):
+def edit(db, user, fake_x_publisher, fake_x_reader, fixed_clock):
     async def _edit(scheduled_post_id: str, **fields) -> ScheduledPostResponse:
         return await mediator.edit_scheduled_post(
             db=db,
+            publisher=fake_x_publisher,
             reader=fake_x_reader,
             user=user,
             scheduled_post_id=scheduled_post_id,

@@ -149,8 +149,12 @@ class ScheduledPostUpdateRequest(BaseModel):
 
     # Every Part in order, replacing those not live; live Parts come first, unchanged.
     parts: Optional[Parts] = None
+    # A Version of the same Post: its Parts after the live ones replace those not live.
+    source_version_id: Optional[str] = None
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
+    # Publishes it within the request, on the X account connected now.
+    publish_now: bool = False
     # The ID or URL of a new Community; an explicit null moves it back to the User's profile.
     community: Optional[str] = Field(None, max_length=COMMUNITY_PASTE_MAX_CHARS)
     # Ignored when the Scheduled post ends up on the profile.

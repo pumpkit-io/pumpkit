@@ -252,6 +252,7 @@ def _publishing_started() -> ConflictError:
 
 async def edit_scheduled_post(
     db: AsyncSession,
+    publisher: XPublisher,
     reader: XReader,
     user: User,
     scheduled_post_id: str,
@@ -259,27 +260,41 @@ async def edit_scheduled_post(
     now: datetime,
 ) -> ScheduledPostResponse:
     """
-    New Parts, time, Community or share with followers for a scheduled or Failed Scheduled post.
-    A new time reschedules it on the X account connected now, so a Failed one gets another try.
+    New Parts or Version, time, Community or share with followers for a scheduled or Failed
+    Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
+    so a Failed one gets another try. With publish now it answers like Post now.
     """
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
         raise _publishing_started()
-    if edit.parts is not None:
-        live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
-        rules.check_live_parts_kept(live, edit.parts)
+    live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
+    parts = edit.parts
+    version_id = None
+    if edit.version_id is not None:
+        version = await _source_version(db, user=user, version_id=edit.version_id)
+        if version.post_id != scheduled_post.post_id:
+            raise rules.RuleBroken("Choose a Version of this Post.")
+        # The Version's Parts in the places of the live ones are already on X as they were.
+        parts = live + list(version.final_parts or [])[len(live) :]
+        version_id = version.id
+    if parts is not None:
+        rules.check_live_parts_kept(live, parts)
     reschedule = None
     connection = (
         await connection_to_publish_on(db, user_id=user.id)
-        if edit.publish_at is not None
+        if edit.reschedules
         else await x_connections_service.get_connection(db, user_id=user.id)
     )
-    if edit.parts is not None:
+    if parts is not None:
         subscription_type = connection.subscription_type if connection else None
-        rules.check_length(edit.parts, limit=x_post_max_chars(subscription_type))
-    part_count = len(edit.parts if edit.parts is not None else scheduled_post.parts)
-    if connection is not None and edit.publish_at is not None:
-        new_publish_at = rules.check_publish_at(edit.publish_at, now=now)
+        rules.check_length(parts, limit=x_post_max_chars(subscription_type))
+    part_count = len(parts if parts is not None else scheduled_post.parts)
+    if connection is not None and edit.reschedules:
+        new_publish_at = (
+            now.replace(second=0, microsecond=0)
+            if edit.publish_now
+            else rules.check_publish_at(edit.publish_at, now=now)
+        )
         await check_monthly_cap(
             db,
             user_id=user.id,
@@ -300,12 +315,15 @@ async def edit_scheduled_post(
     if not await service.edit(
         db,
         scheduled_post_id=scheduled_post_id,
-        parts=edit.parts,
+        parts=parts,
+        source_version_id=version_id,
         reschedule=reschedule,
         destination=destination,
         now=now,
     ):
         raise _publishing_started()
+    if edit.publish_now:
+        return await _post_now(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     await db.commit()
     return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
 

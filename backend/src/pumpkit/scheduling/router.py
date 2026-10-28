@@ -167,17 +167,22 @@ async def edit_scheduled_post(
     update_request: ScheduledPostUpdateRequest,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    publisher: XPublisher = Depends(get_x_publisher),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
+    """With `publish_now`, publishes on X before answering, as creating one does."""
     edit = ScheduledPostEdit(
         parts=update_request.parts,
+        version_id=update_request.source_version_id,
         publish_at=update_request.publish_at,
+        publish_now=update_request.publish_now,
         destination=_destination_change(update_request),
         share_with_followers=update_request.share_with_followers,
     )
     return await mediator.edit_scheduled_post(
         db=db,
+        publisher=publisher,
         reader=reader,
         user=current_user,
         scheduled_post_id=scheduled_post_id,

@@ -184,6 +184,7 @@ async def edit_scheduled_post(
     call: ToolCall[User],
     scheduled_post_id: str,
     parts: Optional[list[str]] = None,
+    version_id: Optional[str] = None,
     publish_at: Optional[str] = None,
     community: Optional[str] = None,
     to_profile: bool = False,
@@ -191,23 +192,32 @@ async def edit_scheduled_post(
 ) -> ScheduledPostToolResponse:
     """
     Change a waiting or Failed Scheduled post: its text, as `parts` listing every Part in
-    order, its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one
-    another try), the Community whose URL or ID `community` holds, or, with `to_profile`, send
-    it to the User's profile instead. Leave out what stays the same. Live Parts of a Thread
-    that failed partway are on X and locked: keep them first in `parts`, unchanged. A new time
-    publishes only the Parts not live, as replies to the last live one.
+    order, or as `version_id`, another Version of the same Post whose text it then copies;
+    its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one another
+    try); the Community whose URL or ID `community` holds, or, with `to_profile`, the User's
+    profile instead. Leave out what stays the same. Live Parts of a Thread that failed partway
+    are on X and locked: keep them first in `parts`, unchanged; a Version's Parts in their
+    places are skipped. A new time publishes only the Parts not live, as replies to the last
+    live one.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
-        {"parts": parts, "publish_at": publish_at, "community": community}
+        {
+            "parts": parts,
+            "source_version_id": version_id,
+            "publish_at": publish_at,
+            "community": community,
+        }
     )
     edit = ScheduledPostEdit(
         parts=update_request.parts,
+        version_id=update_request.source_version_id,
         publish_at=update_request.publish_at,
         destination=_destination_change(update_request.community, to_profile),
         share_with_followers=share_with_followers,
     )
     scheduled_post = await mediator.edit_scheduled_post(
         db=call.db,
+        publisher=await call.provide(get_x_publisher),
         reader=await call.provide(get_x_reader),
         user=call.user,
         scheduled_post_id=scheduled_post_id,
