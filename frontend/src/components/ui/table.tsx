@@ -148,7 +148,7 @@ const Table = forwardRef<HTMLTableElement, TableProps>(({ children, className, .
           {activeRect && (
             <motion.div
               key={sessionRef.current}
-              className="absolute bg-neutral-200/40 dark:bg-neutral-800/25 pointer-events-none z-0"
+              className="absolute bg-[var(--hover)] pointer-events-none z-0"
               initial={{
                 opacity: 0,
                 top: activeRect.top,

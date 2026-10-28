@@ -1,9 +1,9 @@
 """
-Writing a Version, the pumpkit-v6 way: the writing call (the draft call for the first Version,
+Writing a Version, the pumpkit-v6 way: the writing call (the sketch call for the first Version,
 the revision call after Feedback), which chooses and writes the Hook too, the scrub, then the
 humanizer call.
 
-The scrubbed writing-call text is the Draft and the humanizer's text is the Final. Every call
+The scrubbed writing-call text is the Sketch and the humanizer's text is the Final. Every call
 gets the system prompt first and the corpus second, as in v6, so the per-call parts come after a
 prefix that stays the same across a Post's Versions.
 """
@@ -27,8 +27,6 @@ from pumpkit.posts.writing.constants import (
 from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
-from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
-from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
 from pumpkit.posts.writing.prompts.feedback import feedback_message
 from pumpkit.posts.writing.prompts.hook import HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
@@ -37,8 +35,10 @@ from pumpkit.posts.writing.prompts.parts import format_text
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     latest_feedback_message,
     previous_final_message,
-    revised_draft_message,
+    revised_sketch_message,
 )
+from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
+from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.posts.writing.scrub import scrub
 
 
@@ -54,7 +54,7 @@ class WrittenPost(_HookedWriting):
     post: str
 
 
-class DraftedPost(WrittenPost):
+class SketchedPost(WrittenPost):
     pass
 
 
@@ -74,7 +74,7 @@ class WrittenThread(_HookedWriting):
     parts: list[str]
 
 
-class DraftedThread(WrittenThread):
+class SketchedThread(WrittenThread):
     pass
 
 
@@ -88,26 +88,27 @@ class FinalThread(BaseModel):
     parts: list[str]
 
 
-# The SDK names the structured-output schema after the class; the post ones are v6's names.
-DraftedPost.__name__ = "drafted_post"
+# The SDK names the structured-output schema after the class. The model reads these names, so
+# they stay the ones the prompts were tuned with, v6's for the post ones, "drafted" included.
+SketchedPost.__name__ = "drafted_post"
 FinalPost.__name__ = "refined_post"
 RevisedPost.__name__ = "revised_post"
-DraftedThread.__name__ = "drafted_thread"
+SketchedThread.__name__ = "drafted_thread"
 RevisedThread.__name__ = "revised_thread"
 FinalThread.__name__ = "refined_thread"
 
 # Each takes the account's character limit. The single-post humanizer states none: it stays v6's.
-_DRAFT_PROMPTS: dict[Format, Callable[[int], str]] = {
-    FORMAT_POST: draft_post_prompt,
-    FORMAT_THREAD: draft_thread_prompt,
+_SKETCH_PROMPTS: dict[Format, Callable[[int], str]] = {
+    FORMAT_POST: sketch_post_prompt,
+    FORMAT_THREAD: sketch_thread_prompt,
 }
 _HUMANIZER_PROMPTS: dict[Format, Callable[[int], str]] = {
     FORMAT_POST: lambda _char_limit: HUMANIZER_PROMPT,
     FORMAT_THREAD: humanizer_thread_prompt,
 }
-_DRAFTED: dict[Format, type[_HookedWriting]] = {
-    FORMAT_POST: DraftedPost,
-    FORMAT_THREAD: DraftedThread,
+_SKETCHED: dict[Format, type[_HookedWriting]] = {
+    FORMAT_POST: SketchedPost,
+    FORMAT_THREAD: SketchedThread,
 }
 _REVISED: dict[Format, type[_HookedWriting]] = {
     FORMAT_POST: RevisedPost,
@@ -137,11 +138,11 @@ class Hook:
 @dataclass(frozen=True)
 class WrittenVersion:
     format: Format
-    draft_parts: list[str]
+    sketch_parts: list[str]
     final_parts: list[str]
-    writing_model: str
+    sketch_model: str
     humanizing_model: str
-    writing_usage: Optional[dict]
+    sketch_usage: Optional[dict]
     humanizing_usage: Optional[dict]
     hook: Hook
 
@@ -159,9 +160,9 @@ def _user(content: str) -> dict:
     return {"role": "user", "content": content}
 
 
-def draft_messages(corpus: Corpus, brief: str, format: Format, char_limit: int) -> list[dict]:
+def sketch_messages(corpus: Corpus, brief: str, format: Format, char_limit: int) -> list[dict]:
     return [
-        _system(_DRAFT_PROMPTS[format](char_limit)),
+        _system(_SKETCH_PROMPTS[format](char_limit)),
         _user(context_message(corpus)),
         _user(brief),
     ]
@@ -176,12 +177,12 @@ def _humanizer_prefix(corpus: Corpus, brief: str, format: Format, char_limit: in
 
 
 def humanizer_messages(
-    corpus: Corpus, brief: str, format: Format, char_limit: int, draft_parts: list[str]
+    corpus: Corpus, brief: str, format: Format, char_limit: int, sketch_parts: list[str]
 ) -> list[dict]:
-    """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Draft last."""
+    """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Sketch last."""
     return [
         *_humanizer_prefix(corpus, brief, format, char_limit),
-        _user(format_text(format, draft_parts)),
+        _user(format_text(format, sketch_parts)),
     ]
 
 
@@ -192,7 +193,7 @@ def revision_humanizer_messages(
     feedback: str,
     format: Format,
     char_limit: int,
-    draft_parts: list[str],
+    sketch_parts: list[str],
 ) -> list[dict]:
     """
     The first Version's prefix in the new Format, then what keeps the humanizer from rewording
@@ -203,7 +204,7 @@ def revision_humanizer_messages(
         *_humanizer_prefix(corpus, brief, format, char_limit),
         _user(previous_final_message(previous.format, previous.final_parts)),
         _user(latest_feedback_message(feedback, previous.format, format)),
-        _user(revised_draft_message(previous.format, format, draft_parts)),
+        _user(revised_sketch_message(previous.format, format, sketch_parts)),
     ]
 
 
@@ -216,12 +217,12 @@ def revision_messages(
     char_limit: int,
 ) -> list[dict]:
     """
-    The draft call's conversation continued, under the new Format's prompt: the Brief, each
+    The sketch call's conversation continued, under the new Format's prompt: the Brief, each
     Final in its own Format as the model's answer after the Feedback that asked for it, then
-    the new Feedback. A Feedback that switched Format says so. Drafts stay out: the User never
+    the new Feedback. A Feedback that switched Format says so. Sketches stay out: the User never
     reacted to them.
     """
-    messages = draft_messages(corpus, brief, format, char_limit)
+    messages = sketch_messages(corpus, brief, format, char_limit)
     previous: Optional[EarlierVersion] = None
     for version in earlier:
         if previous is not None and version.feedback is not None:
@@ -265,15 +266,15 @@ async def write_first_version(
     Write it for an X account whose posts hold up to `char_limit` characters. Raises whatever
     the LLM port raises, or an `LLMError` for a Thread of the wrong length.
     """
-    drafted = await llm.structured(
-        model=settings.LLM_DRAFTING_MODEL,
-        messages=draft_messages(corpus, brief, format, char_limit),
-        response_model=_DRAFTED[format],
+    sketched = await llm.structured(
+        model=settings.LLM_SKETCHING_MODEL,
+        messages=sketch_messages(corpus, brief, format, char_limit),
+        response_model=_SKETCHED[format],
         max_tokens=MAX_TOKENS,
     )
-    draft_parts = [scrub(part) for part in _parts_of("draft", drafted.parsed)]
-    messages = humanizer_messages(corpus, brief, format, char_limit, draft_parts)
-    return await _humanize(llm, format, messages, drafted, draft_parts, _hook(drafted.parsed))
+    sketch_parts = [scrub(part) for part in _parts_of("sketch", sketched.parsed)]
+    messages = humanizer_messages(corpus, brief, format, char_limit, sketch_parts)
+    return await _humanize(llm, format, messages, sketched, sketch_parts, _hook(sketched.parsed))
 
 
 async def write_next_version(
@@ -296,11 +297,11 @@ async def write_next_version(
         response_model=_REVISED[format],
         max_tokens=MAX_TOKENS,
     )
-    draft_parts = [scrub(part) for part in _parts_of("revision", revised.parsed)]
+    sketch_parts = [scrub(part) for part in _parts_of("revision", revised.parsed)]
     messages = revision_humanizer_messages(
-        corpus, brief, earlier[-1], feedback, format, char_limit, draft_parts
+        corpus, brief, earlier[-1], feedback, format, char_limit, sketch_parts
     )
-    return await _humanize(llm, format, messages, revised, draft_parts, _hook(revised.parsed))
+    return await _humanize(llm, format, messages, revised, sketch_parts, _hook(revised.parsed))
 
 
 def _hook(written: _HookedWriting) -> Hook:
@@ -317,7 +318,7 @@ async def _humanize(
     format: Format,
     messages: list[dict],
     written: StructuredResult,
-    draft_parts: list[str],
+    sketch_parts: list[str],
     hook: Hook,
 ) -> WrittenVersion:
     refined = await llm.structured(
@@ -329,11 +330,11 @@ async def _humanize(
     final_parts = _parts_of("humanizer", refined.parsed)
     return WrittenVersion(
         format=format,
-        draft_parts=draft_parts,
+        sketch_parts=sketch_parts,
         final_parts=final_parts,
-        writing_model=written.model,
+        sketch_model=written.model,
         humanizing_model=refined.model,
-        writing_usage=_usage(written),
+        sketch_usage=_usage(written),
         humanizing_usage=_usage(refined),
         hook=hook,
     )

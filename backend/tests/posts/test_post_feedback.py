@@ -10,8 +10,8 @@ from pumpkit.core.config import settings
 from pumpkit.core.time import as_utc
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
+from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written
 
@@ -40,7 +40,7 @@ async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
     """A Post from the Brief "ship small things" whose first Version's Final is "final 1"."""
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [written("draft 1"), {"post": "final 1"}]
+    fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things"})
     assert response.status_code == 201
     fake_llm.calls.clear()
@@ -48,7 +48,7 @@ async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
 
 
 async def test_feedback_returns_a_new_version_with_the_next_number(client, post_id, fake_llm):
-    fake_llm.replies = [written("draft 2—shorter"), {"post": "final 2"}]
+    fake_llm.replies = [written("sketch 2—shorter"), {"post": "final 2"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "make it shorter"})
 
@@ -57,7 +57,6 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
     assert version["number"] == 2
     assert version["feedback"] == "make it shorter"
     assert version["format"] == "post"
-    assert version["draft_parts"] == ["draft 2 - shorter"]
     assert version["parts"] == [
         {"text": "final 2", "char_count": 7, "char_limit": X_POST_MAX_CHARS}
     ]
@@ -65,7 +64,7 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
 
 
 async def test_a_feedback_version_reports_the_tells_in_its_final(client, post_id, fake_llm):
-    fake_llm.replies = [written("draft 2"), {"post": "distribution — that's it"}]
+    fake_llm.replies = [written("sketch 2"), {"post": "distribution — that's it"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -109,9 +108,9 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     client, post_id, fake_llm
 ):
     fake_llm.replies = [
-        written("draft 2"),
+        written("sketch 2"),
         {"post": "final 2"},
-        written("draft 3"),
+        written("sketch 3"),
         {"post": "final 3"},
     ]
 
@@ -122,14 +121,14 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
     assert first_revision.model == DEFAULT_MODEL
     assert first_revision.response_model.__name__ == "revised_post"
     assert first_revision.messages == [
-        _system(draft_post_prompt(X_POST_MAX_CHARS)),
+        _system(sketch_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
         _user(_framed("shorter")),
     ]
     assert second_revision.messages == [
-        _system(draft_post_prompt(X_POST_MAX_CHARS)),
+        _system(sketch_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
@@ -141,7 +140,7 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
 
 async def test_the_revision_call_uses_the_configured_model(client, post_id, fake_llm, monkeypatch):
     monkeypatch.setattr(settings, "LLM_REVISING_MODEL", "llama3.3")
-    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
 
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -172,14 +171,14 @@ def _latest_feedback(feedback: str) -> str:
     )
 
 
-def _to_rewrite(draft: str) -> str:
+def _to_rewrite(sketch: str) -> str:
     return (
         "This is the post to rewrite. Return every sentence that is also in the previous "
         "post exactly as it is in <post> below, even if it moved. A sentence that differs "
         "only in punctuation counts as unchanged. Apply your guidelines only to the "
         "sentences that are new or reworded, and don't add sentences or ideas the post "
         "doesn't have.\n\n"
-        f"<post>\n{draft}\n</post>"
+        f"<post>\n{sketch}\n</post>"
     )
 
 
@@ -207,9 +206,9 @@ async def test_the_humanizer_gets_only_the_latest_feedback_and_the_latest_final(
     client, post_id, fake_llm
 ):
     fake_llm.replies = [
-        written("draft 2"),
+        written("sketch 2"),
         {"post": "final 2"},
-        written("draft 3"),
+        written("sketch 3"),
         {"post": "final 3"},
     ]
 
@@ -219,7 +218,7 @@ async def test_the_humanizer_gets_only_the_latest_feedback_and_the_latest_final(
     assert fake_llm.calls[3].messages[3:] == [
         _user(_previous("final 2")),
         _user(_latest_feedback("shorter")),
-        _user(_to_rewrite("draft 3")),
+        _user(_to_rewrite("sketch 3")),
     ]
 
 
@@ -229,7 +228,7 @@ async def test_the_revision_uses_the_posts_corpus_after_the_users_authors_change
     await client.delete(f"{AUTHORS}/levelsio")
     fake_x_reader.posts["paulg"] = _posts("paulg", 1)
     assert (await client.post(AUTHORS, json={"handle": "paulg"})).status_code == 201
-    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -248,7 +247,7 @@ async def test_feedback_over_100000_characters_returns_422_without_calling_the_m
 
 
 async def test_feedback_of_exactly_100000_characters_is_accepted(client, post_id, fake_llm):
-    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "a" * 100_000})
 
@@ -317,7 +316,7 @@ async def _stored_post(db, post_id: str) -> Post:
 async def test_a_failed_revision_is_stored_as_a_failed_attempt_and_returns_502(
     client, db, post_id, fake_llm, assert_reported_502, clock
 ):
-    fake_llm.replies = [written("draft 2"), LLMError("provider timed out")]
+    fake_llm.replies = [written("sketch 2"), LLMError("provider timed out")]
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
@@ -335,7 +334,7 @@ async def test_a_failed_revision_is_stored_as_a_failed_attempt_and_returns_502(
 async def test_a_failed_attempt_stays_out_of_the_conversation_and_the_numbering(
     client, db, post_id, fake_llm
 ):
-    fake_llm.replies = [LLMError("provider down"), written("draft 2"), {"post": "final 2"}]
+    fake_llm.replies = [LLMError("provider down"), written("sketch 2"), {"post": "final 2"}]
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
     response = await client.post(_versions_url(post_id), json={"feedback": "shorter"})
@@ -351,16 +350,16 @@ async def test_a_failed_attempt_stays_out_of_the_conversation_and_the_numbering(
 
 
 async def test_a_version_stores_its_feedback_models_and_usage(client, db, post_id, fake_llm):
-    fake_llm.replies = [written("draft 2"), {"post": "final 2"}]
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
 
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
     post = await _stored_post(db, post_id)
     version = post.attempts[1]
-    assert (version.feedback, version.draft_parts, version.final_parts) == (
+    assert (version.feedback, version.sketch_parts, version.final_parts) == (
         "shorter",
-        ["draft 2"],
+        ["sketch 2"],
         ["final 2"],
     )
-    assert (version.writing_model, version.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
-    assert version.writing_usage is not None and version.humanizing_usage is not None
+    assert (version.sketch_model, version.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
+    assert version.sketch_usage is not None and version.humanizing_usage is not None

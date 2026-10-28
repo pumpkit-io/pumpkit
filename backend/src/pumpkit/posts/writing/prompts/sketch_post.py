@@ -1,5 +1,5 @@
 """
-The system prompt of the draft call (and of the revision call): pumpkit-v6's, with the hook
+The system prompt of the sketch call (and of the revision call): pumpkit-v6's, with the hook
 instructions, the hook library from `hook.py` and an output that names the Hook before the post.
 
 It holds only instructions: the corpus changes per Post, so it travels in a user message.
@@ -11,7 +11,7 @@ from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY
 
 
 @cache
-def draft_post_prompt(char_limit: int) -> str:
+def sketch_post_prompt(char_limit: int) -> str:
     """The prompt for an X account whose posts hold up to `char_limit` characters."""
     return f"""\
 # Role

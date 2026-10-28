@@ -456,7 +456,7 @@ def version_of(db, user) -> Callable[..., Awaitable[str]]:
             format=format_of(parts),
             status=ATTEMPT_SUCCEEDED,
             version_number=1,
-            draft_parts=list(parts),
+            sketch_parts=list(parts),
             final_parts=list(parts),
             slop_tells=[],
             created_at=now,

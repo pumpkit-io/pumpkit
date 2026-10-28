@@ -4,8 +4,8 @@ Every Scheduled post is copied from a Version, and a Post goes out at most once 
 Scheduled post holds its Post's id under a unique constraint. Existing ones copied from a Version
 take its Post's id; where two share a Post, only the newest keeps it.
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0018
+Revises: 0017
 Create Date: 2026-10-28 12:00:00.000000
 
 """
@@ -16,8 +16,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0017"
-down_revision: Union[str, None] = "0016"
+revision: str = "0018"
+down_revision: Union[str, None] = "0017"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

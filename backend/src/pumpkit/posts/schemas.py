@@ -61,7 +61,6 @@ class VersionResponse(BaseModel):
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]
     format: Format
-    draft_parts: list[str]
     # The Final's Parts in order.
     parts: list[PartResponse]
     # What the slop check found in any Part of the Final, for the User to judge.
@@ -75,7 +74,7 @@ class PostResponse(BaseModel):
 
 
 class VersionToolResponse(BaseModel):
-    """A Version as the MCP tools answer with it: no Draft, which only the web app shows."""
+    """A Version as the MCP tools answer with it, without the tells."""
 
     id: str
     number: int

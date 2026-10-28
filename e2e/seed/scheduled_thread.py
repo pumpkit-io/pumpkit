@@ -30,7 +30,7 @@ async def main() -> None:
             format="thread",
             status=ATTEMPT_SUCCEEDED,
             version_number=1,
-            draft_parts=PARTS,
+            sketch_parts=PARTS,
             final_parts=PARTS,
             slop_tells=[],
             created_at=now,

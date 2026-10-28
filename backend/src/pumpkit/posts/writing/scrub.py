@@ -3,7 +3,7 @@ Replace the characters that give a post away as pasted from a model, ported from
 
 Each one (an em or en dash, a curly quote, an ellipsis character, an arrow, a typed bullet,
 a multiplication sign, an invisible space) has exactly one typed replacement, so it is swapped
-in code between the draft call and the humanizer call rather than asked of a model.
+in code between the sketch call and the humanizer call rather than asked of a model.
 """
 
 import re

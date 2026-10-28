@@ -79,76 +79,53 @@ function PartCounter({ part }: { part: Part }) {
   );
 }
 
-/** The Final comes first because it is what goes to X; the Draft below shows what the rewrite changed. */
 export function VersionView({ version }: { version: Version }) {
   const finalId = useId();
-  const draftId = useId();
 
   return (
-    <div className="space-y-3">
-      <article
-        aria-labelledby={finalId}
-        className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 id={finalId} className="font-sans text-sm font-semibold text-foreground">
-            Final
-          </h3>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <FinalToXActions version={version} />
-            <CopyButton
-              text={version.parts.map((part) => part.text).join('\n\n')}
-              event="post_final_copied"
-            >
-              Copy Final
-            </CopyButton>
-          </div>
-        </div>
-        {version.format === 'thread' ? (
-          <ThreadParts
-            parts={version.parts}
-            aside={(part, number) => (
-              <CopyButton text={part.text} event="post_part_copied" size="xs">
-                Copy<span className="sr-only"> Part {number}</span>
-              </CopyButton>
-            )}
+    <article
+      aria-labelledby={finalId}
+      className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 id={finalId} className="font-sans text-sm font-semibold text-foreground">
+          Final
+        </h3>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <FinalToXActions version={version} />
+          <CopyButton
+            text={version.parts.map((part) => part.text).join('\n\n')}
+            event="post_final_copied"
           >
-            {(part) => (
-              <>
-                <PartText part={part} />
-                <PartCounter part={part} />
-              </>
-            )}
-          </ThreadParts>
-        ) : (
-          version.parts.map((part, index) => (
-            <div key={index} className="space-y-4">
+            Copy Final
+          </CopyButton>
+        </div>
+      </div>
+      {version.format === 'thread' ? (
+        <ThreadParts
+          parts={version.parts}
+          aside={(part, number) => (
+            <CopyButton text={part.text} event="post_part_copied" size="xs">
+              Copy<span className="sr-only"> Part {number}</span>
+            </CopyButton>
+          )}
+        >
+          {(part) => (
+            <>
               <PartText part={part} />
               <PartCounter part={part} />
-            </div>
-          ))
-        )}
-        <SlopTells tells={version.tells} />
-      </article>
-
-      <article aria-labelledby={draftId} className="space-y-2 rounded-lg bg-muted/50 p-4 sm:p-5">
-        <div>
-          <h3 id={draftId} className="font-sans text-sm font-semibold text-foreground">
-            Draft
-          </h3>
-          <p className="font-sans text-xs text-muted-foreground">
-            Written first, before the rewrite that made it the Final.
-          </p>
-        </div>
-        {version.draftParts.map((text, index) => (
-          <p
-            key={index}
-            className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-muted-foreground"
-          >
-            {text}
-          </p>
-        ))}
-      </article>
-    </div>
+            </>
+          )}
+        </ThreadParts>
+      ) : (
+        version.parts.map((part, index) => (
+          <div key={index} className="space-y-4">
+            <PartText part={part} />
+            <PartCounter part={part} />
+          </div>
+        ))
+      )}
+      <SlopTells tells={version.tells} />
+    </article>
   );
 }
