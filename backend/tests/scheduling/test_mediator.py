@@ -25,6 +25,7 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import ScheduledPostResponse
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XAccount, XPostRejectedError
+from tests.scheduling.reading import scheduled_posts_through_the_mediator
 
 COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
@@ -79,7 +80,7 @@ def edit(db, user, fake_x_publisher, fake_x_reader, fixed_clock):
 
 
 async def _listed(db, user) -> list[ScheduledPostResponse]:
-    return (await mediator.list_scheduled_posts(db, user, state=None)).data
+    return await scheduled_posts_through_the_mediator(db, user)
 
 
 @pytest.fixture

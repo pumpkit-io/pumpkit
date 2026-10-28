@@ -1,5 +1,11 @@
 import { apiService } from './apiService';
-import { toScheduledPost, type ScheduledPost, type ScheduledPostApi } from './scheduledPostService';
+import {
+  toScheduledPost,
+  type Community,
+  type ScheduledPost,
+  type ScheduledPostApi,
+  type ScheduledPostState,
+} from './scheduledPostService';
 
 /** A machine-written pattern the slop check found in a Version's text. */
 export interface Tell {
@@ -55,6 +61,83 @@ export interface PostDetail extends Post {
   scheduledPost: ScheduledPost | null;
 }
 
+/** How many Posts each status holds, for the Posts tabs and the sidebar's Failed badge. */
+export type PostCounts = Record<PostStatus, number>;
+
+/** What a listed Post shows of its Scheduled post. */
+export interface ScheduledPostSummary {
+  id: string;
+  state: ScheduledPostState;
+  publishAt: string;
+  publishedAt: string | null;
+  /** Null for the User's profile. */
+  community: Community | null;
+  shareWithFollowers: boolean;
+  failedReason: string | null;
+  /** The first Part on X, once it is live. */
+  xPostUrl: string | null;
+}
+
+/** A Post as the Posts tabs list it. */
+export interface PostListItem {
+  id: string;
+  brief: string;
+  status: PostStatus;
+  /** The Scheduled post's text when it has one, else the latest Version's. */
+  parts: string[];
+  format: Format;
+  versionCount: number;
+  latestVersionAt: string;
+  scheduledPost: ScheduledPostSummary | null;
+}
+
+export interface PostsPage {
+  posts: PostListItem[];
+  counts: PostCounts;
+  /** Null on the last page. */
+  nextOffset: number | null;
+}
+
+interface ScheduledPostSummaryApi {
+  id: string;
+  state: ScheduledPostState;
+  publish_at: string;
+  published_at: string | null;
+  community: Community | null;
+  share_with_followers: boolean;
+  failed_reason: string | null;
+  x_post_url: string | null;
+}
+
+interface PostsPageApi {
+  data: {
+    id: string;
+    brief: string;
+    status: PostStatus;
+    parts: string[];
+    format: Format;
+    version_count: number;
+    latest_version_at: string;
+    scheduled_post: ScheduledPostSummaryApi | null;
+  }[];
+  counts: PostCounts;
+  next_offset: number | null;
+}
+
+const toSummary = (s: ScheduledPostSummaryApi): ScheduledPostSummary => ({
+  id: s.id,
+  state: s.state,
+  publishAt: s.publish_at,
+  publishedAt: s.published_at,
+  community: s.community,
+  shareWithFollowers: s.share_with_followers,
+  failedReason: s.failed_reason,
+  xPostUrl: s.x_post_url,
+});
+
+/** How many Posts a page of the Posts tabs holds. */
+export const POSTS_PAGE_SIZE = 20;
+
 interface VersionApi {
   id: string;
   number: number;
@@ -90,6 +173,26 @@ export const BRIEF_MAX_CHARS = 200_000;
 export const FEEDBACK_MAX_CHARS = 100_000;
 
 export const postService = {
+  /** A page of the Posts in `status`, with every status's count. Open like `get`. */
+  list: async (status: PostStatus, offset = 0, limit = POSTS_PAGE_SIZE): Promise<PostsPage> => {
+    const { data } = await apiService.get<PostsPageApi>('/posts', {
+      params: { status, offset, limit },
+    });
+    return {
+      posts: data.data.map((p) => ({
+        id: p.id,
+        brief: p.brief,
+        status: p.status,
+        parts: p.parts,
+        format: p.format,
+        versionCount: p.version_count,
+        latestVersionAt: p.latest_version_at,
+        scheduledPost: p.scheduled_post ? toSummary(p.scheduled_post) : null,
+      })),
+      counts: data.counts,
+      nextOffset: data.next_offset,
+    };
+  },
   /** Open to a User who isn't Subscribed, so their history stays readable. */
   get: async (postId: string): Promise<PostDetail> => {
     const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);

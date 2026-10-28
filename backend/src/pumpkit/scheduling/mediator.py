@@ -18,7 +18,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
-from pumpkit.posts.formats import Format
+from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import VersionAttempt
 from pumpkit.posts.schemas import VersionResponse
@@ -29,9 +29,8 @@ from pumpkit.scheduling.models import (
     PUBLISHED,
     SCHEDULED,
     ScheduledPost,
-    ScheduledPostState,
 )
-from pumpkit.scheduling.post_status import check_takes_feedback, post_status
+from pumpkit.scheduling.post_status import PostStatus, check_takes_feedback, post_status
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import (
     KeepDestination,
@@ -43,10 +42,13 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import (
     CommunityResponse,
     PastCommunitiesResponse,
+    PostCountsResponse,
     PostDetailResponse,
+    PostListItemResponse,
+    PostsPageResponse,
     ScheduledPostPartResponse,
     ScheduledPostResponse,
-    ScheduledPostsListResponse,
+    ScheduledPostSummaryResponse,
     XConnectionResponse,
 )
 from pumpkit.x_connection.models import XConnection
@@ -118,13 +120,6 @@ async def _community(reader: XReader, pasted: str) -> Community:
         logger.warning("Looking up Community %s failed: %s", community_id, error)
         name = None
     return Community(id=community_id, name=name)
-
-
-async def list_scheduled_posts(
-    db: AsyncSession, user: User, state: Optional[ScheduledPostState]
-) -> ScheduledPostsListResponse:
-    scheduled_posts = await service.list_for_user(db, user_id=user.id, state=state)
-    return ScheduledPostsListResponse(data=[scheduled_post_response(s) for s in scheduled_posts])
 
 
 async def list_past_communities(db: AsyncSession, user: User) -> PastCommunitiesResponse:
@@ -375,6 +370,61 @@ async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResp
         ],
         status=post_status(scheduled_post.state if scheduled_post else None),
         scheduled_post=scheduled_post_response(scheduled_post) if scheduled_post else None,
+    )
+
+
+def _scheduled_post_summary(scheduled_post: ScheduledPost) -> ScheduledPostSummaryResponse:
+    published_at = scheduled_post.published_at
+    community_id = scheduled_post.community_id
+    return ScheduledPostSummaryResponse(
+        id=scheduled_post.id,
+        state=scheduled_post.state,
+        publish_at=as_utc(scheduled_post.publish_at),
+        published_at=as_utc(published_at) if published_at else None,
+        community=_community_response(community_id, scheduled_post.community_name)
+        if community_id
+        else None,
+        share_with_followers=scheduled_post.share_with_followers,
+        failed_reason=scheduled_post.failed_reason,
+        x_post_url=_x_post_url(scheduled_post.parts[0].x_post_id),
+    )
+
+
+def _post_list_item(listed: service.ListedPost) -> PostListItemResponse:
+    post, scheduled_post = listed.post, listed.scheduled_post
+    versions = version_writing.versions_of(post)
+    latest = versions[-1]
+    if scheduled_post is not None:
+        parts = [part.text for part in scheduled_post.parts]
+        format = format_of(parts)
+    else:
+        parts = list(latest.final_parts or [])
+        format = latest.format
+    return PostListItemResponse(
+        id=post.id,
+        brief=post.brief,
+        status=post_status(scheduled_post.state if scheduled_post else None),
+        parts=parts,
+        format=format,
+        version_count=len(versions),
+        latest_version_at=as_utc(latest.created_at),
+        scheduled_post=_scheduled_post_summary(scheduled_post) if scheduled_post else None,
+    )
+
+
+async def list_posts(
+    db: AsyncSession, user: User, status: Optional[PostStatus], limit: int, offset: int
+) -> PostsPageResponse:
+    """A page of the User's Posts in `status`, or every one, with how many each status holds."""
+    # One past the page tells whether another page follows.
+    listed = await service.list_posts(
+        db, user_id=user.id, status=status, limit=limit + 1, offset=offset
+    )
+    counts = await service.count_posts(db, user_id=user.id)
+    return PostsPageResponse(
+        data=[_post_list_item(item) for item in listed[:limit]],
+        counts=PostCountsResponse(**counts),
+        next_offset=offset + limit if len(listed) > limit else None,
     )
 
 

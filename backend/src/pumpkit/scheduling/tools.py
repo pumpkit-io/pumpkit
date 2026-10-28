@@ -20,7 +20,8 @@ from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.posts.schemas import FeedbackRequest, VersionToolResponse
 from pumpkit.scheduling import mediator
-from pumpkit.scheduling.models import FAILED, PUBLISHED, ScheduledPostState
+from pumpkit.scheduling.models import FAILED, PUBLISHED
+from pumpkit.scheduling.post_status import PostStatus
 from pumpkit.scheduling.publish import RETRY_WINDOW
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -35,10 +36,11 @@ from pumpkit.scheduling.schemas import (
     PastCommunitiesResponse,
     PostDetailToolResponse,
     PostNowToolResponse,
+    PostsPageRequest,
+    PostsPageResponse,
     ScheduledPageMessageToolResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
-    ScheduledPostsListToolResponse,
     ScheduledPostToolResponse,
     ScheduledPostUpdateRequest,
 )
@@ -149,19 +151,6 @@ async def post_now(
     return PostNowToolResponse(**posted.model_dump(), message=_post_now_message(posted))
 
 
-async def list_scheduled_posts(
-    call: ToolCall[User], state: Optional[ScheduledPostState] = None
-) -> ScheduledPostsListToolResponse:
-    """
-    List the User's Scheduled posts with their state, publish time and Community: waiting ones
-    soonest first, then Published and Failed ones newest first. A Failed one says why it
-    failed, and a Published one links to the post on X. Each Part says whether it is live on
-    X, with its link: a Thread that failed partway keeps its live Parts.
-    """
-    listed = await mediator.list_scheduled_posts(db=call.db, user=call.user, state=state)
-    return ScheduledPostsListToolResponse(data=listed.data, scheduled_page_url=scheduled_page_url())
-
-
 async def list_past_communities(call: ToolCall[User]) -> PastCommunitiesResponse:
     """
     List the Communities the User posted to before from the connected X account, most recently
@@ -242,6 +231,25 @@ async def delete_scheduled_post(
     )
 
 
+async def list_posts(
+    call: ToolCall[User], status: Optional[PostStatus] = None, limit: int = 20, offset: int = 0
+) -> PostsPageResponse:
+    """
+    List the User's Posts with their status, so the User can pick one up from an earlier
+    session. `status` lists one: "scheduled" (soonest first), "draft" (newest Version first),
+    "published" (most recently published first) or "failed" (most recently due first); leave it
+    out for every Post, newest Version first. Each Post has its Brief, its text (the Scheduled
+    post's when it has one, else the latest Version's), how many Versions it has, and its
+    Scheduled post's state, time, Community, failure reason and link on X. `counts` says how
+    many Posts each status holds. Pages hold up to 50; pass `next_offset` as `offset` for the
+    next page. `get_post` reads one Post in full.
+    """
+    page = PostsPageRequest(status=status, limit=limit, offset=offset)
+    return await mediator.list_posts(
+        db=call.db, user=call.user, status=page.status, limit=page.limit, offset=page.offset
+    )
+
+
 async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse:
     """
     Read one of the User's Posts: its Brief and every Version in order, each with the Feedback
@@ -292,14 +300,14 @@ async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
 
 
 TOOLS = [
-    # Reading a Post sits here because its Scheduled post gives it its status.
+    # Reading Posts sits here because their Scheduled posts give them their status.
+    McpTool(list_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     McpTool(get_post, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     # Feedback sits with the Scheduled post tools because a Post's Scheduled post gates it.
     McpTool(give_feedback, rate=VERSION_WRITE_RATE, annotations=ADDITIVE),
     McpTool(schedule_post, rate=WRITE_RATE, annotations=ADDITIVE),
     # Post now goes through the create route on the web.
     McpTool(post_now, rate=WRITE_RATE, annotations=DESTRUCTIVE),
-    McpTool(list_scheduled_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     # The web edit and delete routes have no limit; these take the create route's.
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),

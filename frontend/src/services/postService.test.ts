@@ -93,4 +93,65 @@ describe('postService', () => {
     expect(post.scheduledPost).toBeNull();
     expect(post.status).toBe('draft');
   });
+
+  it('lists a page of one status with each Scheduled post and the counts', async () => {
+    vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: 'post_01',
+            brief: 'ship',
+            status: 'published',
+            parts: ['Out now.'],
+            format: 'post',
+            version_count: 2,
+            latest_version_at: '2026-10-10T12:00:00Z',
+            scheduled_post: {
+              id: 'scheduled_post_01',
+              state: 'published',
+              publish_at: '2026-10-11T09:00:00Z',
+              published_at: '2026-10-11T09:00:05Z',
+              community: null,
+              share_with_followers: false,
+              failed_reason: null,
+              x_post_url: 'https://x.com/i/web/status/1',
+            },
+          },
+        ],
+        counts: { draft: 3, scheduled: 0, published: 1, failed: 2 },
+        next_offset: 20,
+      },
+    } as never);
+
+    const page = await postService.list('published', 20);
+
+    expect(apiService.get).toHaveBeenCalledWith('/posts', {
+      params: { status: 'published', offset: 20, limit: 20 },
+    });
+    expect(page).toEqual({
+      posts: [
+        {
+          id: 'post_01',
+          brief: 'ship',
+          status: 'published',
+          parts: ['Out now.'],
+          format: 'post',
+          versionCount: 2,
+          latestVersionAt: '2026-10-10T12:00:00Z',
+          scheduledPost: {
+            id: 'scheduled_post_01',
+            state: 'published',
+            publishAt: '2026-10-11T09:00:00Z',
+            publishedAt: '2026-10-11T09:00:05Z',
+            community: null,
+            shareWithFollowers: false,
+            failedReason: null,
+            xPostUrl: 'https://x.com/i/web/status/1',
+          },
+        },
+      ],
+      counts: { draft: 3, scheduled: 0, published: 1, failed: 2 },
+      nextOffset: 20,
+    });
+  });
 });

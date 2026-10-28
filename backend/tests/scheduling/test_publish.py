@@ -7,6 +7,7 @@ import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.posts.models import VersionAttempt
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.x_connection.x_publisher import XAccount
+from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 
@@ -51,7 +52,7 @@ async def test_a_waiting_scheduled_post_is_published(
 
     assert await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
 
-    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    [listed] = await scheduled_posts(client)
     assert listed["id"] == scheduled_post_id
     assert listed["state"] == "published"
     assert fake_x_publisher.published == [("access-1001-1", "Due now")]
@@ -93,7 +94,7 @@ async def test_a_user_who_is_no_longer_subscribed_gets_a_failed_post_and_nothing
 
     await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
 
-    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"
     assert listed["failed_reason"] == (
         "Not published: your Subscription had ended. Subscribe, then reschedule it."
@@ -111,7 +112,7 @@ async def test_a_post_for_another_x_account_fails_instead_of_going_out_on_the_ne
 
     await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
 
-    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"
     assert listed["failed_reason"] == (
         "Not published: the X account it was for is no longer connected to Pumpkit."
@@ -128,6 +129,6 @@ async def test_a_post_whose_x_connection_is_gone_fails(
 
     await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
 
-    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"
     assert fake_x_publisher.published == []

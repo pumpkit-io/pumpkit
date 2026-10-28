@@ -4,6 +4,7 @@ import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { postService, type Format, type PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { statusFrom } from './postStatus';
+import { usePostCounts } from './usePostCounts';
 import { isRefusal, useWritingFailure } from './useWritingFailure';
 
 export type PostLoad =
@@ -14,13 +15,15 @@ export type PostLoad =
 
 /**
  * One Post as the server has it, with Feedback on it. After an action that changes its
- * Scheduled post, pass the answer to `setScheduledPost` (null once deleted) and the status follows.
+ * Scheduled post, pass the answer to `setScheduledPost` (null once deleted): the status follows,
+ * and so do the Post counts behind the sidebar's Failed badge.
  */
 export function usePost(postId: string) {
   const [load, setLoad] = useState<PostLoad>({ kind: 'loading' });
   const [isWriting, setIsWriting] = useState(false);
   const writing = useWritingFailure();
   const { fail, clear } = writing;
+  const { refresh: refreshCounts } = usePostCounts();
 
   const reload = useCallback(async () => {
     setLoad({ kind: 'loading' });
@@ -43,13 +46,15 @@ export function usePost(postId: string) {
   }, []);
 
   const setScheduledPost = useCallback(
-    (scheduledPost: ScheduledPost | null) =>
+    (scheduledPost: ScheduledPost | null) => {
       update((post) => ({
         ...post,
         scheduledPost,
         status: statusFrom(scheduledPost?.state ?? null),
-      })),
-    [update],
+      }));
+      refreshCounts();
+    },
+    [update, refreshCounts],
   );
 
   /** Resolves true once the new Version is in the Post, so the caller can clear its box. */

@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
@@ -14,7 +14,6 @@ from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.posts.schemas import FeedbackRequest, VersionResponse
 from pumpkit.scheduling import mediator
-from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.rules import (
     DestinationChange,
     KeepDestination,
@@ -29,9 +28,10 @@ from pumpkit.scheduling.schemas import (
     CommunityResponse,
     PastCommunitiesResponse,
     PostDetailResponse,
+    PostsPageRequest,
+    PostsPageResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
-    ScheduledPostsListResponse,
     ScheduledPostUpdateRequest,
     XConnectionResponse,
 )
@@ -92,20 +92,6 @@ async def look_up_community(
 ) -> CommunityResponse:
     """Without twitterapi.io, or when it fails, the Community comes back without a name."""
     return await mediator.look_up_community(reader=reader, pasted=lookup_request.pasted)
-
-
-# Open to Users who aren't Subscribed, so their Published and Failed history stays visible.
-@router.get(
-    "/scheduled-posts",
-    response_model=ScheduledPostsListResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def list_scheduled_posts(
-    state: Optional[ScheduledPostState] = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> ScheduledPostsListResponse:
-    return await mediator.list_scheduled_posts(db=db, user=current_user, state=state)
 
 
 @router.get(
@@ -205,7 +191,19 @@ async def cancel_scheduled_post(
     )
 
 
-# Open to Users who aren't Subscribed, like their Scheduled posts.
+# Open to Users who aren't Subscribed, so their history stays visible.
+@posts_router.get("/posts", response_model=PostsPageResponse, status_code=status.HTTP_200_OK)
+async def list_posts(
+    page: Annotated[PostsPageRequest, Query()],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> PostsPageResponse:
+    return await mediator.list_posts(
+        db=db, user=current_user, status=page.status, limit=page.limit, offset=page.offset
+    )
+
+
+# Open to Users who aren't Subscribed, like the list.
 @posts_router.get(
     "/posts/{post_id}", response_model=PostDetailResponse, status_code=status.HTTP_200_OK
 )

@@ -17,6 +17,7 @@ from pumpkit.x_connection.x_publisher import (
     XReconnectNeededError,
 )
 from tests.posts.writing_replies import written, written_thread
+from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 X_CONNECTION = "/api/v1/x-connection"
@@ -60,7 +61,7 @@ async def test_post_now_publishes_the_text_and_lists_it_as_published(
     assert body["failed_reason"] is None
     assert fake_x_publisher.refreshes == []
     assert fake_x_publisher.published == [("access-1001-1", "Shipping the new onboarding today.")]
-    listed = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    listed = await scheduled_posts(client)
     assert listed == [body]
 
 
@@ -131,7 +132,7 @@ async def test_post_now_without_an_x_connection_is_refused(
     assert response.status_code == 409
     assert response.json()["detail"] == "Connect your X account first."
     assert fake_x_publisher.published == []
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert (await scheduled_posts(client)) == []
 
 
 async def test_a_text_over_the_limit_by_x_s_count_is_refused(
@@ -187,7 +188,7 @@ async def test_a_post_x_refuses_fails_with_x_s_own_words(
         "X refused the post: You are not allowed to create a Tweet with duplicate content."
     )
     assert body["x_post_url"] is None and body["published_at"] is None
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [body]
+    assert (await scheduled_posts(client)) == [body]
 
 
 async def test_a_post_whose_outcome_is_unknown_fails_telling_the_user_to_check_x(
@@ -221,7 +222,7 @@ async def test_a_post_now_x_never_took_goes_back_to_scheduled_for_the_publisher_
     fake_x_publisher.fail_publish = None
     clock.advance(timedelta(minutes=1))
     await run_pass(db_session_maker, fake_x_publisher, clock)
-    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    [listed] = await scheduled_posts(client)
     assert listed["state"] == "published"
     assert len(fake_x_publisher.published) == 2
 
@@ -237,7 +238,7 @@ async def test_a_post_now_x_keeps_refusing_fails_15_minutes_after_it_was_asked_f
         clock.advance(timedelta(seconds=30))
         await run_pass(db_session_maker, fake_x_publisher, clock)
 
-    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"
     assert listed["failed_reason"] == (
         "Not published: X was busy or unreachable. Try again in a few minutes."
@@ -304,10 +305,7 @@ async def test_a_user_whose_subscription_ended_still_sees_their_scheduled_posts(
     subscribed.status = "canceled"
     await db.commit()
 
-    response = await client.get(SCHEDULED_POSTS)
-
-    assert response.status_code == 200
-    assert response.json()["data"] == [failed, published]
+    assert await scheduled_posts(client) == [published, failed]
 
 
 async def test_published_and_failed_are_tracked_for_analytics(
@@ -378,7 +376,7 @@ async def test_a_post_scheduled_for_later_is_listed_as_upcoming_and_not_publishe
     assert body["publish_at"] == "2026-10-10T14:00:00Z"
     assert body["published_at"] is None and body["x_post_url"] is None
     assert fake_x_publisher.published == []
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [body]
+    assert (await scheduled_posts(client)) == [body]
 
 
 async def test_a_publish_time_in_the_browser_s_timezone_is_stored_in_utc(
@@ -399,7 +397,7 @@ async def test_upcoming_scheduled_posts_are_listed_soonest_first(
     await _schedule(client, version_of, "2026-10-11T09:00:00Z", "Sunday")
     await _schedule(client, version_of, "2026-10-13T09:00:00Z", "Tuesday")
 
-    listed = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    listed = await scheduled_posts(client)
 
     assert [p["parts"][0]["text"] for p in listed] == ["Sunday", "Monday", "Tuesday"]
 
@@ -424,7 +422,7 @@ async def test_a_request_needs_either_a_publish_time_with_a_timezone_or_publish_
 
     assert response.status_code == 422
     assert fake_x_publisher.published == []
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert (await scheduled_posts(client)) == []
 
 
 async def test_a_user_who_is_not_subscribed_cannot_schedule(
@@ -480,7 +478,7 @@ async def test_scheduling_a_version_records_its_text_time_and_source_version(
     assert _texts(body) == ["Version one."]
     assert body["publish_at"] == "2026-10-10T14:00:00Z"
     assert body["source_version_id"] == version["id"]
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [body]
+    assert (await scheduled_posts(client)) == [body]
 
 
 async def test_post_now_on_a_version_publishes_it_and_tracks_its_source(
@@ -545,7 +543,7 @@ async def test_scheduling_a_thread_version_copies_its_parts_in_order_and_publish
     assert _texts(response.json()) == THREAD_VERSION
     fixed_clock.advance(timedelta(minutes=5))
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
-    [listed] = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    [listed] = await scheduled_posts(client)
     assert listed["state"] == "published"
     assert [part["live"] for part in listed["parts"]] == [True, True, True]
     assert [text for _, text in fake_x_publisher.published] == THREAD_VERSION
@@ -586,7 +584,7 @@ async def test_a_source_version_that_is_not_one_of_the_user_s_versions_is_refuse
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Version not found."
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert (await scheduled_posts(client)) == []
 
 
 @pytest.fixture
@@ -643,9 +641,7 @@ async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is
             "These 3 Parts would take you over the cap of 3 X posts in October 2026: you have "
             "1 already. The cap resets on November 1, 2026."
         )
-    assert [p["id"] for p in (await client.get(SCHEDULED_POSTS)).json()["data"]] == [
-        first.json()["id"]
-    ]
+    assert [p["id"] for p in (await scheduled_posts(client))] == [first.json()["id"]]
     assert fake_x_publisher.published == []
 
 
@@ -660,34 +656,8 @@ async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_res
 
     assert response.status_code == 409
     assert response.json()["detail"] == OCTOBER_FULL
-    listed = (await client.get(SCHEDULED_POSTS)).json()["data"]
+    listed = await scheduled_posts(client)
     assert [p["parts"][0]["text"] for p in listed] == ["First", "Second"]
-
-
-async def test_scheduled_posts_can_be_listed_by_state_in_the_same_order(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
-):
-    await connect_x()
-    await _schedule(client, version_of, "2026-10-12T09:00:00Z", "Monday")
-    await _schedule(client, version_of, "2026-10-11T09:00:00Z", "Sunday")
-    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
-    await _post_now(client, version_of, "Refused")
-    fake_x_publisher.fail_publish = None
-    await _post_now(client, version_of, "Went out")
-
-    scheduled = (await client.get(SCHEDULED_POSTS, params={"state": "scheduled"})).json()["data"]
-    failed = (await client.get(SCHEDULED_POSTS, params={"state": "failed"})).json()["data"]
-    published = (await client.get(SCHEDULED_POSTS, params={"state": "published"})).json()["data"]
-
-    assert [p["parts"][0]["text"] for p in scheduled] == ["Sunday", "Monday"]
-    assert [p["parts"][0]["text"] for p in failed] == ["Refused"]
-    assert [p["parts"][0]["text"] for p in published] == ["Went out"]
-
-
-async def test_listing_by_an_unknown_state_is_refused(client, subscribed):
-    response = await client.get(SCHEDULED_POSTS, params={"state": "posted"})
-
-    assert response.status_code == 422
 
 
 async def test_a_thread_scheduled_keeps_its_parts_in_order_with_none_live(
@@ -708,7 +678,7 @@ async def test_a_thread_scheduled_keeps_its_parts_in_order_with_none_live(
         {"text": "The first Part.", "live": False, "x_post_url": None},
         {"text": "The second Part.", "live": False, "x_post_url": None},
     ]
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [response.json()]
+    assert (await scheduled_posts(client)) == [response.json()]
 
 
 async def test_post_now_makes_its_one_part_live_with_its_link_on_x(
@@ -740,4 +710,4 @@ async def test_a_part_over_the_limit_is_refused_naming_the_part(
     assert response.json()["detail"] == (
         "Part 2 is 281 characters by X's count, over the 280 limit."
     )
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == []
+    assert (await scheduled_posts(client)) == []

@@ -38,6 +38,11 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
+    list: vi.fn().mockResolvedValue({
+      posts: [],
+      counts: { draft: 0, scheduled: 0, published: 0, failed: 0 },
+      nextOffset: null,
+    }),
     get: vi.fn(),
     start: vi.fn(),
     addVersion: vi.fn(),
@@ -54,7 +59,6 @@ vi.mock('@/services/xConnectionService', () => ({
 vi.mock('@/services/scheduledPostService', () => ({
   scheduledPostService: {
     pastCommunities: vi.fn().mockResolvedValue([]),
-    list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),
     edit: vi.fn(),
@@ -89,6 +93,7 @@ import { xConnectionService, type XConnection } from '@/services/xConnectionServ
 import {
   LEVELSIO,
   NOT_SUBSCRIBED,
+  NO_POSTS,
   SUBSCRIBED,
   apiError,
   renderSignedIn,
@@ -201,6 +206,7 @@ describe('Post page', () => {
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.addVersion).mockReset();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
     vi.mocked(track).mockClear();
   });
@@ -1361,5 +1367,61 @@ describe('Post page', () => {
       expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
       expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
     });
+  });
+
+  // Whatever sends the Post out on this page passes its answer to usePost's setScheduledPost.
+  it("updates the sidebar's Failed badge once the Post's Scheduled post Fails", async () => {
+    vi.mocked(scheduledPostService.postNow).mockResolvedValue({
+      ...SCHEDULED,
+      state: 'failed',
+      failedReason: 'X refused the post: duplicate content.',
+    });
+    renderPost(postWith('the final text'));
+    await versionCard();
+    const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
+    expect(sidebar.getByRole('link', { name: 'Posts' })).toBeInTheDocument();
+    vi.mocked(postService.list).mockResolvedValue({
+      ...NO_POSTS,
+      counts: { ...NO_POSTS.counts, failed: 1 },
+    });
+
+    fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+    expect(await sidebar.findByRole('link', { name: 'Posts, 1 Failed' })).toBeInTheDocument();
+  });
+
+  it("clears the sidebar's Failed badge once a Failed Post is retried", async () => {
+    vi.mocked(postService.list).mockResolvedValue({
+      ...NO_POSTS,
+      counts: { ...NO_POSTS.counts, failed: 1 },
+    });
+    vi.mocked(scheduledPostService.edit).mockResolvedValue({
+      ...SCHEDULED,
+      state: 'published',
+      publishedAt: '2026-10-10T12:00:14Z',
+      xPostUrl: 'https://x.com/i/web/status/1890000000000000002',
+    });
+    renderPost(
+      withScheduledPost({
+        ...SCHEDULED,
+        state: 'failed',
+        failedReason: 'X refused the post: duplicate content.',
+      }),
+    );
+    await versionCard();
+    const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
+    expect(await sidebar.findByRole('link', { name: 'Posts, 1 Failed' })).toBeInTheDocument();
+    vi.mocked(postService.list).mockResolvedValue(NO_POSTS);
+
+    fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+    expect(await sidebar.findByRole('link', { name: 'Posts' })).toBeInTheDocument();
+    expect(sidebar.queryByRole('link', { name: 'Posts, 1 Failed' })).not.toBeInTheDocument();
   });
 });

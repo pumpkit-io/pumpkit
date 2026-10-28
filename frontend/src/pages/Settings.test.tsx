@@ -31,6 +31,16 @@ vi.mock('@/services/xConnectionService', () => ({
 vi.mock('@/services/apiKeyService', () => ({
   apiKeyService: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
 }));
+vi.mock('@/services/postService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/postService')>()),
+  postService: {
+    list: vi.fn().mockResolvedValue({
+      posts: [],
+      counts: { draft: 0, scheduled: 0, published: 0, failed: 0 },
+      nextOffset: null,
+    }),
+  },
+}));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({

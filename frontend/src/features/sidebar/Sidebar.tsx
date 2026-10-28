@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Brand } from '@/components/brand/Brand';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
+import { usePostCounts } from '@/features/posts/usePostCounts';
 import { cn } from '@/lib/utils';
 import { MAX_INSPIRATION_AUTHORS } from '@/services/inspirationAuthorService';
 import { SIDEBAR_PAGES } from './pages';
@@ -30,11 +31,32 @@ function PersonaCount({ count }: { count: number }) {
   );
 }
 
+/** The Failed Posts beside Posts, in red, shown only while there are some to fix. */
+function FailedCount({ count }: { count: number }) {
+  return (
+    <span
+      aria-hidden
+      className="ml-auto min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center font-mono text-xs font-medium tabular-nums text-destructive-foreground"
+    >
+      {count}
+    </span>
+  );
+}
+
+function ariaLabel(path: string, label: string, personaCount: number | null, failed: number) {
+  if (path === '/persona' && personaCount !== null) {
+    return `${label}, ${personaCount} of ${MAX_INSPIRATION_AUTHORS} Inspiration authors`;
+  }
+  if (path === '/posts' && failed > 0) return `${label}, ${failed} Failed`;
+  return undefined;
+}
+
 export function Sidebar() {
   const { setMobileOpen } = useSidebar();
   const newPost = useNewPost();
   const { authors } = useInspirationAuthorsContext();
   const personaCount = authors?.length ?? null;
+  const failed = usePostCounts().counts?.failed ?? 0;
 
   return (
     <div className="flex h-full w-full flex-col bg-card">
@@ -50,11 +72,7 @@ export function Sidebar() {
               key={path}
               to={path}
               className={ROW}
-              aria-label={
-                isPersona && personaCount !== null
-                  ? `${label}, ${personaCount} of ${MAX_INSPIRATION_AUTHORS} Inspiration authors`
-                  : undefined
-              }
+              aria-label={ariaLabel(path, label, personaCount, failed)}
               onClick={(e) => {
                 if (path === '/new') {
                   e.preventDefault();
@@ -66,6 +84,7 @@ export function Sidebar() {
               <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
               <span className="truncate">{label}</span>
               {isPersona && personaCount !== null && <PersonaCount count={personaCount} />}
+              {path === '/posts' && failed > 0 && <FailedCount count={failed} />}
             </NavLink>
           );
         })}

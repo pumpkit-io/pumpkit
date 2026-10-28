@@ -31,6 +31,11 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
+    list: vi.fn().mockResolvedValue({
+      posts: [],
+      counts: { draft: 0, scheduled: 0, published: 0, failed: 0 },
+      nextOffset: null,
+    }),
     get: vi.fn(),
     start: vi.fn(),
     addVersion: vi.fn(),
@@ -47,7 +52,6 @@ vi.mock('@/services/xConnectionService', () => ({
 vi.mock('@/services/scheduledPostService', () => ({
   scheduledPostService: {
     pastCommunities: vi.fn().mockResolvedValue([]),
-    list: vi.fn().mockResolvedValue([]),
     postNow: vi.fn(),
     schedule: vi.fn(),
     lookUpCommunity: vi.fn(),
@@ -67,7 +71,14 @@ import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { postService, type PostDetail } from '@/services/postService';
 import { xConnectionService } from '@/services/xConnectionService';
-import { LEVELSIO, NOT_SUBSCRIBED, PAULG, SUBSCRIBED, renderSignedIn } from './testing/signedInApp';
+import {
+  LEVELSIO,
+  NOT_SUBSCRIBED,
+  NO_POSTS,
+  PAULG,
+  SUBSCRIBED,
+  renderSignedIn,
+} from './testing/signedInApp';
 
 const POST: PostDetail = {
   id: 'post_01',
@@ -116,6 +127,7 @@ describe('The signed-in shell', () => {
       .mockResolvedValue({ plans: [], termsVersion: '2026-10-11' });
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(postService.start).mockReset();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(track).mockClear();
   });
@@ -149,6 +161,26 @@ describe('The signed-in shell', () => {
       expect(
         await nav.findByRole('link', { name: 'Persona, 2 of 3 Inspiration authors' }),
       ).toBeInTheDocument();
+    });
+
+    it('shows the number of Failed Posts in a badge on Posts', async () => {
+      vi.mocked(postService.list).mockResolvedValue({
+        posts: [],
+        counts: { draft: 4, scheduled: 2, published: 9, failed: 3 },
+        nextOffset: null,
+      });
+      renderSignedIn('/new');
+
+      const posts = await (await sidebar()).findByRole('link', { name: 'Posts, 3 Failed' });
+      expect(posts).toHaveTextContent('3');
+    });
+
+    it('shows no badge on Posts while no Post has Failed', async () => {
+      renderSignedIn('/new');
+
+      const nav = await sidebar();
+      await waitFor(() => expect(postService.list).toHaveBeenCalled());
+      expect(nav.getByRole('link', { name: 'Posts' })).toHaveTextContent(/^Posts$/);
     });
 
     it('counts an empty Persona as 0/3', async () => {

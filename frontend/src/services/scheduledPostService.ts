@@ -112,12 +112,6 @@ export const scheduledPostService = {
     return data.data;
   },
 
-  /** Waiting ones first, soonest first; then Published and Failed ones, newest first. */
-  list: async (): Promise<ScheduledPost[]> => {
-    const { data } = await apiService.get<{ data: ScheduledPostApi[] }>('/scheduled-posts');
-    return data.data.map(toScheduledPost);
-  },
-
   /**
    * Publishes on X before answering: it comes back Published, Failed, or scheduled when X was
    * busy and the publisher will retry.

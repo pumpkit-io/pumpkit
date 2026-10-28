@@ -4,40 +4,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
 from pumpkit.core.errors import RefusedError
-from pumpkit.core.time import as_utc
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import LLM
-from pumpkit.posts.schemas import PostResponse, PostsPageResponse, PostSummaryResponse
+from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
     check_attempt_limit,
     keep_failed_attempt,
     version_response,
-    versions_of,
 )
 from pumpkit.posts.writing.versions import write_first_version
 
 # Where the User adds Inspiration authors.
 PERSONA_PAGE = "/persona"
-
-
-async def list_posts(db: AsyncSession, user: User, limit: int, offset: int) -> PostsPageResponse:
-    """A page of the User's Posts, newest first."""
-    # One past the page tells whether another page follows.
-    posts = await service.list_user_posts(db, user_id=user.id, limit=limit + 1, offset=offset)
-    return PostsPageResponse(
-        data=[
-            PostSummaryResponse(
-                id=post.id,
-                brief=post.brief,
-                created_at=as_utc(post.created_at),
-                version_count=len(versions_of(post)),
-            )
-            for post in posts[:limit]
-        ],
-        next_offset=offset + limit if len(posts) > limit else None,
-    )
 
 
 async def start_post(

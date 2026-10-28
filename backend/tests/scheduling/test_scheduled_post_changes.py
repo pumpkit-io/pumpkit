@@ -9,6 +9,7 @@ import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.core.config import settings
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import XAccount, XPostRejectedError, XRateLimitedError
+from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
@@ -29,7 +30,7 @@ async def _schedule(
 
 
 async def _listed(client: AsyncClient) -> list[dict]:
-    return (await client.get(SCHEDULED_POSTS)).json()["data"]
+    return await scheduled_posts(client)
 
 
 async def test_editing_the_text_of_a_scheduled_post_saves_it(

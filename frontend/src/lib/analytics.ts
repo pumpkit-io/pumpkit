@@ -112,7 +112,7 @@ export const EVENTS = {
     description: 'Post page: copied the text on screen with Copy post, every Part of it.',
   },
 
-  // Scheduled (/scheduled) + the X callback
+  // Posting to X (the Post page and Settings) + the X callback
   x_connected: { description: 'Settings: connected an X account through X consent screen.' },
   x_disconnected: { description: 'Settings: disconnected the X account.' },
   community_looked_up: {
