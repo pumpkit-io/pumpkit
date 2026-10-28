@@ -61,7 +61,7 @@ function Outcome({ created, postNow }: { created: ScheduledPost; postNow: boolea
   return (
     <p className="flex flex-wrap gap-x-3 font-sans text-sm text-foreground">
       {!postNow && <span>Scheduled for {dateTime.format(new Date(created.publishAt))}.</span>}
-      <Link to="/scheduled" className={LINK}>
+      <Link to="/posts/scheduled" className={LINK}>
         See Scheduled posts
       </Link>
     </p>
@@ -112,10 +112,13 @@ function FinalToXDialog({
   action,
   version,
   onClose,
+  onCreated,
 }: {
   action: Action;
   version: Version;
   onClose: () => void;
+  /** Once the dialog closes on a created Scheduled post, so the page moves to its status. */
+  onCreated?: (scheduledPost: ScheduledPost) => void;
 }) {
   const billing = useBilling();
   const { connection } = useXConnectionContext();
@@ -131,6 +134,10 @@ function FinalToXDialog({
     [version.parts],
   );
   const postNow = action === 'postNow';
+  const close = () => {
+    if (created) onCreated?.(created);
+    onClose();
+  };
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -163,7 +170,7 @@ function FinalToXDialog({
     description = outcomeDescription(created, postNow);
     body = <Outcome created={created} postNow={postNow} />;
     footer = (
-      <Button type="button" className="h-10" onClick={onClose}>
+      <Button type="button" className="h-10" onClick={close}>
         Close
       </Button>
     );
@@ -173,7 +180,7 @@ function FinalToXDialog({
     description = 'Pumpkit publishes on the X account you connect.';
     body = <ConnectXPrompt what="this Final" showError />;
     footer = (
-      <Button type="button" variant="outline" className="h-10" onClick={onClose}>
+      <Button type="button" variant="outline" className="h-10" onClick={close}>
         Cancel
       </Button>
     );
@@ -198,7 +205,7 @@ function FinalToXDialog({
       destination === null;
     footer = (
       <>
-        <Button type="button" variant="outline" className="h-10" onClick={onClose}>
+        <Button type="button" variant="outline" className="h-10" onClick={close}>
           Cancel
         </Button>
         <Button type="submit" className="h-10" disabled={unsendable}>
@@ -209,7 +216,7 @@ function FinalToXDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(next) => (next ? null : onClose())}>
+    <Dialog open onOpenChange={(next) => (next ? null : close())}>
       <DialogContent className="max-w-[520px] max-sm:h-auto">
         <form onSubmit={send} className="space-y-4">
           <DialogHeader>
@@ -227,7 +234,13 @@ function FinalToXDialog({
 }
 
 /** Schedule and Post now on a Version's Final; a User who isn't Subscribed gets Billing. */
-export function FinalToXActions({ version }: { version: Version }) {
+export function FinalToXActions({
+  version,
+  onCreated,
+}: {
+  version: Version;
+  onCreated?: (scheduledPost: ScheduledPost) => void;
+}) {
   const { subscribed } = useSubscribed();
   const billing = useBilling();
   const [action, setAction] = useState<Action | null>(null);
@@ -246,7 +259,12 @@ export function FinalToXActions({ version }: { version: Version }) {
         Schedule
       </Button>
       {action && (
-        <FinalToXDialog action={action} version={version} onClose={() => setAction(null)} />
+        <FinalToXDialog
+          action={action}
+          version={version}
+          onClose={() => setAction(null)}
+          onCreated={onCreated}
+        />
       )}
     </>
   );

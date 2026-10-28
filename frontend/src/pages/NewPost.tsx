@@ -42,7 +42,7 @@ function useBillingReturn() {
   }, [location.state, navigate, billing]);
 }
 
-/** Rendered inside AppLayout, which holds the shell, the Persona and the Post. */
+/** The Brief form; writing a Post opens the Post's page. */
 export function NewPost() {
   useBillingReturn();
 

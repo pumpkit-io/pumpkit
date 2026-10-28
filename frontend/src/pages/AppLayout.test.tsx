@@ -31,6 +31,7 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
+    get: vi.fn(),
     start: vi.fn(),
     addVersion: vi.fn(),
   },
@@ -64,7 +65,7 @@ import { track } from '@/lib/analytics';
 import type { Instance } from '@/lib/instance';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
-import { postService, type Post } from '@/services/postService';
+import { postService, type PostDetail } from '@/services/postService';
 import { xConnectionService } from '@/services/xConnectionService';
 import { LEVELSIO, NOT_SUBSCRIBED, PAULG, SUBSCRIBED, renderSignedIn } from './testing/signedInApp';
 
@@ -77,7 +78,7 @@ const WITH_ANALYTICS: Instance = {
   },
 };
 
-const POST: Post = {
+const POST: PostDetail = {
   id: 'post_01',
   brief: 'ship small things',
   versions: [
@@ -90,6 +91,8 @@ const POST: Post = {
       tells: [],
     },
   ],
+  status: 'draft',
+  scheduledPost: null,
 };
 
 async function sidebar() {
@@ -104,16 +107,13 @@ function newPostShortcut(target: Element | Window = window) {
   fireEvent.keyDown(target, { key: 'O', ctrlKey: true, shiftKey: true });
 }
 
-/** A Subscribed User with one Inspiration author and a written Post on /new. */
+/** A Subscribed User with one Inspiration author, on a written Post's page. */
 async function withPostOnScreen() {
   vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
   vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-  vi.mocked(postService.start).mockResolvedValue(POST);
-  renderSignedIn('/new');
-  const brief = await screen.findByLabelText('Brief');
-  fireEvent.change(brief, { target: { value: 'ship small things' } });
-  fireEvent.click(await screen.findByRole('button', { name: 'Write the Post' }));
-  await screen.findByText('the final text');
+  vi.mocked(postService.get).mockResolvedValue(POST);
+  renderSignedIn('/posts/post_01');
+  await screen.findByRole('article', { name: 'Version 1' });
 }
 
 describe('The signed-in shell', () => {
@@ -281,12 +281,14 @@ describe('The signed-in shell', () => {
       expect(currentPath()).toBe('/new');
     });
 
-    it('clears the Post on screen from the sidebar and puts the cursor in the Brief', async () => {
+    it('opens an empty /new from a Post with the cursor in the Brief', async () => {
       await withPostOnScreen();
 
       fireEvent.click((await sidebar()).getByRole('link', { name: 'New post' }));
 
-      expect(screen.queryByText('the final text')).not.toBeInTheDocument();
+      expect(await screen.findByLabelText('Brief')).toBeInTheDocument();
+      expect(currentPath()).toBe('/new');
+      expect(screen.queryByRole('article', { name: 'Version 1' })).not.toBeInTheDocument();
       expect(screen.getByLabelText('Brief')).toHaveValue('');
       expect(screen.getByLabelText('Brief')).toHaveFocus();
       expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'sidebar' });
@@ -303,7 +305,7 @@ describe('The signed-in shell', () => {
         await screen.findByRole('heading', { level: 1, name: 'New post' }),
       ).toBeInTheDocument();
       expect(currentPath()).toBe('/new');
-      expect(screen.queryByText('the final text')).not.toBeInTheDocument();
+      expect(screen.queryByRole('article', { name: 'Version 1' })).not.toBeInTheDocument();
       expect(screen.getByLabelText('Brief')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'shortcut' });
     });
@@ -358,7 +360,7 @@ describe('The signed-in shell', () => {
       fireEvent.click((await sidebar()).getByRole('link', { name: 'New post' }));
 
       expect(screen.getByLabelText('Brief')).toHaveValue('ship small things');
-      expect(track).not.toHaveBeenCalledWith('sidebar_new_post_clicked', expect.anything());
+      expect(screen.getByText(/writing your post/i)).toBeInTheDocument();
     });
   });
 
