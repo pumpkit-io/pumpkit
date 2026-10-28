@@ -94,7 +94,11 @@ def _destination_columns(destination: Destination) -> dict[str, Any]:
 
 def _post_status_column() -> ColumnElement[str]:
     """`post_status` in SQL, for a Post outer-joined to its Scheduled post."""
-    return case(STATUS_OF_STATE, value=ScheduledPost.state, else_=DRAFT)
+    # `case(value=...)` binds each state as VARCHAR, which Postgres won't compare with the enum.
+    return case(
+        *((ScheduledPost.state == state, status) for state, status in STATUS_OF_STATE.items()),
+        else_=DRAFT,
+    )
 
 
 def _latest_versions() -> Subquery:

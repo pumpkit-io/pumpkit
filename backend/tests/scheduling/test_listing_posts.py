@@ -433,3 +433,14 @@ async def test_list_scheduled_posts_is_no_longer_a_tool(subscribed, mcp):
 
 async def test_the_old_scheduled_posts_list_is_gone(client):
     assert (await client.get(SCHEDULED_POSTS)).status_code == 405
+
+
+def test_the_status_column_compares_states_as_the_enum_on_postgres():
+    # SQLite compares anything, so only the compiled SQL shows what Postgres would refuse.
+    from sqlalchemy.dialects import postgresql
+
+    from pumpkit.scheduling.service import _post_status_column
+
+    sql = str((_post_status_column() == "scheduled").compile(dialect=postgresql.asyncpg.dialect()))
+    assert sql.count("::scheduled_post_state_enum") == 4
+    assert "WHEN $1::VARCHAR" not in sql
