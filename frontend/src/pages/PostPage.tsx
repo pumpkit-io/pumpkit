@@ -24,6 +24,8 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 
 /** The Version a Post opens on: the one its Scheduled post came from, else the latest. */
 function openingIndex(post: PostDetail): number {
+  // A Failed Post is retried with the latest Version, so it opens there.
+  if (post.status === 'failed') return post.versions.length - 1;
   const scheduled = post.versions.findIndex((v) => hasScheduledPost(post.scheduledPost, v.id));
   return scheduled >= 0 ? scheduled : post.versions.length - 1;
 }
