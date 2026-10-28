@@ -1,8 +1,8 @@
 # Jev classifies; LLMs write
 
-When Pumpkit needs a labelled answer about text (which of a fixed set of labels fits a conversation, a Brief or a Final), the question goes to Jev, TypeSafe's hosted classifier, and not to the LLM that writes the Post. LLMs only write. We chose Jev for three reasons. It answers a labelled question for $0.042 per million input tokens, with output free. TypeSafe cites about a tenth of a second against several seconds for an LLM, which matters because Versions are written inside the request. And it returns a probability for every label, which we can store to tune the question, where an LLM returns one unscored answer.
+When Pumpkit needs a labelled answer about text (which of a fixed set of labels fits a conversation, a Brief or a Version's text), the question goes to Jev, TypeSafe's hosted classifier, and not to the LLM that writes the Post. LLMs only write. We chose Jev for three reasons. It answers a labelled question for $0.042 per million input tokens, with output free. TypeSafe cites about a tenth of a second against several seconds for an LLM, which matters because Versions are written inside the request. And it returns a probability for every label, which we can store to tune the question, where an LLM returns one unscored answer.
 
-The port is built and tested, and nothing asks it a question yet. Its first caller asked, before a Feedback Version, whether the next Version needed a new Hook. We removed that check when the Hook moved into the draft and revision calls: the call that writes the opening now decides whether to change it, from the Feedback, and needs no separate question.
+The port is built and tested, and nothing asks it a question yet. Its first caller asked, before a Feedback Version, whether the next Version needed a new Hook. We removed that check when the Hook moved into the sketch and revision calls: the call that writes the opening now decides whether to change it, from the Feedback, and needs no separate question.
 
 ## Rules
 

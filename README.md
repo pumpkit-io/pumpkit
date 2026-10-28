@@ -78,7 +78,7 @@ Only the first two are required. Each optional provider stays off until you set 
 | twitterapi.io | Yes | Reads your Inspiration authors' posts, which set the style |
 | SMTP | No | Emails Magic links. Without it, links go to the backend log and only you can sign in |
 | Google | No | "Continue with Google" on the sign-in page |
-| X app | No | Connects X accounts to schedule Posts or post now. Without it, Users copy the Final into X |
+| X app | No | Connects X accounts to schedule Posts or post now. Without it, Users copy a Version's text into X |
 | Stripe | No | Sells Plans. Without it, every User can use all of Pumpkit |
 | Operator details | No | Company footer, Terms and Privacy Policy pages |
 | PostHog | No | Product analytics, behind a consent banner |
