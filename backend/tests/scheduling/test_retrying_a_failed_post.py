@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from pumpkit.posts.models import VersionAttempt
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import XPostRejectedError
+from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 
@@ -144,7 +145,7 @@ async def test_a_version_of_another_post_is_refused(
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Choose a Version of this Post."
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [failed]
+    assert await scheduled_posts(client) == [failed]
 
 
 async def test_a_version_that_is_not_the_users_is_not_found(
@@ -176,7 +177,7 @@ async def test_parts_and_a_version_together_are_refused(
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Give either the Parts or a Version, not both."
-    assert (await client.get(SCHEDULED_POSTS)).json()["data"] == [failed]
+    assert await scheduled_posts(client) == [failed]
 
 
 async def test_a_publish_time_and_publish_now_together_are_refused(
