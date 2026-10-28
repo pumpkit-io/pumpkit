@@ -102,7 +102,7 @@ class ScheduledPostsListResponse(BaseModel):
 
 
 class ScheduledPostToolResponse(ScheduledPostResponse):
-    """A Scheduled post as an MCP tool answers with it, linking to the web app's Scheduled page."""
+    """A Scheduled post as an MCP tool answers with it, linking to the web app's Posts page."""
 
     scheduled_page_url: str
 

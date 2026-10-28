@@ -30,7 +30,7 @@ export function Scheduled() {
 
   return (
     <>
-      <Topbar title="Scheduled" />
+      <Topbar title="Posts" />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
           <XConnectionPanel notice={notice} />

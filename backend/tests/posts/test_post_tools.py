@@ -96,7 +96,7 @@ async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
     result = await mcp.call_tool("start_post", brief="ship small things")
 
     assert error_text(result) == (
-        "Add an Inspiration author with posts before writing a Post. http://localhost:5173/home"
+        "Add an Inspiration author with posts before writing a Post. http://localhost:5173/persona"
     )
 
 

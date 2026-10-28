@@ -1,32 +1,15 @@
-import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
-import { storage } from '@/lib/storage';
+import { createContext, useMemo, useState, type ReactNode } from 'react';
 
 interface SidebarContextValue {
-  collapsed: boolean;
-  setCollapsed: (v: boolean) => void;
-  toggleCollapsed: () => void;
   mobileOpen: boolean;
   setMobileOpen: (v: boolean) => void;
 }
 
 export const SidebarContext = createContext<SidebarContextValue | null>(null);
 
+/** Whether the phone drawer is open; from `md` up the sidebar is always on screen. */
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsedState] = useState<boolean>(() =>
-    storage.get<boolean>('sidebar-collapsed', false),
-  );
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const setCollapsed = useCallback((v: boolean) => {
-    storage.set('sidebar-collapsed', v);
-    setCollapsedState(v);
-  }, []);
-  const toggleCollapsed = useCallback(() => setCollapsed(!collapsed), [collapsed, setCollapsed]);
-
-  const value = useMemo<SidebarContextValue>(
-    () => ({ collapsed, setCollapsed, toggleCollapsed, mobileOpen, setMobileOpen }),
-    [collapsed, setCollapsed, toggleCollapsed, mobileOpen],
-  );
-
+  const value = useMemo(() => ({ mobileOpen, setMobileOpen }), [mobileOpen]);
   return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
 }

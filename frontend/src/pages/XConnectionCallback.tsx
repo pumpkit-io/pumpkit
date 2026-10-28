@@ -21,7 +21,7 @@ export function XConnectionCallback() {
 
     const back = (xConnectionNotice: string) => {
       const state: ScheduledLocationState = { xConnectionNotice };
-      navigate('/scheduled', { replace: true, state });
+      navigate('/posts', { replace: true, state });
     };
     const params = new URLSearchParams(search);
     const code = params.get('code');

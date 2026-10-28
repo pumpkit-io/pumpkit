@@ -28,7 +28,7 @@ function renderCallback(path: string, page: ReactElement, fragment: string) {
     >
       <Routes>
         <Route path={path} element={page} />
-        <Route path="/home" element={<Destination />} />
+        <Route path="/new" element={<Destination />} />
         <Route path="/login" element={<Destination />} />
       </Routes>
     </MemoryRouter>,
@@ -60,10 +60,10 @@ beforeEach(async () => {
 });
 
 describe.each(callbacks)('the $name callback', ({ path, page, error }) => {
-  it('starts the Session and replaces the callback entry with the home page', async () => {
+  it('starts the Session and replaces the callback entry with New post', async () => {
     renderCallback(path, page, VALID);
 
-    expect(await screen.findByText('at /home via REPLACE')).toBeInTheDocument();
+    expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
     expect(session.get()).toEqual({ accessToken: 'tok', expiresAt: EXPIRES_AT });
   });
 

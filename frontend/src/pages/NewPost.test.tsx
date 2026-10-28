@@ -1,5 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -20,7 +19,8 @@ vi.mock('@/services/billingService', () => ({
     fetchPlans: vi.fn().mockResolvedValue({ plans: [], termsVersion: '2026-10-11' }),
   },
 }));
-vi.mock('@/services/inspirationAuthorService', () => ({
+vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
   inspirationAuthorService: {
     list: vi.fn(),
     add: vi.fn(),
@@ -59,95 +59,26 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
   track: vi.fn(),
 }));
 
-import { AuthProvider } from '@/contexts/AuthContext';
-import { ThemeProvider } from '@/features/theme/ThemeProvider';
-import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import type { Instance } from '@/lib/instance';
-import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
+import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
-import {
-  inspirationAuthorService,
-  type InspirationAuthor,
-} from '@/services/inspirationAuthorService';
+import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { postService, type Part, type Post, type Tell, type Version } from '@/services/postService';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
-import { AppLayout } from './AppLayout';
-import { Home } from './Home';
-import { Scheduled } from './Scheduled';
+import {
+  LEVELSIO,
+  NOT_SUBSCRIBED,
+  PAULG,
+  SUBSCRIBED,
+  apiError,
+  renderSignedIn,
+} from './testing/signedInApp';
 
-const NOT_SUBSCRIBED = {
-  subscription: null,
-  subscribed: false,
-  maySubscribe: true,
-  trialDays: null,
-};
-const SUBSCRIBED = {
-  subscription: {
-    status: 'active' as const,
-    planKey: 'pumpkit_pro_monthly',
-    currentPeriodEnd: null,
-    cancelAtPeriodEnd: false,
-  },
-  subscribed: true,
-  maySubscribe: false,
-  trialDays: null,
-};
-
-const LEVELSIO: InspirationAuthor = {
-  handle: 'levelsio',
-  lastFetchedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  postCount: 18,
-};
-const PAULG: InspirationAuthor = {
-  handle: 'paulg',
-  lastFetchedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-  postCount: 20,
-};
-
-/** An axios-shaped rejection carrying the backend's status and `detail`. */
-function apiError(status: number, detail: string, extra: Record<string, unknown> = {}) {
-  return Object.assign(new Error(`Request failed with status code ${status}`), {
-    isAxiosError: true,
-    response: { status, data: { detail, ...extra } },
-  });
-}
-
-const WITH_ANALYTICS: Instance = {
-  ...SELLS_PLANS,
-  analytics: {
-    key: 'phc_test',
-    host: 'https://eu.i.posthog.com',
-    ui_host: 'https://eu.posthog.com',
-  },
-};
-
-function renderHome(state?: unknown, instance: Instance = SELLS_PLANS) {
-  return render(
-    <InstanceProvider instance={instance}>
-      <AuthProvider>
-        <ThemeProvider>
-          <MemoryRouter
-            initialEntries={[{ pathname: '/home', state }]}
-            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-          >
-            <Routes>
-              <Route element={<AppLayout />}>
-                <Route path="/home" element={<Home />} />
-                <Route path="/scheduled" element={<Scheduled />} />
-              </Route>
-            </Routes>
-          </MemoryRouter>
-        </ThemeProvider>
-      </AuthProvider>
-    </InstanceProvider>,
-  );
-}
-
-async function authorsPanel() {
-  return within(await screen.findByRole('region', { name: 'Inspiration authors' }));
+function renderNewPost(state?: unknown, instance: Instance = SELLS_PLANS) {
+  return renderSignedIn('/new', { state, instance });
 }
 
 async function writer() {
@@ -192,8 +123,8 @@ function threadWith(parts: Part[]): Post {
 async function readyToWrite() {
   vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
   vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-  renderHome();
-  await (await authorsPanel()).findByText('@levelsio');
+  renderNewPost();
+  await screen.findByRole('link', { name: 'Persona: @levelsio' });
   const area = await writer();
   await area.findByRole('button', { name: 'Write the Post' });
   return area;
@@ -204,7 +135,7 @@ async function writeBrief(area: Awaited<ReturnType<typeof writer>>, brief: strin
   fireEvent.click(area.getByRole('button', { name: 'Write the Post' }));
 }
 
-describe('Home', () => {
+describe('New post', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
@@ -218,33 +149,71 @@ describe('Home', () => {
     vi.mocked(track).mockClear();
   });
 
-  it('shows the writing area under the authors panel and the user in the sidebar', async () => {
-    renderHome();
-    expect(await authorsPanel()).toBeTruthy();
-    expect(await writer()).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: /welcome/i })).not.toBeInTheDocument();
-    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+  it('shows the Brief box and the Format under the "New post" header', async () => {
+    renderNewPost();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'New post' })).toBeInTheDocument();
+    const area = await writer();
+    expect(area.getByLabelText('Brief')).toBeInTheDocument();
+    expect(area.getByRole('radiogroup', { name: 'Format' })).toBeInTheDocument();
+    expect(area.getByText(/rambling is fine/i)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'How your posts sound' })).not.toBeInTheDocument();
+  });
+
+  describe('Persona chip', () => {
+    it("lists the Inspiration authors' handles in the header and links to Persona", async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
+      renderNewPost();
+
+      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg' });
+      expect(chip).toHaveAttribute('href', '/persona');
+      expect(chip.closest('header')).not.toBeNull();
+    });
+
+    it('asks to set up an empty Persona', async () => {
+      renderNewPost();
+
+      expect(
+        await screen.findByRole('link', { name: 'Persona: empty, set it up' }),
+      ).toHaveAttribute('href', '/persona');
+    });
   });
 
   describe('Writing a Post', () => {
-    it('disables writing with a prompt to add an author when the User has none', async () => {
+    it('replaces the write button with "Set up your Persona" while the Persona is empty', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      renderHome();
+      renderNewPost();
 
       const area = await writer();
-      expect(
-        await area.findByText('Add an Inspiration author to write a Post.'),
-      ).toBeInTheDocument();
-      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+      const setUp = await area.findByRole('link', { name: 'Set up your Persona' });
+      expect(area.getByText(/at least one Inspiration author/i)).toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
+
+      fireEvent.click(setUp);
+
+      expect(await screen.findByRole('heading', { level: 1, name: 'Persona' })).toBeInTheDocument();
     });
 
-    it('shows a User who is not Subscribed a prompt to subscribe instead of the button', async () => {
+    it('replaces the write button with "Subscribe to write" for a User who is not Subscribed', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-      renderHome();
+      renderNewPost();
 
       const area = await writer();
-      expect(await area.findByText(/writing posts needs a subscription/i)).toBeInTheDocument();
+      const subscribe = await area.findByRole('button', { name: 'Subscribe to write' });
+      expect(area.getByText('Your Drafts, schedule and Persona are kept.')).toBeInTheDocument();
       expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
+
+      fireEvent.click(subscribe);
+
+      expect(await screen.findByRole('dialog', { name: 'Billing' })).toBeInTheDocument();
+    });
+
+    it('asks a User who is neither Subscribed nor set up to subscribe first', async () => {
+      renderNewPost();
+
+      const area = await writer();
+      expect(await area.findByRole('button', { name: 'Subscribe to write' })).toBeInTheDocument();
+      expect(area.queryByRole('link', { name: 'Set up your Persona' })).not.toBeInTheDocument();
     });
 
     it('writes the first Version, disabling the Brief while it waits, then shows only the Final', async () => {
@@ -1159,189 +1128,8 @@ describe('Home', () => {
     });
   });
 
-  describe('Sidebar', () => {
-    async function withPostOnScreen() {
-      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
-      const area = await readyToWrite();
-      await writeBrief(area, 'ship small things');
-      await area.findByText('the final text');
-      return area;
-    }
-
-    function newPostShortcut(target: Element | Window = window) {
-      fireEvent.keyDown(target, { key: 'O', ctrlKey: true, shiftKey: true });
-    }
-
-    it('starts a New Post from the sidebar and puts the cursor in the Brief', async () => {
-      const area = await withPostOnScreen();
-
-      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
-      fireEvent.click(nav.getByRole('button', { name: /new post/i }));
-
-      expect(area.queryByText('the final text')).not.toBeInTheDocument();
-      expect(area.getByLabelText('Brief')).toHaveValue('');
-      expect(area.getByLabelText('Brief')).toHaveFocus();
-      expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'sidebar' });
-    });
-
-    it('keeps the Post on screen after a visit to the Scheduled page', async () => {
-      await withPostOnScreen();
-
-      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
-      fireEvent.click(nav.getByRole('button', { name: 'Scheduled' }));
-      expect(await screen.findByRole('region', { name: 'X connection' })).toBeInTheDocument();
-      expect(nav.getByRole('button', { name: 'Scheduled' })).toHaveAttribute(
-        'aria-current',
-        'page',
-      );
-      fireEvent.click(nav.getByRole('button', { name: 'Home' }));
-
-      expect(await (await writer()).findByText('the final text')).toBeInTheDocument();
-    });
-
-    it('starts a New Post from the Scheduled page back on Home', async () => {
-      await withPostOnScreen();
-      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
-      fireEvent.click(nav.getByRole('button', { name: 'Scheduled' }));
-      await screen.findByRole('region', { name: 'X connection' });
-
-      fireEvent.click(nav.getByRole('button', { name: /new post/i }));
-
-      const area = await writer();
-      expect(area.queryByText('the final text')).not.toBeInTheDocument();
-      expect(area.getByLabelText('Brief')).toHaveValue('');
-    });
-
-    it('starts a New Post from the collapsed rail', async () => {
-      const area = await withPostOnScreen();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Close sidebar' }));
-      const rail = within(screen.getByRole('navigation', { name: 'Sidebar rail' }));
-      fireEvent.click(rail.getByRole('button', { name: 'New Post' }));
-
-      expect(area.queryByText('the final text')).not.toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'rail' });
-    });
-
-    it('starts a New Post on Ctrl+Shift+O, even while typing a Brief', async () => {
-      const area = await readyToWrite();
-      const brief = area.getByLabelText('Brief');
-      fireEvent.change(brief, { target: { value: 'half a thought' } });
-
-      newPostShortcut(brief);
-
-      expect(brief).toHaveValue('');
-      expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'shortcut' });
-    });
-
-    it('starts one New Post when the shortcut is held down', async () => {
-      await readyToWrite();
-
-      newPostShortcut();
-      fireEvent.keyDown(window, { key: 'O', ctrlKey: true, shiftKey: true, repeat: true });
-
-      expect(
-        vi.mocked(track).mock.calls.filter(([event]) => event === 'sidebar_new_post_clicked'),
-      ).toHaveLength(1);
-    });
-
-    it('leaves the Brief alone when the shortcut is pressed over a dialog', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-      renderHome();
-      const area = await writer();
-      fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'half a thought' } });
-      fireEvent.click(await area.findByRole('button', { name: /subscribe/i }));
-      await screen.findByRole('dialog');
-
-      newPostShortcut();
-
-      expect(area.getByLabelText('Brief')).toHaveValue('half a thought');
-    });
-
-    it('refuses a New Post while a Version is being written', async () => {
-      vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
-      const area = await readyToWrite();
-      await writeBrief(area, 'ship small things');
-
-      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
-      expect(nav.getByRole('button', { name: /new post/i })).toBeDisabled();
-      newPostShortcut();
-
-      expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
-      expect(track).not.toHaveBeenCalledWith('sidebar_new_post_clicked', expect.anything());
-    });
-
-    it('closes the mobile drawer after a New Post', async () => {
-      await withPostOnScreen();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }));
-      const drawerNav = screen.getAllByRole('navigation', { name: 'Main' }).at(-1)!;
-      fireEvent.click(within(drawerNav).getByRole('button', { name: /new post/i }));
-
-      await waitFor(() =>
-        expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1),
-      );
-    });
-
-    it('links to the Privacy Policy and the Terms at the bottom, in a new tab', async () => {
-      renderHome(undefined, WITH_OPERATOR);
-      await authorsPanel();
-
-      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
-      const privacy = legal.getByRole('link', { name: 'Privacy Policy' });
-      const terms = legal.getByRole('link', { name: 'Terms' });
-      expect(privacy).toHaveAttribute('href', '/privacy');
-      expect(terms).toHaveAttribute('href', '/terms');
-      for (const link of [privacy, terms]) expect(link).toHaveAttribute('target', '_blank');
-    });
-
-    it('offers Cookie settings next to the legal links', async () => {
-      renderHome(undefined, { ...WITH_OPERATOR, analytics: WITH_ANALYTICS.analytics });
-      await authorsPanel();
-
-      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
-      expect(legal.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
-    });
-
-    it('offers only Cookie settings on an Instance with analytics but no Operator details', async () => {
-      renderHome(undefined, WITH_ANALYTICS);
-      await authorsPanel();
-
-      expect(screen.getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
-    });
-
-    it('has no legal links or Cookie settings on an Instance with neither', async () => {
-      renderHome();
-      await authorsPanel();
-
-      expect(screen.queryByRole('link', { name: 'Privacy Policy' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
-    });
-
-    it('offers no Cookie settings on an Instance without analytics', async () => {
-      renderHome(undefined, WITH_OPERATOR);
-      await authorsPanel();
-
-      const legal = within(screen.getByRole('navigation', { name: 'Legal' }));
-      expect(legal.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
-    });
-
-    it('remembers a collapsed sidebar across visits', async () => {
-      const first = renderHome();
-      fireEvent.click(await screen.findByRole('button', { name: 'Close sidebar' }));
-      first.unmount();
-
-      renderHome();
-
-      await authorsPanel();
-      expect(screen.queryByRole('button', { name: 'Close sidebar' })).not.toBeInTheDocument();
-    });
-  });
-
   it('opens the billing dialog after a successful checkout', async () => {
-    renderHome({ checkoutStatus: 'success' });
+    renderNewPost({ checkoutStatus: 'success' });
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Billing')).toBeInTheDocument();
   });
@@ -1349,23 +1137,20 @@ describe('Home', () => {
   describe('On an Instance that sells no Plans', () => {
     const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
 
-    it('lets a User without a Subscription add authors and write, with no prompt to subscribe', async () => {
+    it('lets a User without a Subscription write, with no prompt to subscribe', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-      renderHome(undefined, NO_PLANS);
+      renderNewPost(undefined, NO_PLANS);
 
-      const panel = await authorsPanel();
-      expect(await panel.findByLabelText('X handle')).toBeInTheDocument();
       const area = await writer();
       expect(await area.findByRole('button', { name: 'Write the Post' })).toBeInTheDocument();
-      expect(screen.queryByText(/needs a subscription/i)).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Subscribe' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /subscribe/i })).not.toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
     });
 
     it('opens Schedule on a Final instead of Billing', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
-      renderHome(undefined, NO_PLANS);
+      renderNewPost(undefined, NO_PLANS);
       const area = await writer();
       await writeBrief(area, 'ship');
       const final = within(await area.findByRole('article', { name: 'Final' }));
@@ -1379,7 +1164,7 @@ describe('Home', () => {
     });
 
     it('offers no Billing in the user menu', async () => {
-      renderHome(undefined, NO_PLANS);
+      renderNewPost(undefined, NO_PLANS);
       const [menuButton] = await screen.findAllByRole('button', { name: 'User menu' });
 
       fireEvent.keyDown(menuButton, { key: 'Enter' });
@@ -1389,170 +1174,10 @@ describe('Home', () => {
     });
 
     it('opens no Billing dialog when sent back from a checkout', async () => {
-      renderHome({ checkoutStatus: 'success' }, NO_PLANS);
+      renderNewPost({ checkoutStatus: 'success' }, NO_PLANS);
 
       expect(await writer()).toBeTruthy();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
-  });
-
-  describe('Inspiration authors', () => {
-    it('lists the authors in order with when their posts were last fetched and how many are stored', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-      renderHome();
-
-      const panel = await authorsPanel();
-      const items = await panel.findAllByRole('listitem');
-      expect(items.map((item) => within(item).getByText(/^@/).textContent)).toEqual([
-        '@levelsio',
-        '@paulg',
-      ]);
-      expect(within(items[0]).getByText('Fetched 2 hours ago · 18 posts')).toBeInTheDocument();
-      expect(within(items[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
-    });
-
-    it('shows each author chip on a phone with a short last fetched time', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-      renderHome();
-
-      const panel = await authorsPanel();
-      const items = await panel.findAllByRole('listitem');
-      expect(within(items[0]).getByText('2h ago')).toHaveClass('md:hidden');
-      expect(within(items[1]).getByText('5m ago')).toHaveClass('md:hidden');
-    });
-
-    it('says how to start when the User has no authors', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      renderHome();
-
-      const panel = await authorsPanel();
-      expect(await panel.findByText(/no inspiration authors yet/i)).toBeInTheDocument();
-    });
-
-    it('adds a handle, shows it in the list and clears the field', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.add).mockResolvedValue(LEVELSIO);
-      renderHome();
-
-      const panel = await authorsPanel();
-      const field = await panel.findByLabelText('X handle');
-      fireEvent.change(field, { target: { value: '@LevelsIO' } });
-      fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-      expect(await panel.findByText('@levelsio')).toBeInTheDocument();
-      expect(inspirationAuthorService.add).toHaveBeenCalledWith('@LevelsIO');
-      expect(field).toHaveValue('');
-      expect(track).toHaveBeenCalledWith('inspiration_author_added');
-    });
-
-    it.each([
-      [404, "@nobody doesn't exist on X."],
-      [422, '@nobody has no original posts to learn from.'],
-      [409, 'You can have up to 3 Inspiration authors. Remove one to add another.'],
-    ])(
-      'says why a handle was refused with a %i and keeps it in the field',
-      async (status, detail) => {
-        vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-        vi.mocked(inspirationAuthorService.add).mockRejectedValue(apiError(status, detail));
-        renderHome();
-
-        const panel = await authorsPanel();
-        const field = await panel.findByLabelText('X handle');
-        fireEvent.change(field, { target: { value: 'nobody' } });
-        fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-        expect(await panel.findByRole('alert')).toHaveTextContent(detail);
-        expect(field).toHaveValue('nobody');
-        expect(track).not.toHaveBeenCalledWith('inspiration_author_added');
-      },
-    );
-
-    it('removes an author from the list', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-      vi.mocked(inspirationAuthorService.remove).mockResolvedValue(undefined);
-      renderHome();
-
-      const panel = await authorsPanel();
-      fireEvent.click(await panel.findByRole('button', { name: 'Remove @levelsio' }));
-
-      await waitFor(() => expect(panel.queryByText('@levelsio')).not.toBeInTheDocument());
-      expect(panel.getByText('@paulg')).toBeInTheDocument();
-      expect(inspirationAuthorService.remove).toHaveBeenCalledWith('levelsio');
-      expect(track).toHaveBeenCalledWith('inspiration_author_removed');
-    });
-
-    it('shows a User who is not Subscribed their authors and a prompt to subscribe that opens Billing', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-      renderHome();
-
-      const panel = await authorsPanel();
-      expect(await panel.findByText('@levelsio')).toBeInTheDocument();
-      expect(await panel.findByText(/needs a subscription/i)).toBeInTheDocument();
-      expect(panel.queryByLabelText('X handle')).not.toBeInTheDocument();
-      expect(panel.queryByRole('button', { name: 'Remove @levelsio' })).not.toBeInTheDocument();
-      expect(panel.queryByRole('button', { name: 'Refresh @levelsio' })).not.toBeInTheDocument();
-
-      fireEvent.click(panel.getByRole('button', { name: 'Subscribe' }));
-      expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    });
-
-    it('shows the prompt to subscribe when adding is refused with a 403', async () => {
-      vi.mocked(billingService.fetchBillingMe)
-        .mockResolvedValueOnce(SUBSCRIBED)
-        .mockResolvedValue(NOT_SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.add).mockRejectedValue(
-        apiError(403, 'This needs a Subscription. Subscribe to continue.'),
-      );
-      renderHome();
-
-      const panel = await authorsPanel();
-      fireEvent.change(await panel.findByLabelText('X handle'), { target: { value: 'levelsio' } });
-      fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-      expect(await panel.findByRole('button', { name: 'Subscribe' })).toBeInTheDocument();
-    });
-
-    it('refreshes an author and shows its new fetch time and post count', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-      vi.mocked(inspirationAuthorService.refresh).mockResolvedValue({
-        handle: 'levelsio',
-        lastFetchedAt: new Date().toISOString(),
-        postCount: 21,
-      });
-      renderHome();
-
-      const panel = await authorsPanel();
-      fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
-
-      expect(await panel.findByText('Fetched just now · 21 posts')).toBeInTheDocument();
-      expect(inspirationAuthorService.refresh).toHaveBeenCalledWith('levelsio');
-      expect(track).toHaveBeenCalledWith('inspiration_authors_refreshed');
-    });
-
-    it('says when an author can be refreshed again after a refresh within the hour', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-      const retryAt = new Date(2026, 9, 6, 15, 42);
-      vi.mocked(inspirationAuthorService.refresh).mockRejectedValue(
-        apiError(429, '@levelsio was fetched less than an hour ago.', {
-          retry_at: retryAt.toISOString(),
-        }),
-      );
-      renderHome();
-
-      const panel = await authorsPanel();
-      fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
-
-      expect(
-        await panel.findByText(
-          '@levelsio was fetched less than an hour ago. You can refresh it again at 3:42 PM.',
-        ),
-      ).toBeInTheDocument();
-      expect(panel.queryByRole('alert')).not.toBeInTheDocument();
-      expect(track).not.toHaveBeenCalledWith('inspiration_authors_refreshed');
     });
   });
 });
