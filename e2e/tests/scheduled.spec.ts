@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { runSeedScript } from '../backend';
 
-test('the Scheduled page loads with X to connect, the composer and the lists', async ({ page }) => {
-  await page.goto('/scheduled');
+test('the Posts page loads with X to connect, the composer and the lists', async ({ page }) => {
+  await page.goto('/posts');
 
   const xConnection = page.getByRole('region', { name: 'X connection' });
   await expect(xConnection.getByRole('button', { name: 'Connect X' })).toBeVisible();
@@ -15,7 +15,7 @@ test('the Scheduled page loads with X to connect, the composer and the lists', a
 
 test('a two-Part Thread typed in the composer is scheduled as one item', async ({ page }) => {
   runSeedScript('connect_x.py');
-  await page.goto('/scheduled');
+  await page.goto('/posts');
 
   const composer = page.getByRole('region', { name: 'Post to X' });
   await composer.getByLabel('Post text').fill('E2E Thread, Part one.');
