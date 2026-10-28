@@ -1,5 +1,5 @@
 """
-The system prompt of the draft call for a Thread: the single-post draft prompt's rules, with a
+The system prompt of the sketch call for a Thread: the single-post sketch prompt's rules, with a
 Thread's structure in place of its "one post" rule and an output of ordered Parts.
 
 It holds only instructions: the corpus changes per Post, so it travels in a user message.
@@ -12,7 +12,7 @@ from pumpkit.posts.writing.prompts.hook import HOOK_LIBRARY
 
 
 @cache
-def draft_thread_prompt(char_limit: int) -> str:
+def sketch_thread_prompt(char_limit: int) -> str:
     """The prompt for an X account whose posts hold up to `char_limit` characters."""
     return f"""\
 # Role

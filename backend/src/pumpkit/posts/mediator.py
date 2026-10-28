@@ -89,15 +89,14 @@ async def _char_limit(db: AsyncSession, *, user_id: str) -> int:
 
 
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:
-    assert attempt.version_number is not None and attempt.draft_parts is not None
-    assert attempt.final_parts is not None and attempt.slop_tells is not None
+    assert attempt.version_number is not None and attempt.final_parts is not None
+    assert attempt.slop_tells is not None
     format = attempt.format
     return VersionResponse(
         id=attempt.id,
         number=attempt.version_number,
         feedback=attempt.feedback,
         format=format,
-        draft_parts=attempt.draft_parts,
         parts=[
             PartResponse(
                 text=text,
