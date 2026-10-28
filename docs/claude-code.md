@@ -39,7 +39,7 @@ Ask Claude Code to write a Post from an idea, then ask for changes in plain word
 | `list_posts` | Lists your Posts, newest first, 20 at a time (up to 50), with each one's Brief and how many Versions it has. |
 | `get_post` | Reads one Post with all its Versions, each with its Feedback, Final and character count, so Claude Code can compare them or schedule an earlier one. |
 
-Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code don't show up in the web app, which shows only the Post you are writing on Home.
+Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code don't show up in the web app, which shows only the Post you are writing on New post.
 
 ## Scheduled post and link tools
 
@@ -51,7 +51,7 @@ Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 2
 | `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. A new time gives a Failed one another try. In a Thread that failed partway, the live Parts are locked; the others can be edited, added, removed and reordered, and a new time publishes only them, as replies to the last live Part. |
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post. Claude Code asks before calling it. |
 | `list_past_communities` | Lists the Communities you posted to before from your connected X account. |
-| `connect_x` | Answers with the link to the Scheduled page, where you connect, reconnect or disconnect X. |
+| `connect_x` | Answers with the link to the Posts page, where you connect, reconnect or disconnect X. |
 | `manage_subscription` | Answers with the link to the billing page, where you subscribe or manage your Subscription. On an Instance that sells no Plans, it says so instead. |
 
-Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts X posts, one per Part, including those you scheduled in the web app. The X connection refusals and every Scheduled post answer link to the Scheduled page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.
+Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts X posts, one per Part, including those you scheduled in the web app. The X connection refusals and every Scheduled post answer link to the Posts page. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.

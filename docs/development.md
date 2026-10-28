@@ -52,7 +52,7 @@ An Instance without the Stripe billing group sells no Plans (ADR 0011): `billing
 
 ### Write a Post
 
-Home is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answers with the Post and its first Version once both model calls are done, which can take a minute or two (the Caddyfile allows it). `posts/mediator.start_post` reads the corpus (the newest 20 stored posts of each of the User's Inspiration authors, in list order) through `posts/service.py`, ends the read transaction, writes the Version with `src/pumpkit/posts/writing/versions.py`, and only then stores the Post with its corpus post ids and the attempt, succeeded or failed. A failed attempt is committed before the error is re-raised, so it survives the request's rollback.
+New post (`/new`) is where a User writes Posts. `POST /api/v1/posts` takes a Brief and answers with the Post and its first Version once both model calls are done, which can take a minute or two (the Caddyfile allows it). `posts/mediator.start_post` reads the corpus (the newest 20 stored posts of each of the User's Inspiration authors, in list order) through `posts/service.py`, ends the read transaction, writes the Version with `src/pumpkit/posts/writing/versions.py`, and only then stores the Post with its corpus post ids and the attempt, succeeded or failed. A failed attempt is committed before the error is re-raised, so it survives the request's rollback.
 
 A Post can start as a Thread: `format` on the request is `"post"` (the default) or `"thread"`. A Thread's draft and humanizer calls use `prompts/draft_thread.py` and `prompts/humanizer_thread.py` (which shares the single-post humanizer's guidelines) and answer `parts`, a list, instead of `post`. The humanizer reads the scrubbed Draft as numbered `<part>` blocks (`prompts/parts.py`). Both prompts and the check after each call read `THREAD_MIN_PARTS` and `THREAD_MAX_PARTS` (2 and 10, `writing/constants.py`): a reply outside them, or with a blank Part, fails the attempt and is never cut. Tests script a Thread's writing call with `written_thread()`.
 
@@ -68,7 +68,7 @@ The prompts in `src/pumpkit/posts/writing/prompts/` are copied word for word fro
 
 ### Schedule a post
 
-A Subscribed User connects X on the Scheduled page (`x_connection/router.py` and `scheduling/router.py`; the X publisher port in `x_connection/x_publisher.py`). `POST /api/v1/scheduled-posts` takes typed `parts` (one for a single X post, several for a Thread) or a `source_version_id`, either `publish_at` or `publish_now`, and a `community` (its ID or pasted URL) or none for the profile. `PATCH` takes what changes: a `community` string moves it to that Community, `null` back to the profile, and leaving it out keeps its Destination. `GET /api/v1/scheduled-posts` takes an optional `state` to list only Scheduled posts in that state. `DELETE` removes a scheduled or Failed one.
+A Subscribed User connects X on the Posts page (`x_connection/router.py` and `scheduling/router.py`; the X publisher port in `x_connection/x_publisher.py`). `POST /api/v1/scheduled-posts` takes typed `parts` (one for a single X post, several for a Thread) or a `source_version_id`, either `publish_at` or `publish_now`, and a `community` (its ID or pasted URL) or none for the profile. `PATCH` takes what changes: a `community` string moves it to that Community, `null` back to the profile, and leaving it out keeps its Destination. `GET /api/v1/scheduled-posts` takes an optional `state` to list only Scheduled posts in that state. `DELETE` removes a scheduled or Failed one.
 
 The router and the MCP tools in `scheduling/tools.py` only map their arguments onto one mediator interface: `mediator.create_scheduled_post` takes a `NewScheduledPost` and `mediator.edit_scheduled_post` a `ScheduledPostEdit`, frozen dataclasses in `scheduling/rules.py` whose constructors refuse a request that gives both or neither of typed Parts and a Version, both or neither of a time and publish now, or (for an edit) nothing to change. An edit's Destination change is `KeepDestination`, `ToProfile` or `ToCommunity(pasted)`. The request schemas keep only wire concerns: field limits, aware datetimes, `extra="forbid"`.
 
@@ -76,7 +76,7 @@ The mediator then checks, in order, the X connection (`connection_to_publish_on`
 
 Test a rule in `backend/tests/scheduling/test_mediator.py`, and keep one case of each refusal in the route and tool suites. `await connect_x()` (a fixture in `tests/conftest.py`) gives `user` an X connection to `fake_x_publisher.account` without the authorization's requests, at the time `get_clock` reads, so request the clock fixture first.
 
-A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send only `source_version_id`, the Version's id, and the backend copies its Final. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so Home and Scheduled share it.
+A Final goes to X through the same endpoint: the Schedule and Post now dialogs on each Version (`features/scheduledPosts/FinalToX.tsx`) send only `source_version_id`, the Version's id, and the backend copies its Final. The backend refuses a Version that isn't the User's and keeps the id, which becomes null if the Version is deleted. The X connection's provider sits in `AppLayout`, so New post and Posts share it.
 
 A Scheduled post for later waits in `scheduled` until the publisher picks it up. The publisher is a process of its own (ADR 0007): `python -m pumpkit.scheduling.publisher`, the `publisher` service in `compose.dev.yml` and `compose.yml`. Every `PUBLISHER_POLL_INTERVAL_SECONDS` it runs `publisher.run_pass`, which:
 
@@ -90,7 +90,7 @@ Test the pass by calling `run_pass(db_session_maker, fake_x_publisher, fixed_clo
 
 ### Refuse a request
 
-A mediator serves both the web routes and the MCP tools, so it refuses with one of the bases in `core/errors.py` rather than an `HTTPException`: `NotFoundError` (404), `ConflictError` (409), `RefusedError` (422) or `BadRequestError` (400). Each takes the `detail` the User reads, word for word on the web and in a tool error. Pass `fix_page`, a web app path, when the User fixes the refusal in the web app, as the X connection refusals do with `fix_page=SCHEDULED_PAGE` (`/scheduled`, in `scheduling/mediator.py`): the HTTP body then carries the full URL as `url` beside `detail`, built from `PUBLIC_URL`, and a tool error appends it to the text. Raise a base directly, and subclass it only when some code catches that refusal. An MCP tool reads an `HTTPException` as an unexpected error, so only web-only code such as `auth` raises one. Scheduling's pure rules raise `RuleBroken` (a `RefusedError`) and `MonthFull` (a `ConflictError`) from `scheduling/rules.py`.
+A mediator serves both the web routes and the MCP tools, so it refuses with one of the bases in `core/errors.py` rather than an `HTTPException`: `NotFoundError` (404), `ConflictError` (409), `RefusedError` (422) or `BadRequestError` (400). Each takes the `detail` the User reads, word for word on the web and in a tool error. Pass `fix_page`, a web app path, when the User fixes the refusal in the web app, as the X connection refusals do with `fix_page=SCHEDULED_PAGE` (`/posts`, in `scheduling/mediator.py`): the HTTP body then carries the full URL as `url` beside `detail`, built from `PUBLIC_URL`, and a tool error appends it to the text. Raise a base directly, and subclass it only when some code catches that refusal. An MCP tool reads an `HTTPException` as an unexpected error, so only web-only code such as `auth` raises one. Scheduling's pure rules raise `RuleBroken` (a `RefusedError`) and `MonthFull` (a `ConflictError`) from `scheduling/rules.py`.
 
 ### Add an MCP tool
 
@@ -129,7 +129,7 @@ answer = classification.answers["opening"]  # a ChoiceAnswer: choice, confidence
 
 ### Add a page to the shell
 
-Add the page to `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`, which gives it an expanded row and a matching icon on the collapsed rail, and add its route under the `AppLayout` route in `frontend/src/App.tsx`. `frontend/src/pages/AppLayout.tsx` holds the shell and the Post, so the Post stays on screen while the User is on another page.
+Add its route to `signedInRoutes()` in `frontend/src/pages/signedInRoutes.tsx`, which both `App.tsx` and the page tests mount inside `AppLayout`, and give the page a `Topbar` with its title and any header controls as `actions`. A page the sidebar links to also goes in `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`. `frontend/src/pages/AppLayout.tsx` holds the shell, the Persona and the Post, so the Post stays on `/new` while the User is on another page. Page tests render the route tree with `renderSignedIn(path)` from `frontend/src/pages/testing/signedInApp.tsx`.
 
 ### Edit the user profile
 

@@ -47,7 +47,7 @@ from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
 # Where the User connects or reconnects X, which takes a browser.
-SCHEDULED_PAGE = "/scheduled"
+SCHEDULED_PAGE = "/posts"
 
 
 def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:

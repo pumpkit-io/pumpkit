@@ -20,7 +20,7 @@ from pumpkit.x_connection.x_publisher import (
 from tests.mcp_client import error_text
 from tests.posts.writing_replies import written, written_thread
 
-SCHEDULED_PAGE = "http://localhost:5173/scheduled"
+SCHEDULED_PAGE = "http://localhost:5173/posts"
 
 
 @pytest.fixture

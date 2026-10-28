@@ -23,6 +23,10 @@ if [ "$robots_meta" = 'index,follow' ]; then
   cat >/srv/robots.txt <<ROBOTS
 User-agent: *
 Allow: /
+Disallow: /new
+Disallow: /posts
+Disallow: /persona
+Disallow: /settings
 Disallow: /home
 Disallow: /billing
 
