@@ -1,7 +1,7 @@
 """Seed a fixed e2e test user and print one machine-readable line, `E2E_ACCESS_TOKEN=<jwt>`.
 
 The user is Subscribed through a Subscription written straight into Pumpkit's copy, and has
-no Inspiration authors, X connection or Scheduled posts, so Home and Scheduled show their
+no Inspiration authors, Posts, X connection or Scheduled posts, so Home and Scheduled show their
 tools without calling any provider.
 
 Run inside the backend container: `docker compose -f compose.dev.yml exec -T backend python - < e2e/seed/seed_user.py`.
@@ -17,6 +17,7 @@ from pumpkit.auth.tokens import create_access_token
 from pumpkit.authors.models import InspirationAuthor
 from pumpkit.billing.models import Subscription
 from pumpkit.core.db.session import _db_session_handler
+from pumpkit.posts.models import Post
 from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.models import XConnection
 
@@ -41,6 +42,7 @@ async def main() -> None:
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))
         await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
         await db.execute(delete(ScheduledPost).where(ScheduledPost.user_id == user.id))
+        await db.execute(delete(Post).where(Post.user_id == user.id))
         held = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
         if held.first() is None:
             db.add(
