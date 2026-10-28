@@ -3,15 +3,13 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { CancelScheduledPostDialog } from './CancelScheduledPostDialog';
-import { Composer } from './Composer';
 import { EditScheduledPostDialog } from './EditScheduledPostDialog';
 import { ScheduledPostLists } from './ScheduledPostLists';
 import { useScheduledPosts } from './useScheduledPosts';
 
-/** The composer and the lists it adds to. Needs an XConnectionProvider above it. */
+/** The lists of Scheduled posts, to edit or cancel. Needs an XConnectionProvider above it. */
 export function ScheduledPosts() {
-  const { scheduledPosts, loadFailed, posting, error, notice, postNow, schedule, edit, cancel } =
-    useScheduledPosts();
+  const { scheduledPosts, loadFailed, edit, cancel } = useScheduledPosts();
   const { subscribed } = useSubscribed();
   const { connection } = useXConnectionContext();
   const [editing, setEditing] = useState<ScheduledPost | null>(null);
@@ -21,13 +19,6 @@ export function ScheduledPosts() {
 
   return (
     <>
-      <Composer
-        posting={posting}
-        error={error}
-        notice={notice}
-        onPostNow={postNow}
-        onSchedule={schedule}
-      />
       <ScheduledPostLists
         scheduledPosts={scheduledPosts}
         loadFailed={loadFailed}

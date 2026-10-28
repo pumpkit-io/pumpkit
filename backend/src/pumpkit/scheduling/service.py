@@ -39,13 +39,17 @@ async def create(
     *,
     user_id: str,
     x_user_id: str,
+    post_id: str,
+    source_version_id: str,
     parts: list[str],
     publish_at: datetime,
     now: datetime,
-    source_version_id: Optional[str] = None,
     destination: Destination = Destination(),
 ) -> ScheduledPost:
-    """A new Scheduled post in scheduled. Flushes."""
+    """
+    A new Scheduled post in scheduled, copied from the Version `source_version_id` of the Post
+    `post_id`. Flushes, raising IntegrityError when the Post already has one.
+    """
     scheduled_post = ScheduledPost(
         user_id=user_id,
         x_user_id=x_user_id,
@@ -53,6 +57,7 @@ async def create(
         **_destination_columns(destination),
         community_set_at=now if destination.community else None,
         publish_at=publish_at,
+        post_id=post_id,
         source_version_id=source_version_id,
         state=SCHEDULED,
         retry_count=0,
@@ -102,6 +107,16 @@ async def get(db: AsyncSession, *, scheduled_post_id: str) -> Optional[Scheduled
     result = await db.execute(
         select(ScheduledPost)
         .where(ScheduledPost.id == scheduled_post_id)
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledPost]:
+    """The Post's Scheduled post in any state, or None while it is a Draft."""
+    result = await db.execute(
+        select(ScheduledPost)
+        .where(ScheduledPost.post_id == post_id)
         .execution_options(populate_existing=True)
     )
     return result.scalar_one_or_none()

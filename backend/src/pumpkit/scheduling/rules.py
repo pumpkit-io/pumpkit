@@ -95,12 +95,11 @@ def check_month_has_room(count: int, *, adding: int, cap: int, moment: datetime)
 @dataclass(frozen=True)
 class NewScheduledPost:
     """
-    A Scheduled post as the web app or an MCP tool asks for it: typed `parts` or the Version
-    whose Final it copies, and `publish_at` or `publish_now`.
+    A Scheduled post as the web app or an MCP tool asks for it: the Version whose text it copies,
+    and `publish_at` or `publish_now`.
     """
 
-    parts: Optional[list[str]] = None
-    version_id: Optional[str] = None
+    version_id: str
     publish_at: Optional[datetime] = None
     publish_now: bool = False
     # A Community URL or ID as pasted; None for the User's profile.
@@ -109,8 +108,6 @@ class NewScheduledPost:
     share_with_followers: bool = False
 
     def __post_init__(self) -> None:
-        if (self.parts is None) == (self.version_id is None):
-            raise RuleBroken("Give either the Parts or a Version id, not both.")
         if (self.publish_at is None) == (not self.publish_now):
             raise RuleBroken("Give either a publish time or publish now, not both.")
 

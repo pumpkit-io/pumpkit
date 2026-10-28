@@ -10,6 +10,9 @@ from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
+from pumpkit.posts.llm import LLM, get_llm
+from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
+from pumpkit.posts.schemas import FeedbackRequest, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.rules import (
@@ -35,6 +38,8 @@ from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
 router = APIRouter(tags=["scheduled-posts"])
+# Served here, not from posts: whether a Post takes Feedback depends on its Scheduled post.
+feedback_router = APIRouter(tags=["posts"])
 # The X connection routes that answer with the Scheduled posts waiting. Two routers, so main.py
 # can mount them around x_connection's router and keep the OpenAPI document's order.
 x_connection_router = APIRouter(tags=["x-connection"])
@@ -130,7 +135,6 @@ async def create_scheduled_post(
 ) -> ScheduledPostResponse:
     """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
     new = NewScheduledPost(
-        parts=create_request.parts,
         version_id=create_request.source_version_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
@@ -191,4 +195,34 @@ async def cancel_scheduled_post(
 ) -> None:
     await mediator.cancel_scheduled_post(
         db=db, user=current_user, scheduled_post_id=scheduled_post_id
+    )
+
+
+@feedback_router.post(
+    "/posts/{post_id}/versions",
+    response_model=VersionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit(VERSION_WRITE_RATE)
+async def give_feedback(
+    request: Request,
+    post_id: str,
+    feedback_request: FeedbackRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    llm: LLM = Depends(get_llm),
+    clock: Clock = Depends(get_clock),
+) -> VersionResponse:
+    """
+    Writes the Version before answering, which takes two model calls. A Scheduled or Published
+    Post is refused.
+    """
+    return await mediator.give_feedback(
+        db=db,
+        llm=llm,
+        user=current_user,
+        post_id=post_id,
+        feedback=feedback_request.feedback,
+        format=feedback_request.format,
+        now=clock(),
     )
