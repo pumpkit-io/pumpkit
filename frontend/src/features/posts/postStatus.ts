@@ -1,7 +1,7 @@
 import type { PostStatus } from '@/services/postService';
 import type { ScheduledPost, ScheduledPostState } from '@/services/scheduledPostService';
 
-/** As the backend derives it (ADR 0015): one being published is still Scheduled. */
+/** As the backend derives it (ADR 0015), for a Scheduled post the page just changed. */
 export function statusFrom(state: ScheduledPostState | null): PostStatus {
   if (state === null) return 'draft';
   if (state === 'published' || state === 'failed') return state;

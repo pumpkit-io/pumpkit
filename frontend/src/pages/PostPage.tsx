@@ -119,6 +119,7 @@ function LoadedPost({
           index={index}
           onChange={setIndex}
           scheduledPost={scheduledPost}
+          status={post.status}
         />
       </div>
       {post.status === 'draft' && (

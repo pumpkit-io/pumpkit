@@ -3,7 +3,7 @@
 from typing import Literal, Optional
 
 from pumpkit.core.errors import ConflictError
-from pumpkit.scheduling.models import FAILED, PUBLISHED, ScheduledPostState
+from pumpkit.scheduling.models import FAILED, PUBLISHED, PUBLISHING, SCHEDULED, ScheduledPostState
 
 PostStatus = Literal["draft", "scheduled", "published", "failed"]
 DRAFT: PostStatus = "draft"
@@ -12,18 +12,18 @@ PUBLISHED_STATUS: PostStatus = "published"
 FAILED_STATUS: PostStatus = "failed"
 
 
+# One being published is still Scheduled, and a Thread that failed partway is Failed.
+STATUS_OF_STATE: dict[ScheduledPostState, PostStatus] = {
+    SCHEDULED: SCHEDULED_STATUS,
+    PUBLISHING: SCHEDULED_STATUS,
+    PUBLISHED: PUBLISHED_STATUS,
+    FAILED: FAILED_STATUS,
+}
+
+
 def post_status(state: Optional[ScheduledPostState]) -> PostStatus:
-    """
-    From the state of the Post's Scheduled post, None when it has none. One being published is
-    still Scheduled, and a Thread that failed partway is Failed.
-    """
-    if state is None:
-        return DRAFT
-    if state == PUBLISHED:
-        return PUBLISHED_STATUS
-    if state == FAILED:
-        return FAILED_STATUS
-    return SCHEDULED_STATUS
+    """From the state of the Post's Scheduled post, None when it has none."""
+    return DRAFT if state is None else STATUS_OF_STATE[state]
 
 
 class TakesNoFeedback(ConflictError):

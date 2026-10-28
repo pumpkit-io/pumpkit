@@ -1,8 +1,8 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Version } from '@/services/postService';
+import type { PostStatus, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
-import { hasScheduledPost, STATUS_LABEL, statusFrom } from './postStatus';
+import { hasScheduledPost, STATUS_LABEL } from './postStatus';
 
 const DOT_COLOUR = {
   scheduled: 'bg-primary',
@@ -12,10 +12,13 @@ const DOT_COLOUR = {
 
 type Mark = keyof typeof DOT_COLOUR;
 
-/** The status the Scheduled post gives, on the Version it came from only. */
-function markOf(version: Version, scheduledPost: ScheduledPost | null): Mark | null {
+/** The Post's status, on the Version its Scheduled post came from only. */
+function markOf(
+  version: Version,
+  scheduledPost: ScheduledPost | null,
+  status: PostStatus,
+): Mark | null {
   if (!hasScheduledPost(scheduledPost, version.id)) return null;
-  const status = statusFrom(scheduledPost.state);
   return status === 'draft' ? null : status;
 }
 
@@ -31,15 +34,17 @@ export function VersionPager({
   index,
   onChange,
   scheduledPost,
+  status,
 }: {
   versions: Version[];
   index: number;
   onChange: (index: number) => void;
   scheduledPost: ScheduledPost | null;
+  status: PostStatus;
 }) {
   const shown = versions[index];
   if (!shown) return null;
-  const shownMark = markOf(shown, scheduledPost);
+  const shownMark = markOf(shown, scheduledPost, status);
   const origin = shown.feedback === null ? 'From your brief' : `"${shown.feedback}"`;
 
   return (
@@ -57,7 +62,7 @@ export function VersionPager({
         <div className="flex min-w-0 flex-col items-center gap-1.5">
           <ol className="flex flex-wrap items-center justify-center gap-0.5">
             {versions.map((version, i) => {
-              const state = markOf(version, scheduledPost);
+              const state = markOf(version, scheduledPost, status);
               const label = state
                 ? `Version ${version.number}, ${STATUS_LABEL[state]}`
                 : `Version ${version.number}`;
