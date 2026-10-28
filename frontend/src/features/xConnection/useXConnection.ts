@@ -45,7 +45,7 @@ export function useXConnection() {
     try {
       redirectTo(await xConnectionService.startAuthorization());
     } catch (e) {
-      fail(e, "Couldn't start connecting X. Please try again.");
+      fail(e, "Couldn't start connecting X. Try again.");
       setBusy(false);
     }
   }, [fail]);
@@ -58,7 +58,7 @@ export function useXConnection() {
       setConnection(null);
       track('x_disconnected');
     } catch (e) {
-      fail(e, "Couldn't disconnect X. Please try again.");
+      fail(e, "Couldn't disconnect X. Try again.");
     } finally {
       setBusy(false);
     }

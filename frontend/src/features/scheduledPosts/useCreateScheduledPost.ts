@@ -69,8 +69,8 @@ export function useCreateScheduledPost() {
           errorMessage(
             e,
             request.postNow
-              ? "Couldn't post to X. Please try again."
-              : "Couldn't schedule the post. Please try again.",
+              ? "Couldn't post to X. Try again."
+              : "Couldn't schedule the post. Try again.",
           ),
         );
         // A 409 may mean the X connection changed elsewhere: show its current state.

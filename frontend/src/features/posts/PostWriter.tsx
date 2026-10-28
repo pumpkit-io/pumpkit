@@ -52,7 +52,7 @@ function useStartPost() {
         if (mounted.current) navigate(`/posts/${post.id}`);
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
-        fail(e, "Couldn't write the Post. Please try again.");
+        fail(e, "Couldn't write the Post. Try again.");
       } finally {
         if (mounted.current) setIsWriting(false);
       }

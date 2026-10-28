@@ -71,7 +71,7 @@ export function usePost(postId: string) {
         return true;
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'feedback' });
-        fail(e, "Couldn't write the next Version. Please try again.");
+        fail(e, "Couldn't write the next Version. Try again.");
         return false;
       } finally {
         setIsWriting(false);

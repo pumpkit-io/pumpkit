@@ -52,7 +52,7 @@ function CopyRow({ label, value, copyLabel }: { label: string; value: string; co
       </div>
       {state === 'failed' && (
         <p className="font-sans text-xs text-muted-foreground">
-          Couldn’t copy. Select the text and copy it yourself.
+          Couldn&apos;t copy. Select the text and copy it yourself.
         </p>
       )}
     </div>
@@ -186,7 +186,7 @@ export function ApiKeysSection() {
       setName('');
     } catch (err) {
       if (errorStatus(err) === 403) setNeedsSubscription(true);
-      else setError(errorMessage(err, 'Couldn’t create the key. Try again.'));
+      else setError(errorMessage(err, "Couldn't create the key. Try again."));
     } finally {
       setCreating(false);
     }
@@ -200,7 +200,7 @@ export function ApiKeysSection() {
       setKeys((current) => (current ?? []).filter((k) => k.id !== id));
       if (created?.apiKey.id === id) setCreated(null);
     } catch (err) {
-      setError(errorMessage(err, 'Couldn’t revoke the key. Try again.'));
+      setError(errorMessage(err, "Couldn't revoke the key. Try again."));
     } finally {
       setRevokingId(null);
     }
@@ -241,7 +241,7 @@ export function ApiKeysSection() {
       {error && <ErrorBanner message={error} />}
 
       {loadFailed ? (
-        <ErrorBanner message="Couldn’t load your API keys. Reload the page to try again." />
+        <ErrorBanner message="Couldn't load your API keys. Reload the page to try again." />
       ) : keys === null ? (
         <p role="status" className="font-sans text-xs text-muted-foreground">
           Loading your API keys…

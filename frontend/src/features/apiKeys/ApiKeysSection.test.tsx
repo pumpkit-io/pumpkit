@@ -190,6 +190,6 @@ describe('ApiKeysSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText(/Couldn’t load your API keys/)).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn't load your API keys/)).toBeInTheDocument();
   });
 });

@@ -53,8 +53,8 @@ export function useRetryFailed(scheduledPost: ScheduledPost, versionId: string):
           errorMessage(
             e,
             when.postNow
-              ? "Couldn't post to X. Please try again."
-              : "Couldn't schedule the post. Please try again.",
+              ? "Couldn't post to X. Try again."
+              : "Couldn't schedule the post. Try again.",
           ),
         );
         if (errorStatus(e) === 409) void reloadXConnection();

@@ -46,7 +46,7 @@ export function SubscriptionCard({
       track('billing_portal_opened');
       redirectTo(url);
     } catch (e) {
-      setError(errorMessage(e, 'Could not open the billing portal.'));
+      setError(errorMessage(e, "Couldn't open the billing portal. Try again."));
     }
   };
 

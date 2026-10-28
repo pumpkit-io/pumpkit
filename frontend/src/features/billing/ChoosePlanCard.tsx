@@ -33,7 +33,7 @@ export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: st
         await billingService.startSubscriptionCheckout(planKey, data.termsVersion, acceptance),
       );
     } catch (e) {
-      const message = errorMessage(e, 'Could not start checkout. Please try again.');
+      const message = errorMessage(e, "Couldn't start checkout. Try again.");
       track('billing_checkout_redirect_failed', { error_message: message });
       setError(message);
       setPendingKey(null);

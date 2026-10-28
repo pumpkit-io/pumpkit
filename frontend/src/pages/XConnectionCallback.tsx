@@ -31,7 +31,7 @@ export function XConnectionCallback() {
       return;
     }
     if (!code || !state) {
-      back("X didn't finish connecting your account. Please try again.");
+      back("X didn't finish connecting your account. Try again.");
       return;
     }
     xConnectionService
@@ -40,7 +40,7 @@ export function XConnectionCallback() {
         track('x_connected');
         back(`Connected @${connection.handle}.`);
       })
-      .catch((e) => back(errorMessage(e, "Couldn't connect X. Please try again.")));
+      .catch((e) => back(errorMessage(e, "Couldn't connect X. Try again.")));
   }, [search, navigate]);
 
   return (
