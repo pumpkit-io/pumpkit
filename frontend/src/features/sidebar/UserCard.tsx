@@ -1,9 +1,8 @@
-import { MoreVertical } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInstance } from '@/features/instance/useInstance';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { useProfile } from '@/pages/layout/ProfileContext';
-import { UserMenu } from './UserMenu';
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -12,7 +11,7 @@ function initials(name: string): string {
   return (first + last).toUpperCase() || '•';
 }
 
-/** Who is signed in, which X account they post as and their Plan, with the user menu. */
+/** Who is signed in, which X account they post as and their Plan, as a link to Settings. */
 export function UserCard() {
   const profile = useProfile();
   const { connection } = useXConnectionContext();
@@ -29,13 +28,14 @@ export function UserCard() {
   );
 
   return (
-    <div
-      role="group"
-      aria-label="Your account"
-      className="flex h-16 shrink-0 items-center gap-3 border-t border-border px-3"
+    <Link
+      to="/settings"
+      aria-label={['Your account', display, ...details].join(', ')}
+      className="flex h-16 shrink-0 items-center gap-3 border-t border-border px-3 transition-colors hover:bg-[var(--hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
       <span
         data-avatar
+        aria-hidden
         className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-gradient-soft text-sm text-foreground ring-1 ring-inset ring-primary/25"
       >
         {avatarUrl ? (
@@ -64,17 +64,6 @@ export function UserCard() {
           </p>
         )}
       </div>
-      <UserMenu
-        trigger={
-          <button
-            type="button"
-            aria-label="User menu"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-        }
-      />
-    </div>
+    </Link>
   );
 }
