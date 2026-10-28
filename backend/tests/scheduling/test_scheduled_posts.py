@@ -456,7 +456,7 @@ async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
     ]
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [written("draft one"), {"post": "Version one."}]
+    fake_llm.replies = [written("sketch one"), {"post": "Version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     post = started.json()

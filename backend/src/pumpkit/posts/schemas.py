@@ -46,7 +46,7 @@ class TellResponse(BaseModel):
 
 
 class PartResponse(BaseModel):
-    """One Part of a Final."""
+    """One Part of a Version's text."""
 
     text: str
     # Counted by the backend the way the limit counts, which a browser's string length doesn't.
@@ -60,9 +60,9 @@ class VersionResponse(BaseModel):
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]
     format: Format
-    # The Final's Parts in order.
+    # The Version's text, one Part at a time, in order.
     parts: list[PartResponse]
-    # What the slop check found in any Part of the Final, for the User to judge.
+    # What the slop check found in any Part of the text, for the User to judge.
     tells: list[TellResponse]
 
 

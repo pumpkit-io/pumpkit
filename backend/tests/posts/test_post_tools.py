@@ -102,7 +102,7 @@ async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
 
 @pytest.fixture
 async def post_id(with_author, mcp, fake_llm) -> str:
-    """A Post of the User's with one Version, whose Final is "final 1"."""
+    """A Post of the User's with one Version, whose text is "final 1"."""
     fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
     return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
 

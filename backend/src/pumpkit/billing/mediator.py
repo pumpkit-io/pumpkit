@@ -61,7 +61,7 @@ def subscription_link() -> LinkToolResponse:
         )
     url = settings.billing_page_url()
     return LinkToolResponse(
-        message=f"Subscribe or manage your Subscription on the billing page: {url}", url=url
+        message=f"Subscribe or manage your Subscription on the Settings page: {url}", url=url
     )
 
 

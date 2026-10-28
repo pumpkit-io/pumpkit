@@ -32,7 +32,7 @@ async def connected(subscribed, fixed_clock, connect_x) -> None:
 
 @pytest.fixture
 async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post, whose Final is "The final, version one."."""
+    """The first Version of a new Post, whose text is "The final, version one."."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
@@ -42,7 +42,7 @@ async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
     ]
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [written("draft one"), {"post": "The final, version one."}]
+    fake_llm.replies = [written("sketch one"), {"post": "The final, version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     post = started.json()
@@ -76,7 +76,7 @@ THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
 
 @pytest.fixture
 async def thread_version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post started as a Thread, its Final the three THREAD_FINAL Parts."""
+    """The first Version of a new Post started as a Thread, its text the three THREAD_FINAL Parts."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
@@ -797,7 +797,7 @@ async def test_deleting_a_failed_scheduled_post_lets_its_post_be_scheduled_again
 
 
 async def _give_feedback(mcp, fake_llm, post_id: str) -> dict:
-    fake_llm.replies = [written("draft two"), {"post": "The final, version two."}]
+    fake_llm.replies = [written("sketch two"), {"post": "The final, version two."}]
     return await mcp.call_tool("give_feedback", post_id=post_id, feedback="punchier")
 
 

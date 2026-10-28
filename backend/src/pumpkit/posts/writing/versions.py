@@ -3,7 +3,7 @@ Writing a Version, the pumpkit-v6 way: the writing call (the sketch call for the
 the revision call after Feedback), which chooses and writes the Hook too, the scrub, then the
 humanizer call.
 
-The scrubbed writing-call text is the Sketch and the humanizer's text is the Final. Every call
+The scrubbed writing-call text is the Sketch and the humanizer's text is the Version's text. Every call
 gets the system prompt first and the corpus second, as in v6, so the per-call parts come after a
 prefix that stays the same across a Post's Versions.
 """
@@ -198,7 +198,7 @@ def revision_humanizer_messages(
     """
     The first Version's prefix in the new Format, then what keeps the humanizer from rewording
     sentences the Feedback left alone or undoing what it asked for. Earlier asks live on in the
-    previous Final, which keeps its own Format.
+    previous Version's text, which keeps its own Format.
     """
     return [
         *_humanizer_prefix(corpus, brief, format, char_limit),
@@ -218,7 +218,7 @@ def revision_messages(
 ) -> list[dict]:
     """
     The sketch call's conversation continued, under the new Format's prompt: the Brief, each
-    Final in its own Format as the model's answer after the Feedback that asked for it, then
+    Version's text in its own Format as the model's answer after the Feedback that asked for it, then
     the new Feedback. A Feedback that switched Format says so. Sketches stay out: the User never
     reacted to them.
     """

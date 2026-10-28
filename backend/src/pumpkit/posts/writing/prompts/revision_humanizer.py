@@ -2,7 +2,7 @@
 What the humanizer call is handed after Feedback, on top of what pumpkit-v6 sent it.
 
 Written for Pumpkit, not ported: these messages carry the rules so `HUMANIZER_PROMPT` stays v6's.
-Each text comes in its own Format, so after a switch the previous Final and the Sketch differ.
+Each text comes in its own Format, so after a switch the previous Version's text and the Sketch differ.
 """
 
 from pumpkit.posts.formats import Format, format_noun
@@ -36,8 +36,9 @@ def latest_feedback_message(feedback: str, previous: Format, format: Format) -> 
 
 def revised_sketch_message(previous: Format, format: Format, sketch_parts: list[str]) -> str:
     """
-    Punctuation alone doesn't count as a change: the scrub runs on the Sketch, not the Final, so
-    a sentence the User left alone can differ from the previous Final in a quote or a dash.
+    Punctuation alone doesn't count as a change: the scrub runs on the Sketch, not the Version's
+    text, so a sentence the User left alone can differ from the previous Version's text in a
+    quote or a dash.
     """
     noun = format_noun(format)
     return (
