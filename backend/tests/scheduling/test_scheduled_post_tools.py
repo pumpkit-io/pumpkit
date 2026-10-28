@@ -42,7 +42,7 @@ async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
     ]
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [written("draft one"), {"post": "The final, version one."}]
+    fake_llm.replies = [written("sketch one"), {"post": "The final, version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     post = started.json()
@@ -797,7 +797,7 @@ async def test_deleting_a_failed_scheduled_post_lets_its_post_be_scheduled_again
 
 
 async def _give_feedback(mcp, fake_llm, post_id: str) -> dict:
-    fake_llm.replies = [written("draft two"), {"post": "The final, version two."}]
+    fake_llm.replies = [written("sketch two"), {"post": "The final, version two."}]
     return await mcp.call_tool("give_feedback", post_id=post_id, feedback="punchier")
 
 
