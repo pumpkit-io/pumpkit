@@ -33,4 +33,64 @@ describe('postService', () => {
       },
     ]);
   });
+
+  it("reads a Post's status and its Scheduled post, with the Version it was copied from", async () => {
+    vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        id: 'post_01',
+        brief: 'ship',
+        versions: [VERSION],
+        status: 'failed',
+        scheduled_post: {
+          id: 'scheduled_post_01',
+          parts: [{ text: 'the final', live: true, x_post_url: 'https://x.com/i/web/status/1' }],
+          state: 'failed',
+          publish_at: '2026-10-12T07:00:00Z',
+          published_at: null,
+          x_post_url: null,
+          failed_reason: 'X refused it.',
+          source_version_id: 'version_attempt_01',
+          community: null,
+          share_with_followers: false,
+          created_at: '2026-10-10T12:00:00Z',
+        },
+      },
+    } as never);
+
+    const post = await postService.get('post_01');
+
+    expect(apiService.get).toHaveBeenCalledWith('/posts/post_01');
+    expect(post.status).toBe('failed');
+    expect(post.versions[0].parts).toEqual([{ text: 'the final', charCount: 9, charLimit: 280 }]);
+    expect(post.scheduledPost).toEqual({
+      id: 'scheduled_post_01',
+      parts: [{ text: 'the final', live: true, xPostUrl: 'https://x.com/i/web/status/1' }],
+      state: 'failed',
+      publishAt: '2026-10-12T07:00:00Z',
+      publishedAt: null,
+      xPostUrl: null,
+      failedReason: 'X refused it.',
+      sourceVersionId: 'version_attempt_01',
+      community: null,
+      shareWithFollowers: false,
+      createdAt: '2026-10-10T12:00:00Z',
+    });
+  });
+
+  it('reads a Draft with no Scheduled post', async () => {
+    vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        id: 'post_01',
+        brief: 'ship',
+        versions: [VERSION],
+        status: 'draft',
+        scheduled_post: null,
+      },
+    } as never);
+
+    const post = await postService.get('post_01');
+
+    expect(post.scheduledPost).toBeNull();
+    expect(post.status).toBe('draft');
+  });
 });

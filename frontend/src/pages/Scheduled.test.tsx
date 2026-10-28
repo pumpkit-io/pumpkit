@@ -99,6 +99,7 @@ const PUBLISHED: ScheduledPost = {
   publishedAt: '2026-10-10T12:00:14Z',
   xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
   failedReason: null,
+  sourceVersionId: 'version_attempt_01',
   community: null,
   shareWithFollowers: false,
   createdAt: '2026-10-10T12:00:14Z',
@@ -112,6 +113,7 @@ const MONDAY: ScheduledPost = {
   publishedAt: null,
   xPostUrl: null,
   failedReason: null,
+  sourceVersionId: 'version_attempt_01',
   community: null,
   shareWithFollowers: false,
   createdAt: '2026-10-10T12:00:00Z',
@@ -130,6 +132,7 @@ const FAILED: ScheduledPost = {
   publishedAt: null,
   xPostUrl: null,
   failedReason: 'X refused the post: You are not allowed to create a Tweet with duplicate content.',
+  sourceVersionId: 'version_attempt_01',
   community: null,
   shareWithFollowers: false,
   createdAt: '2026-10-10T12:01:03Z',
@@ -399,6 +402,7 @@ describe('Scheduled', () => {
         THREAD.parts[1],
       ],
       failedReason: 'X refused Part 2: Duplicate content.',
+      sourceVersionId: 'version_attempt_01',
     };
 
     it('marks the live Parts of a Thread that failed partway', async () => {
