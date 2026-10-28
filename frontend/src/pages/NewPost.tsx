@@ -1,14 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useBilling } from '@/features/billing/useBilling';
-import { InspirationAuthorsPanel } from '@/features/inspirationAuthors/InspirationAuthorsPanel';
-import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
+import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { PostWriter } from '@/features/posts/PostWriter';
 import { Topbar } from '@/features/topbar/Topbar';
 import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
 
-interface HomeLocationState {
+interface NewPostLocationState {
   checkoutStatus?: 'success' | 'cancelled';
   openBilling?: boolean;
 }
@@ -22,7 +21,7 @@ function useBillingReturn() {
 
   useEffect(() => {
     if (consumedRef.current) return;
-    const state = (location.state ?? {}) as HomeLocationState;
+    const state = (location.state ?? {}) as NewPostLocationState;
     if (!state.checkoutStatus && !state.openBilling) return;
     consumedRef.current = true;
     navigate('.', { replace: true, state: null });
@@ -43,19 +42,16 @@ function useBillingReturn() {
   }, [location.state, navigate, billing]);
 }
 
-/** Rendered inside AppLayout, which holds the shell and the Post. */
-export function Home() {
+/** Rendered inside AppLayout, which holds the shell, the Persona and the Post. */
+export function NewPost() {
   useBillingReturn();
 
   return (
     <>
-      <Topbar title="Home" />
+      <Topbar title="New post" actions={<PersonaChip />} />
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-2xl space-y-10 px-4 py-8 sm:px-6">
-          <InspirationAuthorsProvider>
-            <InspirationAuthorsPanel />
-            <PostWriter />
-          </InspirationAuthorsProvider>
+        <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
+          <PostWriter />
         </div>
       </div>
     </>

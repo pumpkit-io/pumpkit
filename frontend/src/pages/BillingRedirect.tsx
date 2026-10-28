@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 
 type BillingRedirectStatus = 'success' | 'cancelled';
 
-/** Stripe return URLs: hand the outcome to /home via router state, then go there. */
+/** Stripe return URLs: hand the outcome to New post via router state, then go there. */
 function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
   const navigate = useNavigate();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      navigate('/home', { replace: true, state: { checkoutStatus: status } });
+      navigate('/new', { replace: true, state: { checkoutStatus: status } });
     }, 150);
     return () => window.clearTimeout(timeout);
   }, [navigate, status]);

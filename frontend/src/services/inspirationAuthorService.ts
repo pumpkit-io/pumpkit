@@ -1,5 +1,8 @@
 import { apiService } from './apiService';
 
+/** The places in a Persona, as `authors/mediator.py` enforces with MAX_INSPIRATION_AUTHORS. */
+export const MAX_INSPIRATION_AUTHORS = 3;
+
 /** An X account on the User's list whose posts set the style of their posts. */
 export interface InspirationAuthor {
   /** Normalised: no @, lowercase. */

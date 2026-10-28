@@ -12,7 +12,7 @@ interface SignInCallbackOptions {
 }
 
 /**
- * Starts the Session from the URL fragment, then goes to home or to sign-in with an error.
+ * Starts the Session from the URL fragment, then goes to New post or to sign-in with an error.
  * Both navigations replace the entry so the access-token URL leaves browser history.
  */
 export function useSignInCallback({ errorCodeFor, onSucceeded, onFailed }: SignInCallbackOptions) {
@@ -27,7 +27,7 @@ export function useSignInCallback({ errorCodeFor, onSucceeded, onFailed }: SignI
     const result = session.startFromFragment(hash);
     if (result.ok) {
       onSucceeded();
-      navigate('/home', { replace: true });
+      navigate('/new', { replace: true });
       return;
     }
     const errorCode = errorCodeFor(result.reason);
