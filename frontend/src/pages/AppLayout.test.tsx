@@ -220,6 +220,14 @@ describe('The signed-in shell', () => {
       expect(await card.findByText('Pumpkit Pro')).toBeInTheDocument();
     });
 
+    it('says "Subscribed" in the user card when the Plan has no name to show', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      renderSignedIn('/new');
+
+      const card = within(await screen.findByRole('link', { name: /^Your account/ }));
+      expect(await card.findByText('Subscribed')).toBeInTheDocument();
+    });
+
     it('says "No Subscription" in the user card of a User who is not Subscribed', async () => {
       renderSignedIn('/new');
 

@@ -22,7 +22,11 @@ export function UserCard() {
     : 'Guest';
   const avatarUrl = profile?.avatarUrl ?? null;
   const plan =
-    !sells_plans || subscribed === null ? null : subscribed ? planName : 'No Subscription';
+    !sells_plans || subscribed === null
+      ? null
+      : subscribed
+        ? (planName ?? 'Subscribed')
+        : 'No Subscription';
   const details = [connection ? `@${connection.handle}` : null, plan].filter(
     (detail): detail is string => detail !== null,
   );
