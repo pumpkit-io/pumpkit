@@ -37,13 +37,13 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
         assert tools[name]["annotations"]["readOnlyHint"] is True
     assert tools["give_feedback"]["inputSchema"]["required"] == ["post_id", "feedback"]
     assert tools["give_feedback"]["inputSchema"]["properties"]["format"]["default"] is None
-    assert "draft" not in json.dumps(tools["get_post"]["outputSchema"])
+    assert "sketch" not in json.dumps(tools["get_post"]["outputSchema"])
 
 
 async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
     with_author, mcp, fake_llm
 ):
-    fake_llm.replies = [written("the draft"), {"post": "the final"}]
+    fake_llm.replies = [written("the sketch"), {"post": "the final"}]
 
     result = await mcp.call_tool("start_post", brief="  ship small things ")
 
@@ -67,7 +67,7 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
 
 async def test_starting_a_post_as_a_thread_returns_its_parts(with_author, mcp, fake_llm):
     fake_llm.replies = [
-        written_thread(["draft one", "draft two"]),
+        written_thread(["sketch one", "sketch two"]),
         {"parts": ["final one", "final two 🚀"]},
     ]
 
@@ -103,14 +103,14 @@ async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
 @pytest.fixture
 async def post_id(with_author, mcp, fake_llm) -> str:
     """A Post of the User's with one Version, whose Final is "final 1"."""
-    fake_llm.replies = [written("draft 1"), {"post": "final 1"}]
+    fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
     return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
 
 
 async def test_giving_feedback_returns_the_next_versions_final_and_character_count(
     post_id, mcp, fake_llm
 ):
-    fake_llm.replies = [written("draft 2"), {"post": "shorter final"}]
+    fake_llm.replies = [written("sketch 2"), {"post": "shorter final"}]
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback=" shorter\n")
 
@@ -161,7 +161,7 @@ async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_t
     db, post_id, mcp, fake_llm
 ):
     reasoning = "The feedback asks to open with a rule, so my_rule fits."
-    fake_llm.replies = [written("My rule.\n\ndraft 2", "my_rule", reasoning), {"post": "final 2"}]
+    fake_llm.replies = [written("My rule.\n\nsketch 2", "my_rule", reasoning), {"post": "final 2"}]
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="open with a rule")
 
@@ -170,8 +170,8 @@ async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_t
         select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
     )
     assert version is not None
-    assert (version.draft_parts, version.hook_name, version.hook_reasoning) == (
-        ["My rule.\n\ndraft 2"],
+    assert (version.sketch_parts, version.hook_name, version.hook_reasoning) == (
+        ["My rule.\n\nsketch 2"],
         "my_rule",
         reasoning,
     )
@@ -180,7 +180,7 @@ async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_t
 async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post_id, mcp, fake_llm):
     fake_llm.replies = [LLMError("provider down")]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
-    fake_llm.replies = [written("draft 2"), {"post": "final two"}]
+    fake_llm.replies = [written("sketch 2"), {"post": "final two"}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="warmer")
 
     result = await mcp.call_tool("get_post", post_id=post_id)
@@ -201,7 +201,7 @@ async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post
             [{"text": "final two", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
         ),
     ]
-    assert "draft_parts" not in post["versions"][0]
+    assert set(post["versions"][0]) == {"id", "number", "feedback", "format", "parts"}
 
 
 @pytest.fixture
@@ -231,10 +231,10 @@ async def test_listing_posts_pages_through_the_users_posts_newest_first(
     with_author, mcp, fake_llm, fixed_clock, bobs_post_id
 ):
     for brief in ("first", "second", "third"):
-        fake_llm.replies = [written("draft"), {"post": "final"}]
+        fake_llm.replies = [written("sketch"), {"post": "final"}]
         await mcp.call_tool("start_post", brief=brief)
         fixed_clock.advance(timedelta(minutes=1))
-    fake_llm.replies = [written("draft"), {"post": "final"}]
+    fake_llm.replies = [written("sketch"), {"post": "final"}]
     third_id = (await mcp.call_tool("list_posts"))["structuredContent"]["data"][0]["id"]
     await mcp.call_tool("give_feedback", post_id=third_id, feedback="shorter")
 
@@ -325,7 +325,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
         )
     await db.commit()
     fixed_clock.advance(timedelta(minutes=10))
-    fake_llm.replies = [written("draft"), {"post": "final"}]
+    fake_llm.replies = [written("sketch"), {"post": "final"}]
     assert (await client.post("/api/v1/posts", json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 

@@ -56,7 +56,7 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 | Variable | Meaning |
 | --- | --- |
 | `LLM_BASE_URL` | Any OpenAI-compatible chat completions endpoint, such as `https://api.openai.com/v1` or a local Ollama at `http://localhost:11434/v1`. Defaults to OpenRouter (`https://openrouter.ai/api/v1`). Prompt cache hints are sent only to OpenRouter. |
-| `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` | The model for each writing call: the draft call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
+| `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` | The model for each writing call: the sketch call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
 
 ### SMTP
 

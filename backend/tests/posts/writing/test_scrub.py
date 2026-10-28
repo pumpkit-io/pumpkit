@@ -1,4 +1,4 @@
-"""The deterministic clean-up between the draft and the rewrite.
+"""The deterministic clean-up between the sketch and the rewrite.
 
 Every case is one character and the one string it must become, plus the
 negatives: text a person typed must come out exactly as it went in.

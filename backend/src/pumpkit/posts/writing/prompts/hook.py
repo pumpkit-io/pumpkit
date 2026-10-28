@@ -1,5 +1,5 @@
 """
-The hook library of the draft and revision calls' system prompt. Written for Pumpkit, not ported:
+The hook library of the sketch and revision calls' system prompt. Written for Pumpkit, not ported:
 the library is curated from the User's research on X hooks, keeping only what fits a single post
 or a long post with no image, and leaving out question hooks, which the engagement-bait rule bans.
 

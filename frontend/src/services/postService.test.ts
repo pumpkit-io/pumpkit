@@ -7,7 +7,6 @@ const VERSION = {
   number: 1,
   feedback: null,
   format: 'post',
-  draft_parts: ['the draft'],
   parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
   tells: [{ name: 'em_dash', description: 'em dash' }],
 };
@@ -15,7 +14,7 @@ const VERSION = {
 describe('postService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("reads a Version's Format and the Parts of its Draft and Final", async () => {
+  it("reads a Version's Format and the Parts of its Final", async () => {
     vi.spyOn(apiService, 'post').mockResolvedValue({
       data: { id: 'post_01', brief: 'ship', versions: [VERSION] },
     } as never);
@@ -29,7 +28,6 @@ describe('postService', () => {
         number: 1,
         feedback: null,
         format: 'post',
-        draftParts: ['the draft'],
         parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
         tells: [{ name: 'em_dash', description: 'em dash' }],
       },

@@ -24,7 +24,7 @@ export interface Part {
   charLimit: number;
 }
 
-/** One round of a Post's text: the Draft Pumpkit wrote and the Final meant for X. */
+/** One round of a Post's text, the Final meant for X. */
 export interface Version {
   /** What a Scheduled post made from this Version's Final records as its source. */
   id: string;
@@ -33,7 +33,6 @@ export interface Version {
   feedback: string | null;
   format: Format;
   /** A single X post has one Part. */
-  draftParts: string[];
   parts: Part[];
   /** Found in any Part of the Final. */
   tells: Tell[];
@@ -50,7 +49,6 @@ interface VersionApi {
   number: number;
   feedback: string | null;
   format: Format;
-  draft_parts: string[];
   parts: { text: string; char_count: number; char_limit: number }[];
   tells: Tell[];
 }
@@ -66,7 +64,6 @@ const toVersion = (v: VersionApi): Version => ({
   number: v.number,
   feedback: v.feedback,
   format: v.format,
-  draftParts: v.draft_parts,
   parts: v.parts.map((p) => ({ text: p.text, charCount: p.char_count, charLimit: p.char_limit })),
   tells: v.tells,
 });

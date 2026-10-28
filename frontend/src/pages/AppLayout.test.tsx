@@ -86,7 +86,6 @@ const POST: Post = {
       number: 1,
       feedback: null,
       format: 'post',
-      draftParts: ['the draft text'],
       parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],
       tells: [],
     },

@@ -157,7 +157,7 @@ backend-1  | [2026-10-12 08:24:55] [mailer.py:send_magic_link:130] [WARNING] Mag
 
 Open that URL in the same browser within 15 minutes. **Check:** the browser lands on `PUBLIC_URL/new`, the **New post** page, which shows your address in the sidebar.
 
-To write a first Post, add an X handle on the **Persona** page, then type a Brief on **New post** and choose **Write the Post**. **Check:** after a minute or two a Version appears with its **Final** and its **Draft**.
+To write a first Post, add an X handle on the **Persona** page, then type a Brief on **New post** and choose **Write the Post**. **Check:** after a minute or two a Version appears.
 
 ### 7. Configure SMTP before inviting anyone
 
@@ -173,7 +173,7 @@ Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](ht
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
 - Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls.
-- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the three models it serves: `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
+- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the three models it serves: `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).
 

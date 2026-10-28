@@ -9,10 +9,10 @@ from sqlalchemy.orm import selectinload
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
-from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
+from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
+from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written, written_thread
 
@@ -40,11 +40,11 @@ async def _start(client, fake_llm, format: str) -> str:
     """A Post whose first Version's Final is "final 1", or the Thread "final a", "final b"."""
     if format == "thread":
         fake_llm.replies = [
-            written_thread(["draft a", "draft b"]),
+            written_thread(["sketch a", "sketch b"]),
             {"parts": ["final a", "final b"]},
         ]
     else:
-        fake_llm.replies = [written("draft 1"), {"post": "final 1"}]
+        fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things", "format": format})
     assert response.status_code == 201, response.text
     fake_llm.calls.clear()
@@ -97,7 +97,7 @@ async def test_feedback_with_the_post_format_turns_a_thread_into_a_single_post(
 @pytest.mark.parametrize(
     ("format", "replies"),
     [
-        ("post", [written("draft 2"), {"post": "final 2"}]),
+        ("post", [written("sketch 2"), {"post": "final 2"}]),
         ("thread", [written_thread(["c", "d"]), {"parts": ["final c", "final d"]}]),
     ],
 )
@@ -198,7 +198,7 @@ async def test_the_revision_call_renders_each_final_in_its_own_format_and_states
 
     revision_call = fake_llm.calls[0]
     assert revision_call.messages == [
-        _system(draft_post_prompt(X_POST_MAX_CHARS)),
+        _system(sketch_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
@@ -233,7 +233,7 @@ async def test_a_revision_that_keeps_a_thread_is_written_under_the_thread_prompt
 
     await _feedback(client, post_id, "warmer")
 
-    assert fake_llm.calls[0].messages[0] == _system(draft_thread_prompt(X_POST_MAX_CHARS))
+    assert fake_llm.calls[0].messages[0] == _system(sketch_thread_prompt(X_POST_MAX_CHARS))
     assert fake_llm.calls[0].messages[3] == _assistant(THREAD_FINAL)
 
 
