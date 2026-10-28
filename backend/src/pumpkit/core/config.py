@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # Optional: when unset, pumpkit.posts.llm_client raises LLMNotConfiguredError on use, not at boot.
     LLM_API_KEY: Optional[str] = None
     # The models the writing prompts were tuned against; each call can be re-pointed on its own.
-    LLM_DRAFTING_MODEL: str = "openai/gpt-5.6-luna"
+    LLM_SKETCHING_MODEL: str = "openai/gpt-5.6-luna"
     LLM_HUMANIZING_MODEL: str = "openai/gpt-5.6-luna"
     LLM_REVISING_MODEL: str = "openai/gpt-5.6-luna"
 
