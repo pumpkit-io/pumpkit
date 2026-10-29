@@ -49,7 +49,7 @@ I post pubblici degli Inspiration author appartengono ai rispettivi autori. Pump
 
 Pumpkit scrive con modelli linguistici di intelligenza artificiale. Il loro output può essere inesatto, incompleto o non aggiornato, e può somigliare a testi scritti da altre persone, compresi gli Inspiration author che hai scelto. Un altro Utente può ricevere un testo simile.
 
-Leggi il testo di ogni Versione prima di pubblicarlo. Sei responsabile di ciò che pubblichi, compreso ogni Scheduled post che Pumpkit pubblica per tuo conto, e di assicurarti che sia corretto e non violi i diritti di nessuno.
+Leggi il testo di una Versione prima di pubblicarlo. Sei responsabile di ciò che pubblichi, compreso ogni Scheduled post che Pumpkit pubblica per tuo conto, e di assicurarti che sia corretto e non violi i diritti di nessuno.
 
 ## 7. Pumpkit e X {#x}
 

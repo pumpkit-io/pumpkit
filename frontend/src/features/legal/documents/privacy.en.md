@@ -38,7 +38,7 @@ Each category below says what the data is, what the Operator uses it for, and th
 
 ### Briefs, Feedback and Versions {#data-writing}
 
-- **What:** the Briefs and Feedback you write, and every Version Pumpkit writes from them, including the Sketch it starts from and its text.
+- **What:** the Briefs and Feedback you write, and every Version Pumpkit writes from them, including the Sketch it starts from and the Version's text.
 - **Why:** to write your Posts and revise them.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 

@@ -38,7 +38,7 @@ Per ciascuna categoria qui sotto sono indicati di quali dati si tratta, per cosa
 
 ### Brief, Feedback e Versioni {#data-writing}
 
-- **Quali dati:** i Brief e i Feedback che scrivi e ogni Versione che Pumpkit scrive a partire da essi, compresi lo Sketch da cui parte e il relativo testo.
+- **Quali dati:** i Brief e i Feedback che scrivi e ogni Versione che Pumpkit scrive a partire da essi, compresi lo Sketch da cui parte e il testo della Versione.
 - **Perché:** per scrivere i tuoi Post e rivederli.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 

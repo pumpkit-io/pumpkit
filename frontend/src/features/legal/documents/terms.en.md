@@ -49,7 +49,7 @@ The public posts of Inspiration authors belong to their authors. Pumpkit uses th
 
 Pumpkit writes with AI language models. Their output can be inaccurate, incomplete or out of date, and it can resemble text written by other people, including the Inspiration authors you picked. Another User may receive similar text.
 
-Read the text of every Version before you publish it. You are responsible for what you publish, including each Scheduled post Pumpkit publishes on your behalf, and for making sure it is accurate and does not infringe anyone's rights.
+Read a Version's text before you publish it. You are responsible for what you publish, including each Scheduled post Pumpkit publishes on your behalf, and for making sure it is accurate and does not infringe anyone's rights.
 
 ## 7. Pumpkit and X {#x}
 
