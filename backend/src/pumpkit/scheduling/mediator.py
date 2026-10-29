@@ -18,10 +18,10 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
-from pumpkit.posts.formats import Format, format_of
+from pumpkit.posts.formats import Format, format_of, part_name
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import Post
-from pumpkit.posts.schemas import VersionResponse
+from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
@@ -31,7 +31,12 @@ from pumpkit.scheduling.models import (
     SCHEDULED,
     ScheduledPost,
 )
-from pumpkit.scheduling.post_status import PostStatus, check_takes_feedback, post_status
+from pumpkit.scheduling.post_status import (
+    PostStatus,
+    check_takes_feedback,
+    check_text_changes,
+    post_status,
+)
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import (
     KeepDestination,
@@ -217,10 +222,18 @@ def _already_scheduled() -> ConflictError:
 
 
 def _text_of(post: Post) -> list[str]:
-    """The Parts of the Post's Text, which a Scheduled post copies (ADR 0016)."""
+    """
+    The Parts of the Post's Text, which a Scheduled post copies (ADR 0016), trimmed as typed
+    Parts are. The User may have left a Part blank mid-edit.
+    """
     if not post.text_parts:
         raise ConflictError("This Post has no text to post. Start a new Post.")
-    return list(post.text_parts)
+    parts = [part.strip() for part in post.text_parts]
+    for number, part in enumerate(parts, start=1):
+        if not part:
+            name = part_name(number, len(parts))
+            raise rules.RuleBroken(f"Write {name} first." if name else "Write the post first.")
+    return parts
 
 
 async def _post_now(
@@ -485,6 +498,25 @@ async def give_feedback(
     )
     await db.commit()
     return version_writing.version_response(version, next_version.char_limit)
+
+
+async def edit_text(db: AsyncSession, user: User, post_id: str, parts: list[str]) -> TextResponse:
+    """
+    Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and saving the
+    same Parts again changes nothing, so the web app can retry a save.
+    """
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    if scheduled_post is not None:
+        live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
+        rules.check_text_keeps_live_parts(live_count, post.text_parts or [], parts)
+    posts_service.edit_text(post, parts)
+    await db.commit()
+    char_limit = await version_writing.char_limit_for(db, user_id=user.id)
+    text = version_writing.text_response(post, char_limit)
+    assert text is not None
+    return text
 
 
 async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:

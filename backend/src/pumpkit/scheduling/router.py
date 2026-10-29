@@ -12,7 +12,7 @@ from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import FeedbackRequest, VersionResponse
+from pumpkit.posts.schemas import FeedbackRequest, TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -33,6 +33,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostUpdateRequest,
+    TextEditRequest,
     XConnectionResponse,
 )
 from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
@@ -242,4 +243,22 @@ async def give_feedback(
         feedback=feedback_request.feedback,
         format=feedback_request.format,
         now=clock(),
+    )
+
+
+@posts_router.put(
+    "/posts/{post_id}/text", response_model=TextResponse, status_code=status.HTTP_200_OK
+)
+async def edit_text(
+    post_id: str,
+    edit_request: TextEditRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> TextResponse:
+    """
+    Saves the User's edit of the Post's Text, every Part in order. Idempotent, so the web app
+    retries a failed save as it is. A Scheduled or Published Post is refused.
+    """
+    return await mediator.edit_text(
+        db=db, user=current_user, post_id=post_id, parts=edit_request.parts
     )

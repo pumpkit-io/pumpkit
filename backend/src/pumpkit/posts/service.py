@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.models import AuthorPost, InspirationAuthor
+from pumpkit.core.errors import ConflictError
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import Format
 from pumpkit.posts.models import (
@@ -129,6 +130,30 @@ def set_text_from_version(post: Post, version: VersionAttempt) -> None:
     post.text_parts = list(version.parts or [])
     post.text_version_number = version.version_number
     post.text_edited = False
+
+
+class TextShapeKept(ConflictError):
+    pass
+
+
+def edit_text(post: Post, parts: list[str]) -> None:
+    """
+    Replace the Text's Parts with the User's, as typed. The Format and the number of Parts stay,
+    since only Feedback changes them, and the Text reads as edited while it differs from its
+    Version. Not flushed.
+    """
+    current = post.text_parts
+    if current is None:
+        raise ConflictError("This Post has no Text to edit. Start a new Post.")
+    if len(parts) != len(current):
+        raise TextShapeKept(
+            f"Editing keeps the Text's {len(current)} Parts. Give Feedback to change its shape."
+            if len(current) > 1
+            else "Editing keeps the Text a single post. Give Feedback to make it a Thread."
+        )
+    version = next((a for a in post.attempts if a.version_number == post.text_version_number), None)
+    post.text_parts = list(parts)
+    post.text_edited = version is None or version.parts != parts
 
 
 async def record_failed_attempt(
