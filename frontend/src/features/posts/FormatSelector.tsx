@@ -11,21 +11,31 @@ interface FormatSelectorProps {
   value: Format;
   onChange: (format: Format) => void;
   disabled?: boolean;
+  /** Names the toggle "Format" for screen readers only, where it sits inside a composer. */
+  hideLabel?: boolean;
 }
 
 /** Single post or Thread, as two radios drawn as one segmented control. */
-export function FormatSelector({ value, onChange, disabled = false }: FormatSelectorProps) {
+export function FormatSelector({
+  value,
+  onChange,
+  disabled = false,
+  hideLabel = false,
+}: FormatSelectorProps) {
   const name = useId();
   const labelId = useId();
 
   return (
-    <div className="space-y-1.5">
-      <p id={labelId} className="font-sans text-sm font-medium text-foreground">
-        Format
-      </p>
+    <div className={cn(!hideLabel && 'space-y-1.5')}>
+      {!hideLabel && (
+        <p id={labelId} className="font-sans text-sm font-medium text-foreground">
+          Format
+        </p>
+      )}
       <div
         role="radiogroup"
-        aria-labelledby={labelId}
+        aria-label={hideLabel ? 'Format' : undefined}
+        aria-labelledby={hideLabel ? undefined : labelId}
         className="inline-flex rounded-lg bg-muted p-0.5"
       >
         {OPTIONS.map((option) => (

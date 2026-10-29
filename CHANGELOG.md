@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Changed
+
+- New post is a composer: one line, a box to ramble in with the Format toggle inside it, and a send arrow. ⌘Enter (Ctrl+Enter) writes the Post, and Enter adds a newline.
+
 ## [0.2.0] - 2026-10-29
 
 ### Added
