@@ -10,10 +10,10 @@ import { useNewPost } from './useNewPost';
 import { useSidebar } from './useSidebar';
 
 const ROW = cn(
-  'group flex h-10 items-center gap-3 rounded-lg px-3 font-sans text-sm text-muted-foreground transition-colors',
+  'group flex h-9 items-center gap-3 rounded-lg border border-transparent px-3 font-sans text-sm text-muted-foreground transition-colors',
   'hover:bg-[var(--hover)] hover:text-foreground',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-  'aria-[current=page]:bg-[var(--hover)] aria-[current=page]:font-medium aria-[current=page]:text-foreground',
+  'aria-[current=page]:border-border aria-[current=page]:bg-card aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:shadow-raised',
 );
 
 /** "n/3" beside Persona, in the accent while the Persona is empty since nothing can be written yet. */
@@ -59,12 +59,12 @@ export function Sidebar() {
   const failed = usePostCounts().counts?.failed ?? 0;
 
   return (
-    <div className="flex h-full w-full flex-col bg-card">
-      <div className="flex h-14 shrink-0 items-center px-4">
+    <div className="flex h-full w-full flex-col bg-background">
+      <div className="flex h-16 shrink-0 items-center px-5">
         <Brand size="sm" />
       </div>
 
-      <nav aria-label="Main" className="flex flex-col gap-0.5 px-2 pt-2">
+      <nav aria-label="Main" className="flex flex-col gap-1 px-3 pt-1">
         {SIDEBAR_PAGES.map(({ path, label, icon: Icon }) => {
           const isPersona = path === '/persona';
           return (
@@ -81,7 +81,10 @@ export function Sidebar() {
                 setMobileOpen(false);
               }}
             >
-              <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
+              <Icon
+                className="h-[18px] w-[18px] shrink-0 group-aria-[current=page]:text-primary"
+                aria-hidden
+              />
               <span className="truncate">{label}</span>
               {isPersona && personaCount !== null && <PersonaCount count={personaCount} />}
               {path === '/posts' && failed > 0 && <FailedCount count={failed} />}

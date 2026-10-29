@@ -26,7 +26,7 @@ export function FormatSelector({ value, onChange, disabled = false }: FormatSele
       <div
         role="radiogroup"
         aria-labelledby={labelId}
-        className="inline-flex rounded-md border border-border bg-muted/50 p-0.5"
+        className="inline-flex rounded-lg bg-muted p-0.5"
       >
         {OPTIONS.map((option) => (
           <label
@@ -34,7 +34,7 @@ export function FormatSelector({ value, onChange, disabled = false }: FormatSele
             className={cn(
               'cursor-pointer rounded-sm px-3 py-1.5 font-sans text-sm transition-colors motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
               value === option.format
-                ? 'bg-background font-medium text-foreground shadow-sm'
+                ? 'bg-card font-medium text-foreground shadow-raised'
                 : 'text-muted-foreground hover:text-foreground',
               disabled && 'cursor-not-allowed opacity-50',
             )}

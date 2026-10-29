@@ -24,13 +24,6 @@ const config = {
           'sans-serif',
         ],
         mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-        wordmark: [
-          '"Google Sans Code Variable"',
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'monospace',
-        ],
       },
       keyframes: {
         'accordion-down': {
@@ -86,7 +79,10 @@ const config = {
       backgroundImage: {
         'primary-gradient': 'var(--primary-gradient)',
         'primary-gradient-soft': 'var(--primary-gradient-soft)',
-        'canvas-radial': 'var(--canvas-radial)',
+      },
+      boxShadow: {
+        raised: 'var(--shadow-raised)',
+        panel: 'var(--shadow-panel)',
       },
       borderRadius: {
         lg: 'var(--radius)',

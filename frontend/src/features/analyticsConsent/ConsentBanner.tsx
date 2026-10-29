@@ -40,7 +40,7 @@ export function ConsentBanner() {
       ref={regionRef}
       tabIndex={-1}
       aria-label="Analytics consent"
-      className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-xl rounded-lg border border-border bg-background p-5 text-foreground shadow-lg focus:outline-none sm:inset-x-6"
+      className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-xl rounded-lg border border-border bg-popover p-5 text-foreground shadow-lg focus:outline-none sm:inset-x-6"
     >
       <h2 className="text-sm font-semibold">Allow analytics?</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">

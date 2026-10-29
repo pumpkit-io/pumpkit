@@ -15,7 +15,7 @@ export function AppearanceCard() {
 
   return (
     <SettingsCard title="Appearance" description="System follows your device's setting.">
-      <fieldset className="inline-flex rounded-lg border border-border bg-background p-1">
+      <fieldset className="inline-flex rounded-lg bg-muted p-1">
         <legend className="sr-only">Theme</legend>
         {CHOICES.map(({ value, label }) => (
           <label
