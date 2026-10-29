@@ -13,7 +13,9 @@ export function DraftDock({
   textVersion,
   parts,
   origin,
+  tools,
   feedback,
+  restoreError,
   onScheduled,
 }: {
   postId: string;
@@ -21,7 +23,9 @@ export function DraftDock({
   textVersion: Version;
   parts: ShownPart[];
   origin: ReactNode;
+  tools?: ReactNode;
   feedback: FeedbackSending;
+  restoreError?: string | null;
   onScheduled: (scheduledPost: ScheduledPost) => void;
 }) {
   const sender = useCreateFromText(postId);
@@ -29,8 +33,10 @@ export function DraftDock({
     <FeedbackDock
       name="Draft"
       origin={origin}
+      tools={tools}
       format={textVersion.format}
       feedback={feedback}
+      restoreError={restoreError}
       postTo={
         <PostToButton
           format={textVersion.format}

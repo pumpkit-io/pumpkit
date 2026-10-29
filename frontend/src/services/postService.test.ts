@@ -9,6 +9,7 @@ const VERSION = {
   format: 'post',
   parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
   tells: [{ name: 'em_dash', description: 'em dash' }],
+  created_at: '2026-10-10T12:00:30Z',
 };
 
 describe('postService', () => {
@@ -30,6 +31,7 @@ describe('postService', () => {
         format: 'post',
         parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
         tells: [{ name: 'em_dash', description: 'em dash' }],
+        createdAt: '2026-10-10T12:00:30Z',
       },
     ]);
   });
@@ -196,6 +198,27 @@ describe('postService', () => {
       ],
       counts: { draft: 3, scheduled: 0, published: 1, failed: 2 },
       nextOffset: 20,
+    });
+  });
+
+  it('restores a Version by its number and reads back the Text', async () => {
+    vi.spyOn(apiService, 'post').mockResolvedValue({
+      data: {
+        format: 'post',
+        parts: [{ text: 'the first', char_count: 9, char_limit: 280 }],
+        version_number: 1,
+        edited: false,
+      },
+    } as never);
+
+    const text = await postService.restoreVersion('post_01', 1);
+
+    expect(apiService.post).toHaveBeenCalledWith('/posts/post_01/versions/1/restore');
+    expect(text).toEqual({
+      format: 'post',
+      parts: [{ text: 'the first', charCount: 9, charLimit: 280 }],
+      versionNumber: 1,
+      edited: false,
     });
   });
 });

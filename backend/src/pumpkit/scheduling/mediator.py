@@ -500,6 +500,26 @@ async def give_feedback(
     return version_writing.version_response(version, next_version.char_limit)
 
 
+async def restore_version(
+    db: AsyncSession, user: User, post_id: str, version_number: int
+) -> TextResponse:
+    """Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's."""
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    version = next(
+        (v for v in version_writing.versions_of(post) if v.version_number == version_number), None
+    )
+    if version is None:
+        raise NotFoundError(f"This Post has no Version {version_number}.")
+    posts_service.set_text_from_version(post, version)
+    await db.commit()
+    char_limit = await version_writing.char_limit_for(db, user_id=user.id)
+    text = version_writing.text_response(post, char_limit)
+    assert text is not None
+    return text
+
+
 async def edit_text(db: AsyncSession, user: User, post_id: str, parts: list[str]) -> TextResponse:
     """
     Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and saving the

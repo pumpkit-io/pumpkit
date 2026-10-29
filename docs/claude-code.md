@@ -36,10 +36,11 @@ Ask Claude Code to write a Post from an idea, then ask for changes in plain word
 | --- | --- |
 | `start_post` | Starts a Post from a Brief and writes its first Version in the style of your Inspiration authors, as a single post or, with `format: "thread"`, a Thread. Answers with the Version's Parts and each Part's character count, against your X account's limit: 25,000 with X Premium, 280 otherwise. |
 | `give_feedback` | Gives Feedback on the latest Version of a Post, such as "shorter" or "make Part 3 punchier", and writes the next Version. It keeps the latest Version's Format unless you pass `format: "post"` or `format: "thread"` to switch it. Only a Draft or a Failed Post takes Feedback: on a Scheduled Post it answers that you edit or unschedule it first, and on a Published one that you start a new Post. |
+| `restore_version` | Makes an earlier Version of a Post, named by its number, the Post's Text again, without writing a new Version. Hand edits to the Text are replaced; every Version stays in the Post's History. Only a Draft or a Failed Post's Text changes. |
 | `list_posts` | Lists your Posts of one status, or all of them, 20 at a time (up to 50), with each one's Brief, text, number of Versions and Scheduled post (its state, time, Community, why it failed and its link on X), plus how many Posts each status holds. Scheduled Posts come soonest first, Drafts and the full list by their latest Version, newest first, Published ones most recently published first, and Failed ones most recently due first. |
 | `get_post` | Reads one Post with all its Versions, each with its Feedback, text and character count, plus its status (Draft, Scheduled, Published or Failed) and its Scheduled post, so Claude Code can compare Versions, schedule one of a Draft, or see what went out. |
 
-Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code show up on the web app's Posts page like any other.
+`restore_version` allows 10 calls a minute. Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code show up on the web app's Posts page like any other.
 
 ## Scheduled post and link tools
 

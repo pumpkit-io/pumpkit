@@ -246,6 +246,23 @@ async def give_feedback(
     )
 
 
+@posts_router.post(
+    "/posts/{post_id}/versions/{version_number}/restore",
+    response_model=TextResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def restore_version(
+    post_id: str,
+    version_number: int,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> TextResponse:
+    """Makes the Version the Post's Text, with no write. A Scheduled or Published Post is refused."""
+    return await mediator.restore_version(
+        db=db, user=current_user, post_id=post_id, version_number=version_number
+    )
+
+
 @posts_router.put(
     "/posts/{post_id}/text", response_model=TextResponse, status_code=status.HTTP_200_OK
 )

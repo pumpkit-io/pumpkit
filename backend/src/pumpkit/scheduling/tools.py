@@ -18,7 +18,7 @@ from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import FeedbackRequest, VersionToolResponse
+from pumpkit.posts.schemas import FeedbackRequest, TextResponse, VersionToolResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.models import FAILED, PUBLISHED
 from pumpkit.scheduling.post_status import PostStatus
@@ -290,6 +290,19 @@ async def give_feedback(
     return VersionToolResponse.model_validate(version.model_dump())
 
 
+async def restore_version(call: ToolCall[User], post_id: str, version_number: int) -> TextResponse:
+    """
+    Make an earlier Version of one of the User's Posts its Text again, by its number, with no
+    write: the Text is then that Version's text as written, and Feedback rewrites it from there.
+    Any hand edits to the Text are replaced (`get_post` says whether it is `edited`). Every
+    Version stays in the Post's History. Only a Draft or a Failed Post's Text changes. Answers
+    with the Text.
+    """
+    return await mediator.restore_version(
+        db=call.db, user=call.user, post_id=post_id, version_number=version_number
+    )
+
+
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
     Where the User connects, reconnects or disconnects their X account: the Settings page of
@@ -308,6 +321,8 @@ TOOLS = [
     McpTool(get_post, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     # Feedback sits with the Scheduled post tools because a Post's Scheduled post gates it.
     McpTool(give_feedback, rate=VERSION_WRITE_RATE, annotations=ADDITIVE),
+    # The web restore route has no limit; this takes the create route's.
+    McpTool(restore_version, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(schedule_post, rate=WRITE_RATE, annotations=ADDITIVE),
     # Post now goes through the create route on the web.
     McpTool(post_now, rate=WRITE_RATE, annotations=DESTRUCTIVE),
