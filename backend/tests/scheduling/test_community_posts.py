@@ -22,22 +22,22 @@ def known_community(fake_x_reader) -> None:
     fake_x_reader.communities[COMMUNITY_ID] = "Build in Public"
 
 
-async def _post_now(client: AsyncClient, version_of, text: str = "Hello Community.", **destination):
+async def _post_now(client: AsyncClient, post_with, text: str = "Hello Community.", **destination):
     return await client.post(
         SCHEDULED_POSTS,
-        json={"source_version_id": await version_of(text), "publish_now": True, **destination},
+        json={"post_id": await post_with(text), "publish_now": True, **destination},
     )
 
 
 @pytest.mark.parametrize("share_with_followers", [True, False])
 async def test_post_now_into_a_community_publishes_it_there(
-    client, subscribed, fake_x_publisher, clock, share_with_followers, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, share_with_followers, connect_x, post_with
 ):
     await connect_x()
 
     response = await _post_now(
         client,
-        version_of,
+        post_with,
         community=COMMUNITY_URL,
         share_with_followers=share_with_followers,
     )
@@ -57,11 +57,11 @@ async def test_post_now_into_a_community_publishes_it_there(
 
 
 async def test_post_now_without_a_community_publishes_on_the_profile(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
 
-    body = (await _post_now(client, version_of)).json()
+    body = (await _post_now(client, post_with)).json()
 
     assert body["community"] is None
     assert body["share_with_followers"] is False
@@ -69,11 +69,11 @@ async def test_post_now_without_a_community_publishes_on_the_profile(
 
 
 async def test_text_that_is_not_a_community_is_refused(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
 
-    response = await _post_now(client, version_of, community="https://x.com/levelsio")
+    response = await _post_now(client, post_with, community="https://x.com/levelsio")
 
     assert response.status_code == 422
     assert response.json()["detail"] == (
@@ -85,14 +85,14 @@ async def test_text_that_is_not_a_community_is_refused(
 
 
 async def test_a_community_post_x_refuses_for_a_non_member_fails_with_a_membership_hint(
-    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, post_with
 ):
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
     fake_x_publisher.fail_publish = NOT_A_MEMBER
 
-    response = await _post_now(client, version_of, community=COMMUNITY_ID)
+    response = await _post_now(client, post_with, community=COMMUNITY_ID)
 
     assert response.status_code == 201, response.text
     assert response.json()["state"] == "failed"
@@ -116,50 +116,50 @@ async def test_a_community_post_x_refuses_for_a_non_member_fails_with_a_membersh
     ids=["profile post refused with 403", "community post refused with 400"],
 )
 async def test_other_refusals_fail_without_the_membership_hint(
-    client, subscribed, fake_x_publisher, clock, refusal, community, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, refusal, community, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = refusal
 
-    response = await _post_now(client, version_of, community=community)
+    response = await _post_now(client, post_with, community=community)
 
     assert response.json()["state"] == "failed"
     assert response.json()["failed_reason"] == f"X refused the post: {refusal.message}"
 
 
 async def test_community_posts_count_towards_the_monthly_cap(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
     await connect_x()
     community = COMMUNITY_ID
-    await _post_now(client, version_of, "First", community=community)
+    await _post_now(client, post_with, "First", community=community)
     await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("Second"),
+            "post_id": await post_with("Second"),
             "publish_at": "2026-10-11T09:00:00Z",
             "community": community,
         },
     )
 
-    response = await _post_now(client, version_of, "Third")
+    response = await _post_now(client, post_with, "Third")
 
     assert response.status_code == 409
     assert response.json()["detail"].startswith("You have 2 X posts in October 2026")
 
 
 async def test_a_community_post_is_tracked_with_where_it_went(
-    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, post_with
 ):
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
     community = COMMUNITY_ID
 
-    await _post_now(client, version_of, "Shared", community=community, share_with_followers=True)
-    await _post_now(client, version_of, "Kept to the Community", community=community)
-    await _post_now(client, version_of, "On the profile")
+    await _post_now(client, post_with, "Shared", community=community, share_with_followers=True)
+    await _post_now(client, post_with, "Kept to the Community", community=community)
+    await _post_now(client, post_with, "On the profile")
 
     assert [call.kwargs["properties"] for call in captured.capture.call_args_list] == [
         {
@@ -182,14 +182,14 @@ async def test_a_community_post_is_tracked_with_where_it_went(
 
 @pytest.mark.parametrize("share_with_followers", [True, False])
 async def test_a_community_thread_goes_out_in_the_community_as_a_chain(
-    client, subscribed, fake_x_publisher, clock, share_with_followers, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, share_with_followers, connect_x, post_with
 ):
     await connect_x()
 
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("Part one", "Part two", "Part three"),
+            "post_id": await post_with("Part one", "Part two", "Part three"),
             "publish_now": True,
             "community": COMMUNITY_URL,
             "share_with_followers": share_with_followers,
@@ -216,7 +216,7 @@ async def test_a_community_thread_goes_out_in_the_community_as_a_chain(
 
 
 async def test_a_community_thread_x_refuses_partway_fails_with_the_membership_hint(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = NOT_A_MEMBER
@@ -225,7 +225,7 @@ async def test_a_community_thread_x_refuses_partway_fails_with_the_membership_hi
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("Part one", "Part two", "Part three"),
+            "post_id": await post_with("Part one", "Part two", "Part three"),
             "publish_now": True,
             "community": COMMUNITY_ID,
         },

@@ -11,7 +11,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
-from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.posts.models import Post
 from pumpkit.scheduling.models import SCHEDULED, ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
@@ -32,8 +32,8 @@ async def connected(subscribed, fixed_clock, connect_x) -> None:
 
 
 @pytest.fixture
-async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post, whose text is "The final, version one."."""
+async def written_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """A new Post written through the API, its Text "The final, version one."."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
@@ -46,17 +46,16 @@ async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
     fake_llm.replies = [written("sketch one"), {"post": "The final, version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    post = started.json()
-    return {"post_id": post["id"], **post["versions"][0]}
+    return started.json()
 
 
-async def test_scheduling_a_version_answers_with_the_scheduled_page_link(
-    connected, mcp, version_of, fixed_clock
+async def test_scheduling_a_post_answers_with_the_scheduled_page_link(
+    connected, mcp, post_with, fixed_clock
 ):
-    version_id = await version_of("Shipping on Monday.")
+    post_id = await post_with("Shipping on Monday.")
 
     result = await mcp.call_tool(
-        "schedule_post", version_id=version_id, publish_at="2026-10-10T16:00:00+02:00"
+        "schedule_post", post_id=post_id, publish_at="2026-10-10T16:00:00+02:00"
     )
 
     assert result["isError"] is False, result
@@ -64,7 +63,6 @@ async def test_scheduling_a_version_answers_with_the_scheduled_page_link(
     assert scheduled["parts"][0]["text"] == "Shipping on Monday."
     assert scheduled["state"] == "scheduled"
     assert scheduled["publish_at"] == "2026-10-10T14:00:00Z"
-    assert scheduled["source_version_id"] == version_id
     assert scheduled["community"] is None
     assert scheduled["post_url"] == f"{POSTS_PAGE}/{scheduled['post_id']}"
     assert await scheduled_posts_through_mcp(mcp) == [
@@ -76,8 +74,8 @@ THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
 
 
 @pytest.fixture
-async def thread_version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post started as a Thread, its text the three THREAD_FINAL Parts."""
+async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """A new Post started as a Thread, its Text the three THREAD_FINAL Parts."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
@@ -92,15 +90,15 @@ async def thread_version(client, subscribed, fake_x_reader, fake_llm) -> dict:
         "/api/v1/posts", json={"brief": "ship small things", "format": "thread"}
     )
     assert started.status_code == 201, started.text
-    return started.json()["versions"][0]
+    return started.json()
 
 
 async def test_scheduling_a_thread_answers_with_each_part_in_order_and_none_live(
-    connected, mcp, version_of, fixed_clock
+    connected, mcp, post_with, fixed_clock
 ):
     result = await mcp.call_tool(
         "schedule_post",
-        version_id=await version_of("The first Part.", "The second Part."),
+        post_id=await post_with("The first Part.", "The second Part."),
         publish_at="2026-10-10T14:00:00Z",
     )
 
@@ -112,10 +110,10 @@ async def test_scheduling_a_thread_answers_with_each_part_in_order_and_none_live
 
 
 async def test_post_now_on_a_thread_publishes_its_parts_as_a_chain(
-    connected, mcp, version_of, fake_x_publisher, fixed_clock
+    connected, mcp, post_with, fake_x_publisher, fixed_clock
 ):
     result = await mcp.call_tool(
-        "post_now", version_id=await version_of("Thread start.", "Thread end.")
+        "post_now", post_id=await post_with("Thread start.", "Thread end.")
     )
 
     assert result["isError"] is False, result
@@ -127,9 +125,9 @@ async def test_post_now_on_a_thread_publishes_its_parts_as_a_chain(
 
 
 async def test_editing_replaces_the_parts_and_refuses_one_over_the_limit_by_name(
-    connected, mcp, fixed_clock, version_of
+    connected, mcp, fixed_clock, post_with
 ):
-    scheduled = (await _schedule(mcp, version_of))["structuredContent"]
+    scheduled = (await _schedule(mcp, post_with))["structuredContent"]
 
     edited = await mcp.call_tool(
         "edit_scheduled_post",
@@ -147,57 +145,54 @@ async def test_editing_replaces_the_parts_and_refuses_one_over_the_limit_by_name
     assert error_text(refused) == "Part 1 is 281 characters by X's count, over the 280 limit."
 
 
-async def test_scheduling_a_version_copies_its_final_and_records_the_version(
-    connected, version, mcp, fixed_clock
-):
+async def test_scheduling_a_post_copies_its_text(connected, written_post, mcp, fixed_clock):
     result = await mcp.call_tool(
-        "schedule_post", version_id=version["id"], publish_at="2026-10-10T14:00:00Z"
+        "schedule_post", post_id=written_post["id"], publish_at="2026-10-10T14:00:00Z"
     )
 
     assert result["isError"] is False, result
     assert result["structuredContent"]["parts"][0]["text"] == "The final, version one."
-    assert result["structuredContent"]["source_version_id"] == version["id"]
 
 
 async def _schedule(
-    mcp, version_of, text: str = "Shipping on Monday.", at: str = "2026-10-10T14:00:00Z"
+    mcp, post_with, text: str = "Shipping on Monday.", at: str = "2026-10-10T14:00:00Z"
 ):
-    """Schedule the one Version of a new Post whose text is `text`."""
-    return await mcp.call_tool("schedule_post", version_id=await version_of(text), publish_at=at)
+    """Schedule a new Post whose Text is `text`."""
+    return await mcp.call_tool("schedule_post", post_id=await post_with(text), publish_at=at)
 
 
 async def test_scheduling_without_an_x_connection_links_to_the_settings_page(
-    subscribed, mcp, fixed_clock, version_of
+    subscribed, mcp, fixed_clock, post_with
 ):
-    result = await _schedule(mcp, version_of)
+    result = await _schedule(mcp, post_with)
 
     assert error_text(result) == f"Connect your X account first. {SETTINGS_PAGE}"
 
 
-async def test_a_post_over_the_x_accounts_limit_is_refused(connected, mcp, fixed_clock, version_of):
-    result = await _schedule(mcp, version_of, text="x" * 281)
+async def test_a_post_over_the_x_accounts_limit_is_refused(connected, mcp, fixed_clock, post_with):
+    result = await _schedule(mcp, post_with, text="x" * 281)
 
     assert error_text(result) == "This post is 281 characters by X's count, over the 280 limit."
 
 
-async def test_a_time_without_its_utc_offset_is_refused(connected, mcp, fixed_clock, version_of):
-    result = await _schedule(mcp, version_of, at="2026-10-10T14:00:00")
+async def test_a_time_without_its_utc_offset_is_refused(connected, mcp, fixed_clock, post_with):
+    result = await _schedule(mcp, post_with, at="2026-10-10T14:00:00")
 
     assert error_text(result) == "Input should have timezone info"
 
 
 async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
-    connected, client, mcp, fixed_clock, monkeypatch, version_of
+    connected, client, mcp, fixed_clock, monkeypatch, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
     from_web = await client.post(
         "/api/v1/scheduled-posts",
-        json={"source_version_id": await version_of("First"), "publish_at": "2026-10-11T09:00:00Z"},
+        json={"post_id": await post_with("First"), "publish_at": "2026-10-11T09:00:00Z"},
     )
     assert from_web.status_code == 201, from_web.text
-    await _schedule(mcp, version_of, text="Second", at="2026-10-30T09:00:00Z")
+    await _schedule(mcp, post_with, text="Second", at="2026-10-30T09:00:00Z")
 
-    result = await _schedule(mcp, version_of, text="Third", at="2026-10-12T09:00:00Z")
+    result = await _schedule(mcp, post_with, text="Third", at="2026-10-12T09:00:00Z")
 
     assert error_text(result) == (
         "You have 2 X posts in October 2026, the most for one month. "
@@ -219,11 +214,11 @@ COMMUNITY = {"id": COMMUNITY_ID, "name": "Build in Public", "url": COMMUNITY_URL
 
 @pytest.mark.parametrize("share_with_followers", [True, False])
 async def test_scheduling_into_a_community_names_it_as_x_does(
-    connected, known_community, mcp, fixed_clock, share_with_followers, version_of
+    connected, known_community, mcp, fixed_clock, share_with_followers, post_with
 ):
     result = await mcp.call_tool(
         "schedule_post",
-        version_id=await version_of("Shipping on Monday."),
+        post_id=await post_with("Shipping on Monday."),
         publish_at="2026-10-10T14:00:00Z",
         community=f"{COMMUNITY_URL}?s=20",
         share_with_followers=share_with_followers,
@@ -234,10 +229,10 @@ async def test_scheduling_into_a_community_names_it_as_x_does(
     assert result["structuredContent"]["share_with_followers"] is share_with_followers
 
 
-async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock, version_of):
+async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock, post_with):
     result = await mcp.call_tool(
         "schedule_post",
-        version_id=await version_of("Hi."),
+        post_id=await post_with("Hi."),
         publish_at="2026-10-10T14:00:00Z",
         community="123",
     )
@@ -246,19 +241,19 @@ async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock,
     assert (await scheduled_posts_through_mcp(mcp)) == []
 
 
-async def _post_now_on_the_web(client: AsyncClient, version_id: str) -> dict:
+async def _post_now_on_the_web(client: AsyncClient, post_id: str) -> dict:
     response = await client.post(
-        "/api/v1/scheduled-posts", json={"source_version_id": version_id, "publish_now": True}
+        "/api/v1/scheduled-posts", json={"post_id": post_id, "publish_now": True}
     )
     assert response.status_code == 201, response.text
     return response.json()
 
 
 @pytest.fixture
-async def failed(connected, client, version_of, fake_x_publisher, fixed_clock) -> dict:
+async def failed(connected, client, post_with, fake_x_publisher, fixed_clock) -> dict:
     """A Scheduled post X refused when the User Posted it now in the web app."""
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
-    failed = await _post_now_on_the_web(client, await version_of("Duplicate."))
+    failed = await _post_now_on_the_web(client, await post_with("Duplicate."))
     fake_x_publisher.fail_publish = None
     assert failed["state"] == "failed"
     return failed
@@ -273,9 +268,9 @@ async def test_listing_failed_posts_says_why_each_failed(failed, mcp, fixed_cloc
 
 
 async def test_editing_the_text_and_time_of_a_waiting_scheduled_post_saves_both(
-    connected, mcp, fixed_clock, version_of
+    connected, mcp, fixed_clock, post_with
 ):
-    scheduled = (await _schedule(mcp, version_of, text="Lanch day."))["structuredContent"]
+    scheduled = (await _schedule(mcp, post_with, text="Lanch day."))["structuredContent"]
 
     result = await mcp.call_tool(
         "edit_scheduled_post",
@@ -305,9 +300,9 @@ async def test_rescheduling_a_failed_scheduled_post_waits_to_publish_again(
 
 
 async def test_editing_can_move_a_scheduled_post_into_a_community_and_back_to_the_profile(
-    connected, known_community, mcp, fixed_clock, version_of
+    connected, known_community, mcp, fixed_clock, post_with
 ):
-    scheduled = (await _schedule(mcp, version_of))["structuredContent"]
+    scheduled = (await _schedule(mcp, post_with))["structuredContent"]
 
     into = await mcp.call_tool(
         "edit_scheduled_post",
@@ -326,9 +321,9 @@ async def test_editing_can_move_a_scheduled_post_into_a_community_and_back_to_th
 
 
 async def test_editing_to_a_community_and_the_profile_at_once_is_refused(
-    connected, mcp, fixed_clock, version_of
+    connected, mcp, fixed_clock, post_with
 ):
-    scheduled = (await _schedule(mcp, version_of))["structuredContent"]
+    scheduled = (await _schedule(mcp, post_with))["structuredContent"]
 
     result = await mcp.call_tool(
         "edit_scheduled_post",
@@ -341,12 +336,12 @@ async def test_editing_to_a_community_and_the_profile_at_once_is_refused(
 
 
 async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
-    connected, mcp, fake_x_publisher, fixed_clock, version_of
+    connected, mcp, fake_x_publisher, fixed_clock, post_with
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
     fake_x_publisher.fail_publish_on = 2
     failed = (
-        await mcp.call_tool("post_now", version_id=await version_of("Live one.", "Refused two."))
+        await mcp.call_tool("post_now", post_id=await post_with("Live one.", "Refused two."))
     )["structuredContent"]
     assert failed["failed_reason"] == "X refused Part 2: Nope"
 
@@ -371,27 +366,26 @@ async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
     assert [p["live"] for p in listed[0]["parts"]] == [True, False]
 
 
-async def test_a_thread_failed_partway_is_rescheduled_with_a_version_of_its_post(
-    connected, mcp, fake_x_publisher, fixed_clock, version_of, next_version
+async def test_a_thread_failed_partway_is_rescheduled_with_its_post_s_text(
+    connected, mcp, fake_x_publisher, fixed_clock, post_with, next_version
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
     fake_x_publisher.fail_publish_on = 2
-    first = await version_of("Live one.", "Refused two.")
-    failed = (await mcp.call_tool("post_now", version_id=first))["structuredContent"]
+    post_id = await post_with("Live one.", "Refused two.")
+    failed = (await mcp.call_tool("post_now", post_id=post_id))["structuredContent"]
     fake_x_publisher.fail_publish = None
-    latest = await next_version(first, "Rewritten one.", "Fixed two.", "New three.")
+    await next_version(post_id, "Rewritten one.", "Fixed two.", "New three.")
 
     rescheduled = await mcp.call_tool(
         "edit_scheduled_post",
         scheduled_post_id=failed["id"],
-        version_id=latest,
+        copy_text=True,
         publish_at="2026-10-10T14:00:00Z",
     )
 
     assert rescheduled["isError"] is False, rescheduled
     answer = rescheduled["structuredContent"]
     assert answer["state"] == "scheduled"
-    assert answer["source_version_id"] == latest
     assert [(p["text"], p["live"]) for p in answer["parts"]] == [
         ("Live one.", True),
         ("Fixed two.", False),
@@ -399,33 +393,29 @@ async def test_a_thread_failed_partway_is_rescheduled_with_a_version_of_its_post
     ]
 
 
-async def test_editing_with_a_version_of_another_post_or_with_parts_too_is_refused(
-    connected, mcp, version_of
+async def test_editing_with_the_text_and_parts_too_or_with_a_version_is_refused(
+    connected, mcp, post_with
 ):
-    scheduled = (await _schedule(mcp, version_of))["structuredContent"]
-    elsewhere = await version_of("Another Post.")
+    scheduled = (await _schedule(mcp, post_with))["structuredContent"]
 
-    other_post = await mcp.call_tool(
-        "edit_scheduled_post", scheduled_post_id=scheduled["id"], version_id=elsewhere
-    )
     both = await mcp.call_tool(
-        "edit_scheduled_post",
-        scheduled_post_id=scheduled["id"],
-        version_id=scheduled["source_version_id"],
-        parts=["Typed."],
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], copy_text=True, parts=["Typed."]
+    )
+    a_version = await mcp.call_tool(
+        "edit_scheduled_post", scheduled_post_id=scheduled["id"], version_id="version_attempt_1"
     )
 
-    assert error_text(other_post) == "Choose a Version of this Post."
-    assert error_text(both) == "Give either the Parts or a Version, not both."
+    assert error_text(both) == "Give either the Parts or the Post's Text, not both."
+    assert a_version["isError"] is True, a_version
 
 
 PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
 
 
 async def test_a_published_scheduled_post_can_be_neither_edited_nor_deleted(
-    connected, client, mcp, fixed_clock, version_of
+    connected, client, mcp, fixed_clock, post_with
 ):
-    published = await _post_now_on_the_web(client, await version_of("Out now."))
+    published = await _post_now_on_the_web(client, await post_with("Out now."))
 
     edited = await mcp.call_tool(
         "edit_scheduled_post", scheduled_post_id=published["id"], parts=["Changed"]
@@ -436,9 +426,9 @@ async def test_a_published_scheduled_post_can_be_neither_edited_nor_deleted(
 
 
 async def test_a_scheduled_post_being_published_can_be_neither_edited_nor_deleted(
-    connected, mcp, db_session_maker, fixed_clock, version_of
+    connected, mcp, db_session_maker, fixed_clock, post_with
 ):
-    scheduled = (await _schedule(mcp, version_of, at="2026-10-10T12:02:00Z"))["structuredContent"]
+    scheduled = (await _schedule(mcp, post_with, at="2026-10-10T12:02:00Z"))["structuredContent"]
     fixed_clock.advance(timedelta(minutes=2))
     async with db_session_maker() as session:
         assert await scheduled_posts_service.claim(
@@ -462,22 +452,11 @@ async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fix
     db.add(bob)
     await db.flush()
     bobs_post = Post(user_id=bob.id, brief="Bob's", corpus_post_ids=[], created_at=fixed_clock())
-    bobs_version = VersionAttempt(
-        post=bobs_post,
-        sequence=1,
-        format="post",
-        status=ATTEMPT_SUCCEEDED,
-        version_number=1,
-        parts=["Bob's."],
-        slop_tells=[],
-        created_at=fixed_clock(),
-    )
-    db.add_all([bobs_post, bobs_version])
+    db.add(bobs_post)
     await db.flush()
     bobs = ScheduledPost(
         user_id=bob.id,
         post_id=bobs_post.id,
-        source_version_id=bobs_version.id,
         x_user_id="2002",
         parts=[ScheduledPostPart(position=0, text="Bob's.")],
         publish_at=fixed_clock() + timedelta(hours=2),
@@ -495,9 +474,9 @@ async def test_another_users_scheduled_post_is_not_found(connected, mcp, db, fix
 
 
 async def test_deleting_a_waiting_scheduled_post_takes_it_off_the_list(
-    connected, mcp, fixed_clock, version_of
+    connected, mcp, fixed_clock, post_with
 ):
-    scheduled = (await _schedule(mcp, version_of))["structuredContent"]
+    scheduled = (await _schedule(mcp, post_with))["structuredContent"]
 
     result = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=scheduled["id"])
 
@@ -516,12 +495,12 @@ async def test_deleting_a_failed_scheduled_post_takes_it_off_the_list(failed, mc
 
 
 async def test_past_communities_are_the_ones_the_user_posted_to_before(
-    connected, known_community, mcp, fixed_clock, version_of
+    connected, known_community, mcp, fixed_clock, post_with
 ):
     assert (await mcp.call_tool("list_past_communities"))["structuredContent"] == {"data": []}
     await mcp.call_tool(
         "schedule_post",
-        version_id=await version_of("Hi."),
+        post_id=await post_with("Hi."),
         publish_at="2026-10-10T14:00:00Z",
         community=COMMUNITY_ID,
     )
@@ -557,8 +536,8 @@ async def test_connect_x_links_to_the_settings_page(subscribed, mcp):
 )
 async def test_the_write_tools_allow_10_calls_a_minute(connected, mcp, fixed_clock, name):
     arguments = {
-        "schedule_post": {"version_id": "version_missing", "publish_at": "2026-10-10T14:00:00Z"},
-        "post_now": {"version_id": "version_missing"},
+        "schedule_post": {"post_id": "post_missing", "publish_at": "2026-10-10T14:00:00Z"},
+        "post_now": {"post_id": "post_missing"},
         "edit_scheduled_post": {"scheduled_post_id": "scheduled_post_missing", "parts": ["Hi."]},
         "delete_scheduled_post": {"scheduled_post_id": "scheduled_post_missing"},
     }[name]
@@ -593,8 +572,8 @@ async def subscription_ended(connected, mcp, db) -> None:
 @pytest.mark.parametrize(
     ("name", "arguments"),
     [
-        ("schedule_post", {"version_id": "version_missing", "publish_at": "2026-10-10T14:00:00Z"}),
-        ("post_now", {"version_id": "version_missing"}),
+        ("schedule_post", {"post_id": "post_missing", "publish_at": "2026-10-10T14:00:00Z"}),
+        ("post_now", {"post_id": "post_missing"}),
         ("list_posts", {}),
         ("edit_scheduled_post", {"scheduled_post_id": "scheduled_post_missing", "parts": ["Hi."]}),
         ("delete_scheduled_post", {"scheduled_post_id": "scheduled_post_missing"}),
@@ -618,11 +597,11 @@ async def test_connect_x_works_for_a_user_whose_subscription_ended(subscription_
 
 
 async def test_every_user_schedules_on_an_instance_that_sells_no_plans(
-    sells_no_plans, client, fake_x_publisher, mcp, fixed_clock, connect_x, version_of
+    sells_no_plans, client, fake_x_publisher, mcp, fixed_clock, connect_x, post_with
 ):
     await connect_x()
 
-    result = await _schedule(mcp, version_of)
+    result = await _schedule(mcp, post_with)
 
     assert result["isError"] is False, result
 
@@ -630,10 +609,10 @@ async def test_every_user_schedules_on_an_instance_that_sells_no_plans(
 FIRST_X_POST = "https://x.com/i/web/status/1890000000000000001"
 
 
-async def test_post_now_publishes_a_version_and_links_to_it_on_x(
-    connected, mcp, version_of, fake_x_publisher, fixed_clock
+async def test_post_now_publishes_a_post_and_links_to_it_on_x(
+    connected, mcp, post_with, fake_x_publisher, fixed_clock
 ):
-    result = await mcp.call_tool("post_now", version_id=await version_of("Out now."))
+    result = await mcp.call_tool("post_now", post_id=await post_with("Out now."))
 
     assert result["isError"] is False, result
     posted = result["structuredContent"]
@@ -644,33 +623,31 @@ async def test_post_now_publishes_a_version_and_links_to_it_on_x(
     assert fake_x_publisher.published == [("access-1001-1", "Out now.")]
 
 
-async def test_post_now_publishes_a_versions_final(
-    connected, version, mcp, fake_x_publisher, fixed_clock
+async def test_post_now_publishes_the_post_s_text(
+    connected, written_post, mcp, fake_x_publisher, fixed_clock
 ):
-    result = await mcp.call_tool("post_now", version_id=version["id"])
+    result = await mcp.call_tool("post_now", post_id=written_post["id"])
 
     assert result["structuredContent"]["state"] == "published"
-    assert result["structuredContent"]["source_version_id"] == version["id"]
     assert fake_x_publisher.published == [("access-1001-1", "The final, version one.")]
 
 
-async def test_scheduling_a_thread_version_copies_every_part_in_order(
-    connected, thread_version, mcp, fixed_clock
+async def test_scheduling_a_thread_copies_every_part_in_order(
+    connected, thread_post, mcp, fixed_clock
 ):
     result = await mcp.call_tool(
-        "schedule_post", version_id=thread_version["id"], publish_at="2026-10-10T14:00:00Z"
+        "schedule_post", post_id=thread_post["id"], publish_at="2026-10-10T14:00:00Z"
     )
 
     assert result["isError"] is False, result
     scheduled = result["structuredContent"]
     assert [part["text"] for part in scheduled["parts"]] == THREAD_FINAL
-    assert scheduled["source_version_id"] == thread_version["id"]
 
 
-async def test_post_now_on_a_thread_version_publishes_the_whole_thread(
-    connected, thread_version, mcp, fake_x_publisher, fixed_clock
+async def test_post_now_on_a_thread_publishes_the_whole_thread(
+    connected, thread_post, mcp, fake_x_publisher, fixed_clock
 ):
-    result = await mcp.call_tool("post_now", version_id=thread_version["id"])
+    result = await mcp.call_tool("post_now", post_id=thread_post["id"])
 
     assert result["isError"] is False, result
     posted = result["structuredContent"]
@@ -682,11 +659,11 @@ async def test_post_now_on_a_thread_version_publishes_the_whole_thread(
 
 
 async def test_post_now_that_x_refuses_says_it_failed_and_why(
-    connected, mcp, fake_x_publisher, fixed_clock, version_of
+    connected, mcp, fake_x_publisher, fixed_clock, post_with
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Duplicate content.")
 
-    result = await mcp.call_tool("post_now", version_id=await version_of("Duplicate."))
+    result = await mcp.call_tool("post_now", post_id=await post_with("Duplicate."))
 
     assert result["isError"] is False, result
     posted = result["structuredContent"]
@@ -696,11 +673,11 @@ async def test_post_now_that_x_refuses_says_it_failed_and_why(
 
 
 async def test_post_now_into_a_community_publishes_it_there(
-    connected, known_community, mcp, fake_x_publisher, fixed_clock, version_of
+    connected, known_community, mcp, fake_x_publisher, fixed_clock, post_with
 ):
     result = await mcp.call_tool(
         "post_now",
-        version_id=await version_of("Hello Community."),
+        post_id=await post_with("Hello Community."),
         community=COMMUNITY_URL,
         share_with_followers=True,
     )
@@ -711,12 +688,12 @@ async def test_post_now_into_a_community_publishes_it_there(
 
 
 async def test_a_community_post_x_refuses_fails_with_the_membership_hint(
-    connected, known_community, mcp, fake_x_publisher, fixed_clock, version_of
+    connected, known_community, mcp, fake_x_publisher, fixed_clock, post_with
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(403, "You are not permitted.")
 
     result = await mcp.call_tool(
-        "post_now", version_id=await version_of("Hello Community."), community=COMMUNITY_ID
+        "post_now", post_id=await post_with("Hello Community."), community=COMMUNITY_ID
     )
 
     assert result["structuredContent"]["state"] == "failed"
@@ -728,11 +705,11 @@ async def test_a_community_post_x_refuses_fails_with_the_membership_hint(
 
 @pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
 async def test_post_now_x_didnt_take_says_pumpkit_keeps_trying(
-    connected, mcp, fake_x_publisher, fixed_clock, error, version_of
+    connected, mcp, fake_x_publisher, fixed_clock, error, post_with
 ):
     fake_x_publisher.fail_publish = error
 
-    result = await mcp.call_tool("post_now", version_id=await version_of("Out now."))
+    result = await mcp.call_tool("post_now", post_id=await post_with("Out now."))
 
     assert result["isError"] is False, result
     posted = result["structuredContent"]
@@ -750,7 +727,7 @@ ALREADY_SCHEDULED = "This Post already has a Scheduled post. Edit it, or unsched
         ("post_now", {"parts": ["Typed."]}),
     ],
 )
-async def test_typed_parts_instead_of_a_version_are_refused_and_nothing_is_stored(
+async def test_typed_parts_instead_of_a_post_are_refused_and_nothing_is_stored(
     connected, mcp, fake_x_publisher, fixed_clock, name, arguments
 ):
     result = await mcp.call_tool(name, **arguments)
@@ -760,16 +737,16 @@ async def test_typed_parts_instead_of_a_version_are_refused_and_nothing_is_store
     assert fake_x_publisher.published == []
 
 
-async def _scheduled_in(state: str, mcp, version_id: str, fake_x_publisher) -> dict:
-    """The Scheduled post of the Version's Post, left in `state`."""
+async def _scheduled_in(state: str, mcp, post_id: str, fake_x_publisher) -> dict:
+    """The Post's Scheduled post, left in `state`."""
     if state == "scheduled":
         result = await mcp.call_tool(
-            "schedule_post", version_id=version_id, publish_at="2026-10-10T14:00:00Z"
+            "schedule_post", post_id=post_id, publish_at="2026-10-10T14:00:00Z"
         )
     else:
         if state == "failed":
             fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
-        result = await mcp.call_tool("post_now", version_id=version_id)
+        result = await mcp.call_tool("post_now", post_id=post_id)
         fake_x_publisher.fail_publish = None
     scheduled = result["structuredContent"]
     assert scheduled["state"] == state, result
@@ -782,13 +759,13 @@ async def _scheduled_in(state: str, mcp, version_id: str, fake_x_publisher) -> d
     [("schedule_post", {"publish_at": "2026-10-10T15:00:00Z"}), ("post_now", {})],
 )
 async def test_a_second_scheduled_post_for_the_same_post_is_refused(
-    connected, mcp, version_of, fake_x_publisher, fixed_clock, state, name, arguments
+    connected, mcp, post_with, fake_x_publisher, fixed_clock, state, name, arguments
 ):
-    version_id = await version_of("Once.")
-    first = await _scheduled_in(state, mcp, version_id, fake_x_publisher)
+    post_id = await post_with("Once.")
+    first = await _scheduled_in(state, mcp, post_id, fake_x_publisher)
     published_before = list(fake_x_publisher.published)
 
-    result = await mcp.call_tool(name, version_id=version_id, **arguments)
+    result = await mcp.call_tool(name, post_id=post_id, **arguments)
 
     assert error_text(result) == ALREADY_SCHEDULED
     listed = await scheduled_posts_through_mcp(mcp)
@@ -797,15 +774,13 @@ async def test_a_second_scheduled_post_for_the_same_post_is_refused(
 
 
 async def test_deleting_a_failed_scheduled_post_lets_its_post_be_scheduled_again(
-    connected, mcp, version_of, fake_x_publisher, fixed_clock
+    connected, mcp, post_with, fake_x_publisher, fixed_clock
 ):
-    version_id = await version_of("Retry me.")
-    failed = await _scheduled_in("failed", mcp, version_id, fake_x_publisher)
+    post_id = await post_with("Retry me.")
+    failed = await _scheduled_in("failed", mcp, post_id, fake_x_publisher)
 
     deleted = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=failed["id"])
-    again = await mcp.call_tool(
-        "schedule_post", version_id=version_id, publish_at="2026-10-10T14:00:00Z"
-    )
+    again = await mcp.call_tool("schedule_post", post_id=post_id, publish_at="2026-10-10T14:00:00Z")
 
     assert deleted["isError"] is False, deleted
     assert again["isError"] is False, again
@@ -832,11 +807,11 @@ async def _give_feedback(mcp, fake_llm, post_id: str) -> dict:
     ],
 )
 async def test_feedback_on_a_scheduled_or_published_post_is_refused(
-    connected, version, mcp, fake_llm, fake_x_publisher, fixed_clock, state, refusal
+    connected, written_post, mcp, fake_llm, fake_x_publisher, fixed_clock, state, refusal
 ):
-    await _scheduled_in(state, mcp, version["id"], fake_x_publisher)
+    await _scheduled_in(state, mcp, written_post["id"], fake_x_publisher)
 
-    result = await _give_feedback(mcp, fake_llm, version["post_id"])
+    result = await _give_feedback(mcp, fake_llm, written_post["id"])
 
     assert error_text(result) == refusal
     assert fake_llm.replies, "no model was called"
@@ -844,12 +819,12 @@ async def test_feedback_on_a_scheduled_or_published_post_is_refused(
 
 @pytest.mark.parametrize("state", [None, "failed"])
 async def test_feedback_on_a_draft_or_failed_post_writes_the_next_version(
-    connected, version, mcp, fake_llm, fake_x_publisher, fixed_clock, state
+    connected, written_post, mcp, fake_llm, fake_x_publisher, fixed_clock, state
 ):
     if state is not None:
-        await _scheduled_in(state, mcp, version["id"], fake_x_publisher)
+        await _scheduled_in(state, mcp, written_post["id"], fake_x_publisher)
 
-    result = await _give_feedback(mcp, fake_llm, version["post_id"])
+    result = await _give_feedback(mcp, fake_llm, written_post["id"])
 
     assert result["isError"] is False, result
     assert result["structuredContent"]["number"] == 2
@@ -857,11 +832,11 @@ async def test_feedback_on_a_draft_or_failed_post_writes_the_next_version(
 
 
 async def test_feedback_on_an_unscheduled_post_writes_the_next_version(
-    connected, version, mcp, fake_llm, fake_x_publisher, fixed_clock
+    connected, written_post, mcp, fake_llm, fake_x_publisher, fixed_clock
 ):
-    scheduled = await _scheduled_in("scheduled", mcp, version["id"], fake_x_publisher)
+    scheduled = await _scheduled_in("scheduled", mcp, written_post["id"], fake_x_publisher)
     await mcp.call_tool("delete_scheduled_post", scheduled_post_id=scheduled["id"])
 
-    result = await _give_feedback(mcp, fake_llm, version["post_id"])
+    result = await _give_feedback(mcp, fake_llm, written_post["id"])
 
     assert result["isError"] is False, result

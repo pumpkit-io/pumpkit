@@ -53,10 +53,11 @@ a Brief makes its first Version.
 each one X post, published on X with each Part replying to the one before. A \
 Post starts as a single X post unless the User asks for a Thread, and Feedback may switch the \
 Format.
-- Each Version has its text, the text meant for X, with one text per Part for a Thread. A \
-Version's text can become a Scheduled post, published at a chosen time or at once with Post \
-now. A Scheduled post copied from a Thread keeps every Part, in order. Every Scheduled post \
-comes from a Version: there is no typing one by hand.
+- Each Version has its text, with one text per Part for a Thread. A Post has one Text, the \
+text meant for X, set from each new Version. The Post's Text can become a Scheduled post, \
+published at a chosen time or at once with Post now: `schedule_post` and `post_now` take the \
+Post. A Scheduled post copied from a Thread keeps every Part, in order. Every Scheduled post \
+comes from its Post's Text: there is no typing one by hand.
 - A Post goes out once, so it has at most one Scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the Post a Draft again. Only a Draft or a \
 Failed Post takes Feedback: a scheduled or published one doesn't.

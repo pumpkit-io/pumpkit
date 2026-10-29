@@ -30,11 +30,11 @@ X_UNAVAILABLE_REASON = "Not published: X was busy or unreachable. Try again in a
 
 
 async def _schedule(
-    client: AsyncClient, version_of, publish_at: str, text: str = "Later today."
+    client: AsyncClient, post_with, publish_at: str, text: str = "Later today."
 ) -> str:
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"source_version_id": await version_of(text), "publish_at": publish_at},
+        json={"post_id": await post_with(text), "publish_at": publish_at},
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
@@ -45,10 +45,10 @@ async def _listed(client: AsyncClient) -> dict[str, dict]:
 
 
 async def test_a_scheduled_post_is_published_once_due_and_never_before(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T12:05:00Z", "At five past")
+    await _schedule(client, post_with, "2026-10-10T12:05:00Z", "At five past")
     fixed_clock.advance(timedelta(minutes=4, seconds=29))
 
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
@@ -67,22 +67,22 @@ async def test_a_scheduled_post_is_published_once_due_and_never_before(
 
 
 async def _schedule_thread(
-    client: AsyncClient, version_of, publish_at: str, parts: list[str]
+    client: AsyncClient, post_with, publish_at: str, parts: list[str]
 ) -> str:
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"source_version_id": await version_of(*parts), "publish_at": publish_at},
+        json={"post_id": await post_with(*parts), "publish_at": publish_at},
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
 
 async def test_a_due_thread_goes_out_as_a_chain_each_part_replying_to_the_one_before(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
     await _schedule_thread(
-        client, version_of, "2026-10-10T12:05:00Z", ["Part one", "Part two", "Part three"]
+        client, post_with, "2026-10-10T12:05:00Z", ["Part one", "Part two", "Part three"]
     )
     fixed_clock.advance(timedelta(minutes=5))
 
@@ -109,10 +109,10 @@ async def test_a_due_thread_goes_out_as_a_chain_each_part_replying_to_the_one_be
 
 
 async def test_a_thread_x_rate_limits_partway_goes_on_from_that_part_after_a_backoff(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule_thread(client, version_of, "2026-10-10T12:02:00Z", ["One", "Two", "Three"])
+    await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["One", "Two", "Three"])
     fixed_clock.advance(timedelta(minutes=2))
     fake_x_publisher.fail_publish = XRateLimitedError("429")
     fake_x_publisher.fail_publish_on = 2
@@ -141,10 +141,10 @@ async def test_a_thread_x_rate_limits_partway_goes_on_from_that_part_after_a_bac
 
 
 async def test_a_thread_is_not_published_while_a_part_is_not_live(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule_thread(client, version_of, "2026-10-10T12:02:00Z", ["First", "Second"])
+    await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["First", "Second"])
     fixed_clock.advance(timedelta(minutes=2))
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
     fake_x_publisher.fail_publish_on = 2
@@ -160,10 +160,10 @@ async def test_a_thread_is_not_published_while_a_part_is_not_live(
 
 
 async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_live(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule_thread(client, version_of, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
+    await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
     fixed_clock.advance(timedelta(minutes=2))
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Duplicate content.")
     fake_x_publisher.fail_publish_on = 3
@@ -184,10 +184,10 @@ async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_
 
 
 async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_check_the_profile(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule_thread(client, version_of, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
+    await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
     fixed_clock.advance(timedelta(minutes=2))
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
     fake_x_publisher.fail_publish_on = 3
@@ -206,7 +206,7 @@ async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_chec
 
 
 async def test_a_due_community_post_goes_out_in_its_community(
-    version_of,
+    post_with,
     client,
     db_session_maker,
     subscribed,
@@ -220,7 +220,7 @@ async def test_a_due_community_post_goes_out_in_its_community(
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("For the Community"),
+            "post_id": await post_with("For the Community"),
             "publish_at": "2026-10-10T12:05:00Z",
             "community": "1493446837214187523",
             "share_with_followers": True,
@@ -242,7 +242,7 @@ async def test_a_due_community_post_goes_out_in_its_community(
 
 
 async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_membership_hint(
-    version_of,
+    post_with,
     client,
     db_session_maker,
     subscribed,
@@ -256,7 +256,7 @@ async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_memb
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("Not a member"),
+            "post_id": await post_with("Not a member"),
             "publish_at": "2026-10-10T12:05:00Z",
             "community": "1493446837214187523",
         },
@@ -278,10 +278,10 @@ async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_memb
 
 
 async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_plans_are_sold(
-    version_of, client, db_session_maker, sells_no_plans, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, sells_no_plans, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T12:05:00Z", "No Plans here")
+    await _schedule(client, post_with, "2026-10-10T12:05:00Z", "No Plans here")
     fixed_clock.advance(timedelta(minutes=5))
 
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
@@ -291,12 +291,12 @@ async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_pl
 
 
 async def test_one_pass_publishes_every_due_scheduled_post(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T12:03:00Z", "First")
-    await _schedule(client, version_of, "2026-10-10T12:02:00Z", "Second")
-    await _schedule(client, version_of, "2026-10-10T13:00:00Z", "Later")
+    await _schedule(client, post_with, "2026-10-10T12:03:00Z", "First")
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Second")
+    await _schedule(client, post_with, "2026-10-10T13:00:00Z", "Later")
     fixed_clock.advance(timedelta(minutes=5))
 
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
@@ -306,11 +306,11 @@ async def test_one_pass_publishes_every_due_scheduled_post(
 
 
 async def test_two_passes_at_once_publish_each_scheduled_post_once(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
     for minute in (2, 3, 4):
-        await _schedule(client, version_of, f"2026-10-10T12:0{minute}:00Z", f"Post {minute}")
+        await _schedule(client, post_with, f"2026-10-10T12:0{minute}:00Z", f"Post {minute}")
     fixed_clock.advance(timedelta(minutes=5))
     # The first call to X waits until another one starts, so both passes are mid-publish.
     another_started = asyncio.Event()
@@ -337,7 +337,7 @@ async def test_two_passes_at_once_publish_each_scheduled_post_once(
 
 @pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
 async def test_a_post_x_never_took_is_retried_after_a_backoff(
-    version_of,
+    post_with,
     client,
     db_session_maker,
     subscribed,
@@ -347,7 +347,7 @@ async def test_a_post_x_never_took_is_retried_after_a_backoff(
     connect_x,
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T12:02:00Z", "Busy X")
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Busy X")
     fixed_clock.advance(timedelta(minutes=1, seconds=30))
     fake_x_publisher.fail_publish = error
 
@@ -371,10 +371,10 @@ async def test_a_post_x_never_took_is_retried_after_a_backoff(
 
 
 async def test_a_refresh_x_never_took_is_retried_too(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T14:00:00Z", "Needs a fresh token")
+    await _schedule(client, post_with, "2026-10-10T14:00:00Z", "Needs a fresh token")
     fixed_clock.advance(timedelta(hours=2))
     fake_x_publisher.fail_refresh = XNotReceivedError("ConnectError")
 
@@ -388,10 +388,10 @@ async def test_a_refresh_x_never_took_is_retried_too(
 
 
 async def test_a_rate_limited_post_gives_up_as_failed_15_minutes_after_its_publish_time(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T12:02:00Z", "Never goes out")
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Never goes out")
     fixed_clock.advance(timedelta(minutes=1, seconds=30))
     fake_x_publisher.fail_publish = XRateLimitedError("429")
 
@@ -415,10 +415,10 @@ async def test_a_rate_limited_post_gives_up_as_failed_15_minutes_after_its_publi
 
 
 async def test_a_post_whose_outcome_is_unknown_fails_without_a_retry(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T12:02:00Z", "Timed out")
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Timed out")
     fixed_clock.advance(timedelta(minutes=2))
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
 
@@ -455,7 +455,7 @@ async def _crashed_mid_publish(
 
 
 async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
-    version_of,
+    post_with,
     client,
     db_session_maker,
     subscribed,
@@ -467,7 +467,7 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
-    scheduled_post_id = await _schedule(client, version_of, "2026-10-10T12:02:00Z", "Stuck")
+    scheduled_post_id = await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Stuck")
     fixed_clock.advance(timedelta(minutes=2))
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock)
     fixed_clock.advance(timedelta(minutes=10))
@@ -491,11 +491,11 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
 
 
 async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_live(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
     scheduled_post_id = await _schedule_thread(
-        client, version_of, "2026-10-10T12:02:00Z", ["Went out", "Unknown", "Never sent"]
+        client, post_with, "2026-10-10T12:02:00Z", ["Went out", "Unknown", "Never sent"]
     )
     fixed_clock.advance(timedelta(minutes=2))
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=1)
@@ -517,7 +517,7 @@ async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_li
 
 
 async def test_a_post_stuck_in_publishing_with_its_part_live_becomes_published(
-    version_of,
+    post_with,
     client,
     db_session_maker,
     subscribed,
@@ -529,7 +529,7 @@ async def test_a_post_stuck_in_publishing_with_its_part_live_becomes_published(
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
-    scheduled_post_id = await _schedule(client, version_of, "2026-10-10T12:02:00Z", "Went out")
+    scheduled_post_id = await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Went out")
     fixed_clock.advance(timedelta(minutes=2))
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=1)
     fixed_clock.advance(timedelta(minutes=10, seconds=30))
@@ -551,11 +551,11 @@ async def test_a_post_stuck_in_publishing_with_its_part_live_becomes_published(
 
 
 async def test_a_thread_stuck_in_publishing_with_every_part_live_becomes_published(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
     scheduled_post_id = await _schedule_thread(
-        client, version_of, "2026-10-10T12:02:00Z", ["All out", "Also out"]
+        client, post_with, "2026-10-10T12:02:00Z", ["All out", "Also out"]
     )
     fixed_clock.advance(timedelta(minutes=2))
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=2)
@@ -572,10 +572,10 @@ async def test_a_thread_stuck_in_publishing_with_every_part_live_becomes_publish
 
 
 async def test_the_loop_runs_passes_until_it_is_stopped(
-    version_of, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-10T12:02:00Z", "From the loop")
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", "From the loop")
     fixed_clock.advance(timedelta(minutes=2))
     stop = asyncio.Event()
 
@@ -647,7 +647,7 @@ def test_the_compose_healthcheck_reads_the_heartbeat_the_publisher_touches():
 
 
 async def test_the_pass_tracks_what_it_publishes(
-    version_of,
+    post_with,
     client,
     db_session_maker,
     subscribed,
@@ -659,7 +659,7 @@ async def test_the_pass_tracks_what_it_publishes(
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
-    await _schedule_thread(client, version_of, "2026-10-10T12:02:00Z", ["One", "Two"])
+    await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["One", "Two"])
     fixed_clock.advance(timedelta(minutes=2))
 
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)

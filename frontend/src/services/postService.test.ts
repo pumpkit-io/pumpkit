@@ -34,11 +34,17 @@ describe('postService', () => {
     ]);
   });
 
-  it("reads a Post's status and its Scheduled post, with the Version it was copied from", async () => {
+  it("reads a Post's Text, its status and its Scheduled post", async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {
         id: 'post_01',
         brief: 'ship',
+        text: {
+          format: 'post',
+          parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
+          version_number: 1,
+          edited: false,
+        },
         versions: [VERSION],
         status: 'failed',
         scheduled_post: {
@@ -49,7 +55,6 @@ describe('postService', () => {
           published_at: null,
           x_post_url: null,
           failed_reason: 'X refused it.',
-          source_version_id: 'version_attempt_01',
           community: null,
           share_with_followers: false,
           created_at: '2026-10-10T12:00:00Z',
@@ -60,6 +65,12 @@ describe('postService', () => {
     const post = await postService.get('post_01');
 
     expect(apiService.get).toHaveBeenCalledWith('/posts/post_01');
+    expect(post.text).toEqual({
+      format: 'post',
+      parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
+      versionNumber: 1,
+      edited: false,
+    });
     expect(post.status).toBe('failed');
     expect(post.versions[0].parts).toEqual([{ text: 'the final', charCount: 9, charLimit: 280 }]);
     expect(post.scheduledPost).toEqual({
@@ -70,7 +81,6 @@ describe('postService', () => {
       publishedAt: null,
       xPostUrl: null,
       failedReason: 'X refused it.',
-      sourceVersionId: 'version_attempt_01',
       community: null,
       shareWithFollowers: false,
       createdAt: '2026-10-10T12:00:00Z',
@@ -115,6 +125,7 @@ describe('postService', () => {
       data: {
         id: 'post_01',
         brief: 'ship',
+        text: null,
         versions: [VERSION],
         status: 'draft',
         scheduled_post: null,

@@ -251,20 +251,20 @@ async def test_disconnecting_removes_the_x_connection_and_revokes_its_grant(
 
 
 async def test_the_x_connection_counts_the_scheduled_posts_waiting_to_go_out_on_it(
-    client, subscribed, fake_x_publisher, fixed_clock, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, post_with
 ):
     await _connect(client)
     for text in ("One", "Two"):
         await client.post(
             "/api/v1/scheduled-posts",
             json={
-                "source_version_id": await version_of(text),
+                "post_id": await post_with(text),
                 "publish_at": "2026-10-11T09:00:00Z",
             },
         )
     await client.post(
         "/api/v1/scheduled-posts",
-        json={"source_version_id": await version_of("Gone"), "publish_now": True},
+        json={"post_id": await post_with("Gone"), "publish_now": True},
     )
 
     response = await client.get(X_CONNECTION)
@@ -273,13 +273,13 @@ async def test_the_x_connection_counts_the_scheduled_posts_waiting_to_go_out_on_
 
 
 async def test_scheduled_posts_waiting_for_another_x_account_are_not_counted(
-    client, subscribed, fake_x_publisher, fixed_clock, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, post_with
 ):
     await _connect(client)
     await client.post(
         "/api/v1/scheduled-posts",
         json={
-            "source_version_id": await version_of("For ada"),
+            "post_id": await post_with("For ada"),
             "publish_at": "2026-10-11T09:00:00Z",
         },
     )

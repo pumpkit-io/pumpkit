@@ -58,8 +58,8 @@ class ScheduledPostCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # The Version whose text the server copies: a Scheduled post is never typed (ADR 0015).
-    source_version_id: str
+    # The Post whose Text the server copies: a Scheduled post is never typed (ADR 0015, 0016).
+    post_id: str
     # A time with its UTC offset, or else publish within the request.
     publish_at: Optional[AwareDatetime] = None
     publish_now: bool = False
@@ -88,8 +88,7 @@ class ScheduledPostResponse(BaseModel):
     x_post_url: Optional[str]
     # Why it Failed, in words for the User.
     failed_reason: Optional[str]
-    # The Version whose text it copied.
-    source_version_id: str
+    # The Post whose Text it copied.
     post_id: str
     # The Community it goes to; None for the User's profile.
     community: Optional[CommunityResponse]
@@ -198,8 +197,8 @@ class ScheduledPostUpdateRequest(BaseModel):
 
     # Every Part in order, replacing those not live; live Parts come first, unchanged.
     parts: Optional[Parts] = None
-    # A Version of the same Post: its Parts after the live ones replace those not live.
-    source_version_id: Optional[str] = None
+    # Copy the Post's Text again: its Parts after the live ones replace those not live.
+    copy_text: bool = False
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
     # Publishes it within the request, on the X account connected now.
