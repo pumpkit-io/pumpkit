@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
-import { postService, type Format, type PostDetail } from '@/services/postService';
+import { postService, textOf, type Format, type PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { statusFrom } from './postStatus';
 import { usePostCounts } from './usePostCounts';
@@ -14,7 +14,7 @@ export type PostLoad =
   | { kind: 'failed'; message: string };
 
 /**
- * One Post as the server has it, with Feedback on it. After an action that changes its
+ * One Post as the server has it, with Feedback on its Text. After an action that changes its
  * Scheduled post, pass the answer to `setScheduledPost` (null once deleted): the status follows,
  * and so do the Post counts behind the sidebar's Failed badge.
  */
@@ -57,7 +57,7 @@ export function usePost(postId: string) {
     [update, refreshCounts],
   );
 
-  /** Resolves true once the new Version is in the Post, so the caller can clear its box. */
+  /** Resolves true once the new Version is the Post's Text, so the caller can clear its box. */
   const addFeedback = useCallback(
     async (feedback: string, format: Format): Promise<boolean> => {
       setIsWriting(true);
@@ -66,7 +66,9 @@ export function usePost(postId: string) {
       try {
         const version = await postService.addVersion(postId, feedback, format);
         update((post) =>
-          post.id === postId ? { ...post, versions: [...post.versions, version] } : post,
+          post.id === postId
+            ? { ...post, versions: [...post.versions, version], text: textOf(version) }
+            : post,
         );
         return true;
       } catch (e) {

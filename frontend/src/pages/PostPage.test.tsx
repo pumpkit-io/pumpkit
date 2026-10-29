@@ -84,6 +84,7 @@ import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import {
   postService,
+  textOf,
   type Part,
   type PostDetail,
   type Tell,
@@ -127,14 +128,24 @@ function version(number: number, texts: string[], extra: Partial<Version> = {}):
   };
 }
 
+/** `post` with `versions`, its Text set from the last of them, as the server sets it. */
+function withVersions<P extends PostDetail>(post: P, versions: Version[]): P {
+  const latest = versions[versions.length - 1]!;
+  return { ...post, versions, text: textOf(latest) };
+}
+
 function draft(versions: Version[] = [version(1, ['the final text'])]): PostDetail {
-  return {
-    id: 'post_01',
-    brief: 'ship small things',
+  return withVersions(
+    {
+      id: 'post_01',
+      brief: 'ship small things',
+      text: null,
+      versions: [],
+      status: 'draft',
+      scheduledPost: null,
+    },
     versions,
-    status: 'draft',
-    scheduledPost: null,
-  };
+  );
 }
 
 function postWith(final: string, finalCharCount = final.length, tells: Tell[] = []): PostDetail {
@@ -166,7 +177,7 @@ const SCHEDULED: ScheduledPost = {
   createdAt: '2026-10-10T12:00:00Z',
 };
 
-/** A Post whose first of two Versions has `scheduledPost`, in the status it gives. */
+/** A Post with two Versions and `scheduledPost`, in the status it gives. */
 function withScheduledPost(scheduledPost: ScheduledPost): PostDetail {
   const status =
     scheduledPost.state === 'publishing' || scheduledPost.state === 'scheduled'
@@ -184,8 +195,8 @@ function renderPost(post: PostDetail, instance: Instance = SELLS_PLANS) {
   return renderSignedIn(`/posts/${post.id}`, { instance });
 }
 
-async function versionCard() {
-  return within(await screen.findByRole('article', { name: /^Version \d+$/ }));
+async function textCard() {
+  return within(await screen.findByRole('article', { name: 'Text' }));
 }
 
 function panel(name: string) {
@@ -219,7 +230,7 @@ describe('Post page', () => {
   it('loads the Post from its address, under a breadcrumb with its status and title', async () => {
     renderPost(postWith('the final text\nand a second line'));
 
-    await versionCard();
+    await textCard();
     const heading = screen.getByRole('heading', { level: 1 });
     expect(heading).toHaveTextContent('Posts / Drafts / the final text');
     expect(heading).not.toHaveTextContent('second line');
@@ -232,16 +243,25 @@ describe('Post page', () => {
     expect(
       (await screen.findByRole('link', { name: 'Persona: @levelsio' })).closest('header'),
     ).not.toBeNull();
-    expect(panel('Brief').getByText('ship small things')).toBeInTheDocument();
   });
 
   it('shortens a long title with an ellipsis', async () => {
     renderPost(postWith(`${'word '.repeat(30)}end`));
 
-    await versionCard();
+    await textCard();
     const heading = screen.getByRole('heading', { level: 1 });
     expect(heading).toHaveTextContent(/word…$/);
     expect(heading).not.toHaveTextContent('end');
+  });
+
+  it('shows a card-shaped placeholder and the dock, disabled, while the Post loads', async () => {
+    vi.mocked(postService.get).mockReturnValue(new Promise(() => {}));
+    renderSignedIn('/posts/post_01');
+
+    expect(await screen.findByRole('status', { name: 'Loading the Post' })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Text' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Feedback' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
   });
 
   it('says so when the Post is not found', async () => {
@@ -250,6 +270,7 @@ describe('Post page', () => {
 
     expect(await screen.findByText(/this post isn.t here/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Write a new Post' })).toHaveAttribute('href', '/new');
+    expect(screen.queryByRole('textbox', { name: 'Feedback' })).not.toBeInTheDocument();
   });
 
   it('offers to try again when the Post could not be loaded', async () => {
@@ -260,22 +281,14 @@ describe('Post page', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
 
-    expect((await versionCard()).getByText('the final text')).toBeInTheDocument();
+    expect((await textCard()).getByText('the final text')).toBeInTheDocument();
   });
 
-  describe('Version card', () => {
-    it('shows the Version number, its Format and its Part count', async () => {
-      renderPost(threadWith([part('the first part'), part('the second part')]));
-
-      const card = await versionCard();
-      expect(card.getByRole('heading', { name: 'Version 1' })).toBeInTheDocument();
-      expect(card.getByText('Thread · 2 Parts')).toBeInTheDocument();
-    });
-
+  describe('Text card', () => {
     it("shows each Part as an X post with the User's name, handle, place and count", async () => {
       renderPost(threadWith([part('the first part'), part('the second part', 290)]));
 
-      const card = await versionCard();
+      const card = await textCard();
       const parts = card
         .getAllByRole('listitem', { name: /^Part \d of 2$/ })
         .map((item) => within(item));
@@ -289,40 +302,46 @@ describe('Post page', () => {
       expect(parts[1].getByText("10 characters over X's 280-character limit")).toBeInTheDocument();
     });
 
-    it('shows a single post as one X post with no place in a Thread', async () => {
+    it('shows a single post with no Version number, Format, Part count or place', async () => {
       renderPost(postWith('the final text'));
 
-      const card = await versionCard();
-      expect(card.getByText('Single post · 1 Part')).toBeInTheDocument();
+      const card = await textCard();
       const only = card.getByRole('listitem', { name: 'Post' });
       expect(within(only).getByText('14 / 280')).toBeInTheDocument();
       expect(within(only).queryByText('1/1')).not.toBeInTheDocument();
+      expect(card.queryByText(/Version 1/)).not.toBeInTheDocument();
+      expect(card.queryByText(/Single post|1 Part/)).not.toBeInTheDocument();
     });
 
-    it('says the slop check found no machine-written tells', async () => {
-      renderPost(postWith('the final text'));
-
-      expect((await versionCard()).getByText('No machine-written tells')).toBeInTheDocument();
-    });
-
-    it('lists the tells the slop check found', async () => {
+    it('shows no machine-written tells', async () => {
       renderPost(
         postWith('the unfair advantage — distribution', undefined, [
           { name: 'em_dash', description: 'em dash' },
-          { name: 'startup_cliche', description: 'startup-commentary cliche' },
         ]),
       );
 
-      const card = await versionCard();
-      expect(card.getByText('2 machine-written tells')).toBeInTheDocument();
-      const tells = within(card.getByRole('list', { name: 'Machine-written tells' }));
-      expect(tells.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-        'em dash',
-        'startup-commentary cliche',
-      ]);
+      await textCard();
+      expect(screen.queryByText(/machine-written/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('em dash')).not.toBeInTheDocument();
     });
 
-    it("shows the Scheduled post's text on the Version it was copied from", async () => {
+    it("shows the Post's Text, not its latest Version", async () => {
+      renderPost({
+        ...draft([version(1, ['the first text']), version(2, ['the second text'])]),
+        text: {
+          format: 'post',
+          parts: [part('the text on screen')],
+          versionNumber: 1,
+          edited: true,
+        },
+      });
+
+      const card = await textCard();
+      expect(card.getByText('the text on screen')).toBeInTheDocument();
+      expect(screen.queryByText('the second text')).not.toBeInTheDocument();
+    });
+
+    it("shows the Scheduled post's text on a Scheduled Post", async () => {
       renderPost(
         withScheduledPost({
           ...SCHEDULED,
@@ -330,233 +349,227 @@ describe('Post page', () => {
         }),
       );
 
-      const card = await versionCard();
-      expect(card.getByRole('heading', { name: 'Version 1' })).toBeInTheDocument();
+      const card = await textCard();
       expect(card.getByText('the final text, edited')).toBeInTheDocument();
-      expect(card.queryByText('the final text')).not.toBeInTheDocument();
       expect(card.getByText('22 / 280')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Next Version' }));
-
-      expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
-    });
-
-    it("gives the Format and Part count of the Scheduled post's edited text, and claims no tells for it", async () => {
-      renderPost({
-        ...withScheduledPost({
-          ...SCHEDULED,
-          parts: [
-            { text: 'part one', live: false, xPostUrl: null },
-            { text: 'part two', live: false, xPostUrl: null },
-          ],
-        }),
-        versions: [
-          version(1, ['the final text'], { tells: [{ name: 'em_dash', description: 'em dash' }] }),
-        ],
-      });
-
-      const card = await versionCard();
-      expect(card.getByText('Thread · 2 Parts')).toBeInTheDocument();
-      expect(card.getByText('Edited, not checked for tells')).toBeInTheDocument();
-      expect(card.queryByText('1 machine-written tell')).not.toBeInTheDocument();
-      expect(card.queryByRole('list', { name: 'Machine-written tells' })).not.toBeInTheDocument();
-    });
-
-    it("keeps the Version's tells on a Scheduled post with its text unedited", async () => {
-      renderPost({
-        ...withScheduledPost(SCHEDULED),
-        versions: [
-          version(1, ['the final text'], { tells: [{ name: 'em_dash', description: 'em dash' }] }),
-        ],
-      });
-
-      expect((await versionCard()).getByText('1 machine-written tell')).toBeInTheDocument();
     });
   });
 
-  describe('Pager', () => {
-    it('opens on the latest Version of a Draft and steps through every Version', async () => {
-      renderPost(draft([version(1, ['the first text']), version(2, ['the second text'])]));
-
-      expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      expect(pager.getByText('Version 2 of 2')).toBeInTheDocument();
-      expect(pager.getByText('"punchier"')).toBeInTheDocument();
-      expect(pager.getByRole('button', { name: 'Next Version' })).toBeDisabled();
-
-      fireEvent.click(pager.getByRole('button', { name: 'Previous Version' }));
-
-      expect((await versionCard()).getByText('the first text')).toBeInTheDocument();
-      expect(pager.getByText('From your brief')).toBeInTheDocument();
-      expect(pager.getByRole('button', { name: 'Previous Version' })).toBeDisabled();
-
-      fireEvent.click(pager.getByRole('button', { name: 'Version 2' }));
-
-      expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
-    });
-
-    it.each([
-      ['scheduled', 'Scheduled'],
-      ['publishing', 'Scheduled'],
-      ['failed', 'Failed'],
-      ['published', 'Published'],
-    ] as const)(
-      'marks the Version with a %s Scheduled post and prefixes its footer',
-      async (state, label) => {
-        renderPost(withScheduledPost({ ...SCHEDULED, state }));
-
-        await versionCard();
-        const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-        // A Failed Post opens on its latest Version, so go back to the one that failed.
-        fireEvent.click(pager.getByRole('button', { name: `Version 1, ${label}` }));
-        expect(pager.getByRole('button', { name: `Version 1, ${label}` })).toHaveAttribute(
-          'aria-current',
-          'true',
-        );
-        expect(pager.getByText(`${label} · From your brief`)).toBeInTheDocument();
-
-        fireEvent.click(pager.getByRole('button', { name: 'Version 2' }));
-
-        expect(pager.getByText('"punchier"')).toBeInTheDocument();
-      },
-    );
-  });
-
-  describe('Copy post', () => {
+  describe('Copy', () => {
     let writeText: ReturnType<typeof vi.fn>;
     beforeEach(() => {
       writeText = vi.fn().mockResolvedValue(undefined);
       Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     });
 
-    it('copies every Part of the Version on screen', async () => {
-      renderPost(draft([version(1, ['the first text']), version(2, ['part one', 'part two'])]));
-      await versionCard();
+    it('copies a single post as it is, then says so for two seconds', async () => {
+      renderPost(postWith('the final text\n\nwith a gap'));
+      const card = await textCard();
 
-      fireEvent.click(panel('Draft').getByRole('button', { name: 'Copy post' }));
+      fireEvent.click(card.getByRole('button', { name: 'Copy post' }));
 
-      expect(writeText).toHaveBeenCalledWith('part one\n\npart two');
-      expect(await panel('Draft').findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+      expect(writeText).toHaveBeenCalledWith('the final text\n\nwith a gap');
+      expect(await card.findByRole('status')).toHaveTextContent('Copied');
       expect(track).toHaveBeenCalledWith('post_final_copied');
-
-      fireEvent.click(screen.getByRole('button', { name: 'Previous Version' }));
-      fireEvent.click(await panel('Draft').findByRole('button', { name: /^Cop/ }));
-
-      expect(writeText).toHaveBeenLastCalledWith('the first text');
+      await waitFor(() => expect(card.getByRole('status')).toHaveTextContent(''), {
+        timeout: 2500,
+      });
     });
 
-    it("copies the Scheduled post's text on the Version that has it", async () => {
+    it('copies a Thread with a line holding only --- between its Parts', async () => {
+      renderPost(threadWith([part('part one'), part('part two'), part('part three')]));
+      const card = await textCard();
+
+      fireEvent.click(card.getByRole('button', { name: 'Copy post' }));
+
+      expect(writeText).toHaveBeenCalledWith('part one\n\n---\n\npart two\n\n---\n\npart three');
+      expect(await card.findByText('Copied')).toBeInTheDocument();
+    });
+
+    it("copies the Scheduled post's text on a Scheduled Post", async () => {
       renderPost(
         withScheduledPost({
           ...SCHEDULED,
           parts: [{ text: 'the final text, edited', live: false, xPostUrl: null }],
         }),
       );
-      await versionCard();
+      const card = await textCard();
 
-      fireEvent.click(panel('Scheduled').getByRole('button', { name: 'Copy post' }));
+      fireEvent.click(card.getByRole('button', { name: 'Copy post' }));
 
       expect(writeText).toHaveBeenCalledWith('the final text, edited');
+      expect(await card.findByText('Copied')).toBeInTheDocument();
+    });
+
+    it('says to select the text and copy it when the browser refuses', async () => {
+      writeText.mockRejectedValue(new Error('NotAllowedError'));
+      renderPost(postWith('the final text'));
+      const card = await textCard();
+
+      fireEvent.click(card.getByRole('button', { name: 'Copy post' }));
+
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(
+        "Couldn't copy. Select the text and copy it yourself.",
+      );
+      expect(track).not.toHaveBeenCalledWith('post_final_copied');
+    });
+  });
+
+  describe('Origin line', () => {
+    it('says the Text came from the Brief, and opens the full Brief', async () => {
+      renderPost(postWith('the final text'));
+      await textCard();
+
+      fireEvent.click(panel('Draft').getByRole('button', { name: 'V1 · From your Brief' }));
+
+      const brief = await screen.findByRole('dialog', { name: 'Brief' });
+      expect(within(brief).getByText('ship small things')).toBeInTheDocument();
+      fireEvent.keyDown(brief, { key: 'Escape' });
+      await dialogClosed();
+    });
+
+    it("names the Feedback the Text's Version came from, and opens it in full", async () => {
+      renderPost(
+        draft([
+          version(1, ['the first text']),
+          version(2, ['the second text'], { feedback: 'Shorter, and drop the last line.' }),
+        ]),
+      );
+      await textCard();
+
+      fireEvent.click(
+        panel('Draft').getByRole('button', {
+          name: 'V2 · From Feedback: “Shorter, and drop the last line.”',
+        }),
+      );
+
+      const feedback = await screen.findByRole('dialog', { name: 'Feedback' });
+      expect(within(feedback).getByText('Shorter, and drop the last line.')).toBeInTheDocument();
+      fireEvent.pointerDown(document.body);
+      await dialogClosed();
+    });
+
+    it('follows the Version the Text came from, and says when it was edited', async () => {
+      renderPost({
+        ...draft([version(1, ['the first text']), version(2, ['the second text'])]),
+        text: { format: 'post', parts: [part('changed')], versionNumber: 1, edited: true },
+      });
+      await textCard();
+
+      expect(
+        panel('Draft').getByRole('button', { name: 'V1 · From your Brief · edited' }),
+      ).toBeInTheDocument();
     });
   });
 
   describe('Draft', () => {
     const versionTwo = version(2, ['the second final'], { feedback: 'make it shorter' });
 
-    function sendFeedback(feedback: string) {
-      const draftPanel = panel('Draft');
-      fireEvent.change(draftPanel.getByLabelText('Feedback'), { target: { value: feedback } });
-      fireEvent.click(draftPanel.getByRole('button', { name: 'Rewrite' }));
+    function feedbackBox() {
+      return panel('Draft').getByRole('textbox', { name: 'Feedback' });
     }
 
-    it('offers Feedback with a hint, the Format and Rewrite', async () => {
-      renderPost(postWith('the final text'));
-      await versionCard();
+    /** Types `feedback` and sends it once the Subscription has loaded and sending is possible. */
+    async function sendFeedback(feedback: string) {
+      fireEvent.change(feedbackBox(), { target: { value: feedback } });
+      const send = panel('Draft').getByRole('button', { name: 'Send Feedback' });
+      await waitFor(() => expect(send).toBeEnabled());
+      fireEvent.click(send);
+    }
 
-      const draftPanel = panel('Draft');
-      expect(
-        draftPanel.getByText(/everything you don.t mention stays as it is/i),
-      ).toBeInTheDocument();
-      expect(draftPanel.getByRole('radio', { name: 'Single post' })).toBeChecked();
-      expect(await draftPanel.findByRole('button', { name: 'Rewrite' })).toBeDisabled();
+    it('offers a Feedback composer with the Format, a send arrow and "Post to…"', async () => {
+      renderPost(postWith('the final text'));
+      await textCard();
+
+      const dock = panel('Draft');
+      expect(feedbackBox()).toHaveAttribute('placeholder', 'What should change?');
+      expect(dock.getByRole('radio', { name: 'Single post' })).toBeChecked();
+      expect(dock.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
+      expect(await dock.findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      expect(dock.queryByText(/everything you don.t mention/i)).not.toBeInTheDocument();
+      expect(dock.queryByRole('button', { name: 'Rewrite' })).not.toBeInTheDocument();
     });
 
-    it('writes the next Version from Feedback, then shows it and clears the box', async () => {
+    it('writes the next Version from Feedback, locking the page, then shows it and empties the box', async () => {
       let answer: (v: Version) => void = () => {};
       vi.mocked(postService.addVersion).mockReturnValue(
         new Promise((resolve) => (answer = resolve)),
       );
       renderPost(postWith('the first final'));
-      await versionCard();
-      await panel('Draft').findByRole('button', { name: 'Rewrite' });
+      await textCard();
 
-      sendFeedback('  make it shorter ');
+      await sendFeedback('  make it shorter ');
 
-      const draftPanel = panel('Draft');
-      expect(draftPanel.getByLabelText('Feedback')).toBeDisabled();
-      expect(draftPanel.getByRole('button', { name: /writing/i })).toBeDisabled();
-      expect(draftPanel.getByRole('status')).toHaveTextContent(/writing the next version/i);
+      const dock = panel('Draft');
+      expect(feedbackBox()).toBeDisabled();
+      expect(feedbackBox()).toHaveValue('  make it shorter ');
+      expect(dock.getByRole('button', { name: 'Writing…' })).toBeDisabled();
+      expect(dock.getByText('Writing Version 2 from your Feedback…')).toBeInTheDocument();
+      expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true');
       expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'feedback' });
 
       answer(versionTwo);
 
-      expect(await screen.findByRole('heading', { name: 'Version 2' })).toBeInTheDocument();
-      expect((await versionCard()).getByText('the second final')).toBeInTheDocument();
-      expect(screen.getByText('"make it shorter"')).toBeInTheDocument();
-      expect(draftPanel.getByLabelText('Feedback')).toHaveValue('');
-      expect(draftPanel.getByLabelText('Feedback')).toBeEnabled();
+      expect((await textCard()).getByText('the second final')).toBeInTheDocument();
+      expect(
+        await dock.findByRole('button', { name: 'V2 · From Feedback: “make it shorter”' }),
+      ).toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('');
+      expect(feedbackBox()).toBeEnabled();
+      expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'false');
     });
 
-    it("starts the Format on the latest Version's and switches it with the Feedback", async () => {
+    it("starts the Format on the Text's and switches it with the Feedback", async () => {
       vi.mocked(postService.addVersion).mockResolvedValue({
         ...versionTwo,
         format: 'thread',
         parts: [part('part one'), part('part two'), part('part three')],
       });
       renderPost(postWith('the first final'));
-      await versionCard();
-      await panel('Draft').findByRole('button', { name: 'Rewrite' });
+      await textCard();
       const format = () => within(panel('Draft').getByRole('radiogroup', { name: 'Format' }));
       expect(format().getByRole('radio', { name: 'Single post' })).toBeChecked();
 
       fireEvent.click(format().getByRole('radio', { name: 'Thread' }));
-      sendFeedback('expand it');
+      await sendFeedback('expand it');
 
       expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'expand it', 'thread');
-      expect(await screen.findByText('Thread · 3 Parts')).toBeInTheDocument();
+      expect(
+        await (await textCard()).findAllByRole('listitem', { name: /^Part \d of 3$/ }),
+      ).toHaveLength(3);
       expect(format().getByRole('radio', { name: 'Thread' })).toBeChecked();
     });
 
-    it('starts the Format on Thread when the latest Version is a Thread', async () => {
+    it('starts the Format on Thread when the Text is a Thread', async () => {
       renderPost(threadWith([part('the first part'), part('the second part')]));
-      await versionCard();
+      await textCard();
 
       const format = within(panel('Draft').getByRole('radiogroup', { name: 'Format' }));
       expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
     });
 
-    it('shows a failure and keeps the Feedback so it can be sent again', async () => {
+    it('shows a failure in the dock with a way to try again, keeping the Feedback', async () => {
       vi.mocked(postService.addVersion)
         .mockRejectedValueOnce(apiError(502, 'Writing the Post failed. Please try again.'))
         .mockResolvedValueOnce(versionTwo);
       renderPost(postWith('the first final'));
-      await versionCard();
-      await panel('Draft').findByRole('button', { name: 'Rewrite' });
+      await textCard();
 
-      sendFeedback('make it shorter');
+      await sendFeedback('make it shorter');
 
-      const draftPanel = panel('Draft');
-      expect(await draftPanel.findByRole('alert')).toHaveTextContent(
+      const dock = panel('Draft');
+      expect(await dock.findByRole('alert')).toHaveTextContent(
         'Writing the Post failed. Please try again.',
       );
-      expect(draftPanel.getByLabelText('Feedback')).toHaveValue('make it shorter');
+      expect(feedbackBox()).toHaveValue('make it shorter');
       expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'feedback' });
 
-      fireEvent.click(draftPanel.getByRole('button', { name: 'Rewrite' }));
+      fireEvent.click(dock.getByRole('button', { name: 'Try again' }));
 
-      expect(await screen.findByRole('heading', { name: 'Version 2' })).toBeInTheDocument();
-      expect(draftPanel.queryByRole('alert')).not.toBeInTheDocument();
+      expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
+      expect(postService.addVersion).toHaveBeenLastCalledWith('post_01', 'make it shorter', 'post');
+      expect(dock.queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it.each([
@@ -565,10 +578,9 @@ describe('Post page', () => {
     ])('does not count a refusal with a %i as a failed Version', async (status, detail) => {
       vi.mocked(postService.addVersion).mockRejectedValue(apiError(status, detail));
       renderPost(postWith('the first final'));
-      await versionCard();
-      await panel('Draft').findByRole('button', { name: 'Rewrite' });
+      await textCard();
 
-      sendFeedback('make it shorter');
+      await sendFeedback('make it shorter');
 
       expect(await panel('Draft').findByRole('alert')).toHaveTextContent(detail);
       expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
@@ -581,58 +593,74 @@ describe('Post page', () => {
         }),
       );
       renderPost(postWith('the first final'));
-      await versionCard();
-      await panel('Draft').findByRole('button', { name: 'Rewrite' });
+      await textCard();
 
-      sendFeedback('make it shorter');
+      await sendFeedback('make it shorter');
 
       expect(
-        await screen.findByText(
+        await panel('Draft').findByText(
           "You've made 30 attempts at a Version in the last hour. You can write again at 3:42 PM.",
         ),
       ).toHaveAttribute('role', 'status');
-      expect(panel('Draft').getByLabelText('Feedback')).toHaveValue('make it shorter');
+      expect(feedbackBox()).toHaveValue('make it shorter');
     });
 
     it('shows a length counter only near the Feedback limit, and refuses Feedback over it', async () => {
       renderPost(postWith('the first final'));
-      await versionCard();
-      await panel('Draft').findByRole('button', { name: 'Rewrite' });
-      const draftPanel = panel('Draft');
-      const feedback = draftPanel.getByLabelText('Feedback');
+      await textCard();
+      const dock = panel('Draft');
 
-      fireEvent.change(feedback, { target: { value: 'a'.repeat(1000) } });
-      expect(draftPanel.queryByText(/100,000/)).not.toBeInTheDocument();
+      fireEvent.change(feedbackBox(), { target: { value: 'a'.repeat(1000) } });
+      expect(dock.queryByText(/100,000/)).not.toBeInTheDocument();
 
-      fireEvent.change(feedback, { target: { value: '😀'.repeat(95_000) } });
-      expect(draftPanel.getByText('95,000 / 100,000 characters')).toBeInTheDocument();
-      expect(draftPanel.getByRole('button', { name: 'Rewrite' })).toBeEnabled();
+      fireEvent.change(feedbackBox(), { target: { value: '😀'.repeat(95_000) } });
+      expect(dock.getByText('95,000 / 100,000 characters')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(dock.getByRole('button', { name: 'Send Feedback' })).toBeEnabled(),
+      );
 
-      fireEvent.change(feedback, { target: { value: 'a'.repeat(100_003) } });
-      expect(draftPanel.getByText('3 characters over the 100,000 limit')).toBeInTheDocument();
-      expect(draftPanel.getByRole('button', { name: 'Rewrite' })).toBeDisabled();
+      fireEvent.change(feedbackBox(), { target: { value: 'a'.repeat(100_003) } });
+      expect(dock.getByText('3 characters over the 100,000 limit')).toBeInTheDocument();
+      expect(dock.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
     });
 
-    it('asks a User who is not Subscribed to subscribe before Feedback', async () => {
+    it('asks a User who is not Subscribed to subscribe in place of the send arrow', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderPost(postWith('the first final'));
-      await versionCard();
+      await textCard();
 
-      expect(await panel('Draft').findByRole('link', { name: /subscribe/i })).toBeInTheDocument();
-      expect(panel('Draft').queryByRole('button', { name: 'Rewrite' })).not.toBeInTheDocument();
+      const dock = panel('Draft');
+      fireEvent.click(await dock.findByRole('link', { name: 'Subscribe to write' }));
+      expect(dock.queryByRole('button', { name: 'Send Feedback' })).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_feedback' });
+    });
+
+    it('keeps typed Feedback in the box after "Post to…"', async () => {
+      renderPost(postWith('the first final'));
+      await textCard();
+
+      fireEvent.change(feedbackBox(), { target: { value: 'keep me' } });
+      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+      await dialogClosed();
+
+      expect(feedbackBox()).toHaveValue('keep me');
     });
   });
 
   describe('Scheduled', () => {
-    it('says when it goes out, which Version, where and in which time zone, with no Feedback', async () => {
+    it('says when and where it goes out, with Edit and no Feedback', async () => {
       renderPost(withScheduledPost(SCHEDULED));
-      await versionCard();
+      await textCard();
 
-      const scheduled = panel('Scheduled');
-      expect(scheduled.getByText('Scheduled for Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
-      expect(scheduled.getByText('Version 1 · Your profile · Europe/Rome')).toBeInTheDocument();
-      expect(scheduled.getByRole('button', { name: 'Copy post' })).toBeInTheDocument();
-      expect(screen.queryByLabelText('Feedback')).not.toBeInTheDocument();
+      const dock = panel('Scheduled');
+      expect(dock.getByText('Scheduled for Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
+      expect(dock.getByText('Your profile')).toBeInTheDocument();
+      expect(dock.getByRole('button', { name: /^V2 · From Feedback/ })).toBeInTheDocument();
+      expect(await dock.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(screen.queryByRole('textbox', { name: 'Feedback' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Post to…' })).not.toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
         'Posts / Scheduled / the final text',
       );
@@ -645,7 +673,7 @@ describe('Post page', () => {
           community: { id: '123', name: 'Indie makers', url: 'https://x.com/i/communities/123' },
         }),
       );
-      await versionCard();
+      await textCard();
 
       expect(panel('Scheduled').getByRole('link', { name: 'Indie makers' })).toHaveAttribute(
         'href',
@@ -670,7 +698,7 @@ describe('Post page', () => {
 
     async function startEditing(scheduledPost: ScheduledPost = SCHEDULED) {
       renderPost(withScheduledPost(scheduledPost));
-      await versionCard();
+      await textCard();
       fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
       return within(await screen.findByRole('region', { name: 'Edit the Scheduled post' }));
     }
@@ -682,7 +710,7 @@ describe('Post page', () => {
       });
       const editor = await startEditing();
 
-      const card = await versionCard();
+      const card = await textCard();
       const text = card.getByRole('textbox', { name: 'Post text' });
       expect(text).toHaveValue('the final text');
       fireEvent.change(text, { target: { value: 'the edited text' } });
@@ -695,7 +723,7 @@ describe('Post page', () => {
         }),
       );
       expect(await panel('Scheduled').findByRole('button', { name: 'Edit' })).toBeInTheDocument();
-      expect((await versionCard()).getByText('the edited text')).toBeInTheDocument();
+      expect((await textCard()).getByText('the edited text')).toBeInTheDocument();
       expect(screen.queryByRole('textbox', { name: 'Post text' })).not.toBeInTheDocument();
     });
 
@@ -710,7 +738,7 @@ describe('Post page', () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue(thread);
       const editor = await startEditing(thread);
 
-      const card = await versionCard();
+      const card = await textCard();
       expect(card.queryByRole('textbox', { name: 'Part 1 text' })).not.toBeInTheDocument();
       expect(card.getByRole('link', { name: 'Part 1 is live on X' })).toBeInTheDocument();
       fireEvent.change(card.getByRole('textbox', { name: 'Part 2 text' }), {
@@ -792,15 +820,13 @@ describe('Post page', () => {
           community: null,
         }),
       );
-      expect(
-        await panel('Scheduled').findByText('Version 1 · Your profile · Europe/Rome'),
-      ).toBeInTheDocument();
+      expect(await panel('Scheduled').findByText('Your profile')).toBeInTheDocument();
     });
 
     it('throws the edits away on Cancel', async () => {
       const editor = await startEditing();
 
-      fireEvent.change((await versionCard()).getByRole('textbox', { name: 'Post text' }), {
+      fireEvent.change((await textCard()).getByRole('textbox', { name: 'Post text' }), {
         target: { value: 'never mind' },
       });
       fireEvent.change(editor.getByLabelText('Time'), { target: { value: '11:00' } });
@@ -809,7 +835,7 @@ describe('Post page', () => {
       expect(
         await panel('Scheduled').findByText('Scheduled for Mon, Oct 12, 9:00 AM'),
       ).toBeInTheDocument();
-      expect((await versionCard()).getByText('the final text')).toBeInTheDocument();
+      expect((await textCard()).getByText('the final text')).toBeInTheDocument();
       expect(screen.queryByText('never mind')).not.toBeInTheDocument();
       expect(scheduledPostService.edit).not.toHaveBeenCalled();
     });
@@ -827,7 +853,7 @@ describe('Post page', () => {
 
       expect(await editor.findByText(detail)).toBeInTheDocument();
       expect(editor.getByRole('button', { name: 'Save changes' })).toBeEnabled();
-      expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toBeInTheDocument();
+      expect((await textCard()).getByRole('textbox', { name: 'Post text' })).toBeInTheDocument();
     });
 
     it('says the save failed and to try again when the API gives no reason', async () => {
@@ -836,14 +862,14 @@ describe('Post page', () => {
       );
       const editor = await startEditing();
 
-      fireEvent.change((await versionCard()).getByRole('textbox', { name: 'Post text' }), {
+      fireEvent.change((await textCard()).getByRole('textbox', { name: 'Post text' }), {
         target: { value: 'the edited text' },
       });
       fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
 
       expect(await editor.findByText("Couldn't save the changes. Try again.")).toBeInTheDocument();
       expect(editor.queryByText('Network Error')).not.toBeInTheDocument();
-      expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
+      expect((await textCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
         'the edited text',
       );
       expect(editor.getByRole('button', { name: 'Save changes' })).toBeEnabled();
@@ -882,7 +908,7 @@ describe('Post page', () => {
 
     it('offers no Edit while it is being published', async () => {
       renderPost(withScheduledPost({ ...SCHEDULED, state: 'publishing' }));
-      await versionCard();
+      await textCard();
 
       expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     });
@@ -890,7 +916,7 @@ describe('Post page', () => {
     it('sends a User who is not Subscribed to Choose a Plan instead of editing', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderPost(withScheduledPost(SCHEDULED));
-      await versionCard();
+      await textCard();
 
       fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
 
@@ -907,7 +933,7 @@ describe('Post page', () => {
       expect(
         await screen.findByRole('region', { name: 'Edit the Scheduled post' }),
       ).toBeInTheDocument();
-      expect((await versionCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
+      expect((await textCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
         'the final text',
       );
     });
@@ -943,20 +969,20 @@ describe('Post page', () => {
       ],
     };
 
-    it('says when and where it was published, that it cannot change, and links to it on X', async () => {
+    it('says when and where it was published, and links to it on X', async () => {
       renderPost(withScheduledPost(PUBLISHED));
-      await versionCard();
+      await textCard();
 
-      const published = panel('Published');
-      expect(published.getByText('Published Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
-      expect(published.getByText('Version 1 · Your profile')).toBeInTheDocument();
-      expect(published.getByText(/published posts can.t be changed/i)).toBeInTheDocument();
-      expect(published.getByRole('link', { name: 'View on X' })).toHaveAttribute(
+      const dock = panel('Published');
+      expect(dock.getByText('Published Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
+      expect(dock.getByText('Your profile')).toBeInTheDocument();
+      expect(dock.getByRole('button', { name: /^V2 · From Feedback/ })).toBeInTheDocument();
+      expect(dock.getByRole('link', { name: 'View on X' })).toHaveAttribute(
         'href',
         'https://x.com/i/web/status/1890000000000000001',
       );
-      expect(published.getByRole('button', { name: 'Copy post' })).toBeInTheDocument();
-      expect(screen.queryByLabelText('Feedback')).not.toBeInTheDocument();
+      expect(screen.queryByRole('textbox', { name: 'Feedback' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Post to…' })).not.toBeInTheDocument();
     });
 
     it('says whether a Community post was shared with followers', async () => {
@@ -967,9 +993,9 @@ describe('Post page', () => {
           shareWithFollowers: true,
         }),
       );
-      await versionCard();
+      await textCard();
 
-      expect(panel('Published').getByText('Shared with your followers')).toBeInTheDocument();
+      expect(panel('Published').getByText(/Shared with your followers/)).toBeInTheDocument();
       expect(panel('Published').getByRole('link', { name: '123' })).toBeInTheDocument();
     });
   });
@@ -981,48 +1007,57 @@ describe('Post page', () => {
       failedReason: 'X refused the post: duplicate content.',
     };
 
-    it('shows when it was due and why, then takes Feedback', async () => {
+    it('shows when it was due and why in the dock, then takes Feedback', async () => {
       vi.mocked(postService.addVersion).mockResolvedValue(
         version(3, ['the third text'], { feedback: 'not a duplicate' }),
       );
       renderPost(withScheduledPost(FAILED));
-      await versionCard();
+      await textCard();
 
-      const failed = panel('Failed');
+      const dock = panel('Failed');
       expect(
-        failed.getByText('This Post didn’t go out. It was due Mon, Oct 12, 9:00 AM.'),
+        dock.getByText('This Post didn’t go out. It was due Mon, Oct 12, 9:00 AM.'),
       ).toBeInTheDocument();
-      expect(failed.getByText('X refused the post: duplicate content.')).toBeInTheDocument();
-      await failed.findByRole('button', { name: 'Rewrite' });
-      fireEvent.change(failed.getByLabelText('Feedback'), { target: { value: 'not a duplicate' } });
-      fireEvent.click(failed.getByRole('button', { name: 'Rewrite' }));
+      expect(dock.getByText('X refused the post: duplicate content.')).toBeInTheDocument();
+      expect(await dock.findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      fireEvent.change(dock.getByRole('textbox', { name: 'Feedback' }), {
+        target: { value: 'not a duplicate' },
+      });
+      const send = dock.getByRole('button', { name: 'Send Feedback' });
+      await waitFor(() => expect(send).toBeEnabled());
+      fireEvent.click(send);
 
-      expect(await screen.findByRole('heading', { name: 'Version 3' })).toBeInTheDocument();
+      expect(await (await textCard()).findByText('the third text')).toBeInTheDocument();
+      expect(
+        dock.getByRole('button', { name: 'V3 · From Feedback: “not a duplicate”' }),
+      ).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Failed /');
     });
 
-    it('marks the Parts of a Thread already live on X', async () => {
+    it('marks the Parts of a Thread already live on X, with the Text after them', async () => {
       renderPost(
-        withScheduledPost({
-          ...FAILED,
-          parts: [
-            { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
-            { text: 'Refused two.', live: false, xPostUrl: null },
-          ],
-        }),
+        withVersions(
+          withScheduledPost({
+            ...FAILED,
+            parts: [
+              { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
+              { text: 'Refused two.', live: false, xPostUrl: null },
+            ],
+          }),
+          [version(1, ['Live one.', 'Refused two.']), version(2, ['Rewritten one.', 'New two.'])],
+        ),
       );
-      await versionCard();
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      fireEvent.click(pager.getByRole('button', { name: 'Version 1, Failed' }));
 
-      const card = await versionCard();
+      const card = await textCard();
       const [first, second] = card
         .getAllByRole('listitem', { name: /^Part \d of 2$/ })
         .map((item) => within(item));
+      expect(first!.getByText('Live one.')).toBeInTheDocument();
       expect(first!.getByRole('link', { name: 'Part 1 is live on X' })).toHaveAttribute(
         'href',
         'https://x.com/i/web/status/1',
       );
+      expect(second!.getByText('New two.')).toBeInTheDocument();
       expect(second!.queryByText('Live on X')).not.toBeInTheDocument();
     });
   });
@@ -1063,7 +1098,7 @@ describe('Post page', () => {
     /** Opens "Post to…" on the Draft `post`, once its Version is on screen. */
     async function openPostTo(post: PostDetail = postWith('the final text')): Promise<Dialog> {
       renderPost(post);
-      await versionCard();
+      await textCard();
       fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
     }
@@ -1080,7 +1115,7 @@ describe('Post page', () => {
 
     it('replaces Schedule and Post now with "Post to…"', async () => {
       renderPost(postWith('the final text'));
-      await versionCard();
+      await textCard();
 
       const draftPanel = panel('Draft');
       expect(await draftPanel.findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
@@ -1120,26 +1155,6 @@ describe('Post page', () => {
         panel('Scheduled').getByText('Scheduled for Mon, Oct 12, 9:00 AM'),
       ).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Scheduled /');
-    });
-
-    it('sends the Version on screen, not the latest', async () => {
-      vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
-      renderPost(draft([version(1, ['the final text']), version(2, ['the second text'])]));
-      await versionCard();
-      fireEvent.click(screen.getByRole('button', { name: 'Previous Version' }));
-      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
-
-      expect(dialog.getByText('Version 1 · Single post · 1 Part · as @ada')).toBeInTheDocument();
-      scheduleAt(dialog, '2026-10-12', '09:00');
-      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
-
-      await dialogClosed();
-      expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
-        '2026-10-12T07:00:00.000Z',
-        { community: null, shareWithFollowers: false },
-      );
     });
 
     it('shows why scheduling was refused and keeps the dialog open', async () => {
@@ -1409,7 +1424,7 @@ describe('Post page', () => {
     it('sends a User who is not Subscribed to Choose a Plan', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderPost(postWith('the final text'));
-      await versionCard();
+      await textCard();
 
       fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
 
@@ -1432,7 +1447,7 @@ describe('Post page', () => {
 
     it('opens "Post to…" on an Instance that sells no Plans', async () => {
       renderPost(postWith('the final text'), { ...SELLS_PLANS, sells_plans: false });
-      await versionCard();
+      await textCard();
 
       fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
 
@@ -1456,10 +1471,10 @@ describe('Post page', () => {
     };
 
     function failedThread(latest: Version): PostDetail {
-      return {
-        ...withScheduledPost(FAILED_PARTWAY),
-        versions: [version(1, ['Live one.', 'Refused two.']), latest],
-      };
+      return withVersions(withScheduledPost(FAILED_PARTWAY), [
+        version(1, ['Live one.', 'Refused two.']),
+        latest,
+      ]);
     }
 
     afterEach(() => {
@@ -1475,23 +1490,22 @@ describe('Post page', () => {
       vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);
     });
 
-    /** Opens "Post to…" on the Failed `post` as it loads, on its latest Version. */
+    /** Opens "Post to…" on the Failed `post` once it loads. */
     async function openRetry(post: PostDetail = withScheduledPost(FAILED)): Promise<Dialog> {
       renderPost(post);
-      await versionCard();
+      await textCard();
       fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
     }
 
-    it('opens on the latest Version, not the one that failed', async () => {
+    it('shows the Text, from the latest Version, not the text that failed', async () => {
       renderPost(withScheduledPost(FAILED));
 
-      expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      expect(pager.getByText('Version 2 of 2')).toBeInTheDocument();
+      expect((await textCard()).getByText('the second text')).toBeInTheDocument();
+      expect(screen.queryByText('the final text')).not.toBeInTheDocument();
     });
 
-    it('reschedules the Failed one with the latest Version, and the pager marks that Version', async () => {
+    it("reschedules the Failed one with the Text's Version", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
         parts: [{ text: 'the second text', live: false, xPostUrl: null }],
@@ -1515,15 +1529,9 @@ describe('Post page', () => {
         panel('Scheduled').getByText('Scheduled for Mon, Oct 12, 9:00 AM'),
       ).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Scheduled /');
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      expect(pager.getByRole('button', { name: 'Version 2, Scheduled' })).toHaveAttribute(
-        'aria-current',
-        'true',
-      );
-      expect(pager.getByRole('button', { name: 'Version 1' })).toBeInTheDocument();
     });
 
-    it('posts the latest Version now and shows the Published Post', async () => {
+    it("posts the Text's Version now and shows the Published Post", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
         state: 'published',
@@ -1549,16 +1557,12 @@ describe('Post page', () => {
         'href',
         'https://x.com/i/web/status/1890000000000000002',
       );
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      expect(pager.getByRole('button', { name: 'Version 2, Published' })).toBeInTheDocument();
     });
 
-    it('retries the Version it failed with as it stands, keeping its text', async () => {
+    it('retries with the text that failed as it stands when the Text came from its Version', async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue(SCHEDULED);
-      renderPost(withScheduledPost(FAILED));
-      await versionCard();
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      fireEvent.click(pager.getByRole('button', { name: 'Version 1, Failed' }));
+      renderPost(withVersions(withScheduledPost(FAILED), [version(1, ['the final text'])]));
+      await textCard();
 
       fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
@@ -1655,10 +1659,12 @@ describe('Post page', () => {
 
     it('does not count a live Part against the limit', async () => {
       const longLive = { ...LIVE_ONE, text: 'a'.repeat(300) };
-      const dialog = await openRetry({
-        ...withScheduledPost({ ...FAILED_PARTWAY, parts: [longLive, FAILED_PARTWAY.parts[1]!] }),
-        versions: [version(1, [longLive.text, 'Refused two.']), version(2, ['x', 'Fixed two.'])],
-      });
+      const dialog = await openRetry(
+        withVersions(
+          withScheduledPost({ ...FAILED_PARTWAY, parts: [longLive, FAILED_PARTWAY.parts[1]!] }),
+          [version(1, [longLive.text, 'Refused two.']), version(2, ['x', 'Fixed two.'])],
+        ),
+      );
 
       expect(dialog.queryByText(/over X's/)).not.toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Review and post' })).toBeEnabled();
@@ -1701,7 +1707,7 @@ describe('Post page', () => {
       failedReason: 'X refused the post: duplicate content.',
     });
     renderPost(postWith('the final text'));
-    await versionCard();
+    await textCard();
     const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
     expect(sidebar.getByRole('link', { name: 'Posts' })).toBeInTheDocument();
     vi.mocked(postService.list).mockResolvedValue({
@@ -1735,7 +1741,7 @@ describe('Post page', () => {
         failedReason: 'X refused the post: duplicate content.',
       }),
     );
-    await versionCard();
+    await textCard();
     const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
     expect(await sidebar.findByRole('link', { name: 'Posts, 1 Failed' })).toBeInTheDocument();
     vi.mocked(postService.list).mockResolvedValue(NO_POSTS);

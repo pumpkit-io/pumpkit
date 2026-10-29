@@ -45,6 +45,16 @@ export interface Version {
   tells: Tell[];
 }
 
+/** The one text a Post has at any time, the text meant for X (ADR 0016). */
+export interface PostText {
+  format: Format;
+  parts: Part[];
+  /** The Version it came from: the last one written or restored. */
+  versionNumber: number;
+  /** Whether the User changed it since it came from that Version. */
+  edited: boolean;
+}
+
 export interface Post {
   id: string;
   brief: string;
@@ -56,6 +66,8 @@ export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
 
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
+  /** Null only for a Post whose first Version failed. */
+  text: PostText | null;
   status: PostStatus;
   /** Null while the Post is a Draft. */
   scheduledPost: ScheduledPost | null;
@@ -138,12 +150,18 @@ const toSummary = (s: ScheduledPostSummaryApi): ScheduledPostSummary => ({
 /** How many Posts a page of the Posts tabs holds. */
 export const POSTS_PAGE_SIZE = 20;
 
+interface PartApi {
+  text: string;
+  char_count: number;
+  char_limit: number;
+}
+
 interface VersionApi {
   id: string;
   number: number;
   feedback: string | null;
   format: Format;
-  parts: { text: string; char_count: number; char_limit: number }[];
+  parts: PartApi[];
   tells: Tell[];
 }
 
@@ -153,19 +171,50 @@ interface PostApi {
   versions: VersionApi[];
 }
 
+interface PostTextApi {
+  format: Format;
+  parts: PartApi[];
+  version_number: number;
+  edited: boolean;
+}
+
 interface PostDetailApi extends PostApi {
+  text: PostTextApi | null;
   status: PostStatus;
   scheduled_post: ScheduledPostApi | null;
 }
+
+const toPart = (p: PartApi): Part => ({
+  text: p.text,
+  charCount: p.char_count,
+  charLimit: p.char_limit,
+});
 
 const toVersion = (v: VersionApi): Version => ({
   id: v.id,
   number: v.number,
   feedback: v.feedback,
   format: v.format,
-  parts: v.parts.map((p) => ({ text: p.text, charCount: p.char_count, charLimit: p.char_limit })),
+  parts: v.parts.map(toPart),
   tells: v.tells,
 });
+
+const toText = (t: PostTextApi): PostText => ({
+  format: t.format,
+  parts: t.parts.map(toPart),
+  versionNumber: t.version_number,
+  edited: t.edited,
+});
+
+/** The Text a new Version gives its Post: the server sets it from every Version it writes. */
+export function textOf(version: Version): PostText {
+  return {
+    format: version.format,
+    parts: version.parts,
+    versionNumber: version.number,
+    edited: false,
+  };
+}
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
 export const BRIEF_MAX_CHARS = 200_000;
@@ -199,6 +248,7 @@ export const postService = {
     return {
       id: data.id,
       brief: data.brief,
+      text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
       status: data.status,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
