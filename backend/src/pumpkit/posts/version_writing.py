@@ -12,10 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
+from pumpkit.core.time import as_utc
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
-from pumpkit.posts.schemas import PartResponse, TellResponse, VersionResponse
+from pumpkit.posts.schemas import PartResponse, TellResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.versions import EarlierVersion
 from pumpkit.x_connection.x_length import x_post_max_chars, x_weighted_length
@@ -81,24 +82,36 @@ async def char_limit_for(db: AsyncSession, *, user_id: str) -> int:
     return x_post_max_chars(connection.subscription_type if connection else None)
 
 
+def _part_responses(parts: list[str], char_limit: int) -> list[PartResponse]:
+    return [
+        PartResponse(text=text, char_count=x_weighted_length(text), char_limit=char_limit)
+        for text in parts
+    ]
+
+
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:
     assert attempt.version_number is not None and attempt.parts is not None
     assert attempt.slop_tells is not None
-    format = attempt.format
     return VersionResponse(
         id=attempt.id,
         number=attempt.version_number,
         feedback=attempt.feedback,
-        format=format,
-        parts=[
-            PartResponse(
-                text=text,
-                char_count=x_weighted_length(text),
-                char_limit=char_limit,
-            )
-            for text in attempt.parts
-        ],
+        format=attempt.format,
+        parts=_part_responses(attempt.parts, char_limit),
         tells=[TellResponse(**tell) for tell in attempt.slop_tells],
+        created_at=as_utc(attempt.created_at),
+    )
+
+
+def text_response(post: Post, char_limit: int) -> Optional[TextResponse]:
+    """The Post's Text, or None while it has no Version."""
+    if post.text_format is None or post.text_parts is None or post.text_version_number is None:
+        return None
+    return TextResponse(
+        format=post.text_format,
+        parts=_part_responses(post.text_parts, char_limit),
+        version_number=post.text_version_number,
+        edited=post.text_edited,
     )
 
 

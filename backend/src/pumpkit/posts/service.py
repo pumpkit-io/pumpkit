@@ -111,7 +111,7 @@ async def record_version(
     written: WrittenVersion,
     now: datetime,
 ) -> VersionAttempt:
-    """Store a succeeded attempt, a Version. Flushes."""
+    """Store a succeeded attempt, a Version, and make it the Post's Text. Flushes."""
     attempt = VersionAttempt(
         post_id=post.id,
         sequence=sequence,
@@ -134,8 +134,17 @@ async def record_version(
         created_at=now,
     )
     db.add(attempt)
+    set_text_from_version(post, attempt)
     await db.flush()
     return attempt
+
+
+def set_text_from_version(post: Post, version: VersionAttempt) -> None:
+    """Make the Version the Post's Text, as written. Not flushed."""
+    post.text_format = version.format
+    post.text_parts = list(version.parts or [])
+    post.text_version_number = version.version_number
+    post.text_edited = False
 
 
 async def record_failed_attempt(
