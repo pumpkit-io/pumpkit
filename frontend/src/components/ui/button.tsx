@@ -10,6 +10,9 @@ const buttonVariants = cva(
       variant: {
         default:
           'bg-primary bg-primary-gradient text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.16),0_0_0_1px_hsl(var(--primary)),0_1px_2px_rgb(0_0_0/0.12)] hover:brightness-95 dark:hover:brightness-105 disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none',
+        // The primary fill without the gradient, for pages that keep gradients off.
+        solid:
+          'bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
         outline:
           'border border-border bg-card shadow-raised hover:bg-accent hover:text-accent-foreground',

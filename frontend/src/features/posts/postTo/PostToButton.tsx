@@ -15,12 +15,14 @@ export function PostToButton({
   parts,
   sender,
   initialWhere,
+  disabled = false,
   onDone,
 }: {
   version: Version;
   parts: ShownPart[];
   sender: PostToSender;
   initialWhere?: DestinationDraft;
+  disabled?: boolean;
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
   const { subscribed } = useSubscribed();
@@ -34,7 +36,13 @@ export function PostToButton({
 
   return (
     <>
-      <Button type="button" variant="outline" className="h-10" onClick={start}>
+      <Button
+        type="button"
+        variant="solid"
+        className="h-10 shrink-0 rounded-full"
+        disabled={disabled}
+        onClick={start}
+      >
         Post to…
       </Button>
       {open && (

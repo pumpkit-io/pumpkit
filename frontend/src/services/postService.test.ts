@@ -77,6 +77,39 @@ describe('postService', () => {
     });
   });
 
+  it("reads a Post's Text with the Version it came from and whether it was edited", async () => {
+    vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        id: 'post_01',
+        brief: 'ship',
+        text: {
+          format: 'thread',
+          parts: [
+            { text: 'one', char_count: 3, char_limit: 280 },
+            { text: 'two', char_count: 3, char_limit: 280 },
+          ],
+          version_number: 2,
+          edited: true,
+        },
+        versions: [VERSION],
+        status: 'draft',
+        scheduled_post: null,
+      },
+    } as never);
+
+    const post = await postService.get('post_01');
+
+    expect(post.text).toEqual({
+      format: 'thread',
+      parts: [
+        { text: 'one', charCount: 3, charLimit: 280 },
+        { text: 'two', charCount: 3, charLimit: 280 },
+      ],
+      versionNumber: 2,
+      edited: true,
+    });
+  });
+
   it('reads a Draft with no Scheduled post', async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {

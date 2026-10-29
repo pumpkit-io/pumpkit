@@ -111,7 +111,8 @@ export const EVENTS = {
       'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
   },
   post_final_copied: {
-    description: 'Post page: copied the text on screen with Copy post, every Part of it.',
+    description:
+      "Post page: copied the text on screen with the card's copy icon, every Part of it.",
   },
 
   // Posting to X (the Post page and Settings) + the X callback

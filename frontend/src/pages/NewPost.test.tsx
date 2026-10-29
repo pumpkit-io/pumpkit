@@ -96,6 +96,12 @@ function postWith(final: string): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    text: {
+      format: 'post',
+      parts: [{ text: final, charCount: final.length, charLimit: 280 }],
+      versionNumber: 1,
+      edited: false,
+    },
     versions: [
       {
         id: 'version_attempt_01',
@@ -288,7 +294,7 @@ describe('New post', () => {
           '/posts/post_01',
         ),
       );
-      const card = within(await screen.findByRole('article', { name: 'Version 1' }));
+      const card = within(await screen.findByRole('article', { name: 'Text' }));
       expect(card.getByText('the final text')).toBeInTheDocument();
       expect(postService.get).toHaveBeenCalledWith('post_01');
     });
@@ -342,7 +348,7 @@ describe('New post', () => {
 
       fireEvent.click(area.getByRole('button', { name: 'Try again' }));
 
-      expect(await screen.findByRole('article', { name: 'Version 1' })).toBeInTheDocument();
+      expect(await screen.findByRole('article', { name: 'Text' })).toBeInTheDocument();
       expect(postService.start).toHaveBeenCalledTimes(2);
       expect(postService.start).toHaveBeenNthCalledWith(2, 'ship small things', 'post');
     });
