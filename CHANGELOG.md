@@ -6,8 +6,22 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Added
+
+- Threads. A Version can be a Thread, an ordered list of Parts that X publishes with each Part replying to the one before. A Post starts as a single X post unless the User asks for a Thread, and Feedback can switch the Format. A Scheduled post copied from a Thread keeps every Part.
+- X Communities. A Scheduled post can go to an X Community instead of the User's profile, and can also be shared with their followers.
+- A remote MCP server at `POST /api/v1/mcp`, so Claude Code or any MCP client can start Posts, give Feedback, manage Inspiration authors, schedule posts and Post now. Users create API keys in Settings; `docs/claude-code.md` is the guide.
+- A redesigned app: New post, the Posts tabs (Scheduled, Drafts, Published, Failed), a page for each Post with its Versions, Persona for Inspiration authors, and Settings.
+
 ### Changed
 
+- A Post goes out at most once: it has at most one Scheduled post, always copied from one of its Versions, and takes its status from it. A Scheduled post can no longer be typed by hand. **Upgrade notes:** the database migrations delete every Scheduled post that wasn't copied from a Version and, where several were copied from the same Post, all but the newest. Publish or copy any you want to keep before upgrading.
+- The monthly cap counts X posts, so each Part of a Thread counts as one. **Upgrade notes:** if `.env` sets `SCHEDULED_POSTS_MONTHLY_CAP`, rename it to `X_POSTS_MONTHLY_CAP`; the old name is ignored.
+- Writing a Version: the sketch and revision calls write the Hook themselves, and after Feedback the humanizer keeps the sentences the Feedback left alone. **Upgrade notes:** if `.env` sets `LLM_DRAFTING_MODEL`, rename it to `LLM_SKETCHING_MODEL`, and remove `LLM_HOOKING_MODEL`; the old names are ignored.
+- A refusal from the API or an MCP tool links to the web app page that fixes it.
+- The Terms and the Privacy Policy describe the redesigned app.
+- The Magic link email shows the Pumpkit mascot and wordmark.
+- `robots.txt` also keeps search engines out of the redesigned signed-in pages.
 - Install and upgrade from the latest release tag instead of `main`, so the compose file, `setup.sh` and the docs match the release images. **Upgrade notes:** upgrade with `git fetch --tags && git checkout vX.Y.Z` instead of `git pull` (see Upgrades in `docs/self-hosting.md`).
 
 ## [0.1.0] - 2026-10-12
