@@ -11,6 +11,7 @@ from aiosmtpd.controller import Controller
 from aiosmtpd.handlers import Message
 
 from pumpkit.auth.mailer import LogAuthMailer, MagicLinkEmail, SmtpAuthMailer
+from pumpkit.core.config import settings
 from pumpkit.main import app, lifespan
 
 LINK = "http://localhost:8000/api/v1/login/magic-link?token=abc"
@@ -44,9 +45,8 @@ def smtp_inbox():
     controller.stop()
 
 
-async def test_smtp_mailer_sends_the_magic_link_email_with_the_logo_inline(smtp_inbox):
-    inbox, port = smtp_inbox
-    mailer = SmtpAuthMailer(
+def _smtp_mailer(port: int) -> SmtpAuthMailer:
+    return SmtpAuthMailer(
         host="127.0.0.1",
         port=port,
         security="none",
@@ -55,7 +55,25 @@ async def test_smtp_mailer_sends_the_magic_link_email_with_the_logo_inline(smtp_
         from_address="noreply@example.com",
     )
 
-    await mailer.send_magic_link(EMAIL)
+
+def _inline_images(message: EmailMessage, html: str) -> list[str]:
+    """The content ids of the PNG parts, checking each is inline and referenced by the HTML."""
+    content_ids = []
+    for part in message.walk():
+        if part.get_content_type() != "image/png":
+            continue
+        content_id = part["Content-ID"].strip("<>")
+        assert part.get_content_disposition() == "inline"
+        assert f'src="cid:{content_id}"' in html
+        assert part.get_payload(decode=True)
+        content_ids.append(content_id)
+    return content_ids
+
+
+async def test_smtp_mailer_sends_the_magic_link_email_with_the_mascot_inline(smtp_inbox):
+    inbox, port = smtp_inbox
+
+    await _smtp_mailer(port).send_magic_link(EMAIL)
 
     [message] = inbox.received
     assert message["To"] == "alice@example.com"
@@ -65,10 +83,21 @@ async def test_smtp_mailer_sends_the_magic_link_email_with_the_logo_inline(smtp_
     assert html_part is not None
     html = html_part.get_content()
     assert LINK in html.replace("&amp;", "&")
-    [logo] = [part for part in message.walk() if part.get_content_type() == "image/png"]
-    content_id = logo["Content-ID"].strip("<>")
-    assert f'src="cid:{content_id}"' in html
-    assert logo.get_payload(decode=True)
+    assert _inline_images(message, html) == ["mascot"]
+    assert ">TestApp</span>" in html
+
+
+async def test_smtp_mailer_shows_the_wordmark_while_the_app_is_pumpkit(smtp_inbox, monkeypatch):
+    monkeypatch.setattr(settings, "APP_NAME", "Pumpkit")
+    inbox, port = smtp_inbox
+
+    await _smtp_mailer(port).send_magic_link(EMAIL)
+
+    [message] = inbox.received
+    html_part = message.get_body(preferencelist=("html",))
+    assert html_part is not None
+    html = html_part.get_content()
+    assert _inline_images(message, html) == ["mascot", "wordmark-light", "wordmark-dark"]
 
 
 async def test_log_mailer_writes_the_link_recipient_and_expiry_at_warning(caplog):
