@@ -22,8 +22,9 @@ tag=v$version
 
 [ "$(git symbolic-ref --quiet --short HEAD || true)" = main ] ||
   fail "check out main first (git checkout main && git pull)"
-[ -z "$(git status --porcelain)" ] ||
-  fail "the working tree has changes; commit or remove them first"
+# Untracked files never reach a tag.
+[ -z "$(git status --porcelain --untracked-files=no)" ] ||
+  fail "the working tree has changes to tracked files; commit or discard them first"
 git fetch --quiet --tags origin
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] ||
   fail "main is not level with origin/main; run git pull, and merge the release PR first"
