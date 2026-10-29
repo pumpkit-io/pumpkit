@@ -64,7 +64,7 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 | --- | --- |
 | `SMTP_HOST`, `EMAIL_FROM` | SMTP server and the address Magic link emails come from. Set both or neither. Without them each Magic link, its recipient and expiry are written to the backend log at warning level, and startup says so; configure SMTP before inviting anyone else. |
 | `SMTP_SECURITY` | `starttls` (default), `tls` or `none`. |
-| `SMTP_PORT` | Defaults to the security mode's port: 587 for `starttls`, 465 for `tls`, 25 for `none`. |
+| `SMTP_PORT` | Defaults to the security mode's port: 587 for `starttls`, 465 for `tls`, 25 for `none`. Some cloud providers, DigitalOcean among them, block those ports going out; see [No Magic link arrives](self-hosting.md#troubleshooting). |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP login; leave empty for a server that needs none. |
 
 To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERNAME=resend`, `SMTP_PASSWORD` to a Resend API key and `EMAIL_FROM` to an address on a domain verified in Resend; the default `starttls` on port 587 works.
