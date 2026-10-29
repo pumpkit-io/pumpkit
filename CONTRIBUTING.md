@@ -60,12 +60,13 @@ The project layout and common recipes are in [docs/development.md](./docs/develo
 
 - Branch from `main`; one logical change per PR; link the issue (`Closes #N`).
 - Fill in the PR template: a small summary visual, before/after evidence (a screenshot or test output), and the merge danger.
-- CI (lint, format, typecheck, tests) must pass.
+- Add a line under `## [Unreleased]` in `CHANGELOG.md` saying what changes for Users or Self-hosters, with **Upgrade notes:** for any manual upgrade step. A change nobody running or using an Instance would notice (tests, refactors, CI, contributor docs) gets the `no-changelog` label instead.
+- CI (lint, format, typecheck, tests, the CHANGELOG check) must pass.
 - Domain terms come from `GLOSSARY.md`; architectural decisions live in `docs/adr/`; review standards are in `CODING_STANDARDS.md`.
 
 ## Releases
 
-Maintainers cut releases by pushing a version tag; [docs/releasing.md](./docs/releasing.md) has the steps and the pumpkit.io deploy.
+Maintainers cut releases by pushing a version tag; [docs/releasing.md](./docs/releasing.md) has the steps.
 
 ## AI-assisted contributions
 

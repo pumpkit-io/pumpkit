@@ -99,3 +99,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh scripts/check-release-notes.sh
+      - run: sh scripts/check-release-scripts.sh

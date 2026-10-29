@@ -1,0 +1,19 @@
+name: Changelog
+# Every PR records its change in CHANGELOG.md, unless it carries the no-changelog label.
+# Labelling or unlabelling reruns this check alone, which is why it isn't a job in ci.yml.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+permissions:
+  contents: read
+jobs:
+  changelog:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: sh scripts/check-changelog-entry.sh "$BASE_SHA"

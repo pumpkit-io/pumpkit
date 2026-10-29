@@ -26,7 +26,7 @@ frontend/src/
   contexts/        auth context
 e2e/               Playwright tests run against compose.dev.yml
 infra/web/         the web image: Dockerfile, Caddyfile, start-up steps, PostHog relay snippet
-scripts/           setup.sh (writes .env), check-stack.sh (smoke checks), release notes
+scripts/           setup.sh (writes .env), check-stack.sh (smoke checks), the release scripts
 docs/              configuration, self-hosting, releasing, ADRs
 ```
 
@@ -197,4 +197,4 @@ make dev DEV_COMPOSE="docker compose -f compose.dev.yml -f compose.dev.override.
 
 ## Self-hosting and releases
 
-Running an Instance: [self-hosting.md](./self-hosting.md). Cutting a release and deploying pumpkit.io: [releasing.md](./releasing.md).
+Running an Instance: [self-hosting.md](./self-hosting.md). Cutting a release: [releasing.md](./releasing.md).

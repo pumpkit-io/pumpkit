@@ -30,13 +30,15 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 - `backend/tests/`: the pytest suite, mirroring the package tree, with shared fixtures in `conftest.py`.
 - `frontend/src/`: `pages/` (routes), `features/` (self-contained modules), `components/`, `services/` (API clients), `lib/`.
 - `e2e/`: Playwright smoke tests, against the dev stack in `compose.dev.yml`.
-- Self-hosting: `compose.yml` (the production stack), `compose.external-db.yml`, `infra/web/` (the web image: Caddy serving the built frontend), `scripts/setup.sh` (writes `.env`), `scripts/check-stack.sh` (smoke checks). Releases: `.github/workflows/release.yml`, steps in `docs/releasing.md`.
+- Self-hosting: `compose.yml` (the production stack), `compose.external-db.yml`, `infra/web/` (the web image: Caddy serving the built frontend), `scripts/setup.sh` (writes `.env`), `scripts/check-stack.sh` (smoke checks).
+- Releasing and deploying: cut a release only by following `docs/releasing.md` step by step (`scripts/prepare-release.sh`, `scripts/tag-release.sh`, `.github/workflows/release.yml`). Deploying pumpkit.io follows `deploy.md` in the private `pumpkit-io/pumpkit-ops`, cloned at `../pumpkit-ops`.
 - `docs/development.md`: project layout and recipes (Subscriptions, Scheduled posts, LLM calls, analytics events, branding).
 
 ## Rules
 
 - Use the domain language in `GLOSSARY.md`. Read ADRs in `docs/adr/` before changing an area, and flag contradictions instead of silently overriding them.
 - Work on a branch and open a PR that follows `.github/pull_request_template.md`. Never push to `main`.
+- Every PR adds a line under `## [Unreleased]` in `CHANGELOG.md` saying what changes for Users or Self-hosters, with **Upgrade notes:** for any manual step an upgrade needs; a PR nobody running or using an Instance would notice gets the `no-changelog` label instead. CI checks it.
 - Coding standards live in `CODING_STANDARDS.md` and are checked at review time.
 - Backend call direction is `router → mediator → service`, never backwards. No DB queries in routers or mediators. Across areas, import only another area's service, models, schemas and domain modules, in ADR 0008's area order.
 - Stripe webhook handlers never commit: `billing/mediator.handle_webhook` owns the transaction; raise to roll back.
