@@ -11,7 +11,7 @@ from sqlalchemy import update
 from pumpkit.auth.models import User
 from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError
-from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.posts.models import Post
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.communities import NOT_A_COMMUNITY
 from pumpkit.scheduling.rules import (
@@ -40,15 +40,15 @@ def _at(iso: str) -> datetime:
 
 
 @pytest.fixture
-def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, version_of):
+def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, post_with):
     """
     A new Scheduled post for `user` for 14:00 UTC unless the fields say otherwise, copied from a
-    new Post's Version of `parts` unless `version_id` names one.
+    new Post's Text of `parts` unless `post_id` names one.
     """
 
     async def _create(**fields) -> ScheduledPostResponse:
-        if "version_id" not in fields:
-            fields["version_id"] = await version_of(*fields.pop("parts", ["Shipping on Monday."]))
+        if "post_id" not in fields:
+            fields["post_id"] = await post_with(*fields.pop("parts", ["Shipping on Monday."]))
         if not fields.get("publish_now"):
             fields.setdefault("publish_at", _at("2026-10-10T14:00:00Z"))
         return await mediator.create_scheduled_post(
@@ -91,9 +91,9 @@ def cap_of_two(monkeypatch):
 @pytest.mark.parametrize(
     "fields",
     [
-        {"version_id": "version_attempt_1"},
+        {"post_id": "post_1"},
         {
-            "version_id": "version_attempt_1",
+            "post_id": "post_1",
             "publish_at": _at("2026-10-10T14:00:00Z"),
             "publish_now": True,
         },
@@ -159,60 +159,50 @@ async def test_rescheduling_needs_an_x_connection_but_a_new_text_does_not(
     assert edited.parts[0].text == "New words."
 
 
-async def test_every_part_of_a_version_s_final_is_copied_and_the_version_kept(
-    db, user, create, connect_x
-):
+async def test_every_part_of_the_post_s_text_is_copied(db, user, create, connect_x):
     await connect_x()
-    post = Post(user_id=user.id, brief="ship", corpus_post_ids=[], created_at=_at("2026-10-01"))
-    db.add(post)
-    await db.flush()
-    version = VersionAttempt(
-        post_id=post.id,
-        sequence=1,
-        status=ATTEMPT_SUCCEEDED,
-        version_number=1,
-        format="thread",
-        parts=["The final, Part one.", "The final, Part two."],
+    post = Post(
+        user_id=user.id,
+        brief="ship",
+        corpus_post_ids=[],
         created_at=_at("2026-10-01"),
+        text_format="thread",
+        text_parts=["The Text, Part one.", "The Text, Part two."],
+        text_version_number=1,
     )
-    db.add(version)
+    db.add(post)
     await db.commit()
 
-    scheduled = await create(version_id=version.id)
+    scheduled = await create(post_id=post.id)
 
     assert [part.text for part in scheduled.parts] == [
-        "The final, Part one.",
-        "The final, Part two.",
+        "The Text, Part one.",
+        "The Text, Part two.",
     ]
-    assert scheduled.source_version_id == version.id
+    assert scheduled.post_id == post.id
 
 
-async def test_another_user_s_version_is_not_found(db, user, create, connect_x):
+async def test_another_user_s_post_is_not_found(db, user, create, connect_x):
     await connect_x()
     bob = User(email="bob@example.com", display_name="Bob")
     db.add(bob)
     await db.flush()
     bobs_post = Post(
-        user_id=bob.id, brief="bob's", corpus_post_ids=[], created_at=_at("2026-10-01")
+        user_id=bob.id,
+        brief="bob's",
+        corpus_post_ids=[],
+        created_at=_at("2026-10-01"),
+        text_format="post",
+        text_parts=["Bob's words."],
+        text_version_number=1,
     )
     db.add(bobs_post)
-    await db.flush()
-    bobs_version = VersionAttempt(
-        post_id=bobs_post.id,
-        sequence=1,
-        status=ATTEMPT_SUCCEEDED,
-        version_number=1,
-        format="post",
-        parts=["Bob's words."],
-        created_at=_at("2026-10-01"),
-    )
-    db.add(bobs_version)
     await db.commit()
 
     with pytest.raises(NotFoundError) as refused:
-        await create(version_id=bobs_version.id)
+        await create(post_id=bobs_post.id)
 
-    assert refused.value.detail == "Version not found."
+    assert refused.value.detail == "Post not found."
     assert await _listed(db, user) == []
 
 
@@ -499,7 +489,7 @@ async def test_a_community_x_does_not_have_is_refused(db, user, create, edit, co
     [
         {"parts": ["a" * 281]},
         {"publish_at": _at("2026-10-10T12:00:00Z")},
-        {"version_id": "version_attempt_someone_else"},
+        {"post_id": "post_someone_else"},
     ],
 )
 async def test_a_request_refused_before_the_community_lookup_reads_no_x(

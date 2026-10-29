@@ -7,6 +7,7 @@ from httpx import AsyncClient
 import pumpkit.scheduling.publish as publish_module
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
+from pumpkit.posts.models import Post
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import (
     XAccount,
@@ -34,10 +35,10 @@ def _iso(dt) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
-async def _post_now(client: AsyncClient, version_of, text: str = "Shipping today."):
+async def _post_now(client: AsyncClient, post_with, text: str = "Shipping today."):
     """Post now a new Post's one Version, whose text is `text`."""
     return await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": await version_of(text), "publish_now": True}
+        SCHEDULED_POSTS, json={"post_id": await post_with(text), "publish_now": True}
     )
 
 
@@ -46,11 +47,11 @@ def _texts(scheduled_post: dict) -> list[str]:
 
 
 async def test_post_now_publishes_the_text_and_lists_it_as_published(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
 
-    response = await _post_now(client, version_of, "Shipping the new onboarding today.")
+    response = await _post_now(client, post_with, "Shipping the new onboarding today.")
 
     assert response.status_code == 201, response.text
     body = response.json()
@@ -66,26 +67,26 @@ async def test_post_now_publishes_the_text_and_lists_it_as_published(
 
 
 async def test_post_now_uses_a_fresh_access_token_without_refreshing_it(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     clock.advance(timedelta(hours=1, minutes=54))
 
-    await _post_now(client, version_of)
+    await _post_now(client, post_with)
 
     assert fake_x_publisher.refreshes == []
     assert fake_x_publisher.published[0][0] == "access-1001-1"
 
 
 async def test_a_token_near_expiry_is_refreshed_and_the_rotated_refresh_token_kept(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     clock.advance(timedelta(hours=1, minutes=56))
-    first = await _post_now(client, version_of, "First")
+    first = await _post_now(client, post_with, "First")
     clock.advance(timedelta(hours=1, minutes=56))
 
-    second = await _post_now(client, version_of, "Second")
+    second = await _post_now(client, post_with, "Second")
 
     assert first.json()["state"] == second.json()["state"] == "published"
     assert fake_x_publisher.refreshes == ["refresh-1001-1", "refresh-1001-2"]
@@ -97,37 +98,37 @@ async def test_a_token_near_expiry_is_refreshed_and_the_rotated_refresh_token_ke
     [("None", "Premium", 25_000), ("PremiumPlus", "None", 280)],
 )
 async def test_buying_or_dropping_x_premium_changes_the_limit_at_the_next_token_refresh(
-    client, subscribed, fake_x_publisher, clock, before, after, char_limit, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, before, after, char_limit, connect_x, post_with
 ):
     fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type=before)
     await connect_x()
     fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type=after)
     clock.advance(timedelta(hours=1, minutes=56))
 
-    await _post_now(client, version_of)
+    await _post_now(client, post_with)
 
     assert (await client.get(X_CONNECTION)).json()["char_limit"] == char_limit
 
 
 async def test_a_failed_subscription_type_read_keeps_the_refreshed_tokens_and_publishes(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_fetch_account = XNotReceivedError("ConnectError")
     clock.advance(timedelta(hours=1, minutes=56))
 
-    first = await _post_now(client, version_of, "First")
+    first = await _post_now(client, post_with, "First")
     clock.advance(timedelta(hours=1, minutes=56))
-    second = await _post_now(client, version_of, "Second")
+    second = await _post_now(client, post_with, "Second")
 
     assert first.json()["state"] == second.json()["state"] == "published"
     assert fake_x_publisher.refreshes == ["refresh-1001-1", "refresh-1001-2"]
 
 
 async def test_post_now_without_an_x_connection_is_refused(
-    client, subscribed, fake_x_publisher, clock, version_of
+    client, subscribed, fake_x_publisher, clock, post_with
 ):
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Connect your X account first."
@@ -136,13 +137,13 @@ async def test_post_now_without_an_x_connection_is_refused(
 
 
 async def test_a_text_over_the_limit_by_x_s_count_is_refused(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     # 276 code points, but CJK characters count two each: 281 by X's count.
     text = "a" * 270 + " 日本語のテ"
 
-    response = await _post_now(client, version_of, text)
+    response = await _post_now(client, post_with, text)
 
     assert response.status_code == 422
     assert response.json()["detail"] == (
@@ -152,34 +153,34 @@ async def test_a_text_over_the_limit_by_x_s_count_is_refused(
 
 
 async def test_a_user_who_is_not_subscribed_cannot_post_now(
-    client, fake_x_publisher, clock, version_of
+    client, fake_x_publisher, clock, post_with
 ):
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.status_code == 403
     assert fake_x_publisher.published == []
 
 
 async def test_a_user_without_a_subscription_posts_now_where_no_plans_are_sold(
-    client, sells_no_plans, fake_x_publisher, clock, connect_x, version_of
+    client, sells_no_plans, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
 
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.status_code == 201
     assert response.json()["state"] == "published"
 
 
 async def test_a_post_x_refuses_fails_with_x_s_own_words(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XPostRejectedError(
         403, "You are not allowed to create a Tweet with duplicate content."
     )
 
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.status_code == 201
     body = response.json()
@@ -192,12 +193,12 @@ async def test_a_post_x_refuses_fails_with_x_s_own_words(
 
 
 async def test_a_post_whose_outcome_is_unknown_fails_telling_the_user_to_check_x(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XOutcomeUnknownError("X answered HTTP 503")
 
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.json()["state"] == "failed"
     assert response.json()["failed_reason"] == (
@@ -208,12 +209,12 @@ async def test_a_post_whose_outcome_is_unknown_fails_telling_the_user_to_check_x
 
 @pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
 async def test_a_post_now_x_never_took_goes_back_to_scheduled_for_the_publisher_to_retry(
-    client, db_session_maker, subscribed, fake_x_publisher, clock, error, connect_x, version_of
+    client, db_session_maker, subscribed, fake_x_publisher, clock, error, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = error
 
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.status_code == 201
     body = response.json()
@@ -228,11 +229,11 @@ async def test_a_post_now_x_never_took_goes_back_to_scheduled_for_the_publisher_
 
 
 async def test_a_post_now_x_keeps_refusing_fails_15_minutes_after_it_was_asked_for(
-    client, db_session_maker, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, db_session_maker, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XRateLimitedError("429")
-    await _post_now(client, version_of)
+    await _post_now(client, post_with)
 
     for _ in range(32):
         clock.advance(timedelta(seconds=30))
@@ -246,18 +247,18 @@ async def test_a_post_now_x_keeps_refusing_fails_15_minutes_after_it_was_asked_f
 
 
 async def test_revoked_access_fails_the_post_and_asks_the_user_to_reconnect(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XReconnectNeededError("401")
 
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.json()["state"] == "failed"
     assert response.json()["failed_reason"] == RECONNECT_REASON
     assert (await client.get("/api/v1/x-connection")).json()["needs_reconnect"] is True
     fake_x_publisher.fail_publish = None
-    again = await _post_now(client, version_of)
+    again = await _post_now(client, post_with)
     assert again.status_code == 409
     assert again.json()["detail"] == (
         "X no longer accepts Pumpkit's access to your account. Reconnect X first."
@@ -266,13 +267,13 @@ async def test_revoked_access_fails_the_post_and_asks_the_user_to_reconnect(
 
 
 async def test_a_refresh_token_x_refuses_fails_the_post_and_asks_the_user_to_reconnect(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     clock.advance(timedelta(hours=2))
     fake_x_publisher.fail_refresh = XReconnectNeededError("invalid_grant")
 
-    response = await _post_now(client, version_of)
+    response = await _post_now(client, post_with)
 
     assert response.json()["state"] == "failed"
     assert response.json()["failed_reason"] == RECONNECT_REASON
@@ -281,27 +282,27 @@ async def test_a_refresh_token_x_refuses_fails_the_post_and_asks_the_user_to_rec
 
 
 async def test_reconnecting_clears_the_reconnect_flag(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XReconnectNeededError("401")
-    await _post_now(client, version_of)
+    await _post_now(client, post_with)
     fake_x_publisher.fail_publish = None
 
     await connect_x()
 
     assert (await client.get("/api/v1/x-connection")).json()["needs_reconnect"] is False
-    assert (await _post_now(client, version_of)).json()["state"] == "published"
+    assert (await _post_now(client, post_with)).json()["state"] == "published"
 
 
 async def test_a_user_whose_subscription_ended_still_sees_their_scheduled_posts(
-    client, db, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, db, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
-    published = (await _post_now(client, version_of, "Went out")).json()
+    published = (await _post_now(client, post_with, "Went out")).json()
     clock.advance(timedelta(minutes=1))
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
-    failed = (await _post_now(client, version_of, "Refused")).json()
+    failed = (await _post_now(client, post_with, "Refused")).json()
     subscribed.status = "canceled"
     await db.commit()
 
@@ -309,15 +310,15 @@ async def test_a_user_whose_subscription_ended_still_sees_their_scheduled_posts(
 
 
 async def test_published_and_failed_are_tracked_for_analytics(
-    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, post_with
 ):
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
-    await _post_now(client, version_of)
+    await _post_now(client, post_with)
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
 
-    await _post_now(client, version_of)
+    await _post_now(client, post_with)
 
     assert [call.args[0] for call in captured.capture.call_args_list] == [
         "scheduled_post_published",
@@ -338,14 +339,14 @@ async def test_published_and_failed_are_tracked_for_analytics(
 
 
 async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
-    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, post_with
 ):
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
 
-    await _post_now(client, version_of)
+    await _post_now(client, post_with)
 
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
@@ -354,20 +355,20 @@ async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
     )
 
 
-async def _schedule(client: AsyncClient, version_of, publish_at: str, text: str = "Later today."):
+async def _schedule(client: AsyncClient, post_with, publish_at: str, text: str = "Later today."):
     """Schedule a new Post's one Version, whose text is `text`, for `publish_at`."""
     return await client.post(
         SCHEDULED_POSTS,
-        json={"source_version_id": await version_of(text), "publish_at": publish_at},
+        json={"post_id": await post_with(text), "publish_at": publish_at},
     )
 
 
 async def test_a_post_scheduled_for_later_is_listed_as_upcoming_and_not_published(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
 
-    response = await _schedule(client, version_of, "2026-10-10T14:00:00Z", "Launch day.")
+    response = await _schedule(client, post_with, "2026-10-10T14:00:00Z", "Launch day.")
 
     assert response.status_code == 201, response.text
     body = response.json()
@@ -380,22 +381,22 @@ async def test_a_post_scheduled_for_later_is_listed_as_upcoming_and_not_publishe
 
 
 async def test_a_publish_time_in_the_browser_s_timezone_is_stored_in_utc(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
 
-    response = await _schedule(client, version_of, "2026-10-10T16:00:00+02:00")
+    response = await _schedule(client, post_with, "2026-10-10T16:00:00+02:00")
 
     assert response.json()["publish_at"] == "2026-10-10T14:00:00Z"
 
 
 async def test_upcoming_scheduled_posts_are_listed_soonest_first(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-12T09:00:00Z", "Monday")
-    await _schedule(client, version_of, "2026-10-11T09:00:00Z", "Sunday")
-    await _schedule(client, version_of, "2026-10-13T09:00:00Z", "Tuesday")
+    await _schedule(client, post_with, "2026-10-12T09:00:00Z", "Monday")
+    await _schedule(client, post_with, "2026-10-11T09:00:00Z", "Sunday")
+    await _schedule(client, post_with, "2026-10-13T09:00:00Z", "Tuesday")
 
     listed = await scheduled_posts(client)
 
@@ -412,12 +413,12 @@ async def test_upcoming_scheduled_posts_are_listed_soonest_first(
     ],
 )
 async def test_a_request_needs_either_a_publish_time_with_a_timezone_or_publish_now(
-    client, subscribed, fake_x_publisher, fixed_clock, payload, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, payload, connect_x, post_with
 ):
     await connect_x()
 
     response = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": await version_of("Hi."), **payload}
+        SCHEDULED_POSTS, json={"post_id": await post_with("Hi."), **payload}
     )
 
     assert response.status_code == 422
@@ -426,27 +427,27 @@ async def test_a_request_needs_either_a_publish_time_with_a_timezone_or_publish_
 
 
 async def test_a_user_who_is_not_subscribed_cannot_schedule(
-    client, fake_x_publisher, fixed_clock, version_of
+    client, fake_x_publisher, fixed_clock, post_with
 ):
-    response = await _schedule(client, version_of, "2026-10-10T14:00:00Z")
+    response = await _schedule(client, post_with, "2026-10-10T14:00:00Z")
 
     assert response.status_code == 403
 
 
 async def test_a_user_without_a_subscription_schedules_where_no_plans_are_sold(
-    client, sells_no_plans, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, sells_no_plans, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
 
-    response = await _schedule(client, version_of, "2026-10-10T14:00:00Z")
+    response = await _schedule(client, post_with, "2026-10-10T14:00:00Z")
 
     assert response.status_code == 201
     assert response.json()["state"] == "scheduled"
 
 
 @pytest.fixture
-async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post written through the API, its text "Version one."."""
+async def post(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """A new Post written through the API, its Text the first Version, "Version one."."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
@@ -459,43 +460,57 @@ async def version(client, subscribed, fake_x_reader, fake_llm) -> dict:
     fake_llm.replies = [written("sketch one"), {"post": "Version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    post = started.json()
-    return {"post_id": post["id"], **post["versions"][0]}
+    return started.json()
 
 
-async def test_scheduling_a_version_records_its_text_time_and_source_version(
-    client, version, fake_x_publisher, fixed_clock, connect_x
+async def test_scheduling_a_post_records_its_text_and_time(
+    client, post, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
 
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"publish_at": "2026-10-10T14:00:00Z", "source_version_id": version["id"]},
+        json={"publish_at": "2026-10-10T14:00:00Z", "post_id": post["id"]},
     )
 
     assert response.status_code == 201, response.text
     body = response.json()
     assert _texts(body) == ["Version one."]
     assert body["publish_at"] == "2026-10-10T14:00:00Z"
-    assert body["source_version_id"] == version["id"]
+    assert body["post_id"] == post["id"]
+    assert "source_version_id" not in body
     assert (await scheduled_posts(client)) == [body]
 
 
-async def test_post_now_on_a_version_publishes_it_and_tracks_its_source(
-    client, version, fake_x_publisher, clock, monkeypatch, connect_x
+async def test_scheduling_a_post_copies_its_text_from_the_latest_feedback(
+    client, post, fake_llm, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    fake_llm.replies = [written("sketch two"), {"post": "Version two."}]
+    rewritten = await client.post(
+        f"/api/v1/posts/{post['id']}/versions", json={"feedback": "punchier"}
+    )
+    assert rewritten.status_code == 201, rewritten.text
+
+    response = await client.post(
+        SCHEDULED_POSTS, json={"publish_at": "2026-10-10T14:00:00Z", "post_id": post["id"]}
+    )
+
+    assert response.status_code == 201, response.text
+    assert _texts(response.json()) == ["Version two."]
+
+
+async def test_post_now_on_a_post_publishes_its_text_and_tracks_its_source(
+    client, post, fake_x_publisher, clock, monkeypatch, connect_x
 ):
     captured = MagicMock()
     monkeypatch.setattr(publish_module, "posthog_client", captured)
     await connect_x()
 
-    response = await client.post(
-        SCHEDULED_POSTS,
-        json={"publish_now": True, "source_version_id": version["id"]},
-    )
+    response = await client.post(SCHEDULED_POSTS, json={"publish_now": True, "post_id": post["id"]})
 
     assert response.status_code == 201, response.text
     assert response.json()["state"] == "published"
-    assert response.json()["source_version_id"] == version["id"]
     assert fake_x_publisher.published == [("access-1001-1", "Version one.")]
     [published] = captured.capture.call_args_list
     assert published.kwargs["properties"] == {
@@ -510,8 +525,8 @@ THREAD_VERSION = ["Ship small every week.", "It's how you learn.", "Start today.
 
 
 @pytest.fixture
-async def thread_version(client, subscribed, fake_x_reader, fake_llm) -> dict:
-    """The first Version of a new Post started as a Thread, its text the THREAD_VERSION Parts."""
+async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
+    """A new Post started as a Thread, its Text the THREAD_VERSION Parts."""
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(
             post_id="levelsio-0",
@@ -526,17 +541,17 @@ async def thread_version(client, subscribed, fake_x_reader, fake_llm) -> dict:
         "/api/v1/posts", json={"brief": "ship small things", "format": "thread"}
     )
     assert started.status_code == 201, started.text
-    return started.json()["versions"][0]
+    return started.json()
 
 
-async def test_scheduling_a_thread_version_copies_its_parts_in_order_and_publishes_a_chain(
-    client, db_session_maker, thread_version, fake_x_publisher, fixed_clock, connect_x
+async def test_scheduling_a_thread_copies_its_parts_in_order_and_publishes_a_chain(
+    client, db_session_maker, thread_post, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
 
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"publish_at": "2026-10-10T12:05:00Z", "source_version_id": thread_version["id"]},
+        json={"publish_at": "2026-10-10T12:05:00Z", "post_id": thread_post["id"]},
     )
 
     assert response.status_code == 201, response.text
@@ -550,14 +565,14 @@ async def test_scheduling_a_thread_version_copies_its_parts_in_order_and_publish
     assert fake_x_publisher.replied_to == [None, "1890000000000000001", "1890000000000000002"]
 
 
-async def test_post_now_on_a_thread_version_publishes_the_whole_thread(
-    client, thread_version, fake_x_publisher, clock, connect_x
+async def test_post_now_on_a_thread_publishes_the_whole_thread(
+    client, thread_post, fake_x_publisher, clock, connect_x
 ):
     await connect_x()
 
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"publish_now": True, "source_version_id": thread_version["id"]},
+        json={"publish_now": True, "post_id": thread_post["id"]},
     )
 
     assert response.status_code == 201, response.text
@@ -569,22 +584,50 @@ async def test_post_now_on_a_thread_version_publishes_the_whole_thread(
     assert fake_x_publisher.replied_to == [None, "1890000000000000001", "1890000000000000002"]
 
 
-async def test_a_source_version_that_is_not_one_of_the_user_s_versions_is_refused(
+async def test_a_post_that_is_not_the_users_is_not_found(
     client, subscribed, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
 
     response = await client.post(
         SCHEDULED_POSTS,
-        json={
-            "publish_at": "2026-10-10T14:00:00Z",
-            "source_version_id": "version_attempt_someone_else",
-        },
+        json={"publish_at": "2026-10-10T14:00:00Z", "post_id": "post_someone_else"},
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Version not found."
+    assert response.json()["detail"] == "Post not found."
     assert (await scheduled_posts(client)) == []
+
+
+async def test_a_post_with_no_text_is_refused(
+    client, db, user, subscribed, fake_x_publisher, fixed_clock, connect_x
+):
+    await connect_x()
+    post = Post(user_id=user.id, brief="Failed first", corpus_post_ids=[], created_at=fixed_clock())
+    db.add(post)
+    await db.commit()
+
+    response = await client.post(
+        SCHEDULED_POSTS, json={"publish_at": "2026-10-10T14:00:00Z", "post_id": post.id}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This Post has no text to post. Start a new Post."
+    assert fake_x_publisher.published == []
+
+
+async def test_a_source_version_is_no_longer_taken(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+
+    response = await client.post(
+        SCHEDULED_POSTS,
+        json={"publish_now": True, "source_version_id": await post_with("Old shape.")},
+    )
+
+    assert response.status_code == 422
+    assert fake_x_publisher.published == []
 
 
 @pytest.fixture
@@ -599,20 +642,20 @@ OCTOBER_FULL = (
 
 
 async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
     await connect_x()
     thread = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("One", "Two"),
+            "post_id": await post_with("One", "Two"),
             "publish_at": "2026-10-11T09:00:00Z",
         },
     )
-    single = await _schedule(client, version_of, "2026-10-12T09:00:00Z", "Three")
+    single = await _schedule(client, post_with, "2026-10-12T09:00:00Z", "Three")
 
-    refused = await _schedule(client, version_of, "2026-10-13T09:00:00Z", "Four")
+    refused = await _schedule(client, post_with, "2026-10-13T09:00:00Z", "Four")
 
     assert thread.status_code == single.status_code == 201
     assert refused.status_code == 409
@@ -623,18 +666,16 @@ async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
 
 
 async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is_scheduled(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
     await connect_x()
-    first = await _schedule(client, version_of, "2026-10-11T09:00:00Z", "First")
+    first = await _schedule(client, post_with, "2026-10-11T09:00:00Z", "First")
 
-    thread_id = await version_of("One", "Two", "Three")
+    thread_id = await post_with("One", "Two", "Three")
 
     for fields in ({"publish_at": "2026-10-12T09:00:00Z"}, {"publish_now": True}):
-        response = await client.post(
-            SCHEDULED_POSTS, json={"source_version_id": thread_id, **fields}
-        )
+        response = await client.post(SCHEDULED_POSTS, json={"post_id": thread_id, **fields})
 
         assert response.status_code == 409
         assert response.json()["detail"] == (
@@ -646,13 +687,13 @@ async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is
 
 
 async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_resets(
-    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, cap_of_two, connect_x, post_with
 ):
     await connect_x()
-    await _schedule(client, version_of, "2026-10-11T09:00:00Z", "First")
-    await _schedule(client, version_of, "2026-10-30T09:00:00Z", "Second")
+    await _schedule(client, post_with, "2026-10-11T09:00:00Z", "First")
+    await _schedule(client, post_with, "2026-10-30T09:00:00Z", "Second")
 
-    response = await _schedule(client, version_of, "2026-10-12T09:00:00Z", "Third")
+    response = await _schedule(client, post_with, "2026-10-12T09:00:00Z", "Third")
 
     assert response.status_code == 409
     assert response.json()["detail"] == OCTOBER_FULL
@@ -661,14 +702,14 @@ async def test_scheduling_into_a_full_month_is_refused_with_the_date_the_cap_res
 
 
 async def test_a_thread_scheduled_keeps_its_parts_in_order_with_none_live(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
 
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("The first Part.", "The second Part."),
+            "post_id": await post_with("The first Part.", "The second Part."),
             "publish_at": "2026-10-10T14:00:00Z",
         },
     )
@@ -682,11 +723,11 @@ async def test_a_thread_scheduled_keeps_its_parts_in_order_with_none_live(
 
 
 async def test_post_now_makes_its_one_part_live_with_its_link_on_x(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
 
-    response = await _post_now(client, version_of, "Out now.")
+    response = await _post_now(client, post_with, "Out now.")
 
     assert response.json()["parts"] == [
         {"text": "Out now.", "live": True, "x_post_url": FIRST_X_POST_URL}
@@ -694,14 +735,14 @@ async def test_post_now_makes_its_one_part_live_with_its_link_on_x(
 
 
 async def test_a_part_over_the_limit_is_refused_naming_the_part(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
 
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("Fine.", "a" * 281),
+            "post_id": await post_with("Fine.", "a" * 281),
             "publish_at": "2026-10-10T14:00:00Z",
         },
     )

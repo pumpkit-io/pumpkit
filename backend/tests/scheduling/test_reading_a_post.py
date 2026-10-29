@@ -46,8 +46,8 @@ async def post(client, with_author, fake_llm, fixed_clock) -> dict:
     return started.json()
 
 
-async def _schedule(client, version_id: str, **when) -> dict:
-    response = await client.post(SCHEDULED_POSTS, json={"source_version_id": version_id, **when})
+async def _schedule(client, post_id: str, **when) -> dict:
+    response = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, **when})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -109,7 +109,7 @@ async def test_a_failed_feedback_leaves_the_text_on_the_version_before(client, p
 
 
 async def test_a_scheduled_post_reads_as_scheduled_with_its_scheduled_post(client, post):
-    scheduled = await _schedule(client, post["versions"][0]["id"], publish_at=LATER)
+    scheduled = await _schedule(client, post["id"], publish_at=LATER)
 
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
@@ -119,9 +119,7 @@ async def test_a_scheduled_post_reads_as_scheduled_with_its_scheduled_post(clien
 async def test_a_post_being_published_still_reads_as_scheduled(
     client, db_session_maker, fixed_clock, post
 ):
-    scheduled = await _schedule(
-        client, post["versions"][0]["id"], publish_at="2026-10-10T12:02:00Z"
-    )
+    scheduled = await _schedule(client, post["id"], publish_at="2026-10-10T12:02:00Z")
     async with db_session_maker() as session:
         fixed_clock.advance(timedelta(minutes=2))
         assert await service.claim(session, scheduled_post_id=scheduled["id"], now=fixed_clock())
@@ -133,7 +131,7 @@ async def test_a_post_being_published_still_reads_as_scheduled(
 
 
 async def test_a_published_post_reads_as_published_with_its_link_on_x(client, post):
-    published = await _schedule(client, post["versions"][0]["id"], publish_now=True)
+    published = await _schedule(client, post["id"], publish_now=True)
 
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
@@ -153,7 +151,7 @@ async def test_a_thread_that_failed_partway_reads_as_failed_with_its_live_part(
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
     fake_x_publisher.fail_publish_on = 2
 
-    failed = await _schedule(client, post["versions"][0]["id"], publish_now=True)
+    failed = await _schedule(client, post["id"], publish_now=True)
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
     assert read["status"] == "failed"
@@ -163,11 +161,10 @@ async def test_a_thread_that_failed_partway_reads_as_failed_with_its_live_part(
         ("Refused two.", False),
     ]
     assert read["scheduled_post"]["failed_reason"]
-    assert read["scheduled_post"]["source_version_id"] == post["versions"][0]["id"]
 
 
 async def test_unscheduling_reads_the_post_as_a_draft_again(client, post):
-    scheduled = await _schedule(client, post["versions"][0]["id"], publish_at=LATER)
+    scheduled = await _schedule(client, post["id"], publish_at=LATER)
     await client.delete(f"{SCHEDULED_POSTS}/{scheduled['id']}")
 
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
@@ -206,7 +203,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
     client, post, mcp, fake_x_publisher
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
-    failed = await _schedule(client, post["versions"][0]["id"], publish_now=True)
+    failed = await _schedule(client, post["id"], publish_now=True)
 
     result = await mcp.call_tool("get_post", post_id=post["id"])
 
