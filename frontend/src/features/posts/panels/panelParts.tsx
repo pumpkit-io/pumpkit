@@ -29,7 +29,7 @@ export function Facts({ items }: { items: ReactNode[] }) {
   );
 }
 
-/** The panel under the Version card, named for the Post's status. */
+/** A boxed region named by `name`, such as the Scheduled-post editor's. */
 export function Panel({
   name,
   tone = 'default',

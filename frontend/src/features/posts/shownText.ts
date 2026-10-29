@@ -1,7 +1,6 @@
 import { xWeightedLength } from '@/lib/xLength';
-import type { Part, PostDetail, PostText, Version } from '@/services/postService';
+import type { PostDetail, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
-import { showsScheduledPost } from './postStatus';
 
 /** One Part as the Version card shows it and Copy post copies it. */
 export interface ShownPart {
@@ -13,44 +12,12 @@ export interface ShownPart {
   xPostUrl: string | null;
 }
 
-const notLive = (part: Part): ShownPart => ({ ...part, live: false, xPostUrl: null });
-
-/**
- * The text on screen for `version`. On the Version the Post's Text came from, a Failed Post shows
- * what a retry sends and any other Scheduled post its own copy, edits included, since that is
- * what goes or went to X; every other Version shows its own text.
- */
-export function shownParts(
-  version: Version,
-  post: PostDetail,
-  xCharLimit: number | null,
-): ShownPart[] {
-  if (showsScheduledPost(post, version) && post.text) {
-    const { scheduledPost, text } = post;
-    if (scheduledPost.state === 'failed') return retryParts(text, scheduledPost, xCharLimit);
-    const charLimit = xCharLimit ?? version.parts[0]?.charLimit ?? 280;
-    return scheduledPost.parts.map((part) => ({
-      text: part.text,
-      charCount: xWeightedLength(part.text),
-      charLimit,
-      live: false,
-      xPostUrl: part.xPostUrl,
-    }));
-  }
-  return version.parts.map(notLive);
-}
-
-/** The Post's Text, as "Post to…" sends it from a Draft. */
-export function textParts(text: PostText): ShownPart[] {
-  return text.parts.map(notLive);
-}
-
 /**
  * What retrying a Failed Post sends to X: the Parts already live stay first, as they are, and
  * the Text's Parts in their places are skipped, as the server does (ADR 0014).
  */
 export function retryParts(
-  text: PostText,
+  text: Pick<Version, 'parts'>,
   scheduledPost: ScheduledPost,
   xCharLimit: number | null,
 ): ShownPart[] {
@@ -64,10 +31,47 @@ export function retryParts(
       live: true,
       xPostUrl: part.xPostUrl,
     }));
-  return [...live, ...text.parts.slice(live.length).map(notLive)];
+  const rest = text.parts
+    .slice(live.length)
+    .map((part) => ({ ...part, live: false, xPostUrl: null }));
+  return [...live, ...rest];
 }
 
-/** Every Part, as Copy post puts it on the clipboard. */
+/**
+ * The Post's Text as the Version it came from, for what reads a Version's shape; the
+ * latest Version for a Post with no Text.
+ */
+export function textVersionOf(post: PostDetail): Version | undefined {
+  const latest = post.versions[post.versions.length - 1];
+  const { text } = post;
+  if (!text) return latest;
+  const source = post.versions.find((v) => v.number === text.versionNumber) ?? latest;
+  return source && { ...source, format: text.format, parts: text.parts };
+}
+
+/**
+ * The text the Post's card shows: what goes or went to X once it has a Scheduled post, the live
+ * Parts first on a Failed one, else the Text.
+ */
+export function cardParts(
+  post: PostDetail,
+  textVersion: Version,
+  xCharLimit: number | null,
+): ShownPart[] {
+  const { scheduledPost } = post;
+  if (!scheduledPost) return textVersion.parts.map((p) => ({ ...p, live: false, xPostUrl: null }));
+  if (scheduledPost.state === 'failed') return retryParts(textVersion, scheduledPost, xCharLimit);
+  const charLimit = xCharLimit ?? textVersion.parts[0]?.charLimit ?? 280;
+  return scheduledPost.parts.map((part) => ({
+    text: part.text,
+    charCount: xWeightedLength(part.text),
+    charLimit,
+    live: false,
+    xPostUrl: part.xPostUrl,
+  }));
+}
+
+/** Every Part, as Copy puts it on the clipboard: a Thread's Parts split by a line of `---`. */
 export function copiedText(parts: ShownPart[]): string {
-  return parts.map((part) => part.text).join('\n\n');
+  return parts.map((part) => part.text).join('\n\n---\n\n');
 }

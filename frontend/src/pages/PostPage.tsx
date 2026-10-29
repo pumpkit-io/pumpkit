@@ -1,43 +1,66 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
-import { BriefBlock } from '@/features/posts/BriefBlock';
+import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
-import { DraftPanel } from '@/features/posts/panels/DraftPanel';
-import { FailedPanel } from '@/features/posts/panels/FailedPanel';
+import { DraftDock } from '@/features/posts/panels/DraftDock';
+import { FailedDock } from '@/features/posts/panels/FailedDock';
 import type { FeedbackSending } from '@/features/posts/panels/feedback';
-import { PublishedPanel } from '@/features/posts/panels/PublishedPanel';
-import { ScheduledPanel } from '@/features/posts/panels/ScheduledPanel';
+import { LoadingDock } from '@/features/posts/panels/FeedbackDock';
+import { OriginLine } from '@/features/posts/panels/OriginLine';
+import { PublishedDock } from '@/features/posts/panels/PublishedDock';
+import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
-import { copiedText, retryParts, shownParts } from '@/features/posts/shownText';
+import { cardParts, copiedText, textVersionOf } from '@/features/posts/shownText';
+import { TextCard } from '@/features/posts/TextCard';
 import { usePost } from '@/features/posts/usePost';
-import { VersionCard } from '@/features/posts/VersionCard';
-import { VersionPager } from '@/features/posts/VersionPager';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import type { PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
-/** Where the Version the Post's Text came from sits in its History, else the latest. */
-function textIndex(post: PostDetail): number {
-  const index = post.versions.findIndex((v) => v.number === post.text?.versionNumber);
-  return index >= 0 ? index : post.versions.length - 1;
-}
-
-function Page({ title, children }: { title: ReactNode; children: ReactNode }) {
+/** The page's column scrolls under the Topbar; the dock, when there is one, stays pinned below. */
+function Page({
+  title,
+  dock,
+  children,
+}: {
+  title: ReactNode;
+  dock?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <>
       <Topbar title={title} actions={<PersonaChip />} />
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-2xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+      <div className="flex-1 overflow-y-auto bg-background">
+        <div className="mx-auto w-full max-w-[42rem] space-y-6 px-4 py-6 sm:px-6 sm:py-8">
           {children}
         </div>
       </div>
+      {dock}
     </>
+  );
+}
+
+function CardPlaceholder() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading the Post"
+      className="flex gap-3 rounded-xl border border-border bg-card px-4 py-4 sm:px-5"
+    >
+      <div aria-hidden className="h-10 w-10 shrink-0 rounded-full bg-muted" />
+      <div aria-hidden className="flex-1 space-y-3 pt-1">
+        <div className="h-3 w-40 rounded-full bg-muted" />
+        <div className="h-3 w-full rounded-full bg-muted" />
+        <div className="h-3 w-4/5 rounded-full bg-muted" />
+        <div className="h-3 w-3/5 rounded-full bg-muted" />
+      </div>
+    </div>
   );
 }
 
@@ -52,11 +75,9 @@ function LoadedPost({
 }) {
   const { connection } = useXConnectionContext();
   const location = useLocation();
-  const [index, setIndex] = useState(() => textIndex(post));
   const [editing, setEditing] = useState(
     () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
   );
-  const versionCount = useRef(post.versions.length);
   const navigate = useNavigate();
   const opensEditor = opensEditing(location.state);
 
@@ -65,86 +86,86 @@ function LoadedPost({
     if (opensEditor) navigate(location.pathname, { replace: true, state: null });
   }, [opensEditor, location.pathname, navigate]);
 
-  // A new Version from Feedback goes on screen as soon as it is in the Post.
-  useEffect(() => {
-    if (post.versions.length > versionCount.current) setIndex(post.versions.length - 1);
-    versionCount.current = post.versions.length;
-  }, [post.versions.length]);
-
-  const shown = post.versions[Math.min(index, post.versions.length - 1)];
+  const textVersion = textVersionOf(post);
   const latest = post.versions[post.versions.length - 1];
-  const { scheduledPost, text: postText } = post;
-  if (!shown || !latest || !postText) return null;
-  const parts = shownParts(shown, post, connection?.charLimit ?? null);
-  const text = copiedText(parts);
-  const title = postTitle(scheduledPost?.parts[0]?.text ?? latest.parts[0]?.text ?? post.brief);
+  if (!textVersion || !latest) return null;
+  const { scheduledPost } = post;
+  const charLimit = connection?.charLimit ?? null;
+  const parts = cardParts(post, textVersion, charLimit);
+  const title = postTitle(parts[0]?.text ?? post.brief);
   const breadcrumb = <PostBreadcrumb status={post.status} title={title} />;
 
   if (editing && scheduledPost?.state === 'scheduled') {
-    const source = textIndex(post);
-    const stopEditing = () => {
-      setIndex(source);
-      setEditing(false);
-    };
     return (
       <Page title={breadcrumb}>
-        <BriefBlock brief={post.brief} />
         <ScheduledPostEditor
-          version={post.versions[source] ?? shown}
           scheduledPost={scheduledPost}
-          charLimit={connection?.charLimit ?? shown.parts[0]?.charLimit ?? 280}
+          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? 280}
           onSaved={(saved) => {
             onScheduledPost(saved);
-            stopEditing();
+            setEditing(false);
           }}
           onUnscheduled={() => {
             onScheduledPost(null);
-            stopEditing();
+            setEditing(false);
           }}
-          onCancel={stopEditing}
+          onCancel={() => setEditing(false)}
         />
       </Page>
     );
   }
 
+  const origin = (
+    <OriginLine
+      brief={post.brief}
+      version={textVersion}
+      edited={post.text?.edited ?? false}
+      writing={feedback.isWriting ? latest.number + 1 : null}
+    />
+  );
+
+  let dock: ReactNode = null;
+  if (post.status === 'draft') {
+    dock = (
+      <DraftDock
+        postId={post.id}
+        textVersion={textVersion}
+        parts={parts}
+        origin={origin}
+        feedback={feedback}
+        onScheduled={onScheduledPost}
+      />
+    );
+  } else if (post.status === 'failed' && scheduledPost) {
+    dock = (
+      <FailedDock
+        scheduledPost={scheduledPost}
+        textVersion={textVersion}
+        retryParts={parts}
+        origin={origin}
+        feedback={feedback}
+        onRetried={onScheduledPost}
+      />
+    );
+  } else if (post.status === 'scheduled' && scheduledPost) {
+    dock = (
+      <ScheduledDock
+        scheduledPost={scheduledPost}
+        origin={origin}
+        onEdit={() => setEditing(true)}
+      />
+    );
+  } else if (post.status === 'published' && scheduledPost) {
+    dock = <PublishedDock scheduledPost={scheduledPost} origin={origin} />;
+  }
+
   return (
-    <Page title={breadcrumb}>
-      <BriefBlock brief={post.brief} />
-      <div className="space-y-3">
-        <VersionCard version={shown} parts={parts} />
-        <VersionPager post={post} index={index} onChange={setIndex} />
-      </div>
-      {post.status === 'draft' && (
-        <DraftPanel
-          postId={post.id}
-          text={postText}
-          shownText={text}
-          latestVersion={latest}
-          feedback={feedback}
-          onScheduled={onScheduledPost}
-        />
-      )}
-      {post.status === 'scheduled' && scheduledPost && (
-        <ScheduledPanel
-          scheduledPost={scheduledPost}
-          shownText={text}
-          onEdit={() => setEditing(true)}
-        />
-      )}
-      {post.status === 'published' && scheduledPost && (
-        <PublishedPanel scheduledPost={scheduledPost} shownText={text} />
-      )}
-      {post.status === 'failed' && scheduledPost && (
-        <FailedPanel
-          scheduledPost={scheduledPost}
-          text={postText}
-          retryParts={retryParts(postText, scheduledPost, connection?.charLimit ?? null)}
-          shownText={text}
-          latestVersion={latest}
-          feedback={feedback}
-          onRetried={onScheduledPost}
-        />
-      )}
+    <Page title={breadcrumb} dock={dock}>
+      <TextCard
+        parts={parts}
+        busy={feedback.isWriting}
+        corner={<CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />}
+      />
     </Page>
   );
 }
@@ -171,7 +192,7 @@ export function PostPage() {
           <p className="font-sans text-sm text-foreground">
             This Post isn&apos;t here. It may have been written on another account.
           </p>
-          <Button asChild className="h-10">
+          <Button asChild variant="solid" className="h-10">
             <Link to="/new">Write a new Post</Link>
           </Button>
         </div>
@@ -186,10 +207,8 @@ export function PostPage() {
     );
   }
   return (
-    <Page title="Post">
-      <p role="status" className="font-sans text-sm text-muted-foreground">
-        Loading the Post…
-      </p>
+    <Page title="Post" dock={<LoadingDock />}>
+      <CardPlaceholder />
     </Page>
   );
 }

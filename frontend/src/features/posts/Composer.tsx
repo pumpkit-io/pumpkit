@@ -34,6 +34,8 @@ export interface ComposerProps {
   isWriting?: boolean;
   /** Keeps the arrow greyed out for a reason outside the text, such as data still loading. */
   sendDisabled?: boolean;
+  /** Locks the box and the Format without a spinner, such as while the page loads. */
+  disabled?: boolean;
   /** Takes the arrow's place when the User can't send yet, such as "Subscribe to write". */
   gate?: ReactNode;
   /** After the arrow, such as "Post to…". */
@@ -64,6 +66,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
     onSend,
     isWriting = false,
     sendDisabled = false,
+    disabled = false,
     gate,
     trailingAction,
     maxRows = 12,
@@ -83,7 +86,8 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
 
   const typed = value.trim() !== '';
   const length = charCount(value);
-  const canSend = !gate && typed && length <= maxLength && !sendDisabled && !isWriting;
+  const locked = isWriting || disabled;
+  const canSend = !gate && typed && length <= maxLength && !sendDisabled && !locked;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
@@ -102,17 +106,17 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         rows={2}
-        disabled={isWriting}
+        disabled={locked}
         style={{ maxHeight: maxRows * LINE_PX + PADDING_PX }}
         className="block w-full resize-none overflow-y-auto rounded-t-2xl bg-transparent px-4 pt-3 font-sans text-[15px] leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
       />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-3 pt-1">
-        <FormatSelector value={format} onChange={onFormatChange} disabled={isWriting} hideLabel />
+        <FormatSelector value={format} onChange={onFormatChange} disabled={locked} hideLabel />
         <div className="ml-auto flex items-center gap-2">
           <LengthCounter length={length} max={maxLength} />
           {gate ?? (
             <>
-              {typed && !isWriting && (
+              {typed && !locked && (
                 <span
                   aria-hidden
                   className="font-sans text-[13px] tabular-nums text-muted-foreground"

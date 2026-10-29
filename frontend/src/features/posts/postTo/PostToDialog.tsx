@@ -23,7 +23,7 @@ import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { formatCount } from '@/lib/characters';
 import { xWeightedLength } from '@/lib/xLength';
-import { FORMAT_THREAD, type PostText } from '@/services/postService';
+import { FORMAT_THREAD, type Format } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { formatWhen } from '../panels/panelFacts';
 import type { ShownPart } from '../shownText';
@@ -143,14 +143,15 @@ function PartsToPost({
  * `onDone` gets the Scheduled post once the dialog is through with it.
  */
 export function PostToDialog({
-  text,
+  format,
   parts,
   sender,
   initialWhere = PROFILE_DRAFT,
   onClose,
   onDone,
 }: {
-  text: PostText;
+  /** The Text's Format. */
+  format: Format;
   /** The text that goes out, in order, after any Parts already live, which come first. */
   parts: ShownPart[];
   sender: PostToSender;
@@ -166,7 +167,7 @@ export function PostToDialog({
   const [when, setWhen] = useState<WhenDraft>(initialWhen);
 
   const liveCount = parts.filter((part) => part.live).length;
-  const thread = text.format === FORMAT_THREAD || liveCount > 0;
+  const thread = format === FORMAT_THREAD || liveCount > 0;
   const live = liveNote(liveCount, parts.length);
   const toSend = parts.length - liveCount;
   const destination = destinationFrom(where);

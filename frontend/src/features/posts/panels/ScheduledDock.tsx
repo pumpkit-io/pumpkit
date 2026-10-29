@@ -1,51 +1,50 @@
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
-import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import type { ScheduledPost } from '@/services/scheduledPostService';
-import { CopyPostButton } from '../CopyPostButton';
 import { EDIT_BILLING_SOURCE } from '../edit/useScheduledPostActions';
+import { Dock } from './Dock';
 import { formatWhen } from './panelFacts';
-import { DestinationName, Facts, Panel } from './panelParts';
+import { DestinationName } from './panelParts';
 
 /**
  * A Scheduled Post takes no Feedback: its text is set to go, and is edited instead, until it is
  * being published.
  */
-export function ScheduledPanel({
+export function ScheduledDock({
   scheduledPost,
-  shownText,
+  origin,
   onEdit,
 }: {
   scheduledPost: ScheduledPost;
-  shownText: string;
+  origin: ReactNode;
   onEdit: () => void;
 }) {
   const { subscribed } = useSubscribed();
   const goToChoosePlan = useGoToChoosePlan();
+
   const edit = () => {
     if (subscribed === false) goToChoosePlan(EDIT_BILLING_SOURCE);
     else onEdit();
   };
 
   return (
-    <Panel name="Scheduled">
-      <div className="space-y-1">
-        <p className="font-sans text-base font-semibold text-foreground">
-          Scheduled for {formatWhen(scheduledPost.publishAt)}
+    <Dock name="Scheduled" origin={origin}>
+      <div className="flex min-h-10 items-center gap-3">
+        <p className="min-w-0 flex-1 font-sans text-sm text-foreground">
+          <span>Scheduled for {formatWhen(scheduledPost.publishAt)}</span>
+          {' · '}
+          <span>
+            <DestinationName scheduledPost={scheduledPost} />
+          </span>
         </p>
-        <Facts
-          items={[<DestinationName key="destination" scheduledPost={scheduledPost} />, TIME_ZONE]}
-        />
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <CopyPostButton text={shownText} />
         {scheduledPost.state === 'scheduled' && (
-          <Button type="button" variant="outline" className="h-10" onClick={edit}>
+          <Button type="button" variant="outline" className="h-10 shrink-0" onClick={edit}>
             Edit
           </Button>
         )}
       </div>
-    </Panel>
+    </Dock>
   );
 }

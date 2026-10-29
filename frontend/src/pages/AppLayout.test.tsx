@@ -121,7 +121,7 @@ async function withPostOnScreen() {
   vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
   vi.mocked(postService.get).mockResolvedValue(POST);
   renderSignedIn('/posts/post_01');
-  await screen.findByRole('article', { name: 'Version 1' });
+  await screen.findByRole('article', { name: 'Text' });
 }
 
 describe('The signed-in shell', () => {
@@ -344,7 +344,7 @@ describe('The signed-in shell', () => {
 
       expect(await screen.findByLabelText('Brief')).toBeInTheDocument();
       expect(currentPath()).toBe('/new');
-      expect(screen.queryByRole('article', { name: 'Version 1' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('article', { name: 'Text' })).not.toBeInTheDocument();
       expect(screen.getByLabelText('Brief')).toHaveValue('');
       expect(screen.getByLabelText('Brief')).toHaveFocus();
       expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'sidebar' });
@@ -361,7 +361,7 @@ describe('The signed-in shell', () => {
         await screen.findByRole('heading', { level: 1, name: 'New post' }),
       ).toBeInTheDocument();
       expect(currentPath()).toBe('/new');
-      expect(screen.queryByRole('article', { name: 'Version 1' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('article', { name: 'Text' })).not.toBeInTheDocument();
       expect(screen.getByLabelText('Brief')).toHaveValue('');
       expect(track).toHaveBeenCalledWith('sidebar_new_post_clicked', { source: 'shortcut' });
     });

@@ -1,5 +1,5 @@
-import type { PostDetail, PostStatus, Version } from '@/services/postService';
-import type { ScheduledPost, ScheduledPostState } from '@/services/scheduledPostService';
+import type { PostStatus } from '@/services/postService';
+import type { ScheduledPostState } from '@/services/scheduledPostService';
 
 /** As the backend derives it (ADR 0015), for a Scheduled post the page just changed. */
 export function statusFrom(state: ScheduledPostState | null): PostStatus {
@@ -44,15 +44,4 @@ export function postTitle(text: string): string {
   const cut = firstLine.slice(0, TITLE_MAX_CHARS);
   const lastSpace = cut.lastIndexOf(' ');
   return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
-}
-
-/**
- * Whether `version` carries the Post's Scheduled post: the Version its Text came from, which the
- * Scheduled post was copied from unless Feedback on a Failed Post changed the Text since.
- */
-export function showsScheduledPost(
-  post: Pick<PostDetail, 'scheduledPost' | 'text'>,
-  version: Pick<Version, 'number'>,
-): post is Pick<PostDetail, 'text'> & { scheduledPost: ScheduledPost } {
-  return post.scheduledPost !== null && post.text?.versionNumber === version.number;
 }

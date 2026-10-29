@@ -4,27 +4,23 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { destinationDraftOf } from '@/features/scheduledPosts/communities';
 import { xWeightedLength } from '@/lib/xLength';
-import type { Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { Panel } from '../panels/panelParts';
 import { DateTimeFields, dateTimeOf } from '../postTo/WhenField';
 import { WhereField } from '../postTo/WhereField';
 import type { ShownPart } from '../shownText';
-import { VersionCard } from '../VersionCard';
+import { TextCard } from '../TextCard';
 import { changesFrom, type ScheduledPostEdit } from './scheduledPostEdit';
 import { useScheduledPostActions } from './useScheduledPostActions';
 
-/** A waiting Scheduled post edited in place; only its copy changes, never the Version's text. */
+/** A waiting Scheduled post edited in place; only its copy changes, never the Post's Text. */
 export function ScheduledPostEditor({
-  version,
   scheduledPost,
   charLimit,
   onSaved,
   onUnscheduled,
   onCancel,
 }: {
-  /** The Version the Scheduled post came from, whose card holds the text boxes. */
-  version: Version;
   scheduledPost: ScheduledPost;
   charLimit: number;
   onSaved: (scheduledPost: ScheduledPost) => void;
@@ -71,8 +67,7 @@ export function ScheduledPostEditor({
   return (
     // The API checks the time and the text, and its refusal shows in the panel.
     <form noValidate onSubmit={(e) => void submit(e)} className="space-y-6">
-      <VersionCard
-        version={version}
+      <TextCard
         parts={parts}
         renderText={(part, index) =>
           part.live ? undefined : (

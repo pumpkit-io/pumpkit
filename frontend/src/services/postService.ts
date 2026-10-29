@@ -33,6 +33,7 @@ export interface Part {
 
 /** One round of a Post's text, the text meant for X. */
 export interface Version {
+  /** What a Scheduled post copied from this Version records as its source. */
   id: string;
   number: number;
   /** Null for the first Version, which comes from the Brief. */
@@ -44,6 +45,16 @@ export interface Version {
   tells: Tell[];
 }
 
+/** The one text a Post has at any time, the text meant for X (ADR 0016). */
+export interface PostText {
+  format: Format;
+  parts: Part[];
+  /** The Version it came from: the last one written or restored. */
+  versionNumber: number;
+  /** Whether the User changed it since it came from that Version. */
+  edited: boolean;
+}
+
 export interface Post {
   id: string;
   brief: string;
@@ -53,19 +64,9 @@ export interface Post {
 /** Where a Post stands, from its one Scheduled post (ADR 0015): none makes it a Draft. */
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
 
-/** The text on screen, which a Scheduled post copies (ADR 0016). */
-export interface PostText {
-  format: Format;
-  parts: Part[];
-  /** The Version it came from. */
-  versionNumber: number;
-  /** Whether the User changed it since it came from that Version. */
-  edited: boolean;
-}
-
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
-  /** Null only while the Post has no Version. */
+  /** Null only for a Post whose first Version failed. */
   text: PostText | null;
   status: PostStatus;
   /** Null while the Post is a Draft. */
@@ -149,12 +150,18 @@ const toSummary = (s: ScheduledPostSummaryApi): ScheduledPostSummary => ({
 /** How many Posts a page of the Posts tabs holds. */
 export const POSTS_PAGE_SIZE = 20;
 
+interface PartApi {
+  text: string;
+  char_count: number;
+  char_limit: number;
+}
+
 interface VersionApi {
   id: string;
   number: number;
   feedback: string | null;
   format: Format;
-  parts: { text: string; char_count: number; char_limit: number }[];
+  parts: PartApi[];
   tells: Tell[];
 }
 
@@ -164,18 +171,20 @@ interface PostApi {
   versions: VersionApi[];
 }
 
+interface PostTextApi {
+  format: Format;
+  parts: PartApi[];
+  version_number: number;
+  edited: boolean;
+}
+
 interface PostDetailApi extends PostApi {
-  text: {
-    format: Format;
-    parts: VersionApi['parts'];
-    version_number: number;
-    edited: boolean;
-  } | null;
+  text: PostTextApi | null;
   status: PostStatus;
   scheduled_post: ScheduledPostApi | null;
 }
 
-const toPart = (p: VersionApi['parts'][number]): Part => ({
+const toPart = (p: PartApi): Part => ({
   text: p.text,
   charCount: p.char_count,
   charLimit: p.char_limit,
@@ -190,12 +199,22 @@ const toVersion = (v: VersionApi): Version => ({
   tells: v.tells,
 });
 
-const toText = (t: NonNullable<PostDetailApi['text']>): PostText => ({
+const toText = (t: PostTextApi): PostText => ({
   format: t.format,
   parts: t.parts.map(toPart),
   versionNumber: t.version_number,
   edited: t.edited,
 });
+
+/** The Text a new Version gives its Post: the server sets it from every Version it writes. */
+export function textOf(version: Version): PostText {
+  return {
+    format: version.format,
+    parts: version.parts,
+    versionNumber: version.number,
+    edited: false,
+  };
+}
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
 export const BRIEF_MAX_CHARS = 200_000;

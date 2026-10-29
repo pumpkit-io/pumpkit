@@ -111,7 +111,8 @@ export const EVENTS = {
       'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
   },
   post_final_copied: {
-    description: 'Post page: copied the text on screen with Copy post, every Part of it.',
+    description:
+      "Post page: copied the text on screen with the card's copy icon, every Part of it.",
   },
 
   // Posting to X (the Post page and Settings) + the X callback
@@ -123,12 +124,12 @@ export const EVENTS = {
   },
   scheduled_post_created: {
     description:
-      'Post page: created a Scheduled post from a Version. Props: format (post | thread), part_count (number), source (always final: copied from a Version), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).',
+      "Post page: created a Scheduled post from the Post's Text. Props: format (post | thread), part_count (number), source (always final: copied from the Text), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).",
   },
   // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
   scheduled_post_published: {
     description:
-      'Publisher or Post now: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (always final: copied from a Version), destination (profile | community), share_with_followers (boolean, only for a Community).',
+      'Publisher or Post now: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (always final: copied from the Text), destination (profile | community), share_with_followers (boolean, only for a Community).',
   },
   scheduled_post_failed: {
     description:
