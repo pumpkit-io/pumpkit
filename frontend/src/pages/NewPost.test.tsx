@@ -89,7 +89,7 @@ function renderNewPost(state?: unknown, instance: Instance = SELLS_PLANS) {
 }
 
 async function writer() {
-  return within(await screen.findByRole('region', { name: 'Write a Post' }));
+  return within(await screen.findByRole('region', { name: "What's this one about?" }));
 }
 
 function postWith(final: string): PostDetail {
@@ -142,14 +142,19 @@ describe('New post', () => {
     vi.mocked(track).mockClear();
   });
 
-  it('shows the Brief box and the Format under the "New post" header', async () => {
+  it('shows one line above the composer, with no instructions or field labels', async () => {
     renderNewPost();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'New post' })).toBeInTheDocument();
     const area = await writer();
-    expect(area.getByLabelText('Brief')).toBeInTheDocument();
+    expect(area.getByRole('heading', { level: 2, name: "What's this one about?" })).toBeVisible();
+    const brief = area.getByLabelText('Brief');
+    expect(brief).toHaveAttribute('placeholder', 'Ramble here…');
+    expect(brief).toHaveFocus();
     expect(area.getByRole('radiogroup', { name: 'Format' })).toBeInTheDocument();
-    expect(area.getByText(/rambling is fine/i)).toBeInTheDocument();
+    expect(area.queryByText('Brief')).not.toBeInTheDocument();
+    expect(area.queryByText('Format')).not.toBeInTheDocument();
+    expect(area.queryByText(/rambling is fine/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'How your posts sound' })).not.toBeInTheDocument();
   });
 
@@ -179,7 +184,7 @@ describe('New post', () => {
 
       const area = await writer();
       const setUp = await area.findByRole('link', { name: 'Set up your Persona' });
-      expect(area.getByText(/at least one Inspiration author/i)).toBeInTheDocument();
+      expect(area.queryByText(/at least one Inspiration author/i)).not.toBeInTheDocument();
       expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
 
       fireEvent.click(setUp);
@@ -193,7 +198,7 @@ describe('New post', () => {
 
       const area = await writer();
       const subscribe = await area.findByRole('link', { name: 'Subscribe to write' });
-      expect(area.getByText('Your Drafts, schedule and Persona are kept.')).toBeInTheDocument();
+      expect(area.getByLabelText('Brief')).toBeEnabled();
       expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
 
       fireEvent.click(subscribe);
@@ -213,7 +218,52 @@ describe('New post', () => {
       expect(area.queryByRole('link', { name: 'Set up your Persona' })).not.toBeInTheDocument();
     });
 
-    it("writes the first Version, disabling the Brief while it waits, then opens the Post's page", async () => {
+    it('greys out the send arrow until something is typed', async () => {
+      const area = await readyToWrite();
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+
+      fireEvent.change(area.getByLabelText('Brief'), { target: { value: '   ' } });
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+
+      fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
+      expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
+    });
+
+    it('shows the shortcut hint beside the arrow only once something is typed', async () => {
+      const area = await readyToWrite();
+      expect(area.queryByText(/↵ to write/)).not.toBeInTheDocument();
+
+      fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
+
+      expect(area.getByText(/↵ to write/)).toBeVisible();
+    });
+
+    it.each([
+      ['⌘Enter', { metaKey: true }],
+      ['Ctrl+Enter', { ctrlKey: true }],
+    ])('sends the Brief with %s', async (_, modifier) => {
+      vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
+      const area = await readyToWrite();
+      const brief = area.getByLabelText('Brief');
+      fireEvent.change(brief, { target: { value: 'ship small things' } });
+
+      fireEvent.keyDown(brief, { key: 'Enter', ...modifier });
+
+      expect(postService.start).toHaveBeenCalledWith('ship small things', 'post');
+    });
+
+    it('leaves Enter alone, so it adds a newline instead of sending', async () => {
+      const area = await readyToWrite();
+      const brief = area.getByLabelText('Brief');
+      fireEvent.change(brief, { target: { value: 'ship small things' } });
+
+      const enter = fireEvent.keyDown(brief, { key: 'Enter' });
+
+      expect(enter).toBe(true);
+      expect(postService.start).not.toHaveBeenCalled();
+    });
+
+    it("writes the first Version, locking the composer while it waits, then opens the Post's page", async () => {
       let answer: (post: PostDetail) => void = () => {};
       vi.mocked(postService.start).mockReturnValue(new Promise((resolve) => (answer = resolve)));
       const area = await readyToWrite();
@@ -221,8 +271,13 @@ describe('New post', () => {
       await writeBrief(area, 'ship small things');
 
       expect(area.getByLabelText('Brief')).toBeDisabled();
+      expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
-      expect(area.getByRole('status')).toHaveTextContent(/writing your post/i);
+      expect(area.getByRole('radio', { name: 'Thread' })).toBeDisabled();
+      expect(area.queryByText(/↵ to write/)).not.toBeInTheDocument();
+      expect(area.getByRole('status')).toHaveTextContent(
+        'Writing your Post. This takes a minute or two.',
+      );
       expect(postService.start).toHaveBeenCalledWith('ship small things', 'post');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'brief' });
 
@@ -251,6 +306,7 @@ describe('New post', () => {
 
       const fresh = await writer();
       await waitFor(() => expect(fresh.getByLabelText('Brief')).toHaveValue(''));
+      expect(fresh.getByLabelText('Brief')).toHaveFocus();
       expect(fresh.getByRole('radio', { name: 'Single post' })).toBeChecked();
     });
 
@@ -275,9 +331,12 @@ describe('New post', () => {
 
       await writeBrief(area, 'ship small things');
 
-      expect(await area.findByRole('alert')).toHaveTextContent(
-        'Writing the Post failed. Please try again.',
-      );
+      const alert = await area.findByRole('alert');
+      expect(alert).toHaveTextContent('Writing the Post failed. Please try again.');
+      expect(
+        area.getByLabelText('Brief').compareDocumentPosition(alert) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
       expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
 
