@@ -15,6 +15,8 @@
         .btn { background-color:#2563eb !important; }
         .link { color:#8ab4ff !important; }
         .rule { background-color:#232833 !important; }
+        .wordmark-light { display:none !important; }
+        .wordmark-dark { display:block !important; max-height:none !important; }
       }
       a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; }
     </style>
@@ -30,13 +32,21 @@
           <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; background:#ffffff; border-radius:12px; overflow:hidden;" class="card">
             <tr>
               <td align="left" style="padding:24px 24px 8px 24px;">
+                <!-- The sidebar's Brand: the mascot, then the wordmark while the app is Pumpkit, else the name in Inter. -->
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td style="vertical-align:middle; padding-right:10px;">
-                      <img src="cid:{{logo_cid}}" width="40" height="40" alt="{{app_name}} logo" style="display:block; border:0; outline:none; text-decoration:none; border-radius:8px;">
+                    <td style="vertical-align:middle; padding-right:12px;">
+                      <img src="cid:mascot" width="35" height="32" alt="" style="display:block; border:0; outline:none; text-decoration:none;">
                     </td>
-                    <td style="vertical-align:middle;">
-                      <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:18px; font-weight:600; letter-spacing:-0.01em; color:#0f172a; line-height:1;" class="text">{{app_name}}</span>
+                    <td style="vertical-align:middle; padding-top:6px;">
+                      {% if show_wordmark %}
+                      <img src="cid:wordmark-light" width="94" height="22" alt="{{app_name}}" style="display:block; border:0; outline:none; text-decoration:none;" class="wordmark-light">
+                      <!--[if !mso]><!-->
+                      <img src="cid:wordmark-dark" width="94" height="22" alt="{{app_name}}" style="display:none; max-height:0; overflow:hidden; border:0; outline:none; text-decoration:none;" class="wordmark-dark">
+                      <!--<![endif]-->
+                      {% else %}
+                      <span style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:18px; font-weight:700; letter-spacing:-0.03em; color:#20201e; line-height:1;" class="text">{{app_name}}</span>
+                      {% endif %}
                     </td>
                   </tr>
                 </table>

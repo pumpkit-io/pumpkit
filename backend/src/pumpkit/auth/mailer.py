@@ -42,10 +42,12 @@ class AuthMailer(Protocol):
         ...
 
 
-# Logo embedded inline in the Magic link email via CID. Replace
-# auth/templates/emails/assets/logo.png with your own logo.
-_LOGO_PATH = _TEMPLATES_DIR / "emails" / "assets" / "logo.png"
-_LOGO_CONTENT_ID = "app-logo"
+# The sidebar's Brand, embedded inline in the Magic link email via CID: PNG renders of
+# frontend/src/assets/brand/*.svg, since mail clients don't show SVG. Re-render them when
+# you replace those SVGs; the wordmarks show only while APP_NAME is Pumpkit.
+_ASSETS_DIR = _TEMPLATES_DIR / "emails" / "assets"
+_BRAND_IMAGES = ("mascot", "wordmark-light", "wordmark-dark")
+_WORDMARK_APP_NAME = "Pumpkit"
 
 
 _email_templates = Environment(
@@ -54,13 +56,20 @@ _email_templates = Environment(
 )
 
 
-def _magic_link_message(email: MagicLinkEmail, from_address: str, logo: bytes) -> EmailMessage:
+def _read_brand_images() -> dict[str, bytes]:
+    return {name: (_ASSETS_DIR / f"{name}.png").read_bytes() for name in _BRAND_IMAGES}
+
+
+def _magic_link_message(
+    email: MagicLinkEmail, from_address: str, images: dict[str, bytes]
+) -> EmailMessage:
+    show_wordmark = settings.APP_NAME == _WORDMARK_APP_NAME
     html = _email_templates.get_template("emails/magic_link.html").render(
         display_name=email.display_name,
         magic_url=email.link_url,
         expires_in_minutes=email.expires_in_minutes,
         app_name=settings.APP_NAME,
-        logo_cid=_LOGO_CONTENT_ID,
+        show_wordmark=show_wordmark,
     )
     message = EmailMessage()
     message["From"] = formataddr((settings.APP_NAME, from_address))
@@ -71,12 +80,21 @@ def _magic_link_message(email: MagicLinkEmail, from_address: str, logo: bytes) -
         f"The link expires in {email.expires_in_minutes} minutes."
     )
     message.add_alternative(html, subtype="html")
-    # The logo is a related part of the HTML so mail clients render it inline by content id.
+    # The images are inline related parts of the HTML, so mail clients render them by
+    # content id instead of listing them as attachments.
     html_part = message.get_body(preferencelist=("html",))
     assert html_part is not None
-    html_part.add_related(
-        logo, maintype="image", subtype="png", cid=f"<{_LOGO_CONTENT_ID}>", filename="logo.png"
-    )
+    for name, image in images.items():
+        if name.startswith("wordmark") and not show_wordmark:
+            continue
+        html_part.add_related(
+            image,
+            maintype="image",
+            subtype="png",
+            cid=f"<{name}>",
+            filename=f"{name}.png",
+            disposition="inline",
+        )
     return message
 
 
@@ -97,10 +115,10 @@ class SmtpAuthMailer:
         self._username = username
         self._password = password
         self._from_address = from_address
-        self._logo = _LOGO_PATH.read_bytes()
+        self._images = _read_brand_images()
 
     async def send_magic_link(self, email: MagicLinkEmail) -> None:
-        message = _magic_link_message(email, self._from_address, self._logo)
+        message = _magic_link_message(email, self._from_address, self._images)
         try:
             # smtplib blocks, so the send runs off the event loop.
             await asyncio.to_thread(self._send, message)
