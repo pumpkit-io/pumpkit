@@ -13,13 +13,13 @@ Pumpkit è gestito da INCEPTIONAL S.R.L., di seguito il Gestore:
 
 I presenti Termini riguardano soltanto il servizio ospitato su pumpkit.io. Il codice di Pumpkit è open source e chiunque può eseguirne una propria copia. Il Gestore non gestisce tali istanze installate in proprio e i presenti Termini non si applicano a esse.
 
-I presenti Termini si applicano dal momento in cui accedi. Li accetti di nuovo nella finestra Billing prima di ogni pagamento, dove confermi anche, spuntando caselle separate, la tua richiesta che il servizio inizi immediatamente (clausola 12) e la tua approvazione specifica, che ogni Utente dà, delle clausole lì elencate ai sensi degli artt. 1341 e 1342 del Codice civile.
+I presenti Termini si applicano dal momento in cui accedi. Li accetti di nuovo nella pagina Settings prima di ogni pagamento, dove confermi anche, spuntando caselle separate, la tua richiesta che il servizio inizi immediatamente (clausola 12) e la tua approvazione specifica, che ogni Utente dà, delle clausole lì elencate ai sensi degli artt. 1341 e 1342 del Codice civile.
 
 Nei presenti Termini, è **consumatore** la persona fisica che usa Pumpkit per scopi estranei alla propria attività imprenditoriale, commerciale, artigianale o professionale. È **impresa** chiunque altro, compresi l'imprenditore individuale e il libero professionista che usano Pumpkit per il proprio lavoro.
 
 ## 2. Il servizio {#service}
 
-Pumpkit scrive post per X. Scrivi un Brief che dice di cosa parla un Post e cosa ne pensi, e scegli fino a tre Inspiration author: account X i cui post pubblici recenti determinano lo stile dei tuoi Post, mai il loro contenuto. Pumpkit scrive una Versione del Post a partire dal tuo Brief, e una nuova Versione ogni volta che dai un Feedback. Ogni Versione termina con un Final, il testo destinato a X.
+Pumpkit scrive post per X. Scrivi un Brief che dice di cosa parla un Post e cosa ne pensi, e scegli fino a tre Inspiration author: account X i cui post pubblici recenti determinano lo stile dei tuoi Post, mai il loro contenuto. Pumpkit scrive una Versione del Post a partire dal tuo Brief, e una nuova Versione ogni volta che dai un Feedback. Ogni Versione contiene il testo destinato a X.
 
 Se colleghi il tuo account X tramite una X connection, Pumpkit può anche pubblicare Scheduled post su quell'account all'orario che scegli.
 
@@ -37,7 +37,7 @@ Le informazioni che fornisci al momento della registrazione devono essere veriti
 
 ## 5. I tuoi contenuti {#content}
 
-Sei titolare dei tuoi Brief e Feedback, e delle Versioni, compresi i Final, che Pumpkit scrive per te. Puoi usarli come preferisci, nel rispetto della legge e della clausola 6.
+Sei titolare dei tuoi Brief e Feedback, e delle Versioni che Pumpkit scrive per te. Puoi usarli come preferisci, nel rispetto della legge e della clausola 6.
 
 Concedi al Gestore una licenza non esclusiva e gratuita per conservare e trattare i tuoi contenuti e inviarli ai fornitori indicati nell'Informativa sulla privacy, solo nella misura necessaria a far funzionare Pumpkit per te. La licenza cessa quando i tuoi contenuti vengono eliminati.
 
@@ -49,7 +49,7 @@ I post pubblici degli Inspiration author appartengono ai rispettivi autori. Pump
 
 Pumpkit scrive con modelli linguistici di intelligenza artificiale. Il loro output può essere inesatto, incompleto o non aggiornato, e può somigliare a testi scritti da altre persone, compresi gli Inspiration author che hai scelto. Un altro Utente può ricevere un testo simile.
 
-Leggi ogni Final prima di pubblicarlo. Sei responsabile di ciò che pubblichi, compreso ogni Scheduled post che Pumpkit pubblica per tuo conto, e di assicurarti che sia corretto e non violi i diritti di nessuno.
+Leggi il testo di una Versione prima di pubblicarlo. Sei responsabile di ciò che pubblichi, compreso ogni Scheduled post che Pumpkit pubblica per tuo conto, e di assicurarti che sia corretto e non violi i diritti di nessuno.
 
 ## 7. Pumpkit e X {#x}
 
@@ -83,15 +83,15 @@ In caso di violazione grave o ripetuta della clausola 8, il Gestore può risolve
 
 ## 10. Piani e Trial {#plans}
 
-Le funzionalità di Pumpkit richiedono un Abbonamento a un Piano. La finestra Billing mostra ciascun Piano con il relativo prezzo e periodo di fatturazione prima della sottoscrizione. Paghi tramite Stripe Checkout, e Stripe elabora il tuo pagamento.
+Le funzionalità di Pumpkit richiedono un Abbonamento a un Piano. La pagina Settings mostra ciascun Piano con il relativo prezzo e periodo di fatturazione prima della sottoscrizione. Paghi tramite Stripe Checkout, e Stripe elabora il tuo pagamento.
 
-Il tuo primo Abbonamento può iniziare con un Trial, un periodo iniziale gratuito la cui durata è indicata nella finestra Billing prima del pagamento. Ogni Utente ha diritto al massimo a un Trial. Al momento del pagamento inserisci un metodo di pagamento, e durante il Trial non viene addebitato nulla. Al termine del Trial inizia il primo periodo di fatturazione e il prezzo del Piano viene addebitato automaticamente, salvo che tu abbia disdetto prima.
+Il tuo primo Abbonamento può iniziare con un Trial, un periodo iniziale gratuito la cui durata è indicata nella pagina Settings prima del pagamento. Ogni Utente ha diritto al massimo a un Trial. Al momento del pagamento inserisci un metodo di pagamento, e durante il Trial non viene addebitato nulla. Al termine del Trial inizia il primo periodo di fatturazione e il prezzo del Piano viene addebitato automaticamente, salvo che tu abbia disdetto prima.
 
 ## 11. Rinnovo automatico e disdetta {#renewal}
 
 Il tuo Abbonamento si rinnova automaticamente alla fine di ogni periodo di fatturazione, per un periodo di uguale durata, e il prezzo del Piano viene addebitato ogni volta sul tuo metodo di pagamento.
 
-Puoi disdire in qualsiasi momento dalla finestra Billing con Manage subscription, che apre il portale di fatturazione di Stripe. La disdetta impedisce il rinnovo successivo: mantieni l'accesso fino alla fine del periodo già pagato e non ti viene addebitato altro. Se disdici durante il Trial, non ti viene mai addebitato nulla.
+Puoi disdire in qualsiasi momento dalla pagina Settings con Manage subscription, che apre il portale di fatturazione di Stripe. La disdetta impedisce il rinnovo successivo: mantieni l'accesso fino alla fine del periodo già pagato e non ti viene addebitato altro. Se disdici durante il Trial, non ti viene mai addebitato nulla.
 
 ## 12. Diritto di recesso per i consumatori {#withdrawal}
 

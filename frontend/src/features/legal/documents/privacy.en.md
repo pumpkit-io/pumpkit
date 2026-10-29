@@ -38,7 +38,7 @@ Each category below says what the data is, what the Operator uses it for, and th
 
 ### Briefs, Feedback and Versions {#data-writing}
 
-- **What:** the Briefs and Feedback you write, and every Version Pumpkit writes from them, including its Draft and Final.
+- **What:** the Briefs and Feedback you write, and every Version Pumpkit writes from them, including the Sketch it starts from and the Version's text.
 - **Why:** to write your Posts and revise them.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
@@ -159,14 +159,13 @@ Pumpkit stores a few things in your browser. Some are strictly necessary for Pum
 
 ### Strictly necessary {#cookies-necessary}
 
-| Name                                                                             | Kind          | Purpose                                             | Lifetime                               |
-| -------------------------------------------------------------------------------- | ------------- | --------------------------------------------------- | -------------------------------------- |
-| `__Host-refresh_token`                                                           | Cookie        | Keeps you signed in to your Session                 | 30 days                                |
-| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookies       | Protect Google sign-in from forgery                 | 10 minutes                             |
-| `pumpkit:session`                                                                | Local storage | Holds the access token of your current Session      | Until you sign out or the Session ends |
-| `pumpkit:theme`                                                                  | Local storage | Remembers whether you chose the light or dark theme | Until you clear it                     |
-| `pumpkit:sidebar-collapsed`                                                      | Local storage | Remembers whether you collapsed the sidebar         | Until you clear it                     |
-| `pumpkit:analytics-consent`                                                      | Local storage | Remembers whether you gave Analytics consent        | Until you clear it                     |
+| Name                                                                             | Kind          | Purpose                                                     | Lifetime                               |
+| -------------------------------------------------------------------------------- | ------------- | ----------------------------------------------------------- | -------------------------------------- |
+| `__Host-refresh_token`                                                           | Cookie        | Keeps you signed in to your Session                         | 30 days                                |
+| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookies       | Protect Google sign-in from forgery                         | 10 minutes                             |
+| `pumpkit:session`                                                                | Local storage | Holds the access token of your current Session              | Until you sign out or the Session ends |
+| `pumpkit:theme`                                                                  | Local storage | Remembers whether you chose the light, dark or system theme | Until you clear it                     |
+| `pumpkit:analytics-consent`                                                      | Local storage | Remembers whether you gave Analytics consent                | Until you clear it                     |
 
 ### Analytics, only with Analytics consent {#cookies-analytics}
 
