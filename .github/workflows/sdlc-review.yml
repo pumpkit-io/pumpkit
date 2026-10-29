@@ -1,8 +1,10 @@
 # sdlc checks on every pull request, written by the sdlc setup-sdlc skill.
 # comment-slop: the code-comments patterns a regex can catch, in the lines the PR adds. Needs no secrets.
-# review: the review-changes skill, run by Claude Code with your Claude subscription. It needs the
-# CLAUDE_CODE_OAUTH_TOKEN secret (create it with `claude setup-token`) and skips draft PRs and PRs
-# from forks, so nobody outside the repo can spend your usage.
+# review: the review-changes skill, run by Claude Code with your Claude subscription. It posts the
+# report as one PR comment and fails when the verdict is blocking (a standards breach, a missing or
+# wrong spec requirement, or a likely bug). It needs the CLAUDE_CODE_OAUTH_TOKEN secret (create it
+# with `claude setup-token`) and skips draft PRs and PRs from forks, so nobody outside the repo can
+# spend your usage. Make both jobs required checks in branch protection to block merges on them.
 name: sdlc review
 
 on:
@@ -57,11 +59,16 @@ jobs:
 
             - Fixed point: ${{ github.event.pull_request.base.sha }}. HEAD is the pull request's head commit.
             - Spec: the issues the pull request body or its commit messages reference. Read the body with `gh pr view ${{ github.event.pull_request.number }}`. With no reference, skip the Spec axis.
-            - Change no tracked file. Write the final report, in Markdown, to `.sdlc-review.md` at the repo root, under the heading `## sdlc review of ${{ github.event.pull_request.head.sha }}`.
+            - Change no tracked file. Write the final report, in Markdown, to `.sdlc-review.md` at the repo root, under the heading `## sdlc review of ${{ github.event.pull_request.head.sha }}`, ending with the skill's verdict line.
           claude_args: |
-            --model opus
+            --model claude-sonnet-5-5
             --allowedTools "Read,Glob,Grep,Write,Task,Agent,Skill,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git merge-base:*),Bash(gh pr view:*),Bash(gh issue view:*)"
       - uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: sdlc-review
           path: .sdlc-review.md
+      - name: Fail on a blocking verdict
+        run: |
+          verdict="$(grep -E '^Verdict: ' .sdlc-review.md | tail -n 1)"
+          echo "${verdict:-No verdict line in the report}"
+          [ "$verdict" = "Verdict: pass" ]
