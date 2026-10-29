@@ -21,6 +21,7 @@ export type PostLoad =
 export function usePost(postId: string) {
   const [load, setLoad] = useState<PostLoad>({ kind: 'loading' });
   const [isWriting, setIsWriting] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const writing = useWritingFailure();
   const { fail, clear } = writing;
   const { refresh: refreshCounts } = usePostCounts();
@@ -62,6 +63,7 @@ export function usePost(postId: string) {
     async (feedback: string, format: Format): Promise<boolean> => {
       setIsWriting(true);
       clear();
+      setRestoreError(null);
       track('post_version_requested', { kind: 'feedback' });
       try {
         const version = await postService.addVersion(postId, feedback, format);
@@ -82,11 +84,28 @@ export function usePost(postId: string) {
     [postId, clear, fail, update],
   );
 
+  /** Makes a Version from History the Post's Text; a refusal leaves the Text and says why. */
+  const restoreVersion = useCallback(
+    async (versionNumber: number) => {
+      setRestoreError(null);
+      try {
+        const text = await postService.restoreVersion(postId, versionNumber);
+        update((post) => (post.id === postId ? { ...post, text } : post));
+        track('version_restored', { source: 'history' });
+      } catch (e) {
+        setRestoreError(errorMessage(e, `Couldn't restore Version ${versionNumber}. Try again.`));
+      }
+    },
+    [postId, update],
+  );
+
   return {
     load,
     reload,
     setScheduledPost,
     addFeedback,
+    restoreVersion,
+    restoreError,
     isWriting,
     error: writing.error,
     notice: writing.notice,

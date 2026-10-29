@@ -9,12 +9,14 @@ import { DestinationName } from './panelParts';
 export function PublishedDock({
   scheduledPost,
   origin,
+  tools,
 }: {
   scheduledPost: ScheduledPost;
   origin: ReactNode;
+  tools?: ReactNode;
 }) {
   return (
-    <Dock name="Published" origin={origin}>
+    <Dock name="Published" origin={origin} tools={tools}>
       <div className="flex min-h-10 items-center gap-3">
         <p className="min-w-0 flex-1 font-sans text-sm text-foreground">
           <span>Published {formatWhen(scheduledPost.publishedAt ?? scheduledPost.publishAt)}</span>

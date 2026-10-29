@@ -19,17 +19,22 @@ export function FeedbackDock({
   name,
   reason,
   origin,
+  tools,
   format: textFormat,
   feedback: sending,
+  restoreError,
   postTo,
 }: {
   name: string;
   /** Above everything else, such as why a Failed Post didn't go out. */
   reason?: ReactNode;
   origin: ReactNode;
+  tools?: ReactNode;
   /** The Text's Format, where the toggle starts. */
   format: Format;
   feedback: FeedbackSending;
+  /** Why the last restore from History didn't happen. */
+  restoreError?: string | null;
   postTo: ReactNode;
 }) {
   const { subscribed } = useSubscribed();
@@ -56,9 +61,10 @@ export function FeedbackDock({
     <Dock
       name={name}
       above={
-        (reason || error || notice) && (
+        (reason || error || notice || restoreError) && (
           <div className="space-y-2">
             {reason}
+            {restoreError && <ErrorBanner message={restoreError} />}
             {error && (
               <ErrorBanner message={error} onRetry={typed ? () => void send() : undefined} />
             )}
@@ -67,6 +73,7 @@ export function FeedbackDock({
         )
       }
       origin={origin}
+      tools={tools}
     >
       <Composer
         label="Feedback"

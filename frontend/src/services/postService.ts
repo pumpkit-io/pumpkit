@@ -43,6 +43,8 @@ export interface Version {
   parts: Part[];
   /** Found in any Part of the text. */
   tells: Tell[];
+  /** When Pumpkit wrote it. */
+  createdAt: string;
 }
 
 /** The one text a Post has at any time, the text meant for X (ADR 0016). */
@@ -163,6 +165,7 @@ interface VersionApi {
   format: Format;
   parts: PartApi[];
   tells: Tell[];
+  created_at: string;
 }
 
 interface PostApi {
@@ -197,6 +200,7 @@ const toVersion = (v: VersionApi): Version => ({
   format: v.format,
   parts: v.parts.map(toPart),
   tells: v.tells,
+  createdAt: v.created_at,
 });
 
 const toText = (t: PostTextApi): PostText => ({
@@ -266,5 +270,12 @@ export const postService = {
       format,
     });
     return toVersion(data);
+  },
+  /** Makes the Version the Post's Text again, which writes nothing and answers at once. */
+  restoreVersion: async (postId: string, versionNumber: number): Promise<PostText> => {
+    const { data } = await apiService.post<PostTextApi>(
+      `/posts/${encodeURIComponent(postId)}/versions/${versionNumber}/restore`,
+    );
+    return toText(data);
   },
 };
