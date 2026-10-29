@@ -435,6 +435,14 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **No Magic link arrives.** Without SMTP, it is in the log (`docker compose logs backend | grep "Magic link for"`). With SMTP, look for a send error in `docker compose logs --tail 50 backend`, check your provider's sending logs, and check that `EMAIL_FROM` is on a verified domain. A Magic link expires after 15 minutes and works once.
 
+A `TimeoutError` in that log means the server can't reach the SMTP port. Some cloud providers, DigitalOcean among them, block 25, 465 and 587 going out. Check from the server, with your `SMTP_HOST` and port:
+
+```sh
+timeout 6 bash -c 'echo > /dev/tcp/smtp.resend.com/587' && echo open || echo blocked
+```
+
+If it prints `blocked`, set `SMTP_PORT` to another port your provider listens on (Resend also takes `starttls` on 2587 and `tls` on 2465), then run `docker compose up -d --wait backend`.
+
 **The sign-in page has no Google button.** The Google group is unset. See [Google sign-in](#google-sign-in).
 
 **Google sign-in fails with `redirect_uri_mismatch`.** The OAuth client's redirect URI must be exactly `PUBLIC_URL/api/v1/oauth/google/callback`.
