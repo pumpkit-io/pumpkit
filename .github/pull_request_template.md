@@ -9,6 +9,10 @@
 - **Before:**
 - **After:**
 
+## Changelog
+
+<!-- The line added under [Unreleased] in CHANGELOG.md, or "no-changelog" (and the label) when nobody running or using an Instance would notice. -->
+
 ## Merge danger
 
 **Door:** <!-- two-way (easy to roll back) or one-way (destructive or hard to reverse) -->
