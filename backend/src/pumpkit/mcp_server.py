@@ -49,6 +49,8 @@ Pumpkit writes X posts in the style of X accounts the User picks, their Inspirat
 - A Brief says what a Post is about and what the User thinks about it. Starting a Post from \
 a Brief makes its first Version.
 - Feedback says what to change about the latest Version, and makes the next Version.
+- Every Version stays in the Post's History. `restore_version` makes an earlier one the \
+Post's Text again, by its number, without writing a new Version.
 - Each Version has a Format: a single X post, or a Thread. A Thread is several ordered Parts, \
 each one X post, published on X with each Part replying to the one before. A \
 Post starts as a single X post unless the User asks for a Thread, and Feedback may switch the \
