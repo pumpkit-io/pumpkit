@@ -96,6 +96,12 @@ function postWith(final: string): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    text: {
+      format: 'post',
+      parts: [{ text: final, charCount: final.length, charLimit: 280 }],
+      versionNumber: 1,
+      edited: false,
+    },
     versions: [
       {
         id: 'version_attempt_01',

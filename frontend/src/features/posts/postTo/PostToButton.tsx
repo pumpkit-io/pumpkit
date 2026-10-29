@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import type { DestinationDraft } from '@/features/scheduledPosts/communities';
-import type { Version } from '@/services/postService';
+import type { PostText } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { ShownPart } from '../shownText';
 import { POST_TO_BILLING_SOURCE, type PostToSender } from './postTo';
@@ -11,13 +11,13 @@ import { PostToDialog } from './PostToDialog';
 
 /** "Post to…" on a Draft or a Failed Post; a User who isn't Subscribed goes to Choose a Plan. */
 export function PostToButton({
-  version,
+  text,
   parts,
   sender,
   initialWhere,
   onDone,
 }: {
-  version: Version;
+  text: PostText;
   parts: ShownPart[];
   sender: PostToSender;
   initialWhere?: DestinationDraft;
@@ -39,7 +39,7 @@ export function PostToButton({
       </Button>
       {open && (
         <PostToDialog
-          version={version}
+          text={text}
           parts={parts}
           sender={sender}
           initialWhere={initialWhere}

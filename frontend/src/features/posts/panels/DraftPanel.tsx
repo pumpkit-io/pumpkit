@@ -1,30 +1,30 @@
-import type { Version } from '@/services/postService';
+import type { PostText, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { CopyPostButton } from '../CopyPostButton';
 import { FeedbackBar } from '../FeedbackBar';
 import { PostToButton } from '../postTo/PostToButton';
-import { useCreateFromVersion } from '../postTo/senders';
-import type { ShownPart } from '../shownText';
+import { useCreateFromText } from '../postTo/senders';
+import { textParts } from '../shownText';
 import type { FeedbackSending } from './feedback';
 import { Panel } from './panelParts';
 
-/** A Draft takes Feedback, and "Post to…" sends the Version on screen. */
+/** A Draft takes Feedback, and "Post to…" sends the Post's Text. */
 export function DraftPanel({
-  shownVersion,
-  shownParts,
+  postId,
+  text,
   shownText,
   latestVersion,
   feedback,
   onScheduled,
 }: {
-  shownVersion: Version;
-  shownParts: ShownPart[];
+  postId: string;
+  text: PostText;
   shownText: string;
   latestVersion: Version;
   feedback: FeedbackSending;
   onScheduled: (scheduledPost: ScheduledPost) => void;
 }) {
-  const sender = useCreateFromVersion(shownVersion.id);
+  const sender = useCreateFromText(postId);
   return (
     <Panel name="Draft">
       <FeedbackBar
@@ -34,8 +34,8 @@ export function DraftPanel({
           <>
             <CopyPostButton text={shownText} />
             <PostToButton
-              version={shownVersion}
-              parts={shownParts}
+              text={text}
+              parts={textParts(text)}
               sender={sender}
               onDone={onScheduled}
             />

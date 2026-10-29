@@ -11,9 +11,9 @@ export interface Community {
   url: string;
 }
 
-/** The Version whose text the server copies: a Scheduled post is never typed (ADR 0015). */
+/** The Post whose Text the server copies: a Scheduled post is never typed (ADR 0015, 0016). */
 export interface ScheduledPostSource {
-  sourceVersionId: string;
+  postId: string;
 }
 
 /** Where a new Scheduled post goes: the User's profile when `community` is null. */
@@ -27,8 +27,8 @@ export interface Destination {
 export interface ScheduledPostChanges {
   /** Every Part in order, the live ones first and unchanged; the others replace those not live. */
   parts?: string[];
-  /** A Version of the same Post, in place of `parts`: its Parts after the live ones go out. */
-  sourceVersionId?: string;
+  /** Copies the Post's Text again, in place of `parts`: its Parts after the live ones go out. */
+  copyText?: boolean;
   publishAt?: string;
   /** Publishes it within the request, in place of `publishAt`. */
   publishNow?: boolean;
@@ -58,8 +58,6 @@ export interface ScheduledPost {
   xPostUrl: string | null;
   /** Why it Failed, in words for the User. */
   failedReason: string | null;
-  /** The Version whose text it copied. */
-  sourceVersionId: string;
   /** The Community it goes to; null for the User's profile. */
   community: Community | null;
   shareWithFollowers: boolean;
@@ -74,7 +72,6 @@ export interface ScheduledPostApi {
   published_at: string | null;
   x_post_url: string | null;
   failed_reason: string | null;
-  source_version_id: string;
   community: Community | null;
   share_with_followers: boolean;
   created_at: string;
@@ -88,13 +85,12 @@ export const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   publishedAt: p.published_at,
   xPostUrl: p.x_post_url,
   failedReason: p.failed_reason,
-  sourceVersionId: p.source_version_id,
   community: p.community,
   shareWithFollowers: p.share_with_followers,
   createdAt: p.created_at,
 });
 
-const postTextBody = (post: ScheduledPostSource) => ({ source_version_id: post.sourceVersionId });
+const postTextBody = (post: ScheduledPostSource) => ({ post_id: post.postId });
 
 // The server looks up the Community's name itself, so only its ID goes.
 const destinationBody = ({ community, shareWithFollowers }: Destination) => ({
@@ -148,7 +144,7 @@ export const scheduledPostService = {
       `/scheduled-posts/${encodeURIComponent(id)}`,
       {
         parts: changes.parts,
-        source_version_id: changes.sourceVersionId,
+        copy_text: changes.copyText,
         publish_at: changes.publishAt,
         publish_now: changes.publishNow,
         // Sent only when given: null moves it back to the profile, absent keeps the Community.

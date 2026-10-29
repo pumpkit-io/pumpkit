@@ -286,6 +286,12 @@ describe('Posts page', () => {
         id: 'post_01',
         brief: 'ship small things',
         status: 'scheduled',
+        text: {
+          format: 'post',
+          parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
+          versionNumber: 1,
+          edited: false,
+        },
         versions: [
           {
             id: 'version_attempt_01',
@@ -304,7 +310,6 @@ describe('Posts page', () => {
           publishedAt: null,
           xPostUrl: null,
           failedReason: null,
-          sourceVersionId: 'version_attempt_01',
           community: null,
           shareWithFollowers: false,
           createdAt: at(-1, 15),

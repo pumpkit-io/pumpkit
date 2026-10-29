@@ -2,11 +2,10 @@ import { Button } from '@/components/ui/button';
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
-import type { PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { CopyPostButton } from '../CopyPostButton';
 import { EDIT_BILLING_SOURCE } from '../edit/useScheduledPostActions';
-import { formatWhen, sourceVersionLabel } from './panelFacts';
+import { formatWhen } from './panelFacts';
 import { DestinationName, Facts, Panel } from './panelParts';
 
 /**
@@ -14,20 +13,16 @@ import { DestinationName, Facts, Panel } from './panelParts';
  * being published.
  */
 export function ScheduledPanel({
-  post,
   scheduledPost,
   shownText,
   onEdit,
 }: {
-  post: PostDetail;
   scheduledPost: ScheduledPost;
   shownText: string;
   onEdit: () => void;
 }) {
   const { subscribed } = useSubscribed();
   const goToChoosePlan = useGoToChoosePlan();
-  const version = sourceVersionLabel(post, scheduledPost);
-
   const edit = () => {
     if (subscribed === false) goToChoosePlan(EDIT_BILLING_SOURCE);
     else onEdit();
@@ -40,11 +35,7 @@ export function ScheduledPanel({
           Scheduled for {formatWhen(scheduledPost.publishAt)}
         </p>
         <Facts
-          items={[
-            ...(version ? [version] : []),
-            <DestinationName key="destination" scheduledPost={scheduledPost} />,
-            TIME_ZONE,
-          ]}
+          items={[<DestinationName key="destination" scheduledPost={scheduledPost} />, TIME_ZONE]}
         />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">

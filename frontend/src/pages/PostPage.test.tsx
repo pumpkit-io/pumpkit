@@ -86,6 +86,7 @@ import {
   postService,
   type Part,
   type PostDetail,
+  type PostText,
   type Tell,
   type Version,
 } from '@/services/postService';
@@ -127,10 +128,17 @@ function version(number: number, texts: string[], extra: Partial<Version> = {}):
   };
 }
 
+/** The Post's Text as `v` wrote it. */
+function textOf(v: Version): PostText {
+  return { format: v.format, parts: v.parts, versionNumber: v.number, edited: false };
+}
+
+/** A Draft whose Text is its latest Version, as each new Version makes it. */
 function draft(versions: Version[] = [version(1, ['the final text'])]): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    text: textOf(versions[versions.length - 1]!),
     versions,
     status: 'draft',
     scheduledPost: null,
@@ -160,20 +168,24 @@ const SCHEDULED: ScheduledPost = {
   publishedAt: null,
   xPostUrl: null,
   failedReason: null,
-  sourceVersionId: 'version_attempt_01',
   community: null,
   shareWithFollowers: false,
   createdAt: '2026-10-10T12:00:00Z',
 };
 
-/** A Post whose first of two Versions has `scheduledPost`, in the status it gives. */
-function withScheduledPost(scheduledPost: ScheduledPost): PostDetail {
+/**
+ * A Post of two Versions with `scheduledPost`, in the status it gives, and its Text from Version
+ * `textFrom`: the first, which it was copied from, unless Feedback on a Failed Post made another.
+ */
+function withScheduledPost(scheduledPost: ScheduledPost, textFrom = 1): PostDetail {
   const status =
     scheduledPost.state === 'publishing' || scheduledPost.state === 'scheduled'
       ? 'scheduled'
       : scheduledPost.state;
+  const versions = [version(1, ['the final text']), version(2, ['the second text'])];
   return {
-    ...draft([version(1, ['the final text']), version(2, ['the second text'])]),
+    ...draft(versions),
+    text: textOf(versions[textFrom - 1]!),
     status,
     scheduledPost,
   };
@@ -322,7 +334,7 @@ describe('Post page', () => {
       ]);
     });
 
-    it("shows the Scheduled post's text on the Version it was copied from", async () => {
+    it("shows the Scheduled post's text on the Version the Post's Text came from", async () => {
       renderPost(
         withScheduledPost({
           ...SCHEDULED,
@@ -407,8 +419,6 @@ describe('Post page', () => {
 
         await versionCard();
         const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-        // A Failed Post opens on its latest Version, so go back to the one that failed.
-        fireEvent.click(pager.getByRole('button', { name: `Version 1, ${label}` }));
         expect(pager.getByRole('button', { name: `Version 1, ${label}` })).toHaveAttribute(
           'aria-current',
           'true',
@@ -624,13 +634,13 @@ describe('Post page', () => {
   });
 
   describe('Scheduled', () => {
-    it('says when it goes out, which Version, where and in which time zone, with no Feedback', async () => {
+    it('says when it goes out, where and in which time zone, with no Feedback', async () => {
       renderPost(withScheduledPost(SCHEDULED));
       await versionCard();
 
       const scheduled = panel('Scheduled');
       expect(scheduled.getByText('Scheduled for Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
-      expect(scheduled.getByText('Version 1 · Your profile · Europe/Rome')).toBeInTheDocument();
+      expect(scheduled.getByText('Your profile · Europe/Rome')).toBeInTheDocument();
       expect(scheduled.getByRole('button', { name: 'Copy post' })).toBeInTheDocument();
       expect(screen.queryByLabelText('Feedback')).not.toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
@@ -792,9 +802,7 @@ describe('Post page', () => {
           community: null,
         }),
       );
-      expect(
-        await panel('Scheduled').findByText('Version 1 · Your profile · Europe/Rome'),
-      ).toBeInTheDocument();
+      expect(await panel('Scheduled').findByText('Your profile · Europe/Rome')).toBeInTheDocument();
     });
 
     it('throws the edits away on Cancel', async () => {
@@ -949,7 +957,8 @@ describe('Post page', () => {
 
       const published = panel('Published');
       expect(published.getByText('Published Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
-      expect(published.getByText('Version 1 · Your profile')).toBeInTheDocument();
+      expect(published.getByText('Your profile')).toBeInTheDocument();
+      expect(published.queryByText(/Version 1/)).not.toBeInTheDocument();
       expect(published.getByText(/published posts can.t be changed/i)).toBeInTheDocument();
       expect(published.getByRole('link', { name: 'View on X' })).toHaveAttribute(
         'href',
@@ -1002,20 +1011,20 @@ describe('Post page', () => {
     });
 
     it('marks the Parts of a Thread already live on X', async () => {
-      renderPost(
-        withScheduledPost({
+      const thread = version(1, ['Live one.', 'Refused two.']);
+      renderPost({
+        ...withScheduledPost({
           ...FAILED,
           parts: [
             { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
             { text: 'Refused two.', live: false, xPostUrl: null },
           ],
         }),
-      );
-      await versionCard();
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      fireEvent.click(pager.getByRole('button', { name: 'Version 1, Failed' }));
-
+        text: textOf(thread),
+        versions: [thread],
+      });
       const card = await versionCard();
+      expect(card.getByRole('heading', { name: 'Version 1' })).toBeInTheDocument();
       const [first, second] = card
         .getAllByRole('listitem', { name: /^Part \d of 2$/ })
         .map((item) => within(item));
@@ -1088,13 +1097,14 @@ describe('Post page', () => {
       expect(draftPanel.queryByRole('button', { name: 'Post now' })).not.toBeInTheDocument();
     });
 
-    it('names the Version, its Format, its Part count and the X account it posts as', async () => {
+    it('names the Format, the Part count and the X account it posts as, and no Version', async () => {
       const dialog = await openPostTo(threadWith([part('the first part'), part('the second')]));
 
-      expect(dialog.getByText('Version 1 · Thread · 2 Parts · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Thread · 2 Parts · as @ada')).toBeInTheDocument();
+      expect(dialog.queryByText(/Version 1/)).not.toBeInTheDocument();
     });
 
-    it("schedules the Version to the User's profile for a day and time in their time zone", async () => {
+    it("schedules the Post's Text to the User's profile for a day and time in their time zone", async () => {
       vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
       const dialog = await openPostTo();
 
@@ -1105,7 +1115,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         '2026-10-12T07:00:00.000Z',
         { community: null, shareWithFollowers: false },
       );
@@ -1122,7 +1132,27 @@ describe('Post page', () => {
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Scheduled /');
     });
 
-    it('sends the Version on screen, not the latest', async () => {
+    it("sends the Post's Text whichever Version is on screen", async () => {
+      vi.mocked(scheduledPostService.postNow).mockResolvedValue(PUBLISHED);
+      renderPost(draft([version(1, ['the final text']), version(2, ['the second text'])]));
+      await versionCard();
+      fireEvent.click(screen.getByRole('button', { name: 'Previous Version' }));
+      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      expect(dialog.getByText('the second text')).toBeInTheDocument();
+      expect(dialog.queryByText('the final text')).not.toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      await dialogClosed();
+      expect(scheduledPostService.postNow).toHaveBeenCalledWith(
+        { postId: 'post_01' },
+        { community: null, shareWithFollowers: false },
+      );
+    });
+
+    it('schedules the Text, not the Version on screen', async () => {
       vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
       renderPost(draft([version(1, ['the final text']), version(2, ['the second text'])]));
       await versionCard();
@@ -1130,13 +1160,12 @@ describe('Post page', () => {
       fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
 
-      expect(dialog.getByText('Version 1 · Single post · 1 Part · as @ada')).toBeInTheDocument();
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
 
       await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         '2026-10-12T07:00:00.000Z',
         { community: null, shareWithFollowers: false },
       );
@@ -1173,7 +1202,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         '2026-10-12T07:00:00.000Z',
         { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: false },
       );
@@ -1202,7 +1231,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         '2026-10-12T07:00:00.000Z',
         { community: { id: COMMUNITY_ID, name: 'Indie makers' }, shareWithFollowers: true },
       );
@@ -1267,7 +1296,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
@@ -1308,7 +1337,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
       );
       expect(panel('Published').getByText('Shared with your followers')).toBeInTheDocument();
@@ -1455,12 +1484,17 @@ describe('Post page', () => {
       failedReason: 'X refused Part 2: Nope',
     };
 
+    /** The Thread that failed partway, with Feedback since making `latest` its Text. */
     function failedThread(latest: Version): PostDetail {
       return {
         ...withScheduledPost(FAILED_PARTWAY),
+        text: textOf(latest),
         versions: [version(1, ['Live one.', 'Refused two.']), latest],
       };
     }
+
+    /** The Failed Post after Feedback made its second Version, and so its Text. */
+    const failedThenRewritten = () => withScheduledPost(FAILED, 2);
 
     afterEach(() => {
       vi.useRealTimers();
@@ -1475,37 +1509,36 @@ describe('Post page', () => {
       vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);
     });
 
-    /** Opens "Post to…" on the Failed `post` as it loads, on its latest Version. */
-    async function openRetry(post: PostDetail = withScheduledPost(FAILED)): Promise<Dialog> {
+    /** Opens "Post to…" on the Failed `post` as it loads, on the Version its Text came from. */
+    async function openRetry(post: PostDetail = failedThenRewritten()): Promise<Dialog> {
       renderPost(post);
       await versionCard();
       fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
     }
 
-    it('opens on the latest Version, not the one that failed', async () => {
-      renderPost(withScheduledPost(FAILED));
+    it('opens on the Version its Text came from, not the one that failed', async () => {
+      renderPost(failedThenRewritten());
 
       expect((await versionCard()).getByText('the second text')).toBeInTheDocument();
       const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
       expect(pager.getByText('Version 2 of 2')).toBeInTheDocument();
     });
 
-    it('reschedules the Failed one with the latest Version, and the pager marks that Version', async () => {
+    it("reschedules the Failed one with the Post's Text, and the pager marks its Version", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
         parts: [{ text: 'the second text', live: false, xPostUrl: null }],
-        sourceVersionId: 'version_attempt_02',
       });
       const dialog = await openRetry();
 
-      expect(dialog.getByText('Version 2 · Single post · 1 Part · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Single post · 1 Part · as @ada')).toBeInTheDocument();
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
-        sourceVersionId: 'version_attempt_02',
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishAt: '2026-10-12T07:00:00.000Z',
@@ -1523,14 +1556,13 @@ describe('Post page', () => {
       expect(pager.getByRole('button', { name: 'Version 1' })).toBeInTheDocument();
     });
 
-    it('posts the latest Version now and shows the Published Post', async () => {
+    it("posts the Post's Text now and shows the Published Post", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
         state: 'published',
         publishedAt: '2026-10-10T12:00:14Z',
         xPostUrl: 'https://x.com/i/web/status/1890000000000000002',
         parts: [{ text: 'the second text', live: true, xPostUrl: 'https://x.com/i/web/status/2' }],
-        sourceVersionId: 'version_attempt_02',
       });
       const dialog = await openRetry();
 
@@ -1540,7 +1572,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
-        sourceVersionId: 'version_attempt_02',
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishNow: true,
@@ -1553,12 +1585,11 @@ describe('Post page', () => {
       expect(pager.getByRole('button', { name: 'Version 2, Published' })).toBeInTheDocument();
     });
 
-    it('retries the Version it failed with as it stands, keeping its text', async () => {
+    it("retries with the Post's Text whichever Version is on screen", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue(SCHEDULED);
-      renderPost(withScheduledPost(FAILED));
+      renderPost(failedThenRewritten());
       await versionCard();
-      const pager = within(screen.getByRole('navigation', { name: 'Versions' }));
-      fireEvent.click(pager.getByRole('button', { name: 'Version 1, Failed' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Previous Version' }));
 
       fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
@@ -1567,6 +1598,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishAt: '2026-10-12T07:00:00.000Z',
@@ -1603,13 +1635,12 @@ describe('Post page', () => {
           { text: 'Fixed two.', live: true, xPostUrl: 'https://x.com/i/web/status/3' },
           { text: 'New three.', live: true, xPostUrl: 'https://x.com/i/web/status/4' },
         ],
-        sourceVersionId: 'version_attempt_02',
       });
       const dialog = await openRetry(
         failedThread(version(2, ['Rewritten one.', 'Fixed two.', 'New three.'])),
       );
 
-      expect(dialog.getByText('Version 2 · Thread · 3 Parts · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Thread · 3 Parts · as @ada')).toBeInTheDocument();
       expect(
         dialog.getByText('Part 1 is already on X, so only Parts 2 to 3 go out, as replies to it.'),
       ).toBeInTheDocument();
@@ -1634,7 +1665,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
-        sourceVersionId: 'version_attempt_02',
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishNow: true,
@@ -1642,12 +1673,12 @@ describe('Post page', () => {
       expect(panel('Published')).toBeTruthy();
     });
 
-    it('refuses a Version with no Part after the live ones', async () => {
+    it('refuses a Text with no Part after the live ones', async () => {
       const dialog = await openRetry(failedThread(version(2, ['Just one now.'])));
 
       expect(
         dialog.getByText(
-          'Part 1 is already on X, and this Version has no Part after it. Pick a longer Version.',
+          'Part 1 is already on X, and the text has no Part after it. Ask for more Parts with Feedback.',
         ),
       ).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();
@@ -1656,8 +1687,8 @@ describe('Post page', () => {
     it('does not count a live Part against the limit', async () => {
       const longLive = { ...LIVE_ONE, text: 'a'.repeat(300) };
       const dialog = await openRetry({
-        ...withScheduledPost({ ...FAILED_PARTWAY, parts: [longLive, FAILED_PARTWAY.parts[1]!] }),
-        versions: [version(1, [longLive.text, 'Refused two.']), version(2, ['x', 'Fixed two.'])],
+        ...failedThread(version(2, ['x', 'Fixed two.'])),
+        scheduledPost: { ...FAILED_PARTWAY, parts: [longLive, FAILED_PARTWAY.parts[1]!] },
       });
 
       expect(dialog.queryByText(/over X's/)).not.toBeInTheDocument();

@@ -33,7 +33,6 @@ export interface Part {
 
 /** One round of a Post's text, the text meant for X. */
 export interface Version {
-  /** What a Scheduled post copied from this Version records as its source. */
   id: string;
   number: number;
   /** Null for the first Version, which comes from the Brief. */
@@ -54,8 +53,20 @@ export interface Post {
 /** Where a Post stands, from its one Scheduled post (ADR 0015): none makes it a Draft. */
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
 
+/** The text on screen, which a Scheduled post copies (ADR 0016). */
+export interface PostText {
+  format: Format;
+  parts: Part[];
+  /** The Version it came from. */
+  versionNumber: number;
+  /** Whether the User changed it since it came from that Version. */
+  edited: boolean;
+}
+
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
+  /** Null only while the Post has no Version. */
+  text: PostText | null;
   status: PostStatus;
   /** Null while the Post is a Draft. */
   scheduledPost: ScheduledPost | null;
@@ -154,17 +165,36 @@ interface PostApi {
 }
 
 interface PostDetailApi extends PostApi {
+  text: {
+    format: Format;
+    parts: VersionApi['parts'];
+    version_number: number;
+    edited: boolean;
+  } | null;
   status: PostStatus;
   scheduled_post: ScheduledPostApi | null;
 }
+
+const toPart = (p: VersionApi['parts'][number]): Part => ({
+  text: p.text,
+  charCount: p.char_count,
+  charLimit: p.char_limit,
+});
 
 const toVersion = (v: VersionApi): Version => ({
   id: v.id,
   number: v.number,
   feedback: v.feedback,
   format: v.format,
-  parts: v.parts.map((p) => ({ text: p.text, charCount: p.char_count, charLimit: p.char_limit })),
+  parts: v.parts.map(toPart),
   tells: v.tells,
+});
+
+const toText = (t: NonNullable<PostDetailApi['text']>): PostText => ({
+  format: t.format,
+  parts: t.parts.map(toPart),
+  versionNumber: t.version_number,
+  edited: t.edited,
 });
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
@@ -199,6 +229,7 @@ export const postService = {
     return {
       id: data.id,
       brief: data.brief,
+      text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
       status: data.status,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,

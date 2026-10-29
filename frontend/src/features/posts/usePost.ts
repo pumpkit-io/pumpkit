@@ -65,8 +65,15 @@ export function usePost(postId: string) {
       track('post_version_requested', { kind: 'feedback' });
       try {
         const version = await postService.addVersion(postId, feedback, format);
+        // The new Version becomes the Post's Text, as the server made it.
+        const text = {
+          format: version.format,
+          parts: version.parts,
+          versionNumber: version.number,
+          edited: false,
+        };
         update((post) =>
-          post.id === postId ? { ...post, versions: [...post.versions, version] } : post,
+          post.id === postId ? { ...post, text, versions: [...post.versions, version] } : post,
         );
         return true;
       } catch (e) {

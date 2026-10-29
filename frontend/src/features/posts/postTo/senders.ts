@@ -7,27 +7,26 @@ import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import type { PostToChoice, PostToSender } from './postTo';
 
-/** Sends a Draft's Version as its new Scheduled post. */
-export function useCreateFromVersion(versionId: string): PostToSender {
+/** Sends a Draft's Text as its new Scheduled post. */
+export function useCreateFromText(postId: string): PostToSender {
   const { sending, error, create } = useCreateScheduledPost();
   const send = useCallback(
-    ({ destination, when }: PostToChoice) =>
-      create({ sourceVersionId: versionId, destination, ...when }),
-    [create, versionId],
+    ({ destination, when }: PostToChoice) => create({ postId, destination, ...when }),
+    [create, postId],
   );
   return { sending, error, send };
 }
 
 /**
- * Reschedules or posts now a Failed Post's one Scheduled post, with the Version on screen. The
- * Version it came from is sent as it stands, so text edited after scheduling is kept.
+ * Reschedules or posts now a Failed Post's one Scheduled post with the Post's Text, its live
+ * Parts kept first (ADR 0014).
  */
-export function useRetryFailed(scheduledPost: ScheduledPost, versionId: string): PostToSender {
+export function useRetryFailed(scheduledPost: ScheduledPost): PostToSender {
   const { refresh: refreshSubscribed } = useSubscribed();
   const { reload: reloadXConnection } = useXConnectionContext();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { id, sourceVersionId } = scheduledPost;
+  const { id } = scheduledPost;
 
   const send = useCallback(
     async ({ destination, when }: PostToChoice) => {
@@ -35,7 +34,7 @@ export function useRetryFailed(scheduledPost: ScheduledPost, versionId: string):
       setError(null);
       try {
         const retried = await scheduledPostService.edit(id, {
-          ...(versionId !== sourceVersionId && { sourceVersionId: versionId }),
+          copyText: true,
           community: destination.community,
           shareWithFollowers: destination.shareWithFollowers,
           ...(when.postNow ? { publishNow: true } : { publishAt: when.publishAt }),
@@ -63,7 +62,7 @@ export function useRetryFailed(scheduledPost: ScheduledPost, versionId: string):
         setSending(false);
       }
     },
-    [id, sourceVersionId, versionId, refreshSubscribed, reloadXConnection],
+    [id, refreshSubscribed, reloadXConnection],
   );
 
   return { sending, error, send };

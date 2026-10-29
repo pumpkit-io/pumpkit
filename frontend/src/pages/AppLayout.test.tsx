@@ -83,6 +83,12 @@ import {
 const POST: PostDetail = {
   id: 'post_01',
   brief: 'ship small things',
+  text: {
+    format: 'post',
+    parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],
+    versionNumber: 1,
+    edited: false,
+  },
   versions: [
     {
       id: 'version_attempt_01',

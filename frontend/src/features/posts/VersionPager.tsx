@@ -1,8 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PostStatus, Version } from '@/services/postService';
-import type { ScheduledPost } from '@/services/scheduledPostService';
-import { hasScheduledPost, STATUS_LABEL } from './postStatus';
+import type { PostDetail, Version } from '@/services/postService';
+import { showsScheduledPost, STATUS_LABEL } from './postStatus';
 
 const DOT_COLOUR = {
   scheduled: 'bg-primary',
@@ -12,39 +11,32 @@ const DOT_COLOUR = {
 
 type Mark = keyof typeof DOT_COLOUR;
 
-/** The Post's status, on the Version its Scheduled post came from only. */
-function markOf(
-  version: Version,
-  scheduledPost: ScheduledPost | null,
-  status: PostStatus,
-): Mark | null {
-  if (!hasScheduledPost(scheduledPost, version.id)) return null;
-  return status === 'draft' ? null : status;
+/** The Post's status, on the Version its Text came from only. */
+function markOf(version: Version, post: PostDetail): Mark | null {
+  if (!showsScheduledPost(post, version)) return null;
+  return post.status === 'draft' ? null : post.status;
 }
 
 const STEP =
   'inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40';
 
 /**
- * Steps through every Version. The one its Scheduled post came from gets a dot in that post's
+ * Steps through every Version. The one the Text came from gets a dot in its Scheduled post's
  * colour, and the footer says what made the Version shown: its Feedback, or the Brief.
  */
 export function VersionPager({
-  versions,
+  post,
   index,
   onChange,
-  scheduledPost,
-  status,
 }: {
-  versions: Version[];
+  post: PostDetail;
   index: number;
   onChange: (index: number) => void;
-  scheduledPost: ScheduledPost | null;
-  status: PostStatus;
 }) {
+  const { versions } = post;
   const shown = versions[index];
   if (!shown) return null;
-  const shownMark = markOf(shown, scheduledPost, status);
+  const shownMark = markOf(shown, post);
   const origin = shown.feedback === null ? 'From your brief' : `"${shown.feedback}"`;
 
   return (
@@ -62,7 +54,7 @@ export function VersionPager({
         <div className="flex min-w-0 flex-col items-center gap-1.5">
           <ol className="flex flex-wrap items-center justify-center gap-0.5">
             {versions.map((version, i) => {
-              const state = markOf(version, scheduledPost, status);
+              const state = markOf(version, post);
               const label = state
                 ? `Version ${version.number}, ${STATUS_LABEL[state]}`
                 : `Version ${version.number}`;

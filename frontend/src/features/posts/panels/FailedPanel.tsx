@@ -1,5 +1,5 @@
 import { destinationDraftOf } from '@/features/scheduledPosts/communities';
-import type { Version } from '@/services/postService';
+import type { PostText, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { CopyPostButton } from '../CopyPostButton';
 import { FeedbackBar } from '../FeedbackBar';
@@ -12,11 +12,11 @@ import { Panel } from './panelParts';
 
 /**
  * Why the Post didn't go out, then Feedback for a Version X will take, and "Post to…", which
- * retries the Post's one Scheduled post with the Version on screen.
+ * retries the Post's one Scheduled post with the Post's Text.
  */
 export function FailedPanel({
   scheduledPost,
-  shownVersion,
+  text,
   retryParts,
   shownText,
   latestVersion,
@@ -24,7 +24,7 @@ export function FailedPanel({
   onRetried,
 }: {
   scheduledPost: ScheduledPost;
-  shownVersion: Version;
+  text: PostText;
   /** What the retry sends, the live Parts first. */
   retryParts: ShownPart[];
   shownText: string;
@@ -32,7 +32,7 @@ export function FailedPanel({
   feedback: FeedbackSending;
   onRetried: (scheduledPost: ScheduledPost) => void;
 }) {
-  const sender = useRetryFailed(scheduledPost, shownVersion.id);
+  const sender = useRetryFailed(scheduledPost);
   return (
     <Panel name="Failed" tone="destructive">
       <div className="space-y-1">
@@ -51,7 +51,7 @@ export function FailedPanel({
             <>
               <CopyPostButton text={shownText} />
               <PostToButton
-                version={shownVersion}
+                text={text}
                 parts={retryParts}
                 sender={sender}
                 initialWhere={destinationDraftOf(scheduledPost)}

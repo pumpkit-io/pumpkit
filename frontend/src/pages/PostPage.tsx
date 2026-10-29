@@ -12,7 +12,7 @@ import type { FeedbackSending } from '@/features/posts/panels/feedback';
 import { PublishedPanel } from '@/features/posts/panels/PublishedPanel';
 import { ScheduledPanel } from '@/features/posts/panels/ScheduledPanel';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
-import { hasScheduledPost, postTitle } from '@/features/posts/postStatus';
+import { postTitle } from '@/features/posts/postStatus';
 import { copiedText, retryParts, shownParts } from '@/features/posts/shownText';
 import { usePost } from '@/features/posts/usePost';
 import { VersionCard } from '@/features/posts/VersionCard';
@@ -22,12 +22,10 @@ import { useXConnectionContext } from '@/features/xConnection/useXConnectionCont
 import type { PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
-/** The Version a Post opens on: the one its Scheduled post came from, else the latest. */
-function openingIndex(post: PostDetail): number {
-  // A Failed Post is retried with the latest Version, so it opens there.
-  if (post.status === 'failed') return post.versions.length - 1;
-  const scheduled = post.versions.findIndex((v) => hasScheduledPost(post.scheduledPost, v.id));
-  return scheduled >= 0 ? scheduled : post.versions.length - 1;
+/** Where the Version the Post's Text came from sits in its History, else the latest. */
+function textIndex(post: PostDetail): number {
+  const index = post.versions.findIndex((v) => v.number === post.text?.versionNumber);
+  return index >= 0 ? index : post.versions.length - 1;
 }
 
 function Page({ title, children }: { title: ReactNode; children: ReactNode }) {
@@ -54,7 +52,7 @@ function LoadedPost({
 }) {
   const { connection } = useXConnectionContext();
   const location = useLocation();
-  const [index, setIndex] = useState(() => openingIndex(post));
+  const [index, setIndex] = useState(() => textIndex(post));
   const [editing, setEditing] = useState(
     () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
   );
@@ -75,17 +73,17 @@ function LoadedPost({
 
   const shown = post.versions[Math.min(index, post.versions.length - 1)];
   const latest = post.versions[post.versions.length - 1];
-  if (!shown || !latest) return null;
-  const { scheduledPost } = post;
-  const parts = shownParts(shown, scheduledPost, connection?.charLimit ?? null);
+  const { scheduledPost, text: postText } = post;
+  if (!shown || !latest || !postText) return null;
+  const parts = shownParts(shown, post, connection?.charLimit ?? null);
   const text = copiedText(parts);
   const title = postTitle(scheduledPost?.parts[0]?.text ?? latest.parts[0]?.text ?? post.brief);
   const breadcrumb = <PostBreadcrumb status={post.status} title={title} />;
 
   if (editing && scheduledPost?.state === 'scheduled') {
-    const source = post.versions.findIndex((v) => v.id === scheduledPost.sourceVersionId);
+    const source = textIndex(post);
     const stopEditing = () => {
-      if (source >= 0) setIndex(source);
+      setIndex(source);
       setEditing(false);
     };
     return (
@@ -114,18 +112,12 @@ function LoadedPost({
       <BriefBlock brief={post.brief} />
       <div className="space-y-3">
         <VersionCard version={shown} parts={parts} />
-        <VersionPager
-          versions={post.versions}
-          index={index}
-          onChange={setIndex}
-          scheduledPost={scheduledPost}
-          status={post.status}
-        />
+        <VersionPager post={post} index={index} onChange={setIndex} />
       </div>
       {post.status === 'draft' && (
         <DraftPanel
-          shownVersion={shown}
-          shownParts={parts}
+          postId={post.id}
+          text={postText}
           shownText={text}
           latestVersion={latest}
           feedback={feedback}
@@ -134,20 +126,19 @@ function LoadedPost({
       )}
       {post.status === 'scheduled' && scheduledPost && (
         <ScheduledPanel
-          post={post}
           scheduledPost={scheduledPost}
           shownText={text}
           onEdit={() => setEditing(true)}
         />
       )}
       {post.status === 'published' && scheduledPost && (
-        <PublishedPanel post={post} scheduledPost={scheduledPost} shownText={text} />
+        <PublishedPanel scheduledPost={scheduledPost} shownText={text} />
       )}
       {post.status === 'failed' && scheduledPost && (
         <FailedPanel
           scheduledPost={scheduledPost}
-          shownVersion={shown}
-          retryParts={retryParts(shown, scheduledPost, connection?.charLimit ?? null)}
+          text={postText}
+          retryParts={retryParts(postText, scheduledPost, connection?.charLimit ?? null)}
           shownText={text}
           latestVersion={latest}
           feedback={feedback}
