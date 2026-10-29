@@ -161,6 +161,15 @@ else
 fi
 git checkout -q -- .
 
+mkdir untracked && touch untracked/notes.md
+run sh "$scripts/tag-release.sh" 0.3.0
+if ! grep -q 'changes' "$err"; then
+  pass "tag-release ignores untracked files"
+else
+  fail "expected tag-release to ignore untracked files, got: $(cat "$err")"
+fi
+rm -r untracked
+
 run sh "$scripts/tag-release.sh" 0.3.0
 if [ "$status" -ne 0 ] && grep -q 'PUMPKIT_VERSION=0.2.0' "$err"; then
   pass "tag-release refuses a version .env.example doesn't set"
