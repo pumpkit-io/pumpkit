@@ -42,9 +42,8 @@ class AuthMailer(Protocol):
         ...
 
 
-# The sidebar's Brand, embedded inline in the Magic link email via CID: PNG renders of
-# frontend/src/assets/brand/*.svg, since mail clients don't show SVG. Re-render them when
-# you replace those SVGs; the wordmarks show only while APP_NAME is Pumpkit.
+# PNG renders of frontend/src/assets/brand/*.svg, since mail clients don't show SVG.
+# Re-render them whenever those SVGs change.
 _ASSETS_DIR = _TEMPLATES_DIR / "emails" / "assets"
 _BRAND_IMAGES = ("mascot", "wordmark-light", "wordmark-dark")
 _WORDMARK_APP_NAME = "Pumpkit"
@@ -80,8 +79,7 @@ def _magic_link_message(
         f"The link expires in {email.expires_in_minutes} minutes."
     )
     message.add_alternative(html, subtype="html")
-    # The images are inline related parts of the HTML, so mail clients render them by
-    # content id instead of listing them as attachments.
+    # With a filename the disposition defaults to attachment, which Gmail lists and won't render.
     html_part = message.get_body(preferencelist=("html",))
     assert html_part is not None
     for name, image in images.items():
