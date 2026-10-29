@@ -15,8 +15,13 @@ from pumpkit.core.mcp_tools import (
     ToolCall,
 )
 from pumpkit.core.schemas import LinkToolResponse
+from pumpkit.posts.formats import Format
+from pumpkit.posts.llm import get_llm
+from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
+from pumpkit.posts.schemas import FeedbackRequest, VersionToolResponse
 from pumpkit.scheduling import mediator
-from pumpkit.scheduling.models import FAILED, PUBLISHED, ScheduledPostState
+from pumpkit.scheduling.models import FAILED, PUBLISHED
+from pumpkit.scheduling.post_status import PostStatus
 from pumpkit.scheduling.publish import RETRY_WINDOW
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -29,32 +34,34 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     PastCommunitiesResponse,
+    PostDetailToolResponse,
+    PostMessageToolResponse,
     PostNowToolResponse,
-    ScheduledPageMessageToolResponse,
+    PostsPageRequest,
+    PostsPageResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
-    ScheduledPostsListToolResponse,
     ScheduledPostToolResponse,
     ScheduledPostUpdateRequest,
 )
 from pumpkit.x_connection.x_publisher import get_x_publisher
 
 
-def scheduled_page_url() -> str:
-    return f"{settings.frontend_url()}{mediator.SCHEDULED_PAGE}"
+def post_url(post_id: str) -> str:
+    """The Post's page in the web app."""
+    return f"{settings.frontend_url()}{mediator.POSTS_PAGE}/{post_id}"
 
 
 def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolResponse:
     return ScheduledPostToolResponse(
-        **scheduled_post.model_dump(), scheduled_page_url=scheduled_page_url()
+        **scheduled_post.model_dump(), post_url=post_url(scheduled_post.post_id)
     )
 
 
 async def _create_scheduled_post(
     call: ToolCall[User],
     *,
-    parts: Optional[list[str]],
-    version_id: Optional[str],
+    version_id: str,
     publish_at: Optional[str],
     community: Optional[str],
     share_with_followers: bool,
@@ -62,7 +69,6 @@ async def _create_scheduled_post(
     """A new Scheduled post, its arguments checked by the create route's request schema."""
     create_request = ScheduledPostCreateRequest.model_validate(
         {
-            "parts": parts,
             "source_version_id": version_id,
             "publish_at": publish_at,
             "publish_now": publish_at is None,
@@ -71,7 +77,6 @@ async def _create_scheduled_post(
         }
     )
     new = NewScheduledPost(
-        parts=create_request.parts,
         version_id=create_request.source_version_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
@@ -91,24 +96,21 @@ async def _create_scheduled_post(
 
 async def schedule_post(
     call: ToolCall[User],
+    version_id: str,
     publish_at: str,
-    parts: Optional[list[str]] = None,
-    version_id: Optional[str] = None,
     community: Optional[str] = None,
     share_with_followers: bool = False,
 ) -> ScheduledPostToolResponse:
     """
-    Schedule a post on the User's connected X account for `publish_at`, an ISO 8601 time with
-    its UTC offset, on a whole minute and at least a minute from now. Give either `parts` or
-    `version_id`. `parts` is the User's text as a list of Parts in order: one Part is a single
-    X post, and several are a Thread. `version_id` schedules that Version's Final, and a
-    Thread's Final keeps every Part in order. The post goes to the User's profile, or to the
-    Community whose URL or ID is in `community`. In a Community, `share_with_followers` also
-    shows it to the User's followers.
+    Schedule a Version's text on the User's connected X account for `publish_at`, an ISO 8601
+    time with its UTC offset, on a whole minute and at least a minute from now. A Thread keeps
+    every Part in order. A Post goes out once: it has at most one Scheduled post, so to change
+    one already scheduled, edit it, or delete it first. The post goes to the User's profile, or
+    to the Community whose URL or ID is in `community`. In a Community, `share_with_followers`
+    also shows it to the User's followers.
     """
     return await _create_scheduled_post(
         call,
-        parts=parts,
         version_id=version_id,
         publish_at=publish_at,
         community=community,
@@ -129,42 +131,25 @@ def _post_now_message(posted: ScheduledPostToolResponse) -> str:
 
 async def post_now(
     call: ToolCall[User],
-    parts: Optional[list[str]] = None,
-    version_id: Optional[str] = None,
+    version_id: str,
     community: Optional[str] = None,
     share_with_followers: bool = False,
 ) -> PostNowToolResponse:
     """
-    Publish a post on the User's connected X account right away. Show the User the exact text
-    of every Part and get their yes first. Give either `parts` or `version_id`. `parts` is the
-    User's text as a list of Parts in order: one Part is a single X post, and several are a
-    Thread, in which each Part replies to the one before. `version_id` publishes that
-    Version's Final, and a Thread's Final keeps every Part in order. The post goes to the
-    User's profile, or to the Community whose URL or ID is in `community`. In a Community,
-    `share_with_followers` also shows it to the User's followers.
+    Publish a Version's text on the User's connected X account right away. Show the User the
+    exact text of every Part and get their yes first. A Thread keeps every Part in order, each
+    replying to the one before. A Post goes out once: one that already has a Scheduled post is
+    refused. The post goes to the User's profile, or to the Community whose URL or ID is in
+    `community`. In a Community, `share_with_followers` also shows it to the User's followers.
     """
     posted = await _create_scheduled_post(
         call,
-        parts=parts,
         version_id=version_id,
         publish_at=None,
         community=community,
         share_with_followers=share_with_followers,
     )
     return PostNowToolResponse(**posted.model_dump(), message=_post_now_message(posted))
-
-
-async def list_scheduled_posts(
-    call: ToolCall[User], state: Optional[ScheduledPostState] = None
-) -> ScheduledPostsListToolResponse:
-    """
-    List the User's Scheduled posts with their state, publish time and Community: waiting ones
-    soonest first, then Published and Failed ones newest first. A Failed one says why it
-    failed, and a Published one links to the post on X. Each Part says whether it is live on
-    X, with its link: a Thread that failed partway keeps its live Parts.
-    """
-    listed = await mediator.list_scheduled_posts(db=call.db, user=call.user, state=state)
-    return ScheduledPostsListToolResponse(data=listed.data, scheduled_page_url=scheduled_page_url())
 
 
 async def list_past_communities(call: ToolCall[User]) -> PastCommunitiesResponse:
@@ -189,6 +174,7 @@ async def edit_scheduled_post(
     call: ToolCall[User],
     scheduled_post_id: str,
     parts: Optional[list[str]] = None,
+    version_id: Optional[str] = None,
     publish_at: Optional[str] = None,
     community: Optional[str] = None,
     to_profile: bool = False,
@@ -196,23 +182,32 @@ async def edit_scheduled_post(
 ) -> ScheduledPostToolResponse:
     """
     Change a waiting or Failed Scheduled post: its text, as `parts` listing every Part in
-    order, its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one
-    another try), the Community whose URL or ID `community` holds, or, with `to_profile`, send
-    it to the User's profile instead. Leave out what stays the same. Live Parts of a Thread
-    that failed partway are on X and locked: keep them first in `parts`, unchanged. A new time
-    publishes only the Parts not live, as replies to the last live one.
+    order, or as `version_id`, another Version of the same Post whose text it then copies;
+    its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one another
+    try); the Community whose URL or ID `community` holds, or, with `to_profile`, the User's
+    profile instead. Leave out what stays the same. Live Parts of a Thread that failed partway
+    are on X and locked: keep them first in `parts`, unchanged; a Version's Parts in their
+    places are skipped. A new time publishes only the Parts not live, as replies to the last
+    live one.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
-        {"parts": parts, "publish_at": publish_at, "community": community}
+        {
+            "parts": parts,
+            "source_version_id": version_id,
+            "publish_at": publish_at,
+            "community": community,
+        }
     )
     edit = ScheduledPostEdit(
         parts=update_request.parts,
+        version_id=update_request.source_version_id,
         publish_at=update_request.publish_at,
         destination=_destination_change(update_request.community, to_profile),
         share_with_followers=share_with_followers,
     )
     scheduled_post = await mediator.edit_scheduled_post(
         db=call.db,
+        publisher=await call.provide(get_x_publisher),
         reader=await call.provide(get_x_reader),
         user=call.user,
         scheduled_post_id=scheduled_post_id,
@@ -224,33 +219,96 @@ async def edit_scheduled_post(
 
 async def delete_scheduled_post(
     call: ToolCall[User], scheduled_post_id: str
-) -> ScheduledPageMessageToolResponse:
-    """Delete a waiting or Failed Scheduled post, so it is never published. It can't be undone."""
-    await mediator.cancel_scheduled_post(
+) -> PostMessageToolResponse:
+    """
+    Delete a waiting or Failed Scheduled post, so it is never published, and its Post is a Draft
+    again: it takes Feedback and can be scheduled anew. It can't be undone.
+    """
+    post_id = await mediator.cancel_scheduled_post(
         db=call.db, user=call.user, scheduled_post_id=scheduled_post_id
     )
-    return ScheduledPageMessageToolResponse(
-        message="The Scheduled post is deleted.", scheduled_page_url=scheduled_page_url()
+    return PostMessageToolResponse(
+        message="The Scheduled post is deleted.", post_url=post_url(post_id)
     )
+
+
+async def list_posts(
+    call: ToolCall[User], status: Optional[PostStatus] = None, limit: int = 20, offset: int = 0
+) -> PostsPageResponse:
+    """
+    List the User's Posts with their status, so the User can pick one up from an earlier
+    session. `status` lists one: "scheduled" (soonest first), "draft" (newest Version first),
+    "published" (most recently published first) or "failed" (most recently due first); leave it
+    out for every Post, newest Version first. Each Post has its Brief, its text (the Scheduled
+    post's when it has one, else the latest Version's), how many Versions it has, and its
+    Scheduled post's state, time, Community, failure reason and link on X. `counts` says how
+    many Posts each status holds. Pages hold up to 50; pass `next_offset` as `offset` for the
+    next page. `get_post` reads one Post in full.
+    """
+    page = PostsPageRequest(status=status, limit=limit, offset=offset)
+    return await mediator.list_posts(
+        db=call.db, user=call.user, status=page.status, limit=page.limit, offset=page.offset
+    )
+
+
+async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse:
+    """
+    Read one of the User's Posts: its Brief and every Version in order, each with the Feedback
+    that made it, its text and each Part's character count. `status` is "draft" with no
+    Scheduled post, else "scheduled", "published" or "failed" from its one Scheduled post,
+    returned in `scheduled_post` with its text, which the User may have edited, and the
+    Version it was copied from. A Draft has no Scheduled post, so its Versions can be scheduled.
+    """
+    post = await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
+    return PostDetailToolResponse.model_validate(post.model_dump())
+
+
+async def give_feedback(
+    call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
+) -> VersionToolResponse:
+    """
+    Give Feedback in plain words on the latest Version of one of the User's Posts, such as
+    "shorter", "end with a question" or "make Part 3 punchier", and write its next Version,
+    keeping the earlier ones. `format` switches the new Version to "post" (a single X post) or
+    "thread"; leave it out to keep the latest Version's Format. Only a Draft or a Failed Post
+    takes Feedback: a scheduled one is edited or deleted first, and a published one is done.
+    Show the User the new Version's text, with every Part and its character count. Takes up to
+    a minute.
+    """
+    feedback_request = FeedbackRequest(feedback=feedback, format=format)
+    version = await mediator.give_feedback(
+        db=call.db,
+        llm=await call.provide(get_llm),
+        user=call.user,
+        post_id=post_id,
+        feedback=feedback_request.feedback,
+        format=feedback_request.format,
+        now=call.now,
+    )
+    return VersionToolResponse.model_validate(version.model_dump())
 
 
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
-    Where the User connects, reconnects or disconnects their X account: the Scheduled page of
+    Where the User connects, reconnects or disconnects their X account: the Settings page of
     the Pumpkit web app, since X asks them to sign in and approve in a browser.
     """
-    url = scheduled_page_url()
+    url = f"{settings.frontend_url()}{mediator.X_CONNECTION_PAGE}"
     return LinkToolResponse(
-        message=f"Connect, reconnect or disconnect your X account on the Scheduled page: {url}",
+        message=f"Connect, reconnect or disconnect your X account on the Settings page: {url}",
         url=url,
     )
 
 
 TOOLS = [
+    # Reading Posts sits here because their Scheduled posts give them their status.
+    McpTool(list_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    McpTool(get_post, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    # Feedback sits with the Scheduled post tools because a Post's Scheduled post gates it.
+    McpTool(give_feedback, rate=VERSION_WRITE_RATE, annotations=ADDITIVE),
     McpTool(schedule_post, rate=WRITE_RATE, annotations=ADDITIVE),
     # Post now goes through the create route on the web.
     McpTool(post_now, rate=WRITE_RATE, annotations=DESTRUCTIVE),
-    McpTool(list_scheduled_posts, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     # The web edit and delete routes have no limit; these take the create route's.
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),

@@ -53,9 +53,13 @@ a Brief makes its first Version.
 each one X post, published on X with each Part replying to the one before. A \
 Post starts as a single X post unless the User asks for a Thread, and Feedback may switch the \
 Format.
-- Each Version has a Final, the text meant for X, with one text per Part for a Thread. A Final, \
-or text the User typed as one or more Parts, can become a Scheduled post, published at a \
-chosen time. A Scheduled post copied from a Thread's Final keeps every Part, in order.
+- Each Version has its text, the text meant for X, with one text per Part for a Thread. A \
+Version's text can become a Scheduled post, published at a chosen time or at once with Post \
+now. A Scheduled post copied from a Thread keeps every Part, in order. Every Scheduled post \
+comes from a Version: there is no typing one by hand.
+- A Post goes out once, so it has at most one Scheduled post. To change one already \
+scheduled, edit it, or delete it first, which makes the Post a Draft again. Only a Draft or a \
+Failed Post takes Feedback: a scheduled or published one doesn't.
 - Connecting X and subscribing happen in the Pumpkit web app. The tools for them answer with \
 a link to open.
 - Before Post now, show the User the exact text of every Part that will be published, in \

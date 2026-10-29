@@ -1,4 +1,4 @@
-import type { Community, Destination } from '@/services/scheduledPostService';
+import type { Community, Destination, ScheduledPost } from '@/services/scheduledPostService';
 
 /** Where a Scheduled post goes unless the User picks a Community. */
 export const PROFILE: Destination = { community: null, shareWithFollowers: false };
@@ -52,6 +52,20 @@ export type DestinationDraft =
     };
 
 export const PROFILE_DRAFT: DestinationDraft = { kind: 'profile' };
+
+/** Where a Scheduled post goes now, as the field holds it, so an edit or a retry starts there. */
+export function destinationDraftOf({
+  community,
+  shareWithFollowers,
+}: Pick<ScheduledPost, 'community' | 'shareWithFollowers'>): DestinationDraft {
+  if (!community) return PROFILE_DRAFT;
+  return {
+    kind: 'community',
+    pasted: community.url,
+    shareWithFollowers,
+    lookup: { state: 'found', ...community },
+  };
+}
 
 /** The lookup a new paste needs: kept while it names the same Community, else a new one. */
 export function lookupFor(pasted: string, current: CommunityLookup): CommunityLookup {

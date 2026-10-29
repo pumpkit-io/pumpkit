@@ -155,9 +155,9 @@ docker compose logs backend | grep "Magic link for"
 backend-1  | [2026-10-12 08:24:55] [mailer.py:send_magic_link:130] [WARNING] Magic link for you@example.com (expires in 15 minutes): http://localhost:8080/api/v1/login/magic-link?token=...
 ```
 
-Open that URL in the same browser within 15 minutes. **Check:** the browser lands on `PUBLIC_URL/home`, which shows your address in the sidebar and an **Inspiration authors** section.
+Open that URL in the same browser within 15 minutes. **Check:** the browser lands on `PUBLIC_URL/new`, the **New post** page, which shows your address in the sidebar.
 
-To write a first Post, add an X handle under **Inspiration authors**, type a Brief and choose **Write the Post**. **Check:** after a minute or two a Version appears with its **Final** and its **Draft**.
+To write a first Post, add an X handle on the **Persona** page, then type a Brief on **New post** and choose **Write the Post**. **Check:** after a minute or two a Version appears.
 
 ### 7. Configure SMTP before inviting anyone
 
@@ -173,7 +173,7 @@ Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](ht
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
 - Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls.
-- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the three models it serves: `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
+- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the three models it serves: `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).
 
@@ -185,7 +185,7 @@ Reads the recent posts of each Inspiration author, which set the style Pumpkit w
 - Pricing: [twitterapi.io pricing](https://twitterapi.io/pricing).
 - Settings: `TWITTERAPI_IO_API_KEY`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, adding an Inspiration author fails, and a User with no Inspiration author cannot write a Post. A pasted Community shows its ID instead of its name, and posting into it still works.
-- **Check:** adding an X handle under **Inspiration authors** on Home lists it.
+- **Check:** adding an X handle on the **Persona** page lists it.
 
 ### SMTP
 
@@ -230,13 +230,13 @@ curl -s http://localhost:8080/api/v1/instance | grep -o '"sign_in_methods":[^]]*
 
 ### X app
 
-Lets Users connect their X account, then schedule Finals or post them now (ADR 0006). Your X app pays for every publish.
+Lets Users connect their X account, then schedule their Posts or post them now (ADR 0006). Your X app pays for every publish.
 
 - Get credentials: in the [X developer portal](https://developer.x.com/en/portal/dashboard), create an app and set up its user authentication: OAuth 2.0, app type **Web App, Automated App or Bot** (a confidential client), permissions **Read and write**. Register this callback URL: `PUBLIC_URL/oauth/x/callback` (for example `https://pumpkit.example.org/oauth/x/callback`), and use `PUBLIC_URL` as the website URL. Copy the OAuth 2.0 client ID and client secret.
 - Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `X_POSTS_MONTHLY_CAP` (default 100 X posts per User per month, each Part of a Thread counting as one) bounds what each User can cost you; set it empty for no cap.
 - Settings: `X_CLIENT_ID` and `X_CLIENT_SECRET`.
-- Without it: connecting an X account fails, so nobody can schedule or publish to X. Writing Posts still works; Users copy the Final instead.
-- **Check:** on the **Scheduled** page, connecting X sends you to X to authorise the app and back to the Scheduled page, connected.
+- Without it: connecting an X account fails, so nobody can schedule or publish to X. Writing Posts still works; Users copy a Version's text instead.
+- **Check:** on the **Posts** page, connecting X sends you to X to authorise the app and back to the Posts page, connected.
 
 ### Stripe billing
 
@@ -305,7 +305,7 @@ Turn this on only if you charge Users. You are then the seller: your own Terms, 
    **Check:** it prints `"sells_plans":true`, and `curl -s PUBLIC_URL/api/v1/billing/plans` lists each Plan with its price.
 5. **Set the Operator details and replace the legal documents**, below, so Users accept your Terms at checkout.
 
-Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.stripe.com/testing), and check that the Billing dialog shows the Subscription.
+Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.stripe.com/testing), and check that the Plan card in Settings shows the Subscription.
 
 ### Replace the legal documents
 
@@ -445,6 +445,6 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **Connecting X fails.** The X group is unset, or the X app's callback URL is not exactly `PUBLIC_URL/oauth/x/callback`, or the app is not an OAuth 2.0 confidential client with read and write permissions.
 
-**A Scheduled post does not go out.** `docker compose ps publisher` should show `(healthy)`; `docker compose logs --tail 50 publisher` shows its passes and any error from X. A Failed Scheduled post shows its reason on the Scheduled page.
+**A Scheduled post does not go out.** `docker compose ps publisher` should show `(healthy)`; `docker compose logs --tail 50 publisher` shows its passes and any error from X. A Failed Scheduled post shows its reason on the Posts page.
 
 **Stripe Checkout fails, or a paid Subscription does not show.** Check Stripe Tax ([Selling Plans](#selling-plans), step 2) and the backend log, which has Stripe's reason. On Stripe's webhook endpoint page, check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.

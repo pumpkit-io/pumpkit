@@ -1,7 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './pages/AppLayout';
-import { Home } from './pages/Home';
-import { Scheduled } from './pages/Scheduled';
 import { XConnectionCallback } from './pages/XConnectionCallback';
 import { Login } from './pages/Login';
 import { Landing } from './pages/Landing';
@@ -11,6 +9,7 @@ import { MagicLinkSent } from './pages/MagicLinkSent';
 import { BillingCancelledRedirect, BillingSuccessRedirect } from './pages/BillingRedirect';
 import { AuthProvider, BYPASS_AUTH, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { signedInRoutes } from './pages/signedInRoutes';
 import { ThemeProvider } from './features/theme/ThemeProvider';
 import { ConsentBanner } from './features/analyticsConsent/ConsentBanner';
 import { useInstance } from './features/instance/useInstance';
@@ -35,7 +34,7 @@ function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading) return <FullPageLoading />;
   if (BYPASS_AUTH) return <Landing />;
-  return isAuthenticated ? <Navigate to="/home" replace /> : <Landing />;
+  return isAuthenticated ? <Navigate to="/new" replace /> : <Landing />;
 }
 
 function AppRoutes() {
@@ -53,8 +52,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route path="/home" element={<Home />} />
-        <Route path="/scheduled" element={<Scheduled />} />
+        {signedInRoutes()}
       </Route>
       <Route
         path="/oauth/x/callback"
@@ -89,7 +87,7 @@ function AppRoutes() {
             path="/billing"
             element={
               <ProtectedRoute>
-                <Navigate to="/home" replace state={{ openBilling: true }} />
+                <Navigate to="/settings" replace />
               </ProtectedRoute>
             }
           />

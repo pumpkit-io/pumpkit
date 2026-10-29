@@ -95,12 +95,11 @@ def check_month_has_room(count: int, *, adding: int, cap: int, moment: datetime)
 @dataclass(frozen=True)
 class NewScheduledPost:
     """
-    A Scheduled post as the web app or an MCP tool asks for it: typed `parts` or the Version
-    whose Final it copies, and `publish_at` or `publish_now`.
+    A Scheduled post as the web app or an MCP tool asks for it: the Version whose text it copies,
+    and `publish_at` or `publish_now`.
     """
 
-    parts: Optional[list[str]] = None
-    version_id: Optional[str] = None
+    version_id: str
     publish_at: Optional[datetime] = None
     publish_now: bool = False
     # A Community URL or ID as pasted; None for the User's profile.
@@ -109,8 +108,6 @@ class NewScheduledPost:
     share_with_followers: bool = False
 
     def __post_init__(self) -> None:
-        if (self.parts is None) == (self.version_id is None):
-            raise RuleBroken("Give either the Parts or a Version id, not both.")
         if (self.publish_at is None) == (not self.publish_now):
             raise RuleBroken("Give either a publish time or publish now, not both.")
 
@@ -140,19 +137,33 @@ class ScheduledPostEdit:
 
     # Every Part in order, the live ones first and unchanged.
     parts: Optional[list[str]] = None
+    # A Version of the same Post whose text replaces the Parts not live, and which it then copies.
+    version_id: Optional[str] = None
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[datetime] = None
+    # Reschedules it for now and publishes it within the request.
+    publish_now: bool = False
     destination: DestinationChange = field(default_factory=KeepDestination)
     # Ignored when the Scheduled post ends up on the profile.
     share_with_followers: Optional[bool] = None
 
     def __post_init__(self) -> None:
+        if self.parts is not None and self.version_id is not None:
+            raise RuleBroken("Give either the Parts or a Version, not both.")
+        if self.publish_at is not None and self.publish_now:
+            raise RuleBroken("Give either a publish time or publish now, not both.")
         if (
             self.parts is None
+            and self.version_id is None
             and self.publish_at is None
+            and not self.publish_now
             and isinstance(self.destination, KeepDestination)
             and self.share_with_followers is None
         ):
             raise RuleBroken(
                 "Change the text, the publish time, the Community or sharing with followers."
             )
+
+    @property
+    def reschedules(self) -> bool:
+        return self.publish_at is not None or self.publish_now

@@ -25,6 +25,7 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import ScheduledPostResponse
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XAccount, XPostRejectedError
+from tests.scheduling.reading import scheduled_posts_through_the_mediator
 
 COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
@@ -39,12 +40,15 @@ def _at(iso: str) -> datetime:
 
 
 @pytest.fixture
-def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock):
-    """A new Scheduled post for `user`: typed text for 14:00 UTC unless the fields say otherwise."""
+def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, version_of):
+    """
+    A new Scheduled post for `user` for 14:00 UTC unless the fields say otherwise, copied from a
+    new Post's Version of `parts` unless `version_id` names one.
+    """
 
     async def _create(**fields) -> ScheduledPostResponse:
         if "version_id" not in fields:
-            fields.setdefault("parts", ["Shipping on Monday."])
+            fields["version_id"] = await version_of(*fields.pop("parts", ["Shipping on Monday."]))
         if not fields.get("publish_now"):
             fields.setdefault("publish_at", _at("2026-10-10T14:00:00Z"))
         return await mediator.create_scheduled_post(
@@ -60,10 +64,11 @@ def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock):
 
 
 @pytest.fixture
-def edit(db, user, fake_x_reader, fixed_clock):
+def edit(db, user, fake_x_publisher, fake_x_reader, fixed_clock):
     async def _edit(scheduled_post_id: str, **fields) -> ScheduledPostResponse:
         return await mediator.edit_scheduled_post(
             db=db,
+            publisher=fake_x_publisher,
             reader=fake_x_reader,
             user=user,
             scheduled_post_id=scheduled_post_id,
@@ -75,7 +80,7 @@ def edit(db, user, fake_x_reader, fixed_clock):
 
 
 async def _listed(db, user) -> list[ScheduledPostResponse]:
-    return (await mediator.list_scheduled_posts(db, user, state=None)).data
+    return await scheduled_posts_through_the_mediator(db, user)
 
 
 @pytest.fixture
@@ -86,22 +91,12 @@ def cap_of_two(monkeypatch):
 @pytest.mark.parametrize(
     "fields",
     [
-        {"publish_now": True},
-        {"parts": ["Mine."], "version_id": "version_attempt_1", "publish_now": True},
-    ],
-)
-def test_a_new_scheduled_post_has_either_text_or_a_version(fields):
-    with pytest.raises(RuleBroken) as refused:
-        NewScheduledPost(**fields)
-
-    assert refused.value.detail == "Give either the Parts or a Version id, not both."
-
-
-@pytest.mark.parametrize(
-    "fields",
-    [
-        {"parts": ["Neither."]},
-        {"parts": ["Both."], "publish_at": _at("2026-10-10T14:00:00Z"), "publish_now": True},
+        {"version_id": "version_attempt_1"},
+        {
+            "version_id": "version_attempt_1",
+            "publish_at": _at("2026-10-10T14:00:00Z"),
+            "publish_now": True,
+        },
     ],
 )
 def test_a_new_scheduled_post_has_either_a_publish_time_or_publish_now(fields):
@@ -120,14 +115,14 @@ def test_an_edit_changes_something():
     )
 
 
-async def test_without_an_x_connection_connecting_x_is_asked_for_on_the_scheduled_page(
+async def test_without_an_x_connection_connecting_x_is_asked_for_on_the_settings_page(
     create, fake_x_publisher
 ):
     with pytest.raises(ConflictError) as refused:
         await create(publish_now=True)
 
     assert refused.value.detail == "Connect your X account first."
-    assert refused.value.fix_page == "/scheduled"
+    assert refused.value.fix_page == "/settings"
     assert fake_x_publisher.published == []
 
 
@@ -146,7 +141,7 @@ async def test_an_x_connection_x_no_longer_accepts_must_be_reconnected_first(
     assert refused.value.detail == (
         "X no longer accepts Pumpkit's access to your account. Reconnect X first."
     )
-    assert refused.value.fix_page == "/scheduled"
+    assert refused.value.fix_page == "/settings"
 
 
 async def test_rescheduling_needs_an_x_connection_but_a_new_text_does_not(
@@ -177,7 +172,7 @@ async def test_every_part_of_a_version_s_final_is_copied_and_the_version_kept(
         status=ATTEMPT_SUCCEEDED,
         version_number=1,
         format="thread",
-        final_parts=["The final, Part one.", "The final, Part two."],
+        parts=["The final, Part one.", "The final, Part two."],
         created_at=_at("2026-10-01"),
     )
     db.add(version)
@@ -208,7 +203,7 @@ async def test_another_user_s_version_is_not_found(db, user, create, connect_x):
         status=ATTEMPT_SUCCEEDED,
         version_number=1,
         format="post",
-        final_parts=["Bob's words."],
+        parts=["Bob's words."],
         created_at=_at("2026-10-01"),
     )
     db.add(bobs_version)

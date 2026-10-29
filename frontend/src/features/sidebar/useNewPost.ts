@@ -1,31 +1,23 @@
 import { useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { usePostWriterContext } from '@/features/posts/usePostWriterContext';
+import { useNavigate } from 'react-router-dom';
 import { track } from '@/lib/analytics';
 import { useSidebar } from './useSidebar';
 
-export type NewPostSource = 'sidebar' | 'rail' | 'shortcut';
+export type NewPostSource = 'sidebar' | 'shortcut';
 
-/**
- * New Post from the sidebar row, the rail or the shortcut, on Home whatever page it starts
- * from; refused while a Version is on its way.
- */
+/** New post from the sidebar or the shortcut: an empty /new from any page, /new included. */
 export function useNewPost() {
-  const { isWriting, newPost } = usePostWriterContext();
   const { setMobileOpen } = useSidebar();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
 
   const start = useCallback(
     (source: NewPostSource) => {
-      if (isWriting) return;
-      track('sidebar_new_post_clicked', { source });
-      if (pathname !== '/home') navigate('/home');
-      newPost();
+      navigate('/new');
       setMobileOpen(false);
+      track('sidebar_new_post_clicked', { source });
     },
-    [isWriting, newPost, setMobileOpen, navigate, pathname],
+    [setMobileOpen, navigate],
   );
 
-  return { start, disabled: isWriting };
+  return { start };
 }

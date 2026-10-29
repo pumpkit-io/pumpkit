@@ -4,13 +4,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import pumpkit.posts.mediator as posts_mediator
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
-from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
+from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
+from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.posts.writing_replies import written, written_thread
@@ -54,7 +53,7 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
     client, with_author, fake_llm
 ):
     fake_llm.replies = [
-        written("draft"),
+        written("sketch"),
         {"post": "final"},
         written_thread(["one", "two"]),
         {"parts": ["one", "two"]},
@@ -66,9 +65,9 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
     assert _limits(post.json()["versions"][0]) == [X_POST_MAX_CHARS]
     assert _limits(thread.json()["versions"][0]) == [X_POST_MAX_CHARS, X_POST_MAX_CHARS]
     assert [_system_text(call) for call in fake_llm.calls] == [
-        draft_post_prompt(X_POST_MAX_CHARS),
+        sketch_post_prompt(X_POST_MAX_CHARS),
         HUMANIZER_PROMPT,
-        draft_thread_prompt(X_POST_MAX_CHARS),
+        sketch_thread_prompt(X_POST_MAX_CHARS),
         humanizer_thread_prompt(X_POST_MAX_CHARS),
     ]
 
@@ -87,7 +86,7 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
 ):
     await connect_x_as(subscription_type)
     fake_llm.replies = [
-        written("draft"),
+        written("sketch"),
         {"post": "final"},
         written_thread(["one", "two"]),
         {"parts": ["one", "two"]},
@@ -99,9 +98,9 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
     assert _limits(post.json()["versions"][0]) == [char_limit]
     assert _limits(thread.json()["versions"][0]) == [char_limit, char_limit]
     assert [_system_text(call) for call in fake_llm.calls] == [
-        draft_post_prompt(char_limit),
+        sketch_post_prompt(char_limit),
         HUMANIZER_PROMPT,
-        draft_thread_prompt(char_limit),
+        sketch_thread_prompt(char_limit),
         humanizer_thread_prompt(char_limit),
     ]
 
@@ -123,9 +122,7 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "longer"})
 
     assert _limits(response.json()) == [X_LONG_POST_MAX_CHARS, X_LONG_POST_MAX_CHARS]
-    assert _system_text(fake_llm.calls[2]) == draft_thread_prompt(X_LONG_POST_MAX_CHARS)
+    assert _system_text(fake_llm.calls[2]) == sketch_thread_prompt(X_LONG_POST_MAX_CHARS)
     assert _system_text(fake_llm.calls[3]) == humanizer_thread_prompt(X_LONG_POST_MAX_CHARS)
-    read = await posts_mediator.get_post(db, user, post_id)
-    assert [[part.char_limit for part in v.parts] for v in read.versions] == [
-        [X_LONG_POST_MAX_CHARS] * 2
-    ] * 2
+    read = (await client.get(f"{POSTS}/{post_id}")).json()
+    assert [_limits(v) for v in read["versions"]] == [[X_LONG_POST_MAX_CHARS] * 2] * 2

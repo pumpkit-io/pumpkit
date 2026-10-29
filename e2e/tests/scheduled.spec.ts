@@ -1,38 +1,46 @@
 import { expect, test } from '@playwright/test';
 import { runSeedScript } from '../backend';
 
-test('the Scheduled page loads with X to connect, the composer and the lists', async ({ page }) => {
-  await page.goto('/scheduled');
+test('Settings offers to connect X', async ({ page }) => {
+  await page.goto('/settings');
 
-  const xConnection = page.getByRole('region', { name: 'X connection' });
-  await expect(xConnection.getByRole('button', { name: 'Connect X' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Post to X' })).toBeVisible();
-  await expect(
-    page.getByRole('region', { name: 'Upcoming' }).getByText(/nothing scheduled/i),
-  ).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Published' })).toBeVisible();
+  const xAccount = page.getByRole('region', { name: 'X account' });
+  await expect(xAccount.getByRole('button', { name: 'Connect X' })).toBeVisible();
 });
 
-test('a two-Part Thread typed in the composer is scheduled as one item', async ({ page }) => {
+test('the Posts page opens on an empty Scheduled tab', async ({ page }) => {
+  await page.goto('/posts');
+
+  await expect(page).toHaveURL(/\/posts\/scheduled$/);
+  const tabs = page.getByRole('navigation', { name: 'Posts by status' });
+  await expect(tabs.getByRole('link', { name: 'Scheduled 0' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(page.getByText(/Nothing scheduled\./)).toBeVisible();
+});
+
+test('a Thread scheduled from a Version is one row that expands into its Parts', async ({
+  page,
+}) => {
   runSeedScript('connect_x.py');
-  await page.goto('/scheduled');
+  runSeedScript('scheduled_thread.py');
+  await page.goto('/posts/scheduled');
 
-  const composer = page.getByRole('region', { name: 'Post to X' });
-  await composer.getByLabel('Post text').fill('E2E Thread, Part one.');
-  await composer.getByRole('button', { name: 'Add a Part' }).click();
-  await composer.getByRole('textbox', { name: 'Part 2' }).fill('E2E Thread, Part two.');
-  // Tomorrow at 09:00 in the browser timezone, as the picker holds it.
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const day = [
-    tomorrow.getFullYear(),
-    String(tomorrow.getMonth() + 1).padStart(2, '0'),
-    String(tomorrow.getDate()).padStart(2, '0'),
-  ].join('-');
-  await composer.getByLabel('Date and time').fill(`${day}T09:00`);
-  await composer.getByRole('button', { name: 'Schedule' }).click();
+  const row = page.getByRole('listitem', { name: 'E2E Thread, Part one.' });
+  await expect(row.getByText('Tomorrow')).toBeVisible();
+  await expect(row.getByText(/Thread · 2 Parts · Your profile/)).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Posts by status' })).toContainText(
+    'Scheduled 1',
+  );
 
-  const upcoming = page.getByRole('region', { name: 'Upcoming' });
-  await expect(upcoming.getByText('Thread, 2 Parts')).toBeVisible();
-  await expect(upcoming.getByRole('listitem')).toHaveCount(1);
-  await expect(upcoming.getByText('E2E Thread, Part two.')).toBeVisible();
+  await row.getByRole('button', { name: 'Show every Part' }).click();
+  await expect(row.getByRole('listitem', { name: 'Part 2 of 2' })).toContainText(
+    'E2E Thread, Part two.',
+  );
+
+  await row.getByRole('link', { name: 'E2E Thread, Part one.' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(
+    'Posts / Scheduled / E2E Thread, Part one.',
+  );
 });

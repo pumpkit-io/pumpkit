@@ -7,12 +7,14 @@ from pumpkit.billing.models import Subscription
 BILLING_PAGE = "http://localhost:5173/billing"
 
 
-async def test_manage_subscription_links_to_the_billing_page(subscribed, mcp):
+async def test_manage_subscription_links_to_settings_through_the_billing_route(subscribed, mcp):
     result = await mcp.call_tool("manage_subscription")
 
     assert result["isError"] is False, result
     assert result["structuredContent"]["url"] == BILLING_PAGE
-    assert BILLING_PAGE in result["structuredContent"]["message"]
+    assert result["structuredContent"]["message"] == (
+        f"Subscribe or manage your Subscription on the Settings page: {BILLING_PAGE}"
+    )
 
 
 async def test_a_user_whose_subscription_ended_gets_the_link_to_subscribe_again(

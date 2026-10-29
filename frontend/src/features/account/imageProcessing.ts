@@ -43,7 +43,8 @@ function readAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new AvatarProcessingError('Could not read the file.'));
+    reader.onerror = () =>
+      reject(new AvatarProcessingError("Couldn't read the file. Try another image."));
     reader.readAsDataURL(file);
   });
 }

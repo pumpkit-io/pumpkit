@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.posts.service as posts_service
+import pumpkit.posts.version_writing as version_writing
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import (
@@ -17,6 +18,11 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
+from pumpkit.posts.formats import Format, format_of
+from pumpkit.posts.llm import LLM
+from pumpkit.posts.models import VersionAttempt
+from pumpkit.posts.schemas import VersionResponse
+from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -24,8 +30,8 @@ from pumpkit.scheduling.models import (
     PUBLISHED,
     SCHEDULED,
     ScheduledPost,
-    ScheduledPostState,
 )
+from pumpkit.scheduling.post_status import PostStatus, check_takes_feedback, post_status
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import (
     KeepDestination,
@@ -37,17 +43,23 @@ from pumpkit.scheduling.rules import (
 from pumpkit.scheduling.schemas import (
     CommunityResponse,
     PastCommunitiesResponse,
+    PostCountsResponse,
+    PostDetailResponse,
+    PostListItemResponse,
+    PostsPageResponse,
     ScheduledPostPartResponse,
     ScheduledPostResponse,
-    ScheduledPostsListResponse,
+    ScheduledPostSummaryResponse,
     XConnectionResponse,
 )
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
+# Where the User sees their Posts; one Post's page is under it.
+POSTS_PAGE = "/posts"
 # Where the User connects or reconnects X, which takes a browser.
-SCHEDULED_PAGE = "/scheduled"
+X_CONNECTION_PAGE = "/settings"
 
 
 def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:
@@ -82,6 +94,7 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         else None,
         failed_reason=scheduled_post.failed_reason,
         source_version_id=scheduled_post.source_version_id,
+        post_id=scheduled_post.post_id,
         community=_community_response(community_id, scheduled_post.community_name)
         if community_id
         else None,
@@ -111,13 +124,6 @@ async def _community(reader: XReader, pasted: str) -> Community:
     return Community(id=community_id, name=name)
 
 
-async def list_scheduled_posts(
-    db: AsyncSession, user: User, state: Optional[ScheduledPostState]
-) -> ScheduledPostsListResponse:
-    scheduled_posts = await service.list_for_user(db, user_id=user.id, state=state)
-    return ScheduledPostsListResponse(data=[scheduled_post_response(s) for s in scheduled_posts])
-
-
 async def list_past_communities(db: AsyncSession, user: User) -> PastCommunitiesResponse:
     """Only the connected X account's: membership in a Community belongs to the X account."""
     connection = await x_connections_service.get_connection(db, user_id=user.id)
@@ -131,11 +137,11 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     """The X connection a new or rescheduled Scheduled post targets, or a 409."""
     connection = await x_connections_service.get_connection(db, user_id=user_id)
     if connection is None:
-        raise ConflictError("Connect your X account first.", fix_page=SCHEDULED_PAGE)
+        raise ConflictError("Connect your X account first.", fix_page=X_CONNECTION_PAGE)
     if connection.needs_reconnect:
         raise ConflictError(
             "X no longer accepts Pumpkit's access to your account. Reconnect X first.",
-            fix_page=SCHEDULED_PAGE,
+            fix_page=X_CONNECTION_PAGE,
         )
     return connection
 
@@ -175,37 +181,49 @@ async def create_scheduled_post(
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     connection = await connection_to_publish_on(db, user_id=user.id)
-    if new.version_id is not None:
-        parts = await _source_version_final(db, user=user, version_id=new.version_id)
-    else:
-        assert new.parts is not None
-        parts = new.parts
+    version = await _source_version(db, user=user, version_id=new.version_id)
+    if await service.get_for_post(db, post_id=version.post_id) is not None:
+        raise _already_scheduled()
+    parts = list(version.parts or [])
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_monthly_cap(db, user_id=user.id, publish_at=publish_at, part_count=len(parts))
     community = await _community(reader, new.community) if new.community is not None else None
-    scheduled_post = await service.create(
-        db,
-        user_id=user.id,
-        x_user_id=connection.x_user_id,
-        parts=parts,
-        publish_at=publish_at.replace(second=0, microsecond=0) if new.publish_now else publish_at,
-        now=now,
-        source_version_id=new.version_id,
-        destination=Destination(community=community, share_with_followers=new.share_with_followers),
-    )
+    try:
+        scheduled_post = await service.create(
+            db,
+            user_id=user.id,
+            x_user_id=connection.x_user_id,
+            post_id=version.post_id,
+            source_version_id=version.id,
+            parts=parts,
+            publish_at=publish_at.replace(second=0, microsecond=0)
+            if new.publish_now
+            else publish_at,
+            now=now,
+            destination=Destination(
+                community=community, share_with_followers=new.share_with_followers
+            ),
+        )
+    except IntegrityError:
+        # Another request scheduled the same Post between the check and the insert.
+        raise _already_scheduled()
     if new.publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
     await db.commit()
     return scheduled_post_response(scheduled_post)
 
 
-async def _source_version_final(db: AsyncSession, *, user: User, version_id: str) -> list[str]:
-    """The Final's Parts a Scheduled post copies, or a 404 unless the Version is the User's."""
+def _already_scheduled() -> ConflictError:
+    return ConflictError("This Post already has a Scheduled post. Edit it, or unschedule it first.")
+
+
+async def _source_version(db: AsyncSession, *, user: User, version_id: str) -> VersionAttempt:
+    """The Version a Scheduled post copies, or a 404 unless the Version is the User's."""
     version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
-    if version is None or not version.final_parts:
+    if version is None or not version.parts:
         raise NotFoundError("Version not found.")
-    return list(version.final_parts)
+    return version
 
 
 async def _post_now(
@@ -231,6 +249,7 @@ def _publishing_started() -> ConflictError:
 
 async def edit_scheduled_post(
     db: AsyncSession,
+    publisher: XPublisher,
     reader: XReader,
     user: User,
     scheduled_post_id: str,
@@ -238,27 +257,41 @@ async def edit_scheduled_post(
     now: datetime,
 ) -> ScheduledPostResponse:
     """
-    New Parts, time, Community or share with followers for a scheduled or Failed Scheduled post.
-    A new time reschedules it on the X account connected now, so a Failed one gets another try.
+    New Parts or Version, time, Community or share with followers for a scheduled or Failed
+    Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
+    so a Failed one gets another try. With publish now it answers like Post now.
     """
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
         raise _publishing_started()
-    if edit.parts is not None:
-        live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
-        rules.check_live_parts_kept(live, edit.parts)
+    live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
+    parts = edit.parts
+    version_id = None
+    if edit.version_id is not None:
+        version = await _source_version(db, user=user, version_id=edit.version_id)
+        if version.post_id != scheduled_post.post_id:
+            raise rules.RuleBroken("Choose a Version of this Post.")
+        # The Version's Parts in the places of the live ones are already on X as they were.
+        parts = live + list(version.parts or [])[len(live) :]
+        version_id = version.id
+    if parts is not None:
+        rules.check_live_parts_kept(live, parts)
     reschedule = None
     connection = (
         await connection_to_publish_on(db, user_id=user.id)
-        if edit.publish_at is not None
+        if edit.reschedules
         else await x_connections_service.get_connection(db, user_id=user.id)
     )
-    if edit.parts is not None:
+    if parts is not None:
         subscription_type = connection.subscription_type if connection else None
-        rules.check_length(edit.parts, limit=x_post_max_chars(subscription_type))
-    part_count = len(edit.parts if edit.parts is not None else scheduled_post.parts)
-    if connection is not None and edit.publish_at is not None:
-        new_publish_at = rules.check_publish_at(edit.publish_at, now=now)
+        rules.check_length(parts, limit=x_post_max_chars(subscription_type))
+    part_count = len(parts if parts is not None else scheduled_post.parts)
+    if connection is not None and edit.reschedules:
+        new_publish_at = (
+            now.replace(second=0, microsecond=0)
+            if edit.publish_now
+            else rules.check_publish_at(edit.publish_at, now=now)
+        )
         await check_monthly_cap(
             db,
             user_id=user.id,
@@ -279,12 +312,15 @@ async def edit_scheduled_post(
     if not await service.edit(
         db,
         scheduled_post_id=scheduled_post_id,
-        parts=edit.parts,
+        parts=parts,
+        source_version_id=version_id,
         reschedule=reschedule,
         destination=destination,
         now=now,
     ):
         raise _publishing_started()
+    if edit.publish_now:
+        return await _post_now(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     await db.commit()
     return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
 
@@ -314,12 +350,153 @@ async def _destination_after_edit(
     return Destination(community=community, share_with_followers=share_with_followers)
 
 
-async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> None:
-    """Delete a scheduled or Failed Scheduled post."""
-    await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
+async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> str:
+    """
+    Delete a scheduled or Failed Scheduled post, which makes its Post a Draft again. Returns the
+    Post's id.
+    """
+    scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
+    post_id = scheduled_post.post_id
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()
+    return post_id
+
+
+async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResponse:
+    """The User's Post with every Version in order, its status and its Scheduled post."""
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    char_limit = await version_writing.char_limit_for(db, user_id=user.id)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    return PostDetailResponse(
+        id=post.id,
+        brief=post.brief,
+        versions=[
+            version_writing.version_response(v, char_limit)
+            for v in version_writing.versions_of(post)
+        ],
+        status=post_status(scheduled_post.state if scheduled_post else None),
+        scheduled_post=scheduled_post_response(scheduled_post) if scheduled_post else None,
+    )
+
+
+def _scheduled_post_summary(scheduled_post: ScheduledPost) -> ScheduledPostSummaryResponse:
+    published_at = scheduled_post.published_at
+    community_id = scheduled_post.community_id
+    return ScheduledPostSummaryResponse(
+        id=scheduled_post.id,
+        state=scheduled_post.state,
+        publish_at=as_utc(scheduled_post.publish_at),
+        published_at=as_utc(published_at) if published_at else None,
+        community=_community_response(community_id, scheduled_post.community_name)
+        if community_id
+        else None,
+        share_with_followers=scheduled_post.share_with_followers,
+        failed_reason=scheduled_post.failed_reason,
+        x_post_url=_x_post_url(scheduled_post.parts[0].x_post_id),
+    )
+
+
+def _post_list_item(listed: service.ListedPost) -> PostListItemResponse:
+    post, scheduled_post = listed.post, listed.scheduled_post
+    versions = version_writing.versions_of(post)
+    latest = versions[-1]
+    if scheduled_post is not None:
+        parts = [part.text for part in scheduled_post.parts]
+        format = format_of(parts)
+    else:
+        parts = list(latest.parts or [])
+        format = latest.format
+    return PostListItemResponse(
+        id=post.id,
+        brief=post.brief,
+        status=post_status(scheduled_post.state if scheduled_post else None),
+        parts=parts,
+        format=format,
+        version_count=len(versions),
+        latest_version_at=as_utc(latest.created_at),
+        scheduled_post=_scheduled_post_summary(scheduled_post) if scheduled_post else None,
+    )
+
+
+async def list_posts(
+    db: AsyncSession, user: User, status: Optional[PostStatus], limit: int, offset: int
+) -> PostsPageResponse:
+    """A page of the User's Posts in `status`, or every one, with how many each status holds."""
+    # One past the page tells whether another page follows.
+    listed = await service.list_posts(
+        db, user_id=user.id, status=status, limit=limit + 1, offset=offset
+    )
+    counts = await service.count_posts(db, user_id=user.id)
+    return PostsPageResponse(
+        data=[_post_list_item(item) for item in listed[:limit]],
+        counts=PostCountsResponse(**counts),
+        next_offset=offset + limit if len(listed) > limit else None,
+    )
+
+
+async def give_feedback(
+    db: AsyncSession,
+    llm: LLM,
+    user: User,
+    post_id: str,
+    feedback: str,
+    format: Optional[Format],
+    now: datetime,
+) -> VersionResponse:
+    """
+    Write the Post's next Version from Feedback. Only a Draft or a Failed Post takes Feedback,
+    checked again after the model calls in case the Post was scheduled meanwhile.
+    """
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    await _check_takes_feedback(db, post_id=post_id)
+    next_version = await version_writing.prepare_next_version(
+        db, user=user, post=post, format=format, now=now
+    )
+    # Ends the read transaction before the calls, which can take minutes.
+    await db.commit()
+
+    try:
+        written = await write_next_version(
+            llm,
+            next_version.corpus,
+            post.brief,
+            next_version.earlier,
+            feedback,
+            next_version.format,
+            next_version.char_limit,
+        )
+        await _check_takes_feedback(db, post_id=post_id)
+    except Exception as error:
+        await version_writing.record_failed_attempt(
+            db,
+            post=post,
+            sequence=next_version.sequence,
+            feedback=feedback,
+            format=next_version.format,
+            error=error,
+            now=now,
+        )
+        # Commit before re-raising, or the request session rolls the failed attempt back.
+        await db.commit()
+        raise
+
+    version = await posts_service.record_version(
+        db,
+        post=post,
+        sequence=next_version.sequence,
+        version_number=next_version.number,
+        feedback=feedback,
+        written=written,
+        now=now,
+    )
+    await db.commit()
+    return version_writing.version_response(version, next_version.char_limit)
+
+
+async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_takes_feedback(post_status(scheduled_post.state if scheduled_post else None))
 
 
 async def _x_connection_response(db: AsyncSession, connection: XConnection) -> XConnectionResponse:

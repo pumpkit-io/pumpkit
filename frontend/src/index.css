@@ -4,90 +4,91 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Brand palette: Pumpkin #D96B45, Charcoal #20201E, Ivory #F7F5EF, Olive #66734E. */
+    --background: 60 8.3% 95.3%;
+    --foreground: 60 3.2% 12.2%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 60 3.2% 12.2%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 60 3.2% 12.2%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 15.1 62.3% 43.7%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 48 13.5% 92.7%;
+    --secondary-foreground: 60 3.2% 12.2%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 48 13.5% 92.7%;
+    --muted-foreground: 51.4 3.6% 38.6%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 48 11.6% 91.6%;
+    --accent-foreground: 60 3.2% 12.2%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 4.2 76.5% 40%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --success: 81.2 23% 29%;
+    --warning: 25.7 83.3% 32.9%;
+
+    --border: 48 8.5% 88.4%;
+    --input: 52.5 3.4% 53.3%;
+    --ring: 15.1 62.3% 43.7%;
 
     --radius: 0.75rem;
 
-    --hover: rgba(15, 23, 42, 0.05);
-    --primary-gradient: linear-gradient(135deg, #334155 0%, #0f172a 100%);
+    --hover: rgba(32, 32, 30, 0.05);
+    --shadow-raised: 0 1px 2px rgba(32, 32, 30, 0.06), 0 1px 1px rgba(32, 32, 30, 0.03);
+    --shadow-panel: 0 1px 3px rgba(32, 32, 30, 0.05), 0 8px 24px -12px rgba(32, 32, 30, 0.08);
+    --primary-gradient: linear-gradient(180deg, #c2593a 0%, #b54d2a 100%);
     --primary-gradient-soft: linear-gradient(
       135deg,
-      rgba(51, 65, 85, 0.1) 0%,
-      rgba(15, 23, 42, 0.06) 100%
-    );
-    --canvas-radial: radial-gradient(
-      80% 60% at 50% -10%,
-      rgba(15, 23, 42, 0.05) 0%,
-      rgba(255, 255, 255, 0) 60%
+      rgba(217, 107, 69, 0.14) 0%,
+      rgba(217, 107, 69, 0.06) 100%
     );
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 60 5.6% 7.1%;
+    --foreground: 45 23.5% 93.3%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 60 3.8% 10.2%;
+    --card-foreground: 45 23.5% 93.3%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 60 4.6% 12.7%;
+    --popover-foreground: 45 23.5% 93.3%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 15.7 75% 63.9%;
+    --primary-foreground: 60 3.8% 10.2%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 60 4.2% 13.9%;
+    --secondary-foreground: 45 23.5% 93.3%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 60 4.2% 13.9%;
+    --muted-foreground: 48 5.2% 62%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 60 3.7% 15.9%;
+    --accent-foreground: 45 23.5% 93.3%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 7.2 81.8% 72%;
+    --destructive-foreground: 60 3.8% 10.2%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --success: 80 24.5% 61.6%;
+    --warning: 38.6 77.3% 60.2%;
 
-    --hover: rgba(248, 250, 252, 0.06);
-    --primary-gradient: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
+    --border: 60 3.5% 16.7%;
+    --input: 52.5 3.8% 41.6%;
+    --ring: 15.7 75% 63.9%;
+
+    --hover: rgba(242, 240, 234, 0.06);
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --primary-gradient: linear-gradient(180deg, #ec8d6b 0%, #e8825e 100%);
     --primary-gradient-soft: linear-gradient(
       135deg,
-      rgba(248, 250, 252, 0.1) 0%,
-      rgba(203, 213, 225, 0.06) 100%
-    );
-    --canvas-radial: radial-gradient(
-      80% 60% at 50% -10%,
-      rgba(248, 250, 252, 0.04) 0%,
-      rgba(0, 0, 0, 0) 60%
+      rgba(232, 130, 94, 0.18) 0%,
+      rgba(232, 130, 94, 0.08) 100%
     );
   }
 }
@@ -98,6 +99,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings:
+      'cv11' 1,
+      'ss03' 1;
   }
   html {
     scroll-behavior: smooth;

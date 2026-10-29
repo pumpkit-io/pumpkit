@@ -21,7 +21,10 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Subquery
 
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
@@ -30,7 +33,14 @@ from pumpkit.scheduling.models import (
     SCHEDULED,
     ScheduledPost,
     ScheduledPostPart,
-    ScheduledPostState,
+)
+from pumpkit.scheduling.post_status import (
+    DRAFT,
+    FAILED_STATUS,
+    PUBLISHED_STATUS,
+    SCHEDULED_STATUS,
+    STATUS_OF_STATE,
+    PostStatus,
 )
 
 
@@ -39,13 +49,17 @@ async def create(
     *,
     user_id: str,
     x_user_id: str,
+    post_id: str,
+    source_version_id: str,
     parts: list[str],
     publish_at: datetime,
     now: datetime,
-    source_version_id: Optional[str] = None,
     destination: Destination = Destination(),
 ) -> ScheduledPost:
-    """A new Scheduled post in scheduled. Flushes."""
+    """
+    A new Scheduled post in scheduled, copied from the Version `source_version_id` of the Post
+    `post_id`. Flushes, raising IntegrityError when the Post already has one.
+    """
     scheduled_post = ScheduledPost(
         user_id=user_id,
         x_user_id=x_user_id,
@@ -53,6 +67,7 @@ async def create(
         **_destination_columns(destination),
         community_set_at=now if destination.community else None,
         publish_at=publish_at,
+        post_id=post_id,
         source_version_id=source_version_id,
         state=SCHEDULED,
         retry_count=0,
@@ -77,24 +92,83 @@ def _destination_columns(destination: Destination) -> dict[str, Any]:
     }
 
 
-async def list_for_user(
-    db: AsyncSession, *, user_id: str, state: Optional[ScheduledPostState] = None
-) -> list[ScheduledPost]:
-    """Waiting ones first, soonest first; then Published and Failed ones, newest first."""
-    waiting = ScheduledPost.state.in_([SCHEDULED, PUBLISHING])
-    query = select(ScheduledPost).where(ScheduledPost.user_id == user_id)
-    if state is not None:
-        query = query.where(ScheduledPost.state == state)
-    result = await db.execute(
-        query.order_by(
-            case((waiting, 0), else_=1),
-            case((waiting, ScheduledPost.publish_at)),
-            ScheduledPost.publish_at.desc(),
-            ScheduledPost.created_at.desc(),
-            ScheduledPost.id.desc(),
-        )
+def _post_status_column() -> ColumnElement[str]:
+    """`post_status` in SQL, for a Post outer-joined to its Scheduled post."""
+    # `case(value=...)` binds each state as VARCHAR, which Postgres won't compare with the enum.
+    return case(
+        *((ScheduledPost.state == state, status) for state, status in STATUS_OF_STATE.items()),
+        else_=DRAFT,
     )
-    return list(result.scalars())
+
+
+def _latest_versions() -> Subquery:
+    """Each Post with a Version, and when its latest Version was written."""
+    return (
+        select(
+            VersionAttempt.post_id.label("post_id"),
+            func.max(VersionAttempt.created_at).label("latest_at"),
+        )
+        .where(VersionAttempt.status == ATTEMPT_SUCCEEDED)
+        .group_by(VersionAttempt.post_id)
+        .subquery()
+    )
+
+
+@dataclass(frozen=True)
+class ListedPost:
+    post: Post
+    # None while the Post is a Draft.
+    scheduled_post: Optional[ScheduledPost]
+
+
+async def list_posts(
+    db: AsyncSession, *, user_id: str, status: Optional[PostStatus], limit: int, offset: int
+) -> list[ListedPost]:
+    """A page of the User's Posts with a Version, in `status` or every one, in its tab's order."""
+    latest = _latest_versions()
+    query = (
+        select(Post, ScheduledPost)
+        .join(latest, latest.c.post_id == Post.id)
+        .outerjoin(ScheduledPost, ScheduledPost.post_id == Post.id)
+        .where(Post.user_id == user_id)
+        .options(selectinload(Post.attempts))
+    )
+    if status is not None:
+        query = query.where(_post_status_column() == status)
+    # Drafts, like every Post listed together, go by their latest Version, newest first.
+    if status == SCHEDULED_STATUS:
+        order = [ScheduledPost.publish_at, ScheduledPost.id]
+    elif status == PUBLISHED_STATUS:
+        order = [ScheduledPost.published_at.desc(), ScheduledPost.id.desc()]
+    elif status == FAILED_STATUS:
+        order = [ScheduledPost.publish_at.desc(), ScheduledPost.id.desc()]
+    else:
+        order = [latest.c.latest_at.desc(), Post.id.desc()]
+    result = await db.execute(query.order_by(*order).limit(limit).offset(offset))
+    return [ListedPost(post=post, scheduled_post=scheduled) for post, scheduled in result.tuples()]
+
+
+async def count_posts(db: AsyncSession, *, user_id: str) -> dict[PostStatus, int]:
+    """How many of the User's Posts with a Version each status holds."""
+    latest = _latest_versions()
+    status = _post_status_column()
+    result = await db.execute(
+        select(status, func.count())
+        .select_from(Post)
+        .join(latest, latest.c.post_id == Post.id)
+        .outerjoin(ScheduledPost, ScheduledPost.post_id == Post.id)
+        .where(Post.user_id == user_id)
+        .group_by(status)
+    )
+    counts: dict[PostStatus, int] = {
+        DRAFT: 0,
+        SCHEDULED_STATUS: 0,
+        PUBLISHED_STATUS: 0,
+        FAILED_STATUS: 0,
+    }
+    for listed_status, count in result.tuples():
+        counts[cast(PostStatus, listed_status)] = count
+    return counts
 
 
 async def get(db: AsyncSession, *, scheduled_post_id: str) -> Optional[ScheduledPost]:
@@ -102,6 +176,16 @@ async def get(db: AsyncSession, *, scheduled_post_id: str) -> Optional[Scheduled
     result = await db.execute(
         select(ScheduledPost)
         .where(ScheduledPost.id == scheduled_post_id)
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledPost]:
+    """The Post's Scheduled post in any state, or None while it is a Draft."""
+    result = await db.execute(
+        select(ScheduledPost)
+        .where(ScheduledPost.post_id == post_id)
         .execution_options(populate_existing=True)
     )
     return result.scalar_one_or_none()
@@ -121,6 +205,7 @@ async def edit(
     reschedule: Optional[Reschedule],
     now: datetime,
     destination: Optional[Destination] = None,
+    source_version_id: Optional[str] = None,
 ) -> bool:
     """
     Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
@@ -128,9 +213,11 @@ async def edit(
     check in the update keeps a claim by the publisher between the User's read and this write safe.
     A `destination` of None leaves it where it goes; moving it into another Community is a use.
     New `parts` replace every Part not live; the live ones, which open the list, stay as they
-    are with their X post ids.
+    are with their X post ids. A `source_version_id` points it at the Version they came from.
     """
     values: dict[str, object] = {"updated_at": now}
+    if source_version_id is not None:
+        values["source_version_id"] = source_version_id
     if destination is not None:
         community = destination.community
         values.update(_destination_columns(destination))

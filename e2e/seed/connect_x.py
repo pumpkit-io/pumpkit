@@ -1,4 +1,4 @@
-"""Give the seeded e2e user an X connection, so the Scheduled page lets them schedule.
+"""Give the seeded e2e user an X connection, so "Post to…" lets them schedule.
 
 Its tokens are fakes: nothing in the smoke tests reaches X, and `seed_user.py` removes the
 connection again on the next run. Run it like `seed_user.py`, after it.

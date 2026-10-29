@@ -31,13 +31,13 @@ function renderCallback(search: string) {
   render(
     <StrictMode>
       <MemoryRouter
-        initialEntries={['/scheduled', `/oauth/x/callback${search}`]}
+        initialEntries={['/settings', `/oauth/x/callback${search}`]}
         initialIndex={1}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/oauth/x/callback" element={<XConnectionCallback />} />
-          <Route path="/scheduled" element={<Destination />} />
+          <Route path="/settings" element={<Destination />} />
         </Routes>
       </MemoryRouter>
     </StrictMode>,
@@ -57,7 +57,7 @@ describe('the X callback', () => {
     vi.mocked(track).mockClear();
   });
 
-  it('completes the authorization once and returns to the Scheduled page', async () => {
+  it('completes the authorization once and returns to Settings', async () => {
     vi.mocked(xConnectionService.complete).mockResolvedValue({
       handle: 'ada',
       charLimit: 280,
@@ -68,7 +68,7 @@ describe('the X callback', () => {
     renderCallback('?state=the-state&code=the-code');
 
     expect(
-      await screen.findByText('at /scheduled via REPLACE: Connected @ada.'),
+      await screen.findByText('at /settings via REPLACE: Connected @ada.'),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).toHaveBeenCalledTimes(1);
     expect(xConnectionService.complete).toHaveBeenCalledWith('the-code', 'the-state');
@@ -80,7 +80,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        'at /scheduled via REPLACE: You cancelled connecting X. Connect it again whenever you like.',
+        'at /settings via REPLACE: You cancelled connecting X. Connect it again whenever you like.',
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        'at /scheduled via REPLACE: @ada is already connected to another Pumpkit account.',
+        'at /settings via REPLACE: @ada is already connected to another Pumpkit account.',
       ),
     ).toBeInTheDocument();
     expect(track).not.toHaveBeenCalledWith('x_connected');
@@ -106,7 +106,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        "at /scheduled via REPLACE: X didn't finish connecting your account. Please try again.",
+        "at /settings via REPLACE: X didn't finish connecting your account. Try again.",
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();

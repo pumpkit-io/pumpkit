@@ -55,7 +55,7 @@ export function useInspirationAuthors() {
         track('inspiration_author_added');
         return true;
       } catch (e) {
-        fail(e, "Couldn't add that handle. Please try again.");
+        fail(e, "Couldn't add that handle. Try again.");
         return false;
       } finally {
         setIsAdding(false);
@@ -83,7 +83,7 @@ export function useInspirationAuthors() {
               `You can refresh it again at ${timeOfDay(retryAt)}.`,
           );
         } else {
-          fail(e, `Couldn't refresh @${handle}. Please try again.`);
+          fail(e, `Couldn't refresh @${handle}. Try again.`);
         }
       } finally {
         setRefreshing(null);
@@ -101,7 +101,7 @@ export function useInspirationAuthors() {
         setAuthors((list) => (list ?? []).filter((a) => a.handle !== handle));
         track('inspiration_author_removed');
       } catch (e) {
-        fail(e, `Couldn't remove @${handle}. Please try again.`);
+        fail(e, `Couldn't remove @${handle}. Try again.`);
       }
     },
     [fail],

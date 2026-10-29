@@ -2,7 +2,9 @@
 export function errorMessage(e: unknown, fallback: string): string {
   const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
   if (typeof detail === 'string') return detail;
-  if (e instanceof Error && e.message) return e.message;
+  // An HTTP client's own message ("Network Error") is no sentence for the User.
+  const fromHttpClient = (e as { isAxiosError?: unknown })?.isAxiosError === true;
+  if (e instanceof Error && e.message && !fromHttpClient) return e.message;
   return fallback;
 }
 

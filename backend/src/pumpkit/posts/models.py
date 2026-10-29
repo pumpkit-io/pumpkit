@@ -66,18 +66,16 @@ class VersionAttempt(Base):
     )
     # Counts succeeded attempts only: the number the User sees.
     version_number: Mapped[Optional[int]] = mapped_column(Integer)
-    # The Part texts in order; a single X post has one.
-    draft_parts: Mapped[Optional[list[str]]] = mapped_column(
+    # The Sketch's Part texts in order; a single X post has one. Only kept, never shown.
+    sketch_parts: Mapped[Optional[list[str]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
-    final_parts: Mapped[Optional[list[str]]] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql")
-    )
-    # The draft call's model on a first Version, the revision call's on a later one.
-    writing_model: Mapped[Optional[str]] = mapped_column(String)
+    parts: Mapped[Optional[list[str]]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    # The sketch call's model on a first Version, the revision call's on a later one.
+    sketch_model: Mapped[Optional[str]] = mapped_column(String)
     humanizing_model: Mapped[Optional[str]] = mapped_column(String)
     # The provider's whole usage payload, cost and cache counts included.
-    writing_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    sketch_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     humanizing_usage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
@@ -85,7 +83,7 @@ class VersionAttempt(Base):
     # name is None for an opening with no library Hook or one the library doesn't have.
     hook_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     hook_name: Mapped[Optional[str]] = mapped_column(String)
-    # The slop check's tells in any Part of the Final, each {"name", "description"}, in the
+    # The slop check's tells in any Part of the Version's text, each {"name", "description"}, in the
     # check's order.
     slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")

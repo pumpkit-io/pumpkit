@@ -85,7 +85,9 @@ from pumpkit.core.db.session import get_async_db  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
+from pumpkit.posts.formats import format_of  # noqa: E402
 from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa: E402
 from pumpkit.x_connection.service import save_connection  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
 from tests.mcp_client import McpClient  # noqa: E402
@@ -436,6 +438,64 @@ def connect_x(db, user, fake_x_publisher) -> Callable[[], Awaitable[None]]:
         await db.commit()
 
     return _connect
+
+
+@pytest.fixture
+def version_of(db, user) -> Callable[..., Awaitable[str]]:
+    """
+    Store a new Post of `user` whose one Version's text is the given Parts, as writing it would,
+    and return the Version's id: what a Scheduled post is copied from. Several Parts make a Thread.
+    """
+
+    async def _version_of(*parts: str) -> str:
+        now = datetime.now(timezone.utc)
+        post = Post(user_id=user.id, brief="Seeded", corpus_post_ids=[], created_at=now)
+        version = VersionAttempt(
+            post=post,
+            sequence=1,
+            format=format_of(parts),
+            status=ATTEMPT_SUCCEEDED,
+            version_number=1,
+            sketch_parts=list(parts),
+            parts=list(parts),
+            slop_tells=[],
+            created_at=now,
+        )
+        db.add_all([post, version])
+        await db.commit()
+        return version.id
+
+    return _version_of
+
+
+@pytest.fixture
+def next_version(db) -> Callable[..., Awaitable[str]]:
+    """
+    Store the next Version of the Post that `version_id` belongs to, as Feedback would, with
+    the given Parts, and return its id.
+    """
+
+    async def _next_version(version_id: str, *parts: str) -> str:
+        now = datetime.now(timezone.utc)
+        previous = await db.get(VersionAttempt, version_id)
+        assert previous is not None
+        version = VersionAttempt(
+            post_id=previous.post_id,
+            sequence=previous.sequence + 1,
+            format=format_of(parts),
+            status=ATTEMPT_SUCCEEDED,
+            version_number=(previous.version_number or 0) + 1,
+            feedback="Try again",
+            sketch_parts=list(parts),
+            parts=list(parts),
+            slop_tells=[],
+            created_at=now,
+        )
+        db.add(version)
+        await db.commit()
+        return version.id
+
+    return _next_version
 
 
 @pytest_asyncio.fixture

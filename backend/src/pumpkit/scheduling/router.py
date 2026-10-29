@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
@@ -10,8 +10,10 @@ from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
+from pumpkit.posts.llm import LLM, get_llm
+from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
+from pumpkit.posts.schemas import FeedbackRequest, VersionResponse
 from pumpkit.scheduling import mediator
-from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.rules import (
     DestinationChange,
     KeepDestination,
@@ -25,9 +27,11 @@ from pumpkit.scheduling.schemas import (
     CommunityLookupRequest,
     CommunityResponse,
     PastCommunitiesResponse,
+    PostDetailResponse,
+    PostsPageRequest,
+    PostsPageResponse,
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
-    ScheduledPostsListResponse,
     ScheduledPostUpdateRequest,
     XConnectionResponse,
 )
@@ -35,6 +39,9 @@ from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
 router = APIRouter(tags=["scheduled-posts"])
+# Served here, not from posts: a Post's status, and so whether it takes Feedback, comes from
+# its Scheduled post.
+posts_router = APIRouter(tags=["posts"])
 # The X connection routes that answer with the Scheduled posts waiting. Two routers, so main.py
 # can mount them around x_connection's router and keep the OpenAPI document's order.
 x_connection_router = APIRouter(tags=["x-connection"])
@@ -87,20 +94,6 @@ async def look_up_community(
     return await mediator.look_up_community(reader=reader, pasted=lookup_request.pasted)
 
 
-# Open to Users who aren't Subscribed, so their Published and Failed history stays visible.
-@router.get(
-    "/scheduled-posts",
-    response_model=ScheduledPostsListResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def list_scheduled_posts(
-    state: Optional[ScheduledPostState] = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> ScheduledPostsListResponse:
-    return await mediator.list_scheduled_posts(db=db, user=current_user, state=state)
-
-
 @router.get(
     "/scheduled-posts/communities",
     response_model=PastCommunitiesResponse,
@@ -130,7 +123,6 @@ async def create_scheduled_post(
 ) -> ScheduledPostResponse:
     """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
     new = NewScheduledPost(
-        parts=create_request.parts,
         version_id=create_request.source_version_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
@@ -161,17 +153,22 @@ async def edit_scheduled_post(
     update_request: ScheduledPostUpdateRequest,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    publisher: XPublisher = Depends(get_x_publisher),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
+    """With `publish_now`, publishes on X before answering, as creating one does."""
     edit = ScheduledPostEdit(
         parts=update_request.parts,
+        version_id=update_request.source_version_id,
         publish_at=update_request.publish_at,
+        publish_now=update_request.publish_now,
         destination=_destination_change(update_request),
         share_with_followers=update_request.share_with_followers,
     )
     return await mediator.edit_scheduled_post(
         db=db,
+        publisher=publisher,
         reader=reader,
         user=current_user,
         scheduled_post_id=scheduled_post_id,
@@ -191,4 +188,58 @@ async def cancel_scheduled_post(
 ) -> None:
     await mediator.cancel_scheduled_post(
         db=db, user=current_user, scheduled_post_id=scheduled_post_id
+    )
+
+
+# Open to Users who aren't Subscribed, so their history stays visible.
+@posts_router.get("/posts", response_model=PostsPageResponse, status_code=status.HTTP_200_OK)
+async def list_posts(
+    page: Annotated[PostsPageRequest, Query()],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> PostsPageResponse:
+    return await mediator.list_posts(
+        db=db, user=current_user, status=page.status, limit=page.limit, offset=page.offset
+    )
+
+
+# Open to Users who aren't Subscribed, like the list.
+@posts_router.get(
+    "/posts/{post_id}", response_model=PostDetailResponse, status_code=status.HTTP_200_OK
+)
+async def get_post(
+    post_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> PostDetailResponse:
+    return await mediator.get_post(db=db, user=current_user, post_id=post_id)
+
+
+@posts_router.post(
+    "/posts/{post_id}/versions",
+    response_model=VersionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit(VERSION_WRITE_RATE)
+async def give_feedback(
+    request: Request,
+    post_id: str,
+    feedback_request: FeedbackRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    llm: LLM = Depends(get_llm),
+    clock: Clock = Depends(get_clock),
+) -> VersionResponse:
+    """
+    Writes the Version before answering, which takes two model calls. A Scheduled or Published
+    Post is refused.
+    """
+    return await mediator.give_feedback(
+        db=db,
+        llm=llm,
+        user=current_user,
+        post_id=post_id,
+        feedback=feedback_request.feedback,
+        format=feedback_request.format,
+        now=clock(),
     )

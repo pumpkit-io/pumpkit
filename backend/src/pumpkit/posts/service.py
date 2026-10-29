@@ -54,19 +54,6 @@ async def get_user_post(db: AsyncSession, *, user_id: str, post_id: str) -> Opti
     return result.scalar_one_or_none()
 
 
-async def list_user_posts(db: AsyncSession, *, user_id: str, limit: int, offset: int) -> list[Post]:
-    """A page of the User's Posts with their attempts, newest first."""
-    result = await db.execute(
-        select(Post)
-        .where(Post.user_id == user_id)
-        .order_by(Post.created_at.desc(), Post.id.desc())
-        .limit(limit)
-        .offset(offset)
-        .options(selectinload(Post.attempts))
-    )
-    return list(result.scalars())
-
-
 async def get_user_version(
     db: AsyncSession, *, user_id: str, version_id: str
 ) -> Optional[VersionAttempt]:
@@ -132,17 +119,17 @@ async def record_version(
         format=written.format,
         status=ATTEMPT_SUCCEEDED,
         version_number=version_number,
-        draft_parts=written.draft_parts,
-        final_parts=written.final_parts,
-        writing_model=written.writing_model,
+        sketch_parts=written.sketch_parts,
+        parts=written.parts,
+        sketch_model=written.sketch_model,
         humanizing_model=written.humanizing_model,
-        writing_usage=written.writing_usage,
+        sketch_usage=written.sketch_usage,
         humanizing_usage=written.humanizing_usage,
         hook_reasoning=written.hook.reasoning,
         hook_name=written.hook.name,
         slop_tells=[
             {"name": name, "description": description}
-            for name, description in slop.find_in_parts(written.final_parts)
+            for name, description in slop.find_in_parts(written.parts)
         ],
         created_at=now,
     )

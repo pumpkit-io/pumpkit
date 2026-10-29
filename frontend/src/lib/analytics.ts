@@ -59,32 +59,27 @@ export const EVENTS = {
   },
 
   // App shell
-  sidebar_user_menu_opened: { description: 'Sidebar: opened the user menu.' },
   sidebar_new_post_clicked: {
-    description: 'Sidebar: started a New Post. Props: source (sidebar | rail | shortcut).',
+    description: 'New post from the sidebar or the shortcut. Props: source (sidebar | shortcut).',
   },
   sidebar_mobile_drawer_opened: { description: 'Mobile sidebar: opened the drawer.' },
   sidebar_mobile_drawer_closed: {
     description: 'Mobile sidebar: closed the drawer. Props: via_backdrop.',
   },
-  user_menu_account_clicked: { description: 'User menu: clicked "Account".' },
-  user_menu_billing_clicked: { description: 'User menu: clicked "Billing".' },
-  user_menu_theme_changed: {
-    description: 'User menu: changed the theme. Props: theme (system/light/dark).',
-  },
-  user_menu_logout_clicked: { description: 'User menu: clicked "Sign out".' },
 
-  account_dialog_opened: { description: 'Account: opened the account dialog.' },
-  account_dialog_closed: {
-    description: 'Account: closed the account dialog. Props: unsaved_changes.',
+  // Settings (/settings)
+  settings_theme_changed: {
+    description: 'Settings: changed the theme in Appearance. Props: theme (system/light/dark).',
   },
+  settings_sign_out_clicked: { description: 'Settings: clicked "Sign out" in the header.' },
   account_profile_saved: { description: 'Account: saved profile changes. Props: fields_changed.' },
   account_profile_save_failed: {
     description: 'Account: profile save failed. Props: error_message.',
   },
 
-  billing_dialog_opened: { description: 'Billing: opened the billing dialog. Props: source.' },
-  billing_dialog_closed: { description: 'Billing: closed the billing dialog.' },
+  billing_choose_plan_opened: {
+    description: 'Billing: a prompt to subscribe sent the User to Choose a Plan. Props: source.',
+  },
   billing_subscription_checkout_started: {
     description: 'Billing: started a Subscription checkout. Props: plan_key.',
   },
@@ -99,42 +94,45 @@ export const EVENTS = {
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
 
-  // Home: writing
+  // Writing: Persona, New post and the Post page
   inspiration_author_added: {
-    description: 'Home: added an Inspiration author and its posts were fetched.',
+    description: 'Persona: added an Inspiration author and its posts were fetched.',
   },
-  inspiration_author_removed: { description: 'Home: removed an Inspiration author.' },
+  inspiration_author_removed: { description: 'Persona: removed an Inspiration author.' },
   inspiration_authors_refreshed: {
-    description: 'Home: refreshed an Inspiration author and its latest posts were fetched.',
+    description: 'Persona: refreshed an Inspiration author and its latest posts were fetched.',
   },
   post_version_requested: {
-    description: 'Home: asked for a Version of a Post. Props: kind (brief | feedback).',
+    description:
+      'New post (brief) or the Post page (feedback): asked for a Version. Props: kind (brief | feedback).',
   },
   post_version_failed: {
-    description: 'Home: writing a Version failed. Props: kind (brief | feedback).',
+    description:
+      'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
   },
-  post_final_copied: { description: "Home: copied a Version's Final." },
-  post_part_copied: { description: "Home: copied one Part of a Thread Version's Final." },
+  post_final_copied: {
+    description: 'Post page: copied the text on screen with Copy post, every Part of it.',
+  },
 
-  // Scheduled (/scheduled) + the X callback
-  x_connected: { description: 'Scheduled: connected an X account through X consent screen.' },
-  x_disconnected: { description: 'Scheduled: disconnected the X account.' },
+  // Posting to X (the Post page and Settings) + the X callback
+  x_connected: { description: 'Settings: connected an X account through X consent screen.' },
+  x_disconnected: { description: 'Settings: disconnected the X account.' },
   community_looked_up: {
     description:
-      'Scheduled: looked up a Community pasted by its URL or ID. Props: found (boolean), named (boolean, only when found).',
+      'Post to… or the inline edit: looked up a Community pasted by its URL or ID. Props: found (boolean), named (boolean, only when found).',
   },
   scheduled_post_created: {
     description:
-      'Scheduled: created a Scheduled post. Props: format (post | thread), part_count (number), source (typed | final), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).',
+      'Post page: created a Scheduled post from a Version. Props: format (post | thread), part_count (number), source (always final: copied from a Version), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).',
   },
   // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
   scheduled_post_published: {
     description:
-      'Scheduled: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (typed | final), destination (profile | community), share_with_followers (boolean, only for a Community).',
+      'Publisher or Post now: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (always final: copied from a Version), destination (profile | community), share_with_followers (boolean, only for a Community).',
   },
   scheduled_post_failed: {
     description:
-      'Scheduled: a Scheduled post Failed. Props: format (post | thread), part_count (number), reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown).',
+      'Publisher or Post now: a Scheduled post Failed. Props: format (post | thread), part_count (number), reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown).',
   },
 } as const satisfies Record<string, { description: string }>;
 

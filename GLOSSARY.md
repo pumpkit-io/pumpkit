@@ -80,17 +80,25 @@ _Avoid_: free tier, cardless trial
 An X account whose recent posts set the writing style of a User's posts, and never their content. Each User picks their own, up to three.
 _Avoid_: creator, voice, style source
 
+**Persona**:
+A User's Inspiration authors taken together, up to three. It sets how the User's Posts sound, and never what they say. A User with no Inspiration authors has an empty Persona and cannot start a Post.
+_Avoid_: voice, style, profile
+
 **Brief**:
 What a User writes to say what a Post is about and what they think about it. It is the Post's content, and the Inspiration authors are only its form.
 _Avoid_: prompt, topic, input
 
 **Post**:
-One piece of writing made from one Brief, with every Version it has been through. Its Versions may differ in Format.
+One piece of writing made from one Brief, with every Version it has been through. Its Versions may differ in Format. A Post goes out at most once, so it has at most one Scheduled post, and takes its status from it: Scheduled while it waits or is being published, then Published or Failed. A Post with no Scheduled post is a Draft.
 _Avoid_: tweet, run
 
+**Draft**:
+A Post that has at least one Version and no Scheduled post: it was never scheduled, or the User unscheduled it.
+_Avoid_: unpublished post, not published
+
 **Version**:
-One round of a Post's text. The first comes from the Brief, and each later one comes from a piece of Feedback on the one before. Each Version has one Format.
-_Avoid_: revision, iteration, round
+One round of a Post's text, the text meant for X. The first comes from the Brief, and each later one comes from a piece of Feedback on the one before. Each Version has one Format, and a Thread's Version has one text per Part. Pumpkit writes a Sketch first and rewrites it into the Version's text.
+_Avoid_: revision, iteration, round, Final, final version
 
 **Format**:
 The shape of a Version's text: a single X post, or a Thread. The User picks it when starting a Post, a single X post unless they say otherwise, and may change it with any Feedback; Versions already written keep theirs.
@@ -104,20 +112,16 @@ _Avoid_: tweetstorm, chain, multi-post
 One X post within a Thread, in its place in the order.
 _Avoid_: tweet, segment, item
 
-**Draft**:
-The text Pumpkit writes first in a Version, Hook included, before it is rewritten to sound like a person typed it.
-_Avoid_: first pass, raw output
+**Sketch**:
+The text Pumpkit writes first in a Version, Hook included, before it is rewritten to sound like a person typed it. Users never see it.
+_Avoid_: draft, first pass, raw output
 
 **Hook**:
-The opening of a Post's text: the line or lines meant to make a reader stop and read the rest. Pumpkit writes it as part of the Draft, from its library of proven openings when one fits, and changes it in a later Version only when the Feedback asks. In a Thread, the Hook opens the first Part.
+The opening of a Post's text: the line or lines meant to make a reader stop and read the rest. Pumpkit writes it as part of the Sketch, from its library of proven openings when one fits, and changes it in a later Version only when the Feedback asks. In a Thread, the Hook opens the first Part.
 _Avoid_: headline, intro, opener, lede
 
-**Final**:
-The rewritten text of a Version, the one meant to be pasted into X. A Thread's Final has one text per Part.
-_Avoid_: humanized post, output, refined post
-
 **Feedback**:
-What a User tells Pumpkit to change about the latest Version of a Post.
+What a User tells Pumpkit to change about the latest Version of a Post. Only a Draft or a Failed Post takes it: to revise a scheduled Post, the User unschedules it first, and a Published Post is finished.
 _Avoid_: revision request, comment, instruction
 
 ### Publishing
@@ -135,7 +139,7 @@ Where a Scheduled post goes: the profile of the X account of the User's X connec
 _Avoid_: target, location, channel
 
 **Scheduled post**:
-A text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is either typed by the User or copied from a Version's Final. One Scheduled post is one X post, or one Thread published at one time; posting the same text in two places takes two Scheduled posts. It keeps its own copy of the text and stays a Scheduled post after it is Published or Failed.
+A Version's text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is always copied from a Version, and a Post has at most one. One Scheduled post is one X post, or one Thread published at one time; posting the same text in two places takes two Posts. It keeps its own copy of the text, which the User may edit, and stays a Scheduled post after it is Published or Failed. Unscheduling a waiting one deletes it and makes its Post a Draft again.
 _Avoid_: queued tweet, publication, scheduled tweet
 
 **Published**:
@@ -143,7 +147,7 @@ A Scheduled post that X has accepted and shows on the User's X account, or in it
 _Avoid_: posted, sent, live
 
 **Failed**:
-A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it. A Thread may fail after some of its Parts are live; those Parts can no longer change, and rescheduling publishes only the rest.
+A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it, also with the text of a newer Version of its Post. A Thread may fail after some of its Parts are live; those Parts can no longer change, and rescheduling publishes only the rest.
 _Avoid_: errored, rejected, dead
 
 ### Legal

@@ -1,4 +1,4 @@
-"""The draft and revision calls' scripted replies, for tests that write a Version."""
+"""The sketch and revision calls' scripted replies, for tests that write a Version."""
 
 from typing import Optional
 

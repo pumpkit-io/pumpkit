@@ -6,8 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
-import { shortTimeAgo, timeAgo } from '@/lib/relativeTime';
-import type { InspirationAuthor } from '@/services/inspirationAuthorService';
+import { timeAgo } from '@/lib/relativeTime';
+import { cn } from '@/lib/utils';
+import {
+  MAX_INSPIRATION_AUTHORS,
+  type InspirationAuthor,
+} from '@/services/inspirationAuthorService';
 import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
 
 function fetchedLabel(author: InspirationAuthor): string {
@@ -18,9 +22,12 @@ function fetchedLabel(author: InspirationAuthor): string {
 
 function AddAuthorForm({
   isAdding,
+  full,
   onAdd,
 }: {
   isAdding: boolean;
+  /** Every place is taken, so the form waits for a Remove. */
+  full: boolean;
   onAdd: (handle: string) => Promise<boolean>;
 }) {
   const [handle, setHandle] = useState('');
@@ -33,24 +40,32 @@ function AddAuthorForm({
   };
 
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <label htmlFor="inspiration-author-handle" className="sr-only">
-        X handle
-      </label>
-      <Input
-        id="inspiration-author-handle"
-        value={handle}
-        onChange={(e) => setHandle(e.target.value)}
-        placeholder="@handle"
-        autoComplete="off"
-        autoCapitalize="none"
-        spellCheck={false}
-        disabled={isAdding}
-        className="min-w-0 flex-1"
-      />
-      <Button type="submit" disabled={isAdding || !handle.trim()} className="shrink-0">
-        {isAdding ? 'Fetching posts…' : 'Add author'}
-      </Button>
+    <form onSubmit={submit} className="space-y-2">
+      <div className="flex gap-2">
+        <label htmlFor="inspiration-author-handle" className="sr-only">
+          X handle
+        </label>
+        <Input
+          id="inspiration-author-handle"
+          value={handle}
+          onChange={(e) => setHandle(e.target.value)}
+          placeholder="@handle"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          disabled={isAdding || full}
+          aria-describedby={full ? 'inspiration-authors-full' : undefined}
+          className="min-w-0 flex-1"
+        />
+        <Button type="submit" disabled={isAdding || full || !handle.trim()} className="shrink-0">
+          {isAdding ? 'Fetching posts…' : 'Add author'}
+        </Button>
+      </div>
+      {full && (
+        <p id="inspiration-authors-full" className="font-sans text-sm text-muted-foreground">
+          All three places are taken. Remove an Inspiration author to add another.
+        </p>
+      )}
     </form>
   );
 }
@@ -64,10 +79,6 @@ interface AuthorActions {
   onRemove: (handle: string) => void;
 }
 
-/**
- * On a phone the list is a row of compact chips (handle and a short fetch time), so it doesn't
- * push the writing area off the screen; from `md` up each author is a row with its full details.
- */
 function AuthorList({
   authors,
   actions,
@@ -76,28 +87,17 @@ function AuthorList({
   actions?: AuthorActions;
 }) {
   return (
-    <ul className="flex flex-wrap gap-2 md:flex-col md:flex-nowrap md:gap-0 md:divide-y md:divide-border md:rounded-lg md:border md:border-border">
+    <ul className="divide-y divide-border rounded-lg border border-border">
       {authors.map((author) => (
-        <li
-          key={author.handle}
-          className="flex h-10 items-center rounded-full border border-border pl-3 md:h-auto md:rounded-none md:border-0 md:py-2 md:pl-4 md:pr-2"
-        >
-          <div className="min-w-0 md:flex-1">
-            <span className="font-sans text-sm font-medium text-foreground">@{author.handle}</span>
-            {author.lastFetchedAt && (
-              <span
-                aria-hidden
-                className="ml-1.5 font-sans text-xs text-muted-foreground md:hidden"
-              >
-                {shortTimeAgo(author.lastFetchedAt)}
-              </span>
-            )}
-            <p className="sr-only font-sans text-xs text-muted-foreground md:not-sr-only">
-              {fetchedLabel(author)}
+        <li key={author.handle} className="flex items-center gap-2 py-2 pl-4 pr-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-sans text-sm font-medium text-foreground">
+              @{author.handle}
             </p>
+            <p className="font-sans text-xs text-muted-foreground">{fetchedLabel(author)}</p>
           </div>
-          {actions ? (
-            <div className="ml-1 flex shrink-0">
+          {actions && (
+            <div className="flex shrink-0">
               <button
                 type="button"
                 onClick={() => actions.onRefresh(author.handle)}
@@ -124,12 +124,31 @@ function AuthorList({
                 <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
-          ) : (
-            <span className="pr-3 md:pr-2" />
           )}
         </li>
       ))}
     </ul>
+  );
+}
+
+/** One marker per place in the Persona, filled for each one taken. */
+function PlacesTaken({ taken }: { taken: number }) {
+  return (
+    <div
+      role="img"
+      aria-label={`${taken} of ${MAX_INSPIRATION_AUTHORS} places taken`}
+      className="flex items-center gap-1.5"
+    >
+      {Array.from({ length: MAX_INSPIRATION_AUTHORS }, (_, i) => (
+        <span
+          key={i}
+          className={cn(
+            'h-1.5 w-8 rounded-full',
+            i < taken ? 'bg-primary' : 'bg-muted-foreground/25',
+          )}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -139,26 +158,36 @@ export function InspirationAuthorsPanel() {
     useInspirationAuthorsContext();
 
   return (
-    <section aria-labelledby="inspiration-authors-heading" className="space-y-4">
-      <div className="space-y-1">
-        <h2
-          id="inspiration-authors-heading"
-          className="font-sans text-base font-semibold text-foreground"
-        >
-          Inspiration authors
-        </h2>
-        <p className="font-sans text-sm text-muted-foreground">
-          Up to three X accounts whose recent posts set how your posts sound, never what they say.
-        </p>
+    <section aria-labelledby="inspiration-authors-heading" className="space-y-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h2
+            id="inspiration-authors-heading"
+            className="font-sans text-xl font-semibold tracking-[-0.015em] text-foreground"
+          >
+            How your posts sound
+          </h2>
+          <p className="font-sans text-sm text-muted-foreground">
+            Up to three X accounts, your Inspiration authors. Their recent posts set how your posts
+            sound, never what they say.
+          </p>
+        </div>
+        {authors !== null && <PlacesTaken taken={authors.length} />}
       </div>
 
       {subscribed === false && (
         <SubscribePrompt
           message="Adding Inspiration authors needs a Subscription."
-          source="home_inspiration_authors"
+          source="persona_inspiration_authors"
         />
       )}
-      {subscribed === true && <AddAuthorForm isAdding={isAdding} onAdd={add} />}
+      {subscribed === true && (
+        <AddAuthorForm
+          isAdding={isAdding}
+          full={(authors?.length ?? 0) >= MAX_INSPIRATION_AUTHORS}
+          onAdd={add}
+        />
+      )}
       {error && <ErrorBanner message={error} />}
       {notice && <LimitNotice message={notice} />}
 

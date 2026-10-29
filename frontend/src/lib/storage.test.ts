@@ -9,9 +9,9 @@ describe('storage', () => {
   });
 
   it('round-trips JSON values', () => {
-    storage.set('sidebar-collapsed', true);
-    expect(localStorage.getItem('pumpkit:sidebar-collapsed')).toBe('true');
-    expect(storage.get('sidebar-collapsed', false)).toBe(true);
+    storage.set('analytics-consent', 'denied');
+    expect(localStorage.getItem('pumpkit:analytics-consent')).toBe('"denied"');
+    expect(storage.get('analytics-consent', null)).toBe('denied');
   });
 
   it('falls back on missing or corrupt values', () => {

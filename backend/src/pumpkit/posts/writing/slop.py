@@ -1,5 +1,5 @@
 """
-Find the machine-written tells in a Final, ported from pumpkit-v6.
+Find the machine-written tells in a Version's text, ported from pumpkit-v6.
 
 A smoke alarm, not a judge: it reports what it saw so the User can decide whether to ask for a
 change. Every pattern was found in real output from the v6 pipeline.

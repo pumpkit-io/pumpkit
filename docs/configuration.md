@@ -31,7 +31,7 @@ None of these is a setting. A trailing slash on `PUBLIC_URL` is dropped.
 | Stripe Checkout return | `PUBLIC_URL/billing/success` and `PUBLIC_URL/billing/cancelled` | Where Checkout returns after paying or cancelling. |
 | Stripe customer portal return | `PUBLIC_URL/billing` | Where the customer portal returns. |
 | Stripe webhook | `PUBLIC_URL/api/v1/stripe/webhook` | Register it as the webhook endpoint in Stripe. |
-| MCP endpoint | `PUBLIC_URL/api/v1/mcp` | Claude Code and other MCP clients connect to it with an API key; the `claude mcp add` command in the account dialog names it. |
+| MCP endpoint | `PUBLIC_URL/api/v1/mcp` | Claude Code and other MCP clients connect to it with an API key; the `claude mcp add` command in Settings' API keys card names it. |
 | Canonical and social URLs | `PUBLIC_URL/` | The web container writes them into `index.html`'s canonical, Open Graph, Twitter card and JSON-LD tags, and into `sitemap.xml`, when it starts. |
 
 The scheme of `PUBLIC_URL` also decides the sign-in cookies. With `https` they are `Secure`, and the refresh cookie is named `__Host-refresh_token`; with `http` they are plain and the refresh cookie is `refresh_token`, because Safari drops `Secure` cookies on `http://localhost`.
@@ -56,7 +56,7 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 | Variable | Meaning |
 | --- | --- |
 | `LLM_BASE_URL` | Any OpenAI-compatible chat completions endpoint, such as `https://api.openai.com/v1` or a local Ollama at `http://localhost:11434/v1`. Defaults to OpenRouter (`https://openrouter.ai/api/v1`). Prompt cache hints are sent only to OpenRouter. |
-| `LLM_DRAFTING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` | The model for each writing call: the draft call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
+| `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` | The model for each writing call: the sketch call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
 
 ### SMTP
 
@@ -134,7 +134,7 @@ The defaults reach the compose stack's bundled Postgres; set these only for an e
 
 | Variable | Meaning |
 | --- | --- |
-| `ALLOW_SEARCH_INDEXING` | `false` (default) or `true`, read by the web container when it starts. `false` serves `index.html` with `<meta name="robots" content="noindex,nofollow">` and a `robots.txt` that disallows every path, so the Instance stays out of search engines. `true` serves `index,follow` and a `robots.txt` that allows crawling (except `/home` and `/billing`) and names `PUBLIC_URL/sitemap.xml`. The hosted Instance at pumpkit.io sets `true`. |
+| `ALLOW_SEARCH_INDEXING` | `false` (default) or `true`, read by the web container when it starts. `false` serves `index.html` with `<meta name="robots" content="noindex,nofollow">` and a `robots.txt` that disallows every path, so the Instance stays out of search engines. `true` serves `index,follow` and a `robots.txt` that allows crawling (except the signed-in pages and `/billing`) and names `PUBLIC_URL/sitemap.xml`. The hosted Instance at pumpkit.io sets `true`. |
 
 ### Instance and internal tunables
 

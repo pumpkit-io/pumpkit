@@ -78,7 +78,7 @@ Only the first two are required. Each optional provider stays off until you set 
 | twitterapi.io | Yes | Reads your Inspiration authors' posts, which set the style |
 | SMTP | No | Emails Magic links. Without it, links go to the backend log and only you can sign in |
 | Google | No | "Continue with Google" on the sign-in page |
-| X app | No | Connects X accounts to schedule Posts or post now. Without it, Users copy the Final into X |
+| X app | No | Connects X accounts to schedule Posts or post now. Without it, Users copy a Version's text into X |
 | Stripe | No | Sells Plans. Without it, every User can use all of Pumpkit |
 | Operator details | No | Company footer, Terms and Privacy Policy pages |
 | PostHog | No | Product analytics, behind a consent banner |
@@ -87,7 +87,7 @@ The guide's [Providers](./docs/self-hosting.md#providers) section says where to 
 
 ## Use Pumpkit from Claude Code
 
-Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in your account dialog and run the `claude mcp add` command it shows. Claude Code can then write and revise Posts, manage your Inspiration authors, and schedule or publish posts. See [docs/claude-code.md](./docs/claude-code.md).
+Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in Settings and run the `claude mcp add` command it shows. Claude Code can then write and revise Posts, manage your Inspiration authors, and schedule or publish posts. See [docs/claude-code.md](./docs/claude-code.md).
 
 Self-hosted Instances get the MCP server in the first release after 0.1.0.
 

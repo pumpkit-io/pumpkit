@@ -24,13 +24,6 @@ const config = {
           'sans-serif',
         ],
         mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-        wordmark: [
-          '"Google Sans Code Variable"',
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'monospace',
-        ],
       },
       keyframes: {
         'accordion-down': {
@@ -77,6 +70,8 @@ const config = {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
+        success: 'hsl(var(--success))',
+        warning: 'hsl(var(--warning))',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -84,7 +79,10 @@ const config = {
       backgroundImage: {
         'primary-gradient': 'var(--primary-gradient)',
         'primary-gradient-soft': 'var(--primary-gradient-soft)',
-        'canvas-radial': 'var(--canvas-radial)',
+      },
+      boxShadow: {
+        raised: 'var(--shadow-raised)',
+        panel: 'var(--shadow-panel)',
       },
       borderRadius: {
         lg: 'var(--radius)',

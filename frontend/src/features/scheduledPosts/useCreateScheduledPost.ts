@@ -27,7 +27,7 @@ export type CreateOutcome =
   | { kind: 'refused' };
 
 /**
- * Sends a new Scheduled post from the composer or a Final. A refusal sets `error`, except one
+ * Sends a new Scheduled post copied from a Version. A refusal sets `error`, except one
  * for want of a Subscription, which the caller turns into the prompt to subscribe.
  */
 export function useCreateScheduledPost() {
@@ -39,10 +39,7 @@ export function useCreateScheduledPost() {
   const create = useCallback(
     async (request: NewScheduledPost): Promise<CreateOutcome> => {
       const { destination = PROFILE } = request;
-      const post: ScheduledPostSource =
-        'sourceVersionId' in request
-          ? { sourceVersionId: request.sourceVersionId }
-          : { parts: request.parts };
+      const post: ScheduledPostSource = { sourceVersionId: request.sourceVersionId };
       setSending(true);
       setError(null);
       try {
@@ -52,7 +49,8 @@ export function useCreateScheduledPost() {
         track('scheduled_post_created', {
           format: formatOf(created.parts),
           part_count: created.parts.length,
-          source: 'sourceVersionId' in post ? 'final' : 'typed',
+          // Always a Version since ADR 0015; kept so the event's history reads the same.
+          source: 'final',
           post_now: request.postNow,
           ...(destination.community
             ? { destination: 'community', share_with_followers: destination.shareWithFollowers }
@@ -71,8 +69,8 @@ export function useCreateScheduledPost() {
           errorMessage(
             e,
             request.postNow
-              ? "Couldn't post to X. Please try again."
-              : "Couldn't schedule the post. Please try again.",
+              ? "Couldn't post to X. Try again."
+              : "Couldn't schedule the post. Try again.",
           ),
         );
         // A 409 may mean the X connection changed elsewhere: show its current state.

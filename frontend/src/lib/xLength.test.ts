@@ -6,7 +6,7 @@ import { X_TLDS } from './xTlds';
 
 const backendXConnection = path.resolve(__dirname, '../../../backend/src/pumpkit/x_connection');
 
-// The backend's cases, so the composer's counter and the backend's check agree.
+// The backend's cases, so the web app's counters and the backend's check agree.
 const CASES: { note: string; text: string; length: number }[] = JSON.parse(
   readFileSync(
     path.resolve(__dirname, '../../../backend/tests/x_connection/x_weighted_length_cases.json'),

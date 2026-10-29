@@ -9,9 +9,9 @@ from sqlalchemy.orm import selectinload
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.constants import THREAD_MAX_PARTS
-from pumpkit.posts.writing.prompts.draft_post import draft_post_prompt
-from pumpkit.posts.writing.prompts.draft_thread import draft_thread_prompt
 from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
+from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
+from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.posts.writing_replies import written, written_thread
 
@@ -55,7 +55,6 @@ async def test_starting_a_post_as_a_thread_returns_a_first_version_of_parts(
     assert response.status_code == 201, response.text
     [version] = response.json()["versions"]
     assert version["format"] == "thread"
-    assert version["draft_parts"] == ["Ship small - every week", "it's how you learn"]
     assert version["parts"] == [
         {"text": "Ship small every week 🚀", "char_count": 24, "char_limit": 280},
         {
@@ -65,8 +64,9 @@ async def test_starting_a_post_as_a_thread_returns_a_first_version_of_parts(
         },
     ]
     [attempt] = await _stored_attempts(db)
-    assert (attempt.format, attempt.final_parts) == (
+    assert (attempt.format, attempt.sketch_parts, attempt.parts) == (
         "thread",
+        ["Ship small - every week", "it's how you learn"],
         ["Ship small every week 🚀", "it's how you learn https://pumpkit.io/a/long/link"],
     )
 
@@ -89,7 +89,7 @@ LEVELSIO_CORPUS = (
 )
 
 
-async def test_a_thread_is_drafted_and_humanized_with_the_thread_prompts_and_schemas(
+async def test_a_thread_is_sketched_and_humanized_with_the_thread_prompts_and_schemas(
     client, with_author, fake_llm
 ):
     fake_llm.replies = [
@@ -99,10 +99,10 @@ async def test_a_thread_is_drafted_and_humanized_with_the_thread_prompts_and_sch
 
     await client.post(POSTS, json={"brief": "ship small things", "format": "thread"})
 
-    draft_call, humanizer_call = fake_llm.calls
-    assert draft_call.response_model.__name__ == "drafted_thread"
-    assert draft_call.messages == [
-        _system(draft_thread_prompt(X_POST_MAX_CHARS)),
+    sketch_call, humanizer_call = fake_llm.calls
+    assert sketch_call.response_model.__name__ == "drafted_thread"
+    assert sketch_call.messages == [
+        _system(sketch_thread_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
@@ -138,9 +138,9 @@ TOO_MANY = [f"part {n}" for n in range(1, THREAD_MAX_PARTS + 2)]
 @pytest.mark.parametrize(
     "replies",
     [
-        pytest.param([written_thread(["just one"])], id="draft of one Part"),
-        pytest.param([written_thread(TOO_MANY)], id="draft over the cap"),
-        pytest.param([written_thread(["one", "  "])], id="draft with a blank Part"),
+        pytest.param([written_thread(["just one"])], id="sketch of one Part"),
+        pytest.param([written_thread(TOO_MANY)], id="sketch over the cap"),
+        pytest.param([written_thread(["one", "  "])], id="sketch with a blank Part"),
         pytest.param([written_thread(["one", "two"]), {"parts": ["one"]}], id="final of one Part"),
         pytest.param([written_thread(["one", "two"]), {"parts": TOO_MANY}], id="final over cap"),
     ],
@@ -155,17 +155,17 @@ async def test_a_thread_reply_outside_the_part_bounds_fails_the_attempt(
     assert_reported_502(response)
     assert fake_llm.replies == []
     [attempt] = await _stored_attempts(db)
-    assert (attempt.status, attempt.format, attempt.final_parts) == ("failed", "thread", None)
+    assert (attempt.status, attempt.format, attempt.parts) == ("failed", "thread", None)
 
 
 async def test_a_post_started_with_the_post_format_is_a_single_post(client, with_author, fake_llm):
-    fake_llm.replies = [written("draft"), {"post": "final"}]
+    fake_llm.replies = [written("sketch"), {"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "ship", "format": "post"})
 
     [version] = response.json()["versions"]
     assert (version["format"], len(version["parts"])) == ("post", 1)
-    assert fake_llm.calls[0].messages[0] == _system(draft_post_prompt(X_POST_MAX_CHARS))
+    assert fake_llm.calls[0].messages[0] == _system(sketch_post_prompt(X_POST_MAX_CHARS))
 
 
 async def test_an_unknown_format_returns_422(client, with_author, fake_llm):
