@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from pumpkit.posts.formats import Format, part_name
-from pumpkit.posts.schemas import VersionResponse, VersionToolResponse
+from pumpkit.posts.schemas import TextResponse, VersionResponse, VersionToolResponse
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
 
@@ -98,10 +98,12 @@ class ScheduledPostResponse(BaseModel):
 
 
 class PostDetailResponse(BaseModel):
-    """One Post with its Versions in order, and the status its one Scheduled post gives it."""
+    """One Post with its Text, its Versions in order, and the status its Scheduled post gives it."""
 
     id: str
     brief: str
+    # None only for a Post whose first Version failed.
+    text: Optional[TextResponse]
     versions: list[VersionResponse]
     status: PostStatus
     # None while the Post is a Draft.
@@ -113,6 +115,7 @@ class PostDetailToolResponse(BaseModel):
 
     id: str
     brief: str
+    text: Optional[TextResponse]
     versions: list[VersionToolResponse]
     status: PostStatus
     scheduled_post: Optional[ScheduledPostResponse]

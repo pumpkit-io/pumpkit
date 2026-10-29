@@ -253,8 +253,10 @@ async def list_posts(
 
 async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse:
     """
-    Read one of the User's Posts: its Brief and every Version in order, each with the Feedback
-    that made it, its text and each Part's character count. `status` is "draft" with no
+    Read one of the User's Posts: its Brief, its Text (the text meant for X, with
+    `version_number`, the Version it came from, and `edited`, whether the User changed it by hand
+    since) and every Version in order, each with the Feedback that made it, its text, each Part's
+    character count and when it was written. `status` is "draft" with no
     Scheduled post, else "scheduled", "published" or "failed" from its one Scheduled post,
     returned in `scheduled_post` with its text, which the User may have edited, and the
     Version it was copied from. A Draft has no Scheduled post, so its Versions can be scheduled.

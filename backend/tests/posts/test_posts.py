@@ -40,7 +40,9 @@ async def with_author(client, subscribed, fake_x_reader):
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
-async def test_starting_a_post_returns_it_with_its_first_version(client, with_author, fake_llm):
+async def test_starting_a_post_returns_it_with_its_first_version(
+    client, with_author, fake_llm, fixed_clock
+):
     fake_llm.replies = [written("the sketch—with a dash"), {"post": "the final"}]
 
     response = await client.post(POSTS, json={"brief": "ship small things"})
@@ -58,6 +60,7 @@ async def test_starting_a_post_returns_it_with_its_first_version(client, with_au
             "format": "post",
             "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
             "tells": [],
+            "created_at": "2026-10-10T12:00:30Z",
         }
     ]
 
@@ -79,7 +82,15 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
     ).json()
 
     for version in (first, second):
-        assert set(version) == {"id", "number", "feedback", "format", "parts", "tells"}
+        assert set(version) == {
+            "id",
+            "number",
+            "feedback",
+            "format",
+            "parts",
+            "tells",
+            "created_at",
+        }
         assert "sketch" not in str(version)
 
 

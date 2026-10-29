@@ -9,6 +9,7 @@ import pytest
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
@@ -51,17 +52,60 @@ async def _schedule(client, version_id: str, **when) -> dict:
     return response.json()
 
 
-async def test_a_draft_reads_with_its_brief_versions_and_no_scheduled_post(client, post):
+async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(client, post):
     response = await client.get(f"{POSTS}/{post['id']}")
 
     assert response.status_code == 200, response.text
+    one = {"text": "Version one.", "char_count": 12, "char_limit": X_POST_MAX_CHARS}
     assert response.json() == {
         "id": post["id"],
         "brief": "ship small things",
-        "versions": post["versions"],
+        "text": {"format": "post", "parts": [one], "version_number": 1, "edited": False},
+        "versions": [
+            {
+                "id": post["versions"][0]["id"],
+                "number": 1,
+                "feedback": None,
+                "format": "post",
+                "parts": [one],
+                "tells": [],
+                "created_at": "2026-10-10T12:00:30Z",
+            }
+        ],
         "status": "draft",
         "scheduled_post": None,
     }
+
+
+async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
+    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["Part one.", "Part two."]}]
+    given = await client.post(
+        f"{POSTS}/{post['id']}/versions", json={"feedback": "expand it", "format": "thread"}
+    )
+    assert given.status_code == 201, given.text
+
+    read = (await client.get(f"{POSTS}/{post['id']}")).json()
+
+    assert read["text"] == {
+        "format": "thread",
+        "parts": [
+            {"text": "Part one.", "char_count": 9, "char_limit": X_POST_MAX_CHARS},
+            {"text": "Part two.", "char_count": 9, "char_limit": X_POST_MAX_CHARS},
+        ],
+        "version_number": 2,
+        "edited": False,
+    }
+    assert read["versions"][1]["feedback"] == "expand it"
+
+
+async def test_a_failed_feedback_leaves_the_text_on_the_version_before(client, post, fake_llm):
+    fake_llm.replies = [LLMError("provider down")]
+    await client.post(f"{POSTS}/{post['id']}/versions", json={"feedback": "shorter"})
+
+    read = (await client.get(f"{POSTS}/{post['id']}")).json()
+
+    assert read["text"]["version_number"] == 1
+    assert [p["text"] for p in read["text"]["parts"]] == ["Version one."]
 
 
 async def test_a_scheduled_post_reads_as_scheduled_with_its_scheduled_post(client, post):
@@ -158,7 +202,7 @@ async def test_another_users_post_is_not_found(client, subscribed, bobs_post_id)
     assert response.json()["detail"] == "Post not found."
 
 
-async def test_the_get_post_tool_reads_the_status_and_the_scheduled_post(
+async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_post(
     client, post, mcp, fake_x_publisher
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
@@ -168,18 +212,19 @@ async def test_the_get_post_tool_reads_the_status_and_the_scheduled_post(
 
     assert result["isError"] is False
     read = result["structuredContent"]
+    one = {"text": "Version one.", "char_count": 12, "char_limit": X_POST_MAX_CHARS}
     assert read == {
         "id": post["id"],
         "brief": "ship small things",
+        "text": {"format": "post", "parts": [one], "version_number": 1, "edited": False},
         "versions": [
             {
                 "id": post["versions"][0]["id"],
                 "number": 1,
                 "feedback": None,
                 "format": "post",
-                "parts": [
-                    {"text": "Version one.", "char_count": 12, "char_limit": X_POST_MAX_CHARS}
-                ],
+                "parts": [one],
+                "created_at": "2026-10-10T12:00:30Z",
             }
         ],
         "status": "failed",

@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Changed
+
+- A Post has one Text, the text meant for X, set from each new Version. `GET /api/v1/posts/{id}` and the `get_post` MCP tool return it with the number of the Version it came from and whether it was edited since, and every Version now carries its creation time. **Upgrade notes:** the backend applies a database migration when it starts that sets every existing Post's Text from its latest Version; there is nothing to do by hand.
+
 ## [0.2.0] - 2026-10-29
 
 ### Added

@@ -364,13 +364,14 @@ async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id:
 
 
 async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResponse:
-    """The User's Post with every Version in order, its status and its Scheduled post."""
+    """The User's Post with its Text, every Version in order, its status and Scheduled post."""
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     return PostDetailResponse(
         id=post.id,
         brief=post.brief,
+        text=version_writing.text_response(post, char_limit),
         versions=[
             version_writing.version_response(v, char_limit)
             for v in version_writing.versions_of(post)

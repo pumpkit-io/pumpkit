@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -64,6 +65,18 @@ class VersionResponse(BaseModel):
     parts: list[PartResponse]
     # What the slop check found in any Part of the text, for the User to judge.
     tells: list[TellResponse]
+    created_at: datetime
+
+
+class TextResponse(BaseModel):
+    """A Post's Text (ADR 0016)."""
+
+    format: Format
+    parts: list[PartResponse]
+    # The Version it came from: the last one written or restored.
+    version_number: int
+    # Whether the User changed it since it came from that Version.
+    edited: bool
 
 
 class PostResponse(BaseModel):
@@ -80,6 +93,7 @@ class VersionToolResponse(BaseModel):
     feedback: Optional[str]
     format: Format
     parts: list[PartResponse]
+    created_at: datetime
 
 
 class PostToolResponse(BaseModel):
