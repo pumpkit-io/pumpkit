@@ -53,3 +53,7 @@ Issues live in GitHub Issues on `pumpkit-io/pumpkit`, managed with the `gh` CLI.
 ### Domain docs
 
 Single-context: one root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
+
+### Code comments
+
+Load the `code-comments` skill before writing or editing any comment.
