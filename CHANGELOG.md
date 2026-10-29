@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
 ### Added
 
 - Threads. A Version can be a Thread, an ordered list of Parts that X publishes with each Part replying to the one before. A Post starts as a single X post unless the User asks for a Thread, and Feedback can switch the Format. A Scheduled post copied from a Thread keeps every Part.
