@@ -1,5 +1,6 @@
+# Fast checks only. The test suites run in CI, which must pass before a PR can merge.
 if command -v gitleaks >/dev/null; then gitleaks git --pre-commit --staged --no-banner --redact; fi
 npx lint-staged
-(cd frontend && npm run typecheck && npm test)
+(cd frontend && npm run typecheck)
 (cd e2e && npm run typecheck)
-(cd backend && uv run --extra dev pyright && uv run --extra dev pytest -q)
+(cd backend && uv run --extra dev pyright)
