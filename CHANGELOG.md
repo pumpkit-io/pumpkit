@@ -10,6 +10,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - New post is a composer: one line, a box to ramble in with the Format toggle inside it, and a send arrow. ⌘Enter (Ctrl+Enter) writes the Post, and Enter adds a newline.
 - A Post has one Text, the text meant for X, set from each new Version. `GET /api/v1/posts/{id}` and the `get_post` MCP tool return it with the number of the Version it came from and whether it was edited since, and every Version now carries its creation time. **Upgrade notes:** the backend applies a database migration when it starts that sets every existing Post's Text from its latest Version; there is nothing to do by hand.
+- A Scheduled post is copied from its Post's Text, not from a Version. "Post to…" and the retry on a Failed Post send the Text, and a Failed Thread keeps its live Parts first. `POST /api/v1/scheduled-posts` and the `schedule_post` and `post_now` MCP tools take `post_id` instead of a Version id; `PATCH /api/v1/scheduled-posts/{id}` and `edit_scheduled_post` take `copy_text` to copy the Text again in place of a Version id. Scheduled posts no longer return `source_version_id`. **Upgrade notes:** agents or scripts that pass a Version id to `schedule_post`, `post_now` or `edit_scheduled_post` must pass the Post's id (or `copy_text`) instead; the old argument is refused. The backend applies a database migration when it starts that drops each Scheduled post's link to its Version and keeps every Scheduled post; there is nothing to do by hand.
 
 ## [0.2.0] - 2026-10-29
 
