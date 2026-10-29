@@ -16,7 +16,7 @@ const ONEROUS_CLAUSES = [
 
 const CLAUSES_ID = 'terms-acceptance-onerous-clauses';
 
-// A new tab keeps the dialog and the boxes already ticked.
+// A new tab keeps the card and the boxes already ticked.
 function DocumentLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={TEXT_LINK_CLASS}>

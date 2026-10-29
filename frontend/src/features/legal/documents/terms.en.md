@@ -13,13 +13,13 @@ Pumpkit is run by INCEPTIONAL S.R.L., called the Operator in these Terms:
 
 These Terms cover only the hosted service at pumpkit.io. Pumpkit's code is open source, and anyone can run their own copy. The Operator does not run those self-hosted instances, and these Terms do not apply to them.
 
-These Terms apply from the moment you sign in. You accept them again in the Billing dialog before every checkout, where you also confirm, by ticking separate boxes, your request for the service to start immediately (clause 12) and your specific approval, which every User gives, of the clauses listed there under arts. 1341 and 1342 of the Italian Civil Code.
+These Terms apply from the moment you sign in. You accept them again in Settings before every checkout, where you also confirm, by ticking separate boxes, your request for the service to start immediately (clause 12) and your specific approval, which every User gives, of the clauses listed there under arts. 1341 and 1342 of the Italian Civil Code.
 
 In these Terms, a **consumer** is a person using Pumpkit for purposes outside their trade, business, craft or profession. A **business** is anyone else, including a sole trader or freelancer using Pumpkit for their work.
 
 ## 2. The service {#service}
 
-Pumpkit writes posts for X. You write a Brief saying what a Post is about and what you think about it, and pick up to three Inspiration authors: X accounts whose recent public posts set the style of your Posts, never their content. Pumpkit writes a Version of the Post from your Brief, and a new Version each time you give Feedback. Each Version ends with a Final, the text meant for X.
+Pumpkit writes posts for X. You write a Brief saying what a Post is about and what you think about it, and pick up to three Inspiration authors: X accounts whose recent public posts set the style of your Posts, never their content. Pumpkit writes a Version of the Post from your Brief, and a new Version each time you give Feedback. Each Version holds the text meant for X.
 
 If you connect your X account through an X connection, Pumpkit can also publish Scheduled posts on that account at the time you choose.
 
@@ -37,7 +37,7 @@ The information you give when you sign up must be true, and you keep it up to da
 
 ## 5. Your content {#content}
 
-You own your Briefs and Feedback, and the Versions, including the Finals, that Pumpkit writes for you. You may use them however you like, subject to the law and to clause 6.
+You own your Briefs and Feedback, and the Versions that Pumpkit writes for you. You may use them however you like, subject to the law and to clause 6.
 
 You give the Operator a non-exclusive, royalty-free licence to store, process and send your content to the providers listed in the Privacy Policy, only as far as needed to run Pumpkit for you. The licence ends when your content is deleted.
 
@@ -49,7 +49,7 @@ The public posts of Inspiration authors belong to their authors. Pumpkit uses th
 
 Pumpkit writes with AI language models. Their output can be inaccurate, incomplete or out of date, and it can resemble text written by other people, including the Inspiration authors you picked. Another User may receive similar text.
 
-Read every Final before you publish it. You are responsible for what you publish, including each Scheduled post Pumpkit publishes on your behalf, and for making sure it is accurate and does not infringe anyone's rights.
+Read the text of every Version before you publish it. You are responsible for what you publish, including each Scheduled post Pumpkit publishes on your behalf, and for making sure it is accurate and does not infringe anyone's rights.
 
 ## 7. Pumpkit and X {#x}
 
@@ -83,15 +83,15 @@ For a serious or repeated breach of clause 8, the Operator may end the contract 
 
 ## 10. Plans and Trial {#plans}
 
-Pumpkit's features need a Subscription to a Plan. The Billing dialog shows each Plan with its price and billing period before you subscribe. You pay through Stripe Checkout, and Stripe processes your payment.
+Pumpkit's features need a Subscription to a Plan. Settings shows each Plan with its price and billing period before you subscribe. You pay through Stripe Checkout, and Stripe processes your payment.
 
-Your first Subscription may start with a Trial, a free opening period whose length the Billing dialog shows before checkout. Each User gets at most one Trial. You enter a payment method at checkout, and nothing is charged during the Trial. When the Trial ends, the first billing period starts and the price of the Plan is charged automatically, unless you cancelled before then.
+Your first Subscription may start with a Trial, a free opening period whose length Settings shows before checkout. Each User gets at most one Trial. You enter a payment method at checkout, and nothing is charged during the Trial. When the Trial ends, the first billing period starts and the price of the Plan is charged automatically, unless you cancelled before then.
 
 ## 11. Automatic renewal and cancellation {#renewal}
 
 Your Subscription renews automatically at the end of each billing period, for a period of the same length, and the price of the Plan is charged to your payment method each time.
 
-You can cancel at any time from the Billing dialog with Manage subscription, which opens Stripe's billing portal. Cancelling stops the next renewal: you keep access until the end of the period you have paid for, and you are not charged again. If you cancel during the Trial, you are never charged.
+You can cancel at any time in Settings with Manage subscription, which opens Stripe's billing portal. Cancelling stops the next renewal: you keep access until the end of the period you have paid for, and you are not charged again. If you cancel during the Trial, you are never charged.
 
 ## 12. Right of withdrawal for consumers {#withdrawal}
 

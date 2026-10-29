@@ -38,7 +38,7 @@ Per ciascuna categoria qui sotto sono indicati di quali dati si tratta, per cosa
 
 ### Brief, Feedback e Versioni {#data-writing}
 
-- **Quali dati:** i Brief e i Feedback che scrivi e ogni Versione che Pumpkit scrive a partire da essi, compresi il relativo Draft e il Final.
+- **Quali dati:** i Brief e i Feedback che scrivi e ogni Versione che Pumpkit scrive a partire da essi, compresi lo Sketch da cui parte e il relativo testo.
 - **Perché:** per scrivere i tuoi Post e rivederli.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
@@ -159,14 +159,13 @@ Pumpkit salva alcune informazioni nel tuo browser. Alcune sono strettamente nece
 
 ### Strettamente necessari {#cookies-necessary}
 
-| Nome                                                                             | Tipo          | Finalità                                             | Durata                                    |
-| -------------------------------------------------------------------------------- | ------------- | ---------------------------------------------------- | ----------------------------------------- |
-| `__Host-refresh_token`                                                           | Cookie        | Mantiene il tuo accesso nella Sessione               | 30 giorni                                 |
-| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookie        | Proteggono l'accesso con Google dalla contraffazione | 10 minuti                                 |
-| `pumpkit:session`                                                                | Local storage | Conserva il token di accesso della Sessione corrente | Finché non esci o la Sessione non termina |
-| `pumpkit:theme`                                                                  | Local storage | Ricorda se hai scelto il tema chiaro o scuro         | Finché non lo cancelli                    |
-| `pumpkit:sidebar-collapsed`                                                      | Local storage | Ricorda se hai compresso la barra laterale           | Finché non lo cancelli                    |
-| `pumpkit:analytics-consent`                                                      | Local storage | Ricorda se hai prestato il Consenso analitico        | Finché non lo cancelli                    |
+| Nome                                                                             | Tipo          | Finalità                                                 | Durata                                    |
+| -------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------- | ----------------------------------------- |
+| `__Host-refresh_token`                                                           | Cookie        | Mantiene il tuo accesso nella Sessione                   | 30 giorni                                 |
+| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookie        | Proteggono l'accesso con Google dalla contraffazione     | 10 minuti                                 |
+| `pumpkit:session`                                                                | Local storage | Conserva il token di accesso della Sessione corrente     | Finché non esci o la Sessione non termina |
+| `pumpkit:theme`                                                                  | Local storage | Ricorda se hai scelto il tema chiaro, scuro o di sistema | Finché non lo cancelli                    |
+| `pumpkit:analytics-consent`                                                      | Local storage | Ricorda se hai prestato il Consenso analitico            | Finché non lo cancelli                    |
 
 ### Analisi, solo con il Consenso analitico {#cookies-analytics}
 
