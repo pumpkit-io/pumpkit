@@ -22,7 +22,7 @@ tag=v$version
 
 [ "$(git symbolic-ref --quiet --short HEAD || true)" = main ] ||
   fail "check out main first (git checkout main && git pull)"
-# Untracked files never reach the tag, so only changes to tracked files stop it.
+# Untracked files never reach a tag.
 [ -z "$(git status --porcelain --untracked-files=no)" ] ||
   fail "the working tree has changes to tracked files; commit or discard them first"
 git fetch --quiet --tags origin
