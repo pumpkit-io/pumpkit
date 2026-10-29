@@ -30,7 +30,7 @@ export function FailedDock({
   feedback: FeedbackSending;
   onRetried: (scheduledPost: ScheduledPost) => void;
 }) {
-  const sender = useRetryFailed(scheduledPost, textVersion.id);
+  const sender = useRetryFailed(scheduledPost);
   return (
     <FeedbackDock
       name="Failed"
@@ -47,7 +47,7 @@ export function FailedDock({
       feedback={feedback}
       postTo={
         <PostToButton
-          version={textVersion}
+          format={textVersion.format}
           parts={retryParts}
           sender={sender}
           initialWhere={destinationDraftOf(scheduledPost)}

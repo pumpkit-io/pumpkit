@@ -63,6 +63,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.orm import selectinload  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 import pumpkit.core.errors as errors_module  # noqa: E402
@@ -88,6 +89,7 @@ from pumpkit.main import app  # noqa: E402
 from pumpkit.posts.formats import format_of  # noqa: E402
 from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa: E402
+from pumpkit.posts.service import set_text_from_version  # noqa: E402
 from pumpkit.x_connection.service import save_connection  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
 from tests.mcp_client import McpClient  # noqa: E402
@@ -441,13 +443,14 @@ def connect_x(db, user, fake_x_publisher) -> Callable[[], Awaitable[None]]:
 
 
 @pytest.fixture
-def version_of(db, user) -> Callable[..., Awaitable[str]]:
+def post_with(db, user) -> Callable[..., Awaitable[str]]:
     """
-    Store a new Post of `user` whose one Version's text is the given Parts, as writing it would,
-    and return the Version's id: what a Scheduled post is copied from. Several Parts make a Thread.
+    Store a new Post of `user` whose one Version, and so its Text, is the given Parts, as writing
+    it would, and return the Post's id: what a Scheduled post is copied from. Several Parts make a
+    Thread.
     """
 
-    async def _version_of(*parts: str) -> str:
+    async def _post_with(*parts: str) -> str:
         now = datetime.now(timezone.utc)
         post = Post(user_id=user.id, brief="Seeded", corpus_post_ids=[], created_at=now)
         version = VersionAttempt(
@@ -461,26 +464,25 @@ def version_of(db, user) -> Callable[..., Awaitable[str]]:
             slop_tells=[],
             created_at=now,
         )
+        set_text_from_version(post, version)
         db.add_all([post, version])
         await db.commit()
-        return version.id
+        return post.id
 
-    return _version_of
+    return _post_with
 
 
 @pytest.fixture
-def next_version(db) -> Callable[..., Awaitable[str]]:
-    """
-    Store the next Version of the Post that `version_id` belongs to, as Feedback would, with
-    the given Parts, and return its id.
-    """
+def next_version(db) -> Callable[..., Awaitable[None]]:
+    """Store the next Version of the Post, as Feedback would, with the given Parts as its Text."""
 
-    async def _next_version(version_id: str, *parts: str) -> str:
+    async def _next_version(post_id: str, *parts: str) -> None:
         now = datetime.now(timezone.utc)
-        previous = await db.get(VersionAttempt, version_id)
-        assert previous is not None
+        post = await db.get(Post, post_id, options=[selectinload(Post.attempts)])
+        assert post is not None
+        previous = post.attempts[-1]
         version = VersionAttempt(
-            post_id=previous.post_id,
+            post_id=post_id,
             sequence=previous.sequence + 1,
             format=format_of(parts),
             status=ATTEMPT_SUCCEEDED,
@@ -491,9 +493,9 @@ def next_version(db) -> Callable[..., Awaitable[str]]:
             slop_tells=[],
             created_at=now,
         )
+        set_text_from_version(post, version)
         db.add(version)
         await db.commit()
-        return version.id
 
     return _next_version
 

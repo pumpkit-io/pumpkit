@@ -58,9 +58,7 @@ async def _restore(client, post_id: str, number: int):
 
 
 async def _schedule(client, post: dict, **when) -> dict:
-    response = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": post["versions"][-1]["id"], **when}
-    )
+    response = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], **when})
     assert response.status_code == 201, response.text
     return response.json()
 

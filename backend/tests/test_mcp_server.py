@@ -37,6 +37,19 @@ async def test_initialize_returns_the_server_instructions(subscribed, mcp):
     assert "Only a Draft or a Failed Post takes Feedback" in instructions
 
 
+async def test_the_instructions_and_scheduling_tools_copy_the_post_s_text(subscribed, mcp):
+    instructions = (await mcp.initialize())["instructions"]
+    tools = await mcp.list_tools()
+
+    assert "Every Scheduled post comes from its Post's Text" in instructions
+    assert "Version's text can become a Scheduled post" not in instructions
+    for name in ("schedule_post", "post_now"):
+        assert "the Post's Text" in tools[name]["description"]
+        assert "post_id" in tools[name]["inputSchema"]["required"]
+        assert "version_id" not in tools[name]["inputSchema"]["properties"]
+    assert "version_id" not in tools["edit_scheduled_post"]["inputSchema"]["properties"]
+
+
 async def test_no_instruction_or_tool_description_says_final(subscribed, mcp):
     instructions = (await mcp.initialize())["instructions"]
     tools = await mcp.list_tools()

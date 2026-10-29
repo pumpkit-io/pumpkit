@@ -20,7 +20,7 @@ from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
-from pumpkit.posts.models import VersionAttempt
+from pumpkit.posts.models import Post
 from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service
@@ -98,7 +98,6 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         if scheduled_post.state == PUBLISHED
         else None,
         failed_reason=scheduled_post.failed_reason,
-        source_version_id=scheduled_post.source_version_id,
         post_id=scheduled_post.post_id,
         community=_community_response(community_id, scheduled_post.community_name)
         if community_id
@@ -186,10 +185,10 @@ async def create_scheduled_post(
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     connection = await connection_to_publish_on(db, user_id=user.id)
-    version = await _source_version(db, user=user, version_id=new.version_id)
-    if await service.get_for_post(db, post_id=version.post_id) is not None:
+    post = await version_writing.user_post(db, user=user, post_id=new.post_id)
+    if await service.get_for_post(db, post_id=post.id) is not None:
         raise _already_scheduled()
-    parts = list(version.parts or [])
+    parts = _text_of(post)
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_monthly_cap(db, user_id=user.id, publish_at=publish_at, part_count=len(parts))
@@ -199,8 +198,7 @@ async def create_scheduled_post(
             db,
             user_id=user.id,
             x_user_id=connection.x_user_id,
-            post_id=version.post_id,
-            source_version_id=version.id,
+            post_id=post.id,
             parts=parts,
             publish_at=publish_at.replace(second=0, microsecond=0)
             if new.publish_now
@@ -223,12 +221,11 @@ def _already_scheduled() -> ConflictError:
     return ConflictError("This Post already has a Scheduled post. Edit it, or unschedule it first.")
 
 
-async def _source_version(db: AsyncSession, *, user: User, version_id: str) -> VersionAttempt:
-    """The Version a Scheduled post copies, or a 404 unless the Version is the User's."""
-    version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
-    if version is None or not version.parts:
-        raise NotFoundError("Version not found.")
-    return version
+def _text_of(post: Post) -> list[str]:
+    """The Parts of the Post's Text, which a Scheduled post copies (ADR 0016)."""
+    if not post.text_parts:
+        raise ConflictError("This Post has no text to post. Start a new Post.")
+    return list(post.text_parts)
 
 
 async def _post_now(
@@ -262,7 +259,7 @@ async def edit_scheduled_post(
     now: datetime,
 ) -> ScheduledPostResponse:
     """
-    New Parts or Version, time, Community or share with followers for a scheduled or Failed
+    New Parts or the Post's Text, time, Community or share with followers for a scheduled or Failed
     Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
     so a Failed one gets another try. With publish now it answers like Post now.
     """
@@ -271,14 +268,10 @@ async def edit_scheduled_post(
         raise _publishing_started()
     live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
     parts = edit.parts
-    version_id = None
-    if edit.version_id is not None:
-        version = await _source_version(db, user=user, version_id=edit.version_id)
-        if version.post_id != scheduled_post.post_id:
-            raise rules.RuleBroken("Choose a Version of this Post.")
-        # The Version's Parts in the places of the live ones are already on X as they were.
-        parts = live + list(version.parts or [])[len(live) :]
-        version_id = version.id
+    if edit.copy_text:
+        post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+        # The Text's Parts in the places of the live ones are already on X as they were.
+        parts = live + _text_of(post)[len(live) :]
     if parts is not None:
         rules.check_live_parts_kept(live, parts)
     reschedule = None
@@ -318,7 +311,6 @@ async def edit_scheduled_post(
         db,
         scheduled_post_id=scheduled_post_id,
         parts=parts,
-        source_version_id=version_id,
         reschedule=reschedule,
         destination=destination,
         now=now,

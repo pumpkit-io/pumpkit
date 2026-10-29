@@ -95,11 +95,11 @@ def check_month_has_room(count: int, *, adding: int, cap: int, moment: datetime)
 @dataclass(frozen=True)
 class NewScheduledPost:
     """
-    A Scheduled post as the web app or an MCP tool asks for it: the Version whose text it copies,
+    A Scheduled post as the web app or an MCP tool asks for it: the Post whose Text it copies,
     and `publish_at` or `publish_now`.
     """
 
-    version_id: str
+    post_id: str
     publish_at: Optional[datetime] = None
     publish_now: bool = False
     # A Community URL or ID as pasted; None for the User's profile.
@@ -137,8 +137,8 @@ class ScheduledPostEdit:
 
     # Every Part in order, the live ones first and unchanged.
     parts: Optional[list[str]] = None
-    # A Version of the same Post whose text replaces the Parts not live, and which it then copies.
-    version_id: Optional[str] = None
+    # Copy the Post's Text again in place of the Parts not live.
+    copy_text: bool = False
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[datetime] = None
     # Reschedules it for now and publishes it within the request.
@@ -148,13 +148,13 @@ class ScheduledPostEdit:
     share_with_followers: Optional[bool] = None
 
     def __post_init__(self) -> None:
-        if self.parts is not None and self.version_id is not None:
-            raise RuleBroken("Give either the Parts or a Version, not both.")
+        if self.parts is not None and self.copy_text:
+            raise RuleBroken("Give either the Parts or the Post's Text, not both.")
         if self.publish_at is not None and self.publish_now:
             raise RuleBroken("Give either a publish time or publish now, not both.")
         if (
             self.parts is None
-            and self.version_id is None
+            and not self.copy_text
             and self.publish_at is None
             and not self.publish_now
             and isinstance(self.destination, KeepDestination)

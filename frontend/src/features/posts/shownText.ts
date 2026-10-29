@@ -1,7 +1,6 @@
 import { xWeightedLength } from '@/lib/xLength';
 import type { PostDetail, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
-import { hasScheduledPost } from './postStatus';
 
 /** One Part as the Version card shows it and Copy post copies it. */
 export interface ShownPart {
@@ -14,42 +13,15 @@ export interface ShownPart {
 }
 
 /**
- * The text on screen for `version`: the Scheduled post's copy when it came from this Version,
- * since that is what goes or went to X, edits included; else the Version's own text.
- */
-export function shownParts(
-  version: Version,
-  scheduledPost: ScheduledPost | null,
-  xCharLimit: number | null,
-): ShownPart[] {
-  if (hasScheduledPost(scheduledPost, version.id)) {
-    const charLimit = xCharLimit ?? version.parts[0]?.charLimit ?? 280;
-    const failed = scheduledPost.state === 'failed';
-    return scheduledPost.parts.map((part) => ({
-      text: part.text,
-      charCount: xWeightedLength(part.text),
-      charLimit,
-      live: failed && part.live,
-      xPostUrl: part.xPostUrl,
-    }));
-  }
-  return version.parts.map((part) => ({ ...part, live: false, xPostUrl: null }));
-}
-
-/**
- * What retrying a Failed Post with `version` sends to X: the Parts already live stay first, as
- * they are, and the Version's Parts in their places are skipped, as the server does (ADR 0014).
- * On the Version the Failed one came from, its own text, edits included.
+ * What retrying a Failed Post sends to X: the Parts already live stay first, as they are, and
+ * the Text's Parts in their places are skipped, as the server does (ADR 0014).
  */
 export function retryParts(
-  version: Version,
+  text: Pick<Version, 'parts'>,
   scheduledPost: ScheduledPost,
   xCharLimit: number | null,
 ): ShownPart[] {
-  if (scheduledPost.sourceVersionId === version.id) {
-    return shownParts(version, scheduledPost, xCharLimit);
-  }
-  const charLimit = xCharLimit ?? version.parts[0]?.charLimit ?? 280;
+  const charLimit = xCharLimit ?? text.parts[0]?.charLimit ?? 280;
   const live: ShownPart[] = scheduledPost.parts
     .filter((part) => part.live)
     .map((part) => ({
@@ -59,14 +31,14 @@ export function retryParts(
       live: true,
       xPostUrl: part.xPostUrl,
     }));
-  const rest = version.parts
+  const rest = text.parts
     .slice(live.length)
     .map((part) => ({ ...part, live: false, xPostUrl: null }));
   return [...live, ...rest];
 }
 
 /**
- * The Post's Text as the Version it came from, so what sends a Version sends the Text; the
+ * The Post's Text as the Version it came from, for what reads a Version's shape; the
  * latest Version for a Post with no Text.
  */
 export function textVersionOf(post: PostDetail): Version | undefined {

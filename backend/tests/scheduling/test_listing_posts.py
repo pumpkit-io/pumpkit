@@ -81,7 +81,6 @@ def seed_post(db, user):
                     user_id=post.user_id,
                     x_user_id="x-user",
                     post_id=post.id,
-                    source_version_id=attempts[-1].id,
                     parts=[
                         ScheduledPostPart(
                             position=i,
@@ -325,7 +324,7 @@ async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_par
     fake_x_publisher.fail_publish_on = 2
     failed = await client.post(
         SCHEDULED_POSTS,
-        json={"source_version_id": post["versions"][0]["id"], "publish_now": True},
+        json={"post_id": post["id"], "publish_now": True},
     )
 
     [item] = (await _listed(client, "failed"))["data"]
@@ -342,7 +341,7 @@ async def test_unscheduling_moves_the_post_back_to_drafts(client, with_author_an
         await client.post(
             SCHEDULED_POSTS,
             json={
-                "source_version_id": post["versions"][0]["id"],
+                "post_id": post["id"],
                 "publish_at": "2026-10-11T09:00:00Z",
             },
         )

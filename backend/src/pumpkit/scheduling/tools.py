@@ -61,7 +61,7 @@ def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolRe
 async def _create_scheduled_post(
     call: ToolCall[User],
     *,
-    version_id: str,
+    post_id: str,
     publish_at: Optional[str],
     community: Optional[str],
     share_with_followers: bool,
@@ -69,7 +69,7 @@ async def _create_scheduled_post(
     """A new Scheduled post, its arguments checked by the create route's request schema."""
     create_request = ScheduledPostCreateRequest.model_validate(
         {
-            "source_version_id": version_id,
+            "post_id": post_id,
             "publish_at": publish_at,
             "publish_now": publish_at is None,
             "community": community,
@@ -77,7 +77,7 @@ async def _create_scheduled_post(
         }
     )
     new = NewScheduledPost(
-        version_id=create_request.source_version_id,
+        post_id=create_request.post_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
         community=create_request.community,
@@ -96,13 +96,13 @@ async def _create_scheduled_post(
 
 async def schedule_post(
     call: ToolCall[User],
-    version_id: str,
+    post_id: str,
     publish_at: str,
     community: Optional[str] = None,
     share_with_followers: bool = False,
 ) -> ScheduledPostToolResponse:
     """
-    Schedule a Version's text on the User's connected X account for `publish_at`, an ISO 8601
+    Schedule the Post's Text on the User's connected X account for `publish_at`, an ISO 8601
     time with its UTC offset, on a whole minute and at least a minute from now. A Thread keeps
     every Part in order. A Post goes out once: it has at most one Scheduled post, so to change
     one already scheduled, edit it, or delete it first. The post goes to the User's profile, or
@@ -111,7 +111,7 @@ async def schedule_post(
     """
     return await _create_scheduled_post(
         call,
-        version_id=version_id,
+        post_id=post_id,
         publish_at=publish_at,
         community=community,
         share_with_followers=share_with_followers,
@@ -131,12 +131,12 @@ def _post_now_message(posted: ScheduledPostToolResponse) -> str:
 
 async def post_now(
     call: ToolCall[User],
-    version_id: str,
+    post_id: str,
     community: Optional[str] = None,
     share_with_followers: bool = False,
 ) -> PostNowToolResponse:
     """
-    Publish a Version's text on the User's connected X account right away. Show the User the
+    Publish the Post's Text on the User's connected X account right away. Show the User the
     exact text of every Part and get their yes first. A Thread keeps every Part in order, each
     replying to the one before. A Post goes out once: one that already has a Scheduled post is
     refused. The post goes to the User's profile, or to the Community whose URL or ID is in
@@ -144,7 +144,7 @@ async def post_now(
     """
     posted = await _create_scheduled_post(
         call,
-        version_id=version_id,
+        post_id=post_id,
         publish_at=None,
         community=community,
         share_with_followers=share_with_followers,
@@ -174,7 +174,7 @@ async def edit_scheduled_post(
     call: ToolCall[User],
     scheduled_post_id: str,
     parts: Optional[list[str]] = None,
-    version_id: Optional[str] = None,
+    copy_text: bool = False,
     publish_at: Optional[str] = None,
     community: Optional[str] = None,
     to_profile: bool = False,
@@ -182,25 +182,25 @@ async def edit_scheduled_post(
 ) -> ScheduledPostToolResponse:
     """
     Change a waiting or Failed Scheduled post: its text, as `parts` listing every Part in
-    order, or as `version_id`, another Version of the same Post whose text it then copies;
+    order, or with `copy_text`, its Post's Text as it is now, after Feedback on a Failed Post;
     its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one another
     try); the Community whose URL or ID `community` holds, or, with `to_profile`, the User's
     profile instead. Leave out what stays the same. Live Parts of a Thread that failed partway
-    are on X and locked: keep them first in `parts`, unchanged; a Version's Parts in their
+    are on X and locked: keep them first in `parts`, unchanged; the Text's Parts in their
     places are skipped. A new time publishes only the Parts not live, as replies to the last
     live one.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
         {
             "parts": parts,
-            "source_version_id": version_id,
+            "copy_text": copy_text,
             "publish_at": publish_at,
             "community": community,
         }
     )
     edit = ScheduledPostEdit(
         parts=update_request.parts,
-        version_id=update_request.source_version_id,
+        copy_text=update_request.copy_text,
         publish_at=update_request.publish_at,
         destination=_destination_change(update_request.community, to_profile),
         share_with_followers=share_with_followers,
@@ -258,8 +258,8 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse
     since) and every Version in order, each with the Feedback that made it, its text, each Part's
     character count and when it was written. `status` is "draft" with no
     Scheduled post, else "scheduled", "published" or "failed" from its one Scheduled post,
-    returned in `scheduled_post` with its text, which the User may have edited, and the
-    Version it was copied from. A Draft has no Scheduled post, so its Versions can be scheduled.
+    returned in `scheduled_post` with its own copy of the Text, which the User may have edited
+    since. A Draft has no Scheduled post, so its Text can be scheduled.
     """
     post = await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
     return PostDetailToolResponse.model_validate(post.model_dump())

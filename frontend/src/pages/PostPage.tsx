@@ -128,6 +128,7 @@ function LoadedPost({
   if (post.status === 'draft') {
     dock = (
       <DraftDock
+        postId={post.id}
         textVersion={textVersion}
         parts={parts}
         origin={origin}

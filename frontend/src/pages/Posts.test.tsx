@@ -310,7 +310,6 @@ describe('Posts page', () => {
           publishedAt: null,
           xPostUrl: null,
           failedReason: null,
-          sourceVersionId: 'version_attempt_01',
           community: null,
           shareWithFollowers: false,
           createdAt: at(-1, 15),

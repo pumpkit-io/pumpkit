@@ -171,7 +171,6 @@ const SCHEDULED: ScheduledPost = {
   publishedAt: null,
   xPostUrl: null,
   failedReason: null,
-  sourceVersionId: 'version_attempt_01',
   community: null,
   shareWithFollowers: false,
   createdAt: '2026-10-10T12:00:00Z',
@@ -1123,13 +1122,14 @@ describe('Post page', () => {
       expect(draftPanel.queryByRole('button', { name: 'Post now' })).not.toBeInTheDocument();
     });
 
-    it('names the Version, its Format, its Part count and the X account it posts as', async () => {
+    it('names the Format, the Part count and the X account it posts as, and no Version', async () => {
       const dialog = await openPostTo(threadWith([part('the first part'), part('the second')]));
 
-      expect(dialog.getByText('Version 1 · Thread · 2 Parts · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Thread · 2 Parts · as @ada')).toBeInTheDocument();
+      expect(dialog.queryByText(/Version 1/)).not.toBeInTheDocument();
     });
 
-    it("schedules the Version to the User's profile for a day and time in their time zone", async () => {
+    it("schedules the Post's Text to the User's profile for a day and time in their time zone", async () => {
       vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
       const dialog = await openPostTo();
 
@@ -1140,7 +1140,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         '2026-10-12T07:00:00.000Z',
         { community: null, shareWithFollowers: false },
       );
@@ -1188,7 +1188,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         '2026-10-12T07:00:00.000Z',
         { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: false },
       );
@@ -1217,7 +1217,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.schedule).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         '2026-10-12T07:00:00.000Z',
         { community: { id: COMMUNITY_ID, name: 'Indie makers' }, shareWithFollowers: true },
       );
@@ -1282,7 +1282,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         { community: null, shareWithFollowers: false },
       );
       expect(track).toHaveBeenCalledWith('scheduled_post_created', {
@@ -1323,7 +1323,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.postNow).toHaveBeenCalledWith(
-        { sourceVersionId: 'version_attempt_01' },
+        { postId: 'post_01' },
         { community: { id: COMMUNITY_ID, name: null }, shareWithFollowers: true },
       );
       expect(panel('Published').getByText('Shared with your followers')).toBeInTheDocument();
@@ -1505,21 +1505,20 @@ describe('Post page', () => {
       expect(screen.queryByText('the final text')).not.toBeInTheDocument();
     });
 
-    it("reschedules the Failed one with the Text's Version", async () => {
+    it("reschedules the Failed one with the Post's Text", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
         parts: [{ text: 'the second text', live: false, xPostUrl: null }],
-        sourceVersionId: 'version_attempt_02',
       });
       const dialog = await openRetry();
 
-      expect(dialog.getByText('Version 2 · Single post · 1 Part · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Single post · 1 Part · as @ada')).toBeInTheDocument();
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
-        sourceVersionId: 'version_attempt_02',
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishAt: '2026-10-12T07:00:00.000Z',
@@ -1531,14 +1530,13 @@ describe('Post page', () => {
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Scheduled /');
     });
 
-    it("posts the Text's Version now and shows the Published Post", async () => {
+    it("posts the Post's Text now and shows the Published Post", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
         state: 'published',
         publishedAt: '2026-10-10T12:00:14Z',
         xPostUrl: 'https://x.com/i/web/status/1890000000000000002',
         parts: [{ text: 'the second text', live: true, xPostUrl: 'https://x.com/i/web/status/2' }],
-        sourceVersionId: 'version_attempt_02',
       });
       const dialog = await openRetry();
 
@@ -1548,7 +1546,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
-        sourceVersionId: 'version_attempt_02',
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishNow: true,
@@ -1559,7 +1557,7 @@ describe('Post page', () => {
       );
     });
 
-    it('retries with the text that failed as it stands when the Text came from its Version', async () => {
+    it("copies the Post's Text even when it is the text that failed", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue(SCHEDULED);
       renderPost(withVersions(withScheduledPost(FAILED), [version(1, ['the final text'])]));
       await textCard();
@@ -1571,6 +1569,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishAt: '2026-10-12T07:00:00.000Z',
@@ -1607,13 +1606,12 @@ describe('Post page', () => {
           { text: 'Fixed two.', live: true, xPostUrl: 'https://x.com/i/web/status/3' },
           { text: 'New three.', live: true, xPostUrl: 'https://x.com/i/web/status/4' },
         ],
-        sourceVersionId: 'version_attempt_02',
       });
       const dialog = await openRetry(
         failedThread(version(2, ['Rewritten one.', 'Fixed two.', 'New three.'])),
       );
 
-      expect(dialog.getByText('Version 2 · Thread · 3 Parts · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Thread · 3 Parts · as @ada')).toBeInTheDocument();
       expect(
         dialog.getByText('Part 1 is already on X, so only Parts 2 to 3 go out, as replies to it.'),
       ).toBeInTheDocument();
@@ -1638,7 +1636,7 @@ describe('Post page', () => {
 
       await dialogClosed();
       expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
-        sourceVersionId: 'version_attempt_02',
+        copyText: true,
         community: null,
         shareWithFollowers: false,
         publishNow: true,
@@ -1646,12 +1644,12 @@ describe('Post page', () => {
       expect(panel('Published')).toBeTruthy();
     });
 
-    it('refuses a Version with no Part after the live ones', async () => {
+    it('refuses a Text with no Part after the live ones', async () => {
       const dialog = await openRetry(failedThread(version(2, ['Just one now.'])));
 
       expect(
         dialog.getByText(
-          'Part 1 is already on X, and this Version has no Part after it. Pick a longer Version.',
+          'Part 1 is already on X, and the text has no Part after it. Ask for more Parts with Feedback.',
         ),
       ).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();

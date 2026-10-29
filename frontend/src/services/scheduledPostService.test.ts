@@ -19,17 +19,16 @@ const SCHEDULED = {
 describe('scheduledPostService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('sends only the Version, for the server to copy', async () => {
+  it('sends only the Post, for the server to copy its Text', async () => {
     const post = vi.spyOn(apiService, 'post').mockResolvedValue({ data: SCHEDULED } as never);
 
-    await scheduledPostService.schedule(
-      { sourceVersionId: 'version_attempt_01' },
-      '2026-10-12T07:00:00.000Z',
-      { community: null, shareWithFollowers: false },
-    );
+    await scheduledPostService.schedule({ postId: 'post_01' }, '2026-10-12T07:00:00.000Z', {
+      community: null,
+      shareWithFollowers: false,
+    });
 
     expect(post).toHaveBeenCalledWith('/scheduled-posts', {
-      source_version_id: 'version_attempt_01',
+      post_id: 'post_01',
       publish_at: '2026-10-12T07:00:00.000Z',
       community: null,
       share_with_followers: false,
@@ -41,14 +40,14 @@ describe('scheduledPostService', () => {
     const patch = vi.spyOn(apiService, 'patch').mockResolvedValue({ data: SCHEDULED } as never);
 
     await scheduledPostService.postNow(
-      { sourceVersionId: 'version_attempt_01' },
+      { postId: 'post_01' },
       { community: COMMUNITY, shareWithFollowers: true },
     );
     await scheduledPostService.edit('scheduled_post_1', { community: COMMUNITY });
     await scheduledPostService.edit('scheduled_post_1', { community: null });
 
     expect(post).toHaveBeenCalledWith('/scheduled-posts', {
-      source_version_id: 'version_attempt_01',
+      post_id: 'post_01',
       publish_now: true,
       community: COMMUNITY.id,
       share_with_followers: true,
@@ -59,11 +58,11 @@ describe('scheduledPostService', () => {
     ]);
   });
 
-  it('retries one with a Version, now or at a time', async () => {
+  it("retries one with the Post's Text, now or at a time", async () => {
     const patch = vi.spyOn(apiService, 'patch').mockResolvedValue({ data: SCHEDULED } as never);
 
     await scheduledPostService.edit('scheduled_post_1', {
-      sourceVersionId: 'version_attempt_02',
+      copyText: true,
       publishNow: true,
     });
     await scheduledPostService.edit('scheduled_post_1', {
@@ -71,7 +70,7 @@ describe('scheduledPostService', () => {
     });
 
     expect(patch.mock.calls.map(([, body]) => body)).toEqual([
-      { source_version_id: 'version_attempt_02', publish_now: true },
+      { copy_text: true, publish_now: true },
       { publish_at: '2026-10-12T07:00:00.000Z' },
     ]);
   });
@@ -89,7 +88,7 @@ describe('scheduledPostService', () => {
     } as never);
 
     const scheduled = await scheduledPostService.schedule(
-      { sourceVersionId: 'version_attempt_01' },
+      { postId: 'post_01' },
       '2026-10-12T07:00:00.000Z',
       { community: null, shareWithFollowers: false },
     );

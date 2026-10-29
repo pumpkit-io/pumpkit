@@ -21,7 +21,7 @@ def known_communities(fake_x_reader) -> None:
 
 
 async def _post_now_into(
-    client: AsyncClient, version_of, reader: FakeXReader, community_id: str, name: Optional[str]
+    client: AsyncClient, post_with, reader: FakeXReader, community_id: str, name: Optional[str]
 ) -> None:
     """Into the Community X now names `name`, or that X can't be read for when it's None."""
     reader.fail = name is None
@@ -30,7 +30,7 @@ async def _post_now_into(
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("Hello"),
+            "post_id": await post_with("Hello"),
             "publish_now": True,
             "community": community_id,
         },
@@ -45,14 +45,14 @@ async def _past_communities(client: AsyncClient) -> list[dict]:
 
 
 async def test_past_communities_come_most_recently_used_first_each_once(
-    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
-    await _post_now_into(client, version_of, fake_x_reader, MAKERS, "Indie makers")
+    await _post_now_into(client, post_with, fake_x_reader, MAKERS, "Indie makers")
     clock.advance(timedelta(minutes=1))
-    await _post_now_into(client, version_of, fake_x_reader, WRITERS, "Writers")
+    await _post_now_into(client, post_with, fake_x_reader, WRITERS, "Writers")
     clock.advance(timedelta(minutes=1))
-    await _post_now_into(client, version_of, fake_x_reader, MAKERS, "Indie makers")
+    await _post_now_into(client, post_with, fake_x_reader, MAKERS, "Indie makers")
 
     assert await _past_communities(client) == [
         {"id": MAKERS, "name": "Indie makers", "url": f"https://x.com/i/communities/{MAKERS}"},
@@ -61,7 +61,7 @@ async def test_past_communities_come_most_recently_used_first_each_once(
 
 
 async def test_a_scheduled_post_counts_as_a_use_too(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
     publish_at = "2026-10-11T09:00:00Z"
@@ -69,7 +69,7 @@ async def test_a_scheduled_post_counts_as_a_use_too(
     response = await client.post(
         SCHEDULED_POSTS,
         json={
-            "source_version_id": await version_of("Later"),
+            "post_id": await post_with("Later"),
             "publish_at": publish_at,
             "community": MAKERS,
         },
@@ -80,19 +80,17 @@ async def test_a_scheduled_post_counts_as_a_use_too(
 
 
 async def test_editing_a_post_into_a_community_counts_as_its_latest_use(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
     later = {"publish_at": "2026-10-11T09:00:00Z"}
     earlier_post = (
-        await client.post(
-            SCHEDULED_POSTS, json={**later, "source_version_id": await version_of("Later")}
-        )
+        await client.post(SCHEDULED_POSTS, json={**later, "post_id": await post_with("Later")})
     ).json()
     fixed_clock.advance(timedelta(minutes=1))
     await client.post(
         SCHEDULED_POSTS,
-        json={**later, "source_version_id": await version_of("Later"), "community": MAKERS},
+        json={**later, "post_id": await post_with("Later"), "community": MAKERS},
     )
     fixed_clock.advance(timedelta(minutes=1))
 
@@ -105,20 +103,20 @@ async def test_editing_a_post_into_a_community_counts_as_its_latest_use(
 
 
 async def test_changing_only_the_share_with_followers_choice_is_no_new_use(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):
     await connect_x()
     later = {"publish_at": "2026-10-11T09:00:00Z"}
     makers_post = (
         await client.post(
             SCHEDULED_POSTS,
-            json={**later, "source_version_id": await version_of("Later"), "community": MAKERS},
+            json={**later, "post_id": await post_with("Later"), "community": MAKERS},
         )
     ).json()
     fixed_clock.advance(timedelta(minutes=1))
     await client.post(
         SCHEDULED_POSTS,
-        json={**later, "source_version_id": await version_of("Later"), "community": WRITERS},
+        json={**later, "post_id": await post_with("Later"), "community": WRITERS},
     )
     fixed_clock.advance(timedelta(minutes=1))
 
@@ -131,46 +129,46 @@ async def test_changing_only_the_share_with_followers_choice_is_no_new_use(
 
 
 async def test_a_past_community_shows_the_latest_name_stored_for_it(
-    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
-    await _post_now_into(client, version_of, fake_x_reader, MAKERS, "Makers")
+    await _post_now_into(client, post_with, fake_x_reader, MAKERS, "Makers")
     clock.advance(timedelta(minutes=1))
-    await _post_now_into(client, version_of, fake_x_reader, MAKERS, "Indie makers")
+    await _post_now_into(client, post_with, fake_x_reader, MAKERS, "Indie makers")
     clock.advance(timedelta(minutes=1))
-    await _post_now_into(client, version_of, fake_x_reader, MAKERS, None)
+    await _post_now_into(client, post_with, fake_x_reader, MAKERS, None)
 
     assert [c["name"] for c in await _past_communities(client)] == ["Indie makers"]
 
 
 async def test_a_past_community_never_named_has_no_name(
-    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
-    await _post_now_into(client, version_of, fake_x_reader, MAKERS, None)
+    await _post_now_into(client, post_with, fake_x_reader, MAKERS, None)
 
     assert [c["name"] for c in await _past_communities(client)] == [None]
 
 
 async def test_profile_posts_add_no_past_community(
-    client, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
     await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": await version_of("Hello"), "publish_now": True}
+        SCHEDULED_POSTS, json={"post_id": await post_with("Hello"), "publish_now": True}
     )
 
     assert await _past_communities(client) == []
 
 
 async def test_only_the_connected_x_account_s_communities_are_offered(
-    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, version_of
+    client, fake_x_reader, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):
     await connect_x()
-    await _post_now_into(client, version_of, fake_x_reader, MAKERS, "Indie makers")
+    await _post_now_into(client, post_with, fake_x_reader, MAKERS, "Indie makers")
     fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
     await connect_x()
-    await _post_now_into(client, version_of, fake_x_reader, WRITERS, "Writers")
+    await _post_now_into(client, post_with, fake_x_reader, WRITERS, "Writers")
 
     assert [c["id"] for c in await _past_communities(client)] == [WRITERS]
 
