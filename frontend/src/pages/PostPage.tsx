@@ -10,6 +10,7 @@ import { DraftDock } from '@/features/posts/panels/DraftDock';
 import { FailedDock } from '@/features/posts/panels/FailedDock';
 import type { FeedbackSending } from '@/features/posts/panels/feedback';
 import { LoadingDock } from '@/features/posts/panels/FeedbackDock';
+import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
 import { PublishedDock } from '@/features/posts/panels/PublishedDock';
 import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
@@ -67,10 +68,12 @@ function CardPlaceholder() {
 function LoadedPost({
   post,
   feedback,
+  restore,
   onScheduledPost,
 }: {
   post: PostDetail;
   feedback: FeedbackSending;
+  restore: { onRestore: (versionNumber: number) => void; error: string | null };
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
   const { connection } = useXConnectionContext();
@@ -124,6 +127,20 @@ function LoadedPost({
     />
   );
 
+  const textChanges = post.status === 'draft' || post.status === 'failed';
+  // Undo and redo (#197) go before History.
+  const tools = (
+    <div className="flex shrink-0 items-center gap-0.5">
+      <HistoryButton
+        brief={post.brief}
+        versions={post.versions}
+        textVersionNumber={textVersion.number}
+        edited={post.text?.edited ?? false}
+        onRestore={textChanges && !feedback.isWriting ? restore.onRestore : undefined}
+      />
+    </div>
+  );
+
   let dock: ReactNode = null;
   if (post.status === 'draft') {
     dock = (
@@ -132,7 +149,9 @@ function LoadedPost({
         textVersion={textVersion}
         parts={parts}
         origin={origin}
+        tools={tools}
         feedback={feedback}
+        restoreError={restore.error}
         onScheduled={onScheduledPost}
       />
     );
@@ -143,7 +162,9 @@ function LoadedPost({
         textVersion={textVersion}
         retryParts={parts}
         origin={origin}
+        tools={tools}
         feedback={feedback}
+        restoreError={restore.error}
         onRetried={onScheduledPost}
       />
     );
@@ -152,11 +173,12 @@ function LoadedPost({
       <ScheduledDock
         scheduledPost={scheduledPost}
         origin={origin}
+        tools={tools}
         onEdit={() => setEditing(true)}
       />
     );
   } else if (post.status === 'published' && scheduledPost) {
-    dock = <PublishedDock scheduledPost={scheduledPost} origin={origin} />;
+    dock = <PublishedDock scheduledPost={scheduledPost} origin={origin} tools={tools} />;
   }
 
   return (
@@ -173,7 +195,17 @@ function LoadedPost({
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */
 export function PostPage() {
   const { id = '' } = useParams();
-  const { load, reload, setScheduledPost, addFeedback, isWriting, error, notice } = usePost(id);
+  const {
+    load,
+    reload,
+    setScheduledPost,
+    addFeedback,
+    restoreVersion,
+    restoreError,
+    isWriting,
+    error,
+    notice,
+  } = usePost(id);
 
   if (load.kind === 'loaded') {
     return (
@@ -181,6 +213,7 @@ export function PostPage() {
         key={load.post.id}
         post={load.post}
         feedback={{ isWriting, error, notice, onSend: addFeedback }}
+        restore={{ onRestore: (n) => void restoreVersion(n), error: restoreError }}
         onScheduledPost={setScheduledPost}
       />
     );

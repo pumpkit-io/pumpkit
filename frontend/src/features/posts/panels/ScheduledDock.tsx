@@ -15,10 +15,12 @@ import { DestinationName } from './panelParts';
 export function ScheduledDock({
   scheduledPost,
   origin,
+  tools,
   onEdit,
 }: {
   scheduledPost: ScheduledPost;
   origin: ReactNode;
+  tools?: ReactNode;
   onEdit: () => void;
 }) {
   const { subscribed } = useSubscribed();
@@ -30,7 +32,7 @@ export function ScheduledDock({
   };
 
   return (
-    <Dock name="Scheduled" origin={origin}>
+    <Dock name="Scheduled" origin={origin} tools={tools}>
       <div className="flex min-h-10 items-center gap-3">
         <p className="min-w-0 flex-1 font-sans text-sm text-foreground">
           <span>Scheduled for {formatWhen(scheduledPost.publishAt)}</span>

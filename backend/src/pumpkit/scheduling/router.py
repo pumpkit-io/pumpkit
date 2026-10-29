@@ -12,7 +12,7 @@ from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import FeedbackRequest, VersionResponse
+from pumpkit.posts.schemas import FeedbackRequest, TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -242,4 +242,21 @@ async def give_feedback(
         feedback=feedback_request.feedback,
         format=feedback_request.format,
         now=clock(),
+    )
+
+
+@posts_router.post(
+    "/posts/{post_id}/versions/{version_number}/restore",
+    response_model=TextResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def restore_version(
+    post_id: str,
+    version_number: int,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> TextResponse:
+    """Makes the Version the Post's Text, with no write. A Scheduled or Published Post is refused."""
+    return await mediator.restore_version(
+        db=db, user=current_user, post_id=post_id, version_number=version_number
     )

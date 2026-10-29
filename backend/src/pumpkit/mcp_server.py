@@ -58,6 +58,8 @@ text meant for X, set from each new Version. The Post's Text can become a Schedu
 published at a chosen time or at once with Post now: `schedule_post` and `post_now` take the \
 Post. A Scheduled post copied from a Thread keeps every Part, in order. Every Scheduled post \
 comes from its Post's Text: there is no typing one by hand.
+- Every Version stays in the Post's History. `restore_version` makes an earlier one the \
+Post's Text again, by its number, without writing a new Version.
 - A Post goes out once, so it has at most one Scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the Post a Draft again. Only a Draft or a \
 Failed Post takes Feedback: a scheduled or published one doesn't.

@@ -18,7 +18,9 @@ export function FailedDock({
   textVersion,
   retryParts,
   origin,
+  tools,
   feedback,
+  restoreError,
   onRetried,
 }: {
   scheduledPost: ScheduledPost;
@@ -27,7 +29,9 @@ export function FailedDock({
   /** What the retry sends, the live Parts first. */
   retryParts: ShownPart[];
   origin: ReactNode;
+  tools?: ReactNode;
   feedback: FeedbackSending;
+  restoreError?: string | null;
   onRetried: (scheduledPost: ScheduledPost) => void;
 }) {
   const sender = useRetryFailed(scheduledPost);
@@ -43,8 +47,10 @@ export function FailedDock({
         </div>
       }
       origin={origin}
+      tools={tools}
       format={textVersion.format}
       feedback={feedback}
+      restoreError={restoreError}
       postTo={
         <PostToButton
           format={textVersion.format}

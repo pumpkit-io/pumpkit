@@ -110,6 +110,10 @@ export const EVENTS = {
     description:
       'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
   },
+  version_restored: {
+    description:
+      "Post page: made an earlier Version the Post's Text again. Props: source (history | undo).",
+  },
   post_final_copied: {
     description:
       "Post page: copied the text on screen with the card's copy icon, every Part of it.",

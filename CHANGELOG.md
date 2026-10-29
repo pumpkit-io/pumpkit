@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Added
+
+- History on the Post's page: a clock in the dock lists every Version, newest first, with its Brief or Feedback and when it was written, and clicking one makes it the Text again. It opens as a bottom sheet on a phone. The `restore_version` MCP tool does the same for agents, and `POST /api/v1/posts/{id}/versions/{number}/restore` for the API.
+
 ### Changed
 
 - New post is a composer: one line, a box to ramble in with the Format toggle inside it, and a send arrow. ⌘Enter (Ctrl+Enter) writes the Post, and Enter adds a newline.

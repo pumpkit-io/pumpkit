@@ -46,6 +46,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     get: vi.fn(),
     start: vi.fn(),
     addVersion: vi.fn(),
+    restoreVersion: vi.fn(),
   },
 }));
 vi.mock('@/services/xConnectionService', () => ({
@@ -124,6 +125,7 @@ function version(number: number, texts: string[], extra: Partial<Version> = {}):
     format: texts.length > 1 ? 'thread' : 'post',
     parts: texts.map((text) => part(text)),
     tells: [],
+    createdAt: `2026-10-10T0${number}:00:00Z`,
     ...extra,
   };
 }
@@ -221,6 +223,7 @@ describe('Post page', () => {
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.addVersion).mockReset();
+    vi.mocked(postService.restoreVersion).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
     vi.mocked(track).mockClear();
@@ -457,6 +460,201 @@ describe('Post page', () => {
 
       expect(
         panel('Draft').getByRole('button', { name: 'V1 · From your Brief · edited' }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('History', () => {
+    const THREE = [
+      version(1, ['the first text']),
+      version(2, ['the second text'], { feedback: 'Punchier hook' }),
+      version(3, ['the third text'], {
+        feedback: 'Shorter, and drop the last line.\nAlso no hashtags.',
+      }),
+    ];
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-10T05:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function openHistory(dockName = 'Draft') {
+      await textCard();
+      fireEvent.click(panel(dockName).getByRole('button', { name: 'History' }));
+      return within(await screen.findByRole('dialog', { name: 'History' }));
+    }
+
+    function rows(history: Dialog) {
+      return history.getAllByRole('listitem').map((row) => within(row));
+    }
+
+    it('lists every Version newest first, with its Brief or Feedback and when it was written', async () => {
+      renderPost(draft(THREE));
+
+      const history = await openHistory();
+
+      const [third, second, first] = rows(history);
+      expect(third!.getByText('Version 3')).toBeInTheDocument();
+      expect(third!.getByText('Feedback: “Shorter, and drop the last line.”')).toBeInTheDocument();
+      expect(third!.getByText('On screen')).toBeInTheDocument();
+      expect(second!.getByText('Feedback: “Punchier hook”')).toBeInTheDocument();
+      expect(second!.getByText('3h ago')).toBeInTheDocument();
+      expect(first!.getByText('Version 1')).toBeInTheDocument();
+      expect(first!.getByText('Brief: “ship small things”')).toBeInTheDocument();
+      expect(first!.getByText('4h ago')).toBeInTheDocument();
+      expect(history.getByRole('button', { name: /^Version 3/ })).toHaveAttribute(
+        'aria-current',
+        'true',
+      );
+      expect(history.getByRole('button', { name: /^Version 2/ })).not.toHaveAttribute(
+        'aria-current',
+      );
+    });
+
+    it('expands a row to its full Brief or Feedback', async () => {
+      renderPost(draft(THREE));
+      const history = await openHistory();
+
+      const expand = history.getByRole('button', { name: 'Show the full Feedback of Version 3' });
+      expect(expand).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(expand);
+
+      expect(expand).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        history.getByText(
+          (_, node) =>
+            node?.textContent === 'Shorter, and drop the last line.\nAlso no hashtags.' &&
+            node.tagName === 'P',
+        ),
+      ).toBeInTheDocument();
+      expect(postService.restoreVersion).not.toHaveBeenCalled();
+    });
+
+    it('restores a Version on click, and the Text and the origin line follow', async () => {
+      vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(THREE[1]!));
+      renderPost(draft(THREE));
+      const history = await openHistory();
+
+      fireEvent.click(history.getByRole('button', { name: /^Version 2/ }));
+
+      expect(await (await textCard()).findByText('the second text')).toBeInTheDocument();
+      expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 2);
+      expect(
+        panel('Draft').getByRole('button', { name: 'V2 · From Feedback: “Punchier hook”' }),
+      ).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('version_restored', { source: 'history' });
+      await dialogClosed();
+    });
+
+    it('leaves the Text be when its own Version is clicked', async () => {
+      renderPost(draft(THREE));
+      const history = await openHistory();
+
+      fireEvent.click(history.getByRole('button', { name: /^Version 3/ }));
+
+      await dialogClosed();
+      expect(postService.restoreVersion).not.toHaveBeenCalled();
+    });
+
+    it('restores the Version on screen over edits to it', async () => {
+      vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(THREE[2]!));
+      renderPost({
+        ...draft(THREE),
+        text: { format: 'post', parts: [part('changed by hand')], versionNumber: 3, edited: true },
+      });
+      const history = await openHistory();
+
+      fireEvent.click(history.getByRole('button', { name: /^Version 3/ }));
+
+      expect(await (await textCard()).findByText('the third text')).toBeInTheDocument();
+      expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 3);
+    });
+
+    it('keeps the Text and says why when a restore is refused', async () => {
+      vi.mocked(postService.restoreVersion).mockRejectedValue(
+        apiError(409, 'This Post is scheduled, so its Text is set.'),
+      );
+      renderPost(draft(THREE));
+      const history = await openHistory();
+
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+      expect(
+        await panel('Draft').findByText('This Post is scheduled, so its Text is set.'),
+      ).toBeInTheDocument();
+      expect((await textCard()).getByText('the third text')).toBeInTheDocument();
+      expect(track).not.toHaveBeenCalledWith('version_restored', expect.anything());
+    });
+
+    it('closes with Escape and with a click outside', async () => {
+      renderPost(draft(THREE));
+
+      const history = await openHistory();
+      fireEvent.keyDown(history.getByRole('list'), { key: 'Escape' });
+      await dialogClosed();
+      expect(panel('Draft').getByRole('button', { name: 'History' })).toHaveFocus();
+
+      await openHistory();
+      fireEvent.pointerDown(document.body);
+      await dialogClosed();
+    });
+
+    it('opens as a sheet on a phone, and restores from it', async () => {
+      const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
+        (query: string) =>
+          ({
+            matches: query === '(max-width: 639px)',
+            media: query,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+          }) as unknown as MediaQueryList,
+      );
+      vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(THREE[0]!));
+      renderPost(draft(THREE));
+
+      const history = await openHistory();
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+      expect(await (await textCard()).findByText('the first text')).toBeInTheDocument();
+      await dialogClosed();
+      matchMedia.mockRestore();
+    });
+
+    it('is read-only on a Scheduled Post', async () => {
+      renderPost(withScheduledPost(SCHEDULED));
+
+      const history = await openHistory('Scheduled');
+
+      expect(rows(history)).toHaveLength(2);
+      expect(history.queryByRole('button', { name: /^Version/ })).not.toBeInTheDocument();
+      expect(history.getByText('Version 1')).toBeInTheDocument();
+    });
+
+    it('is read-only on a Published Post', async () => {
+      renderPost(withScheduledPost({ ...SCHEDULED, state: 'published', xPostUrl: null }));
+
+      const history = await openHistory('Published');
+
+      expect(history.queryByRole('button', { name: /^Version/ })).not.toBeInTheDocument();
+      expect(history.getByText('Version 2')).toBeInTheDocument();
+    });
+
+    it('restores on a Failed Post', async () => {
+      vi.mocked(postService.restoreVersion).mockResolvedValue(
+        textOf(version(1, ['the final text'])),
+      );
+      renderPost(withScheduledPost({ ...SCHEDULED, state: 'failed', failedReason: 'Nope.' }));
+      const history = await openHistory('Failed');
+
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+      await waitFor(() => expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 1));
+      expect(
+        await panel('Failed').findByRole('button', { name: 'V1 · From your Brief' }),
       ).toBeInTheDocument();
     });
   });

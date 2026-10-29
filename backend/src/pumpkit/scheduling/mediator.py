@@ -21,7 +21,7 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import Post
-from pumpkit.posts.schemas import VersionResponse
+from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
@@ -31,7 +31,12 @@ from pumpkit.scheduling.models import (
     SCHEDULED,
     ScheduledPost,
 )
-from pumpkit.scheduling.post_status import PostStatus, check_takes_feedback, post_status
+from pumpkit.scheduling.post_status import (
+    PostStatus,
+    check_takes_feedback,
+    check_text_changes,
+    post_status,
+)
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import (
     KeepDestination,
@@ -485,6 +490,26 @@ async def give_feedback(
     )
     await db.commit()
     return version_writing.version_response(version, next_version.char_limit)
+
+
+async def restore_version(
+    db: AsyncSession, user: User, post_id: str, version_number: int
+) -> TextResponse:
+    """Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's."""
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    version = next(
+        (v for v in version_writing.versions_of(post) if v.version_number == version_number), None
+    )
+    if version is None:
+        raise NotFoundError(f"This Post has no Version {version_number}.")
+    posts_service.set_text_from_version(post, version)
+    await db.commit()
+    char_limit = await version_writing.char_limit_for(db, user_id=user.id)
+    text = version_writing.text_response(post, char_limit)
+    assert text is not None
+    return text
 
 
 async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:
