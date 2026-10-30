@@ -854,6 +854,28 @@ describe('Post page', () => {
       expect(postService.saveText).toHaveBeenCalledTimes(1);
     });
 
+    it('drops an edit not yet saved when a Version is restored over it', async () => {
+      const versions = [version(1, ['the first text']), version(2, ['the second text'])];
+      vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(versions[0]!));
+      renderPost(draft(versions));
+      fireEvent.change((await textCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'edited' },
+      });
+
+      fireEvent.click(panel('Draft').getByRole('button', { name: 'History' }));
+      const history = within(await screen.findByRole('dialog', { name: 'History' }));
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+      expect(
+        await panel('Draft').findByRole('button', { name: 'V1 · From your Brief' }),
+      ).toBeInTheDocument();
+      expect((await textCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
+        'the first text',
+      );
+      await pause();
+      expect(postService.saveText).not.toHaveBeenCalled();
+    });
+
     it('shows a Scheduled and a Published Post read-only', async () => {
       const { unmount } = renderPost(withScheduledPost(SCHEDULED));
       expect((await textCard()).queryByRole('textbox')).not.toBeInTheDocument();
