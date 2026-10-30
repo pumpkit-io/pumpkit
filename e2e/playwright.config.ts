@@ -10,7 +10,8 @@ export default defineConfig({
   retries: 1,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:5173',
+    // scripts/dev-stack serves each worktree's stack at its own Dev URL.
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',
     storageState: './storageState.json',
     trace: 'on-first-retry',
     actionTimeout: 15_000,

@@ -3,6 +3,8 @@ DEV_COMPOSE ?= docker compose -f compose.dev.yml
 # The production stack; pass COMPOSE="docker compose -p NAME" to run it beside another one.
 COMPOSE ?= docker compose
 SMOKE_URL ?= http://localhost:8080
+# The app e2e runs against. For a worktree's own stack, pass the Dev URL `scripts/dev-stack up` prints.
+E2E_BASE_URL ?= http://localhost:5173
 
 .PHONY: dev check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-wait smoke
 
@@ -41,13 +43,16 @@ fmt:
 	cd e2e && npm run format
 
 # Starts the dev stack in the background if it is not already up, and leaves it running.
+# Given E2E_BASE_URL, it only waits for the stack already serving there.
 e2e:
+ifeq ($(origin E2E_BASE_URL),file)
 	$(DEV_COMPOSE) up -d --build
+endif
 	$(MAKE) e2e-wait
 	cd e2e && npm test
 
 e2e-wait:
-	@for url in http://localhost:8000/api/v1/health http://localhost:5173; do \
+	@for url in $(E2E_BASE_URL)/api/v1/health $(E2E_BASE_URL); do \
 		tries=0; \
 		until curl -sf -o /dev/null $$url; do \
 			tries=$$((tries + 1)); \

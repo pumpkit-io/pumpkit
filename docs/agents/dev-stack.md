@@ -12,7 +12,7 @@
 ## Safe mode
 
 - `PUBLISHER_ENABLED=false`: the publisher process runs but publishes nothing to X.
-- `SMTP_HOST=`: Magic links are logged instead of emailed.
+- `SMTP_HOST=` and `EMAIL_FROM=`: Magic links are logged instead of emailed. Blanking only one leaves SMTP partly configured, and the backend refuses to start.
 - `POSTHOG_ENABLED=false`: the backend sends no analytics events.
 
 ## Browsers

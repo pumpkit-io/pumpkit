@@ -4,8 +4,11 @@ Scheduled posts are made and checked through the HTTP API.
 """
 
 import asyncio
+import os
+import signal
 import subprocess
 import sys
+import threading
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -640,6 +643,42 @@ async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed
     assert not heartbeat.exists()
 
 
+async def test_a_loop_turned_off_publishes_nothing_and_keeps_its_heartbeat(
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    tmp_path,
+):
+    await connect_x()
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", "While turned off")
+    fixed_clock.advance(timedelta(minutes=2))
+    heartbeat = tmp_path / "heartbeat"
+    stop = asyncio.Event()
+
+    looping = asyncio.create_task(
+        run(
+            db_session_maker,
+            fake_x_publisher,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+            heartbeat=heartbeat,
+            enabled=False,
+        )
+    )
+    await asyncio.sleep(0.2)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=1)
+
+    assert (await _listed(client))["While turned off"]["state"] == "scheduled"
+    assert fake_x_publisher.published == []
+    assert heartbeat.exists()
+
+
 def test_the_compose_healthcheck_reads_the_heartbeat_the_publisher_touches():
     compose = (Path(__file__).parents[3] / "compose.yml").read_text()
 
@@ -683,3 +722,29 @@ def test_the_publisher_process_maps_every_model_it_queries():
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
 
     assert result.returncode == 0, result.stderr
+
+
+def test_a_publisher_turned_off_says_so_and_stops_cleanly():
+    process = subprocess.Popen(
+        [sys.executable, "-m", "pumpkit.scheduling.publisher"],
+        env={**os.environ, "PUBLISHER_ENABLED": "false"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    assert process.stdout is not None
+    # A publisher that ignores the switch keeps polling, so a deadline ends the read.
+    deadline = threading.Timer(20, process.kill)
+    deadline.start()
+    try:
+        for line in process.stdout:
+            if "PUBLISHER_ENABLED is false" in line:
+                break
+        else:
+            pytest.fail("The publisher exited without saying it is turned off")
+        process.send_signal(signal.SIGTERM)
+
+        assert process.wait(timeout=10) == 0
+    finally:
+        deadline.cancel()
+        process.kill()
