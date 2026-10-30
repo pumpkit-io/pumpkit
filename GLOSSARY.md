@@ -109,8 +109,8 @@ A Text Pumpkit wrote for a Post. The first comes from the Brief, and each later 
 _Avoid_: revision, iteration, round, snapshot, Final, final version
 
 **History**:
-Every Version of a Post in the order Pumpkit wrote them, each with the Brief or Feedback it came from. Restoring a Version makes it the Post's Text again. Editing the Text and undoing never change History.
-_Avoid_: version history, log, timeline
+Every Version of a Post in the order Pumpkit wrote them, each with the Brief or Feedback it came from. Restoring a Version makes it the Post's Text again. Editing the Text and undoing never change History. The button that opens it is labelled "Versions history".
+_Avoid_: log, timeline
 
 **Starting text**:
 The Post's Text a piece of Feedback was given on, kept with the Version it made when it differs from the Version before: the User edited the Text, or went back to an earlier Version, before sending.
