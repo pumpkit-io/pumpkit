@@ -41,7 +41,7 @@ test.describe('logged in', () => {
     );
 
     for (const [name, path, title] of [
-      [/^Persona/, '/persona', 'Persona'],
+      ['Persona', '/persona', 'Persona'],
       ['Posts', '/posts/scheduled', 'Posts'],
       ['Settings', '/settings', 'Settings'],
     ] as const) {
@@ -52,14 +52,9 @@ test.describe('logged in', () => {
     }
   });
 
-  test('with an empty Persona, New post offers to set it up and Persona counts 0/3', async ({
-    page,
-  }) => {
+  test('with an empty Persona, New post offers to set it up', async ({ page }) => {
     await page.goto('/new');
     const writer = page.getByRole('region', { name: "What's the post about?" });
-    await expect(
-      sidebar(page).getByRole('link', { name: 'Persona, 0 of 3 Inspiration authors' }),
-    ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Persona: empty, set it up' })).toBeVisible();
 
     await writer.getByRole('link', { name: 'Set up your Persona' }).click();
@@ -88,7 +83,7 @@ test.describe('logged in', () => {
 
       await page.getByRole('button', { name: 'Open sidebar' }).click();
       const drawer = page.getByRole('dialog', { name: 'Sidebar' });
-      await drawer.getByRole('link', { name: /^Persona/ }).click();
+      await drawer.getByRole('link', { name: 'Persona' }).click();
 
       await expect(page).toHaveURL(/\/persona$/);
       await expect(drawer).toBeHidden();

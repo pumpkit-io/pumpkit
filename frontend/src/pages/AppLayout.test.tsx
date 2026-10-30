@@ -150,7 +150,7 @@ describe('The signed-in shell', () => {
         '/persona',
         '/settings',
       ]);
-      expect(nav.getByRole('link', { name: /^Persona/ })).toHaveAttribute('aria-current', 'page');
+      expect(nav.getByRole('link', { name: 'Persona' })).toHaveAttribute('aria-current', 'page');
       expect(nav.getByRole('link', { name: 'New post' })).not.toHaveAttribute('aria-current');
 
       fireEvent.click(nav.getByRole('link', { name: 'Posts' }));
@@ -159,14 +159,13 @@ describe('The signed-in shell', () => {
       expect(nav.getByRole('link', { name: 'Posts' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('counts the places taken in the Persona out of three', async () => {
+    it('shows Persona as a plain link, without counting its Inspiration authors', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
       renderSignedIn('/new');
 
       const nav = await sidebar();
-      expect(
-        await nav.findByRole('link', { name: 'Persona, 2 of 3 Inspiration authors' }),
-      ).toBeInTheDocument();
+      await waitFor(() => expect(inspirationAuthorService.list).toHaveBeenCalled());
+      expect(nav.getByRole('link', { name: 'Persona' })).toHaveTextContent(/^Persona$/);
     });
 
     it('shows the number of Failed Posts in a badge on Posts', async () => {
@@ -187,14 +186,6 @@ describe('The signed-in shell', () => {
       const nav = await sidebar();
       await waitFor(() => expect(postService.list).toHaveBeenCalled());
       expect(nav.getByRole('link', { name: 'Posts' })).toHaveTextContent(/^Posts$/);
-    });
-
-    it('counts an empty Persona as 0/3', async () => {
-      renderSignedIn('/new');
-
-      const persona = (await sidebar()).getByRole('link', { name: /^Persona/ });
-      await waitFor(() => expect(persona).toHaveTextContent('0/3'));
-      expect(persona).toHaveAccessibleName('Persona, 0 of 3 Inspiration authors');
     });
 
     it("shows the User's name, X handle and Plan in the user card", async () => {
@@ -352,7 +343,7 @@ describe('The signed-in shell', () => {
 
     it('opens an empty /new on the shortcut from another page', async () => {
       await withPostOnScreen();
-      fireEvent.click((await sidebar()).getByRole('link', { name: /^Persona/ }));
+      fireEvent.click((await sidebar()).getByRole('link', { name: 'Persona' }));
       await screen.findByRole('heading', { level: 1, name: 'Persona' });
 
       newPostShortcut();

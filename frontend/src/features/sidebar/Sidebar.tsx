@@ -1,10 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Brand } from '@/components/brand/Brand';
-import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { STATUS_TAB } from '@/features/posts/postStatus';
 import { usePostCounts } from '@/features/posts/usePostCounts';
 import { cn } from '@/lib/utils';
-import { MAX_INSPIRATION_AUTHORS } from '@/services/inspirationAuthorService';
 import { SIDEBAR_PAGES } from './pages';
 import { UserCard } from './UserCard';
 import { useNewPost } from './useNewPost';
@@ -16,21 +14,6 @@ const ROW = cn(
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
   'aria-[current=page]:border-border aria-[current=page]:bg-card aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:shadow-raised',
 );
-
-/** "n/3" beside Persona, in the accent while the Persona is empty since nothing can be written yet. */
-function PersonaCount({ count }: { count: number }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'ml-auto rounded-md px-1.5 py-0.5 font-mono text-xs tabular-nums',
-        count === 0 ? 'bg-primary/15 text-primary' : 'text-muted-foreground',
-      )}
-    >
-      {count}/{MAX_INSPIRATION_AUTHORS}
-    </span>
-  );
-}
 
 /** The Failed Posts beside Posts, in red, shown only while there are some to fix. */
 function FailedCount({ count }: { count: number }) {
@@ -44,10 +27,7 @@ function FailedCount({ count }: { count: number }) {
   );
 }
 
-function ariaLabel(path: string, label: string, personaCount: number | null, failed: number) {
-  if (path === '/persona' && personaCount !== null) {
-    return `${label}, ${personaCount} of ${MAX_INSPIRATION_AUTHORS} Inspiration authors`;
-  }
+function ariaLabel(path: string, label: string, failed: number) {
   if (path === '/posts' && failed > 0) return `${label}, ${failed} Failed`;
   return undefined;
 }
@@ -56,8 +36,6 @@ export function Sidebar() {
   const { setMobileOpen } = useSidebar();
   const newPost = useNewPost();
   const navigate = useNavigate();
-  const { authors } = useInspirationAuthorsContext();
-  const personaCount = authors?.length ?? null;
   const failed = usePostCounts().counts?.failed ?? 0;
 
   return (
@@ -67,41 +45,37 @@ export function Sidebar() {
       </div>
 
       <nav aria-label="Main" className="flex flex-col gap-1 px-3 pt-1">
-        {SIDEBAR_PAGES.map(({ path, label, icon: Icon }) => {
-          const isPersona = path === '/persona';
-          return (
-            <NavLink
-              key={path}
-              to={path}
-              className={ROW}
-              aria-label={ariaLabel(path, label, personaCount, failed)}
-              // On New post, the composer keeps its focus through the press instead of losing
-              // it to the link and getting it back once the page empties.
-              onMouseDown={path === '/new' ? (e) => e.preventDefault() : undefined}
-              onClick={(e) => {
-                if (path === '/new') {
-                  e.preventDefault();
-                  newPost.start('sidebar');
-                }
-                // Straight to the tab: /posts redirects there, and going through the redirect
-                // would unmount the Posts page and load it again.
-                if (path === '/posts' && !(e.metaKey || e.ctrlKey || e.shiftKey)) {
-                  e.preventDefault();
-                  navigate(STATUS_TAB.scheduled.path);
-                }
-                setMobileOpen(false);
-              }}
-            >
-              <Icon
-                className="h-[18px] w-[18px] shrink-0 group-aria-[current=page]:text-primary"
-                aria-hidden
-              />
-              <span className="truncate">{label}</span>
-              {isPersona && personaCount !== null && <PersonaCount count={personaCount} />}
-              {path === '/posts' && failed > 0 && <FailedCount count={failed} />}
-            </NavLink>
-          );
-        })}
+        {SIDEBAR_PAGES.map(({ path, label, icon: Icon }) => (
+          <NavLink
+            key={path}
+            to={path}
+            className={ROW}
+            aria-label={ariaLabel(path, label, failed)}
+            // On New post, the composer keeps its focus through the press instead of losing
+            // it to the link and getting it back once the page empties.
+            onMouseDown={path === '/new' ? (e) => e.preventDefault() : undefined}
+            onClick={(e) => {
+              if (path === '/new') {
+                e.preventDefault();
+                newPost.start('sidebar');
+              }
+              // Straight to the tab: /posts redirects there, and going through the redirect
+              // would unmount the Posts page and load it again.
+              if (path === '/posts' && !(e.metaKey || e.ctrlKey || e.shiftKey)) {
+                e.preventDefault();
+                navigate(STATUS_TAB.scheduled.path);
+              }
+              setMobileOpen(false);
+            }}
+          >
+            <Icon
+              className="h-[18px] w-[18px] shrink-0 group-aria-[current=page]:text-primary"
+              aria-hidden
+            />
+            <span className="truncate">{label}</span>
+            {path === '/posts' && failed > 0 && <FailedCount count={failed} />}
+          </NavLink>
+        ))}
       </nav>
 
       <div className="flex-1" />
