@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -101,13 +102,47 @@ def fill_empty_profile(user: User, hints: NameHints) -> None:
         user.display_name = hints.display_name
 
 
-async def update_user_profile(db: AsyncSession, user: User, changes: dict[str, Any]) -> User:
+def may_fill_photo(user: User) -> bool:
+    """Whether Pumpkit may give the User a Photo on its own: they have none and never chose one."""
+    return user.avatar_data_url is None and user.photo_chosen_at is None
+
+
+async def fill_photo(db: AsyncSession, user: User, photo_data_url: str) -> None:
+    """
+    Give the User a Photo they didn't choose, such as their Google picture, only while
+    `may_fill_photo`. Leaves the Photo chosen marker unset. Flushes, never commits.
+    """
+    if not may_fill_photo(user):
+        return
+    user.avatar_data_url = photo_data_url
+    await db.flush()
+
+
+async def choose_photo(
+    db: AsyncSession, user: User, photo_data_url: Optional[str], now: datetime
+) -> None:
+    """
+    Save the Photo the User chose, or clear it with `None`, and mark the Photo chosen, so
+    Pumpkit never fills it again. Flushes, never commits.
+    """
+    user.avatar_data_url = photo_data_url
+    if user.photo_chosen_at is None:
+        user.photo_chosen_at = now
+    await db.flush()
+
+
+async def update_user_profile(
+    db: AsyncSession, user: User, changes: dict[str, Any], now: datetime
+) -> User:
     """
     Apply profile changes. Flushes, never commits.
 
     A first or last name change re-derives display_name, which the app shows for the User;
-    clearing both falls back to the email local part.
+    clearing both falls back to the email local part. Saving or clearing the Photo marks it chosen.
     """
+    changes = dict(changes)
+    if "avatar_data_url" in changes:
+        await choose_photo(db, user, changes.pop("avatar_data_url"), now)
     for field, value in changes.items():
         setattr(user, field, value)
 

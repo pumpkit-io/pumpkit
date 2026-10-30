@@ -24,13 +24,14 @@ class GoogleSignInError(Exception):
 
 @dataclass(frozen=True)
 class GoogleClaims:
-    """Who Google says signed in: the account's subject, its verified email and name hints."""
+    """Who Google says signed in: the account's subject, its verified email, name hints and picture."""
 
     subject: str
     email: str
     given_name: Optional[str] = None
     family_name: Optional[str] = None
     name: Optional[str] = None
+    picture: Optional[str] = None
     # The verified ID-token payload, kept on the Google identity as its profile.
     profile: dict[str, Any] = field(default_factory=dict)
 
@@ -100,6 +101,7 @@ class GoogleOAuthSignIn:
             given_name=id_info.get("given_name"),
             family_name=id_info.get("family_name"),
             name=id_info.get("name"),
+            picture=id_info.get("picture"),
             profile=dict(id_info),
         )
 
