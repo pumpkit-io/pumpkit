@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 import pumpkit.auth.service.sessions as sessions
 from pumpkit.auth.google_sign_in import GoogleClaims
-from pumpkit.auth.models import GoogleIdentity, User
+from pumpkit.auth.models import GoogleIdentity, RefreshToken, User
 from pumpkit.core.config import settings
 from tests.conftest import callback_fragment
 
@@ -264,6 +264,76 @@ async def test_a_failed_picture_download_still_signs_in_and_the_next_sign_in_fil
     fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
     later = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
     assert (await _profile(browser, later))["avatar_data_url"] == GOOGLE_PHOTO
+
+
+async def test_the_sign_in_is_committed_before_the_google_picture_downloads(
+    new_browser, sign_in_with_google, fake_photo_fetcher, db_session_maker, monkeypatch
+):
+    sessions_seen_while_downloading: list[int] = []
+    download = fake_photo_fetcher.fetch
+
+    async def download_after_looking(url: str) -> Optional[str]:
+        # An independent connection sees only what the sign-in has committed.
+        async with db_session_maker() as other:
+            committed = select(func.count()).select_from(RefreshToken)
+            sessions_seen_while_downloading.append((await other.execute(committed)).scalar_one())
+        return await download(url)
+
+    monkeypatch.setattr(fake_photo_fetcher, "fetch", download_after_looking)
+    fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
+    browser = new_browser()
+
+    landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+
+    assert sessions_seen_while_downloading == [1]
+    assert (await _profile(browser, landed))["avatar_data_url"] == GOOGLE_PHOTO
+
+
+async def test_a_refused_google_sign_in_never_downloads_the_picture(
+    new_browser, sign_in_with_google, fake_photo_fetcher, suspend_user, user
+):
+    await suspend_user(user.email)
+    fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
+
+    refused = await sign_in_with_google(new_browser(), ALICE_GOOGLE_WITH_PICTURE)
+
+    assert refused.headers["location"] == "http://localhost:5173/login?error=account_suspended"
+    assert fake_photo_fetcher.fetched == []
+
+
+async def test_a_photo_that_fails_to_save_still_signs_in(
+    new_browser, sign_in_with_google, fake_photo_fetcher, monkeypatch
+):
+    async def broken_download(url: str) -> Optional[str]:
+        raise RuntimeError("the photo port broke its promise")
+
+    monkeypatch.setattr(fake_photo_fetcher, "fetch", broken_download)
+    browser = new_browser()
+
+    landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+
+    assert landed.headers["location"].startswith("http://localhost:5173/oauth/google/callback#")
+    assert (await _profile(browser, landed))["avatar_data_url"] is None
+
+
+async def test_a_photo_chosen_while_the_google_picture_downloads_stays(
+    new_browser, sign_in_with_google, fake_photo_fetcher, monkeypatch
+):
+    elsewhere = new_browser()
+    signed_in_elsewhere = await sign_in_with_google(elsewhere, ALICE_GOOGLE)
+    download = fake_photo_fetcher.fetch
+
+    async def download_while_choosing_elsewhere(url: str) -> Optional[str]:
+        await _set_photo(elsewhere, signed_in_elsewhere, UPLOADED_PHOTO)
+        return await download(url)
+
+    monkeypatch.setattr(fake_photo_fetcher, "fetch", download_while_choosing_elsewhere)
+    fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
+    browser = new_browser()
+
+    landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+
+    assert (await _profile(browser, landed))["avatar_data_url"] == UPLOADED_PHOTO
 
 
 @pytest.mark.parametrize(
