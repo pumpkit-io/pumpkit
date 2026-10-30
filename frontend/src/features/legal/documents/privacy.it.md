@@ -27,7 +27,7 @@ Per ciascuna categoria qui sotto sono indicati di quali dati si tratta, per cosa
 ### Identità Google {#data-google}
 
 - **Quali dati:** se accedi con Google, l'identificativo del tuo account Google, il profilo che Google condivide con Pumpkit (nome, indirizzo email e immagine) e il token di accesso rilasciato da Google, conservato in forma cifrata.
-- **Perché:** per farti accedere con il tuo account Google.
+- **Perché:** per farti accedere con il tuo account Google. Se non hai un'immagine del profilo e non ne hai mai caricata o rimossa una, Pumpkit scarica una copia dell'immagine del tuo account Google e la usa come tua immagine del profilo. Puoi cambiarla o rimuoverla nelle Impostazioni, e da quel momento Pumpkit non la sostituisce più.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
 ### Registrazioni delle Sessioni e dei Magic link {#data-sessions}

@@ -3,6 +3,7 @@ Google sign-in over HTTP, through the fake `GoogleSignIn` port and real token ve
 """
 
 from dataclasses import replace
+from typing import Optional
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -186,6 +187,83 @@ async def test_a_refused_google_sign_in_leaves_nothing_behind(
         "/api/v1/users/me", headers={"Authorization": f"Bearer {signed_in.access_token}"}
     )
     assert me.json()["first_name"] is None
+
+
+ALICE_PICTURE = "https://lh3.googleusercontent.com/a/alice=s96-c"
+ALICE_GOOGLE_WITH_PICTURE = replace(ALICE_GOOGLE, picture=ALICE_PICTURE)
+GOOGLE_PHOTO = "data:image/jpeg;base64,R29vZ2xlUGhvdG8="
+UPLOADED_PHOTO = "data:image/jpeg;base64,VXBsb2FkZWRQaG90bw=="
+
+
+async def _set_photo(browser: AsyncClient, landed: Response, photo: Optional[str]) -> None:
+    """Save or clear the Photo from Settings, as the User the callback redirect signed in."""
+    access_token = callback_fragment(landed.headers["location"])["access_token"]
+    saved = await browser.patch(
+        "/api/v1/users/me",
+        json={"avatar_data_url": photo},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert saved.status_code == 200
+
+
+async def test_a_first_google_sign_in_makes_the_google_picture_the_photo(
+    new_browser, sign_in_with_google, fake_photo_fetcher
+):
+    fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
+    browser = new_browser()
+
+    landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+
+    assert (await _profile(browser, landed))["avatar_data_url"] == GOOGLE_PHOTO
+
+
+async def test_a_google_account_without_a_picture_signs_in_with_no_photo(
+    new_browser, sign_in_with_google, fake_photo_fetcher
+):
+    browser = new_browser()
+
+    landed = await sign_in_with_google(browser, ALICE_GOOGLE)
+
+    assert (await _profile(browser, landed))["avatar_data_url"] is None
+    assert fake_photo_fetcher.fetched == []
+
+
+async def test_google_sign_in_keeps_an_uploaded_photo(
+    new_browser, sign_in_with_google, fake_photo_fetcher
+):
+    browser = new_browser()
+    await _set_photo(browser, await sign_in_with_google(browser, ALICE_GOOGLE), UPLOADED_PHOTO)
+    fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
+
+    landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+
+    assert (await _profile(browser, landed))["avatar_data_url"] == UPLOADED_PHOTO
+
+
+async def test_google_sign_in_never_fills_a_photo_the_user_cleared(
+    new_browser, sign_in_with_google, fake_photo_fetcher
+):
+    fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
+    browser = new_browser()
+    await _set_photo(browser, await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE), None)
+
+    landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+
+    assert (await _profile(browser, landed))["avatar_data_url"] is None
+
+
+async def test_a_failed_picture_download_still_signs_in_and_the_next_sign_in_fills_the_photo(
+    new_browser, sign_in_with_google, fake_photo_fetcher
+):
+    browser = new_browser()
+
+    failed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+
+    assert failed.status_code == 303
+    assert (await _profile(browser, failed))["avatar_data_url"] is None
+    fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
+    later = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
+    assert (await _profile(browser, later))["avatar_data_url"] == GOOGLE_PHOTO
 
 
 @pytest.mark.parametrize(
