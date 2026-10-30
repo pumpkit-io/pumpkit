@@ -63,6 +63,7 @@ describe('the X callback', () => {
       charLimit: 280,
       needsReconnect: false,
       scheduledPostsWaiting: 0,
+      photoUrl: null,
     });
 
     renderCallback('?state=the-state&code=the-code');

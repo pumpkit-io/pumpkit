@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 function initials(name: string): string {
@@ -7,7 +8,10 @@ function initials(name: string): string {
   return (first + last).toUpperCase() || '•';
 }
 
-/** The User's photo, or their initials on the accent tint. Decorative: the name sits beside it. */
+/**
+ * A photo, or initials on the accent tint while it loads, when it fails, or when there is none.
+ * Decorative: the name or handle sits beside it.
+ */
 export function UserAvatar({
   name,
   avatarUrl,
@@ -17,6 +21,8 @@ export function UserAvatar({
   avatarUrl: string | null;
   className?: string;
 }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const shown = avatarUrl && avatarUrl !== failedUrl ? avatarUrl : null;
   return (
     <span
       aria-hidden
@@ -25,15 +31,15 @@ export function UserAvatar({
         className,
       )}
     >
-      {avatarUrl ? (
+      <span className="bg-primary-gradient bg-clip-text text-transparent">{initials(name)}</span>
+      {shown && (
         <img
-          src={avatarUrl}
+          src={shown}
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
           draggable={false}
+          onError={() => setFailedUrl(shown)}
         />
-      ) : (
-        <span className="bg-primary-gradient bg-clip-text text-transparent">{initials(name)}</span>
       )}
     </span>
   );

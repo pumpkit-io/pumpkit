@@ -58,7 +58,7 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 
 ### X connection {#data-x-connection}
 
-- **Quali dati:** l'identificativo e l'handle del tuo account X, le autorizzazioni che hai concesso, il tipo di abbonamento X e i token di accesso rilasciati da X, conservati in forma cifrata.
+- **Quali dati:** l'identificativo, l'handle e l'indirizzo della foto del tuo account X, le autorizzazioni che hai concesso, il tipo di abbonamento X e i token di accesso rilasciati da X, conservati in forma cifrata. Pumpkit mostra la foto del tuo account X facendola caricare al tuo browser direttamente da X.
 - **Perché:** per pubblicare sul tuo account X quando lo chiedi a Pumpkit.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 

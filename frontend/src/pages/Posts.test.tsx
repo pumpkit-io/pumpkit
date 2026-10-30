@@ -142,6 +142,7 @@ describe('Posts page', () => {
       charLimit: 280,
       needsReconnect: false,
       scheduledPostsWaiting: 0,
+      photoUrl: null,
     });
   });
 
