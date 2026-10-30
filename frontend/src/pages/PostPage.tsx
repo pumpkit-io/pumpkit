@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
@@ -21,11 +20,10 @@ import { TextHeader } from '@/features/posts/panels/TextHeader';
 import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
-import { cardParts, copiedText, versionOnScreen } from '@/features/posts/shownText';
-import { TextEditor, type TextChange } from '@/features/posts/TextEditor';
+import { cardParts, copiedText } from '@/features/posts/shownText';
+import type { TextController, TextSnapshot } from '@/features/posts/text/textController';
+import { TextEditor } from '@/features/posts/TextEditor';
 import { X_POST_MAX_CHARS } from '@/lib/xLength';
-import type { TextSaveState } from '@/features/posts/useTextAutosave';
-import type { TextTrace, UndoAnnouncement } from '@/features/posts/useUndoLine';
 import { usePost } from '@/features/posts/usePost';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
@@ -84,39 +82,24 @@ function CardPlaceholder() {
   );
 }
 
-/** The in-place editing of the Text, with undo and redo, from `usePost`. */
-interface TextEditing {
-  onEdit: (texts: string[], change: TextChange) => void;
-  save: TextSaveState;
-  /** Saves the last edit now; true once the server has it. */
-  flush: () => Promise<boolean>;
-  /** Left out at either end of the undo line. */
-  onUndo?: () => void;
-  onRedo?: () => void;
-  trace: TextTrace | null;
-  announcement: UndoAnnouncement | null;
-  rewritesDropped: boolean;
-}
-
 function LoadedPost({
-  post,
+  post: loaded,
+  text,
+  controller,
   feedback,
-  restore,
-  edit,
+  rewritesDropped,
   onScheduledPost,
 }: {
   post: PostDetail;
+  text: TextSnapshot;
+  controller: TextController;
   feedback: FeedbackSending;
-  restore: {
-    onRestore: (versionNumber: number) => void;
-    isRestoring: boolean;
-    error: string | null;
-  };
-  edit: TextEditing;
+  /** An edit just dropped rewrites from redo, which History still holds. */
+  rewritesDropped: boolean;
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
+  const post: PostDetail = { ...loaded, text: text.text, versions: text.versions };
   const { connection } = useXConnectionContext();
-  const { subscribed } = useSubscribed();
   const location = useLocation();
   const opensEditor = opensEditing(location.state);
   const [editing, setEditing] = useState(
@@ -133,7 +116,7 @@ function LoadedPost({
     if (post.status === 'draft') recordDraftOpened(post.id);
   }, [post.id, post.status]);
 
-  const textVersion = versionOnScreen(post);
+  const { textVersion, can } = text;
   const latest = post.versions[post.versions.length - 1];
   if (!textVersion || !latest) return null;
   const { scheduledPost } = post;
@@ -167,16 +150,16 @@ function LoadedPost({
       brief={post.brief}
       version={textVersion}
       edited={post.text?.edited ?? false}
-      writing={feedback.isWriting ? latest.number + 1 : null}
-      save={edit.save}
-      rewritesDropped={edit.rewritesDropped}
+      writing={text.writing ? latest.number + 1 : null}
+      save={text.save}
+      rewritesDropped={rewritesDropped}
     />
   );
 
   const textChanges = post.status === 'draft' || post.status === 'failed';
-  const editable = textChanges && !!post.text && subscribed === true && !feedback.isWriting;
-  const onUndo = editable ? edit.onUndo : undefined;
-  const onRedo = editable ? edit.onRedo : undefined;
+  const onUndo = can.undo ? () => controller.undo() : undefined;
+  const onRedo = can.redo ? () => controller.redo() : undefined;
+  const settle = () => controller.settle();
   const tools = (
     <HoverLabels>
       <div className="flex shrink-0 items-center gap-0.5">
@@ -186,13 +169,9 @@ function LoadedPost({
           versions={post.versions}
           textVersionNumber={textVersion.number}
           edited={post.text?.edited ?? false}
-          onRestore={
-            textChanges && !feedback.isWriting && !restore.isRestoring
-              ? restore.onRestore
-              : undefined
-          }
+          onRestore={can.restore ? (n) => controller.restore(n) : undefined}
         />
-        <CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />
+        <CopyTextButton text={copiedText(parts)} disabled={text.writing} />
       </div>
     </HoverLabels>
   );
@@ -200,14 +179,16 @@ function LoadedPost({
   let dock: ReactNode = null;
   let postTo: ReactNode = null;
   if (post.status === 'draft') {
-    dock = <DraftDock textVersion={textVersion} feedback={feedback} restoreError={restore.error} />;
+    dock = (
+      <DraftDock textVersion={textVersion} feedback={feedback} restoreError={text.restoreError} />
+    );
     postTo = (
       <DraftPostTo
         postId={post.id}
         textVersion={textVersion}
         parts={parts}
-        disabled={feedback.isWriting}
-        prepare={edit.flush}
+        disabled={!can.postTo}
+        prepare={settle}
         onScheduled={onScheduledPost}
       />
     );
@@ -217,7 +198,7 @@ function LoadedPost({
         scheduledPost={scheduledPost}
         textVersion={textVersion}
         feedback={feedback}
-        restoreError={restore.error}
+        restoreError={text.restoreError}
       />
     );
     postTo = (
@@ -225,8 +206,8 @@ function LoadedPost({
         scheduledPost={scheduledPost}
         textVersion={textVersion}
         retryParts={parts}
-        disabled={feedback.isWriting}
-        prepare={edit.flush}
+        disabled={!can.postTo}
+        prepare={settle}
         onRetried={onScheduledPost}
       />
     );
@@ -241,16 +222,16 @@ function LoadedPost({
       <TextEditor
         parts={parts}
         texts={post.text?.parts.map((p) => p.text) ?? []}
-        editable={editable}
-        onEdit={edit.onEdit}
+        editable={can.edit}
+        onEdit={(texts, change) => controller.edit(texts, change.cause)}
         onUndo={onUndo}
         onRedo={onRedo}
-        trace={edit.trace}
-        busy={feedback.isWriting}
+        trace={text.trace}
+        busy={text.writing}
         header={<TextHeader origin={origin} tools={tools} action={postTo} />}
       />
       <p role="status" className="sr-only">
-        {edit.announcement && <span key={edit.announcement.key}>{edit.announcement.message}</span>}
+        {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}
       </p>
     </Page>
   );
@@ -259,44 +240,18 @@ function LoadedPost({
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */
 export function PostPage() {
   const { id = '' } = useParams();
-  const {
-    load,
-    reload,
-    setScheduledPost,
-    addFeedback,
-    restoreVersion,
-    restoreError,
-    isRestoring,
-    editText,
-    undo,
-    redo,
-    trace,
-    announcement,
-    rewritesDropped,
-    textSave,
-    flushText,
-    isWriting,
-    error,
-    notice,
-  } = usePost(id);
+  const { load, reload, setScheduledPost, text, sendFeedback, rewritesDropped, error, notice } =
+    usePost(id);
 
-  if (load.kind === 'loaded') {
+  if (load.kind === 'loaded' && text) {
     return (
       <LoadedPost
         key={load.post.id}
         post={load.post}
-        feedback={{ isWriting, error, notice, onSend: addFeedback }}
-        restore={{ onRestore: restoreVersion, isRestoring, error: restoreError }}
-        edit={{
-          onEdit: (texts, change) => editText(texts, change.cause),
-          save: textSave,
-          flush: flushText,
-          onUndo: undo,
-          onRedo: redo,
-          trace,
-          announcement,
-          rewritesDropped,
-        }}
+        text={text}
+        controller={load.controller}
+        feedback={{ isWriting: text.writing, error, notice, onSend: sendFeedback }}
+        rewritesDropped={rewritesDropped}
         onScheduledPost={setScheduledPost}
       />
     );

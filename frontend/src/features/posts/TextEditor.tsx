@@ -5,7 +5,7 @@ import { changeDiff, type PartChange } from './changeDiff';
 import type { ShownPart } from './shownText';
 import type { EditCause } from './textHistory';
 import { TextCard } from './TextCard';
-import type { TextTrace } from './useUndoLine';
+import type { TextTrace } from './text/textController';
 
 /** How long the Pumpkin trace fades for, and how long it stays without a fade. */
 export const TRACE_FADE_MS = 1_200;

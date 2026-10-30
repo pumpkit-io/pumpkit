@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
-import { formatOf, postService } from '@/services/postService';
+import type { Clock, TimerId } from './clock';
 
 /** How long the User stops typing before their edit is saved. */
 export const TEXT_SAVE_PAUSE_MS = 800;
@@ -28,10 +26,10 @@ function refusesForGood(e: unknown): boolean {
  * User pauses, and the latest edit again after a failure. Saving is idempotent, so a retry sends
  * the same Parts as they are.
  */
-class TextSaver {
+export class TextSaver {
   private unsaved: string[] | null = null;
   private sending: Promise<void> | null = null;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: TimerId | null = null;
   private failures = 0;
   private retrying = false;
   private waiting: ((saved: boolean) => void)[] = [];
@@ -40,6 +38,7 @@ class TextSaver {
     private readonly save: (parts: string[]) => Promise<unknown>,
     private readonly onState: (state: TextSaveState) => void,
     private readonly onSaved: (parts: string[]) => void,
+    private readonly clock: Clock,
   ) {}
 
   edit(parts: string[]) {
@@ -78,11 +77,11 @@ class TextSaver {
 
   private sendIn(ms: number) {
     this.clearTimer();
-    this.timer = setTimeout(() => void this.send(), ms);
+    this.timer = this.clock.setTimeout(() => void this.send(), ms);
   }
 
   private clearTimer() {
-    if (this.timer) clearTimeout(this.timer);
+    if (this.timer !== null) this.clock.clearTimeout(this.timer);
     this.timer = null;
   }
 
@@ -105,7 +104,7 @@ class TextSaver {
     await this.sending;
     this.sending = null;
     // An edit made while the save was out, whose pause ran out meanwhile.
-    if (this.unsaved && this.unsaved !== parts && !this.timer) void this.send();
+    if (this.unsaved && this.unsaved !== parts && this.timer === null) void this.send();
   }
 
   private async attempt(parts: string[]): Promise<void> {
@@ -134,30 +133,4 @@ class TextSaver {
     this.onState({ kind: 'saved' });
     this.settle(true);
   }
-}
-
-/**
- * Autosave for a Post's Text: `edit` takes every Part after each change, `flush` saves at once
- * and resolves true once nothing is left unsaved, and `discard` drops what isn't sent yet.
- * A saved burst is tracked once, retries included.
- */
-export function useTextAutosave(postId: string) {
-  const [state, setState] = useState<TextSaveState>({ kind: 'saved' });
-  const saver = useMemo(
-    () =>
-      new TextSaver(
-        (parts) => postService.saveText(postId, parts),
-        setState,
-        (parts) => track('post_text_edited', { format: formatOf(parts), part_count: parts.length }),
-      ),
-    [postId],
-  );
-
-  useEffect(() => () => saver.dispose(), [saver]);
-
-  const edit = useCallback((parts: string[]) => saver.edit(parts), [saver]);
-  const flush = useCallback(() => saver.flush(), [saver]);
-  const discard = useCallback(() => saver.discard(), [saver]);
-
-  return { state, edit, flush, discard };
 }
