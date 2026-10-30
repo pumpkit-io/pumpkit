@@ -30,6 +30,12 @@ Per ciascuna categoria qui sotto sono indicati di quali dati si tratta, per cosa
 - **Perché:** per farti accedere con il tuo account Google. Se non hai un'immagine del profilo e non ne hai mai caricata o rimossa una, Pumpkit scarica una copia dell'immagine del tuo account Google e la usa come tua immagine del profilo. Puoi cambiarla o rimuoverla nelle Impostazioni, e da quel momento Pumpkit non la sostituisce più.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
+### Immagine Gravatar {#data-gravatar}
+
+- **Quali dati:** se accedi con un Magic link, non hai un'immagine del profilo e non ne hai mai caricata o rimossa una, Pumpkit invia a Gravatar, gestito da Automattic, un hash del tuo indirizzo email per cercare l'immagine che vi hai pubblicato. Il tuo indirizzo email in sé non viene inviato.
+- **Perché:** per usare la tua immagine Gravatar come tua immagine del profilo. Pumpkit ne scarica una copia; se non ne hai una, restano le tue iniziali. Puoi cambiarla o rimuoverla nelle Impostazioni, e da quel momento Pumpkit non la sostituisce più.
+- **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
+
 ### Registrazioni delle Sessioni e dei Magic link {#data-sessions}
 
 - **Quali dati:** per ogni Sessione, quando è iniziata e quando scade, con l'indirizzo IP e lo user agent del browser da cui è stata creata. Per ogni Magic link, l'indirizzo email a cui è stato inviato, quando è stato inviato e usato, e l'indirizzo IP e lo user agent che lo hanno richiesto.
@@ -88,6 +94,7 @@ Il Gestore condivide i dati personali solo con i fornitori indicati qui sotto, e
 | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | DigitalOcean (hosting)                                                     | Tutti i dati sopra indicati, sul server su cui girano Pumpkit e il suo database                                      | Francoforte, Germania |
 | Google (accesso)                                                           | La tua richiesta di accesso quando scegli Google                                                                     | Stati Uniti           |
+| Gravatar, gestito da Automattic (immagine del profilo)                     | Un hash del tuo indirizzo email, quando accedi con un Magic link e non hai un'immagine del profilo                   | Stati Uniti           |
 | Resend (email)                                                             | Il tuo indirizzo email e l'email con il Magic link                                                                   | Stati Uniti           |
 | Stripe (fatturazione)                                                      | Il tuo nome, indirizzo email e identificativo utente, e i dati di pagamento che inserisci su Stripe Checkout         | Stati Uniti           |
 | X (X connection e pubblicazione)                                           | La tua autorizzazione quando colleghi l'account e il testo di ogni Scheduled post quando viene pubblicato            | Stati Uniti           |

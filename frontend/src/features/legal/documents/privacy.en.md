@@ -30,6 +30,12 @@ Each category below says what the data is, what the Operator uses it for, and th
 - **Why:** to sign you in with your Google account. If you have no profile picture and have never uploaded or removed one, Pumpkit downloads a copy of your Google account's picture and uses it as your profile picture. You can change or remove it in Settings, and Pumpkit then never replaces it.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
+### Gravatar picture {#data-gravatar}
+
+- **What:** if you sign in with a Magic link, have no profile picture and have never uploaded or removed one, Pumpkit sends Gravatar, run by Automattic, a hash of your email address to look up the picture you published there. Your email address itself is not sent.
+- **Why:** to use your Gravatar picture as your profile picture. Pumpkit downloads a copy of it; if you have none, you keep your initials. You can change or remove it in Settings, and Pumpkit then never replaces it.
+- **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
+
 ### Session and Magic link records {#data-sessions}
 
 - **What:** for each Session, when it started and when it expires, with the IP address and browser user agent it was created from. For each Magic link, the email address it was sent to, when it was sent and used, and the IP address and user agent that requested it.
@@ -88,6 +94,7 @@ The Operator shares personal data only with the providers below, and each receiv
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------ |
 | DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                             | Frankfurt, Germany |
 | Google (sign-in)                                                 | Your sign-in request when you choose Google                                                                      | United States      |
+| Gravatar, run by Automattic (profile picture)                    | A hash of your email address, when you sign in with a Magic link and have no profile picture                     | United States      |
 | Resend (email)                                                   | Your email address and the Magic link email                                                                      | United States      |
 | Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout               | United States      |
 | X (X connection and publishing)                                  | Your authorization when you connect, and the text of each Scheduled post when it is published                    | United States      |
