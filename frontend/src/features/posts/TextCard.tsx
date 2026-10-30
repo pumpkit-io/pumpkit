@@ -83,7 +83,6 @@ export function TextCard({
   renderText,
   corner,
   header,
-  footer,
   busy = false,
 }: {
   parts: ShownPart[];
@@ -91,10 +90,8 @@ export function TextCard({
   renderText?: (part: ShownPart, index: number) => ReactNode;
   /** At the card's top right, such as Copy. */
   corner?: ReactNode;
-  /** A row above the Parts, such as where the Text came from and its tools. */
+  /** A row above the Parts that stays put while they scroll, such as the Text's tools. */
   header?: ReactNode;
-  /** A row below the Parts, such as "Post to…". */
-  footer?: ReactNode;
   /** Dims the Parts while Pumpkit rewrites the text. */
   busy?: boolean;
 }) {
@@ -108,13 +105,14 @@ export function TextCard({
     <article
       aria-label="Text"
       aria-busy={busy}
-      className="relative overflow-hidden rounded-xl border border-border bg-card text-card-foreground"
+      className="relative flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground"
     >
       {corner && <div className="absolute right-2 top-2">{corner}</div>}
       {header}
+      {/* Taller than the space it is given, only the Parts scroll, with the scrollbar in the card. */}
       <ol
         className={cn(
-          'divide-y divide-border transition-opacity motion-reduce:transition-none',
+          'min-h-0 divide-y divide-border overflow-y-auto transition-opacity motion-reduce:transition-none',
           busy && 'opacity-60',
         )}
       >
@@ -132,7 +130,6 @@ export function TextCard({
           />
         ))}
       </ol>
-      {footer}
     </article>
   );
 }

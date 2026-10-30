@@ -53,14 +53,21 @@ export function OriginLine({
     : 'From your Brief';
   const line = [`V${version.number}`, from, ...(edited ? ['edited'] : [])].join(' · ');
 
+  // The Version number leads as a tag; the source gives way first when the line runs short.
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`block w-full truncate rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${LINE}`}
+          aria-label={line}
+          className={`group flex w-full min-w-0 items-center gap-2 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${LINE}`}
         >
-          {line}
+          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground">
+            V{version.number}
+          </span>
+          <span className="min-w-0 truncate">{from}</span>
+          {edited && <span className="shrink-0">· edited</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent

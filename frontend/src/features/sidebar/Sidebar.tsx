@@ -1,6 +1,7 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Brand } from '@/components/brand/Brand';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
+import { STATUS_TAB } from '@/features/posts/postStatus';
 import { usePostCounts } from '@/features/posts/usePostCounts';
 import { cn } from '@/lib/utils';
 import { MAX_INSPIRATION_AUTHORS } from '@/services/inspirationAuthorService';
@@ -54,6 +55,7 @@ function ariaLabel(path: string, label: string, personaCount: number | null, fai
 export function Sidebar() {
   const { setMobileOpen } = useSidebar();
   const newPost = useNewPost();
+  const navigate = useNavigate();
   const { authors } = useInspirationAuthorsContext();
   const personaCount = authors?.length ?? null;
   const failed = usePostCounts().counts?.failed ?? 0;
@@ -73,10 +75,19 @@ export function Sidebar() {
               to={path}
               className={ROW}
               aria-label={ariaLabel(path, label, personaCount, failed)}
+              // On New post, the composer keeps its focus through the press instead of losing
+              // it to the link and getting it back once the page empties.
+              onMouseDown={path === '/new' ? (e) => e.preventDefault() : undefined}
               onClick={(e) => {
                 if (path === '/new') {
                   e.preventDefault();
                   newPost.start('sidebar');
+                }
+                // Straight to the tab: /posts redirects there, and going through the redirect
+                // would unmount the Posts page and load it again.
+                if (path === '/posts' && !(e.metaKey || e.ctrlKey || e.shiftKey)) {
+                  e.preventDefault();
+                  navigate(STATUS_TAB.scheduled.path);
                 }
                 setMobileOpen(false);
               }}

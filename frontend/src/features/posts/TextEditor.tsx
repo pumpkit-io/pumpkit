@@ -140,7 +140,7 @@ function PartBox({
           if (redo) onRedo?.();
           else onUndo?.();
         }}
-        className="relative block w-full cursor-text resize-none overflow-hidden rounded-md bg-transparent px-2 py-1 font-sans text-[15px] leading-6 text-foreground outline-none ring-1 ring-transparent transition-shadow hover:ring-border focus:ring-primary motion-reduce:transition-none"
+        className="relative block w-full cursor-text resize-none overflow-hidden rounded-md bg-transparent px-2 py-1 font-sans text-[15px] leading-6 text-foreground outline-none ring-1 ring-transparent transition-shadow hover:ring-border focus:ring-primary/50 motion-reduce:transition-none"
       />
     </div>
   );
@@ -179,7 +179,6 @@ export function TextEditor({
   trace,
   corner,
   header,
-  footer,
   busy = false,
 }: {
   /** What the card shows, the live Parts first on a Failed Post. */
@@ -192,7 +191,6 @@ export function TextEditor({
   trace?: TextTrace | null;
   corner?: ReactNode;
   header?: ReactNode;
-  footer?: ReactNode;
   busy?: boolean;
 }) {
   const total = parts.length;
@@ -218,7 +216,6 @@ export function TextEditor({
       busy={busy}
       corner={corner}
       header={header}
-      footer={footer}
       renderText={
         editable
           ? (part, index) =>

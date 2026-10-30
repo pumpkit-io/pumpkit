@@ -45,6 +45,8 @@
     --trace: rgba(217, 107, 69, 0.22);
     --shadow-raised: 0 1px 2px rgba(32, 32, 30, 0.06), 0 1px 1px rgba(32, 32, 30, 0.03);
     --shadow-panel: 0 1px 3px rgba(32, 32, 30, 0.05), 0 8px 24px -12px rgba(32, 32, 30, 0.08);
+    /* The composer's resting halo, in the accent. */
+    --shadow-glow: 0 1px 3px rgba(32, 32, 30, 0.05), 0 0 28px -6px rgba(217, 107, 69, 0.3);
     --primary-gradient: linear-gradient(180deg, #c2593a 0%, #b54d2a 100%);
     --primary-gradient-soft: linear-gradient(
       135deg,
@@ -91,6 +93,7 @@
     --trace: rgba(232, 130, 94, 0.3);
     --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-glow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 28px -6px rgba(232, 130, 94, 0.24);
     --primary-gradient: linear-gradient(180deg, #ec8d6b 0%, #e8825e 100%);
     --primary-gradient-soft: linear-gradient(
       135deg,

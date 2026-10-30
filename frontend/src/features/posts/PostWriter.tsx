@@ -94,7 +94,7 @@ export function PostWriter() {
     <section aria-labelledby="new-post-line" className="space-y-3">
       <h2
         id="new-post-line"
-        className="font-sans text-2xl/[30px] font-semibold tracking-[-0.015em] text-foreground"
+        className="pb-1.5 font-sans text-2xl/[30px] font-semibold tracking-[-0.015em] text-foreground"
       >
         What&apos;s the post about?
       </h2>

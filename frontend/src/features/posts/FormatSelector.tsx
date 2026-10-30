@@ -50,6 +50,9 @@ export function FormatSelector({
         {OPTIONS.map((option) => (
           <label
             key={option.format}
+            // The press keeps focus where it is, so focus goes straight to the radio on release
+            // and a composer around the toggle never shows a moment without its focus line.
+            onMouseDown={(e) => e.preventDefault()}
             className={cn(
               'relative cursor-pointer rounded-sm px-3 py-1.5 text-center font-sans text-sm transition-colors duration-200 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
               value === option.format

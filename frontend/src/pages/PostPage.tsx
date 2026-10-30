@@ -15,7 +15,7 @@ import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
 import { PublishedDock } from '@/features/posts/panels/PublishedDock';
 import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
-import { TextFooter, TextHeader } from '@/features/posts/panels/TextHeader';
+import { TextHeader } from '@/features/posts/panels/TextHeader';
 import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
@@ -30,26 +30,36 @@ import { useXConnectionContext } from '@/features/xConnection/useXConnectionCont
 import type { PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
-/** The dock, when there is one, stays pinned under the Topbar; the page's column scrolls under it. */
+const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
+
+/**
+ * The dock, when there is one, stays pinned under the Topbar. A `pinned` page holds the Post's
+ * card in the height left, so only the card's Parts scroll; any other page scrolls as a whole.
+ */
 function Page({
   title,
   dock,
+  pinned = false,
   children,
 }: {
   title: ReactNode;
   dock?: ReactNode;
+  pinned?: boolean;
   children: ReactNode;
 }) {
   return (
     <>
       <Topbar title={title} actions={<PersonaChip />} />
       {dock}
-      {/* The gutter on both edges keeps the card centred under the dock, scrollbar or not. */}
-      <div className="flex-1 overflow-y-auto bg-background [scrollbar-gutter:stable_both-edges]">
-        <div className="mx-auto w-full max-w-[42rem] space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-          {children}
+      {pinned ? (
+        <div className="flex min-h-0 flex-1 flex-col bg-background">
+          <div className={`${COLUMN} flex min-h-0 flex-col pb-4 pt-6 sm:pb-6`}>{children}</div>
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto bg-background">
+          <div className={`${COLUMN} space-y-6 py-6 sm:py-8`}>{children}</div>
+        </div>
+      )}
     </>
   );
 }
@@ -217,7 +227,7 @@ function LoadedPost({
   }
 
   return (
-    <Page title={breadcrumb} dock={dock}>
+    <Page title={breadcrumb} dock={dock} pinned>
       <TextEditor
         parts={parts}
         texts={post.text?.parts.map((p) => p.text) ?? []}
@@ -227,8 +237,7 @@ function LoadedPost({
         onRedo={onRedo}
         trace={edit.trace}
         busy={feedback.isWriting}
-        header={<TextHeader origin={origin} tools={tools} />}
-        footer={postTo && <TextFooter>{postTo}</TextFooter>}
+        header={<TextHeader origin={origin} tools={tools} action={postTo} />}
       />
       <p role="status" className="sr-only">
         {edit.announcement && <span key={edit.announcement.key}>{edit.announcement.message}</span>}
@@ -304,7 +313,7 @@ export function PostPage() {
     );
   }
   return (
-    <Page title="Post" dock={<LoadingDock />}>
+    <Page title="Post" dock={<LoadingDock />} pinned>
       <CardPlaceholder />
     </Page>
   );

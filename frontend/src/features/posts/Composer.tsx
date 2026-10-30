@@ -47,6 +47,9 @@ export interface ComposerProps {
 const LINE_PX = 24;
 const PADDING_PX = 24;
 
+/** The column a composer sits in, so the Brief and the Feedback boxes are always one size. */
+export const COMPOSER_COLUMN = 'mx-auto w-full max-w-[53rem] px-4 sm:px-6';
+
 /**
  * A box to write in that grows with its text, with the Format toggle at the bottom left and the
  * send arrow at the bottom right. Enter adds a newline and ⌘Enter or Ctrl+Enter sends, unless
@@ -98,7 +101,8 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-panel transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/20 motion-reduce:transition-none">
+    // No transition on focus: a box that mounts focused shows its line at once, not fading in.
+    <div className="rounded-2xl border border-border bg-card shadow-glow focus-within:border-primary/50">
       <textarea
         ref={boxRef}
         aria-label={label}
@@ -112,7 +116,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         style={{ maxHeight: maxRows * LINE_PX + PADDING_PX }}
         className="block w-full resize-none overflow-y-auto rounded-t-2xl bg-transparent px-4 pt-3 font-sans text-[15px] leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
       />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-3 pt-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-3 pt-3">
         <FormatSelector value={format} onChange={onFormatChange} disabled={locked} hideLabel />
         <div className="ml-auto flex items-center gap-2">
           <LengthCounter length={length} max={maxLength} />

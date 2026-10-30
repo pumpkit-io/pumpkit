@@ -105,7 +105,8 @@ export function Posts({ status }: { status: PostStatus }) {
   return (
     <>
       <Topbar title="Posts" actions={<PostingAs />} />
-      <div className="flex-1 overflow-y-auto">
+      {/* Reserve the scrollbar's space so switching between short and long tabs doesn't shift the page. */}
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
         <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-6 sm:px-6 sm:py-8">
           <PostsTabs counts={counts} />
           <p className="font-sans text-xs text-muted-foreground">{TAB_ORDER_LINE[status]}</p>

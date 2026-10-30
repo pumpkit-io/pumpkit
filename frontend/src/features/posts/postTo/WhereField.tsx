@@ -93,7 +93,7 @@ export function WhereField({
                 value={value.kind === 'pastCommunity' ? value.community.id : ADD}
                 onChange={(e) => pick(e.target.value)}
                 disabled={disabled}
-                className="flex h-10 w-full rounded-lg border border-input bg-card px-3 py-2 font-sans text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-10 w-full rounded-lg border border-input bg-card px-3 py-2 font-sans text-sm text-foreground focus:border-primary/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {past.map((community) => (
                   <option key={community.id} value={community.id}>
