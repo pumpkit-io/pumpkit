@@ -10,7 +10,16 @@ const DEV_STACK_TARGET_FILE = path.join(REPO_ROOT, '.sdlc', 'dev-stack', 'e2e-ta
 function composeProjectArgs(): string[] {
   if (!existsSync(DEV_STACK_TARGET_FILE)) return [];
   const [devUrl, project] = readFileSync(DEV_STACK_TARGET_FILE, 'utf8').split('\n');
-  return process.env.E2E_BASE_URL === devUrl ? ['-p', project] : [];
+  return sameOrigin(process.env.E2E_BASE_URL, devUrl) ? ['-p', project] : [];
+}
+
+function sameOrigin(url: string | undefined, other: string): boolean {
+  if (!url) return false;
+  try {
+    return new URL(url).origin === new URL(other).origin;
+  } catch {
+    return false;
+  }
 }
 
 /** Runs one of `seed/`'s Python scripts inside the dev stack's backend container. */
