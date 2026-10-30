@@ -21,3 +21,5 @@ backups/
 
 # Architecture review handoff docs
 docs/architecture-improvements/
+.claude/worktrees/
+.sdlc/

@@ -61,3 +61,11 @@ The required `review` check runs the `review-changes` skill on Claude Code, from
 ### Code comments
 
 Load the `code-comments` skill before writing or editing any comment.
+
+### Worktrees
+
+Never edit files or commit in the main checkout, even for a one-line change. Before your first file change or commit, load the `worktrees` skill and resolve a worktree for the work, then work and commit there. Release its lock when the work is committed. The one exception is a main-checkout path a skill names, such as `improve-codebase-architecture`'s notes.
+
+### Dev stack
+
+Start, check and stop the app only through `scripts/dev-stack`: load the `dev-stack` skill when you need it running. See `docs/agents/dev-stack.md`.
