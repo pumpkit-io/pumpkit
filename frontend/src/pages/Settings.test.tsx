@@ -559,7 +559,7 @@ describe('Settings', () => {
       ['trialing', 'Trial', `Billing starts on ${PERIOD_END_LABEL}`],
       ['active', 'Active', `Renews on ${PERIOD_END_LABEL}`],
     ] as const)(
-      'shows the Plan and its price, a %s status as %s and when it next bills, with Manage subscription',
+      'shows the Plan, a %s status as %s and when it next bills, with Manage subscription',
       async (status, label, nextBilling) => {
         vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding(status, true));
         renderSettings();
@@ -567,7 +567,6 @@ describe('Settings', () => {
         const plan = await card('Plan');
         expect(await plan.findByText(label)).toBeInTheDocument();
         expect(plan.getByText('Pro')).toBeInTheDocument();
-        expect(plan.getByText('€9.00 / month')).toBeInTheDocument();
         expect(plan.getByText(nextBilling)).toBeInTheDocument();
         fireEvent.click(plan.getByRole('button', { name: 'Manage subscription' }));
 
@@ -591,7 +590,7 @@ describe('Settings', () => {
       ['past_due', true, 'Past due'],
       ['unpaid', false, 'Unpaid'],
     ] as const)(
-      'warns that the last payment of a %s Subscription failed and offers Fix payment',
+      'warns that the last payment of a %s Subscription failed and offers Fix payment, with no renewal date',
       async (status, subscribed, label) => {
         vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding(status, subscribed));
         renderSettings();
@@ -601,6 +600,7 @@ describe('Settings', () => {
           await plan.findByText('Your last payment failed. Update your card to keep access.'),
         ).toBeInTheDocument();
         expect(plan.getByText(label)).toBeInTheDocument();
+        expect(plan.queryByText(/Renews on/)).not.toBeInTheDocument();
         fireEvent.click(plan.getByRole('button', { name: 'Fix payment' }));
 
         await waitFor(() =>

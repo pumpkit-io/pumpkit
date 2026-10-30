@@ -21,7 +21,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
-- The Plan card in Settings shows your plan's name and price, its status as a badge, and when it next renews, starts billing after a trial or ends, beside Manage subscription. The API keys card says which MCP clients a key works with.
+- The Plan card in Settings shows your plan's name with its status as a badge, and when it next renews, starts billing after a trial or ends, beside Manage subscription. The API keys card says which MCP clients a key works with.
 - The app, its error messages and the MCP tool descriptions now write words like post, version, feedback, scheduled post, community, plan and subscription in lowercase mid-sentence. Names of pages, tabs and buttons keep their capitals.
 - The Persona chip at the top of New post and each Post's page reads "Writing in the style of" (beyond phone width), with the squarer corners of the other buttons, and shows your Inspiration authors' photos as a stack, with their initial when there is none or it fails to load. Hovering or focusing it unfolds each photo with its handle over the page title, and on a touch screen the first tap unfolds it and the second opens Persona.
 - The sidebar shows Persona as a plain link, without the "N/3" count of Inspiration authors.

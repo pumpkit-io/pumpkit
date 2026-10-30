@@ -13,7 +13,6 @@ import {
   type SubscriptionStatus,
 } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
-import { recurringLabel } from './PlanCard';
 
 // How each Subscription status reads to the User. Ended ones are never shown.
 const STATUS_LABELS: Record<SubscriptionStatus, string> = {
@@ -34,7 +33,7 @@ const PAYMENT_FAILED_STATUSES: ReadonlySet<SubscriptionStatus> = new Set([
   'paused',
 ]);
 
-function statusBadge(status: SubscriptionStatus): BadgeProps['variant'] {
+function statusBadgeVariant(status: SubscriptionStatus): BadgeProps['variant'] {
   if (status === 'active') return 'success';
   if (status === 'trialing') return 'accent';
   return PAYMENT_FAILED_STATUSES.has(status) ? 'warning' : 'default';
@@ -46,7 +45,7 @@ function nextBillingLabel({ status, cancelAtPeriodEnd }: Subscription): string {
   return status === 'trialing' ? 'Billing starts on' : 'Renews on';
 }
 
-/** The User's Plan, its price, status and next billing date, with the billing portal for the rest. */
+/** The User's Plan, its status and next billing date, with the billing portal for the rest. */
 export function SubscriptionCard({
   data,
   isLoading,
@@ -91,23 +90,19 @@ export function SubscriptionCard({
               Your last payment failed. Update your card to keep access.
             </p>
           )}
-          <div className="flex items-start justify-between gap-3 px-4 py-4">
-            <div className="min-w-0 space-y-0.5">
+          <div className="flex items-center justify-between gap-3 px-4 py-4">
+            <div className="min-w-0">
               <p className="truncate font-sans text-lg font-semibold leading-tight text-foreground">
                 {plan?.productName ?? 'Your plan'}
               </p>
-              {plan && (
-                <p className="font-sans text-sm tabular-nums text-muted-foreground">
-                  {recurringLabel(plan.amount, plan.currency, plan.interval, plan.intervalCount)}
-                </p>
-              )}
             </div>
-            <Badge variant={statusBadge(subscription.status)} className="shrink-0">
+            <Badge variant={statusBadgeVariant(subscription.status)} className="shrink-0">
               {STATUS_LABELS[subscription.status]}
             </Badge>
           </div>
           <div className="flex flex-col gap-3 border-t border-border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            {subscription.currentPeriodEnd && (
+            {/* While a payment fails Stripe retries it, so nothing renews on the period end. */}
+            {subscription.currentPeriodEnd && !paymentFailed && (
               <p className="font-sans text-sm text-foreground">
                 {`${nextBillingLabel(subscription)} ${new Date(
                   subscription.currentPeriodEnd,
