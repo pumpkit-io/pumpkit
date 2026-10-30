@@ -18,8 +18,9 @@ import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
 import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
-import { cardParts, copiedText, textVersionOf } from '@/features/posts/shownText';
+import { cardParts, copiedText, versionOnScreen } from '@/features/posts/shownText';
 import { TextEditor, type TextChange } from '@/features/posts/TextEditor';
+import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import type { TextSaveState } from '@/features/posts/useTextAutosave';
 import type { TextTrace, UndoAnnouncement } from '@/features/posts/useUndoLine';
 import { usePost } from '@/features/posts/usePost';
@@ -103,18 +104,18 @@ function LoadedPost({
   const { connection } = useXConnectionContext();
   const { subscribed } = useSubscribed();
   const location = useLocation();
+  const opensEditor = opensEditing(location.state);
   const [editing, setEditing] = useState(
-    () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
+    () => opensEditor && post.scheduledPost?.state === 'scheduled',
   );
   const navigate = useNavigate();
-  const opensEditor = opensEditing(location.state);
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
   useEffect(() => {
     if (opensEditor) navigate(location.pathname, { replace: true, state: null });
   }, [opensEditor, location.pathname, navigate]);
 
-  const textVersion = textVersionOf(post);
+  const textVersion = versionOnScreen(post);
   const latest = post.versions[post.versions.length - 1];
   if (!textVersion || !latest) return null;
   const { scheduledPost } = post;
@@ -128,7 +129,7 @@ function LoadedPost({
       <Page title={breadcrumb}>
         <ScheduledPostEditor
           scheduledPost={scheduledPost}
-          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? 280}
+          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
           onSaved={(saved) => {
             onScheduledPost(saved);
             setEditing(false);

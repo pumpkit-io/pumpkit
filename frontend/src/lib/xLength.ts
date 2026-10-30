@@ -158,3 +158,6 @@ function urlSpans(text: string): Map<number, number> {
   }
   return spans;
 }
+
+/** X's limit for an account without Premium, when the Text doesn't say its own. */
+export const X_POST_MAX_CHARS = 280;

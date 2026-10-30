@@ -5,14 +5,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { shortTimeAgo } from '@/lib/relativeTime';
-import { useMediaQuery } from '@/lib/useMediaQuery';
+import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import { cn } from '@/lib/utils';
 import type { Version } from '@/services/postService';
+import { ICON_BUTTON } from './iconButton';
 
 const HISTORY_BILLING_SOURCE = 'post_history_restore';
-
-export const ICON_BUTTON =
-  'inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none';
 
 interface HistoryProps {
   brief: string;
@@ -141,7 +139,7 @@ function HistoryList({
  * sheet on a phone. Clicking one restores it, unless it is already the Text as written.
  */
 export function HistoryButton({ onRestore, ...list }: HistoryProps) {
-  const phone = useMediaQuery('(max-width: 639px)');
+  const phone = useMediaQuery(PHONE);
   const [open, setOpen] = useState(false);
   const { subscribed } = useSubscribed();
   const goToChoosePlan = useGoToChoosePlan();

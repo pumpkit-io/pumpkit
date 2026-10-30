@@ -1492,9 +1492,38 @@ describe('Post page', () => {
       await textCard();
 
       const dock = panel('Draft');
-      fireEvent.click(await dock.findByRole('link', { name: 'Subscribe to write' }));
+      const subscribe = await dock.findByRole('link', { name: 'Subscribe to write' });
       expect(dock.queryByRole('button', { name: 'Send Feedback' })).not.toBeInTheDocument();
+      expect(dock.getByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      fireEvent.change(feedbackBox(), { target: { value: 'shorter' } });
+      expect(dock.queryByText(/↵ to send/)).not.toBeInTheDocument();
+      fireEvent.keyDown(feedbackBox(), { key: 'Enter', metaKey: true });
+      expect(postService.addVersion).not.toHaveBeenCalled();
+
+      fireEvent.click(subscribe);
       expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_feedback' });
+    });
+
+    it.each([
+      ['⌘Enter', { metaKey: true }],
+      ['Ctrl+Enter', { ctrlKey: true }],
+    ])('sends Feedback with %s, as the hint says', async (_name, keys) => {
+      vi.mocked(postService.addVersion).mockResolvedValue(versionTwo);
+      renderPost(postWith('the first final'));
+      await textCard();
+      fireEvent.change(feedbackBox(), { target: { value: 'make it shorter' } });
+      await waitFor(() =>
+        expect(panel('Draft').getByRole('button', { name: 'Send Feedback' })).toBeEnabled(),
+      );
+
+      expect(panel('Draft').getByText(/↵ to send/)).toBeVisible();
+      fireEvent.keyDown(feedbackBox(), { key: 'Enter', ...keys });
+
+      await waitFor(() =>
+        expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post', [
+          'the first final',
+        ]),
+      );
     });
 
     it('keeps typed Feedback in the box after "Post to…"', async () => {

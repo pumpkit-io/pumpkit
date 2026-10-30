@@ -111,7 +111,7 @@ export class TextHistory {
       (burst.mode === null || burst.mode === mode);
 
     this.burst = {
-      mode: mode ?? null,
+      mode,
       lastAt: now,
       closed: cause === 'paste' || cause === 'cut',
     };

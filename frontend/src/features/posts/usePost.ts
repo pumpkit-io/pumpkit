@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { track } from '@/lib/analytics';
-import { xWeightedLength } from '@/lib/xLength';
+import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import {
   postService,
@@ -47,7 +47,7 @@ function withEditedText(
       parts: texts.map((t, i) => ({
         text: t,
         charCount: xWeightedLength(t),
-        charLimit: text.parts[i]?.charLimit ?? text.parts[0]?.charLimit ?? 280,
+        charLimit: text.parts[i]?.charLimit ?? text.parts[0]?.charLimit ?? X_POST_MAX_CHARS,
       })),
       edited:
         !source ||

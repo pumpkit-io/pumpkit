@@ -11,10 +11,8 @@ import type { TextTrace } from './useUndoLine';
 export const TRACE_FADE_MS = 1_200;
 export const TRACE_STILL_MS = 1_500;
 
-/** Which Part an edit changed, and how, as the browser's `inputType` says ("insertText"…). */
+/** What kind of change an edit was, from the browser's `inputType` ("insertText"…). */
 export interface TextChange {
-  part: number;
-  inputType: string | null;
   cause: EditCause;
 }
 
@@ -206,7 +204,7 @@ export function TextEditor({
     caret.current = { part: index, at };
     onEdit(
       texts.map((text, i) => (i === index ? value : text)),
-      { part: index, inputType, cause: jumped ? 'cursorJump' : causeOf(inputType, before, value) },
+      { cause: jumped ? 'cursorJump' : causeOf(inputType, before, value) },
     );
   };
 
