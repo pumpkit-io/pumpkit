@@ -559,7 +559,9 @@ async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:
     check_takes_feedback(post_status(scheduled_post.state if scheduled_post else None))
 
 
-async def _x_connection_response(db: AsyncSession, connection: XConnection) -> XConnectionResponse:
+async def _x_connection_response(
+    db: AsyncSession, connection: XConnection, user: User
+) -> XConnectionResponse:
     return XConnectionResponse(
         handle=connection.handle,
         char_limit=x_post_max_chars(connection.subscription_type),
@@ -567,6 +569,8 @@ async def _x_connection_response(db: AsyncSession, connection: XConnection) -> X
         scheduled_posts_waiting=await service.count_waiting(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id
         ),
+        photo_url=connection.photo_url,
+        offer_photo=x_connections_service.offers_photo(connection, user),
     )
 
 
@@ -578,7 +582,7 @@ async def get_x_connection(db: AsyncSession, user: User) -> XConnectionResponse:
     connection = await x_connections_service.get_connection(db, user_id=user.id)
     if connection is None:
         raise x_connections_service.XConnectionNotFoundError()
-    return await _x_connection_response(db, connection)
+    return await _x_connection_response(db, connection, user)
 
 
 async def complete_x_authorization(
@@ -611,4 +615,4 @@ async def complete_x_authorization(
     except IntegrityError:
         # Another User connected the same X account between the check and the save.
         raise _owned_elsewhere(account.handle)
-    return await _x_connection_response(db, connection)
+    return await _x_connection_response(db, connection, user)

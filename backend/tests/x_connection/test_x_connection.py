@@ -60,6 +60,8 @@ async def test_a_subscribed_user_connects_and_then_sees_their_handle(
         "char_limit": 280,
         "needs_reconnect": False,
         "scheduled_posts_waiting": 0,
+        "photo_url": None,
+        "offer_photo": False,
     }
     assert completed.json() == expected
     assert (await client.get(X_CONNECTION)).json() == expected
@@ -90,6 +92,32 @@ async def test_the_x_connection_reports_the_limit_for_the_x_account_s_subscripti
 
     assert completed.json()["char_limit"] == char_limit
     assert (await client.get(X_CONNECTION)).json()["char_limit"] == char_limit
+
+
+async def test_connecting_stores_the_x_account_s_photo(client, subscribed, fake_x_publisher, clock):
+    photo = "https://pbs.twimg.com/profile_images/1/ada_200x200.jpg"
+    fake_x_publisher.account = XAccount(
+        user_id="1001", handle="ada", subscription_type="None", photo_url=photo
+    )
+
+    completed = await _connect(client)
+
+    assert completed.json()["photo_url"] == photo
+    assert (await client.get(X_CONNECTION)).json()["photo_url"] == photo
+
+
+async def test_reconnecting_an_x_account_that_lost_its_photo_forgets_it(
+    client, subscribed, fake_x_publisher, clock
+):
+    fake_x_publisher.account = XAccount(
+        user_id="1001", handle="ada", subscription_type="None", photo_url="https://x/ada.jpg"
+    )
+    await _connect(client)
+    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type="None")
+
+    await _connect(client)
+
+    assert (await client.get(X_CONNECTION)).json()["photo_url"] is None
 
 
 async def test_the_x_connection_outlives_the_session_it_was_made_in(

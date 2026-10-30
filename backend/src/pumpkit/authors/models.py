@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,9 +53,14 @@ class AuthorPost(Base):
 
 
 class AuthorFetch(Base):
-    """When a handle's posts were last fetched, shared by every User who lists it."""
+    """
+    When a handle's posts were last fetched, and the author's photo as that fetch found it,
+    shared by every User who lists it.
+    """
 
     __tablename__ = "author_fetches"
 
     handle: Mapped[str] = mapped_column(String, primary_key=True)
     last_fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # X's URL for the photo, never a copy; the browser loads it from X.
+    photo_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)

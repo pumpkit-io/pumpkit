@@ -24,6 +24,7 @@ from pumpkit.auth.google_config import (
     GOOGLE_SIGN_IN_STATE_COOKIE,
 )
 from pumpkit.auth.google_sign_in import GoogleSignIn, GoogleSignInError
+from pumpkit.auth.gravatar import gravatar_url
 from pumpkit.auth.mailer import AuthMailer, AuthMailerError, MagicLinkEmail
 from pumpkit.auth.models import ApiKey, User
 from pumpkit.auth.schemas import ApiKeyCreatedResponse, ApiKeyResponse, ApiKeysListResponse
@@ -31,6 +32,7 @@ from pumpkit.auth.sign_up_allowlist import EMAIL_NOT_ALLOWED, EmailNotAllowedErr
 from pumpkit.core.config import settings
 from pumpkit.core.errors import report_unexpected_exception
 from pumpkit.core.logging import logger
+from pumpkit.core.photos import PhotoFetcher
 from pumpkit.core.schemas import MessageResponse
 from pumpkit.core.security import (
     decode_payload,
@@ -97,6 +99,7 @@ async def oauth_google_callback(
     request: Request,
     db: AsyncSession,
     google_sign_in: GoogleSignIn,
+    photo_fetcher: PhotoFetcher,
     code: Optional[str],
     state: Optional[str],
     error: Optional[str],
@@ -111,6 +114,7 @@ async def oauth_google_callback(
             request=request,
             db=db,
             google_sign_in=google_sign_in,
+            photo_fetcher=photo_fetcher,
             code=code,
             state=state,
             error=error,
@@ -127,6 +131,7 @@ async def _sign_in_with_google(
     request: Request,
     db: AsyncSession,
     google_sign_in: GoogleSignIn,
+    photo_fetcher: PhotoFetcher,
     code: Optional[str],
     state: Optional[str],
     error: Optional[str],
@@ -165,6 +170,8 @@ async def _sign_in_with_google(
     # One sign-in, one transaction: the User, their Google identity and the
     # Session commit together, or not at all.
     user = await google_identities_service.resolve_user(db, claims)
+    if claims.picture:
+        await _fill_empty_photo(db, user, claims.picture, photo_fetcher)
     result = await sessions.start(
         db,
         user=user,
@@ -177,6 +184,22 @@ async def _sign_in_with_google(
         return result.as_sign_in_redirect()
     await db.commit()
     return result.as_callback_redirect("/oauth/google/callback")
+
+
+async def _fill_empty_photo(
+    db: AsyncSession, user: User, photo_url: str, photo_fetcher: PhotoFetcher
+) -> None:
+    """
+    Copy the photo at `photo_url` into a User who may have one filled. A failed download leaves
+    the Photo empty, so the next sign-in tries again.
+    """
+    if not user_service.may_fill_photo(user):
+        return
+    photo_data_url = await photo_fetcher.fetch(photo_url)
+    if photo_data_url is None:
+        logger.info("No photo copied for User %s", user.id)
+        return
+    await user_service.fill_photo(db, user, photo_data_url)
 
 
 def _state_flow(state: str) -> Optional[str]:
@@ -260,6 +283,7 @@ async def complete_magic_link(
     token: str,
     request: Request,
     db: AsyncSession,
+    photo_fetcher: PhotoFetcher,
     now: datetime,
 ) -> RedirectResponse:
     """
@@ -268,7 +292,9 @@ async def complete_magic_link(
     unexpected exception is reported and rolled back, so a failure halfway leaves no User behind.
     """
     try:
-        return await _sign_in_with_magic_link(token=token, request=request, db=db, now=now)
+        return await _sign_in_with_magic_link(
+            token=token, request=request, db=db, photo_fetcher=photo_fetcher, now=now
+        )
     except Exception as exc:
         report_unexpected_exception(request, exc)
         await db.rollback()
@@ -279,6 +305,7 @@ async def _sign_in_with_magic_link(
     token: str,
     request: Request,
     db: AsyncSession,
+    photo_fetcher: PhotoFetcher,
     now: datetime,
 ) -> RedirectResponse:
     redeemed = await magic_links.redeem(db, token=token, now=now)
@@ -300,11 +327,14 @@ async def _sign_in_with_magic_link(
         sign_in_method="magic_link",
         client=sessions.ClientInfo.from_request(request),
     )
-    # Commit a refusal too, so the single-use Magic link stays consumed.
-    # A refused User already exists (Suspended), so resolving them wrote nothing else.
-    await db.commit()
     if isinstance(result, sessions.SessionRefusal):
+        # Commit a refusal too, so the single-use Magic link stays consumed.
+        # A refused User already exists (Suspended), so resolving them wrote nothing else.
+        await db.commit()
         return result.as_sign_in_redirect()
+    if settings.GRAVATAR_ENABLED:
+        await _fill_empty_photo(db, user, gravatar_url(redeemed.email), photo_fetcher)
+    await db.commit()
     return result.as_callback_redirect("/auth/magic-link/callback")
 
 

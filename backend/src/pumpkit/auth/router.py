@@ -19,6 +19,7 @@ from pumpkit.auth.schemas import (
     UserProfileUpdate,
 )
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.photos import PhotoFetcher, get_photo_fetcher
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.schemas import MessageResponse
 from pumpkit.core.time import Clock, get_clock
@@ -56,11 +57,13 @@ async def oauth_google_callback(
     error: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
     google_sign_in: GoogleSignIn = Depends(get_google_sign_in),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
 ) -> RedirectResponse:
     return await mediator.oauth_google_callback(
         request=request,
         db=db,
         google_sign_in=google_sign_in,
+        photo_fetcher=photo_fetcher,
         code=code,
         state=state,
         error=error,
@@ -97,12 +100,14 @@ async def complete_magic_link(
     token: str,
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
 ) -> RedirectResponse:
     # The browser lands here from an email link, so every outcome is a redirect.
     return await mediator.complete_magic_link(
         token=token,
         request=request,
         db=db,
+        photo_fetcher=photo_fetcher,
         now=clock(),
     )
 
@@ -136,13 +141,7 @@ async def logout(request: Request, db: AsyncSession = Depends(get_async_db)) -> 
 async def get_current_user_profile(
     current_user: User = Depends(get_current_user),
 ) -> UserProfileResponse:
-    return UserProfileResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        avatar_data_url=current_user.avatar_data_url,
-    )
+    return UserProfileResponse.model_validate(current_user)
 
 
 @router.patch(
@@ -155,22 +154,17 @@ async def update_current_user_profile(
     update: UserProfileUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
 ) -> UserProfileResponse:
     """Apply only the fields present in the body; ``null`` clears a field (e.g. the avatar)."""
 
     current_user = await user_service.update_user_profile(
-        db=db, user=current_user, changes=update.model_dump(exclude_unset=True)
+        db=db, user=current_user, changes=update.model_dump(exclude_unset=True), now=clock()
     )
     await db.commit()
     await db.refresh(current_user)
 
-    return UserProfileResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        avatar_data_url=current_user.avatar_data_url,
-    )
+    return UserProfileResponse.model_validate(current_user)
 
 
 # Listing and revoking need only the Session, so a User whose Subscription ended can revoke a key.

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
 import { SettingsCard } from '@/components/SettingsCard';
+import { UserAvatar } from '@/components/UserAvatar';
 import { Button } from '@/components/ui/button';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
@@ -46,8 +47,15 @@ export function XAccountCard({ notice }: { notice: string | null }) {
       ) : connection ? (
         <div className="space-y-3 rounded-lg border border-border px-4 py-2">
           <div className="flex items-center justify-between gap-3">
-            <span className="font-sans text-sm font-medium text-foreground">
-              @{connection.handle}
+            <span className="flex min-w-0 items-center gap-3">
+              <UserAvatar
+                name={connection.handle}
+                avatarUrl={connection.photoUrl}
+                className="h-8 w-8 text-xs"
+              />
+              <span className="truncate font-sans text-sm font-medium text-foreground">
+                @{connection.handle}
+              </span>
             </span>
             <Button
               variant="outline"

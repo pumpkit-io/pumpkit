@@ -20,14 +20,20 @@ Per ciascuna categoria qui sotto sono indicati di quali dati si tratta, per cosa
 
 ### Account e profilo {#data-account}
 
-- **Quali dati:** il tuo indirizzo email, il tuo nome e l'immagine del profilo che carichi, se presente.
+- **Quali dati:** il tuo indirizzo email, il tuo nome e la tua foto, se ne hai una.
 - **Perché:** per creare il tuo account, farti accedere e mostrare il tuo profilo.
 - **Base giuridica:** esecuzione del contratto concluso con te (art. 6, par. 1, lett. b) GDPR).
 
 ### Identità Google {#data-google}
 
 - **Quali dati:** se accedi con Google, l'identificativo del tuo account Google, il profilo che Google condivide con Pumpkit (nome, indirizzo email e immagine) e il token di accesso rilasciato da Google, conservato in forma cifrata.
-- **Perché:** per farti accedere con il tuo account Google.
+- **Perché:** per farti accedere con il tuo account Google. Se non hai una foto e non ne hai mai scelta o rimossa una, Pumpkit scarica una copia dell'immagine del tuo account Google e la usa come tua foto. Puoi cambiarla o rimuoverla nelle Impostazioni, e da quel momento Pumpkit non la sostituisce più.
+- **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
+
+### Immagine Gravatar {#data-gravatar}
+
+- **Quali dati:** se accedi con un Magic link, non hai una foto e non ne hai mai scelta o rimossa una, Pumpkit invia a Gravatar, gestito da Automattic, un hash del tuo indirizzo email per cercare l'immagine che vi hai pubblicato. Il tuo indirizzo email in sé non viene inviato.
+- **Perché:** per usare la tua immagine Gravatar come tua foto. Pumpkit ne scarica una copia; se non ne hai una, restano le tue iniziali. Puoi cambiarla o rimuoverla nelle Impostazioni, e da quel momento Pumpkit non la sostituisce più.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
 ### Registrazioni delle Sessioni e dei Magic link {#data-sessions}
@@ -58,7 +64,7 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 
 ### X connection {#data-x-connection}
 
-- **Quali dati:** l'identificativo e l'handle del tuo account X, le autorizzazioni che hai concesso, il tipo di abbonamento X e i token di accesso rilasciati da X, conservati in forma cifrata.
+- **Quali dati:** l'identificativo, l'handle e l'indirizzo della foto del tuo account X, le autorizzazioni che hai concesso, il tipo di abbonamento X e i token di accesso rilasciati da X, conservati in forma cifrata. Pumpkit mostra la foto del tuo account X facendola caricare al tuo browser direttamente da X. Se scegli "Use photo", Pumpkit conserva una copia di quella foto come tua foto.
 - **Perché:** per pubblicare sul tuo account X quando lo chiedi a Pumpkit.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
@@ -88,6 +94,7 @@ Il Gestore condivide i dati personali solo con i fornitori indicati qui sotto, e
 | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | DigitalOcean (hosting)                                                     | Tutti i dati sopra indicati, sul server su cui girano Pumpkit e il suo database                                      | Francoforte, Germania |
 | Google (accesso)                                                           | La tua richiesta di accesso quando scegli Google                                                                     | Stati Uniti           |
+| Gravatar, gestito da Automattic (foto)                                     | Un hash del tuo indirizzo email, quando accedi con un Magic link e non hai una foto                                  | Stati Uniti           |
 | Resend (email)                                                             | Il tuo indirizzo email e l'email con il Magic link                                                                   | Stati Uniti           |
 | Stripe (fatturazione)                                                      | Il tuo nome, indirizzo email e identificativo utente, e i dati di pagamento che inserisci su Stripe Checkout         | Stati Uniti           |
 | X (X connection e pubblicazione)                                           | La tua autorizzazione quando colleghi l'account e il testo di ogni Scheduled post quando viene pubblicato            | Stati Uniti           |
@@ -144,7 +151,7 @@ Se ritieni che il Gestore tratti i tuoi dati in modo illecito, puoi proporre rec
 
 Questa sezione è rivolta ai titolari degli account X che un Utente sceglie come Inspiration author.
 
-Quando un Utente sceglie il tuo account X come Inspiration author, Pumpkit recupera i tuoi post pubblici recenti tramite twitterapi.io, li conserva e li invia a OpenRouter affinché i Post dell'Utente seguano il tuo stile di scrittura. I tuoi post determinano solo lo stile di quei Post, mai il loro contenuto. Pumpkit non pubblica i tuoi post e non ti contatta.
+Quando un Utente sceglie il tuo account X come Inspiration author, Pumpkit recupera i tuoi post pubblici recenti tramite twitterapi.io, li conserva e li invia a OpenRouter affinché i Post dell'Utente seguano il tuo stile di scrittura. I tuoi post determinano solo lo stile di quei Post, mai il loro contenuto. Pumpkit non pubblica i tuoi post e non ti contatta. Pumpkit conserva anche l'indirizzo della tua foto X, che il browser dell'Utente carica da X per mostrarla accanto al tuo handle.
 
 - **Fonte:** i tuoi post pubblici su X, letti tramite twitterapi.io.
 - **Base giuridica:** il legittimo interesse del Gestore e dei suoi Utenti ad apprendere lo stile di scrittura da post che hai reso pubblici (art. 6, par. 1, lett. f) GDPR).

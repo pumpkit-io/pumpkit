@@ -113,8 +113,11 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
     post_id = (await client.post(POSTS, json={"brief": "ship", "format": "thread"})).json()["id"]
     connection = await x_connections_service.get_connection(db, user_id=user.id)
     assert connection is not None
-    await x_connections_service.save_subscription_type(
-        db, connection, subscription_type="Premium", now=datetime.now(timezone.utc)
+    await x_connections_service.save_account(
+        db,
+        connection,
+        account=XAccount(user_id=connection.x_user_id, handle="ada", subscription_type="Premium"),
+        now=datetime.now(timezone.utc),
     )
     await db.commit()
     fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["one", "two"]}]

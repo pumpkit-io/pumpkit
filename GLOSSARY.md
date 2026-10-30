@@ -24,6 +24,10 @@ _Avoid_: whitelist, invite list, access list
 A person with a Pumpkit account, identified by their email address.
 _Avoid_: account holder, customer (in auth contexts)
 
+**Photo**:
+The picture a User is shown with in Pumpkit. The User may upload one, take it from their Google account, their Gravatar or their X connection, or have none and be shown by their initials. Once a User has chosen or removed a Photo, Pumpkit never replaces it on its own. An X account and an Inspiration author also have a photo, the one X shows for them.
+_Avoid_: avatar, profile picture, pfp
+
 **Sign-in method**:
 A way a User proves who they are to Pumpkit. The only Sign-in methods are Google and Magic link (see ADR 0002).
 _Avoid_: auth provider, login method, first-party auth, third-party auth

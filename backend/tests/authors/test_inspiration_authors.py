@@ -38,6 +38,7 @@ async def test_a_subscribed_user_adds_a_handle_and_its_posts_are_fetched_at_once
         "handle": "levelsio",
         "last_fetched_at": clock().isoformat().replace("+00:00", "Z"),
         "post_count": 2,
+        "photo_url": None,
     }
     assert fake_x_reader.calls == ["levelsio"]
 
@@ -56,8 +57,13 @@ async def test_the_list_shows_authors_in_the_order_they_were_added(
     fetched_at = clock().isoformat().replace("+00:00", "Z")
     assert response.json() == {
         "data": [
-            {"handle": "levelsio", "last_fetched_at": fetched_at, "post_count": 2},
-            {"handle": "paulg", "last_fetched_at": fetched_at, "post_count": 1},
+            {
+                "handle": "levelsio",
+                "last_fetched_at": fetched_at,
+                "post_count": 2,
+                "photo_url": None,
+            },
+            {"handle": "paulg", "last_fetched_at": fetched_at, "post_count": 1, "photo_url": None},
         ]
     }
 
@@ -219,6 +225,7 @@ async def test_adding_a_handle_fetched_less_than_an_hour_ago_uses_its_stored_pos
         "handle": "levelsio",
         "last_fetched_at": _iso(fetched_at),
         "post_count": 2,
+        "photo_url": None,
     }
     assert fake_x_reader.calls == ["levelsio"]
 
@@ -239,6 +246,7 @@ async def test_adding_a_handle_fetched_over_an_hour_ago_fetches_it_again(
         "handle": "levelsio",
         "last_fetched_at": _iso(clock()),
         "post_count": 3,
+        "photo_url": None,
     }
     assert fake_x_reader.calls == ["levelsio", "levelsio"]
 
@@ -276,10 +284,62 @@ async def test_refreshing_an_author_stores_its_new_posts_and_updates_its_fetch_t
     response = await client.post(f"{AUTHORS}/LevelsIO/refresh")
 
     assert response.status_code == 200
-    expected = {"handle": "levelsio", "last_fetched_at": _iso(clock()), "post_count": 3}
+    expected = {
+        "handle": "levelsio",
+        "last_fetched_at": _iso(clock()),
+        "post_count": 3,
+        "photo_url": None,
+    }
     assert response.json() == expected
     assert (await client.get(AUTHORS)).json() == {"data": [expected]}
     assert fake_x_reader.calls == ["levelsio", "levelsio"]
+
+
+PHOTO = "https://pbs.twimg.com/profile_images/1/levelsio_normal.jpg"
+NEW_PHOTO = "https://pbs.twimg.com/profile_images/2/levelsio_normal.jpg"
+
+
+async def test_adding_an_author_stores_their_x_photo_for_every_user_who_lists_them(
+    client, db, subscribed, fake_x_reader
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    fake_x_reader.photos["levelsio"] = PHOTO
+
+    response = await client.post(AUTHORS, json={"handle": "levelsio"})
+
+    assert response.json()["photo_url"] == PHOTO
+    await _sign_in_as_another_subscribed_user(db)
+    added_without_a_fetch = await client.post(AUTHORS, json={"handle": "levelsio"})
+    assert added_without_a_fetch.json()["photo_url"] == PHOTO
+    assert (await client.get(AUTHORS)).json()["data"][0]["photo_url"] == PHOTO
+    assert fake_x_reader.calls == ["levelsio"]
+
+
+async def test_a_refetch_replaces_the_stored_photo(client, subscribed, fake_x_reader, clock):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    fake_x_reader.photos["levelsio"] = PHOTO
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(hours=2))
+    fake_x_reader.photos["levelsio"] = NEW_PHOTO
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.json()["photo_url"] == NEW_PHOTO
+    assert (await client.get(AUTHORS)).json()["data"][0]["photo_url"] == NEW_PHOTO
+
+
+async def test_a_refetch_that_finds_no_photo_keeps_the_stored_one(
+    client, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["levelsio"] = _posts("1")
+    fake_x_reader.photos["levelsio"] = PHOTO
+    await client.post(AUTHORS, json={"handle": "levelsio"})
+    clock.advance(timedelta(hours=2))
+    del fake_x_reader.photos["levelsio"]
+
+    response = await client.post(f"{AUTHORS}/levelsio/refresh")
+
+    assert response.json()["photo_url"] == PHOTO
 
 
 async def test_refreshing_a_handle_fetched_less_than_an_hour_ago_returns_429_with_when_to_retry(

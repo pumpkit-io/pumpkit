@@ -81,6 +81,12 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 | --- | --- |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials. Set both or neither. With neither, the sign-in page offers only the Magic link and the Google sign-in routes answer 404. Register `PUBLIC_URL/api/v1/oauth/google/callback` as the client's redirect URI. |
 
+### Gravatar
+
+| Variable | Meaning |
+| --- | --- |
+| `GRAVATAR_ENABLED` | `true` to fill an empty Photo from Gravatar when a User signs in with a Magic link, for a User who has never saved or removed a Photo. Pumpkit sends Gravatar (Automattic) a SHA-256 hash of the email address and stores a copy of the picture; an email with no Gravatar keeps its initials. Defaults to `false`, so nothing about Users' email addresses leaves the Instance. If you turn it on, say so in your privacy notice. |
+
 ### X app
 
 | Variable | Meaning |

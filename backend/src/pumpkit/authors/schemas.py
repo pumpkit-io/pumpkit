@@ -22,11 +22,24 @@ class InspirationAuthorAddRequest(BaseModel):
         return normalize_handle(value)
 
 
-class InspirationAuthorResponse(BaseModel):
+class InspirationAuthorToolResponse(BaseModel):
+    """An Inspiration author as the MCP tools answer with it: without its photo."""
+
     handle: str
     # None only if the handle has no fetch record, which adding an author always writes.
     last_fetched_at: Optional[datetime]
     post_count: int
+
+
+class InspirationAuthorResponse(InspirationAuthorToolResponse):
+    # X's URL for the author's photo, None until a fetch finds one.
+    photo_url: Optional[str]
+
+
+class InspirationAuthorsListToolResponse(BaseModel):
+    """The User's Inspiration authors in the order they were added."""
+
+    data: list[InspirationAuthorToolResponse]
 
 
 class InspirationAuthorsListResponse(BaseModel):

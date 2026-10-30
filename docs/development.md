@@ -7,7 +7,7 @@ backend/src/pumpkit/
   main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
   mcp_server.py    the MCP server: every area's tools behind API key authentication, the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
-  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev)
+  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
   authors/         Inspiration authors and their posts; the X reader (twitterapi.io)
@@ -42,7 +42,7 @@ The signed-in web app is one route table, `pages/signedInRoutes.tsx`, rendered i
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
 
-ADR 0008 orders the areas `core` <- `auth` <- `billing` <- {`authors`, `x_connection`, `support`} <- `posts` <- `scheduling`: an area imports only areas to its left, and only their service, models, schemas and domain modules, never a router or mediator. `core` imports no area. `cd backend && uv run --extra dev lint-imports` checks these rules with the contracts in `backend/pyproject.toml`, and CI runs it. When an endpoint belongs to one area but needs a higher area's data, serve it from the higher area: `GET /x-connection` and `POST /x-connection/authorizations/complete` answer with the count of waiting Scheduled posts, so `scheduling/router.py` serves them, and `x_connection/router.py` keeps starting an authorization and disconnecting.
+ADR 0008 orders the areas `core` <- `auth` <- `billing` <- {`authors`, `x_connection`, `support`} <- `posts` <- `scheduling`: an area imports only areas to its left, and only their service, models, schemas and domain modules, never a router or mediator. `core` imports no area. `cd backend && uv run --extra dev lint-imports` checks these rules with the contracts in `backend/pyproject.toml`, and CI runs it. When an endpoint belongs to one area but needs a higher area's data, serve it from the higher area: `GET /x-connection` and `POST /x-connection/authorizations/complete` answer with the count of waiting Scheduled posts, so `scheduling/router.py` serves them, and `x_connection/router.py` keeps starting an authorization, disconnecting, and using or declining the X account's photo as the User's Photo.
 
 ## Recipes
 
@@ -142,6 +142,10 @@ answer = classification.answers["opening"]  # a ChoiceAnswer: choice, confidence
 ```
 
 `state` is any JSON value, and each question's name keys its answer. `classification.model` is the Jev version that answered, and `classification.usage` its token counts. The adapter waits 5 seconds and retries once on a timeout, a lost connection, a 429 or a 529. Jev is optional, so the caller catches `ClassifierError` (the provider failed or gave an answer that doesn't fit the questions) and `ClassifierNotConfiguredError` (no key), a subclass of it, and takes its cautious path instead of failing the request. Tests get the scripted `FakeClassifier` through the autouse `fake_classifier` fixture: queue `fake_classifier.replies` (answers by question name, or an exception) and read each call's state, questions and model in `fake_classifier.calls`. With no reply queued it raises `ClassifierError`, so a test that doesn't script Jev sees the cautious path. The adapter's own tests are in `backend/tests/core/test_classifier.py`.
+
+### Copy a photo into a User's Photo
+
+A User's Photo is always a copy stored in `users.avatar_data_url`: the browser never loads it from Google, Gravatar or X. Mediators download one through the `PhotoFetcher` port (`core/photos.py`): a router injects it with `photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher)`, and `await photo_fetcher.fetch(url)` returns a JPEG data URL, a centred square of at most 256px within the upload limits, or `None` when the image is missing, too large, not an image or unreachable. It never raises, so the caller carries on without a Photo. Store the result through auth's service: `fill_photo` for a Photo the User didn't pick, which applies only while `may_fill_photo` (no Photo and no `photo_chosen_at`) and leaves the marker unset, or `choose_photo` for one they picked, which sets `photo_chosen_at` so Pumpkit never fills it again. Tests get `FakePhotoFetcher` through the autouse `fake_photo_fetcher` fixture: map URLs to data URLs in `fake_photo_fetcher.photos` (any other URL reads as a failed download) and read the URLs asked for in `fake_photo_fetcher.fetched`. The adapter's own tests are in `backend/tests/core/test_photos.py`.
 
 ### Add a page to the shell
 

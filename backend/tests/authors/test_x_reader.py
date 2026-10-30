@@ -37,9 +37,9 @@ async def test_keeps_original_posts_and_quotes_and_drops_replies_reposts_and_unr
         return_value=httpx.Response(200, json=_last_tweets())
     )
 
-    posts = await TwitterApiIoReader().fetch_recent_posts("levelsio")
+    recent = await TwitterApiIoReader().fetch_recent_posts("levelsio")
 
-    assert posts == [
+    assert recent.posts == [
         FetchedPost(
             post_id="1843000000000000006",
             text="shipped a new feature today, took 20 minutes",
@@ -62,14 +62,44 @@ async def test_keeps_original_posts_and_quotes_and_drops_replies_reposts_and_unr
 
 
 @respx.mock
+async def test_reads_the_author_s_photo_from_their_posts():
+    respx.get(TWITTERAPI_IO_LAST_TWEETS_URL).mock(
+        return_value=httpx.Response(200, json=_last_tweets())
+    )
+
+    recent = await TwitterApiIoReader().fetch_recent_posts("levelsio")
+
+    assert recent.photo_url == (
+        "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+    )
+
+
+@pytest.mark.parametrize("picture", [None, "", 42, "http://pbs.twimg.com/a_normal.jpg"])
+@respx.mock
+async def test_posts_without_a_usable_photo_read_as_no_photo(picture):
+    body = _last_tweets()
+    for tweet in body["data"]["tweets"]:
+        if picture is None:
+            tweet["author"].pop("profilePicture")
+        else:
+            tweet["author"]["profilePicture"] = picture
+    respx.get(TWITTERAPI_IO_LAST_TWEETS_URL).mock(return_value=httpx.Response(200, json=body))
+
+    recent = await TwitterApiIoReader().fetch_recent_posts("levelsio")
+
+    assert recent.photo_url is None
+    assert len(recent.posts) == 3
+
+
+@respx.mock
 async def test_reads_tweets_at_the_top_level_of_the_body_too():
     body = _last_tweets()
     body["tweets"] = body.pop("data")["tweets"]
     respx.get(TWITTERAPI_IO_LAST_TWEETS_URL).mock(return_value=httpx.Response(200, json=body))
 
-    posts = await TwitterApiIoReader().fetch_recent_posts("levelsio")
+    recent = await TwitterApiIoReader().fetch_recent_posts("levelsio")
 
-    assert len(posts) == 3
+    assert len(recent.posts) == 3
 
 
 @respx.mock
@@ -80,7 +110,10 @@ async def test_an_empty_timeline_is_no_posts_not_an_unknown_handle():
         )
     )
 
-    assert await TwitterApiIoReader().fetch_recent_posts("quiet") == []
+    recent = await TwitterApiIoReader().fetch_recent_posts("quiet")
+
+    assert recent.posts == []
+    assert recent.photo_url is None
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, createEvent, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -73,6 +73,7 @@ import { postService, type PostDetail } from '@/services/postService';
 import { xConnectionService } from '@/services/xConnectionService';
 import {
   LEVELSIO,
+  NAVAL,
   NOT_SUBSCRIBED,
   PAULG,
   SUBSCRIBED,
@@ -86,6 +87,17 @@ function currentPath() {
 
 function renderNewPost(state?: unknown, instance: Instance = SELLS_PLANS) {
   return renderSignedIn('/new', { state, instance });
+}
+
+// jsdom has no PointerEvent, so fireEvent's pointer events drop `pointerType`.
+function firePointer(
+  name: 'pointerDown' | 'pointerOver' | 'pointerOut',
+  element: Element,
+  pointerType: 'mouse' | 'touch',
+) {
+  const event = createEvent[name](element);
+  Object.defineProperty(event, 'pointerType', { value: pointerType });
+  fireEvent(element, event);
 }
 
 async function writer() {
@@ -174,12 +186,106 @@ describe('New post', () => {
       expect(chip.closest('header')).not.toBeNull();
     });
 
+    it("stacks the Inspiration authors' photos, with initials for a photo that fails", async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+        { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/levelsio_normal.jpg' },
+        { ...PAULG, photoUrl: 'https://pbs.twimg.com/paulg_normal.jpg' },
+        NAVAL,
+      ]);
+      renderNewPost();
+
+      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg, @naval' });
+      const photos = Array.from(chip.querySelectorAll('img'));
+      expect(photos.map((photo) => photo.getAttribute('src'))).toEqual([
+        'https://pbs.twimg.com/levelsio_normal.jpg',
+        'https://pbs.twimg.com/paulg_normal.jpg',
+      ]);
+      expect(within(chip).getByText('N')).toBeInTheDocument();
+
+      fireEvent.error(photos[1]!);
+
+      expect(chip.querySelectorAll('img')).toHaveLength(1);
+      expect(within(chip).getByText('P')).toBeInTheDocument();
+    });
+
+    it('shows the handles only once hovered', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
+      renderNewPost();
+
+      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg' });
+      expect(within(chip).getByText('@levelsio')).not.toBeVisible();
+
+      firePointer('pointerOver', chip, 'mouse');
+
+      expect(within(chip).getByText('@levelsio')).toBeVisible();
+      expect(within(chip).getByText('@paulg')).toBeVisible();
+
+      firePointer('pointerOut', chip, 'mouse');
+
+      expect(within(chip).getByText('@levelsio')).not.toBeVisible();
+    });
+
+    it('shows the handles while focused, and still opens Persona on click', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      renderNewPost();
+
+      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio' });
+      act(() => chip.focus());
+
+      expect(within(chip).getByText('@levelsio')).toBeVisible();
+
+      fireEvent.click(chip);
+
+      expect(await screen.findByRole('heading', { level: 1, name: 'Persona' })).toBeInTheDocument();
+    });
+
+    it('expands on the first tap and opens Persona on the second', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      renderNewPost();
+
+      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio' });
+      firePointer('pointerDown', chip, 'touch');
+      fireEvent.click(chip);
+
+      expect(currentPath()).toBe('/new');
+      expect(within(chip).getByText('@levelsio')).toBeVisible();
+
+      firePointer('pointerDown', chip, 'touch');
+      fireEvent.click(chip);
+
+      expect(await screen.findByRole('heading', { level: 1, name: 'Persona' })).toBeInTheDocument();
+    });
+
+    it('collapses when tapped elsewhere', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      renderNewPost();
+
+      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio' });
+      firePointer('pointerDown', chip, 'touch');
+      fireEvent.click(chip);
+      expect(within(chip).getByText('@levelsio')).toBeVisible();
+
+      firePointer('pointerDown', document.body, 'touch');
+
+      expect(within(chip).getByText('@levelsio')).not.toBeVisible();
+    });
+
     it('asks to set up an empty Persona', async () => {
       renderNewPost();
 
-      expect(
-        await screen.findByRole('link', { name: 'Persona: empty, set it up' }),
-      ).toHaveAttribute('href', '/persona');
+      const chip = await screen.findByRole('link', { name: 'Persona: empty, set it up' });
+      expect(chip).toHaveAttribute('href', '/persona');
+      expect(chip).toHaveTextContent('PersonaSet up');
+      expect(chip.querySelector('img')).toBeNull();
+    });
+
+    it('renders nothing while the Persona loads', async () => {
+      vi.mocked(inspirationAuthorService.list).mockReturnValue(new Promise(() => {}));
+      renderNewPost();
+
+      const heading = await screen.findByRole('heading', { level: 1, name: 'New post' });
+      await writer();
+      expect(heading.closest('header')!.querySelector('a')).toBeNull();
     });
   });
 

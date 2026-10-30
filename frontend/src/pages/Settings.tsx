@@ -13,6 +13,7 @@ import { LegalLinks } from '@/features/legal/LegalLinks';
 import { AppearanceCard } from '@/features/theme/AppearanceCard';
 import { Topbar } from '@/features/topbar/Topbar';
 import { XAccountCard } from '@/features/xConnection/XAccountCard';
+import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
 import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
 
@@ -118,6 +119,7 @@ export function Settings() {
           )}
           <ProfileCard />
           <XAccountCard notice={arrival.xConnectionNotice ?? null} />
+          <XPhotoOfferDialog />
           {sells_plans && (
             <SubscriptionCard
               data={data}

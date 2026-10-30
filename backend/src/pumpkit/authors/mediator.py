@@ -12,7 +12,7 @@ from pumpkit.authors.schemas import (
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
 )
-from pumpkit.authors.x_reader import FetchedPost, HandleNotFoundError, XReader
+from pumpkit.authors.x_reader import HandleNotFoundError, RecentPosts, XReader
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 
 MAX_INSPIRATION_AUTHORS = 3
@@ -45,6 +45,7 @@ def _response(summary: service.AuthorSummary) -> InspirationAuthorResponse:
         handle=summary.handle,
         last_fetched_at=summary.last_fetched_at,
         post_count=summary.post_count,
+        photo_url=summary.photo_url,
     )
 
 
@@ -78,11 +79,11 @@ async def add_author(
 
     last_fetched_at = await service.last_fetched_at(db, handle=handle)
     if next_refresh_at(last_fetched_at, now=now) is None:
-        posts = await _fetch(reader, handle)
-        has_posts = bool(posts)
+        recent = await _fetch(reader, handle)
+        has_posts = bool(recent.posts)
         if has_posts:
-            await service.store_new_posts(db, handle=handle, posts=posts, now=now)
-            await service.record_fetch(db, handle=handle, now=now)
+            await service.store_new_posts(db, handle=handle, posts=recent.posts, now=now)
+            await service.record_fetch(db, handle=handle, now=now, photo_url=recent.photo_url)
     else:
         has_posts = await service.count_posts(db, handle=handle) > 0
     if not has_posts:
@@ -115,14 +116,14 @@ async def refresh_author(
             f"@{handle} was fetched less than an hour ago.", retry_at=retry_at, now=now
         )
 
-    posts = await _fetch(reader, handle)
-    await service.store_new_posts(db, handle=handle, posts=posts, now=now)
-    await service.record_fetch(db, handle=handle, now=now)
+    recent = await _fetch(reader, handle)
+    await service.store_new_posts(db, handle=handle, posts=recent.posts, now=now)
+    await service.record_fetch(db, handle=handle, now=now, photo_url=recent.photo_url)
     await db.commit()
     return await _author_response(db, user_id=user_id, handle=handle)
 
 
-async def _fetch(reader: XReader, handle: str) -> list[FetchedPost]:
+async def _fetch(reader: XReader, handle: str) -> RecentPosts:
     try:
         return await reader.fetch_recent_posts(handle)
     except HandleNotFoundError:

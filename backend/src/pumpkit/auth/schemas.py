@@ -1,16 +1,15 @@
-import re
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
-# About 200 KB of base64: client-resized 256x256 JPEGs are 30-60 KB, so PNG/webp still fit.
-_MAX_AVATAR_DATA_URL_LEN = 220_000
-_AVATAR_DATA_URL_PATTERN = re.compile(r"data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+")
+from pumpkit.core.photos import MAX_PHOTO_DATA_URL_LENGTH, PHOTO_DATA_URL_PATTERN
 
 
 class UserProfileResponse(BaseModel):
-    """The current User's basic profile."""
+    """The current User's basic profile, built from the User with `model_validate`."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     email: EmailStr
@@ -48,9 +47,9 @@ class UserProfileUpdate(BaseModel):
     def validate_avatar(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
-        if len(v) > _MAX_AVATAR_DATA_URL_LEN:
+        if len(v) > MAX_PHOTO_DATA_URL_LENGTH:
             raise ValueError("avatar payload too large")
-        if not _AVATAR_DATA_URL_PATTERN.fullmatch(v):
+        if not PHOTO_DATA_URL_PATTERN.fullmatch(v):
             raise ValueError(
                 "must be a base64-encoded data URL of type image/jpeg, image/png or image/webp"
             )

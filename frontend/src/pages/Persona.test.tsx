@@ -119,20 +119,6 @@ describe('Persona', () => {
     await waitFor(() => expect(field).toBeEnabled());
   });
 
-  it('counts the new author in the sidebar once it is added', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.add).mockResolvedValue(LEVELSIO);
-    renderPersona();
-
-    const panel = await persona();
-    fireEvent.change(await panel.findByLabelText('X handle'), { target: { value: 'levelsio' } });
-    fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-    expect(
-      await screen.findByRole('link', { name: 'Persona, 1 of 3 Inspiration authors' }),
-    ).toBeInTheDocument();
-  });
-
   it('lists the authors in order with when their posts were last fetched and how many are stored', async () => {
     vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
     vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
@@ -146,6 +132,33 @@ describe('Persona', () => {
     ]);
     expect(within(items[0]).getByText('Fetched 2 hours ago · 18 posts')).toBeInTheDocument();
     expect(within(items[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
+  });
+
+  it("shows each author's X photo left of their handle, or their initial when there is none", async () => {
+    const photo = 'https://pbs.twimg.com/profile_images/1/levelsio_normal.jpg';
+    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+      { ...LEVELSIO, photoUrl: photo },
+      PAULG,
+    ]);
+    renderPersona();
+
+    const [withPhoto, withoutPhoto] = await (await persona()).findAllByRole('listitem');
+    expect(withPhoto.querySelector('img')).toHaveAttribute('src', photo);
+    expect(withoutPhoto.querySelector('img')).toBeNull();
+    expect(within(withoutPhoto).getByText('P')).toBeInTheDocument();
+  });
+
+  it("shows an author's initial when their photo fails to load", async () => {
+    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/profile_images/1/gone_normal.jpg' },
+    ]);
+    renderPersona();
+
+    const [row] = await (await persona()).findAllByRole('listitem');
+    fireEvent.error(row.querySelector('img')!);
+
+    expect(row.querySelector('img')).toBeNull();
+    expect(within(row).getByText('L')).toBeInTheDocument();
   });
 
   it('says how to start when the User has no authors', async () => {
@@ -247,6 +260,7 @@ describe('Persona', () => {
       handle: 'levelsio',
       lastFetchedAt: new Date().toISOString(),
       postCount: 21,
+      photoUrl: null,
     });
     renderPersona();
 

@@ -67,13 +67,24 @@ class FetchedPost:
 
 
 @dataclass(frozen=True)
+class RecentPosts:
+    """
+    One page of a handle's kept posts, and the author's photo as twitterapi.io links it: X's
+    small (48px) variant, or None when no post carried one.
+    """
+
+    posts: list[FetchedPost]
+    photo_url: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class FetchedCommunity:
     id: str
     name: str
 
 
 class XReader(Protocol):
-    async def fetch_recent_posts(self, handle: str) -> list[FetchedPost]:
+    async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         """
         One page (about 20) of the handle's newest posts, keeping only original posts and
         quotes. Raises `HandleNotFoundError` for an unknown handle, else `XReaderError`.
@@ -88,7 +99,7 @@ class XReader(Protocol):
 class TwitterApiIoReader:
     """Reads X through twitterapi.io. The key is checked on use, so the app boots without it."""
 
-    async def fetch_recent_posts(self, handle: str) -> list[FetchedPost]:
+    async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         if not settings.TWITTERAPI_IO_API_KEY:
             raise XReaderNotConfiguredError()
         try:
@@ -124,7 +135,7 @@ def _json_or_none(response: httpx.Response) -> Any:
         return None
 
 
-def parse_last_tweets(status_code: int, payload: Any) -> list[FetchedPost]:
+def parse_last_tweets(status_code: int, payload: Any) -> RecentPosts:
     """The kept posts out of one `last_tweets` answer, or the error it stands for."""
     message = _error_message(payload)
     if status_code == 404 or (message is not None and _NOT_FOUND_MESSAGE.search(message)):
@@ -137,12 +148,13 @@ def parse_last_tweets(status_code: int, payload: Any) -> list[FetchedPost]:
     if message is not None:
         raise XReaderError("twitterapi.io returned an error status")
 
+    tweets = _page_tweets(payload)
     posts = []
-    for tweet in _page_tweets(payload):
+    for tweet in tweets:
         post = _kept_post(tweet)
         if post is not None:
             posts.append(post)
-    return posts
+    return RecentPosts(posts=posts, photo_url=_author_photo_url(tweets))
 
 
 def parse_community_info(status_code: int, payload: Any) -> FetchedCommunity:
@@ -188,6 +200,19 @@ def _page_tweets(payload: dict) -> list:
     return tweets if isinstance(tweets, list) else []
 
 
+def _author_photo_url(tweets: list) -> Optional[str]:
+    """
+    The first https `author.profilePicture` on the page. Every post on a user's timeline,
+    their reposts too, has them as its author.
+    """
+    for tweet in tweets:
+        author = tweet.get("author") if isinstance(tweet, dict) else None
+        picture = author.get("profilePicture") if isinstance(author, dict) else None
+        if isinstance(picture, str) and picture.startswith("https://"):
+            return picture
+    return None
+
+
 def _kept_post(tweet: Any) -> Optional[FetchedPost]:
     """
     The post if it is worth learning from: replies (thread continuations too) and bare
@@ -212,19 +237,20 @@ def _kept_post(tweet: Any) -> Optional[FetchedPost]:
 @dataclass
 class FakeXReader:
     """
-    X in memory: answers a handle with `posts[handle]` and a Community ID with
-    `communities[id]` (its name), anything else with a not-found error. Records each handle read
+    X in memory: answers a handle with `posts[handle]` and `photos.get(handle)`, and a Community
+    ID with `communities[id]` (its name), anything else with a not-found error. Records each handle read
     in `calls` and each Community ID in `community_calls`. Set `fail` or `not_configured` to raise.
     """
 
     posts: dict[str, list[FetchedPost]] = field(default_factory=dict)
+    photos: dict[str, str] = field(default_factory=dict)
     communities: dict[str, str] = field(default_factory=dict)
     calls: list[str] = field(default_factory=list)
     community_calls: list[str] = field(default_factory=list)
     fail: bool = False
     not_configured: bool = False
 
-    async def fetch_recent_posts(self, handle: str) -> list[FetchedPost]:
+    async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         self.calls.append(handle)
         if self.not_configured:
             raise XReaderNotConfiguredError()
@@ -232,7 +258,7 @@ class FakeXReader:
             raise XReaderError("Fake X reader is set to fail")
         if handle not in self.posts:
             raise HandleNotFoundError(f"Fake X reader has no {handle}")
-        return list(self.posts[handle])
+        return RecentPosts(posts=list(self.posts[handle]), photo_url=self.photos.get(handle))
 
     async def fetch_community(self, community_id: str) -> FetchedCommunity:
         self.community_calls.append(community_id)
