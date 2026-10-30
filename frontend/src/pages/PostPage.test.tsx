@@ -858,6 +858,28 @@ describe('Post page', () => {
       expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
     });
 
+    it('saves a failed edit at once for "Post to…", without waiting for the retry', async () => {
+      vi.mocked(postService.saveText)
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockResolvedValueOnce({
+          format: 'post',
+          parts: [part('edited')],
+          versionNumber: 1,
+          edited: true,
+        });
+      renderPost(postWith('the final text'));
+      fireEvent.change((await textCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'edited' },
+      });
+      await pause();
+      expect(await card().findByText('Edit not saved. Retrying.')).toBeInTheDocument();
+
+      fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+
+      expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
+      expect(postService.saveText).toHaveBeenCalledTimes(2);
+    });
+
     it('saves the edit before sending Feedback on it', async () => {
       vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['the second text']));
       renderPost(postWith('the final text'));

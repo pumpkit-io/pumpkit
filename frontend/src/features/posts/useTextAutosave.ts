@@ -54,7 +54,8 @@ class TextSaver {
   flush(): Promise<boolean> {
     if (!this.unsaved && !this.sending) return Promise.resolve(true);
     const done = new Promise<boolean>((resolve) => this.waiting.push(resolve));
-    if (!this.retrying) void this.send();
+    // A pending retry goes now too: the User is waiting on it.
+    void this.send();
     return done;
   }
 
