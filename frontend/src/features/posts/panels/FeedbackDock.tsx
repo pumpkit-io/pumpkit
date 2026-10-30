@@ -41,6 +41,12 @@ export function FeedbackDock({
   const phone = useMediaQuery('(max-width: 639px)');
   const [feedback, setFeedback] = useState('');
   const [format, setFormat] = useState<Format>(textFormat);
+  // A restore, an undo or a rewrite that changes the Text's Format moves the toggle with it.
+  const [formatFollowed, setFormatFollowed] = useState<Format>(textFormat);
+  if (formatFollowed !== textFormat) {
+    setFormatFollowed(textFormat);
+    setFormat(textFormat);
+  }
   const { isWriting, error, notice, onSend } = sending;
   const typed = feedback.trim();
 

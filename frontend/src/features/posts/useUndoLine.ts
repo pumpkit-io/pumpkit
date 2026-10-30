@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { track } from '@/lib/analytics';
 import type { PostDetail } from '@/services/postService';
-import { TextHistory, type CommitKind, type EditCause, type TextStep } from './textHistory';
+import {
+  TextHistory,
+  type CommitKind,
+  type EditCause,
+  type TextMark,
+  type TextStep,
+} from './textHistory';
 
 /** How long "Newer rewrites are in History" stays in the origin line. */
 export const REWRITES_DROPPED_MS = 4_000;
@@ -140,21 +146,25 @@ export function useUndoLine() {
     [highlight, announce, sync],
   );
 
-  /** Takes back a move the server refused, so the line matches the Text again. */
-  const takeBack = useCallback(
-    (direction: UndoDirection) => {
+  /** Where the line is now, to `rewind` to if the server refuses the move that follows. */
+  const mark = useCallback(() => history.current?.mark() ?? null, []);
+
+  /** Puts the line back at `marked`, so it matches the Text again after a refused move. */
+  const rewind = useCallback(
+    (marked: TextMark | null) => {
       const h = history.current;
-      if (!h) return;
-      if (direction === 'undo') h.redo();
-      else h.undo();
+      if (!h || !marked) return;
+      h.rewind(marked);
       setTrace(null);
+      // Any rewrites an edit dropped since are back on the line.
+      setDroppedNotice(null);
       sync();
     },
     [sync],
   );
 
-  /** The Parts where the line is now, typing included. */
-  const currentParts = useCallback(() => history.current?.current.parts ?? null, []);
+  /** The step where the line is now, typing included. */
+  const currentStep = useCallback(() => history.current?.current ?? null, []);
 
   return {
     ...ends,
@@ -165,7 +175,8 @@ export function useUndoLine() {
     edit,
     commit,
     move,
-    takeBack,
-    currentParts,
+    mark,
+    rewind,
+    currentStep,
   };
 }

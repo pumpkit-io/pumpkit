@@ -92,7 +92,11 @@ function LoadedPost({
 }: {
   post: PostDetail;
   feedback: FeedbackSending;
-  restore: { onRestore: (versionNumber: number) => void; error: string | null };
+  restore: {
+    onRestore: (versionNumber: number) => void;
+    isRestoring: boolean;
+    error: string | null;
+  };
   edit: TextEditing;
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
@@ -162,7 +166,9 @@ function LoadedPost({
         versions={post.versions}
         textVersionNumber={textVersion.number}
         edited={post.text?.edited ?? false}
-        onRestore={textChanges && !feedback.isWriting ? restore.onRestore : undefined}
+        onRestore={
+          textChanges && !feedback.isWriting && !restore.isRestoring ? restore.onRestore : undefined
+        }
       />
     </div>
   );
@@ -239,6 +245,7 @@ export function PostPage() {
     addFeedback,
     restoreVersion,
     restoreError,
+    isRestoring,
     editText,
     undo,
     redo,
@@ -258,7 +265,7 @@ export function PostPage() {
         key={load.post.id}
         post={load.post}
         feedback={{ isWriting, error, notice, onSend: addFeedback }}
-        restore={{ onRestore: (n) => void restoreVersion(n), error: restoreError }}
+        restore={{ onRestore: restoreVersion, isRestoring, error: restoreError }}
         edit={{
           onEdit: (texts, change) => editText(texts, change.cause),
           save: textSave,

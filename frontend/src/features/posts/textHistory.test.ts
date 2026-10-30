@@ -231,4 +231,39 @@ describe('TextHistory', () => {
     history.undo();
     expect(history.current.parts).toEqual(['One', 'Two']);
   });
+
+  it('rewinds to a mark, undoing the moves and edits made since', () => {
+    const { history, clock } = historyAt();
+    history.commit(['V2'], 'rewrite', 2);
+    clock.t += 100;
+    history.edit(['V2, typed'], 'typing');
+    const mark = history.mark();
+    history.undo();
+    history.undo();
+    clock.t += 100;
+    history.edit(['Hello, typed'], 'typing');
+
+    history.rewind(mark);
+
+    expect(history.current).toEqual({
+      kind: 'edit',
+      parts: ['V2, typed'],
+      origin: { versionNumber: 2, edited: true },
+    });
+    expect(history.canRedo).toBe(false);
+    history.undo();
+    expect(history.current.parts).toEqual(['V2']);
+  });
+
+  it('starts a new step on typing right after a rewind', () => {
+    const { history, clock } = historyAt();
+    history.edit(['Hello!'], 'typing');
+    const mark = history.mark();
+    history.rewind(mark);
+    clock.t += 100;
+    history.edit(['Hello!?'], 'typing');
+
+    history.undo();
+    expect(history.current.parts).toEqual(['Hello!']);
+  });
 });

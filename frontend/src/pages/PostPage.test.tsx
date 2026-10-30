@@ -787,6 +787,31 @@ describe('Post page', () => {
       expect(panel('Draft').queryByText('Edit not saved. Retrying.')).not.toBeInTheDocument();
     });
 
+    it('saves the last edit when the page closes while an earlier save is out', async () => {
+      let saved: () => void = () => {};
+      vi.mocked(postService.saveText).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            saved = () =>
+              resolve({ format: 'post', parts: [part('first')], versionNumber: 1, edited: true });
+          }),
+      );
+      const { unmount } = renderPost(postWith('the final text'));
+      const box = (await textCard()).getByRole('textbox', { name: 'Post text' });
+      fireEvent.change(box, { target: { value: 'first' } });
+      await pause();
+      fireEvent.change(box, { target: { value: 'first, then more' } });
+
+      unmount();
+      await act(async () => saved());
+
+      expect(postService.saveText).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(postService.saveText).mock.calls[1]).toEqual([
+        'post_01',
+        ['first, then more'],
+      ]);
+    });
+
     it('says why an edit was refused, without retrying it', async () => {
       vi.mocked(postService.saveText).mockRejectedValue(
         apiError(409, 'This Post is scheduled, so its Text is set.'),
@@ -1066,6 +1091,111 @@ describe('Post page', () => {
       ]);
     });
 
+    it('takes a refused undo across a rewrite back, typing during it included', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(TWO[1]!);
+      renderPost(draft([TWO[0]!]));
+      await sendFeedback('Punchier hook');
+      await boxHolds('the second text');
+      let refuse: () => void = () => {};
+      vi.mocked(postService.restoreVersion).mockImplementationOnce(
+        () =>
+          new Promise(
+            (_, reject) => (refuse = () => reject(apiError(503, 'Pumpkit is down for a moment.'))),
+          ),
+      );
+      fireEvent.click(button('Undo'));
+      await boxHolds('the first text');
+
+      expect(button('Redo')).toBeDisabled();
+      fireEvent.change(await postBox(), { target: { value: 'the first text, mine' } });
+      await pause(TEXT_SAVE_PAUSE_MS);
+      await act(async () => refuse());
+
+      await boxHolds('the second text');
+      expect(await origin('V2 · From Feedback: “Punchier hook”')).toBeInTheDocument();
+      expect(await panel('Draft').findByText('Pumpkit is down for a moment.')).toBeVisible();
+      expect(button('Redo')).toBeDisabled();
+      await pause(TEXT_SAVE_PAUSE_MS);
+      expect(postService.saveText).not.toHaveBeenCalled();
+
+      fireEvent.click(button('Undo'));
+      await boxHolds('the first text');
+      await waitFor(() =>
+        expect(postService.restoreVersion).toHaveBeenLastCalledWith('post_01', 1),
+      );
+      expect(await origin('V1 · From your Brief')).toBeInTheDocument();
+    });
+
+    it('saves typing done during an undo across a rewrite once it reaches the server', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(TWO[1]!);
+      renderPost(draft([TWO[0]!]));
+      await sendFeedback('Punchier hook');
+      await boxHolds('the second text');
+      let restored: () => void = () => {};
+      vi.mocked(postService.restoreVersion).mockImplementationOnce(
+        () => new Promise((resolve) => (restored = () => resolve(textOf(TWO[0]!)))),
+      );
+      fireEvent.click(button('Undo'));
+      await boxHolds('the first text');
+
+      fireEvent.change(await postBox(), { target: { value: 'the first text, mine' } });
+      await pause(TEXT_SAVE_PAUSE_MS);
+      expect(postService.saveText).not.toHaveBeenCalled();
+      await act(async () => restored());
+      await pause(TEXT_SAVE_PAUSE_MS);
+
+      expect(postService.saveText).toHaveBeenCalledTimes(1);
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['the first text, mine']);
+    });
+
+    it('offers no restore from History while an undo across a rewrite is out', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(TWO[1]!);
+      renderPost(draft([TWO[0]!]));
+      await sendFeedback('Punchier hook');
+      await boxHolds('the second text');
+      let restored: () => void = () => {};
+      vi.mocked(postService.restoreVersion).mockImplementationOnce(
+        () => new Promise((resolve) => (restored = () => resolve(textOf(TWO[0]!)))),
+      );
+      fireEvent.click(button('Undo'));
+      await boxHolds('the first text');
+
+      fireEvent.click(button('History'));
+      const history = within(await screen.findByRole('dialog', { name: 'History' }));
+      fireEvent.click(history.getByText(/Punchier hook/));
+      await act(async () => restored());
+
+      expect(postService.restoreVersion).toHaveBeenCalledTimes(1);
+      await boxHolds('the first text');
+    });
+
+    it('sends Feedback only once a restore from History has reached the server', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(
+        version(3, ['the third text'], { feedback: 'Shorter' }),
+      );
+      renderPost(draft(TWO));
+      await textCard();
+      let restored: () => void = () => {};
+      vi.mocked(postService.restoreVersion).mockImplementationOnce(
+        () => new Promise((resolve) => (restored = () => resolve(textOf(TWO[0]!)))),
+      );
+      fireEvent.click(button('History'));
+      const history = within(await screen.findByRole('dialog', { name: 'History' }));
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+      fireEvent.keyDown(history.getByRole('list'), { key: 'Escape' });
+
+      expect(button('Undo')).toBeDisabled();
+      await sendFeedback('Shorter');
+
+      await waitFor(() => expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 1));
+      expect(postService.addVersion).not.toHaveBeenCalled();
+      await act(async () => restored());
+      await waitFor(() => expect(postService.addVersion).toHaveBeenCalledTimes(1));
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'Shorter', 'post', [
+        'the first text',
+      ]);
+    });
+
     it('undoes a restore in one step', async () => {
       renderPost(draft(TWO));
       await textCard();
@@ -1254,6 +1384,26 @@ describe('Post page', () => {
 
       const format = within(panel('Draft').getByRole('radiogroup', { name: 'Format' }));
       expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
+    });
+
+    it('moves the Format to the Text’s when a restore changes it', async () => {
+      const versions = [version(1, ['the first text']), version(2, ['part one', 'part two'])];
+      vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(versions[0]!));
+      renderPost(draft(versions));
+      await textCard();
+      const format = within(panel('Draft').getByRole('radiogroup', { name: 'Format' }));
+      expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
+
+      fireEvent.click(panel('Draft').getByRole('button', { name: 'History' }));
+      const history = within(await screen.findByRole('dialog', { name: 'History' }));
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+      await waitFor(() => expect(format.getByRole('radio', { name: 'Single post' })).toBeChecked());
+      vi.mocked(postService.addVersion).mockResolvedValue(version(3, ['the third text']));
+      await sendFeedback('shorter');
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'shorter', 'post', [
+        'the first text',
+      ]);
     });
 
     it('shows a failure in the dock with a way to try again, keeping the Feedback', async () => {

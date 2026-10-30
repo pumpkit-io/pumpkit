@@ -36,6 +36,12 @@ interface Step extends TextStep {
   versionParts: string[];
 }
 
+/** A place on the undo line to come back to, as `mark` left it. */
+export interface TextMark {
+  readonly steps: readonly Step[];
+  readonly index: number;
+}
+
 interface Burst {
   mode: 'typing' | 'deleting' | null;
   lastAt: number;
@@ -145,6 +151,18 @@ export class TextHistory {
     this.index += 1;
     const step = this.current;
     return { step, current: step };
+  }
+
+  /** Where the line is now, steps and place both, to `rewind` to later. */
+  mark(): TextMark {
+    return { steps: [...this.steps], index: this.index };
+  }
+
+  /** Puts the line back as `mark` found it, dropping every move and edit made since. */
+  rewind(mark: TextMark): void {
+    this.steps = [...mark.steps];
+    this.index = mark.index;
+    this.burst = null;
   }
 
   private push(step: Step): TextRecord {
