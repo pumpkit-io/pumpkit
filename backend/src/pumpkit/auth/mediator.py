@@ -24,6 +24,7 @@ from pumpkit.auth.google_config import (
     GOOGLE_SIGN_IN_STATE_COOKIE,
 )
 from pumpkit.auth.google_sign_in import GoogleSignIn, GoogleSignInError
+from pumpkit.auth.gravatar import gravatar_url
 from pumpkit.auth.mailer import AuthMailer, AuthMailerError, MagicLinkEmail
 from pumpkit.auth.models import ApiKey, User
 from pumpkit.auth.schemas import ApiKeyCreatedResponse, ApiKeyResponse, ApiKeysListResponse
@@ -282,6 +283,7 @@ async def complete_magic_link(
     token: str,
     request: Request,
     db: AsyncSession,
+    photo_fetcher: PhotoFetcher,
     now: datetime,
 ) -> RedirectResponse:
     """
@@ -290,7 +292,9 @@ async def complete_magic_link(
     unexpected exception is reported and rolled back, so a failure halfway leaves no User behind.
     """
     try:
-        return await _sign_in_with_magic_link(token=token, request=request, db=db, now=now)
+        return await _sign_in_with_magic_link(
+            token=token, request=request, db=db, photo_fetcher=photo_fetcher, now=now
+        )
     except Exception as exc:
         report_unexpected_exception(request, exc)
         await db.rollback()
@@ -301,6 +305,7 @@ async def _sign_in_with_magic_link(
     token: str,
     request: Request,
     db: AsyncSession,
+    photo_fetcher: PhotoFetcher,
     now: datetime,
 ) -> RedirectResponse:
     redeemed = await magic_links.redeem(db, token=token, now=now)
@@ -322,11 +327,14 @@ async def _sign_in_with_magic_link(
         sign_in_method="magic_link",
         client=sessions.ClientInfo.from_request(request),
     )
-    # Commit a refusal too, so the single-use Magic link stays consumed.
-    # A refused User already exists (Suspended), so resolving them wrote nothing else.
-    await db.commit()
     if isinstance(result, sessions.SessionRefusal):
+        # Commit a refusal too, so the single-use Magic link stays consumed.
+        # A refused User already exists (Suspended), so resolving them wrote nothing else.
+        await db.commit()
         return result.as_sign_in_redirect()
+    if settings.GRAVATAR_ENABLED:
+        await _fill_empty_photo(db, user, gravatar_url(redeemed.email), photo_fetcher)
+    await db.commit()
     return result.as_callback_redirect("/auth/magic-link/callback")
 
 

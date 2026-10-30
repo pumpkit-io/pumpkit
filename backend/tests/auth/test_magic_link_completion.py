@@ -5,10 +5,13 @@ rejected link lands on the sign-in page with `invalid_magic_link` and no cookie.
 
 import asyncio
 from datetime import timedelta
+from typing import Optional
 
+import pytest
 from httpx import AsyncClient, Response
 
-from tests.conftest import magic_link_token
+from pumpkit.core.config import settings
+from tests.conftest import callback_fragment, magic_link_token
 
 INVALID_MAGIC_LINK = "http://localhost:5173/login?error=invalid_magic_link"
 CALLBACK = "http://localhost:5173/auth/magic-link/callback#"
@@ -106,3 +109,115 @@ async def test_request_within_the_cooldown_sends_no_new_link(new_browser, auth_o
     assert second.status_code == 200
     assert len(auth_outbox.messages) == 1
     assert (await _open(browser, token)).headers["location"].startswith(CALLBACK)
+
+
+BOB_GRAVATAR = (
+    "https://gravatar.com/avatar/"
+    "5ff860bf1190596c7188ab851db691f0f3169c453936e9e1eba2f9a47f7a0018?s=256&d=404"
+)
+GRAVATAR_PHOTO = "data:image/jpeg;base64,R3JhdmF0YXJQaG90bw=="
+UPLOADED_PHOTO = "data:image/jpeg;base64,VXBsb2FkZWRQaG90bw=="
+
+
+@pytest.fixture
+def gravatar_on(monkeypatch):
+    monkeypatch.setattr(settings, "GRAVATAR_ENABLED", True)
+
+
+async def _sign_in(browser: AsyncClient, auth_outbox, clock, email: str = "bob@example.com") -> str:
+    """Complete a fresh Magic link and return the access token it signed in with."""
+    clock.advance(timedelta(seconds=61))
+    opened = await _open(browser, await _request_link(browser, auth_outbox, email))
+    assert opened.headers["location"].startswith(CALLBACK)
+    return callback_fragment(opened.headers["location"])["access_token"]
+
+
+async def _photo(browser: AsyncClient, access_token: str) -> Optional[str]:
+    me = await browser.get("/api/v1/users/me", headers={"Authorization": f"Bearer {access_token}"})
+    assert me.status_code == 200
+    return me.json()["avatar_data_url"]
+
+
+async def _set_photo(browser: AsyncClient, access_token: str, photo: Optional[str]) -> None:
+    saved = await browser.patch(
+        "/api/v1/users/me",
+        json={"avatar_data_url": photo},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert saved.status_code == 200
+
+
+@pytest.mark.usefixtures("gravatar_on")
+async def test_with_gravatar_on_a_first_magic_link_makes_the_gravatar_the_photo(
+    new_browser, auth_outbox, clock, fake_photo_fetcher
+):
+    fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
+    browser = new_browser()
+
+    access_token = await _sign_in(browser, auth_outbox, clock, " Bob@Example.com ")
+
+    assert await _photo(browser, access_token) == GRAVATAR_PHOTO
+
+
+async def test_with_gravatar_off_a_magic_link_never_asks_for_a_photo(
+    new_browser, auth_outbox, clock, fake_photo_fetcher
+):
+    fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
+    browser = new_browser()
+
+    access_token = await _sign_in(browser, auth_outbox, clock)
+
+    assert await _photo(browser, access_token) is None
+    assert fake_photo_fetcher.fetched == []
+
+
+@pytest.mark.usefixtures("gravatar_on")
+async def test_an_email_without_a_gravatar_signs_in_with_no_photo(
+    new_browser, auth_outbox, clock, fake_photo_fetcher
+):
+    browser = new_browser()
+
+    access_token = await _sign_in(browser, auth_outbox, clock)
+
+    assert await _photo(browser, access_token) is None
+    assert fake_photo_fetcher.fetched == [BOB_GRAVATAR]
+
+
+@pytest.mark.usefixtures("gravatar_on")
+async def test_a_failed_gravatar_download_still_signs_in_and_the_next_magic_link_fills_the_photo(
+    new_browser, auth_outbox, clock, fake_photo_fetcher
+):
+    browser = new_browser()
+    failed = await _sign_in(browser, auth_outbox, clock)
+    assert await _photo(browser, failed) is None
+
+    fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
+    later = await _sign_in(browser, auth_outbox, clock)
+
+    assert await _photo(browser, later) == GRAVATAR_PHOTO
+
+
+@pytest.mark.usefixtures("gravatar_on")
+async def test_a_magic_link_keeps_an_uploaded_photo(
+    new_browser, auth_outbox, clock, fake_photo_fetcher
+):
+    browser = new_browser()
+    await _set_photo(browser, await _sign_in(browser, auth_outbox, clock), UPLOADED_PHOTO)
+    fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
+
+    access_token = await _sign_in(browser, auth_outbox, clock)
+
+    assert await _photo(browser, access_token) == UPLOADED_PHOTO
+
+
+@pytest.mark.usefixtures("gravatar_on")
+async def test_a_magic_link_never_fills_a_photo_the_user_cleared(
+    new_browser, auth_outbox, clock, fake_photo_fetcher
+):
+    fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
+    browser = new_browser()
+    await _set_photo(browser, await _sign_in(browser, auth_outbox, clock), None)
+
+    access_token = await _sign_in(browser, auth_outbox, clock)
+
+    assert await _photo(browser, access_token) is None
