@@ -317,7 +317,7 @@ export function PostToDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (open ? null : close())}>
-      <DialogContent className="max-w-[560px] max-sm:h-auto">
+      <DialogContent className="max-w-[560px] max-sm:h-fit">
         <form onSubmit={submit}>
           <DialogHeader>
             <DialogTitle className="font-sans text-base font-semibold tracking-tight">

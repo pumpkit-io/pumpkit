@@ -33,7 +33,7 @@ export function DisconnectXDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onCancel())}>
-      <DialogContent className="max-w-[480px] max-sm:h-auto">
+      <DialogContent className="max-w-[480px] max-sm:h-fit">
         <DialogHeader>
           <DialogTitle className="font-sans text-base font-semibold tracking-tight">
             Disconnect @{handle}?
