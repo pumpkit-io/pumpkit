@@ -89,7 +89,7 @@ const X_PHOTO_DATA_URL = 'data:image/jpeg;base64,eA==';
 const OFFERING_PHOTO: XConnection = { ...CONNECTED, photoUrl: X_PHOTO, offerPhoto: true };
 
 const PERIOD_END = '2030-01-01T00:00:00Z';
-const PERIOD_END_LABEL = new Date(PERIOD_END).toLocaleDateString();
+const PERIOD_END_LABEL = new Date(PERIOD_END).toLocaleDateString(undefined, { dateStyle: 'long' });
 
 const CATALOG: PlanCatalog = {
   plans: [
@@ -556,18 +556,18 @@ describe('Settings', () => {
 
   describe('Plan', () => {
     it.each([
-      ['trialing', 'Trial'],
-      ['active', 'Active'],
+      ['trialing', 'Trial', `Billing starts on ${PERIOD_END_LABEL}`],
+      ['active', 'Active', `Renews on ${PERIOD_END_LABEL}`],
     ] as const)(
-      'shows the Plan, a %s status as %s and its renewal date, with Manage subscription',
-      async (status, label) => {
+      'shows the Plan, a %s status as %s and when it next bills, with Manage subscription',
+      async (status, label, nextBilling) => {
         vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding(status, true));
         renderSettings();
 
         const plan = await card('Plan');
         expect(await plan.findByText(label)).toBeInTheDocument();
         expect(plan.getByText('Pro')).toBeInTheDocument();
-        expect(plan.getByText(new RegExp(`renews ${PERIOD_END_LABEL}`))).toBeInTheDocument();
+        expect(plan.getByText(nextBilling)).toBeInTheDocument();
         fireEvent.click(plan.getByRole('button', { name: 'Manage subscription' }));
 
         await waitFor(() =>
@@ -582,7 +582,7 @@ describe('Settings', () => {
       renderSettings();
 
       expect(
-        await (await card('Plan')).findByText(new RegExp(`ends ${PERIOD_END_LABEL}`)),
+        await (await card('Plan')).findByText(`Ends on ${PERIOD_END_LABEL}`),
       ).toBeInTheDocument();
     });
 
@@ -590,7 +590,7 @@ describe('Settings', () => {
       ['past_due', true, 'Past due'],
       ['unpaid', false, 'Unpaid'],
     ] as const)(
-      'warns that the last payment of a %s Subscription failed and offers Fix payment',
+      'warns that the last payment of a %s Subscription failed and offers Fix payment, with no renewal date',
       async (status, subscribed, label) => {
         vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding(status, subscribed));
         renderSettings();
@@ -600,6 +600,7 @@ describe('Settings', () => {
           await plan.findByText('Your last payment failed. Update your card to keep access.'),
         ).toBeInTheDocument();
         expect(plan.getByText(label)).toBeInTheDocument();
+        expect(plan.queryByText(/Renews on/)).not.toBeInTheDocument();
         fireEvent.click(plan.getByRole('button', { name: 'Fix payment' }));
 
         await waitFor(() =>
