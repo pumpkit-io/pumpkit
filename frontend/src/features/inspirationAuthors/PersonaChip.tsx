@@ -10,7 +10,7 @@ const CHIP =
 const LABEL = 'Writing in the style of';
 const PHOTO_PX = 24;
 const OVERLAP_PX = 8;
-const MOTION = 'duration-300 ease-in-out motion-reduce:transition-none';
+const MOTION = '[transition-duration:250ms] ease-in-out motion-reduce:transition-none';
 
 /** For the page header: whose style Pumpkit writes in, linking to the Persona page. */
 export function PersonaChip() {
