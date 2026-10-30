@@ -9,7 +9,9 @@ from typing import Optional
 
 import pytest
 from httpx import AsyncClient, Response
+from sqlalchemy import func, select
 
+from pumpkit.auth.models import RefreshToken
 from pumpkit.core.config import settings
 from tests.conftest import callback_fragment, magic_link_token
 
@@ -217,6 +219,45 @@ async def test_a_magic_link_never_fills_a_photo_the_user_cleared(
     fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
     browser = new_browser()
     await _set_photo(browser, await _sign_in(browser, auth_outbox, clock), None)
+
+    access_token = await _sign_in(browser, auth_outbox, clock)
+
+    assert await _photo(browser, access_token) is None
+
+
+@pytest.mark.usefixtures("gravatar_on")
+async def test_the_sign_in_is_committed_before_the_gravatar_downloads(
+    new_browser, auth_outbox, clock, fake_photo_fetcher, db_session_maker, monkeypatch
+):
+    sessions_seen_while_downloading: list[int] = []
+    download = fake_photo_fetcher.fetch
+
+    async def download_after_looking(url: str) -> Optional[str]:
+        # An independent connection sees only what the sign-in has committed.
+        async with db_session_maker() as other:
+            committed = select(func.count()).select_from(RefreshToken)
+            sessions_seen_while_downloading.append((await other.execute(committed)).scalar_one())
+        return await download(url)
+
+    monkeypatch.setattr(fake_photo_fetcher, "fetch", download_after_looking)
+    fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
+    browser = new_browser()
+
+    access_token = await _sign_in(browser, auth_outbox, clock)
+
+    assert sessions_seen_while_downloading == [1]
+    assert await _photo(browser, access_token) == GRAVATAR_PHOTO
+
+
+@pytest.mark.usefixtures("gravatar_on")
+async def test_a_gravatar_that_fails_to_save_still_signs_in(
+    new_browser, auth_outbox, clock, fake_photo_fetcher, monkeypatch
+):
+    async def broken_download(url: str) -> Optional[str]:
+        raise RuntimeError("the photo port broke its promise")
+
+    monkeypatch.setattr(fake_photo_fetcher, "fetch", broken_download)
+    browser = new_browser()
 
     access_token = await _sign_in(browser, auth_outbox, clock)
 

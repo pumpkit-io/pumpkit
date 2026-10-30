@@ -107,7 +107,7 @@ async def oauth_google_callback(
     """
     Always redirect: to the frontend callback with a new Session, or to the sign-in page
     with `sign_in_failed`, `account_suspended` or `email_not_allowed`. An unexpected exception is reported and
-    rolled back, so a failure halfway leaves no User or Google identity behind.
+    rolled back, so a failure before the Session starts leaves no User or Google identity behind.
     """
     try:
         response = await _sign_in_with_google(
@@ -168,10 +168,8 @@ async def _sign_in_with_google(
         return sessions.sign_in_error_redirect(EMAIL_NOT_ALLOWED)
 
     # One sign-in, one transaction: the User, their Google identity and the
-    # Session commit together, or not at all.
+    # Session commit together, or not at all. The Photo fills afterwards.
     user = await google_identities_service.resolve_user(db, claims)
-    if claims.picture:
-        await _fill_empty_photo(db, user, claims.picture, photo_fetcher)
     result = await sessions.start(
         db,
         user=user,
@@ -182,7 +180,10 @@ async def _sign_in_with_google(
         # A refused sign-in keeps nothing: no new Google identity, no profile fill.
         await db.rollback()
         return result.as_sign_in_redirect()
+    # Sanctioned early commit: no connection stays held across the picture download.
     await db.commit()
+    if claims.picture:
+        await _fill_empty_photo(db, user, claims.picture, photo_fetcher)
     return result.as_callback_redirect("/oauth/google/callback")
 
 
@@ -190,16 +191,24 @@ async def _fill_empty_photo(
     db: AsyncSession, user: User, photo_url: str, photo_fetcher: PhotoFetcher
 ) -> None:
     """
-    Copy the photo at `photo_url` into a User who may have one filled. A failed download leaves
-    the Photo empty, so the next sign-in tries again.
+    Copy the photo at `photo_url` into a User who may have one filled, in its own transaction after
+    the sign-in committed. Any failure leaves the Photo empty, so the next sign-in tries again.
     """
     if not user_service.may_fill_photo(user):
         return
-    photo_data_url = await photo_fetcher.fetch(photo_url)
-    if photo_data_url is None:
-        logger.info("No photo copied for User %s", user.id)
-        return
-    await user_service.fill_photo(db, user, photo_data_url)
+    try:
+        photo_data_url = await photo_fetcher.fetch(photo_url)
+        if photo_data_url is None:
+            logger.info("No photo copied for User %s", user.id)
+            return
+        # The User may have chosen a Photo elsewhere during the download.
+        await db.refresh(user)
+        await user_service.fill_photo(db, user, photo_data_url)
+        await db.commit()
+    except Exception:
+        # The sign-in already committed: a photo never costs the User their Session.
+        logger.exception("Could not fill the photo of User %s", user.id)
+        await db.rollback()
 
 
 def _state_flow(state: str) -> Optional[str]:
@@ -289,7 +298,8 @@ async def complete_magic_link(
     """
     Always redirect: to the frontend callback with a new Session, or to the sign-in page with
     `invalid_magic_link`, `account_suspended`, `email_not_allowed` or `sign_in_failed`. An
-    unexpected exception is reported and rolled back, so a failure halfway leaves no User behind.
+    unexpected exception is reported and rolled back, so a failure before the Session starts
+    leaves no User behind.
     """
     try:
         return await _sign_in_with_magic_link(
@@ -332,9 +342,10 @@ async def _sign_in_with_magic_link(
         # A refused User already exists (Suspended), so resolving them wrote nothing else.
         await db.commit()
         return result.as_sign_in_redirect()
+    # Sanctioned early commit: no connection stays held across the Gravatar download.
+    await db.commit()
     if settings.GRAVATAR_ENABLED:
         await _fill_empty_photo(db, user, gravatar_url(redeemed.email), photo_fetcher)
-    await db.commit()
     return result.as_callback_redirect("/auth/magic-link/callback")
 
 
