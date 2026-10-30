@@ -49,6 +49,16 @@ def check_live_parts_kept(live: list[str], parts: list[str]) -> None:
         raise LivePartLocked("Keep at least one Part after the ones already on X.")
 
 
+def check_text_keeps_live_parts(live_count: int, before: list[str], after: list[str]) -> None:
+    """
+    An edit of a Failed Thread's Text leaves the Text's Parts in the places of the live ones as
+    they were: those places show what X has, and a retry skips them (ADR 0014).
+    """
+    for number in range(1, min(live_count, len(before), len(after)) + 1):
+        if before[number - 1] != after[number - 1]:
+            raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
+
+
 def check_publish_at(publish_at: Optional[datetime], *, now: datetime) -> datetime:
     """The publish time in UTC: a whole minute, one minute to a year from `now`."""
     if publish_at is None:

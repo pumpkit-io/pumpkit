@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
+import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
@@ -17,7 +18,8 @@ import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
 import { cardParts, copiedText, textVersionOf } from '@/features/posts/shownText';
-import { TextCard } from '@/features/posts/TextCard';
+import { TextEditor, type TextChange } from '@/features/posts/TextEditor';
+import type { TextSaveState } from '@/features/posts/useTextAutosave';
 import { usePost } from '@/features/posts/usePost';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
@@ -65,18 +67,29 @@ function CardPlaceholder() {
   );
 }
 
+/** The in-place editing of the Text, from `usePost`. */
+interface TextEditing {
+  onEdit: (texts: string[], change: TextChange) => void;
+  save: TextSaveState;
+  /** Saves the last edit now; true once the server has it. */
+  flush: () => Promise<boolean>;
+}
+
 function LoadedPost({
   post,
   feedback,
   restore,
+  edit,
   onScheduledPost,
 }: {
   post: PostDetail;
   feedback: FeedbackSending;
   restore: { onRestore: (versionNumber: number) => void; error: string | null };
+  edit: TextEditing;
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
   const { connection } = useXConnectionContext();
+  const { subscribed } = useSubscribed();
   const location = useLocation();
   const [editing, setEditing] = useState(
     () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
@@ -124,6 +137,7 @@ function LoadedPost({
       version={textVersion}
       edited={post.text?.edited ?? false}
       writing={feedback.isWriting ? latest.number + 1 : null}
+      save={edit.save}
     />
   );
 
@@ -152,6 +166,7 @@ function LoadedPost({
         tools={tools}
         feedback={feedback}
         restoreError={restore.error}
+        prepare={edit.flush}
         onScheduled={onScheduledPost}
       />
     );
@@ -165,6 +180,7 @@ function LoadedPost({
         tools={tools}
         feedback={feedback}
         restoreError={restore.error}
+        prepare={edit.flush}
         onRetried={onScheduledPost}
       />
     );
@@ -183,8 +199,11 @@ function LoadedPost({
 
   return (
     <Page title={breadcrumb} dock={dock}>
-      <TextCard
+      <TextEditor
         parts={parts}
+        texts={post.text?.parts.map((p) => p.text) ?? []}
+        editable={textChanges && !!post.text && subscribed === true && !feedback.isWriting}
+        onEdit={edit.onEdit}
         busy={feedback.isWriting}
         corner={<CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />}
       />
@@ -202,6 +221,9 @@ export function PostPage() {
     addFeedback,
     restoreVersion,
     restoreError,
+    editText,
+    textSave,
+    flushText,
     isWriting,
     error,
     notice,
@@ -214,6 +236,7 @@ export function PostPage() {
         post={load.post}
         feedback={{ isWriting, error, notice, onSend: addFeedback }}
         restore={{ onRestore: (n) => void restoreVersion(n), error: restoreError }}
+        edit={{ onEdit: editText, save: textSave, flush: flushText }}
         onScheduledPost={setScheduledPost}
       />
     );

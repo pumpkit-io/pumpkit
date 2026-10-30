@@ -16,6 +16,7 @@ export function DraftDock({
   tools,
   feedback,
   restoreError,
+  prepare,
   onScheduled,
 }: {
   postId: string;
@@ -26,6 +27,8 @@ export function DraftDock({
   tools?: ReactNode;
   feedback: FeedbackSending;
   restoreError?: string | null;
+  /** Saves the User's last edit before "Post to…" opens. */
+  prepare: () => Promise<boolean>;
   onScheduled: (scheduledPost: ScheduledPost) => void;
 }) {
   const sender = useCreateFromText(postId);
@@ -43,6 +46,7 @@ export function DraftDock({
           parts={parts}
           sender={sender}
           disabled={feedback.isWriting}
+          prepare={prepare}
           onDone={onScheduled}
         />
       }

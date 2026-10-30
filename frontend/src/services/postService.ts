@@ -271,6 +271,17 @@ export const postService = {
     });
     return toVersion(data);
   },
+  /**
+   * Stores the User's edit of the Post's Text, every Part in order, as typed. Saving the same
+   * Parts again changes nothing, so a failed save can be retried as it is.
+   */
+  saveText: async (postId: string, parts: string[]): Promise<PostText> => {
+    const { data } = await apiService.put<PostTextApi>(
+      `/posts/${encodeURIComponent(postId)}/text`,
+      { parts },
+    );
+    return toText(data);
+  },
   /** Makes the Version the Post's Text again, which writes nothing and answers at once. */
   restoreVersion: async (postId: string, versionNumber: number): Promise<PostText> => {
     const { data } = await apiService.post<PostTextApi>(

@@ -33,6 +33,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostUpdateRequest,
+    TextEditRequest,
     XConnectionResponse,
 )
 from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
@@ -259,4 +260,22 @@ async def restore_version(
     """Makes the Version the Post's Text, with no write. A Scheduled or Published Post is refused."""
     return await mediator.restore_version(
         db=db, user=current_user, post_id=post_id, version_number=version_number
+    )
+
+
+@posts_router.put(
+    "/posts/{post_id}/text", response_model=TextResponse, status_code=status.HTTP_200_OK
+)
+async def edit_text(
+    post_id: str,
+    edit_request: TextEditRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> TextResponse:
+    """
+    Saves the User's edit of the Post's Text, every Part in order. Idempotent, so the web app
+    retries a failed save as it is. A Scheduled or Published Post is refused.
+    """
+    return await mediator.edit_text(
+        db=db, user=current_user, post_id=post_id, parts=edit_request.parts
     )

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { track } from '@/lib/analytics';
+import { xWeightedLength } from '@/lib/xLength';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { postService, textOf, type Format, type PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { statusFrom } from './postStatus';
 import { usePostCounts } from './usePostCounts';
+import { useTextAutosave } from './useTextAutosave';
 import { isRefusal, useWritingFailure } from './useWritingFailure';
 
 export type PostLoad =
@@ -14,7 +16,33 @@ export type PostLoad =
   | { kind: 'failed'; message: string };
 
 /**
- * One Post as the server has it, with Feedback on its Text. After an action that changes its
+ * The Post with its Text's Parts replaced by `texts`, counted as X counts them, and edited while
+ * they differ from the Version the Text came from, as the server decides it.
+ */
+function withEditedText(post: PostDetail, texts: string[]): PostDetail {
+  const { text } = post;
+  if (!text) return post;
+  const source = post.versions.find((v) => v.number === text.versionNumber);
+  return {
+    ...post,
+    text: {
+      ...text,
+      parts: texts.map((t, i) => ({
+        text: t,
+        charCount: xWeightedLength(t),
+        charLimit: text.parts[i]?.charLimit ?? text.parts[0]?.charLimit ?? 280,
+      })),
+      edited:
+        !source ||
+        source.parts.length !== texts.length ||
+        source.parts.some((p, i) => p.text !== texts[i]),
+    },
+  };
+}
+
+/**
+ * One Post as the server has it, with its Text edited in place and saved on its own, and Feedback
+ * on it. After an action that changes its
  * Scheduled post, pass the answer to `setScheduledPost` (null once deleted): the status follows,
  * and so do the Post counts behind the sidebar's Failed badge.
  */
@@ -25,6 +53,8 @@ export function usePost(postId: string) {
   const writing = useWritingFailure();
   const { fail, clear } = writing;
   const { refresh: refreshCounts } = usePostCounts();
+  const autosave = useTextAutosave(postId);
+  const { edit: saveSoon, flush: flushText, discard: discardEdits } = autosave;
 
   const reload = useCallback(async () => {
     setLoad({ kind: 'loading' });
@@ -64,6 +94,11 @@ export function usePost(postId: string) {
       setIsWriting(true);
       clear();
       setRestoreError(null);
+      // Feedback rewrites the Text the server has, so it must have the User's last edit.
+      if (!(await flushText())) {
+        setIsWriting(false);
+        return false;
+      }
       track('post_version_requested', { kind: 'feedback' });
       try {
         const version = await postService.addVersion(postId, feedback, format);
@@ -81,13 +116,27 @@ export function usePost(postId: string) {
         setIsWriting(false);
       }
     },
-    [postId, clear, fail, update],
+    [postId, clear, fail, update, flushText],
+  );
+
+  /**
+   * Replaces every Part of the Text with the User's, shown at once and saved after a pause.
+   * Undo and redo (#197) go through here too.
+   */
+  const editText = useCallback(
+    (texts: string[]) => {
+      update((post) => (post.id === postId ? withEditedText(post, texts) : post));
+      saveSoon(texts);
+    },
+    [postId, update, saveSoon],
   );
 
   /** Makes a Version from History the Post's Text; a refusal leaves the Text and says why. */
   const restoreVersion = useCallback(
     async (versionNumber: number) => {
       setRestoreError(null);
+      // The restored Version replaces any edit, and a late save mustn't overwrite it.
+      await discardEdits();
       try {
         const text = await postService.restoreVersion(postId, versionNumber);
         update((post) => (post.id === postId ? { ...post, text } : post));
@@ -96,7 +145,7 @@ export function usePost(postId: string) {
         setRestoreError(errorMessage(e, `Couldn't restore Version ${versionNumber}. Try again.`));
       }
     },
-    [postId, update],
+    [postId, update, discardEdits],
   );
 
   return {
@@ -106,6 +155,9 @@ export function usePost(postId: string) {
     addFeedback,
     restoreVersion,
     restoreError,
+    editText,
+    textSave: autosave.state,
+    flushText,
     isWriting,
     error: writing.error,
     notice: writing.notice,

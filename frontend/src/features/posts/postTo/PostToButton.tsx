@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
@@ -16,6 +17,7 @@ export function PostToButton({
   sender,
   initialWhere,
   disabled = false,
+  prepare,
   onDone,
 }: {
   /** The Text's Format. */
@@ -24,15 +26,27 @@ export function PostToButton({
   sender: PostToSender;
   initialWhere?: DestinationDraft;
   disabled?: boolean;
+  /** Runs before the dialog opens, such as saving the User's last edit; false keeps it shut. */
+  prepare?: () => Promise<boolean>;
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
   const { subscribed } = useSubscribed();
   const goToChoosePlan = useGoToChoosePlan();
   const [open, setOpen] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
-  const start = () => {
-    if (subscribed === false) goToChoosePlan(POST_TO_BILLING_SOURCE);
-    else setOpen(true);
+  const start = async () => {
+    if (subscribed === false) {
+      goToChoosePlan(POST_TO_BILLING_SOURCE);
+      return;
+    }
+    if (prepare) {
+      setPreparing(true);
+      const ready = await prepare();
+      setPreparing(false);
+      if (!ready) return;
+    }
+    setOpen(true);
   };
 
   return (
@@ -41,9 +55,13 @@ export function PostToButton({
         type="button"
         variant="solid"
         className="h-10 shrink-0 rounded-full"
-        disabled={disabled}
-        onClick={start}
+        disabled={disabled || preparing}
+        aria-busy={preparing}
+        onClick={() => void start()}
       >
+        {preparing && (
+          <Loader2 aria-hidden className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+        )}
         Post to…
       </Button>
       {open && (

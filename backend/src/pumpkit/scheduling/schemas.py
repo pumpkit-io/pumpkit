@@ -211,6 +211,13 @@ class ScheduledPostUpdateRequest(BaseModel):
     _strip = field_validator("parts")(_strip_parts)
 
 
+class TextEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Every Part of the Text in order, as typed, so a Part may be blank while the User writes it.
+    parts: Parts
+
+
 class XConnectionResponse(BaseModel):
     """The User's X connection. Tokens never leave the backend."""
 

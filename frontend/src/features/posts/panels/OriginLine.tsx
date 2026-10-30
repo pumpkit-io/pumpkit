@@ -1,5 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Version } from '@/services/postService';
+import type { TextSaveState } from '../useTextAutosave';
 
 const LINE = 'font-sans text-[13px] tabular-nums text-muted-foreground';
 
@@ -12,6 +13,7 @@ export function OriginLine({
   version,
   edited,
   writing,
+  save,
 }: {
   brief: string;
   /** The Version the Text came from. */
@@ -19,9 +21,21 @@ export function OriginLine({
   edited: boolean;
   /** The number of the Version being written from Feedback, if one is. */
   writing?: number | null;
+  /** How saving the User's edit is going; only a failure takes the line. */
+  save?: TextSaveState;
 }) {
   if (writing) {
     return <p className={`truncate ${LINE}`}>Writing Version {writing} from your Feedback…</p>;
+  }
+  if (save?.kind === 'retrying' || save?.kind === 'refused') {
+    return (
+      <p
+        className="truncate font-sans text-[13px] text-destructive"
+        title={save.kind === 'refused' ? save.message : undefined}
+      >
+        {save.kind === 'retrying' ? 'Edit not saved. Retrying.' : `Edit not saved. ${save.message}`}
+      </p>
+    );
   }
 
   const from = version.feedback
