@@ -845,7 +845,10 @@ describe('Post page', () => {
 
       fireEvent.click(panel('Draft').getByRole('button', { name: 'Send Feedback' }));
 
-      expect(await (await textCard()).findByText('the second text')).toBeInTheDocument();
+      // The rewrite's words are marked under the box too, so read the box itself.
+      await waitFor(() =>
+        expect(screen.getByRole('textbox', { name: 'Post text' })).toHaveValue('the second text'),
+      );
       expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']);
       expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'shorter', 'post', ['edited']);
       expect(vi.mocked(postService.saveText).mock.invocationCallOrder[0]).toBeLessThan(
@@ -900,6 +903,265 @@ describe('Post page', () => {
       const card = await textCard();
       expect(card.getByText('the final text')).toBeInTheDocument();
       expect(card.queryByRole('textbox')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Undo and redo', () => {
+    const TWO = [
+      version(1, ['the first text']),
+      version(2, ['the second text'], { feedback: 'Punchier hook' }),
+    ];
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.mocked(postService.saveText)
+        .mockReset()
+        .mockImplementation(async (_postId, texts) => ({
+          format: 'post',
+          parts: texts.map((text) => part(text)),
+          versionNumber: 1,
+          edited: true,
+        }));
+      vi.mocked(postService.restoreVersion).mockImplementation(async (_postId, n) =>
+        textOf(TWO[n - 1]!),
+      );
+      Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function pause(ms: number) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    }
+
+    const button = (name: string) => panel('Draft').getByRole('button', { name });
+    const origin = (name: string) => panel('Draft').findByRole('button', { name });
+
+    async function postBox() {
+      return (await textCard()).getByRole('textbox', { name: 'Post text' });
+    }
+
+    /** Waits for the box to hold `text`; a rewrite's marks repeat its words under the box. */
+    async function boxHolds(text: string) {
+      await waitFor(() =>
+        expect(screen.getByRole('textbox', { name: 'Post text' })).toHaveValue(text),
+      );
+    }
+
+    async function sendFeedback(feedback: string) {
+      await textCard();
+      fireEvent.change(panel('Draft').getByRole('textbox', { name: 'Feedback' }), {
+        target: { value: feedback },
+      });
+      fireEvent.click(panel('Draft').getByRole('button', { name: 'Send Feedback' }));
+    }
+
+    it('starts with nothing to undo or redo, as after a reload', async () => {
+      renderPost(postWith('the final text'));
+      await textCard();
+
+      expect(button('Undo')).toBeDisabled();
+      expect(button('Redo')).toBeDisabled();
+    });
+
+    it('undoes and redoes each burst of typing, saving the Text it lands on', async () => {
+      renderPost(postWith('the final text'));
+      const box = await postBox();
+
+      fireEvent.change(box, { target: { value: 'the final text,' } });
+      fireEvent.change(box, { target: { value: 'the final text, again' } });
+      await pause(1_000);
+      fireEvent.change(box, { target: { value: 'the final text, again!' } });
+
+      fireEvent.click(button('Undo'));
+      expect(box).toHaveValue('the final text, again');
+      fireEvent.click(button('Undo'));
+      expect(box).toHaveValue('the final text');
+      expect(button('Undo')).toBeDisabled();
+      expect(await origin('V1 · From your Brief')).toBeInTheDocument();
+      expect(await screen.findByText('Undid: your edit')).toBeInTheDocument();
+      await pause(TEXT_SAVE_PAUSE_MS);
+      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text']);
+
+      fireEvent.click(button('Redo'));
+      expect(box).toHaveValue('the final text, again');
+      expect(await origin('V1 · From your Brief · edited')).toBeInTheDocument();
+      await pause(TEXT_SAVE_PAUSE_MS);
+      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text, again']);
+      expect(track).toHaveBeenCalledWith('text_undone', { step: 'edit' });
+      expect(track).toHaveBeenCalledWith('text_redone', { step: 'edit' });
+    });
+
+    it('undoes with ⌘Z and redoes with ⇧⌘Z while editing', async () => {
+      renderPost(postWith('the final text'));
+      const box = await postBox();
+      fireEvent.change(box, { target: { value: 'the final text!' } });
+
+      fireEvent.keyDown(box, { key: 'z', metaKey: true });
+      expect(box).toHaveValue('the final text');
+
+      fireEvent.keyDown(box, { key: 'z', metaKey: true, shiftKey: true });
+      expect(box).toHaveValue('the final text!');
+    });
+
+    it('undoes a rewrite in one step, back to the Text the Feedback was given on', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(TWO[1]!);
+      renderPost(draft([TWO[0]!]));
+      const box = await postBox();
+      fireEvent.change(box, { target: { value: 'my own edit' } });
+      await sendFeedback('Punchier hook');
+      await boxHolds('the second text');
+
+      fireEvent.click(button('Undo'));
+
+      await boxHolds('my own edit');
+      expect(await origin('V1 · From your Brief · edited')).toBeInTheDocument();
+      expect(await screen.findByText('Undid: rewrite from Feedback')).toBeInTheDocument();
+      expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 1);
+      await pause(TEXT_SAVE_PAUSE_MS);
+      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['my own edit']);
+      expect(track).toHaveBeenCalledWith('version_restored', { source: 'undo' });
+      expect(track).toHaveBeenCalledWith('text_undone', { step: 'rewrite' });
+
+      const saves = vi.mocked(postService.saveText).mock.calls.length;
+      fireEvent.click(button('Redo'));
+
+      await boxHolds('the second text');
+      expect(await origin('V2 · From Feedback: “Punchier hook”')).toBeInTheDocument();
+      expect(await screen.findByText('Redid: rewrite from Feedback')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(postService.restoreVersion).toHaveBeenLastCalledWith('post_01', 2),
+      );
+      await pause(TEXT_SAVE_PAUSE_MS);
+      expect(postService.saveText).toHaveBeenCalledTimes(saves);
+    });
+
+    it('sends Feedback only once an undo across a rewrite has reached the server', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(TWO[1]!);
+      renderPost(draft([TWO[0]!]));
+      await sendFeedback('Punchier hook');
+      await boxHolds('the second text');
+      let restored: () => void = () => {};
+      vi.mocked(postService.restoreVersion).mockImplementationOnce(
+        () => new Promise((resolve) => (restored = () => resolve(textOf(TWO[0]!)))),
+      );
+      fireEvent.click(button('Undo'));
+      await boxHolds('the first text');
+
+      await sendFeedback('Shorter');
+
+      await waitFor(() => expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 1));
+      expect(postService.addVersion).toHaveBeenCalledTimes(1);
+      await act(async () => restored());
+      await waitFor(() => expect(postService.addVersion).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(postService.addVersion).mock.calls[1]).toEqual([
+        'post_01',
+        'Shorter',
+        'post',
+        ['the first text'],
+      ]);
+    });
+
+    it('undoes a restore in one step', async () => {
+      renderPost(draft(TWO));
+      await textCard();
+      fireEvent.click(button('History'));
+      const history = within(await screen.findByRole('dialog', { name: 'History' }));
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+      expect(await screen.findByText('Restored Version 1')).toBeInTheDocument();
+      await boxHolds('the first text');
+
+      fireEvent.click(button('Undo'));
+
+      await boxHolds('the second text');
+      expect(await origin('V2 · From Feedback: “Punchier hook”')).toBeInTheDocument();
+      expect(await screen.findByText('Undid: restore of Version 1')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(postService.restoreVersion).toHaveBeenLastCalledWith('post_01', 2),
+      );
+      await pause(TEXT_SAVE_PAUSE_MS);
+      expect(postService.saveText).not.toHaveBeenCalled();
+    });
+
+    it('says newer rewrites are in History when typing drops them from redo', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(TWO[1]!);
+      renderPost(draft([TWO[0]!]));
+      await sendFeedback('Punchier hook');
+      await boxHolds('the second text');
+      fireEvent.click(button('Undo'));
+      await boxHolds('the first text');
+
+      fireEvent.change(await postBox(), { target: { value: 'the first text, mine' } });
+
+      expect(await panel('Draft').findByText('Newer rewrites are in History')).toBeInTheDocument();
+      expect(button('Redo')).toBeDisabled();
+      expect(track).toHaveBeenCalledWith('redo_rewrites_dropped', { count: 1 });
+      await pause(5_000);
+      expect(panel('Draft').queryByText('Newer rewrites are in History')).not.toBeInTheDocument();
+
+      fireEvent.click(button('History'));
+      const history = within(await screen.findByRole('dialog', { name: 'History' }));
+      expect(history.getByRole('button', { name: /^Version 2/ })).toBeInTheDocument();
+    });
+
+    it('marks the words that changed in Pumpkin, scrolled into view, until they fade', async () => {
+      renderPost(postWith('Ship it today'));
+      const box = await postBox();
+      fireEvent.change(box, { target: { value: 'Ship it early today' } });
+      fireEvent.click(button('Undo'));
+
+      fireEvent.click(button('Redo'));
+
+      const mark = (await textCard()).getByText('early', { selector: 'mark' });
+      expect(mark.scrollIntoView).toHaveBeenCalled();
+      await pause(1_300);
+      expect((await textCard()).queryByText('early', { selector: 'mark' })).not.toBeInTheDocument();
+    });
+
+    it('shows the marks without a fade for a while with reduced motion', async () => {
+      const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
+        (query: string) =>
+          ({
+            matches: query === '(prefers-reduced-motion: reduce)',
+            media: query,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+          }) as unknown as MediaQueryList,
+      );
+      renderPost(postWith('Ship it today'));
+      const box = await postBox();
+      fireEvent.change(box, { target: { value: 'Ship it early today' } });
+      fireEvent.click(button('Undo'));
+      fireEvent.click(button('Redo'));
+
+      await pause(1_300);
+      expect((await textCard()).getByText('early', { selector: 'mark' })).toBeInTheDocument();
+      await pause(300);
+      expect((await textCard()).queryByText('early', { selector: 'mark' })).not.toBeInTheDocument();
+      matchMedia.mockRestore();
+    });
+
+    it('drops the marks as soon as the User types', async () => {
+      renderPost(postWith('Ship it today'));
+      const box = await postBox();
+      fireEvent.change(box, { target: { value: 'Ship it early today' } });
+      fireEvent.click(button('Undo'));
+      fireEvent.click(button('Redo'));
+
+      fireEvent.change(box, { target: { value: 'Ship it early today!' } });
+
+      expect((await textCard()).queryByText('early', { selector: 'mark' })).not.toBeInTheDocument();
+    });
+
+    it('offers no undo on a Scheduled Post', async () => {
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+
+      expect(panel('Scheduled').queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
     });
   });
 

@@ -114,6 +114,18 @@ export const EVENTS = {
     description:
       "Post page: saved a burst of the User's edits to the Post's Text, once however many retries it took. Props: format (post | thread), part_count (number).",
   },
+  text_undone: {
+    description:
+      "Post page: undid one step of the Post's Text with the undo button or ⌘Z. Props: step (edit | rewrite | restore).",
+  },
+  text_redone: {
+    description:
+      "Post page: redid one step of the Post's Text with the redo button or ⇧⌘Z. Props: step (edit | rewrite | restore).",
+  },
+  redo_rewrites_dropped: {
+    description:
+      'Post page: an edit after an undo dropped rewrites from redo, which stay in History. Props: count (number).',
+  },
   version_restored: {
     description:
       "Post page: made an earlier Version the Post's Text again. Props: source (history | undo).",

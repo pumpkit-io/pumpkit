@@ -14,6 +14,7 @@ export function OriginLine({
   edited,
   writing,
   save,
+  rewritesDropped = false,
 }: {
   brief: string;
   /** The Version the Text came from. */
@@ -23,6 +24,8 @@ export function OriginLine({
   writing?: number | null;
   /** How saving the User's edit is going; only a failure takes the line. */
   save?: TextSaveState;
+  /** An edit just dropped rewrites from redo, which History still holds. */
+  rewritesDropped?: boolean;
 }) {
   if (writing) {
     return <p className={`truncate ${LINE}`}>Writing Version {writing} from your Feedback…</p>;
@@ -34,6 +37,13 @@ export function OriginLine({
         title={save.kind === 'refused' ? save.message : undefined}
       >
         {save.kind === 'retrying' ? 'Edit not saved. Retrying.' : `Edit not saved. ${save.message}`}
+      </p>
+    );
+  }
+  if (rewritesDropped) {
+    return (
+      <p className="truncate font-sans text-[13px] text-foreground">
+        Newer rewrites are in History
       </p>
     );
   }

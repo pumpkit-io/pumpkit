@@ -5,8 +5,10 @@ import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { postService, textOf, type Format, type PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { statusFrom } from './postStatus';
+import type { EditCause } from './textHistory';
 import { usePostCounts } from './usePostCounts';
 import { useTextAutosave } from './useTextAutosave';
+import { useUndoLine, type UndoDirection } from './useUndoLine';
 import { isRefusal, useWritingFailure } from './useWritingFailure';
 
 export type PostLoad =
@@ -15,18 +17,27 @@ export type PostLoad =
   | { kind: 'notFound' }
   | { kind: 'failed'; message: string };
 
+const textsOf = (parts: { text: string }[]) => parts.map((p) => p.text);
+
 /**
  * The Post with its Text's Parts replaced by `texts`, counted as X counts them, and edited while
- * they differ from the Version the Text came from, as the server decides it.
+ * they differ from the Version the Text came from, as the server decides it. `versionNumber`
+ * moves the Text to another Version, for undo and redo across a rewrite or a restore.
  */
-function withEditedText(post: PostDetail, texts: string[]): PostDetail {
+function withEditedText(
+  post: PostDetail,
+  texts: string[],
+  versionNumber = post.text?.versionNumber,
+): PostDetail {
   const { text } = post;
   if (!text) return post;
-  const source = post.versions.find((v) => v.number === text.versionNumber);
+  const source = post.versions.find((v) => v.number === versionNumber);
   return {
     ...post,
     text: {
       ...text,
+      format: source?.format ?? text.format,
+      versionNumber: source?.number ?? text.versionNumber,
       parts: texts.map((t, i) => ({
         text: t,
         charCount: xWeightedLength(t),
@@ -41,8 +52,8 @@ function withEditedText(post: PostDetail, texts: string[]): PostDetail {
 }
 
 /**
- * One Post as the server has it, with its Text edited in place and saved on its own, and Feedback
- * on it. After an action that changes its
+ * One Post as the server has it, with its Text edited in place and saved on its own, Feedback
+ * on it, and undo and redo along every change to it in this tab. After an action that changes its
  * Scheduled post, pass the answer to `setScheduledPost` (null once deleted): the status follows,
  * and so do the Post counts behind the sidebar's Failed badge.
  */
@@ -54,17 +65,31 @@ export function usePost(postId: string) {
   const { fail, clear } = writing;
   const { refresh: refreshCounts } = usePostCounts();
   const autosave = useTextAutosave(postId);
-  const { edit: saveSoon, flush: flushText, discard: discardEdits } = autosave;
+  const { edit: saveSoon, flush: flushEdits, discard: discardEdits } = autosave;
+  const line = useUndoLine();
+  const { start: startLine, edit: recordEdit, commit, move, takeBack, currentParts } = line;
+  // Restores for undo and redo go out one at a time, so the server ends on the last one.
+  const restoring = useRef<Promise<void>>(Promise.resolve());
+  const restoresOut = useRef(0);
+
+  /** Saves the Text on screen now, an undo's restore included; true once the server has it. */
+  const flushText = useCallback(
+    (): Promise<boolean> =>
+      restoresOut.current > 0 ? restoring.current.then(flushEdits) : flushEdits(),
+    [flushEdits],
+  );
 
   const reload = useCallback(async () => {
     setLoad({ kind: 'loading' });
     try {
-      setLoad({ kind: 'loaded', post: await postService.get(postId) });
+      const post = await postService.get(postId);
+      startLine(post);
+      setLoad({ kind: 'loaded', post });
     } catch (e) {
       if (errorStatus(e) === 404) setLoad({ kind: 'notFound' });
       else setLoad({ kind: 'failed', message: errorMessage(e, "Couldn't load the Post.") });
     }
-  }, [postId]);
+  }, [postId, startLine]);
 
   useEffect(() => {
     void reload();
@@ -114,6 +139,7 @@ export function usePost(postId: string) {
             ? { ...post, versions: [...post.versions, version], text: textOf(version) }
             : post,
         );
+        commit(textsOf(version.parts), 'rewrite', version.number);
         return true;
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'feedback' });
@@ -123,19 +149,61 @@ export function usePost(postId: string) {
         setIsWriting(false);
       }
     },
-    [postId, clear, fail, update, flushText],
+    [postId, clear, fail, update, flushText, commit],
+  );
+
+  const showText = useCallback(
+    (texts: string[], versionNumber?: number) =>
+      update((post) => (post.id === postId ? withEditedText(post, texts, versionNumber) : post)),
+    [postId, update],
+  );
+
+  /** Replaces every Part of the Text with the User's, shown at once and saved after a pause. */
+  const editText = useCallback(
+    (texts: string[], cause: EditCause) => {
+      recordEdit(texts, cause);
+      showText(texts);
+      saveSoon(texts);
+    },
+    [recordEdit, showText, saveSoon],
   );
 
   /**
-   * Replaces every Part of the Text with the User's, shown at once and saved after a pause.
-   * Undo and redo (#197) go through here too.
+   * Steps the Text back or forward along the undo line. Within one Version it saves the Parts;
+   * across a rewrite or a restore it restores that Version first, since a save keeps the Text's
+   * Version and shape, then saves the Parts if they were edited.
    */
-  const editText = useCallback(
-    (texts: string[]) => {
-      update((post) => (post.id === postId ? withEditedText(post, texts) : post));
-      saveSoon(texts);
+  const stepText = useCallback(
+    (direction: UndoDirection) => {
+      const moved = move(direction);
+      if (!moved) return;
+      const { from, to } = moved;
+      setRestoreError(null);
+      showText(to.parts, to.origin.versionNumber);
+      if (to.origin.versionNumber === from.origin.versionNumber) {
+        saveSoon(to.parts);
+        return;
+      }
+      restoresOut.current += 1;
+      restoring.current = restoring.current.then(async () => {
+        await discardEdits();
+        try {
+          const text = await postService.restoreVersion(postId, to.origin.versionNumber);
+          track('version_restored', { source: 'undo' });
+          // The User may have typed while the restore was out.
+          const parts = currentParts() ?? to.parts;
+          update((post) => (post.id === postId ? withEditedText({ ...post, text }, parts) : post));
+          if (parts.some((t, i) => t !== text.parts[i]?.text)) saveSoon(parts);
+        } catch (e) {
+          takeBack(direction);
+          showText(from.parts, from.origin.versionNumber);
+          setRestoreError(errorMessage(e, `Couldn't ${direction} that change. Try again.`));
+        } finally {
+          restoresOut.current -= 1;
+        }
+      });
     },
-    [postId, update, saveSoon],
+    [postId, move, takeBack, currentParts, showText, update, saveSoon, discardEdits],
   );
 
   /** Makes a Version from History the Post's Text; a refusal leaves the Text and says why. */
@@ -147,12 +215,13 @@ export function usePost(postId: string) {
       try {
         const text = await postService.restoreVersion(postId, versionNumber);
         update((post) => (post.id === postId ? { ...post, text } : post));
+        commit(textsOf(text.parts), 'restore', versionNumber);
         track('version_restored', { source: 'history' });
       } catch (e) {
         setRestoreError(errorMessage(e, `Couldn't restore Version ${versionNumber}. Try again.`));
       }
     },
-    [postId, update, discardEdits],
+    [postId, update, discardEdits, commit],
   );
 
   return {
@@ -163,6 +232,11 @@ export function usePost(postId: string) {
     restoreVersion,
     restoreError,
     editText,
+    undo: line.canUndo ? () => stepText('undo') : undefined,
+    redo: line.canRedo ? () => stepText('redo') : undefined,
+    trace: line.trace,
+    announcement: line.announcement,
+    rewritesDropped: line.rewritesDropped,
     textSave: autosave.state,
     flushText,
     isWriting,
