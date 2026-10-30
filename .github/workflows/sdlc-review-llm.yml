@@ -1,0 +1,74 @@
+# The review-changes skill on Claude Code, run by hand so it spends the CLAUDE_CODE_OAUTH_TOKEN subscription only when an admin asks.
+# Run it on the PR's branch (`gh workflow run sdlc-review-llm.yml --ref <branch>`): the required `review` check lands on that commit.
+name: sdlc review (LLM)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: sdlc-review-llm-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Only repository admins may run the LLM review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          perm="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_TRIGGERING_ACTOR/permission" --jq .permission)" || perm=no
+          [ "$perm" = admin ] || { echo "$GITHUB_TRIGGERING_ACTOR has $perm access; only admins can run this review"; exit 1; }
+      - name: Find the pull request for this branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr="$(gh pr view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json number,baseRefOid,headRefOid,state)" \
+            || { echo "No pull request for $GITHUB_REF_NAME; run this workflow on a PR's branch"; exit 1; }
+          [ "$(jq -r .state <<<"$pr")" = OPEN ] || { echo "The pull request for $GITHUB_REF_NAME is not open"; exit 1; }
+          # A branch pushed after the dispatch would put a verdict for one commit onto another.
+          [ "$(jq -r .headRefOid <<<"$pr")" = "$GITHUB_SHA" ] || { echo "$GITHUB_REF_NAME moved past this run's commit; dispatch the workflow again"; exit 1; }
+          echo "number=$(jq -r .number <<<"$pr")" >> "$GITHUB_OUTPUT"
+          echo "base=$(jq -r .baseRefOid <<<"$pr")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          plugin_marketplaces: https://github.com/pumpkit-io/sdlc.git
+          plugins: sdlc@pumpkit-io
+          prompt: |
+            Load the review-changes skill and review pull request #${{ steps.pr.outputs.number }}. This is a CI job, so nobody can answer questions.
+
+            - Fixed point: ${{ steps.pr.outputs.base }}. HEAD is the pull request's head commit.
+            - Spec: the issues the pull request body or its commit messages reference. Read the body with `gh pr view ${{ steps.pr.outputs.number }}`. With no reference, skip the Spec axis.
+            - This job has no sub-agents: run the three reviews one after another in this session, as the skill describes for an agent that can't spawn them.
+            - Change no tracked file. Write the final report, in Markdown, to `.sdlc-review.md` at the repo root, under the heading `## sdlc review of ${{ github.sha }}`, ending with the skill's verdict line.
+          claude_args: |
+            --model sonnet
+            --allowedTools "Read,Glob,Grep,Write,Skill,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git merge-base:*),Bash(gh pr view:*),Bash(gh issue view:*)"
+            --disallowedTools "Agent,Task"
+      - uses: marocchino/sticky-pull-request-comment@v2
+        if: hashFiles('.sdlc-review.md') != ''
+        with:
+          header: sdlc-review
+          number: ${{ steps.pr.outputs.number }}
+          path: .sdlc-review.md
+      - name: Fail on a blocking verdict
+        run: |
+          [ -f .sdlc-review.md ] || { echo "The review wrote no report"; exit 1; }
+          verdict="$(grep -E '^Verdict: ' .sdlc-review.md | tail -n 1)" || true
+          echo "${verdict:-No verdict line in the report}"
+          [ "$verdict" = "Verdict: pass" ]
