@@ -46,6 +46,7 @@ async def save_connection(
     connection.x_user_id = account.user_id
     connection.handle = account.handle
     connection.subscription_type = account.subscription_type
+    connection.photo_url = account.photo_url
     connection.access_token_encrypted = encrypt(tokens.access_token)
     connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
     connection.access_token_expires_at = tokens.expires_at
@@ -82,11 +83,12 @@ async def save_tokens(
     await db.flush()
 
 
-async def save_subscription_type(
-    db: AsyncSession, connection: XConnection, *, subscription_type: Optional[str], now: datetime
+async def save_account(
+    db: AsyncSession, connection: XConnection, *, account: XAccount, now: datetime
 ) -> None:
-    """Flushes."""
-    connection.subscription_type = subscription_type
+    """Keep what a later users/me read says about the X account. Flushes."""
+    connection.subscription_type = account.subscription_type
+    connection.photo_url = account.photo_url
     connection.updated_at = now
     await db.flush()
 

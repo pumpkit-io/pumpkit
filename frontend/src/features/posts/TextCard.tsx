@@ -100,6 +100,8 @@ export function TextCard({
   const name = profile
     ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email
     : 'You';
+  // Connected, the preview looks as the post will on X, with the X account's photo.
+  const avatarUrl = connection ? connection.photoUrl : (profile?.avatarUrl ?? null);
 
   return (
     <article
@@ -124,7 +126,7 @@ export function TextCard({
             total={parts.length}
             name={name}
             handle={connection?.handle ?? null}
-            avatarUrl={profile?.avatarUrl ?? null}
+            avatarUrl={avatarUrl}
             text={renderText?.(part, index)}
             clearCorner={!!corner && index === 0}
           />

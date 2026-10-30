@@ -567,6 +567,7 @@ async def _x_connection_response(db: AsyncSession, connection: XConnection) -> X
         scheduled_posts_waiting=await service.count_waiting(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id
         ),
+        photo_url=connection.photo_url,
     )
 
 

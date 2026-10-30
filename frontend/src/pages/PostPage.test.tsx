@@ -113,6 +113,7 @@ const CONNECTED: XConnection = {
   charLimit: 280,
   needsReconnect: false,
   scheduledPostsWaiting: 0,
+  photoUrl: null,
 };
 
 function part(text: string, charCount = text.length): Part {
@@ -308,6 +309,36 @@ describe('Post page', () => {
       expect(parts[0].getByText('14 / 280')).toBeInTheDocument();
       expect(parts[1].getByText('290 / 280')).toBeInTheDocument();
       expect(parts[1].getByText("10 characters over X's 280-character limit")).toBeInTheDocument();
+    });
+
+    it("shows the X account's photo where it shows the X account", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...CONNECTED,
+        photoUrl: 'https://pbs.twimg.com/ada_200x200.jpg',
+      });
+      renderPost(postWith('the final text'));
+
+      const only = (await screen.findByRole('article', { name: 'Text' })).querySelector('li')!;
+      await within(only).findByText('@ada');
+      expect(only.querySelector('img')).toHaveAttribute(
+        'src',
+        'https://pbs.twimg.com/ada_200x200.jpg',
+      );
+    });
+
+    it("shows the User's initials when the X account's photo fails to load", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...CONNECTED,
+        photoUrl: 'https://pbs.twimg.com/gone.jpg',
+      });
+      renderPost(postWith('the final text'));
+
+      const only = (await screen.findByRole('article', { name: 'Text' })).querySelector('li')!;
+      await within(only).findByText('@ada');
+      fireEvent.error(only.querySelector('img')!);
+
+      expect(only.querySelector('img')).toBeNull();
+      expect(within(only).getByText('AL')).toBeInTheDocument();
     });
 
     it('shows a single post with no Version number, Format, Part count or place', async () => {
