@@ -134,7 +134,7 @@ async function readyToWrite() {
   vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
   vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
   renderNewPost();
-  await screen.findByRole('link', { name: 'Persona: @levelsio' });
+  await screen.findByRole('link', { name: 'Writing in the style of @levelsio' });
   const area = await writer();
   await area.findByRole('button', { name: 'Write the Post' });
   return area;
@@ -181,8 +181,11 @@ describe('New post', () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
       renderNewPost();
 
-      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg' });
+      const chip = await screen.findByRole('link', {
+        name: 'Writing in the style of @levelsio, @paulg',
+      });
       expect(chip).toHaveAttribute('href', '/persona');
+      expect(chip).toHaveTextContent(/^Writing in the style of/);
       expect(chip.closest('header')).not.toBeNull();
     });
 
@@ -194,7 +197,9 @@ describe('New post', () => {
       ]);
       renderNewPost();
 
-      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg, @naval' });
+      const chip = await screen.findByRole('link', {
+        name: 'Writing in the style of @levelsio, @paulg, @naval',
+      });
       const photos = Array.from(chip.querySelectorAll('img'));
       expect(photos.map((photo) => photo.getAttribute('src'))).toEqual([
         'https://pbs.twimg.com/levelsio_normal.jpg',
@@ -212,7 +217,9 @@ describe('New post', () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
       renderNewPost();
 
-      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg' });
+      const chip = await screen.findByRole('link', {
+        name: 'Writing in the style of @levelsio, @paulg',
+      });
       expect(within(chip).getByText('@levelsio')).not.toBeVisible();
 
       firePointer('pointerOver', chip, 'mouse');
@@ -229,7 +236,7 @@ describe('New post', () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       renderNewPost();
 
-      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio' });
+      const chip = await screen.findByRole('link', { name: 'Writing in the style of @levelsio' });
       act(() => chip.focus());
 
       expect(within(chip).getByText('@levelsio')).toBeVisible();
@@ -243,7 +250,7 @@ describe('New post', () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       renderNewPost();
 
-      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio' });
+      const chip = await screen.findByRole('link', { name: 'Writing in the style of @levelsio' });
       firePointer('pointerDown', chip, 'touch');
       fireEvent.click(chip);
 
@@ -260,7 +267,7 @@ describe('New post', () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       renderNewPost();
 
-      const chip = await screen.findByRole('link', { name: 'Persona: @levelsio' });
+      const chip = await screen.findByRole('link', { name: 'Writing in the style of @levelsio' });
       firePointer('pointerDown', chip, 'touch');
       fireEvent.click(chip);
       expect(within(chip).getByText('@levelsio')).toBeVisible();

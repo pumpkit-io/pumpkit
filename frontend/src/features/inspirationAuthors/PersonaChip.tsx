@@ -6,7 +6,8 @@ import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
 
 const CHIP =
-  'inline-flex h-8 items-center gap-2 rounded-full border px-3 font-sans text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'inline-flex h-8 items-center gap-2 rounded-lg border px-3 font-sans text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const LABEL = 'Writing in the style of';
 const PHOTO_PX = 24;
 const OVERLAP_PX = 8;
 const MOTION = 'duration-200 ease-out motion-reduce:transition-none';
@@ -59,13 +60,13 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
   return (
     <div className="relative h-8 shrink-0">
       <span aria-hidden className={cn(CHIP, 'invisible border-transparent')}>
-        <span className="font-medium">Persona</span>
+        <span className="font-medium">{LABEL}</span>
         <span style={{ width: restStackPx }} />
       </span>
       <Link
         ref={chipRef}
         to="/persona"
-        aria-label={`Persona: ${handles.join(', ')}`}
+        aria-label={`${LABEL} ${handles.join(', ')}`}
         onPointerEnter={(event) => event.pointerType === 'mouse' && setHovered(true)}
         onPointerLeave={(event) => event.pointerType === 'mouse' && setHovered(false)}
         onFocus={() => setFocused(true)}
@@ -88,7 +89,7 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
       >
         {/* A phone lacks room for the label beside three handles; the accessible name keeps it. */}
         <span className={cn('shrink-0 font-medium text-foreground', expanded && 'max-sm:hidden')}>
-          Persona
+          {LABEL}
         </span>
         <span className="flex min-w-0 items-center">
           {authors.map((author, index) => (
