@@ -15,6 +15,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
+- The Persona chip at the top of New post and each Post's page shows your Inspiration authors' photos as a stack, with their initial when there is none or it fails to load. Hovering or focusing it unfolds each photo with its handle over the page title, and on a touch screen the first tap unfolds it and the second opens Persona.
 - The sidebar shows Persona as a plain link, without the "N/3" count of Inspiration authors.
 - New post is a composer: one line, a box to ramble in with the Format toggle inside it, and a send arrow. ⌘Enter (Ctrl+Enter) writes the Post, and Enter adds a newline.
 - The Post's page shows the Text as the X post it will become, with a copy icon at its corner, above a dock pinned to the bottom: one line saying which Version and which Brief or Feedback the Text came from, which opens in full, then Feedback in a composer with "Post to…", or the Scheduled or Published status. The version pager, the Brief block and the machine-written tells are gone, and copying a Thread puts a line of `---` between its Parts.
