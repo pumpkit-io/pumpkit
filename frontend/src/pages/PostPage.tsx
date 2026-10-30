@@ -18,8 +18,9 @@ import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
 import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
-import { cardParts, copiedText, textVersionOf } from '@/features/posts/shownText';
+import { cardParts, copiedText, versionOnScreen } from '@/features/posts/shownText';
 import { TextEditor, type TextChange } from '@/features/posts/TextEditor';
+import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import type { TextSaveState } from '@/features/posts/useTextAutosave';
 import type { TextTrace, UndoAnnouncement } from '@/features/posts/useUndoLine';
 import { usePost } from '@/features/posts/usePost';
@@ -92,25 +93,29 @@ function LoadedPost({
 }: {
   post: PostDetail;
   feedback: FeedbackSending;
-  restore: { onRestore: (versionNumber: number) => void; error: string | null };
+  restore: {
+    onRestore: (versionNumber: number) => void;
+    isRestoring: boolean;
+    error: string | null;
+  };
   edit: TextEditing;
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
   const { connection } = useXConnectionContext();
   const { subscribed } = useSubscribed();
   const location = useLocation();
+  const opensEditor = opensEditing(location.state);
   const [editing, setEditing] = useState(
-    () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
+    () => opensEditor && post.scheduledPost?.state === 'scheduled',
   );
   const navigate = useNavigate();
-  const opensEditor = opensEditing(location.state);
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
   useEffect(() => {
     if (opensEditor) navigate(location.pathname, { replace: true, state: null });
   }, [opensEditor, location.pathname, navigate]);
 
-  const textVersion = textVersionOf(post);
+  const textVersion = versionOnScreen(post);
   const latest = post.versions[post.versions.length - 1];
   if (!textVersion || !latest) return null;
   const { scheduledPost } = post;
@@ -124,7 +129,7 @@ function LoadedPost({
       <Page title={breadcrumb}>
         <ScheduledPostEditor
           scheduledPost={scheduledPost}
-          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? 280}
+          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
           onSaved={(saved) => {
             onScheduledPost(saved);
             setEditing(false);
@@ -162,7 +167,9 @@ function LoadedPost({
         versions={post.versions}
         textVersionNumber={textVersion.number}
         edited={post.text?.edited ?? false}
-        onRestore={textChanges && !feedback.isWriting ? restore.onRestore : undefined}
+        onRestore={
+          textChanges && !feedback.isWriting && !restore.isRestoring ? restore.onRestore : undefined
+        }
       />
     </div>
   );
@@ -239,6 +246,7 @@ export function PostPage() {
     addFeedback,
     restoreVersion,
     restoreError,
+    isRestoring,
     editText,
     undo,
     redo,
@@ -258,7 +266,7 @@ export function PostPage() {
         key={load.post.id}
         post={load.post}
         feedback={{ isWriting, error, notice, onSend: addFeedback }}
-        restore={{ onRestore: (n) => void restoreVersion(n), error: restoreError }}
+        restore={{ onRestore: restoreVersion, isRestoring, error: restoreError }}
         edit={{
           onEdit: (texts, change) => editText(texts, change.cause),
           save: textSave,

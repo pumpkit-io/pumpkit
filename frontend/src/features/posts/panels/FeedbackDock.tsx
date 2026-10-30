@@ -5,7 +5,7 @@ import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { CHOOSE_PLAN_PATH, trackChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
-import { useMediaQuery } from '@/lib/useMediaQuery';
+import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import { FEEDBACK_MAX_CHARS, type Format } from '@/services/postService';
 import { Composer } from '../Composer';
 import { Dock } from './Dock';
@@ -38,9 +38,15 @@ export function FeedbackDock({
   postTo: ReactNode;
 }) {
   const { subscribed } = useSubscribed();
-  const phone = useMediaQuery('(max-width: 639px)');
+  const phone = useMediaQuery(PHONE);
   const [feedback, setFeedback] = useState('');
   const [format, setFormat] = useState<Format>(textFormat);
+  // A restore, an undo or a rewrite that changes the Text's Format moves the toggle with it.
+  const [formatFollowed, setFormatFollowed] = useState<Format>(textFormat);
+  if (formatFollowed !== textFormat) {
+    setFormatFollowed(textFormat);
+    setFormat(textFormat);
+  }
   const { isWriting, error, notice, onSend } = sending;
   const typed = feedback.trim();
 

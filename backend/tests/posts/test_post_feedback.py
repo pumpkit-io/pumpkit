@@ -578,6 +578,18 @@ async def test_feedback_sent_with_a_text_that_is_not_saved_is_refused(client, po
     assert fake_llm.calls == []
 
 
+@pytest.mark.parametrize(
+    "text",
+    [["x" * 30_001], ["Part."] * 26, []],
+    ids=["a part too long", "too many parts", "no parts"],
+)
+async def test_feedback_sent_with_a_text_out_of_bounds_is_refused(client, post_id, fake_llm, text):
+    response = await client.post(_versions_url(post_id), json={"feedback": "warmer", "text": text})
+
+    assert response.status_code == 422
+    assert fake_llm.calls == []
+
+
 async def test_feedback_sent_with_the_saved_text_is_written(client, post_id, fake_llm):
     await client.put(_text_url(post_id), json={"parts": ["saved by hand"]})
     fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]

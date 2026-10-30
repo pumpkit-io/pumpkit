@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import select
@@ -46,13 +46,21 @@ async def corpus_for_user(db: AsyncSession, *, user_id: str) -> Corpus:
     return group_corpus(posts)
 
 
-async def get_user_post(db: AsyncSession, *, user_id: str, post_id: str) -> Optional[Post]:
-    """The User's Post with its attempts in order, or None when it isn't theirs."""
-    result = await db.execute(
+async def get_user_post(
+    db: AsyncSession, *, user_id: str, post_id: str, for_update: bool = False
+) -> Optional[Post]:
+    """
+    The User's Post with its attempts in order, or None when it isn't theirs. `for_update` locks
+    the Post's row until the transaction ends, for a change to its Text.
+    """
+    query = (
         select(Post)
         .where(Post.id == post_id, Post.user_id == user_id)
         .options(selectinload(Post.attempts))
     )
+    if for_update:
+        query = query.with_for_update(of=Post)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -98,7 +106,7 @@ async def record_version(
     now: datetime,
     starting_text: Optional[StartingText] = None,
 ) -> VersionAttempt:
-    """Store a succeeded attempt, a Version, and make it the Post's Text. Flushes."""
+    """Store a succeeded attempt, a Version, and make it the Post's Text, free to change. Flushes."""
     attempt = VersionAttempt(
         post_id=post.id,
         sequence=sequence,
@@ -125,6 +133,7 @@ async def record_version(
     )
     db.add(attempt)
     set_text_from_version(post, attempt)
+    post.writing_since = None
     await db.flush()
     return attempt
 
@@ -135,6 +144,31 @@ def set_text_from_version(post: Post, version: VersionAttempt) -> None:
     post.text_parts = list(version.parts or [])
     post.text_version_number = version.version_number
     post.text_edited = False
+
+
+# Longer than both model calls can take, so only a write whose request died holds the Text past it.
+WRITING_TIMEOUT = timedelta(minutes=30)
+
+
+class VersionBeingWritten(ConflictError):
+    pass
+
+
+def check_not_writing(post: Post, *, now: datetime) -> None:
+    """
+    Refuses while Feedback's Version is being written, since the Version replaces the Text: an
+    edit, a restore or other Feedback made meanwhile would be lost.
+    """
+    if post.writing_since is not None and now - as_utc(post.writing_since) < WRITING_TIMEOUT:
+        raise VersionBeingWritten(
+            "Pumpkit is writing a new Version of this Post. Try again once it's written."
+        )
+
+
+def start_writing(post: Post, *, now: datetime) -> None:
+    """Holds the Text until the Version is recorded, or its attempt fails. Not flushed."""
+    check_not_writing(post, now=now)
+    post.writing_since = now
 
 
 class TextShapeKept(ConflictError):
@@ -171,7 +205,7 @@ async def record_failed_attempt(
     error: str,
     now: datetime,
 ) -> VersionAttempt:
-    """Flushes."""
+    """Lets the Text change again. Flushes."""
     attempt = VersionAttempt(
         post_id=post.id,
         sequence=sequence,
@@ -182,5 +216,6 @@ async def record_failed_attempt(
         created_at=now,
     )
     db.add(attempt)
+    post.writing_since = None
     await db.flush()
     return attempt

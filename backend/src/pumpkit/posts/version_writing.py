@@ -138,20 +138,34 @@ def stored_starting_text(attempt: VersionAttempt) -> Optional[StartingText]:
     )
 
 
-def text_response(post: Post, char_limit: int) -> Optional[TextResponse]:
+def post_text(post: Post) -> Optional[StartingText]:
     """The Post's Text, or None while it has no Version."""
     if post.text_format is None or post.text_parts is None or post.text_version_number is None:
         return None
-    return TextResponse(
+    return StartingText(
         format=post.text_format,
-        parts=_part_responses(post.text_parts, char_limit),
+        parts=list(post.text_parts),
         version_number=post.text_version_number,
+    )
+
+
+def text_response(post: Post, char_limit: int) -> Optional[TextResponse]:
+    """The Post's Text, or None while it has no Version."""
+    text = post_text(post)
+    if text is None:
+        return None
+    return TextResponse(
+        format=text.format,
+        parts=_part_responses(text.parts, char_limit),
+        version_number=text.version_number,
         edited=post.text_edited,
     )
 
 
-async def user_post(db: AsyncSession, *, user: User, post_id: str) -> Post:
-    post = await service.get_user_post(db, user_id=user.id, post_id=post_id)
+async def user_post(
+    db: AsyncSession, *, user: User, post_id: str, for_update: bool = False
+) -> Post:
+    post = await service.get_user_post(db, user_id=user.id, post_id=post_id, for_update=for_update)
     if post is None:
         raise NotFoundError("Post not found.")
     return post
@@ -186,26 +200,20 @@ async def prepare_next_version(
 ) -> NextVersion:
     """
     For Feedback on `post`'s Text, in `format` or else the Text's, with the corpus the Post
-    started with. Raises when the Post has no Text yet, when `sent_text` isn't the saved Text, or
+    started with, and holds the Text until the Version is recorded. Raises when the Post has no
+    Text yet, when another Version is being written, when `sent_text` isn't the saved Text, or
     when the User is over the attempt limit.
     """
     versions = versions_of(post)
-    if (
-        not versions
-        or post.text_format is None
-        or post.text_parts is None
-        or post.text_version_number is None
-    ):
+    text = post_text(post)
+    if not versions or text is None:
         raise ConflictError("This Post has no Version to give Feedback on. Start a new Post.")
-    if sent_text is not None and sent_text != post.text_parts:
+    service.check_not_writing(post, now=now)
+    if sent_text is not None and sent_text != text.parts:
         raise ConflictError("Your last edit to the Text isn't saved yet. Save it, then try again.")
     await check_attempt_limit(db, user_id=user.id, now=now)
-    text = StartingText(
-        format=post.text_format,
-        parts=list(post.text_parts),
-        version_number=post.text_version_number,
-    )
     latest = versions[-1]
+    service.start_writing(post, now=now)
     return NextVersion(
         corpus=await service.corpus_for_post(db, post=post),
         earlier=[
@@ -219,7 +227,7 @@ async def prepare_next_version(
             for v in versions
         ],
         starting_text=starting_text(text, latest.format, latest.parts or []),
-        format=format or post.text_format,
+        format=format or text.format,
         sequence=len(post.attempts) + 1,
         number=len(versions) + 1,
         char_limit=await char_limit_for(db, user_id=user.id),

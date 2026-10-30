@@ -1,7 +1,7 @@
 import { Redo2, Undo2 } from 'lucide-react';
 import { IS_MAC } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
-import { ICON_BUTTON } from './HistoryPanel';
+import { ICON_BUTTON } from './iconButton';
 
 const UNDO_KEYS = IS_MAC ? '⌘Z' : 'Ctrl+Z';
 const REDO_KEYS = IS_MAC ? '⇧⌘Z' : 'Ctrl+Shift+Z';

@@ -18,7 +18,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
-from pumpkit.posts.formats import Format, format_of, part_name
+from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import Post
 from pumpkit.posts.schemas import TextResponse, VersionResponse
@@ -227,12 +227,9 @@ def _text_of(post: Post) -> list[str]:
     Parts are. The User may have left a Part blank mid-edit.
     """
     if not post.text_parts:
-        raise ConflictError("This Post has no text to post. Start a new Post.")
+        raise ConflictError("This Post has no Text to post. Start a new Post.")
     parts = [part.strip() for part in post.text_parts]
-    for number, part in enumerate(parts, start=1):
-        if not part:
-            name = part_name(number, len(parts))
-            raise rules.RuleBroken(f"Write {name} first." if name else "Write the post first.")
+    rules.check_parts_written(parts)
     return parts
 
 
@@ -456,12 +453,12 @@ async def give_feedback(
     a Draft or a Failed Post takes Feedback, checked again after the model calls in case the Post
     was scheduled meanwhile. `sent_text`, the Parts the sender shows, must be the saved Text.
     """
-    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(
         db, user=user, post=post, format=format, sent_text=sent_text, now=now
     )
-    # Ends the read transaction before the calls, which can take minutes.
+    # Holds the Text and ends the transaction before the calls, which can take minutes.
     await db.commit()
 
     try:
@@ -505,40 +502,54 @@ async def give_feedback(
 
 
 async def restore_version(
-    db: AsyncSession, user: User, post_id: str, version_number: int
+    db: AsyncSession, user: User, post_id: str, version_number: int, now: datetime
 ) -> TextResponse:
-    """Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's."""
-    post = await version_writing.user_post(db, user=user, post_id=post_id)
-    scheduled_post = await service.get_for_post(db, post_id=post_id)
-    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    """
+    Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's, and not
+    while a Version is being written.
+    """
+    post, _ = await _post_whose_text_changes(db, user=user, post_id=post_id, now=now)
     version = next(
         (v for v in version_writing.versions_of(post) if v.version_number == version_number), None
     )
     if version is None:
         raise NotFoundError(f"This Post has no Version {version_number}.")
     posts_service.set_text_from_version(post, version)
-    await db.commit()
-    char_limit = await version_writing.char_limit_for(db, user_id=user.id)
-    text = version_writing.text_response(post, char_limit)
-    assert text is not None
-    return text
+    return await _commit_text(db, user=user, post=post)
 
 
-async def edit_text(db: AsyncSession, user: User, post_id: str, parts: list[str]) -> TextResponse:
+async def edit_text(
+    db: AsyncSession, user: User, post_id: str, parts: list[str], now: datetime
+) -> TextResponse:
     """
-    Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and saving the
-    same Parts again changes nothing, so the web app can retry a save.
+    Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and not while a
+    Version is being written. Saving the same Parts again changes nothing, so the web app can
+    retry a save.
     """
-    post = await version_writing.user_post(db, user=user, post_id=post_id)
-    scheduled_post = await service.get_for_post(db, post_id=post_id)
-    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    post, scheduled_post = await _post_whose_text_changes(db, user=user, post_id=post_id, now=now)
     if scheduled_post is not None:
         live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
         rules.check_text_keeps_live_parts(live_count, post.text_parts or [], parts)
     posts_service.edit_text(post, parts)
+    return await _commit_text(db, user=user, post=post)
+
+
+async def _post_whose_text_changes(
+    db: AsyncSession, *, user: User, post_id: str, now: datetime
+) -> tuple[Post, Optional[ScheduledPost]]:
+    """The User's Post, locked, with its Scheduled post, once its Text may change."""
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    posts_service.check_not_writing(post, now=now)
+    return post, scheduled_post
+
+
+async def _commit_text(db: AsyncSession, *, user: User, post: Post) -> TextResponse:
     await db.commit()
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     text = version_writing.text_response(post, char_limit)
+    # Only a Post with a Version has a Text to change.
     assert text is not None
     return text
 

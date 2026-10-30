@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
-import { xWeightedLength } from '@/lib/xLength';
+import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import { cn } from '@/lib/utils';
 import type { PostListItem } from '@/services/postService';
 import type { PostPageState } from '../edit/scheduledPostEdit';
@@ -15,7 +15,6 @@ import { postTitle } from '../postStatus';
 import { rowMoment, rowWhen } from './rowWhen';
 
 /** X's limit for an account without Premium, when no X account is connected to say otherwise. */
-const DEFAULT_CHAR_LIMIT = 280;
 
 const EDIT_STATE: PostPageState = { edit: true };
 
@@ -152,7 +151,7 @@ export function PostRow({ post, charLimit }: { post: PostListItem; charLimit: nu
           </p>
         )}
         {expanded && (
-          <Expanded post={post} id={partsId} charLimit={charLimit ?? DEFAULT_CHAR_LIMIT} />
+          <Expanded post={post} id={partsId} charLimit={charLimit ?? X_POST_MAX_CHARS} />
         )}
       </div>
     </li>

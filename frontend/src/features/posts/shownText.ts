@@ -1,4 +1,4 @@
-import { xWeightedLength } from '@/lib/xLength';
+import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import type { PostDetail, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
@@ -21,7 +21,7 @@ export function retryParts(
   scheduledPost: ScheduledPost,
   xCharLimit: number | null,
 ): ShownPart[] {
-  const charLimit = xCharLimit ?? text.parts[0]?.charLimit ?? 280;
+  const charLimit = xCharLimit ?? text.parts[0]?.charLimit ?? X_POST_MAX_CHARS;
   const live: ShownPart[] = scheduledPost.parts
     .filter((part) => part.live)
     .map((part) => ({
@@ -41,7 +41,7 @@ export function retryParts(
  * The Post's Text as the Version it came from, for what reads a Version's shape; the
  * latest Version for a Post with no Text.
  */
-export function textVersionOf(post: PostDetail): Version | undefined {
+export function versionOnScreen(post: PostDetail): Version | undefined {
   const latest = post.versions[post.versions.length - 1];
   const { text } = post;
   if (!text) return latest;
@@ -61,7 +61,7 @@ export function cardParts(
   const { scheduledPost } = post;
   if (!scheduledPost) return textVersion.parts.map((p) => ({ ...p, live: false, xPostUrl: null }));
   if (scheduledPost.state === 'failed') return retryParts(textVersion, scheduledPost, xCharLimit);
-  const charLimit = xCharLimit ?? textVersion.parts[0]?.charLimit ?? 280;
+  const charLimit = xCharLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS;
   return scheduledPost.parts.map((part) => ({
     text: part.text,
     charCount: xWeightedLength(part.text),

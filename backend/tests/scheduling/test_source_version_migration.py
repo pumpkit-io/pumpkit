@@ -3,36 +3,16 @@ Migration 0021 drops each Scheduled post's link to a source Version, since it is
 Post's Text (ADR 0016), and keeps every Scheduled post.
 """
 
-from pathlib import Path
-
 import pytest
 import sqlalchemy as sa
-from alembic.config import Config
 from sqlalchemy import Connection
 
 from alembic import command
+from tests.migrations import insert, migrate
 
 POSTS = "/api/v1/posts"
 WRITTEN_AT = "2026-10-01 12:00:00"
 PUBLISH_AT = "2026-10-11 09:00:00"
-
-
-def _alembic(connection: Connection, run) -> None:
-    # No ini file, so Alembic leaves the test run's logging alone.
-    config = Config()
-    config.set_main_option("script_location", str(Path(__file__).parents[2] / "alembic"))
-    config.attributes["connection"] = connection
-    run(config)
-
-
-async def _migrate(db_engine, run) -> None:
-    async with db_engine.begin() as connection:
-        await connection.run_sync(_alembic, run)
-
-
-def _insert(connection: Connection, table: str, **values) -> None:
-    columns = [sa.column(name) for name in values]
-    connection.execute(sa.table(table, *columns).insert().values(**values))
 
 
 def _columns(connection: Connection) -> set[str]:
@@ -42,11 +22,11 @@ def _columns(connection: Connection) -> set[str]:
 @pytest.fixture
 async def scheduled_with_its_source_version(db_engine, user) -> None:
     """At 0020: a Post with two Versions, its Scheduled post copied from Version 1."""
-    await _migrate(db_engine, lambda config: command.stamp(config, "0021"))
-    await _migrate(db_engine, lambda config: command.downgrade(config, "0020"))
+    await migrate(db_engine, lambda config: command.stamp(config, "0021"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0020"))
 
     def fill(connection: Connection) -> None:
-        _insert(
+        insert(
             connection,
             "posts",
             id="post_a",
@@ -60,7 +40,7 @@ async def scheduled_with_its_source_version(db_engine, user) -> None:
             text_edited=False,
         )
         for number in (1, 2):
-            _insert(
+            insert(
                 connection,
                 "version_attempts",
                 id=f"version_{number}",
@@ -74,7 +54,7 @@ async def scheduled_with_its_source_version(db_engine, user) -> None:
                 slop_tells="[]",
                 created_at=WRITTEN_AT,
             )
-        _insert(
+        insert(
             connection,
             "scheduled_posts",
             id="scheduled_post_a",
@@ -89,7 +69,7 @@ async def scheduled_with_its_source_version(db_engine, user) -> None:
             created_at=WRITTEN_AT,
             updated_at=WRITTEN_AT,
         )
-        _insert(
+        insert(
             connection,
             "scheduled_post_parts",
             id="scheduled_post_part_a",
@@ -105,7 +85,7 @@ async def scheduled_with_its_source_version(db_engine, user) -> None:
 async def test_the_migration_drops_the_source_version_and_keeps_the_scheduled_post(
     db_engine, scheduled_with_its_source_version, subscribed, client
 ):
-    await _migrate(db_engine, lambda config: command.upgrade(config, "0021"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0021"))
 
     read = (await client.get(f"{POSTS}/post_a")).json()
 
@@ -120,8 +100,8 @@ async def test_the_migration_drops_the_source_version_and_keeps_the_scheduled_po
 async def test_the_migration_runs_down_and_up_again(
     db_engine, scheduled_with_its_source_version, subscribed, client
 ):
-    await _migrate(db_engine, lambda config: command.upgrade(config, "0021"))
-    await _migrate(db_engine, lambda config: command.downgrade(config, "0020"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0021"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0020"))
 
     def sources(connection: Connection) -> list[tuple[str, str]]:
         rows = connection.execute(sa.text("SELECT id, source_version_id FROM scheduled_posts"))
@@ -130,6 +110,6 @@ async def test_the_migration_runs_down_and_up_again(
     async with db_engine.connect() as connection:
         assert await connection.run_sync(sources) == [("scheduled_post_a", "version_2")]
 
-    await _migrate(db_engine, lambda config: command.upgrade(config, "0021"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0021"))
     read = (await client.get(f"{POSTS}/post_a")).json()
     assert read["scheduled_post"]["id"] == "scheduled_post_a"

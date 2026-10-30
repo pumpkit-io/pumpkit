@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pumpkit.posts.formats import FORMAT_POST, Format
-from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS, FEEDBACK_MAX_CHARS
+from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS
 
 # Per caller, for the routes and MCP tools that write a Version.
 WRITE_RATE = "20/minute"
@@ -22,25 +22,6 @@ class PostStartRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("Write a Brief first.")
-        return stripped
-
-
-class FeedbackRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    feedback: str = Field(..., max_length=FEEDBACK_MAX_CHARS)
-    # None keeps the Text's Format.
-    format: Optional[Format] = None
-    # The Text's Parts as the sender shows them. When set, Feedback is refused unless they are the
-    # saved Text, so it never rewrites a Text without the User's latest edit.
-    text: Optional[list[str]] = None
-
-    @field_validator("feedback")
-    @classmethod
-    def _strip(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Write some Feedback first.")
         return stripped
 
 
@@ -63,7 +44,6 @@ class StartingTextResponse(BaseModel):
 
     format: Format
     parts: list[PartResponse]
-    # The Version that Text came from: the last one written or restored before the Feedback.
     version_number: int
 
 
@@ -88,7 +68,6 @@ class TextResponse(BaseModel):
     parts: list[PartResponse]
     # The Version it came from: the last one written or restored.
     version_number: int
-    # Whether the User changed it since it came from that Version.
     edited: bool
 
 

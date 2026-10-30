@@ -18,7 +18,7 @@ from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import FeedbackRequest, TextResponse, VersionToolResponse
+from pumpkit.posts.schemas import TextResponse, VersionToolResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.models import FAILED, PUBLISHED
 from pumpkit.scheduling.post_status import PostStatus
@@ -33,6 +33,7 @@ from pumpkit.scheduling.rules import (
 )
 from pumpkit.scheduling.schemas import (
     WRITE_RATE,
+    FeedbackRequest,
     PastCommunitiesResponse,
     PostDetailToolResponse,
     PostMessageToolResponse,
@@ -294,14 +295,14 @@ async def give_feedback(
 
 async def restore_version(call: ToolCall[User], post_id: str, version_number: int) -> TextResponse:
     """
-    Make an earlier Version of one of the User's Posts its Text again, by its number, with no
-    write: the Text is then that Version's text as written, and Feedback rewrites it from there.
+    Make an earlier Version of one of the User's Posts its Text again, by its number, without
+    writing a new one: the Text is then that Version's text as written, and Feedback rewrites it from there.
     Any hand edits to the Text are replaced (`get_post` says whether it is `edited`). Every
     Version stays in the Post's History. Only a Draft or a Failed Post's Text changes. Answers
     with the Text.
     """
     return await mediator.restore_version(
-        db=call.db, user=call.user, post_id=post_id, version_number=version_number
+        db=call.db, user=call.user, post_id=post_id, version_number=version_number, now=call.now
     )
 
 
