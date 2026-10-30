@@ -46,14 +46,17 @@ async def run(
     poll_interval: timedelta,
     stop: asyncio.Event,
     heartbeat: Optional[Path] = None,
+    enabled: bool = True,
 ) -> None:
     """
     Run a pass every `poll_interval` until `stop` is set. A failed pass is logged and retried.
     Each pass that completes touches `heartbeat`, which the container healthcheck reads.
+    With `enabled` false it skips the passes but keeps the heartbeat, so the container stays healthy.
     """
     while not stop.is_set():
         try:
-            await run_pass(session_maker, publisher, clock, stop)
+            if enabled:
+                await run_pass(session_maker, publisher, clock, stop)
         except Exception:
             logger.exception("Publisher pass failed; trying again next interval")
         else:
@@ -72,13 +75,11 @@ async def main() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
 
-    if not settings.PUBLISHER_ENABLED:
-        logger.warning("PUBLISHER_ENABLED is false: the publisher publishes nothing")
-        await stop.wait()
-        return
-
     interval = timedelta(seconds=settings.PUBLISHER_POLL_INTERVAL_SECONDS)
-    logger.info(f"Publisher started, polling every {interval.total_seconds():g}s")
+    if settings.PUBLISHER_ENABLED:
+        logger.info(f"Publisher started, polling every {interval.total_seconds():g}s")
+    else:
+        logger.warning("PUBLISHER_ENABLED is false: the publisher publishes nothing")
     try:
         await run(
             _db_session_handler.async_session_maker,
@@ -87,6 +88,7 @@ async def main() -> None:
             poll_interval=interval,
             stop=stop,
             heartbeat=HEARTBEAT_FILE,
+            enabled=settings.PUBLISHER_ENABLED,
         )
     finally:
         logger.info("Publisher stopping")

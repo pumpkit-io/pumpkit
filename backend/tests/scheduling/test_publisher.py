@@ -643,6 +643,42 @@ async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed
     assert not heartbeat.exists()
 
 
+async def test_a_loop_turned_off_publishes_nothing_and_keeps_its_heartbeat(
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    tmp_path,
+):
+    await connect_x()
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", "While turned off")
+    fixed_clock.advance(timedelta(minutes=2))
+    heartbeat = tmp_path / "heartbeat"
+    stop = asyncio.Event()
+
+    looping = asyncio.create_task(
+        run(
+            db_session_maker,
+            fake_x_publisher,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+            heartbeat=heartbeat,
+            enabled=False,
+        )
+    )
+    await asyncio.sleep(0.2)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=1)
+
+    assert (await _listed(client))["While turned off"]["state"] == "scheduled"
+    assert fake_x_publisher.published == []
+    assert heartbeat.exists()
+
+
 def test_the_compose_healthcheck_reads_the_heartbeat_the_publisher_touches():
     compose = (Path(__file__).parents[3] / "compose.yml").read_text()
 
@@ -688,7 +724,7 @@ def test_the_publisher_process_maps_every_model_it_queries():
     assert result.returncode == 0, result.stderr
 
 
-def test_a_publisher_turned_off_publishes_nothing_and_stops_cleanly():
+def test_a_publisher_turned_off_says_so_and_stops_cleanly():
     process = subprocess.Popen(
         [sys.executable, "-m", "pumpkit.scheduling.publisher"],
         env={**os.environ, "PUBLISHER_ENABLED": "false"},

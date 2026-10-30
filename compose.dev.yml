@@ -32,7 +32,7 @@ services:
       PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
-      # Read from .env unless scripts/dev-stack overrides them for its safe mode.
+      # Safe-mode switches: read from .env unless scripts/dev-stack overrides them.
       PUBLISHER_ENABLED: ${PUBLISHER_ENABLED:-true}
       SMTP_HOST: ${SMTP_HOST:-}
       EMAIL_FROM: ${EMAIL_FROM:-}

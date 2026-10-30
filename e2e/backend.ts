@@ -3,12 +3,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 const REPO_ROOT = path.resolve(__dirname, '..');
-// Written by `scripts/dev-stack up`, which runs this worktree's stack under a Compose project of its own.
-const DEV_STACK_PROJECT_FILE = path.join(REPO_ROOT, '.sdlc', 'dev-stack', 'compose-project');
+// Written by `scripts/dev-stack up`: its Dev URL, then the Compose project serving it.
+const DEV_STACK_TARGET_FILE = path.join(REPO_ROOT, '.sdlc', 'dev-stack', 'e2e-target');
 
+/** Points seed scripts at the worktree's own stack when the suite runs against its Dev URL. */
 function composeProjectArgs(): string[] {
-  if (!process.env.E2E_BASE_URL || !existsSync(DEV_STACK_PROJECT_FILE)) return [];
-  return ['-p', readFileSync(DEV_STACK_PROJECT_FILE, 'utf8').trim()];
+  if (!existsSync(DEV_STACK_TARGET_FILE)) return [];
+  const [devUrl, project] = readFileSync(DEV_STACK_TARGET_FILE, 'utf8').split('\n');
+  return process.env.E2E_BASE_URL === devUrl ? ['-p', project] : [];
 }
 
 /** Runs one of `seed/`'s Python scripts inside the dev stack's backend container. */

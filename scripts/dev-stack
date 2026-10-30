@@ -16,7 +16,7 @@ APP_URL_VAR="DEV_PUBLIC_URL"
 # Workers that act on the outside world stay off: .env may hold real X, SMTP and PostHog credentials.
 safe_mode_env() {
   export PUBLISHER_ENABLED=false
-  export SMTP_HOST= EMAIL_FROM=
+  export SMTP_HOST='' EMAIL_FROM=''
   export POSTHOG_ENABLED=false
 }
 
@@ -77,10 +77,11 @@ init_names() {
     SLUG=${ROUTE%".$PROJECT"}
   fi
   # The Main checkout's names carry no slug, so no branch, not even one ending in main, can share them.
+  # "-dev" keeps clear of compose.yml's production project, which is plain "pumpkit".
   if [ -n "$SLUG" ]; then
-    COMPOSE_PROJECT="$PROJECT-$SLUG"
+    COMPOSE_PROJECT="$PROJECT-dev-$SLUG"
   else
-    COMPOSE_PROJECT="$PROJECT"
+    COMPOSE_PROJECT="$PROJECT-dev"
   fi
   if [ -n "$got" ] && proxy_running; then
     DEV_URL=$got
@@ -135,8 +136,8 @@ b_alive() { [ -n "$(b_compose ps -q --status running "$B_WEB_SERVICE" 2>/dev/nul
 b_up() {
   # The backend's start.sh migrates; e2e seeds its own User, so there is no seed step.
   b_compose up -d --build --wait >&2 || die "docker compose up failed; see: scripts/dev-stack logs"
-  # e2e/backend.ts reads it to run seed scripts in this stack.
-  printf '%s\n' "$COMPOSE_PROJECT" >"$STATE_DIR/compose-project"
+  # e2e/backend.ts runs seed scripts in this project when E2E_BASE_URL is this Dev URL.
+  printf '%s\n%s\n' "$DEV_URL" "$COMPOSE_PROJECT" >"$STATE_DIR/e2e-target"
   local hostport
   hostport=$(b_compose port "$B_WEB_SERVICE" "$B_WEB_PORT") || die "$B_WEB_SERVICE does not publish port $B_WEB_PORT"
   # --force only ever re-points this worktree's own route at its new port.
