@@ -93,8 +93,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   const canSend = !gate && typed && length <= maxLength && !sendDisabled && !locked;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter that picks an IME candidate, such as for Japanese, isn't a send.
-    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    // Enter that picks an IME candidate, such as for Japanese, isn't a send. Safari sends that
+    // Enter after the composition ends, so only its keyCode of 229 gives it away.
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (sendOnEnter ? e.shiftKey : !(e.metaKey || e.ctrlKey)) return;
     e.preventDefault();
     if (canSend) onSend();

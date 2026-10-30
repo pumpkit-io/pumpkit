@@ -1539,6 +1539,27 @@ describe('Post page', () => {
       expect(postService.addVersion).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['while composing', { isComposing: true }],
+      ['right after composing, as Safari sends it', { keyCode: 229 }],
+    ])(
+      'does not send Feedback with an Enter that picks an IME candidate %s',
+      async (_when, ime) => {
+        vi.mocked(postService.addVersion).mockResolvedValue(versionTwo);
+        renderPost(postWith('the first final'));
+        await textCard();
+        fireEvent.change(feedbackBox(), { target: { value: 'もっと短く' } });
+        await waitFor(() =>
+          expect(panel('Draft').getByRole('button', { name: 'Send Feedback' })).toBeEnabled(),
+        );
+
+        fireEvent.keyDown(feedbackBox(), { key: 'Enter', ...ime });
+
+        expect(panel('Draft').getByRole('button', { name: 'Send Feedback' })).toBeEnabled();
+        expect(feedbackBox()).toHaveValue('もっと短く');
+      },
+    );
+
     it('keeps typed Feedback in the box after "Post to…"', async () => {
       renderPost(postWith('the first final'));
       await textCard();
