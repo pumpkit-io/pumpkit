@@ -54,6 +54,10 @@ Issues live in GitHub Issues on `pumpkit-io/pumpkit`, managed with the `gh` CLI.
 
 Single-context: one root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
 
+### PR review
+
+The required `review` check runs the `review-changes` skill on Claude Code, from `.github/workflows/sdlc-review-llm.yml`. It never runs on its own: a repository admin starts it on a PR's branch, and so can an agent whose `gh` is logged in as one, when the user asks. Start it with `gh workflow run sdlc-review-llm.yml --ref <branch>` and follow it with `gh run watch`; the verdict lands as a PR comment. It reviews the branch's head commit, so run it again after every push.
+
 ### Code comments
 
 Load the `code-comments` skill before writing or editing any comment.
