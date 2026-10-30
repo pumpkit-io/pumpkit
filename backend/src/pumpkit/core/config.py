@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     GOOGLE_COOKIE_MAX_AGE_SECONDS: int = 600
     GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS: int = 30
 
+    # Optional: Magic link sign-in fills an empty Photo from Gravatar, which receives a hash of the email.
+    GRAVATAR_ENABLED: bool = False
+
     # Optional group: the company running this Instance, shown with its legal pages (ADR 0011).
     OPERATOR_NAME: Optional[str] = None
     OPERATOR_ADDRESS: Optional[str] = None

@@ -100,12 +100,14 @@ async def complete_magic_link(
     token: str,
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
 ) -> RedirectResponse:
     # The browser lands here from an email link, so every outcome is a redirect.
     return await mediator.complete_magic_link(
         token=token,
         request=request,
         db=db,
+        photo_fetcher=photo_fetcher,
         now=clock(),
     )
 
