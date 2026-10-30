@@ -51,7 +51,7 @@ export function XPhotoOfferDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : notNow())}>
-      <DialogContent className="max-w-[400px] max-sm:h-auto">
+      <DialogContent className="max-w-[400px] max-sm:h-fit">
         <DialogHeader className="items-center pt-8 text-center sm:text-center">
           {photoUrl && (
             <UserAvatar
