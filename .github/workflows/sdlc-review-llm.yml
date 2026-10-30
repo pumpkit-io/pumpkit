@@ -1,5 +1,5 @@
 # The review-changes skill on Claude Code, run by hand so it spends the CLAUDE_CODE_OAUTH_TOKEN subscription only when an admin asks.
-# Run it on the PR's branch (`gh workflow run sdlc-review-llm.yml --ref <branch>`): the required `review` check lands on that commit.
+# Run it on the PR's branch (`gh workflow run sdlc-review-llm.yml --ref <branch>`): the required `review` status lands on that commit.
 name: sdlc review (LLM)
 
 on:
@@ -17,6 +17,7 @@ jobs:
       contents: read
       issues: read
       pull-requests: write
+      statuses: write
       id-token: write
     steps:
       - name: Only repository admins may run the LLM review
@@ -37,6 +38,13 @@ jobs:
           [ "$(jq -r .headRefOid <<<"$pr")" = "$GITHUB_SHA" ] || { echo "$GITHUB_REF_NAME moved past this run's commit; dispatch the workflow again"; exit 1; }
           echo "number=$(jq -r .number <<<"$pr")" >> "$GITHUB_OUTPUT"
           echo "base=$(jq -r .baseRefOid <<<"$pr")" >> "$GITHUB_OUTPUT"
+      # A PR leaves out check runs from workflow_dispatch, so the required `review` check is this commit status.
+      - name: Mark the review pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=pending -f context=review \
+            -f description="LLM review running" -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -72,3 +80,16 @@ jobs:
           verdict="$(grep -E '^Verdict: ' .sdlc-review.md | tail -n 1)" || true
           echo "${verdict:-No verdict line in the report}"
           [ "$verdict" = "Verdict: pass" ]
+      - name: Report the result as the review status
+        if: always() && steps.pr.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          case "$JOB_STATUS" in
+            success) state=success description="Verdict: pass" ;;
+            failure) state=failure description="Blocking verdict or failed review" ;;
+            *) state=error description="Review $JOB_STATUS" ;;
+          esac
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state="$state" -f context=review \
+            -f description="$description" -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

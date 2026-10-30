@@ -62,6 +62,7 @@ The project layout and common recipes are in [docs/development.md](./docs/develo
 - Fill in the PR template: a small summary visual, before/after evidence (a screenshot or test output), and the merge danger.
 - Add a line under `## [Unreleased]` in `CHANGELOG.md` saying what changes for Users or Self-hosters, with **Upgrade notes:** for any manual upgrade step. A change nobody running or using an Instance would notice (tests, refactors, CI, contributor docs) gets the `no-changelog` label instead.
 - CI (lint, format, typecheck, tests, the CHANGELOG check) must pass.
+- A maintainer runs the LLM review (the required `review` check) by hand once the PR is ready, and again after later pushes.
 - Domain terms come from `GLOSSARY.md`; architectural decisions live in `docs/adr/`; review standards are in `CODING_STANDARDS.md`.
 
 ## Releases
