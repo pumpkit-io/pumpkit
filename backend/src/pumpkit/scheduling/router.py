@@ -260,7 +260,10 @@ async def restore_version(
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> TextResponse:
-    """Makes the Version the Post's Text, with no write. A Scheduled or Published Post is refused."""
+    """
+    Makes the Version the Post's Text without writing a new one. A Scheduled or Published Post
+    is refused.
+    """
     return await mediator.restore_version(
         db=db, user=current_user, post_id=post_id, version_number=version_number, now=clock()
     )

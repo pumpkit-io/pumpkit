@@ -3,46 +3,26 @@ Migration 0020 gives every existing Post its Text from its latest Version (ADR 0
 through `GET /posts/{id}` and `get_post` as an upgraded Instance would serve it.
 """
 
-from pathlib import Path
-
 import pytest
 import sqlalchemy as sa
-from alembic.config import Config
 from sqlalchemy import Connection
 
 from alembic import command
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
+from tests.migrations import insert, migrate
 
 POSTS = "/api/v1/posts"
 WRITTEN_AT = "2026-10-01 12:00:00"
 
 
-def _alembic(connection: Connection, run) -> None:
-    # No ini file, so Alembic leaves the test run's logging alone.
-    config = Config()
-    config.set_main_option("script_location", str(Path(__file__).parents[2] / "alembic"))
-    config.attributes["connection"] = connection
-    run(config)
-
-
-async def _migrate(db_engine, run) -> None:
-    async with db_engine.begin() as connection:
-        await connection.run_sync(_alembic, run)
-
-
 async def _to_0019(db_engine) -> None:
     """Take the test schema, built at head, back to before the Text."""
-    await _migrate(db_engine, lambda config: command.stamp(config, "0020"))
-    await _migrate(db_engine, lambda config: command.downgrade(config, "0019"))
-
-
-def _insert(connection: Connection, table: str, **values) -> None:
-    columns = [sa.column(name) for name in values]
-    connection.execute(sa.table(table, *columns).insert().values(**values))
+    await migrate(db_engine, lambda config: command.stamp(config, "0020"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0019"))
 
 
 def _post(connection: Connection, *, user_id: str, post_id: str) -> None:
-    _insert(
+    insert(
         connection,
         "posts",
         id=post_id,
@@ -63,7 +43,7 @@ def _attempt(
     parts,
     status="succeeded",
 ) -> None:
-    _insert(
+    insert(
         connection,
         "version_attempts",
         id=f"{post_id}-attempt-{sequence}",
@@ -127,7 +107,7 @@ async def posts_before_the_text(db_engine, user) -> None:
 async def test_the_migration_sets_each_posts_text_to_its_latest_version(
     db_engine, posts_before_the_text, subscribed, client, mcp
 ):
-    await _migrate(db_engine, lambda config: command.upgrade(config, "0020"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
 
     read = (await client.get(f"{POSTS}/post_a")).json()
     tool_read = (await mcp.call_tool("get_post", post_id="post_a"))["structuredContent"]
@@ -149,7 +129,7 @@ async def test_the_migration_sets_each_posts_text_to_its_latest_version(
 async def test_the_migration_leaves_a_post_with_no_version_without_text(
     db_engine, posts_before_the_text, client
 ):
-    await _migrate(db_engine, lambda config: command.upgrade(config, "0020"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
 
     read = (await client.get(f"{POSTS}/post_b")).json()
 
@@ -157,8 +137,8 @@ async def test_the_migration_leaves_a_post_with_no_version_without_text(
 
 
 async def test_the_migration_runs_down_and_up_again(db_engine, posts_before_the_text, client):
-    await _migrate(db_engine, lambda config: command.upgrade(config, "0020"))
-    await _migrate(db_engine, lambda config: command.downgrade(config, "0019"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0019"))
 
     def post_columns(connection: Connection) -> set[str]:
         return {column["name"] for column in sa.inspect(connection).get_columns("posts")}
@@ -166,6 +146,6 @@ async def test_the_migration_runs_down_and_up_again(db_engine, posts_before_the_
     async with db_engine.connect() as connection:
         assert not {c for c in await connection.run_sync(post_columns) if c.startswith("text_")}
 
-    await _migrate(db_engine, lambda config: command.upgrade(config, "0020"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
     read = (await client.get(f"{POSTS}/post_a")).json()
     assert read["text"]["version_number"] == 2

@@ -25,6 +25,14 @@ class LivePartLocked(ConflictError):
     pass
 
 
+def check_parts_written(parts: list[str]) -> None:
+    """Every Part has some text: the User may have left one blank mid-edit."""
+    for number, part in enumerate(parts, start=1):
+        if not part:
+            name = part_name(number, len(parts))
+            raise RuleBroken(f"Write {name} first." if name else "Write the post first.")
+
+
 def check_length(parts: list[str], *, limit: int) -> None:
     """Each Part by X's own count; the refusal names the first Part over the limit."""
     for number, text in enumerate(parts, start=1):

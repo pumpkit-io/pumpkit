@@ -44,7 +44,6 @@ class StartingTextResponse(BaseModel):
 
     format: Format
     parts: list[PartResponse]
-    # The Version that Text came from: the last one written or restored before the Feedback.
     version_number: int
 
 
@@ -69,7 +68,6 @@ class TextResponse(BaseModel):
     parts: list[PartResponse]
     # The Version it came from: the last one written or restored.
     version_number: int
-    # Whether the User changed it since it came from that Version.
     edited: bool
 
 

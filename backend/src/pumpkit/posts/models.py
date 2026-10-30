@@ -47,7 +47,6 @@ class Post(Base):
     )
     # Versions are never removed, so the number names the one the Text came from for good.
     text_version_number: Mapped[Optional[int]] = mapped_column(Integer)
-    # Whether the User changed the Text since it came from its Version.
     text_edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # When Feedback's Version started being written, which then becomes the Text; None otherwise.
     writing_since: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

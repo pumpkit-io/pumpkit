@@ -612,7 +612,7 @@ async def test_a_post_with_no_text_is_refused(
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "This Post has no text to post. Start a new Post."
+    assert response.json()["detail"] == "This Post has no Text to post. Start a new Post."
     assert fake_x_publisher.published == []
 
 
