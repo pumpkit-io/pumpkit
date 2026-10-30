@@ -79,13 +79,13 @@ export function PostWriter() {
 
   const gate =
     subscribed === false ? (
-      <Button asChild className="h-10 shrink-0 rounded-full">
+      <Button asChild variant="solid" className="h-10 shrink-0 rounded-full">
         <Link to={CHOOSE_PLAN_PATH} onClick={() => trackChoosePlan('new_post_write')}>
           Subscribe to write
         </Link>
       </Button>
     ) : noCorpus ? (
-      <Button asChild className="h-10 shrink-0 rounded-full">
+      <Button asChild variant="solid" className="h-10 shrink-0 rounded-full">
         <Link to="/persona">Set up your Persona</Link>
       </Button>
     ) : undefined;

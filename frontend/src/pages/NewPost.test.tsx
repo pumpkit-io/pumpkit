@@ -191,6 +191,8 @@ describe('New post', () => {
 
       const area = await writer();
       const setUp = await area.findByRole('link', { name: 'Set up your Persona' });
+      // No gradient on New post: the solid Pumpkin fill.
+      expect(setUp).not.toHaveClass('bg-primary-gradient');
       expect(area.queryByText(/at least one Inspiration author/i)).not.toBeInTheDocument();
       expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
 
@@ -205,6 +207,7 @@ describe('New post', () => {
 
       const area = await writer();
       const subscribe = await area.findByRole('link', { name: 'Subscribe to write' });
+      expect(subscribe).not.toHaveClass('bg-primary-gradient');
       expect(area.getByLabelText('Brief')).toBeEnabled();
       expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
 
