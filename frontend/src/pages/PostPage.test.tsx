@@ -103,6 +103,7 @@ import {
   LEVELSIO,
   NOT_SUBSCRIBED,
   NO_POSTS,
+  PAULG,
   SUBSCRIBED,
   apiError,
   renderSignedIn,
@@ -252,6 +253,28 @@ describe('Post page', () => {
     expect(
       (await screen.findByRole('link', { name: 'Persona: @levelsio' })).closest('header'),
     ).not.toBeNull();
+  });
+
+  it("shows the Persona's photos in the header and their handles on focus", async () => {
+    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/levelsio_normal.jpg' },
+      PAULG,
+    ]);
+    renderPost(postWith('the final text'));
+
+    const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg' });
+    expect(chip).toHaveAttribute('href', '/persona');
+    expect(chip.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://pbs.twimg.com/levelsio_normal.jpg',
+    );
+    expect(within(chip).getByText('P')).toBeInTheDocument();
+    expect(within(chip).getByText('@paulg')).not.toBeVisible();
+
+    act(() => chip.focus());
+
+    expect(within(chip).getByText('@levelsio')).toBeVisible();
+    expect(within(chip).getByText('@paulg')).toBeVisible();
   });
 
   it('shortens a long title with an ellipsis', async () => {
