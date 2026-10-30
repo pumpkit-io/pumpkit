@@ -456,12 +456,12 @@ async def give_feedback(
     a Draft or a Failed Post takes Feedback, checked again after the model calls in case the Post
     was scheduled meanwhile. `sent_text`, the Parts the sender shows, must be the saved Text.
     """
-    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(
         db, user=user, post=post, format=format, sent_text=sent_text, now=now
     )
-    # Ends the read transaction before the calls, which can take minutes.
+    # Holds the Text and ends the transaction before the calls, which can take minutes.
     await db.commit()
 
     try:
@@ -505,12 +505,16 @@ async def give_feedback(
 
 
 async def restore_version(
-    db: AsyncSession, user: User, post_id: str, version_number: int
+    db: AsyncSession, user: User, post_id: str, version_number: int, now: datetime
 ) -> TextResponse:
-    """Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's."""
-    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    """
+    Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's, and not
+    while a Version is being written.
+    """
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    posts_service.check_not_writing(post, now=now)
     version = next(
         (v for v in version_writing.versions_of(post) if v.version_number == version_number), None
     )
@@ -524,14 +528,18 @@ async def restore_version(
     return text
 
 
-async def edit_text(db: AsyncSession, user: User, post_id: str, parts: list[str]) -> TextResponse:
+async def edit_text(
+    db: AsyncSession, user: User, post_id: str, parts: list[str], now: datetime
+) -> TextResponse:
     """
-    Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and saving the
-    same Parts again changes nothing, so the web app can retry a save.
+    Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and not while a
+    Version is being written. Saving the same Parts again changes nothing, so the web app can
+    retry a save.
     """
-    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    posts_service.check_not_writing(post, now=now)
     if scheduled_post is not None:
         live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
         rules.check_text_keeps_live_parts(live_count, post.text_parts or [], parts)

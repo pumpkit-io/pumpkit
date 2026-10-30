@@ -5,6 +5,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 
 from pumpkit.posts.formats import Format, part_name
 from pumpkit.posts.schemas import TextResponse, VersionResponse, VersionToolResponse
+from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
 
@@ -209,6 +210,25 @@ class ScheduledPostUpdateRequest(BaseModel):
     share_with_followers: Optional[bool] = None
 
     _strip = field_validator("parts")(_strip_parts)
+
+
+class FeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: str = Field(..., max_length=FEEDBACK_MAX_CHARS)
+    # None keeps the Text's Format.
+    format: Optional[Format] = None
+    # The Text's Parts as the sender shows them. When set, Feedback is refused unless they are the
+    # saved Text, so it never rewrites a Text without the User's latest edit.
+    text: Optional[Parts] = None
+
+    @field_validator("feedback")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Write some Feedback first.")
+        return stripped
 
 
 class TextEditRequest(BaseModel):
