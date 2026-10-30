@@ -51,7 +51,6 @@ async def scheduled_with_its_source_version(db_engine, user) -> None:
                 format="post",
                 status="succeeded",
                 parts='["One."]' if number == 1 else '["Two."]',
-                slop_tells="[]",
                 created_at=WRITTEN_AT,
             )
         insert(

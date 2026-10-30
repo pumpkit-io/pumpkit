@@ -299,7 +299,6 @@ describe('Posts page', () => {
             feedback: null,
             format: 'post',
             parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
-            tells: [],
             createdAt: '2026-10-10T12:00:30Z',
           },
         ],

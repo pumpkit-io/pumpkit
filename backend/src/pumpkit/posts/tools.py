@@ -5,21 +5,12 @@ from pumpkit.core.mcp_tools import ADDITIVE, McpTool, ToolCall
 from pumpkit.posts import mediator
 from pumpkit.posts.formats import FORMAT_POST, Format
 from pumpkit.posts.llm import get_llm
-from pumpkit.posts.schemas import (
-    WRITE_RATE,
-    PostResponse,
-    PostStartRequest,
-    PostToolResponse,
-)
-
-
-def _post_tool_response(post: PostResponse) -> PostToolResponse:
-    return PostToolResponse.model_validate(post.model_dump())
+from pumpkit.posts.schemas import WRITE_RATE, PostResponse, PostStartRequest
 
 
 async def start_post(
     call: ToolCall[User], brief: str, format: Format = FORMAT_POST
-) -> PostToolResponse:
+) -> PostResponse:
     """
     Start a Post from a Brief, what the Post is about and what the User thinks about it, and
     write its first Version in the style of the User's Inspiration authors. `format` is "post"
@@ -29,7 +20,7 @@ async def start_post(
     """
     start_request = PostStartRequest(brief=brief, format=format)
     llm = await call.provide(get_llm)
-    post = await mediator.start_post(
+    return await mediator.start_post(
         db=call.db,
         llm=llm,
         user=call.user,
@@ -37,7 +28,6 @@ async def start_post(
         format=start_request.format,
         now=call.now,
     )
-    return _post_tool_response(post)
 
 
 TOOLS = [

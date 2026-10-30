@@ -15,7 +15,6 @@ from pumpkit.posts.models import (
     Post,
     VersionAttempt,
 )
-from pumpkit.posts.writing import slop
 from pumpkit.posts.writing.constants import CORPUS_POSTS_PER_AUTHOR
 from pumpkit.posts.writing.corpus import Corpus, CorpusPost, group_corpus
 from pumpkit.posts.writing.starting_text import StartingText
@@ -122,10 +121,6 @@ async def record_version(
         humanizing_usage=written.humanizing_usage,
         hook_reasoning=written.hook.reasoning,
         hook_name=written.hook.name,
-        slop_tells=[
-            {"name": name, "description": description}
-            for name, description in slop.find_in_parts(written.parts)
-        ],
         starting_text_format=starting_text.format if starting_text else None,
         starting_text_parts=list(starting_text.parts) if starting_text else None,
         starting_text_version_number=starting_text.version_number if starting_text else None,

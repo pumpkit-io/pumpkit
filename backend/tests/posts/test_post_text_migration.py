@@ -54,7 +54,6 @@ def _attempt(
         format=format,
         status=status,
         parts=parts,
-        slop_tells="[]",
         created_at=WRITTEN_AT,
     )
 

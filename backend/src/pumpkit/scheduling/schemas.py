@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from pumpkit.posts.formats import Format, part_name
-from pumpkit.posts.schemas import TextResponse, VersionResponse, VersionToolResponse
+from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
@@ -107,17 +107,6 @@ class PostDetailResponse(BaseModel):
     versions: list[VersionResponse]
     status: PostStatus
     # None while the Post is a Draft.
-    scheduled_post: Optional[ScheduledPostResponse]
-
-
-class PostDetailToolResponse(BaseModel):
-    """A Post as the `get_post` tool answers with it, without the tells."""
-
-    id: str
-    brief: str
-    text: Optional[TextResponse]
-    versions: list[VersionToolResponse]
-    status: PostStatus
     scheduled_post: Optional[ScheduledPostResponse]
 
 

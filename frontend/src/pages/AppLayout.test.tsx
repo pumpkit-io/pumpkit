@@ -96,7 +96,6 @@ const POST: PostDetail = {
       feedback: null,
       format: 'post',
       parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],
-      tells: [],
       createdAt: '2026-10-10T12:00:30Z',
     },
   ],

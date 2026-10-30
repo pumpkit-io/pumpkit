@@ -59,7 +59,6 @@ async def test_starting_a_post_returns_it_with_its_first_version(
             "feedback": None,
             "format": "post",
             "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
-            "tells": [],
             "starting_text": None,
             "created_at": "2026-10-10T12:00:30Z",
         }
@@ -89,31 +88,10 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
             "feedback",
             "format",
             "parts",
-            "tells",
             "starting_text",
             "created_at",
         }
         assert "sketch" not in str(version)
-
-
-async def test_a_version_reports_the_tells_the_slop_check_found_in_its_final(
-    client, db, with_author, fake_llm
-):
-    fake_llm.replies = [
-        written("sketch"),
-        {"post": "the unfair advantage was distribution — and this is why i keep saying it"},
-    ]
-
-    response = await client.post(POSTS, json={"brief": "ship"})
-
-    tells = [
-        {"name": "em_dash", "description": "em dash"},
-        {"name": "invented_stance", "description": "invented recurring opinion"},
-        {"name": "startup_cliche", "description": "startup-commentary cliche"},
-    ]
-    assert response.json()["versions"][0]["tells"] == tells
-    [post] = await _stored_posts(db)
-    assert post.attempts[0].slop_tells == tells
 
 
 def _system(prompt: str) -> dict:

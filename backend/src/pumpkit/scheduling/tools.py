@@ -18,7 +18,7 @@ from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import TextResponse, VersionToolResponse
+from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.models import FAILED, PUBLISHED
 from pumpkit.scheduling.post_status import PostStatus
@@ -35,7 +35,7 @@ from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     FeedbackRequest,
     PastCommunitiesResponse,
-    PostDetailToolResponse,
+    PostDetailResponse,
     PostMessageToolResponse,
     PostNowToolResponse,
     PostsPageRequest,
@@ -252,7 +252,7 @@ async def list_posts(
     )
 
 
-async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse:
+async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     """
     Read one of the User's Posts: its Brief, its Text (the text meant for X, with
     `version_number`, the Version it came from, and `edited`, whether the User changed it by hand
@@ -263,13 +263,12 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse
     returned in `scheduled_post` with its own copy of the Text, which the User may have edited
     since. A Draft has no Scheduled post, so its Text can be scheduled.
     """
-    post = await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
-    return PostDetailToolResponse.model_validate(post.model_dump())
+    return await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
 
 
 async def give_feedback(
     call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
-) -> VersionToolResponse:
+) -> VersionResponse:
     """
     Give Feedback in plain words on one of the User's Posts, such as "shorter", "end with a
     question", "make Part 3 punchier" or "like Version 2, with a different hook". It rewrites
@@ -281,7 +280,7 @@ async def give_feedback(
     Takes up to a minute.
     """
     feedback_request = FeedbackRequest(feedback=feedback, format=format)
-    version = await mediator.give_feedback(
+    return await mediator.give_feedback(
         db=call.db,
         llm=await call.provide(get_llm),
         user=call.user,
@@ -290,7 +289,6 @@ async def give_feedback(
         format=feedback_request.format,
         now=call.now,
     )
-    return VersionToolResponse.model_validate(version.model_dump())
 
 
 async def restore_version(call: ToolCall[User], post_id: str, version_number: int) -> TextResponse:

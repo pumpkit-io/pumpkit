@@ -19,7 +19,6 @@ from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.schemas import (
     PartResponse,
     StartingTextResponse,
-    TellResponse,
     TextResponse,
     VersionResponse,
 )
@@ -98,14 +97,12 @@ def _part_responses(parts: list[str], char_limit: int) -> list[PartResponse]:
 
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:
     assert attempt.version_number is not None and attempt.parts is not None
-    assert attempt.slop_tells is not None
     return VersionResponse(
         id=attempt.id,
         number=attempt.version_number,
         feedback=attempt.feedback,
         format=attempt.format,
         parts=_part_responses(attempt.parts, char_limit),
-        tells=[TellResponse(**tell) for tell in attempt.slop_tells],
         starting_text=_starting_text_response(attempt, char_limit),
         created_at=as_utc(attempt.created_at),
     )

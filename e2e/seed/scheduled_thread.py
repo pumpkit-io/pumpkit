@@ -34,7 +34,6 @@ async def main() -> None:
             version_number=1,
             sketch_parts=PARTS,
             parts=PARTS,
-            slop_tells=[],
             created_at=now,
         )
         set_text_from_version(post, version)
