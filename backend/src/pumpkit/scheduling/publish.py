@@ -150,11 +150,9 @@ async def fresh_access_token(
     try:
         account = await publisher.fetch_account(access_token=tokens.access_token)
     except XPublisherError:
-        # The last-read subscription_type stands until the next refresh; the publish goes on.
+        # What users/me last said stands until the next refresh; the publish goes on.
         return tokens.access_token
-    await x_connections_service.save_subscription_type(
-        db, connection, subscription_type=account.subscription_type, now=now
-    )
+    await x_connections_service.save_account(db, connection, account=account, now=now)
     return tokens.access_token
 
 

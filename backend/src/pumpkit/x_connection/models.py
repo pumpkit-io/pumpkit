@@ -34,6 +34,8 @@ class XConnection(Base):
     scopes: Mapped[str] = mapped_column(String)
     # As users/me last reported it; it decides the length limit.
     subscription_type: Mapped[Optional[str]] = mapped_column(String)
+    # X's URL for the account's photo as users/me last reported it; None when X gave none.
+    photo_url: Mapped[Optional[str]] = mapped_column(Text)
     needs_reconnect: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

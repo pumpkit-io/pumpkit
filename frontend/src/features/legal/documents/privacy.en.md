@@ -64,7 +64,7 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 ### X connection {#data-x-connection}
 
-- **What:** your X account identifier and handle, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted.
+- **What:** your X account identifier, handle and the address of its photo, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted. Pumpkit shows your X account's photo by having your browser load it from X.
 - **Why:** to publish on your X account when you ask Pumpkit to.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 

@@ -9,8 +9,8 @@ function initials(name: string): string {
 }
 
 /**
- * A photo, or the name's initials on the accent tint when there is none or it fails to load.
- * Decorative: the name sits beside it.
+ * A photo, or initials on the accent tint while it loads, when it fails, or when there is none.
+ * Decorative: the name or handle sits beside it.
  */
 export function UserAvatar({
   name,
@@ -22,8 +22,7 @@ export function UserAvatar({
   className?: string;
 }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const photoUrl = avatarUrl !== failedUrl ? avatarUrl : null;
-
+  const shown = avatarUrl && avatarUrl !== failedUrl ? avatarUrl : null;
   return (
     <span
       aria-hidden
@@ -32,16 +31,15 @@ export function UserAvatar({
         className,
       )}
     >
-      {photoUrl ? (
+      <span className="bg-primary-gradient bg-clip-text text-transparent">{initials(name)}</span>
+      {shown && (
         <img
-          src={photoUrl}
+          src={shown}
           alt=""
-          onError={() => setFailedUrl(photoUrl)}
           className="absolute inset-0 h-full w-full object-cover"
           draggable={false}
+          onError={() => setFailedUrl(shown)}
         />
-      ) : (
-        <span className="bg-primary-gradient bg-clip-text text-transparent">{initials(name)}</span>
       )}
     </span>
   );
