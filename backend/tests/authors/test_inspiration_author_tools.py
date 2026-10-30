@@ -20,6 +20,7 @@ def _posts(*ids: str) -> list[FetchedPost]:
 def known_handles(fake_x_reader):
     for handle in ("levelsio", "paulg", "naval", "dhh"):
         fake_x_reader.posts[handle] = _posts(f"{handle}-1", f"{handle}-2")
+        fake_x_reader.photos[handle] = f"https://pbs.twimg.com/profile_images/1/{handle}_normal.jpg"
 
 
 async def test_adding_a_handle_lists_it_with_its_fetched_posts(

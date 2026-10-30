@@ -7,7 +7,8 @@ from pumpkit.authors.schemas import (
     WRITE_RATE,
     InspirationAuthorAddRequest,
     InspirationAuthorResponse,
-    InspirationAuthorsListResponse,
+    InspirationAuthorsListToolResponse,
+    InspirationAuthorToolResponse,
 )
 from pumpkit.authors.x_reader import get_x_reader
 from pumpkit.core.mcp_tools import (
@@ -21,24 +22,36 @@ from pumpkit.core.mcp_tools import (
 from pumpkit.core.schemas import MessageResponse
 
 
-async def list_inspiration_authors(call: ToolCall[User]) -> InspirationAuthorsListResponse:
+def _tool_response(author: InspirationAuthorResponse) -> InspirationAuthorToolResponse:
+    return InspirationAuthorToolResponse(
+        handle=author.handle, last_fetched_at=author.last_fetched_at, post_count=author.post_count
+    )
+
+
+async def list_inspiration_authors(call: ToolCall[User]) -> InspirationAuthorsListToolResponse:
     """
     List the User's Inspiration authors, the X accounts whose posts set the style of every Post
     Pumpkit writes for them, in the order they were added, with how many posts each has stored.
     """
-    return await mediator.list_authors(db=call.db, user=call.user)
+    listed = await mediator.list_authors(db=call.db, user=call.user)
+    return InspirationAuthorsListToolResponse(
+        data=[_tool_response(author) for author in listed.data]
+    )
 
 
-async def add_inspiration_author(call: ToolCall[User], handle: str) -> InspirationAuthorResponse:
+async def add_inspiration_author(
+    call: ToolCall[User], handle: str
+) -> InspirationAuthorToolResponse:
     """
     Add an X account as an Inspiration author, by its handle with or without the @. Pumpkit
     reads its recent original posts at once. A User has up to three Inspiration authors.
     """
     add_request = InspirationAuthorAddRequest(handle=handle)
     reader = await call.provide(get_x_reader)
-    return await mediator.add_author(
+    added = await mediator.add_author(
         db=call.db, reader=reader, user=call.user, handle=add_request.handle, now=call.now
     )
+    return _tool_response(added)
 
 
 async def remove_inspiration_author(call: ToolCall[User], handle: str) -> MessageResponse:

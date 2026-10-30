@@ -13,7 +13,11 @@
         "createdAt": "Sun Oct 05 18:02:11 +0000 2026",
         "isReply": false,
         "inReplyToId": null,
-        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "author": {
+          "userName": "levelsio",
+          "name": "@levelsio",
+          "profilePicture": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+        },
         "quoted_tweet": null,
         "retweeted_tweet": null
       },
@@ -25,7 +29,11 @@
         "createdAt": "Sun Oct 05 12:40:00 +0000 2026",
         "isReply": false,
         "inReplyToId": null,
-        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "author": {
+          "userName": "levelsio",
+          "name": "@levelsio",
+          "profilePicture": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+        },
         "quoted_tweet": { "id": "1842000000000000001", "text": "quoted post" },
         "retweeted_tweet": null
       },
@@ -37,7 +45,11 @@
         "createdAt": "Sun Oct 05 11:00:00 +0000 2026",
         "isReply": true,
         "inReplyToId": "1842999999999999999",
-        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "author": {
+          "userName": "levelsio",
+          "name": "@levelsio",
+          "profilePicture": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+        },
         "quoted_tweet": null,
         "retweeted_tweet": null
       },
@@ -49,7 +61,11 @@
         "createdAt": "Sun Oct 05 10:00:00 +0000 2026",
         "isReply": false,
         "inReplyToId": null,
-        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "author": {
+          "userName": "levelsio",
+          "name": "@levelsio",
+          "profilePicture": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+        },
         "quoted_tweet": null,
         "retweeted_tweet": { "id": "1842000000000000002", "text": "something they said" }
       },
@@ -61,7 +77,11 @@
         "createdAt": "Sun Oct 05 09:00:00 +0000 2026",
         "isReply": false,
         "inReplyToId": null,
-        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "author": {
+          "userName": "levelsio",
+          "name": "@levelsio",
+          "profilePicture": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+        },
         "quoted_tweet": null,
         "retweeted_tweet": null
       },
@@ -73,7 +93,11 @@
         "createdAt": "2026-10-05T08:00:00Z",
         "isReply": false,
         "inReplyToId": null,
-        "author": { "userName": "levelsio", "name": "@levelsio" },
+        "author": {
+          "userName": "levelsio",
+          "name": "@levelsio",
+          "profilePicture": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+        },
         "quoted_tweet": null,
         "retweeted_tweet": null
       },
@@ -85,7 +109,11 @@
         "createdAt": "Sat Oct 04 23:59:59 +0000 2026",
         "isReply": false,
         "inReplyToId": null,
-        "author": { "userName": "LevelsIO", "name": "@levelsio" },
+        "author": {
+          "userName": "LevelsIO",
+          "name": "@levelsio",
+          "profilePicture": "https://pbs.twimg.com/profile_images/1589756412078555136/YlXMBzhq_normal.jpg"
+        },
         "quoted_tweet": null,
         "retweeted_tweet": null
       }

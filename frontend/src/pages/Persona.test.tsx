@@ -148,6 +148,33 @@ describe('Persona', () => {
     expect(within(items[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
   });
 
+  it("shows each author's X photo left of their handle, or their initial when there is none", async () => {
+    const photo = 'https://pbs.twimg.com/profile_images/1/levelsio_normal.jpg';
+    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+      { ...LEVELSIO, photoUrl: photo },
+      PAULG,
+    ]);
+    renderPersona();
+
+    const [withPhoto, withoutPhoto] = await (await persona()).findAllByRole('listitem');
+    expect(withPhoto.querySelector('img')).toHaveAttribute('src', photo);
+    expect(withoutPhoto.querySelector('img')).toBeNull();
+    expect(within(withoutPhoto).getByText('P')).toBeInTheDocument();
+  });
+
+  it("shows an author's initial when their photo fails to load", async () => {
+    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/profile_images/1/gone_normal.jpg' },
+    ]);
+    renderPersona();
+
+    const [row] = await (await persona()).findAllByRole('listitem');
+    fireEvent.error(row.querySelector('img')!);
+
+    expect(row.querySelector('img')).toBeNull();
+    expect(within(row).getByText('L')).toBeInTheDocument();
+  });
+
   it('says how to start when the User has no authors', async () => {
     vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
     renderPersona();
@@ -247,6 +274,7 @@ describe('Persona', () => {
       handle: 'levelsio',
       lastFetchedAt: new Date().toISOString(),
       postCount: 21,
+      photoUrl: null,
     });
     renderPersona();
 

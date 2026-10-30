@@ -4,6 +4,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { UserAvatar } from '@/components/UserAvatar';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { timeAgo } from '@/lib/relativeTime';
@@ -89,7 +90,12 @@ function AuthorList({
   return (
     <ul className="divide-y divide-border rounded-lg border border-border">
       {authors.map((author) => (
-        <li key={author.handle} className="flex items-center gap-2 py-2 pl-4 pr-2">
+        <li key={author.handle} className="flex items-center gap-3 py-2 pl-4 pr-2">
+          <UserAvatar
+            name={author.handle}
+            avatarUrl={author.photoUrl}
+            className="h-8 w-8 text-xs"
+          />
           <div className="min-w-0 flex-1">
             <p className="truncate font-sans text-sm font-medium text-foreground">
               @{author.handle}
