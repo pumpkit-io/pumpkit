@@ -63,6 +63,7 @@ jobs:
             - Fixed point: ${{ steps.pr.outputs.base }}. HEAD is the pull request's head commit.
             - Spec: the issues the pull request body or its commit messages reference. Read the body with `gh pr view ${{ steps.pr.outputs.number }}`. With no reference, skip the Spec axis.
             - This job has no sub-agents: run the three reviews one after another in this session, as the skill describes for an agent that can't spawn them.
+            - AGENTS.md's Worktrees rule doesn't apply to this job: resolve no worktree, and write the report in this checkout.
             - Change no tracked file. Write the final report, in Markdown, to `.sdlc-review.md` at the repo root, under the heading `## sdlc review of ${{ github.sha }}`, ending with the skill's verdict line.
           claude_args: |
             --model sonnet
