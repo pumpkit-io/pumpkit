@@ -11,6 +11,7 @@ import { hardRedirect } from '@/lib/navigation';
 import { POSTHOG_IDENTIFIED_KEY, resetPostHog } from '@/lib/analyticsConsent';
 import { api } from '@/services/apiService';
 import { installRefreshOnUnauthorized, SESSION_STORAGE_KEY, session } from '@/lib/session';
+import { recentDraftIds, recordDraftOpened } from '@/features/posts/list/recentDrafts';
 
 installRefreshOnUnauthorized();
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
@@ -370,4 +371,19 @@ describe('signing out', () => {
     expect(resetPostHog).toHaveBeenCalledTimes(1);
     expect(hardRedirect).toHaveBeenCalledWith('/login');
   });
+});
+
+describe('the recently opened Drafts', () => {
+  it.each(['user', 'session_ended', 'other_tab'] as const)(
+    'are forgotten when the Session ends for %s',
+    async (reason) => {
+      session.start('t', inMinutes(60));
+      fakeBackend({});
+      recordDraftOpened('post_01');
+
+      await session.end(reason);
+
+      expect(recentDraftIds()).toEqual([]);
+    },
+  );
 });

@@ -1,5 +1,6 @@
 import { isAxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { hardRedirect } from '@/lib/navigation';
+import { storage } from '@/lib/storage';
 import { POSTHOG_IDENTIFIED_KEY, resetPostHog } from '@/lib/analyticsConsent';
 import { api, performRefresh } from '@/services/apiService';
 import { SIGN_IN_ERROR, signInPath } from './signInError';
@@ -77,6 +78,8 @@ async function endNow(reason: EndSessionReason): Promise<void> {
     }
   }
   clearSession();
+  // Another User may sign in next on this browser.
+  storage.remove('recent-drafts');
   sessionStorage.removeItem(POSTHOG_IDENTIFIED_KEY);
   resetPostHog();
   notify(null);

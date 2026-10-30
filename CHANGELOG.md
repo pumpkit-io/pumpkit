@@ -8,6 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Added
 
+- Recently opened on the Drafts tab: the three Drafts you opened last, most recently opened first, above All drafts. A Draft drops off after 48 hours unopened, and the list is kept in your browser and cleared when you sign out.
 - `PUBLISHER_ENABLED=false` keeps the publisher running without publishing anything; Scheduled posts wait until it is `true` again. It defaults to `true`, so nothing changes unless you set it.
 - History on the Post's page: a clock in the dock lists every Version, newest first, with its Brief or Feedback and when it was written, and clicking one makes it the Text again. It opens as a bottom sheet on a phone. The `restore_version` MCP tool does the same for agents, and `POST /api/v1/posts/{id}/versions/{number}/restore` for the API.
 - Editing the Text in place on a Draft or a Failed Post. Each Part's text is editable where it stands, the number and order of Parts stay, and Parts already live on a Failed Thread stay locked. Edits save on their own a moment after you stop typing, and a failed save says "Edit not saved. Retrying." and tries again; "Post to…" waits until the edit is saved. The API saves the Text with `PUT /api/v1/posts/{id}/text`. A Part left blank can't be scheduled.

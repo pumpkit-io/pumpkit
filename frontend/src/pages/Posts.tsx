@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
@@ -6,11 +6,12 @@ import { PostRow } from '@/features/posts/list/PostRow';
 import { PostsTabs } from '@/features/posts/list/PostsTabs';
 import { TAB_ORDER_LINE } from '@/features/posts/postStatus';
 import { usePostsTab } from '@/features/posts/list/usePostsTab';
+import { useRecentDrafts } from '@/features/posts/list/useRecentDrafts';
 import { usePostCounts } from '@/features/posts/usePostCounts';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
-import type { PostStatus } from '@/services/postService';
+import type { PostListItem, PostStatus } from '@/services/postService';
 
 const LINK = 'font-medium text-foreground underline underline-offset-2';
 
@@ -59,9 +60,19 @@ const EMPTY: Record<PostStatus, ReactNode> = {
   failed: 'Nothing failed. A Post X refuses shows up here with the reason.',
 };
 
+function PostList({ posts }: { posts: PostListItem[] }) {
+  const { connection } = useXConnectionContext();
+  return (
+    <ul className="divide-y divide-border rounded-xl border border-border bg-card text-card-foreground">
+      {posts.map((post) => (
+        <PostRow key={post.id} post={post} charLimit={connection?.charLimit ?? null} />
+      ))}
+    </ul>
+  );
+}
+
 function TabBody({ status }: { status: PostStatus }) {
   const { load, retry, showMore } = usePostsTab(status);
-  const { connection } = useXConnectionContext();
 
   if (load.kind === 'loading') {
     return (
@@ -76,11 +87,7 @@ function TabBody({ status }: { status: PostStatus }) {
   }
   return (
     <div className="space-y-4">
-      <ul className="divide-y divide-border rounded-xl border border-border bg-card text-card-foreground">
-        {load.posts.map((post) => (
-          <PostRow key={post.id} post={post} charLimit={connection?.charLimit ?? null} />
-        ))}
-      </ul>
+      <PostList posts={load.posts} />
       {load.more === 'failed' && (
         <ErrorBanner message="Couldn't load more posts." onRetry={showMore} />
       )}
@@ -99,6 +106,46 @@ function TabBody({ status }: { status: PostStatus }) {
   );
 }
 
+function Section({
+  title,
+  order,
+  children,
+}: {
+  title: string;
+  order: string;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="space-y-3">
+      <div>
+        <h2 id={id} className="font-sans text-sm font-medium text-foreground">
+          {title}
+        </h2>
+        <p className="font-sans text-xs text-muted-foreground">{order}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** The Drafts tab: the few Drafts the User opened last, above every Draft. */
+function DraftsBody() {
+  const recent = useRecentDrafts();
+  return (
+    <div className="space-y-8">
+      {recent && recent.length > 0 && (
+        <Section title="Recently opened" order="Most recently opened first.">
+          <PostList posts={recent} />
+        </Section>
+      )}
+      <Section title="All drafts" order={TAB_ORDER_LINE.draft}>
+        <TabBody status="draft" />
+      </Section>
+    </div>
+  );
+}
+
 /** Every Post by status, one tab per status at its own address. Rendered inside AppLayout. */
 export function Posts({ status }: { status: PostStatus }) {
   const { counts } = usePostCounts();
@@ -109,8 +156,14 @@ export function Posts({ status }: { status: PostStatus }) {
       <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
         <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-6 sm:px-6 sm:py-8">
           <PostsTabs counts={counts} />
-          <p className="font-sans text-xs text-muted-foreground">{TAB_ORDER_LINE[status]}</p>
-          <TabBody key={status} status={status} />
+          {status === 'draft' ? (
+            <DraftsBody />
+          ) : (
+            <>
+              <p className="font-sans text-xs text-muted-foreground">{TAB_ORDER_LINE[status]}</p>
+              <TabBody key={status} status={status} />
+            </>
+          )}
         </div>
       </div>
     </>

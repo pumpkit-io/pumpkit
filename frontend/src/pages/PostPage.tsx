@@ -12,6 +12,7 @@ import { DraftDock, DraftPostTo } from '@/features/posts/panels/DraftDock';
 import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import type { FeedbackSending } from '@/features/posts/panels/feedback';
 import { LoadingDock } from '@/features/posts/panels/FeedbackDock';
+import { recordDraftOpened } from '@/features/posts/list/recentDrafts';
 import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
 import { PublishedDock } from '@/features/posts/panels/PublishedDock';
@@ -127,6 +128,10 @@ function LoadedPost({
   useEffect(() => {
     if (opensEditor) navigate(location.pathname, { replace: true, state: null });
   }, [opensEditor, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (post.status === 'draft') recordDraftOpened(post.id);
+  }, [post.id, post.status]);
 
   const textVersion = versionOnScreen(post);
   const latest = post.versions[post.versions.length - 1];
