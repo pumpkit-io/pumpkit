@@ -6,7 +6,7 @@ const LINE = 'font-sans text-[13px] tabular-nums text-muted-foreground';
 
 /**
  * Where the Text came from, cut to one line: "V3 · From Feedback: “…”" or "V1 · From your
- * Brief". It opens the full Brief or Feedback above it, since the line rarely holds all of it.
+ * Brief". It opens the full Brief or Feedback below it, since the line rarely holds all of it.
  */
 export function OriginLine({
   brief,
@@ -64,7 +64,7 @@ export function OriginLine({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        side="top"
+        side="bottom"
         align="start"
         aria-label={version.feedback ? 'Feedback' : 'Brief'}
         className="max-h-[50vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto"

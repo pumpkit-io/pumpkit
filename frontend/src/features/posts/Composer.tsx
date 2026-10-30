@@ -8,7 +8,6 @@ import {
 } from 'react';
 import { ArrowUp, Loader2 } from 'lucide-react';
 import { charCount } from '@/lib/characters';
-import { MOD_LABEL } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 import type { Format } from '@/services/postService';
 import { FormatSelector } from './FormatSelector';
@@ -26,9 +25,9 @@ export interface ComposerProps {
   maxLength: number;
   /** The send arrow's accessible name. */
   sendLabel: string;
-  /** Ends the shortcut hint, as in "⌘↵ to write". */
-  shortcutVerb: string;
-  /** Called with ⌘Enter, Ctrl+Enter or the arrow, only when sending is possible. */
+  /** Enter sends and Shift+Enter adds a newline, as in a chat, instead of ⌘Enter sending. */
+  sendOnEnter?: boolean;
+  /** Called with the send shortcut or the arrow, only when sending is possible. */
   onSend: () => void;
   /** Locks the box and the Format with the text kept, and turns the arrow into a spinner. */
   isWriting?: boolean;
@@ -50,7 +49,8 @@ const PADDING_PX = 24;
 
 /**
  * A box to write in that grows with its text, with the Format toggle at the bottom left and the
- * send arrow at the bottom right. Enter adds a newline; ⌘Enter or Ctrl+Enter sends.
+ * send arrow at the bottom right. Enter adds a newline and ⌘Enter or Ctrl+Enter sends, unless
+ * `sendOnEnter` makes Enter send and Shift+Enter add the newline.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
   {
@@ -62,7 +62,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
     onFormatChange,
     maxLength,
     sendLabel,
-    shortcutVerb,
+    sendOnEnter = false,
     onSend,
     isWriting = false,
     sendDisabled = false,
@@ -90,7 +90,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   const canSend = !gate && typed && length <= maxLength && !sendDisabled && !locked;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+    // Enter that picks an IME candidate, such as for Japanese, isn't a send.
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    if (sendOnEnter ? e.shiftKey : !(e.metaKey || e.ctrlKey)) return;
     e.preventDefault();
     if (canSend) onSend();
   };
@@ -115,38 +117,25 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         <div className="ml-auto flex items-center gap-2">
           <LengthCounter length={length} max={maxLength} />
           {gate ?? (
-            <>
-              {typed && !locked && (
-                <span
-                  aria-hidden
-                  className="font-sans text-[13px] tabular-nums text-muted-foreground"
-                >
-                  {MOD_LABEL}↵ to {shortcutVerb}
-                </span>
+            <button
+              type="button"
+              aria-label={isWriting ? 'Writing…' : sendLabel}
+              aria-keyshortcuts={sendOnEnter ? 'Enter' : 'Meta+Enter Control+Enter'}
+              onClick={onSend}
+              disabled={!canSend}
+              className={cn(
+                'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transition-none',
+                canSend
+                  ? 'bg-foreground text-background hover:bg-foreground/85'
+                  : 'cursor-not-allowed bg-muted text-muted-foreground',
               )}
-              <button
-                type="button"
-                aria-label={isWriting ? 'Writing…' : sendLabel}
-                aria-keyshortcuts="Meta+Enter Control+Enter"
-                onClick={onSend}
-                disabled={!canSend}
-                className={cn(
-                  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transition-none',
-                  canSend
-                    ? 'bg-foreground text-background hover:bg-foreground/85'
-                    : 'cursor-not-allowed bg-muted text-muted-foreground',
-                )}
-              >
-                {isWriting ? (
-                  <Loader2
-                    className="h-5 w-5 animate-spin motion-reduce:animate-none"
-                    aria-hidden
-                  />
-                ) : (
-                  <ArrowUp className="h-5 w-5" aria-hidden />
-                )}
-              </button>
-            </>
+            >
+              {isWriting ? (
+                <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : (
+                <ArrowUp className="h-5 w-5" aria-hidden />
+              )}
+            </button>
           )}
           {trailingAction}
         </div>

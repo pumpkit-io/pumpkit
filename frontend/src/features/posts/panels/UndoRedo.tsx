@@ -6,7 +6,7 @@ import { ICON_BUTTON } from './iconButton';
 const UNDO_KEYS = IS_MAC ? '⌘Z' : 'Ctrl+Z';
 const REDO_KEYS = IS_MAC ? '⇧⌘Z' : 'Ctrl+Shift+Z';
 
-/** The dock's undo and redo, each disabled at its end of the undo line. */
+/** The Post card's undo and redo, each disabled at its end of the undo line. */
 export function UndoRedo({ onUndo, onRedo }: { onUndo?: () => void; onRedo?: () => void }) {
   return (
     <>

@@ -79,13 +79,13 @@ export function PostWriter() {
 
   const gate =
     subscribed === false ? (
-      <Button asChild variant="solid" className="h-10 shrink-0 rounded-full">
+      <Button asChild variant="solid" className="h-10 shrink-0">
         <Link to={CHOOSE_PLAN_PATH} onClick={() => trackChoosePlan('new_post_write')}>
           Subscribe to write
         </Link>
       </Button>
     ) : noCorpus ? (
-      <Button asChild variant="solid" className="h-10 shrink-0 rounded-full">
+      <Button asChild variant="solid" className="h-10 shrink-0">
         <Link to="/persona">Set up your Persona</Link>
       </Button>
     ) : undefined;
@@ -96,20 +96,19 @@ export function PostWriter() {
         id="new-post-line"
         className="font-sans text-2xl/[30px] font-semibold tracking-[-0.015em] text-foreground"
       >
-        What&apos;s this one about?
+        What&apos;s the post about?
       </h2>
       <Composer
         ref={briefRef}
         autoFocus
         label="Brief"
-        placeholder="Ramble here…"
+        placeholder="Write a new post about…"
         value={brief}
         onChange={setBrief}
         format={format}
         onFormatChange={setFormat}
         maxLength={BRIEF_MAX_CHARS}
         sendLabel="Write the Post"
-        shortcutVerb="write"
         onSend={send}
         isWriting={isWriting}
         sendDisabled={subscribed !== true || authors === null}

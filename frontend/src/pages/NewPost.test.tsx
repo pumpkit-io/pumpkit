@@ -89,7 +89,7 @@ function renderNewPost(state?: unknown, instance: Instance = SELLS_PLANS) {
 }
 
 async function writer() {
-  return within(await screen.findByRole('region', { name: "What's this one about?" }));
+  return within(await screen.findByRole('region', { name: "What's the post about?" }));
 }
 
 function postWith(final: string): PostDetail {
@@ -154,9 +154,9 @@ describe('New post', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'New post' })).toBeInTheDocument();
     const area = await writer();
-    expect(area.getByRole('heading', { level: 2, name: "What's this one about?" })).toBeVisible();
+    expect(area.getByRole('heading', { level: 2, name: "What's the post about?" })).toBeVisible();
     const brief = area.getByLabelText('Brief');
-    expect(brief).toHaveAttribute('placeholder', 'Ramble here…');
+    expect(brief).toHaveAttribute('placeholder', 'Write a new post about…');
     expect(brief).toHaveFocus();
     expect(area.getByRole('radiogroup', { name: 'Format' })).toBeInTheDocument();
     expect(area.queryByText('Brief')).not.toBeInTheDocument();
@@ -239,15 +239,6 @@ describe('New post', () => {
       expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
     });
 
-    it('shows the shortcut hint beside the arrow only once something is typed', async () => {
-      const area = await readyToWrite();
-      expect(area.queryByText(/↵ to write/)).not.toBeInTheDocument();
-
-      fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
-
-      expect(area.getByText(/↵ to write/)).toBeVisible();
-    });
-
     it.each([
       ['⌘Enter', { metaKey: true }],
       ['Ctrl+Enter', { ctrlKey: true }],
@@ -284,7 +275,6 @@ describe('New post', () => {
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
       expect(area.getByRole('radio', { name: 'Thread' })).toBeDisabled();
-      expect(area.queryByText(/↵ to write/)).not.toBeInTheDocument();
       expect(area.getByRole('status')).toHaveTextContent(
         'Writing your Post. This takes a minute or two.',
       );

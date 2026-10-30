@@ -7,14 +7,15 @@ import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
-import { DraftDock } from '@/features/posts/panels/DraftDock';
-import { FailedDock } from '@/features/posts/panels/FailedDock';
+import { DraftDock, DraftPostTo } from '@/features/posts/panels/DraftDock';
+import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import type { FeedbackSending } from '@/features/posts/panels/feedback';
 import { LoadingDock } from '@/features/posts/panels/FeedbackDock';
 import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
 import { PublishedDock } from '@/features/posts/panels/PublishedDock';
 import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
+import { TextFooter, TextHeader } from '@/features/posts/panels/TextHeader';
 import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
@@ -29,7 +30,7 @@ import { useXConnectionContext } from '@/features/xConnection/useXConnectionCont
 import type { PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
-/** The page's column scrolls under the Topbar; the dock, when there is one, stays pinned below. */
+/** The dock, when there is one, stays pinned under the Topbar; the page's column scrolls under it. */
 function Page({
   title,
   dock,
@@ -42,12 +43,13 @@ function Page({
   return (
     <>
       <Topbar title={title} actions={<PersonaChip />} />
-      <div className="flex-1 overflow-y-auto bg-background">
+      {dock}
+      {/* The gutter on both edges keeps the card centred under the dock, scrollbar or not. */}
+      <div className="flex-1 overflow-y-auto bg-background [scrollbar-gutter:stable_both-edges]">
         <div className="mx-auto w-full max-w-[42rem] space-y-6 px-4 py-6 sm:px-6 sm:py-8">
           {children}
         </div>
       </div>
-      {dock}
     </>
   );
 }
@@ -171,20 +173,20 @@ function LoadedPost({
           textChanges && !feedback.isWriting && !restore.isRestoring ? restore.onRestore : undefined
         }
       />
+      <CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />
     </div>
   );
 
   let dock: ReactNode = null;
+  let postTo: ReactNode = null;
   if (post.status === 'draft') {
-    dock = (
-      <DraftDock
+    dock = <DraftDock textVersion={textVersion} feedback={feedback} restoreError={restore.error} />;
+    postTo = (
+      <DraftPostTo
         postId={post.id}
         textVersion={textVersion}
         parts={parts}
-        origin={origin}
-        tools={tools}
-        feedback={feedback}
-        restoreError={restore.error}
+        disabled={feedback.isWriting}
         prepare={edit.flush}
         onScheduled={onScheduledPost}
       />
@@ -194,26 +196,24 @@ function LoadedPost({
       <FailedDock
         scheduledPost={scheduledPost}
         textVersion={textVersion}
-        retryParts={parts}
-        origin={origin}
-        tools={tools}
         feedback={feedback}
         restoreError={restore.error}
+      />
+    );
+    postTo = (
+      <FailedPostTo
+        scheduledPost={scheduledPost}
+        textVersion={textVersion}
+        retryParts={parts}
+        disabled={feedback.isWriting}
         prepare={edit.flush}
         onRetried={onScheduledPost}
       />
     );
   } else if (post.status === 'scheduled' && scheduledPost) {
-    dock = (
-      <ScheduledDock
-        scheduledPost={scheduledPost}
-        origin={origin}
-        tools={tools}
-        onEdit={() => setEditing(true)}
-      />
-    );
+    dock = <ScheduledDock scheduledPost={scheduledPost} onEdit={() => setEditing(true)} />;
   } else if (post.status === 'published' && scheduledPost) {
-    dock = <PublishedDock scheduledPost={scheduledPost} origin={origin} tools={tools} />;
+    dock = <PublishedDock scheduledPost={scheduledPost} />;
   }
 
   return (
@@ -227,7 +227,8 @@ function LoadedPost({
         onRedo={onRedo}
         trace={edit.trace}
         busy={feedback.isWriting}
-        corner={<CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />}
+        header={<TextHeader origin={origin} tools={tools} />}
+        footer={postTo && <TextFooter>{postTo}</TextFooter>}
       />
       <p role="status" className="sr-only">
         {edit.announcement && <span key={edit.announcement.key}>{edit.announcement.message}</span>}

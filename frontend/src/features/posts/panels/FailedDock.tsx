@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { destinationDraftOf } from '@/features/scheduledPosts/communities';
 import type { Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
@@ -9,35 +8,19 @@ import type { FeedbackSending } from './feedback';
 import { FeedbackDock } from './FeedbackDock';
 import { formatWhen } from './panelFacts';
 
-/**
- * Why the Post didn't go out, then Feedback, and "Post to…", which retries the Post's one
- * Scheduled post with the Text on screen.
- */
+/** Feedback on a Failed Post, with why it didn't go out under it. */
 export function FailedDock({
   scheduledPost,
   textVersion,
-  retryParts,
-  origin,
-  tools,
   feedback,
   restoreError,
-  prepare,
-  onRetried,
 }: {
   scheduledPost: ScheduledPost;
   /** The Text, as the Version it came from. */
   textVersion: Version;
-  /** What the retry sends, the live Parts first. */
-  retryParts: ShownPart[];
-  origin: ReactNode;
-  tools?: ReactNode;
   feedback: FeedbackSending;
   restoreError?: string | null;
-  /** Saves the User's last edit before "Post to…" opens. */
-  prepare: () => Promise<boolean>;
-  onRetried: (scheduledPost: ScheduledPost) => void;
 }) {
-  const sender = useRetryFailed(scheduledPost);
   return (
     <FeedbackDock
       name="Failed"
@@ -49,22 +32,41 @@ export function FailedDock({
           {scheduledPost.failedReason && <p>{scheduledPost.failedReason}</p>}
         </div>
       }
-      origin={origin}
-      tools={tools}
       format={textVersion.format}
       feedback={feedback}
       restoreError={restoreError}
-      postTo={
-        <PostToButton
-          format={textVersion.format}
-          parts={retryParts}
-          sender={sender}
-          initialWhere={destinationDraftOf(scheduledPost)}
-          disabled={feedback.isWriting}
-          prepare={prepare}
-          onDone={onRetried}
-        />
-      }
+    />
+  );
+}
+
+/** "Post to…" on a Failed Post, which retries its one Scheduled post with the Text on screen. */
+export function FailedPostTo({
+  scheduledPost,
+  textVersion,
+  retryParts,
+  disabled,
+  prepare,
+  onRetried,
+}: {
+  scheduledPost: ScheduledPost;
+  textVersion: Version;
+  /** What the retry sends, the live Parts first. */
+  retryParts: ShownPart[];
+  disabled: boolean;
+  /** Saves the User's last edit before "Post to…" opens. */
+  prepare: () => Promise<boolean>;
+  onRetried: (scheduledPost: ScheduledPost) => void;
+}) {
+  const sender = useRetryFailed(scheduledPost);
+  return (
+    <PostToButton
+      format={textVersion.format}
+      parts={retryParts}
+      sender={sender}
+      initialWhere={destinationDraftOf(scheduledPost)}
+      disabled={disabled}
+      prepare={prepare}
+      onDone={onRetried}
     />
   );
 }

@@ -203,6 +203,11 @@ async function textCard() {
   return within(await screen.findByRole('article', { name: 'Text' }));
 }
 
+/** The Post's card, which holds the origin line, undo, redo, History and "Post to…". */
+function card() {
+  return within(screen.getByRole('article', { name: 'Text' }));
+}
+
 function panel(name: string) {
   return within(screen.getByRole('region', { name }));
 }
@@ -425,7 +430,7 @@ describe('Post page', () => {
       renderPost(postWith('the final text'));
       await textCard();
 
-      fireEvent.click(panel('Draft').getByRole('button', { name: 'V1 · From your Brief' }));
+      fireEvent.click(card().getByRole('button', { name: 'V1 · From your Brief' }));
 
       const brief = await screen.findByRole('dialog', { name: 'Brief' });
       expect(within(brief).getByText('ship small things')).toBeInTheDocument();
@@ -443,7 +448,7 @@ describe('Post page', () => {
       await textCard();
 
       fireEvent.click(
-        panel('Draft').getByRole('button', {
+        card().getByRole('button', {
           name: 'V2 · From Feedback: “Shorter, and drop the last line.”',
         }),
       );
@@ -462,7 +467,7 @@ describe('Post page', () => {
       await textCard();
 
       expect(
-        panel('Draft').getByRole('button', { name: 'V1 · From your Brief · edited' }),
+        card().getByRole('button', { name: 'V1 · From your Brief · edited' }),
       ).toBeInTheDocument();
     });
   });
@@ -485,9 +490,9 @@ describe('Post page', () => {
       vi.useRealTimers();
     });
 
-    async function openHistory(dockName = 'Draft') {
+    async function openHistory() {
       await textCard();
-      fireEvent.click(panel(dockName).getByRole('button', { name: 'History' }));
+      fireEvent.click(card().getByRole('button', { name: 'History' }));
       return within(await screen.findByRole('dialog', { name: 'History' }));
     }
 
@@ -547,7 +552,7 @@ describe('Post page', () => {
       expect(await (await textCard()).findByText('the second text')).toBeInTheDocument();
       expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 2);
       expect(
-        panel('Draft').getByRole('button', { name: 'V2 · From Feedback: “Punchier hook”' }),
+        card().getByRole('button', { name: 'V2 · From Feedback: “Punchier hook”' }),
       ).toBeInTheDocument();
       expect(track).toHaveBeenCalledWith('version_restored', { source: 'history' });
       await dialogClosed();
@@ -599,7 +604,7 @@ describe('Post page', () => {
       const history = await openHistory();
       fireEvent.keyDown(history.getByRole('list'), { key: 'Escape' });
       await dialogClosed();
-      expect(panel('Draft').getByRole('button', { name: 'History' })).toHaveFocus();
+      expect(card().getByRole('button', { name: 'History' })).toHaveFocus();
 
       await openHistory();
       fireEvent.pointerDown(document.body);
@@ -630,7 +635,7 @@ describe('Post page', () => {
     it('is read-only on a Scheduled Post', async () => {
       renderPost(withScheduledPost(SCHEDULED));
 
-      const history = await openHistory('Scheduled');
+      const history = await openHistory();
 
       expect(rows(history)).toHaveLength(2);
       expect(history.queryByRole('button', { name: /^Version/ })).not.toBeInTheDocument();
@@ -640,7 +645,7 @@ describe('Post page', () => {
     it('is read-only on a Published Post', async () => {
       renderPost(withScheduledPost({ ...SCHEDULED, state: 'published', xPostUrl: null }));
 
-      const history = await openHistory('Published');
+      const history = await openHistory();
 
       expect(history.queryByRole('button', { name: /^Version/ })).not.toBeInTheDocument();
       expect(history.getByText('Version 2')).toBeInTheDocument();
@@ -651,13 +656,13 @@ describe('Post page', () => {
         textOf(version(1, ['the final text'])),
       );
       renderPost(withScheduledPost({ ...SCHEDULED, state: 'failed', failedReason: 'Nope.' }));
-      const history = await openHistory('Failed');
+      const history = await openHistory();
 
       fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
 
       await waitFor(() => expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 1));
       expect(
-        await panel('Failed').findByRole('button', { name: 'V1 · From your Brief' }),
+        await card().findByRole('button', { name: 'V1 · From your Brief' }),
       ).toBeInTheDocument();
     });
   });
@@ -694,7 +699,7 @@ describe('Post page', () => {
 
       expect((await textCard()).getByText('22 / 280')).toBeInTheDocument();
       expect(
-        panel('Draft').getByRole('button', { name: 'V1 · From your Brief · edited' }),
+        card().getByRole('button', { name: 'V1 · From your Brief · edited' }),
       ).toBeInTheDocument();
       expect(postService.saveText).not.toHaveBeenCalled();
       await pause();
@@ -777,14 +782,14 @@ describe('Post page', () => {
       fireEvent.change(box, { target: { value: 'edited' } });
       await pause();
 
-      expect(await panel('Draft').findByText('Edit not saved. Retrying.')).toBeInTheDocument();
+      expect(await card().findByText('Edit not saved. Retrying.')).toBeInTheDocument();
       await pause(TEXT_SAVE_RETRY_MS);
       expect(postService.saveText).toHaveBeenCalledTimes(2);
       expect(vi.mocked(postService.saveText).mock.calls[1]).toEqual(['post_01', ['edited']]);
       expect(
-        await panel('Draft').findByRole('button', { name: 'V1 · From your Brief · edited' }),
+        await card().findByRole('button', { name: 'V1 · From your Brief · edited' }),
       ).toBeInTheDocument();
-      expect(panel('Draft').queryByText('Edit not saved. Retrying.')).not.toBeInTheDocument();
+      expect(card().queryByText('Edit not saved. Retrying.')).not.toBeInTheDocument();
     });
 
     it('saves the last edit when the page closes while an earlier save is out', async () => {
@@ -825,9 +830,7 @@ describe('Post page', () => {
       await pause(TEXT_SAVE_RETRY_MS * 4);
 
       expect(
-        await panel('Draft').findByText(
-          'Edit not saved. This Post is scheduled, so its Text is set.',
-        ),
+        await card().findByText('Edit not saved. This Post is scheduled, so its Text is set.'),
       ).toBeInTheDocument();
       expect(postService.saveText).toHaveBeenCalledTimes(1);
     });
@@ -846,14 +849,11 @@ describe('Post page', () => {
         target: { value: 'edited' },
       });
 
-      fireEvent.click(panel('Draft').getByRole('button', { name: 'Post to…' }));
+      fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
 
       await waitFor(() => expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']));
       expect(screen.queryByRole('dialog', { name: 'Post to…' })).not.toBeInTheDocument();
-      expect(panel('Draft').getByRole('button', { name: 'Post to…' })).toHaveAttribute(
-        'aria-busy',
-        'true',
-      );
+      expect(card().getByRole('button', { name: 'Post to…' })).toHaveAttribute('aria-busy', 'true');
       await act(async () => saved());
       expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
     });
@@ -891,12 +891,12 @@ describe('Post page', () => {
         target: { value: 'edited' },
       });
 
-      fireEvent.click(panel('Draft').getByRole('button', { name: 'History' }));
+      fireEvent.click(card().getByRole('button', { name: 'History' }));
       const history = within(await screen.findByRole('dialog', { name: 'History' }));
       fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
 
       expect(
-        await panel('Draft').findByRole('button', { name: 'V1 · From your Brief' }),
+        await card().findByRole('button', { name: 'V1 · From your Brief' }),
       ).toBeInTheDocument();
       expect((await textCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
         'the first text',
@@ -963,8 +963,8 @@ describe('Post page', () => {
       });
     }
 
-    const button = (name: string) => panel('Draft').getByRole('button', { name });
-    const origin = (name: string) => panel('Draft').findByRole('button', { name });
+    const button = (name: string) => card().getByRole('button', { name });
+    const origin = (name: string) => card().findByRole('button', { name });
 
     async function postBox() {
       return (await textCard()).getByRole('textbox', { name: 'Post text' });
@@ -1227,11 +1227,11 @@ describe('Post page', () => {
 
       fireEvent.change(await postBox(), { target: { value: 'the first text, mine' } });
 
-      expect(await panel('Draft').findByText('Newer rewrites are in History')).toBeInTheDocument();
+      expect(await card().findByText('Newer rewrites are in History')).toBeInTheDocument();
       expect(button('Redo')).toBeDisabled();
       expect(track).toHaveBeenCalledWith('redo_rewrites_dropped', { count: 1 });
       await pause(5_000);
-      expect(panel('Draft').queryByText('Newer rewrites are in History')).not.toBeInTheDocument();
+      expect(card().queryByText('Newer rewrites are in History')).not.toBeInTheDocument();
 
       fireEvent.click(button('History'));
       const history = within(await screen.findByRole('dialog', { name: 'History' }));
@@ -1291,7 +1291,7 @@ describe('Post page', () => {
       renderPost(withScheduledPost(SCHEDULED));
       await textCard();
 
-      expect(panel('Scheduled').queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+      expect(card().queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
     });
   });
 
@@ -1318,7 +1318,7 @@ describe('Post page', () => {
       expect(feedbackBox()).toHaveAttribute('placeholder', 'What should change?');
       expect(dock.getByRole('radio', { name: 'Single post' })).toBeChecked();
       expect(dock.getByRole('button', { name: 'Send Feedback' })).toBeDisabled();
-      expect(await dock.findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      expect(await card().findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
       expect(dock.queryByText(/everything you don.t mention/i)).not.toBeInTheDocument();
       expect(dock.queryByRole('button', { name: 'Rewrite' })).not.toBeInTheDocument();
     });
@@ -1337,7 +1337,7 @@ describe('Post page', () => {
       expect(feedbackBox()).toBeDisabled();
       expect(feedbackBox()).toHaveValue('  make it shorter ');
       expect(dock.getByRole('button', { name: 'Writing…' })).toBeDisabled();
-      expect(dock.getByText('Writing Version 2 from your Feedback…')).toBeInTheDocument();
+      expect(card().getByText('Writing Version 2 from your Feedback…')).toBeInTheDocument();
       expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true');
       expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post', [
         'the first final',
@@ -1348,7 +1348,7 @@ describe('Post page', () => {
 
       expect((await textCard()).getByText('the second final')).toBeInTheDocument();
       expect(
-        await dock.findByRole('button', { name: 'V2 · From Feedback: “make it shorter”' }),
+        await card().findByRole('button', { name: 'V2 · From Feedback: “make it shorter”' }),
       ).toBeInTheDocument();
       expect(feedbackBox()).toHaveValue('');
       expect(feedbackBox()).toBeEnabled();
@@ -1394,7 +1394,7 @@ describe('Post page', () => {
       const format = within(panel('Draft').getByRole('radiogroup', { name: 'Format' }));
       expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
 
-      fireEvent.click(panel('Draft').getByRole('button', { name: 'History' }));
+      fireEvent.click(card().getByRole('button', { name: 'History' }));
       const history = within(await screen.findByRole('dialog', { name: 'History' }));
       fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
 
@@ -1494,10 +1494,9 @@ describe('Post page', () => {
       const dock = panel('Draft');
       const subscribe = await dock.findByRole('link', { name: 'Subscribe to write' });
       expect(dock.queryByRole('button', { name: 'Send Feedback' })).not.toBeInTheDocument();
-      expect(dock.getByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      expect(card().getByRole('button', { name: 'Post to…' })).toBeInTheDocument();
       fireEvent.change(feedbackBox(), { target: { value: 'shorter' } });
-      expect(dock.queryByText(/↵ to send/)).not.toBeInTheDocument();
-      fireEvent.keyDown(feedbackBox(), { key: 'Enter', metaKey: true });
+      fireEvent.keyDown(feedbackBox(), { key: 'Enter' });
       expect(postService.addVersion).not.toHaveBeenCalled();
 
       fireEvent.click(subscribe);
@@ -1505,9 +1504,10 @@ describe('Post page', () => {
     });
 
     it.each([
+      ['Enter', {}],
       ['⌘Enter', { metaKey: true }],
       ['Ctrl+Enter', { ctrlKey: true }],
-    ])('sends Feedback with %s, as the hint says', async (_name, keys) => {
+    ])('sends Feedback with %s', async (_name, keys) => {
       vi.mocked(postService.addVersion).mockResolvedValue(versionTwo);
       renderPost(postWith('the first final'));
       await textCard();
@@ -1516,7 +1516,6 @@ describe('Post page', () => {
         expect(panel('Draft').getByRole('button', { name: 'Send Feedback' })).toBeEnabled(),
       );
 
-      expect(panel('Draft').getByText(/↵ to send/)).toBeVisible();
       fireEvent.keyDown(feedbackBox(), { key: 'Enter', ...keys });
 
       await waitFor(() =>
@@ -1526,12 +1525,26 @@ describe('Post page', () => {
       );
     });
 
+    it('leaves Shift+Enter alone, so it adds a newline instead of sending Feedback', async () => {
+      renderPost(postWith('the first final'));
+      await textCard();
+      fireEvent.change(feedbackBox(), { target: { value: 'make it shorter' } });
+      await waitFor(() =>
+        expect(panel('Draft').getByRole('button', { name: 'Send Feedback' })).toBeEnabled(),
+      );
+
+      const shiftEnter = fireEvent.keyDown(feedbackBox(), { key: 'Enter', shiftKey: true });
+
+      expect(shiftEnter).toBe(true);
+      expect(postService.addVersion).not.toHaveBeenCalled();
+    });
+
     it('keeps typed Feedback in the box after "Post to…"', async () => {
       renderPost(postWith('the first final'));
       await textCard();
 
       fireEvent.change(feedbackBox(), { target: { value: 'keep me' } });
-      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
       fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
       await dialogClosed();
@@ -1548,7 +1561,7 @@ describe('Post page', () => {
       const dock = panel('Scheduled');
       expect(dock.getByText('Scheduled for Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
       expect(dock.getByText('Your profile')).toBeInTheDocument();
-      expect(dock.getByRole('button', { name: /^V2 · From Feedback/ })).toBeInTheDocument();
+      expect(card().getByRole('button', { name: /^V2 · From Feedback/ })).toBeInTheDocument();
       expect(await dock.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
       expect(screen.queryByRole('textbox', { name: 'Feedback' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Post to…' })).not.toBeInTheDocument();
@@ -1867,7 +1880,7 @@ describe('Post page', () => {
       const dock = panel('Published');
       expect(dock.getByText('Published Mon, Oct 12, 9:00 AM')).toBeInTheDocument();
       expect(dock.getByText('Your profile')).toBeInTheDocument();
-      expect(dock.getByRole('button', { name: /^V2 · From Feedback/ })).toBeInTheDocument();
+      expect(card().getByRole('button', { name: /^V2 · From Feedback/ })).toBeInTheDocument();
       expect(dock.getByRole('link', { name: 'View on X' })).toHaveAttribute(
         'href',
         'https://x.com/i/web/status/1890000000000000001',
@@ -1910,7 +1923,7 @@ describe('Post page', () => {
         dock.getByText('This Post didn’t go out. It was due Mon, Oct 12, 9:00 AM.'),
       ).toBeInTheDocument();
       expect(dock.getByText('X refused the post: duplicate content.')).toBeInTheDocument();
-      expect(await dock.findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      expect(await card().findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
       fireEvent.change(dock.getByRole('textbox', { name: 'Feedback' }), {
         target: { value: 'not a duplicate' },
       });
@@ -1920,7 +1933,7 @@ describe('Post page', () => {
 
       expect(await (await textCard()).findByText('the third text')).toBeInTheDocument();
       expect(
-        dock.getByRole('button', { name: 'V3 · From Feedback: “not a duplicate”' }),
+        card().getByRole('button', { name: 'V3 · From Feedback: “not a duplicate”' }),
       ).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Failed /');
     });
@@ -1990,7 +2003,7 @@ describe('Post page', () => {
     async function openPostTo(post: PostDetail = postWith('the final text')): Promise<Dialog> {
       renderPost(post);
       await textCard();
-      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
     }
 
@@ -2009,7 +2022,7 @@ describe('Post page', () => {
       await textCard();
 
       const draftPanel = panel('Draft');
-      expect(await draftPanel.findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
+      expect(await card().findByRole('button', { name: 'Post to…' })).toBeInTheDocument();
       expect(draftPanel.queryByRole('button', { name: 'Schedule' })).not.toBeInTheDocument();
       expect(draftPanel.queryByRole('button', { name: 'Post now' })).not.toBeInTheDocument();
     });
@@ -2318,7 +2331,7 @@ describe('Post page', () => {
       renderPost(postWith('the final text'));
       await textCard();
 
-      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
 
       expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
       expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
@@ -2341,7 +2354,7 @@ describe('Post page', () => {
       renderPost(postWith('the final text'), { ...SELLS_PLANS, sells_plans: false });
       await textCard();
 
-      fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+      fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
 
       expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
     });
@@ -2386,7 +2399,7 @@ describe('Post page', () => {
     async function openRetry(post: PostDetail = withScheduledPost(FAILED)): Promise<Dialog> {
       renderPost(post);
       await textCard();
-      fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
+      fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
     }
 
@@ -2454,7 +2467,7 @@ describe('Post page', () => {
       renderPost(withVersions(withScheduledPost(FAILED), [version(1, ['the final text'])]));
       await textCard();
 
-      fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
+      fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
@@ -2605,7 +2618,7 @@ describe('Post page', () => {
       counts: { ...NO_POSTS.counts, failed: 1 },
     });
 
-    fireEvent.click(await panel('Draft').findByRole('button', { name: 'Post to…' }));
+    fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
     fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
     fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
@@ -2636,7 +2649,7 @@ describe('Post page', () => {
     expect(await sidebar.findByRole('link', { name: 'Posts, 1 Failed' })).toBeInTheDocument();
     vi.mocked(postService.list).mockResolvedValue(NO_POSTS);
 
-    fireEvent.click(await panel('Failed').findByRole('button', { name: 'Post to…' }));
+    fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
     fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
     fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));

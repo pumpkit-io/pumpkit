@@ -12,30 +12,24 @@ import { Dock } from './Dock';
 import type { FeedbackSending } from './feedback';
 
 /**
- * The dock of a Draft or a Failed Post: Feedback on the Text, with "Post to…" in the composer's
- * corner. A failed send keeps the Feedback, so trying again is one click.
+ * The dock of a Draft or a Failed Post: Feedback on the Text. A failed send keeps the Feedback,
+ * so trying again is one click.
  */
 export function FeedbackDock({
   name,
   reason,
-  origin,
-  tools,
   format: textFormat,
   feedback: sending,
   restoreError,
-  postTo,
 }: {
   name: string;
-  /** Above everything else, such as why a Failed Post didn't go out. */
+  /** Under the composer, such as why a Failed Post didn't go out. */
   reason?: ReactNode;
-  origin: ReactNode;
-  tools?: ReactNode;
   /** The Text's Format, where the toggle starts. */
   format: Format;
   feedback: FeedbackSending;
   /** Why the last restore from History didn't happen. */
   restoreError?: string | null;
-  postTo: ReactNode;
 }) {
   const { subscribed } = useSubscribed();
   const phone = useMediaQuery(PHONE);
@@ -56,7 +50,7 @@ export function FeedbackDock({
 
   const gate =
     subscribed === false ? (
-      <Button asChild variant="solid" className="h-10 shrink-0 rounded-full">
+      <Button asChild variant="solid" className="h-10 shrink-0">
         <Link to={CHOOSE_PLAN_PATH} onClick={() => trackChoosePlan('post_feedback')}>
           Subscribe to write
         </Link>
@@ -66,7 +60,7 @@ export function FeedbackDock({
   return (
     <Dock
       name={name}
-      above={
+      notes={
         (reason || error || notice || restoreError) && (
           <div className="space-y-2">
             {reason}
@@ -78,8 +72,6 @@ export function FeedbackDock({
           </div>
         )
       }
-      origin={origin}
-      tools={tools}
     >
       <Composer
         label="Feedback"
@@ -90,12 +82,11 @@ export function FeedbackDock({
         onFormatChange={setFormat}
         maxLength={FEEDBACK_MAX_CHARS}
         sendLabel="Send Feedback"
-        shortcutVerb="send"
+        sendOnEnter
         onSend={() => void send()}
         isWriting={isWriting}
         sendDisabled={subscribed !== true}
         gate={gate}
-        trailingAction={postTo}
         maxRows={phone ? 5 : 8}
       />
     </Dock>
@@ -105,7 +96,7 @@ export function FeedbackDock({
 /** The dock while the Post loads: the same shape, with nothing to use yet. */
 export function LoadingDock() {
   return (
-    <Dock name="Loading" origin={<div className="h-3 w-40 rounded-full bg-muted" />}>
+    <Dock name="Loading">
       <Composer
         label="Feedback"
         placeholder="What should change?"
@@ -115,7 +106,6 @@ export function LoadingDock() {
         onFormatChange={() => {}}
         maxLength={FEEDBACK_MAX_CHARS}
         sendLabel="Send Feedback"
-        shortcutVerb="send"
         onSend={() => {}}
         disabled
       />

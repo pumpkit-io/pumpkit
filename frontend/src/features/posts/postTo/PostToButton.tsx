@@ -54,7 +54,7 @@ export function PostToButton({
       <Button
         type="button"
         variant="solid"
-        className="h-10 shrink-0 rounded-full"
+        className="h-10 shrink-0"
         disabled={disabled || preparing}
         aria-busy={preparing}
         onClick={() => void start()}

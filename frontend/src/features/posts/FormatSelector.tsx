@@ -15,7 +15,7 @@ interface FormatSelectorProps {
   hideLabel?: boolean;
 }
 
-/** Single post or Thread, as two radios drawn as one segmented control. */
+/** Single post or Thread, as two radios drawn as one segmented control with a sliding thumb. */
 export function FormatSelector({
   value,
   onChange,
@@ -36,15 +36,24 @@ export function FormatSelector({
         role="radiogroup"
         aria-label={hideLabel ? 'Format' : undefined}
         aria-labelledby={hideLabel ? undefined : labelId}
-        className="inline-flex rounded-lg bg-muted p-0.5"
+        className="relative inline-grid grid-cols-2 rounded-lg bg-muted p-0.5"
       >
+        {/* One thumb slides under both options, so a change shows which way it went. */}
+        <span
+          aria-hidden
+          className={cn(
+            'absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-sm bg-card shadow-raised transition-transform duration-200 ease-out motion-reduce:transition-none',
+            value === 'thread' && 'translate-x-full',
+            disabled && 'opacity-50',
+          )}
+        />
         {OPTIONS.map((option) => (
           <label
             key={option.format}
             className={cn(
-              'cursor-pointer rounded-sm px-3 py-1.5 font-sans text-sm transition-colors motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
+              'relative cursor-pointer rounded-sm px-3 py-1.5 text-center font-sans text-sm transition-colors duration-200 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
               value === option.format
-                ? 'bg-card font-medium text-foreground shadow-raised'
+                ? 'font-medium text-foreground'
                 : 'text-muted-foreground hover:text-foreground',
               disabled && 'cursor-not-allowed opacity-50',
             )}

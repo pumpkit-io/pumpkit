@@ -82,6 +82,8 @@ export function TextCard({
   parts,
   renderText,
   corner,
+  header,
+  footer,
   busy = false,
 }: {
   parts: ShownPart[];
@@ -89,7 +91,11 @@ export function TextCard({
   renderText?: (part: ShownPart, index: number) => ReactNode;
   /** At the card's top right, such as Copy. */
   corner?: ReactNode;
-  /** Dims the card while Pumpkit rewrites the text. */
+  /** A row above the Parts, such as where the Text came from and its tools. */
+  header?: ReactNode;
+  /** A row below the Parts, such as "Post to…". */
+  footer?: ReactNode;
+  /** Dims the Parts while Pumpkit rewrites the text. */
   busy?: boolean;
 }) {
   const profile = useProfile();
@@ -102,13 +108,16 @@ export function TextCard({
     <article
       aria-label="Text"
       aria-busy={busy}
-      className={cn(
-        'relative overflow-hidden rounded-xl border border-border bg-card text-card-foreground transition-opacity motion-reduce:transition-none',
-        busy && 'opacity-60',
-      )}
+      className="relative overflow-hidden rounded-xl border border-border bg-card text-card-foreground"
     >
       {corner && <div className="absolute right-2 top-2">{corner}</div>}
-      <ol className="divide-y divide-border">
+      {header}
+      <ol
+        className={cn(
+          'divide-y divide-border transition-opacity motion-reduce:transition-none',
+          busy && 'opacity-60',
+        )}
+      >
         {parts.map((part, index) => (
           <XPart
             key={index}
@@ -123,6 +132,7 @@ export function TextCard({
           />
         ))}
       </ol>
+      {footer}
     </article>
   );
 }

@@ -1,36 +1,35 @@
 import type { ReactNode } from 'react';
 
+/** The floating card the dock's status rows sit in, wider than the Post's card. */
+export const DOCK_CARD = 'rounded-2xl border border-border bg-card shadow-panel';
+
 /**
- * The bar pinned under the Post's card, named for the Post's status. Its height changes only
- * with the composer's growth and with what `above` holds, such as an error from the User's send.
+ * The card pinned above the Post's card, named for the Post's status. The Post scrolls under it,
+ * so its height changes only with the composer's growth and with what `notes` holds, such as an
+ * error from the User's send.
  */
 export function Dock({
   name,
-  above,
-  origin,
-  tools,
+  notes,
   children,
 }: {
   name: string;
-  above?: ReactNode;
-  /** The one line saying where the Text came from. */
-  origin: ReactNode;
-  /** At the right of the origin line. */
-  tools?: ReactNode;
+  /** Under the card, such as why a send failed. */
+  notes?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={name} className="shrink-0 border-t border-border bg-background">
-      <div className="mx-auto w-full max-w-[42rem] space-y-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
-        {above}
-        <div className="flex h-6 min-w-0 items-center gap-2">
-          <div aria-live="polite" className="min-w-0 flex-1">
-            {origin}
-          </div>
-          {tools}
-        </div>
+    <section aria-label={name} className="relative z-10 shrink-0 bg-background">
+      <div className="mx-auto w-full max-w-[48rem] space-y-2 px-4 pt-4 sm:px-6 sm:pt-6">
         {children}
+        {notes}
       </div>
+      {/* The Post scrolling up under the dock fades out instead of stopping at an edge; the fade
+          stops short of the scrollbar's 12px so it never veils the thumb. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-0 right-3 top-full h-6 bg-gradient-to-b from-background to-transparent"
+      />
     </section>
   );
 }

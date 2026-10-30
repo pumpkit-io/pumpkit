@@ -1,3 +1,4 @@
+import { CalendarClock, CheckCheck, CircleX, Inbox, type LucideIcon } from 'lucide-react';
 import type { PostStatus } from '@/services/postService';
 import type { ScheduledPostState } from '@/services/scheduledPostService';
 
@@ -17,11 +18,11 @@ export const STATUS_LABEL: Record<PostStatus, string> = {
 };
 
 /** The Posts tab each status lists under, named as its tab is. */
-export const STATUS_TAB: Record<PostStatus, { label: string; path: string }> = {
-  draft: { label: 'Drafts', path: '/posts/drafts' },
-  scheduled: { label: 'Scheduled', path: '/posts/scheduled' },
-  published: { label: 'Published', path: '/posts/published' },
-  failed: { label: 'Failed', path: '/posts/failed' },
+export const STATUS_TAB: Record<PostStatus, { label: string; path: string; icon: LucideIcon }> = {
+  draft: { label: 'Drafts', path: '/posts/drafts', icon: Inbox },
+  scheduled: { label: 'Scheduled', path: '/posts/scheduled', icon: CalendarClock },
+  published: { label: 'Published', path: '/posts/published', icon: CheckCheck },
+  failed: { label: 'Failed', path: '/posts/failed', icon: CircleX },
 };
 
 /** The Posts tabs in the order they sit, Scheduled first: what goes out next is what to check. */

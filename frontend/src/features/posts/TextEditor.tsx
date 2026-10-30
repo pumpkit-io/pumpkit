@@ -178,6 +178,8 @@ export function TextEditor({
   onRedo,
   trace,
   corner,
+  header,
+  footer,
   busy = false,
 }: {
   /** What the card shows, the live Parts first on a Failed Post. */
@@ -189,6 +191,8 @@ export function TextEditor({
   onRedo?: () => void;
   trace?: TextTrace | null;
   corner?: ReactNode;
+  header?: ReactNode;
+  footer?: ReactNode;
   busy?: boolean;
 }) {
   const total = parts.length;
@@ -213,6 +217,8 @@ export function TextEditor({
       parts={parts}
       busy={busy}
       corner={corner}
+      header={header}
+      footer={footer}
       renderText={
         editable
           ? (part, index) =>

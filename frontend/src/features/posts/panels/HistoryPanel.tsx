@@ -135,7 +135,7 @@ function HistoryList({
 }
 
 /**
- * The dock's History button: every Version, newest first, in a popover above it, or a bottom
+ * The Post card's History button: every Version, newest first, in a popover below it, or a bottom
  * sheet on a phone. Clicking one restores it, unless it is already the Text as written.
  */
 export function HistoryButton({ onRestore, ...list }: HistoryProps) {
@@ -186,7 +186,7 @@ export function HistoryButton({ onRestore, ...list }: HistoryProps) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
-        side="top"
+        side="bottom"
         align="end"
         aria-label="History"
         className="max-h-[min(26rem,60vh)] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto p-1.5"
