@@ -683,6 +683,21 @@ describe('Post page', () => {
       await dialogClosed();
     });
 
+    it('keeps its hover label shut while open, and when focus comes back on close', async () => {
+      renderPost(draft(THREE));
+
+      const history = await openHistory();
+      fireEvent.pointerMove(card().getByRole('button', { name: 'History' }), {
+        pointerType: 'mouse',
+      });
+      fireEvent.keyDown(history.getByRole('list'), { key: 'Escape' });
+      await dialogClosed();
+
+      expect(card().getByRole('button', { name: 'History' })).toHaveFocus();
+      await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
+
     it('opens as a sheet on a phone, and restores from it', async () => {
       const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
         (query: string) =>

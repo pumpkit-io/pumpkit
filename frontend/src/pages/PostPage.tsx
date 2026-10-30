@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
+import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
 import { DraftDock, DraftPostTo } from '@/features/posts/panels/DraftDock';
@@ -172,19 +173,23 @@ function LoadedPost({
   const onUndo = editable ? edit.onUndo : undefined;
   const onRedo = editable ? edit.onRedo : undefined;
   const tools = (
-    <div className="flex shrink-0 items-center gap-0.5">
-      {textChanges && <UndoRedo onUndo={onUndo} onRedo={onRedo} />}
-      <HistoryButton
-        brief={post.brief}
-        versions={post.versions}
-        textVersionNumber={textVersion.number}
-        edited={post.text?.edited ?? false}
-        onRestore={
-          textChanges && !feedback.isWriting && !restore.isRestoring ? restore.onRestore : undefined
-        }
-      />
-      <CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />
-    </div>
+    <HoverLabels>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {textChanges && <UndoRedo onUndo={onUndo} onRedo={onRedo} />}
+        <HistoryButton
+          brief={post.brief}
+          versions={post.versions}
+          textVersionNumber={textVersion.number}
+          edited={post.text?.edited ?? false}
+          onRestore={
+            textChanges && !feedback.isWriting && !restore.isRestoring
+              ? restore.onRestore
+              : undefined
+          }
+        />
+        <CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />
+      </div>
+    </HoverLabels>
   );
 
   let dock: ReactNode = null;

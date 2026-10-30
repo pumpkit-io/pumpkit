@@ -8,7 +8,7 @@ import { shortTimeAgo } from '@/lib/relativeTime';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import { cn } from '@/lib/utils';
 import type { Version } from '@/services/postService';
-import { HoverLabel } from './HoverLabel';
+import { HoverLabel } from '@/features/posts/HoverLabel';
 import { ICON_BUTTON } from './iconButton';
 
 const HISTORY_BILLING_SOURCE = 'post_history_restore';
@@ -142,26 +142,38 @@ function HistoryList({
 export function HistoryButton({ onRestore, ...list }: HistoryProps) {
   const phone = useMediaQuery(PHONE);
   const [open, setOpen] = useState(false);
+  // Closing hands focus back to the button, which would otherwise open its label until it blurs.
+  const [labelQuiet, setLabelQuiet] = useState(false);
+  const openChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setLabelQuiet(true);
+  };
   const { subscribed } = useSubscribed();
   const goToChoosePlan = useGoToChoosePlan();
 
   const pick = (version: Version) => {
-    setOpen(false);
+    openChange(false);
     if (version.number === list.textVersionNumber && !list.edited) return;
     if (subscribed === false) goToChoosePlan(HISTORY_BILLING_SOURCE);
     else onRestore?.(version.number);
   };
   const historyList = <HistoryList {...list} onPick={onRestore && pick} />;
   const trigger = (
-    <button type="button" aria-label="History" className={cn(ICON_BUTTON, '-my-1')}>
+    <button
+      type="button"
+      aria-label="History"
+      onPointerLeave={() => setLabelQuiet(false)}
+      onBlur={() => setLabelQuiet(false)}
+      className={cn(ICON_BUTTON, '-my-1')}
+    >
       <History aria-hidden className="h-4 w-4" />
     </button>
   );
 
   if (phone) {
     return (
-      <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
-        <HoverLabel label="Versions history">
+      <DialogPrimitive.Root open={open} onOpenChange={openChange}>
+        <HoverLabel label="Versions history" quiet={open || labelQuiet}>
           <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>
         </HoverLabel>
         <DialogPrimitive.Portal>
@@ -186,8 +198,8 @@ export function HistoryButton({ onRestore, ...list }: HistoryProps) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <HoverLabel label="Versions history">
+    <Popover open={open} onOpenChange={openChange}>
+      <HoverLabel label="Versions history" quiet={open || labelQuiet}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       </HoverLabel>
       <PopoverContent

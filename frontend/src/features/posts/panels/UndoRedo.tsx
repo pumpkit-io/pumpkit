@@ -1,6 +1,6 @@
 import { Redo2, Undo2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { HoverLabel } from './HoverLabel';
+import { HoverLabel } from '@/features/posts/HoverLabel';
 import { ICON_BUTTON } from './iconButton';
 
 /** The Post card's undo and redo, each disabled at its end of the undo line. */

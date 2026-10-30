@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
-import { HOVER_LABEL_DELAY_MS } from '@/features/posts/panels/HoverLabel';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { track } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 
 const COPIED_MS = 2000;
 
-/** Copy as an icon: a check for two seconds once copied, and a way out when the browser refuses. */
+/** Copy as an icon, inside `HoverLabels`: a check for two seconds once copied, and a way out when the browser refuses. */
 export function CopyTextButton({ text, disabled = false }: { text: string; disabled?: boolean }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [hovered, setHovered] = useState(false);
@@ -30,7 +29,7 @@ export function CopyTextButton({ text, disabled = false }: { text: string; disab
 
   const Icon = state === 'copied' ? Check : Copy;
   return (
-    <TooltipProvider delayDuration={HOVER_LABEL_DELAY_MS}>
+    <>
       <Tooltip
         open={hovered || state === 'failed'}
         onOpenChange={(open) => {
@@ -63,6 +62,6 @@ export function CopyTextButton({ text, disabled = false }: { text: string; disab
       <span role="status" className="sr-only">
         {state === 'copied' ? 'Copied' : ''}
       </span>
-    </TooltipProvider>
+    </>
   );
 }
