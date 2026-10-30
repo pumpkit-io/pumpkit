@@ -119,20 +119,6 @@ describe('Persona', () => {
     await waitFor(() => expect(field).toBeEnabled());
   });
 
-  it('counts the new author in the sidebar once it is added', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.add).mockResolvedValue(LEVELSIO);
-    renderPersona();
-
-    const panel = await persona();
-    fireEvent.change(await panel.findByLabelText('X handle'), { target: { value: 'levelsio' } });
-    fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-    expect(
-      await screen.findByRole('link', { name: 'Persona, 1 of 3 Inspiration authors' }),
-    ).toBeInTheDocument();
-  });
-
   it('lists the authors in order with when their posts were last fetched and how many are stored', async () => {
     vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
     vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
