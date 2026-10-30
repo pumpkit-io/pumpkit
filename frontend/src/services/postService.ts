@@ -263,11 +263,20 @@ export const postService = {
     const { data } = await apiService.post<PostApi>('/posts', { brief, format });
     return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
   },
-  /** Writes the next Version from Feedback before answering, which can take a minute or two. */
-  addVersion: async (postId: string, feedback: string, format: Format): Promise<Version> => {
+  /**
+   * Writes the next Version from Feedback on the Text before answering, which can take a minute
+   * or two. `text` is every Part on screen: the server refuses it while an edit isn't saved yet.
+   */
+  addVersion: async (
+    postId: string,
+    feedback: string,
+    format: Format,
+    text: string[],
+  ): Promise<Version> => {
     const { data } = await apiService.post<VersionApi>(`/posts/${postId}/versions`, {
       feedback,
       format,
+      text,
     });
     return toVersion(data);
   },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { track } from '@/lib/analytics';
 import { xWeightedLength } from '@/lib/xLength';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
@@ -70,6 +70,13 @@ export function usePost(postId: string) {
     void reload();
   }, [reload]);
 
+  // What Feedback is given on: the Text on screen, which the server checks it has saved.
+  const shownText = useRef<string[]>([]);
+  useEffect(() => {
+    if (load.kind === 'loaded')
+      shownText.current = (load.post.text?.parts ?? []).map((p) => p.text);
+  }, [load]);
+
   const update = useCallback((change: (post: PostDetail) => PostDetail) => {
     setLoad((current) =>
       current.kind === 'loaded' ? { kind: 'loaded', post: change(current.post) } : current,
@@ -101,7 +108,7 @@ export function usePost(postId: string) {
       }
       track('post_version_requested', { kind: 'feedback' });
       try {
-        const version = await postService.addVersion(postId, feedback, format);
+        const version = await postService.addVersion(postId, feedback, format, shownText.current);
         update((post) =>
           post.id === postId
             ? { ...post, versions: [...post.versions, version], text: textOf(version) }
