@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from httpx import AsyncClient
 
+from pumpkit.auth.models import User
 from pumpkit.x_connection.x_publisher import XAccount
 
 X_CONNECTION = "/api/v1/x-connection"
@@ -90,18 +91,18 @@ async def test_using_the_x_photo_makes_it_the_user_s_photo_and_ends_the_offer(
 
 
 async def test_using_the_x_photo_marks_the_photo_chosen(
-    client, subscribed, fake_x_publisher, fake_photo_fetcher, clock
+    client, db_session_maker, user, subscribed, fake_x_publisher, fake_photo_fetcher, clock
 ):
     _x_account_with_photo(fake_x_publisher)
     fake_photo_fetcher.photos[X_PHOTO] = X_PHOTO_DATA_URL
     await _connect(client)
+
     await client.post(USE_PHOTO)
-    await client.patch(PROFILE, json={"avatar_data_url": None})
-    await client.delete(X_CONNECTION)
 
-    reconnected = await _connect(client)
-
-    assert reconnected.json()["offer_photo"] is False
+    # Read from the database: with a Photo in place, the marker changes nothing a response shows.
+    async with db_session_maker() as db:
+        stored = await db.get_one(User, user.id)
+    assert stored.photo_chosen_at is not None
 
 
 async def test_not_now_ends_the_offer_for_this_connection(

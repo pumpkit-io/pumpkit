@@ -58,13 +58,7 @@ async def use_photo(
     await choose_photo(db, user, photo_data_url, now)
     await service.answer_photo_offer(db, connection, now=now)
     await db.commit()
-    return UserProfileResponse(
-        id=user.id,
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        avatar_data_url=user.avatar_data_url,
-    )
+    return UserProfileResponse.model_validate(user)
 
 
 async def decline_photo(db: AsyncSession, user: User, now: datetime) -> None:

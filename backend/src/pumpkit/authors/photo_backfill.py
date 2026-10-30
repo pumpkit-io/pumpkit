@@ -37,11 +37,11 @@ async def backfill_author_photos(
         try:
             photo_url = (await reader.fetch_recent_posts(handle)).photo_url
         except XReaderError as error:
-            logger.warning(f"Skipped @{handle}'s photo: {error}")
+            logger.warning("Skipped @%s's photo: %s", handle, error)
             skipped += 1
             continue
         if photo_url is None:
-            logger.warning(f"Skipped @{handle}'s photo: X returned none")
+            logger.warning("Skipped @%s's photo: X returned none", handle)
             skipped += 1
             continue
         # A commit per handle keeps what was filled if a later one interrupts the run.
@@ -57,7 +57,9 @@ async def main() -> None:
         result = await backfill_author_photos(
             _db_session_handler.async_session_maker, get_x_reader()
         )
-        logger.info(f"Author photo backfill done: {result.filled} filled, {result.skipped} skipped")
+        logger.info(
+            "Author photo backfill done: %s filled, %s skipped", result.filled, result.skipped
+        )
     finally:
         await _db_session_handler.async_engine.dispose()
 

@@ -166,7 +166,6 @@ async def listed_handles_without_photo(db: AsyncSession) -> list[str]:
 
 async def store_photo(db: AsyncSession, *, handle: str, photo_url: str) -> None:
     """Set the fetched `handle`'s photo, leaving when it was last fetched alone. Flushes."""
-    fetch = await db.get(AuthorFetch, handle)
-    if fetch is not None:
-        fetch.photo_url = photo_url
-        await db.flush()
+    fetch = await db.get_one(AuthorFetch, handle)
+    fetch.photo_url = photo_url
+    await db.flush()

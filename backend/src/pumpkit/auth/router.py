@@ -141,13 +141,7 @@ async def logout(request: Request, db: AsyncSession = Depends(get_async_db)) -> 
 async def get_current_user_profile(
     current_user: User = Depends(get_current_user),
 ) -> UserProfileResponse:
-    return UserProfileResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        avatar_data_url=current_user.avatar_data_url,
-    )
+    return UserProfileResponse.model_validate(current_user)
 
 
 @router.patch(
@@ -170,13 +164,7 @@ async def update_current_user_profile(
     await db.commit()
     await db.refresh(current_user)
 
-    return UserProfileResponse(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        avatar_data_url=current_user.avatar_data_url,
-    )
+    return UserProfileResponse.model_validate(current_user)
 
 
 # Listing and revoking need only the Session, so a User whose Subscription ended can revoke a key.

@@ -7,7 +7,9 @@ from pumpkit.core.photos import MAX_PHOTO_DATA_URL_LENGTH, PHOTO_DATA_URL_PATTER
 
 
 class UserProfileResponse(BaseModel):
-    """The current User's basic profile."""
+    """The current User's basic profile, built from the User with `model_validate`."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     email: EmailStr

@@ -80,3 +80,20 @@ async def test_a_second_run_reads_nothing_from_x(
 
     assert result == BackfillResult(filled=0, skipped=0)
     assert fake_x_reader.calls == []
+
+
+async def test_a_second_run_retries_only_the_handles_the_first_skipped(
+    client, db_session_maker, subscribed, fake_x_reader
+):
+    await _add_authors_listed_before_photos(client, fake_x_reader, "levelsio", "paulg")
+    fake_x_reader.photos["paulg"] = PAULG_PHOTO
+    await backfill_author_photos(db_session_maker, fake_x_reader)
+    fake_x_reader.calls.clear()
+    fake_x_reader.photos["levelsio"] = LEVELSIO_PHOTO
+
+    result = await backfill_author_photos(db_session_maker, fake_x_reader)
+
+    assert result == BackfillResult(filled=1, skipped=0)
+    assert fake_x_reader.calls == ["levelsio"]
+    after = (await client.get(AUTHORS)).json()["data"]
+    assert [author["photo_url"] for author in after] == [LEVELSIO_PHOTO, PAULG_PHOTO]

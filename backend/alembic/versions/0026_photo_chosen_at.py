@@ -1,7 +1,7 @@
 """add the Photo chosen marker to users
 
-A User with no Photo and no marker is one Pumpkit may give a Photo from their Google account.
-Every existing User with a Photo chose it, so they get the marker.
+Pumpkit fills a Photo on its own only while a User has neither a Photo nor the marker.
+Every existing Photo was chosen, so its User gets the marker.
 
 Revision ID: 0026
 Revises: 0025
