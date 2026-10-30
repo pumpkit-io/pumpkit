@@ -29,8 +29,11 @@ class FeedbackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     feedback: str = Field(..., max_length=FEEDBACK_MAX_CHARS)
-    # None keeps the latest Version's Format.
+    # None keeps the Text's Format.
     format: Optional[Format] = None
+    # The Text's Parts as the sender shows them. When set, Feedback is refused unless they are the
+    # saved Text, so it never rewrites a Text without the User's latest edit.
+    text: Optional[list[str]] = None
 
     @field_validator("feedback")
     @classmethod
@@ -55,6 +58,15 @@ class PartResponse(BaseModel):
     char_limit: int
 
 
+class StartingTextResponse(BaseModel):
+    """The Post's Text a Feedback was given on, when it differed from the Version before."""
+
+    format: Format
+    parts: list[PartResponse]
+    # The Version that Text came from: the last one written or restored before the Feedback.
+    version_number: int
+
+
 class VersionResponse(BaseModel):
     id: str
     number: int
@@ -65,6 +77,7 @@ class VersionResponse(BaseModel):
     parts: list[PartResponse]
     # What the slop check found in any Part of the text, for the User to judge.
     tells: list[TellResponse]
+    starting_text: Optional[StartingTextResponse]
     created_at: datetime
 
 
@@ -93,6 +106,7 @@ class VersionToolResponse(BaseModel):
     feedback: Optional[str]
     format: Format
     parts: list[PartResponse]
+    starting_text: Optional[StartingTextResponse]
     created_at: datetime
 
 

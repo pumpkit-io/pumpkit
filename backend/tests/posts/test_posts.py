@@ -60,6 +60,7 @@ async def test_starting_a_post_returns_it_with_its_first_version(
             "format": "post",
             "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
             "tells": [],
+            "starting_text": None,
             "created_at": "2026-10-10T12:00:30Z",
         }
     ]
@@ -89,6 +90,7 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
             "format",
             "parts",
             "tells",
+            "starting_text",
             "created_at",
         }
         assert "sketch" not in str(version)

@@ -203,6 +203,7 @@ async def test_the_revision_call_renders_each_final_in_its_own_format_and_states
         _user("ship small things"),
         _assistant("final 1"),
         _user(
+            "That was Version 1.\n\n"
             "Rewrite the post you just wrote as a thread, according to this feedback. Keep "
             "what it says and how it says it wherever the feedback does not ask for a change, "
             "spread over the parts the thread needs, and return the whole thread.\n\n"
@@ -210,6 +211,7 @@ async def test_the_revision_call_renders_each_final_in_its_own_format_and_states
         ),
         _assistant(THREAD_FINAL),
         _user(
+            "That was Version 2.\n\n"
             "Change the thread you just wrote according to this feedback, and change nothing "
             "else. Keep every part the feedback does not ask about exactly as it is, and return "
             "the whole thread rather than only the part that changed.\n\n"
@@ -217,6 +219,7 @@ async def test_the_revision_call_renders_each_final_in_its_own_format_and_states
         ),
         _assistant('<part number="1">\nfinal a\n</part>\n\n<part number="2">\nfinal b2\n</part>'),
         _user(
+            "That was Version 3.\n\n"
             "Rewrite the thread you just wrote as a single post, according to this feedback. "
             "Keep what it says and how it says it wherever the feedback does not ask for a "
             "change and one post has room for it, and return the whole post.\n\n"
@@ -301,6 +304,32 @@ async def test_the_revision_humanizer_gets_the_previous_post_and_the_new_thread_
             "</thread>"
         ),
     ]
+
+
+async def test_feedback_after_restoring_a_thread_keeps_the_texts_format_and_says_so(
+    client, with_author, fake_llm
+):
+    post_id = await _start(client, fake_llm, "thread")
+    fake_llm.replies = [written("one post"), {"post": "final post"}]
+    await _feedback(client, post_id, "condense it", "post")
+    await client.post(f"{POSTS}/{post_id}/versions/1/restore")
+    fake_llm.replies = [written_thread(["c", "d"]), {"parts": ["final c", "final d"]}]
+    fake_llm.calls.clear()
+
+    response = await _feedback(client, post_id, "warmer")
+
+    assert response.json()["format"] == "thread"
+    assert fake_llm.calls[0].messages[0] == _system(sketch_thread_prompt(X_POST_MAX_CHARS))
+    assert fake_llm.calls[0].messages[-1] == _user(
+        "That was Version 2. I went back to Version 1.\n\n"
+        "Change Version 1 according to this feedback, and change nothing else. Keep every part "
+        "the feedback does not ask about exactly as it is, and return the whole thread rather "
+        "than only the part that changed.\n\nThe feedback:\nwarmer"
+    )
+    assert fake_llm.calls[1].messages[4] == _user(
+        "This is the thread as I last saw it, before my latest feedback.\n\n"
+        f"<previous_thread>\n{THREAD_FINAL}\n</previous_thread>"
+    )
 
 
 async def test_an_unknown_feedback_format_returns_422(client, with_author, fake_llm):

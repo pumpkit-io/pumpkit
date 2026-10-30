@@ -256,7 +256,8 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailToolResponse
     Read one of the User's Posts: its Brief, its Text (the text meant for X, with
     `version_number`, the Version it came from, and `edited`, whether the User changed it by hand
     since) and every Version in order, each with the Feedback that made it, its text, each Part's
-    character count and when it was written. `status` is "draft" with no
+    character count, when it was written and its `starting_text`: the Text that Feedback was
+    given on, with the Version it came from, when it wasn't the Version before as written. `status` is "draft" with no
     Scheduled post, else "scheduled", "published" or "failed" from its one Scheduled post,
     returned in `scheduled_post` with its own copy of the Text, which the User may have edited
     since. A Draft has no Scheduled post, so its Text can be scheduled.
@@ -269,13 +270,14 @@ async def give_feedback(
     call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
 ) -> VersionToolResponse:
     """
-    Give Feedback in plain words on the latest Version of one of the User's Posts, such as
-    "shorter", "end with a question" or "make Part 3 punchier", and write its next Version,
-    keeping the earlier ones. `format` switches the new Version to "post" (a single X post) or
-    "thread"; leave it out to keep the latest Version's Format. Only a Draft or a Failed Post
-    takes Feedback: a scheduled one is edited or deleted first, and a published one is done.
-    Show the User the new Version's text, with every Part and its character count. Takes up to
-    a minute.
+    Give Feedback in plain words on one of the User's Posts, such as "shorter", "end with a
+    question", "make Part 3 punchier" or "like Version 2, with a different hook". It rewrites
+    the Post's Text as it is now, hand edits and a restored Version included, into the next
+    Version, which becomes the Text, keeping the earlier ones. `format` switches the new Version
+    to "post" (a single X post) or "thread"; leave it out to keep the Text's Format. Only a Draft
+    or a Failed Post takes Feedback: a scheduled one is edited or deleted first, and a published
+    one is done. Show the User the new Version's text, with every Part and its character count.
+    Takes up to a minute.
     """
     feedback_request = FeedbackRequest(feedback=feedback, format=format)
     version = await mediator.give_feedback(
