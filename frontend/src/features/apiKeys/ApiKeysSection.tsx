@@ -209,7 +209,7 @@ export function ApiKeysSection() {
   return (
     <SettingsCard
       title="API keys"
-      description="A key lets Claude Code or another MCP client write and schedule posts as you. Creating or revoking one takes effect at once."
+      description="A key lets an MCP client like Claude Code, Codex and Cursor write, edit and schedule posts on your behalf. Creating or revoking a key takes effect immediately."
     >
       {created && <NewKeyReveal created={created} onDone={() => setCreated(null)} />}
 
@@ -221,7 +221,7 @@ export function ApiKeysSection() {
           id="api-key-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Name, like Work laptop"
+          placeholder="Pick a name, like macbook"
           maxLength={80}
           autoComplete="off"
           disabled={creating}
