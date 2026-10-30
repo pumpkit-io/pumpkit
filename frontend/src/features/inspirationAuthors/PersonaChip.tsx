@@ -10,7 +10,7 @@ const CHIP =
 const LABEL = 'Writing in the style of';
 const PHOTO_PX = 24;
 const OVERLAP_PX = 8;
-const MOTION = 'duration-200 ease-out motion-reduce:transition-none';
+const MOTION = 'duration-300 ease-in-out motion-reduce:transition-none';
 
 /** For the page header: whose style Pumpkit writes in, linking to the Persona page. */
 export function PersonaChip() {
@@ -83,7 +83,7 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
         }}
         className={cn(
           CHIP,
-          'absolute right-0 top-0 z-10 max-w-[calc(100vw-4.5rem)] bg-card text-muted-foreground transition-colors md:max-w-[calc(100vw-2rem)]',
+          'absolute right-0 top-0 z-10 w-max max-w-[calc(100vw-4.5rem)] bg-card text-muted-foreground transition-colors md:max-w-[calc(100vw-2rem)]',
           expanded ? 'border-border text-foreground shadow-raised' : 'border-border',
         )}
       >
@@ -107,12 +107,16 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
               </span>
               <span
                 className={cn(
-                  'min-w-0 truncate whitespace-nowrap transition-[max-width,opacity,margin]',
+                  'grid min-w-0 transition-[grid-template-columns,opacity,margin]',
                   MOTION,
                 )}
                 style={handleStyle(expanded)}
               >
-                {handles[index]}
+                <span className="min-w-0 overflow-hidden">
+                  <span className="block max-w-36 truncate whitespace-nowrap">
+                    {handles[index]}
+                  </span>
+                </span>
               </span>
             </span>
           ))}
@@ -125,6 +129,6 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
 // Inline so the collapsed state also holds where no stylesheet loads (the page tests).
 function handleStyle(expanded: boolean): CSSProperties {
   return expanded
-    ? { maxWidth: '9rem', opacity: 1, marginLeft: 4 }
-    : { maxWidth: 0, opacity: 0, marginLeft: 0 };
+    ? { gridTemplateColumns: '1fr', opacity: 1, marginLeft: 4 }
+    : { gridTemplateColumns: '0fr', opacity: 0, marginLeft: 0 };
 }
