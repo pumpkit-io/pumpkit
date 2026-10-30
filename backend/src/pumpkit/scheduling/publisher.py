@@ -72,6 +72,11 @@ async def main() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
 
+    if not settings.PUBLISHER_ENABLED:
+        logger.warning("PUBLISHER_ENABLED is false: the publisher publishes nothing")
+        await stop.wait()
+        return
+
     interval = timedelta(seconds=settings.PUBLISHER_POLL_INTERVAL_SECONDS)
     logger.info(f"Publisher started, polling every {interval.total_seconds():g}s")
     try:

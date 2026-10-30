@@ -124,6 +124,8 @@ class Settings(BaseSettings):
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
 
+    # False keeps the publisher process running without publishing, for dev stacks that share X credentials.
+    PUBLISHER_ENABLED: bool = True
     # How often the publisher process looks for due Scheduled posts.
     PUBLISHER_POLL_INTERVAL_SECONDS: int = Field(default=30, ge=1)
     # Each User's X posts (Parts) per UTC calendar month of publish time (ADR 0006); None is no cap.

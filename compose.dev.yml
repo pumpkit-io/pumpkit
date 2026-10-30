@@ -1,5 +1,6 @@
 # Development stack with bind mounts and hot reload: `docker compose -f compose.dev.yml up --build`.
 # Every service reads the repo root's .env; the app is at http://localhost:5173.
+# scripts/dev-stack runs one copy per worktree: it sets the DEV_* variables below and passes its own -p.
 name: pumpkit-dev
 
 services:
@@ -13,7 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - 5432:5432
+      - ${DEV_DB_BIND:-5432}:5432
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -28,14 +29,19 @@ services:
     # The dev stack always runs locally against its own Postgres, behind the Vite dev server.
     environment: &dev-backend-environment
       ENV: local
-      PUBLIC_URL: http://localhost:5173
+      PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
+      # Read from .env unless scripts/dev-stack overrides them for its safe mode.
+      PUBLISHER_ENABLED: ${PUBLISHER_ENABLED:-true}
+      SMTP_HOST: ${SMTP_HOST:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      POSTHOG_ENABLED: ${POSTHOG_ENABLED:-false}
     volumes:
       - ./backend:/app
       - /app/.venv
     ports:
-      - 8000:8000
+      - ${DEV_API_BIND:-8000}:8000
     depends_on:
       db:
         condition: service_healthy
@@ -68,7 +74,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - 5173:5173
+      - ${DEV_WEB_BIND:-5173}:5173
     depends_on:
       - backend
 

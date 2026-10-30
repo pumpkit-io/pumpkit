@@ -4,8 +4,11 @@ Scheduled posts are made and checked through the HTTP API.
 """
 
 import asyncio
+import os
+import signal
 import subprocess
 import sys
+import threading
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -683,3 +686,29 @@ def test_the_publisher_process_maps_every_model_it_queries():
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
 
     assert result.returncode == 0, result.stderr
+
+
+def test_a_publisher_turned_off_publishes_nothing_and_stops_cleanly():
+    process = subprocess.Popen(
+        [sys.executable, "-m", "pumpkit.scheduling.publisher"],
+        env={**os.environ, "PUBLISHER_ENABLED": "false"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    assert process.stdout is not None
+    # A publisher that ignores the switch keeps polling, so a deadline ends the read.
+    deadline = threading.Timer(20, process.kill)
+    deadline.start()
+    try:
+        for line in process.stdout:
+            if "PUBLISHER_ENABLED is false" in line:
+                break
+        else:
+            pytest.fail("The publisher exited without saying it is turned off")
+        process.send_signal(signal.SIGTERM)
+
+        assert process.wait(timeout=10) == 0
+    finally:
+        deadline.cancel()
+        process.kill()

@@ -3,7 +3,6 @@ import * as path from 'node:path';
 import { runSeedScript } from './backend';
 
 const STORAGE_STATE = path.join(__dirname, 'storageState.json');
-const APP_ORIGIN = 'http://localhost:5173';
 
 function seedUserAndGetToken(): string {
   const out = runSeedScript('seed_user.py');
@@ -12,12 +11,14 @@ function seedUserAndGetToken(): string {
   return match[1];
 }
 
-export default async function globalSetup(_config: FullConfig): Promise<void> {
+export default async function globalSetup(config: FullConfig): Promise<void> {
+  const appOrigin = config.projects[0].use.baseURL;
+  if (!appOrigin) throw new Error('playwright.config.ts sets no baseURL');
   const token = seedUserAndGetToken();
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
-  await page.goto(APP_ORIGIN);
+  await page.goto(appOrigin);
   await page.evaluate((t) => {
     // The frontend Session module's storage shape (`frontend/src/lib/session/store.ts`).
     // Far-future expiry so the frontend never refreshes or signs out mid-suite.

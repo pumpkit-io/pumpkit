@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# Dev stack contract for this repo: up | down | destroy | url | status | logs [service].
+# Drafted from the sdlc dev-stack template; the rules are in that skill's CONTRACT.md.
+set -euo pipefail
+
+# Recorded in docs/agents/dev-stack.md; keep the two in step.
+PROJECT="pumpkit"
+STRATEGY="b"
+PROXY_PORT=1355
+PROXY_TLS=0
+HEALTH_PATH="/api/v1/health"
+HEALTH_TIMEOUT=120
+# compose.dev.yml passes it to the backend as PUBLIC_URL; .env's own PUBLIC_URL is the production one.
+APP_URL_VAR="DEV_PUBLIC_URL"
+
+# Workers that act on the outside world stay off: .env may hold real X, SMTP and PostHog credentials.
+safe_mode_env() {
+  export PUBLISHER_ENABLED=false
+  export SMTP_HOST= EMAIL_FROM=
+  export POSTHOG_ENABLED=false
+}
+
+# Every route change would otherwise rewrite /etc/hosts, which needs root.
+export PORTLESS_SYNC_HOSTS=0
+
+ROOT=$(git rev-parse --show-toplevel)
+STATE_DIR="$ROOT/.sdlc/dev-stack"
+cd "$ROOT"
+
+note() { printf 'dev-stack: %s\n' "$*" >&2; }
+die() { note "$*"; exit 1; }
+
+has_portless() { command -v portless >/dev/null; }
+
+# Any HTTP answer counts, so a proxy in either mode is found on its port.
+proxy_running() {
+  local code
+  code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:$PROXY_PORT/" || true)
+  [ "${code:-000}" != "000" ]
+}
+
+ensure_proxy() {
+  proxy_running && return 0
+  if [ "$PROXY_PORT" -lt 1024 ]; then
+    die "no Portless proxy on port $PROXY_PORT, and starting one there needs sudo; rerun the HTTPS upgrade command in docs/agents/dev-stack.md"
+  fi
+  local tls_flag=--no-tls
+  [ "$PROXY_TLS" = 1 ] && tls_flag=--https
+  portless proxy start -p "$PROXY_PORT" "$tls_flag" </dev/null >&2 || die "could not start the Portless proxy"
+}
+
+# Without Portless, down and destroy still find their names: the Slug rule of the worktrees skill, applied to the branch.
+local_host() {
+  local branch slug=""
+  if [ "$(git rev-parse --absolute-git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then
+    branch=$(git branch --show-current)
+    slug=$(printf '%s' "${branch##*/}" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9-]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//' | cut -c1-63)
+    slug="${slug%-}."
+  fi
+  printf '%s%s.localhost\n' "$slug" "$PROJECT"
+}
+
+# The hostname comes from Portless, so the Slug matches the one portless run derives.
+init_names() {
+  local got=""
+  if has_portless; then
+    got=$(portless get "$PROJECT" </dev/null) || die "portless get $PROJECT failed"
+    HOST=${got#*://}
+    HOST=${HOST%%[:/]*}
+  else
+    HOST=$(local_host)
+  fi
+  ROUTE=${HOST%.localhost}
+  if [ "$ROUTE" = "$PROJECT" ]; then
+    SLUG=""
+  else
+    SLUG=${ROUTE%".$PROJECT"}
+  fi
+  # The Main checkout's names carry no slug, so no branch, not even one ending in main, can share them.
+  if [ -n "$SLUG" ]; then
+    COMPOSE_PROJECT="$PROJECT-$SLUG"
+  else
+    COMPOSE_PROJECT="$PROJECT"
+  fi
+  if [ -n "$got" ] && proxy_running; then
+    DEV_URL=$got
+  else
+    local scheme=http port_part=":$PROXY_PORT"
+    [ "$PROXY_TLS" = 1 ] && scheme=https
+    if { [ "$PROXY_TLS" = 1 ] && [ "$PROXY_PORT" = 443 ]; } || { [ "$PROXY_TLS" = 0 ] && [ "$PROXY_PORT" = 80 ]; }; then
+      port_part=""
+    fi
+    DEV_URL="$scheme://$HOST$port_part"
+  fi
+  # Compose files interpolate it on every command, not only on up.
+  export "$APP_URL_VAR=$DEV_URL"
+}
+
+# In HTTPS mode, trust the Portless CA for this request only.
+curl_ca() {
+  local ca="${PORTLESS_STATE_DIR:-$HOME/.portless}/ca.pem"
+  case "$DEV_URL" in
+    https://*) [ -f "$ca" ] && printf -- '--cacert\n%s\n' "$ca" ;;
+  esac
+  return 0
+}
+
+healthy() {
+  local args=()
+  while IFS= read -r a; do args+=("$a"); done < <(curl_ca)
+  curl -fsS -o /dev/null -m 5 ${args[@]+"${args[@]}"} "$DEV_URL$HEALTH_PATH" 2>/dev/null
+}
+
+wait_healthy() {
+  local deadline=$((SECONDS + HEALTH_TIMEOUT))
+  until healthy; do
+    "${STRATEGY}_alive" || die "the stack exited before it was healthy; see: scripts/dev-stack logs"
+    [ "$SECONDS" -ge "$deadline" ] && die "no healthy answer from $DEV_URL$HEALTH_PATH after ${HEALTH_TIMEOUT}s; see: scripts/dev-stack logs"
+    sleep 1
+  done
+}
+
+# Strategy B: Docker Compose behind portless alias, one Compose project per Slug.
+
+B_COMPOSE_FILE="compose.dev.yml"
+B_WEB_SERVICE="frontend"
+B_WEB_PORT=5173
+# An empty host port lets Docker pick a free one on 127.0.0.1, so stacks never collide.
+export DEV_WEB_BIND=127.0.0.1: DEV_API_BIND=127.0.0.1: DEV_DB_BIND=127.0.0.1:
+
+b_compose() { docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/$B_COMPOSE_FILE" "$@"; }
+
+b_alive() { [ -n "$(b_compose ps -q --status running "$B_WEB_SERVICE" 2>/dev/null)" ]; }
+
+b_up() {
+  # The backend's start.sh migrates; e2e seeds its own User, so there is no seed step.
+  b_compose up -d --build --wait >&2 || die "docker compose up failed; see: scripts/dev-stack logs"
+  # e2e/backend.ts reads it to run seed scripts in this stack.
+  printf '%s\n' "$COMPOSE_PROJECT" >"$STATE_DIR/compose-project"
+  local hostport
+  hostport=$(b_compose port "$B_WEB_SERVICE" "$B_WEB_PORT") || die "$B_WEB_SERVICE does not publish port $B_WEB_PORT"
+  # --force only ever re-points this worktree's own route at its new port.
+  portless alias "$ROUTE" "${hostport##*:}" --force </dev/null >&2
+}
+
+b_down() {
+  b_compose down >&2
+  portless alias --remove "$ROUTE" </dev/null >/dev/null 2>&1 || true
+}
+
+b_destroy() {
+  b_compose down -v --remove-orphans >&2
+  portless alias --remove "$ROUTE" </dev/null >/dev/null 2>&1 || true
+}
+
+b_logs() { b_compose logs --no-color --tail 200 ${1+"$1"}; }
+
+usage() { printf 'usage: scripts/dev-stack up|down|destroy|url|status|logs [service]\n' >&2; }
+
+case "${1:-}" in
+  up)
+    has_portless || die "portless is not installed; run the Portless section of setup-sdlc"
+    ensure_proxy
+    init_names
+    mkdir -p "$STATE_DIR"
+    safe_mode_env
+    "${STRATEGY}_up"
+    wait_healthy
+    printf '%s\n' "$DEV_URL"
+    ;;
+  down)
+    init_names
+    "${STRATEGY}_down"
+    ;;
+  destroy)
+    init_names
+    "${STRATEGY}_destroy"
+    rm -rf "$STATE_DIR"
+    ;;
+  url)
+    init_names
+    printf '%s\n' "$DEV_URL"
+    ;;
+  status)
+    init_names
+    if "${STRATEGY}_alive" && healthy; then
+      echo running
+    else
+      echo stopped
+      exit 3
+    fi
+    ;;
+  logs)
+    init_names
+    "${STRATEGY}_logs" ${2+"$2"}
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
