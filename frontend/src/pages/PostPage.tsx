@@ -15,11 +15,13 @@ import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
 import { PublishedDock } from '@/features/posts/panels/PublishedDock';
 import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
+import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
 import { cardParts, copiedText, textVersionOf } from '@/features/posts/shownText';
 import { TextEditor, type TextChange } from '@/features/posts/TextEditor';
 import type { TextSaveState } from '@/features/posts/useTextAutosave';
+import type { TextTrace, UndoAnnouncement } from '@/features/posts/useUndoLine';
 import { usePost } from '@/features/posts/usePost';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
@@ -67,12 +69,18 @@ function CardPlaceholder() {
   );
 }
 
-/** The in-place editing of the Text, from `usePost`. */
+/** The in-place editing of the Text, with undo and redo, from `usePost`. */
 interface TextEditing {
   onEdit: (texts: string[], change: TextChange) => void;
   save: TextSaveState;
   /** Saves the last edit now; true once the server has it. */
   flush: () => Promise<boolean>;
+  /** Left out at either end of the undo line. */
+  onUndo?: () => void;
+  onRedo?: () => void;
+  trace: TextTrace | null;
+  announcement: UndoAnnouncement | null;
+  rewritesDropped: boolean;
 }
 
 function LoadedPost({
@@ -138,13 +146,17 @@ function LoadedPost({
       edited={post.text?.edited ?? false}
       writing={feedback.isWriting ? latest.number + 1 : null}
       save={edit.save}
+      rewritesDropped={edit.rewritesDropped}
     />
   );
 
   const textChanges = post.status === 'draft' || post.status === 'failed';
-  // Undo and redo (#197) go before History.
+  const editable = textChanges && !!post.text && subscribed === true && !feedback.isWriting;
+  const onUndo = editable ? edit.onUndo : undefined;
+  const onRedo = editable ? edit.onRedo : undefined;
   const tools = (
     <div className="flex shrink-0 items-center gap-0.5">
+      {textChanges && <UndoRedo onUndo={onUndo} onRedo={onRedo} />}
       <HistoryButton
         brief={post.brief}
         versions={post.versions}
@@ -202,11 +214,17 @@ function LoadedPost({
       <TextEditor
         parts={parts}
         texts={post.text?.parts.map((p) => p.text) ?? []}
-        editable={textChanges && !!post.text && subscribed === true && !feedback.isWriting}
+        editable={editable}
         onEdit={edit.onEdit}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        trace={edit.trace}
         busy={feedback.isWriting}
         corner={<CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />}
       />
+      <p role="status" className="sr-only">
+        {edit.announcement && <span key={edit.announcement.key}>{edit.announcement.message}</span>}
+      </p>
     </Page>
   );
 }
@@ -222,6 +240,11 @@ export function PostPage() {
     restoreVersion,
     restoreError,
     editText,
+    undo,
+    redo,
+    trace,
+    announcement,
+    rewritesDropped,
     textSave,
     flushText,
     isWriting,
@@ -236,7 +259,16 @@ export function PostPage() {
         post={load.post}
         feedback={{ isWriting, error, notice, onSend: addFeedback }}
         restore={{ onRestore: (n) => void restoreVersion(n), error: restoreError }}
-        edit={{ onEdit: editText, save: textSave, flush: flushText }}
+        edit={{
+          onEdit: (texts, change) => editText(texts, change.cause),
+          save: textSave,
+          flush: flushText,
+          onUndo: undo,
+          onRedo: redo,
+          trace,
+          announcement,
+          rewritesDropped,
+        }}
         onScheduledPost={setScheduledPost}
       />
     );
