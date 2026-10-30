@@ -109,6 +109,15 @@ class VersionAttempt(Base):
     slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
+    # The Starting text: the Post's Text the Feedback was given on, kept only when it differs from
+    # the Version before. The number is the Version that Text came from.
+    starting_text_format: Mapped[Optional[Format]] = mapped_column(
+        PgEnum(*get_args(Format), name="version_format_enum")
+    )
+    starting_text_parts: Mapped[Optional[list[str]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
+    starting_text_version_number: Mapped[Optional[int]] = mapped_column(Integer)
     error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

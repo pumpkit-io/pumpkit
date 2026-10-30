@@ -449,15 +449,17 @@ async def give_feedback(
     feedback: str,
     format: Optional[Format],
     now: datetime,
+    sent_text: Optional[list[str]] = None,
 ) -> VersionResponse:
     """
-    Write the Post's next Version from Feedback. Only a Draft or a Failed Post takes Feedback,
-    checked again after the model calls in case the Post was scheduled meanwhile.
+    Write the Post's next Version from Feedback on its Text, which the Version then becomes. Only
+    a Draft or a Failed Post takes Feedback, checked again after the model calls in case the Post
+    was scheduled meanwhile. `sent_text`, the Parts the sender shows, must be the saved Text.
     """
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(
-        db, user=user, post=post, format=format, now=now
+        db, user=user, post=post, format=format, sent_text=sent_text, now=now
     )
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
@@ -468,6 +470,7 @@ async def give_feedback(
             next_version.corpus,
             post.brief,
             next_version.earlier,
+            next_version.starting_text,
             feedback,
             next_version.format,
             next_version.char_limit,
@@ -495,6 +498,7 @@ async def give_feedback(
         feedback=feedback,
         written=written,
         now=now,
+        starting_text=next_version.starting_text,
     )
     await db.commit()
     return version_writing.version_response(version, next_version.char_limit)

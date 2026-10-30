@@ -27,12 +27,18 @@ from pumpkit.posts.writing.constants import (
 from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.prompts.brief import brief_message
 from pumpkit.posts.writing.prompts.corpus import context_message
-from pumpkit.posts.writing.prompts.feedback import feedback_message
+from pumpkit.posts.writing.prompts.feedback import (
+    changed_message,
+    feedback_message,
+    went_back_message,
+)
 from pumpkit.posts.writing.prompts.hook import HOOK_NAMES
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
 from pumpkit.posts.writing.prompts.parts import format_text
 from pumpkit.posts.writing.prompts.revision_humanizer import (
+    earlier_feedback_message,
+    hand_written_message,
     latest_feedback_message,
     previous_final_message,
     revised_sketch_message,
@@ -40,6 +46,7 @@ from pumpkit.posts.writing.prompts.revision_humanizer import (
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.posts.writing.scrub import scrub
+from pumpkit.posts.writing.starting_text import StartingText, hand_written_sentences
 
 
 class _HookedWriting(BaseModel):
@@ -122,10 +129,12 @@ _FINAL: dict[Format, type[BaseModel]] = {
 
 @dataclass(frozen=True)
 class EarlierVersion:
+    number: int
     # None for the first Version, which comes from the Brief.
     feedback: Optional[str]
     format: Format
     parts: list[str]
+    starting_text: Optional[StartingText] = None
 
 
 @dataclass(frozen=True)
@@ -189,7 +198,8 @@ def humanizer_messages(
 def revision_humanizer_messages(
     corpus: Corpus,
     brief: str,
-    previous: EarlierVersion,
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
     feedback: str,
     format: Format,
     char_limit: int,
@@ -197,41 +207,84 @@ def revision_humanizer_messages(
 ) -> list[dict]:
     """
     The first Version's prefix in the new Format, then what keeps the humanizer from rewording
-    sentences the Feedback left alone or undoing what it asked for. Earlier asks live on in the
-    previous Version's text, which keeps its own Format.
+    sentences the Feedback left alone, undoing what any Feedback asked for, or rewording what the
+    User wrote by hand. The text the Feedback was given on, the Starting text or else the latest
+    Version's, keeps its own Format.
     """
-    return [
-        *_humanizer_prefix(corpus, brief, format, char_limit),
-        _user(previous_final_message(previous.format, previous.parts)),
-        _user(latest_feedback_message(feedback, previous.format, format)),
-        _user(revised_sketch_message(previous.format, format, sketch_parts)),
-    ]
+    previous = (
+        (earlier[-1].format, earlier[-1].parts)
+        if starting is None
+        else (starting.format, starting.parts)
+    )
+    messages = _humanizer_prefix(corpus, brief, format, char_limit)
+    earlier_feedback = [v.feedback for v in earlier if v.feedback is not None]
+    if earlier_feedback:
+        messages.append(_user(earlier_feedback_message(earlier_feedback)))
+    messages.append(_user(previous_final_message(*previous)))
+    messages.append(_user(latest_feedback_message(feedback, previous[0], format)))
+    hand_written = _hand_written(earlier, starting)
+    if hand_written:
+        messages.append(_user(hand_written_message(hand_written, format)))
+    messages.append(_user(revised_sketch_message(previous[0], format, sketch_parts)))
+    return messages
+
+
+def _hand_written(earlier: Sequence[EarlierVersion], starting: Optional[StartingText]) -> list[str]:
+    if starting is None:
+        return []
+    began_from = next(v for v in earlier if v.number == starting.version_number)
+    return hand_written_sentences(starting, began_from.parts)
+
+
+def _framed_feedback(
+    feedback: str,
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
+    format: Format,
+) -> str:
+    """
+    Feedback given after the last of `earlier`, saying first what the User did to the Text: the
+    same text as an earlier Version reads as going back to it, whatever the edits that led there.
+    """
+    after = earlier[-1]
+    if starting is None:
+        return feedback_message(feedback, after.number, after.format, format)
+    same = [v.number for v in earlier if (v.format, v.parts) == (starting.format, starting.parts)]
+    if same:
+        back_to = starting.version_number if starting.version_number in same else same[-1]
+        return went_back_message(feedback, after.number, back_to, starting.format, format)
+    began_from = None if starting.version_number == after.number else starting.version_number
+    return changed_message(
+        feedback, after.number, began_from, starting.format, starting.parts, format
+    )
 
 
 def revision_messages(
     corpus: Corpus,
     brief: str,
     earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
     feedback: str,
     format: Format,
     char_limit: int,
 ) -> list[dict]:
     """
     The sketch call's conversation continued, under the new Format's prompt: the Brief, each
-    Version's text in its own Format as the model's answer after the Feedback that asked for it, then
-    the new Feedback. A Feedback that switched Format says so. Sketches stay out: the User never
-    reacted to them.
+    Version's text in its own Format as the model's answer after the Feedback that asked for it,
+    then the new Feedback, given on `starting` when the Text isn't the latest Version as written.
+    Each Feedback names the Version before it and says what the User did to the Text, and one that
+    switched Format says so. Sketches stay out: the User never reacted to them.
     """
     messages = sketch_messages(corpus, brief, format, char_limit)
-    previous: Optional[EarlierVersion] = None
-    for version in earlier:
-        if previous is not None and version.feedback is not None:
-            framed = feedback_message(version.feedback, previous.format, version.format)
+    for index, version in enumerate(earlier):
+        if index > 0 and version.feedback is not None:
+            framed = _framed_feedback(
+                version.feedback, earlier[:index], version.starting_text, version.format
+            )
             messages.append(_user(framed))
         content = format_text(version.format, version.parts)
         messages.append({"role": "assistant", "content": content})
-        previous = version
-    messages.append(_user(feedback_message(feedback, earlier[-1].format, format)))
+    messages.append(_user(_framed_feedback(feedback, earlier, starting, format)))
     return messages
 
 
@@ -282,24 +335,26 @@ async def write_next_version(
     corpus: Corpus,
     brief: str,
     earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
     feedback: str,
     format: Format,
     char_limit: int,
 ) -> WrittenVersion:
     """
-    Write the Version after `earlier` in `format`, for an X account whose posts hold up to
+    Write the Version after `earlier` in `format`, from Feedback on `starting` or else the latest
+    Version, for an X account whose posts hold up to
     `char_limit` characters. Raises whatever the LLM port raises, or an
     `LLMError` for a Thread of the wrong length; nothing is stored here.
     """
     revised = await llm.structured(
         model=settings.LLM_REVISING_MODEL,
-        messages=revision_messages(corpus, brief, earlier, feedback, format, char_limit),
+        messages=revision_messages(corpus, brief, earlier, starting, feedback, format, char_limit),
         response_model=_REVISED[format],
         max_tokens=MAX_TOKENS,
     )
     sketch_parts = [scrub(part) for part in _parts_of("revision", revised.parsed)]
     messages = revision_humanizer_messages(
-        corpus, brief, earlier[-1], feedback, format, char_limit, sketch_parts
+        corpus, brief, earlier, starting, feedback, format, char_limit, sketch_parts
     )
     return await _humanize(llm, format, messages, revised, sketch_parts, _hook(revised.parsed))
 

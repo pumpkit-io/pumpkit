@@ -48,18 +48,23 @@ Pumpkit writes X posts in the style of X accounts the User picks, their Inspirat
 
 - A Brief says what a Post is about and what the User thinks about it. Starting a Post from \
 a Brief makes its first Version.
-- Feedback says what to change about the latest Version, and makes the next Version.
+- A Post has one Text, the text meant for X, with one text per Part for a Thread. It is what \
+the User sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
+since the Version it came from.
+- Feedback rewrites the Post's Text as it is, the User's hand edits included, and makes the \
+next Version, which becomes the Text. The writing sees every Version in order, so Feedback such \
+as "like Version 2, with a different hook" works. A Version whose Feedback was given on a Text \
+other than the Version before keeps that Text as its Starting text.
 - Each Version has a Format: a single X post, or a Thread. A Thread is several ordered Parts, \
 each one X post, published on X with each Part replying to the one before. A \
 Post starts as a single X post unless the User asks for a Thread, and Feedback may switch the \
 Format.
-- Each Version has its text, with one text per Part for a Thread. A Post has one Text, the \
-text meant for X, set from each new Version. The Post's Text can become a Scheduled post, \
-published at a chosen time or at once with Post now: `schedule_post` and `post_now` take the \
-Post. A Scheduled post copied from a Thread keeps every Part, in order. Every Scheduled post \
-comes from its Post's Text: there is no typing one by hand.
 - Every Version stays in the Post's History. `restore_version` makes an earlier one the \
-Post's Text again, by its number, without writing a new Version.
+Post's Text again, by its number, without writing a new Version; Feedback then rewrites it.
+- The Post's Text can become a Scheduled post, published at a chosen time or at once with Post \
+now: `schedule_post` and `post_now` take the Post. A Scheduled post copied from a Thread keeps \
+every Part, in order. Every Scheduled post comes from its Post's Text: there is no typing one \
+by hand.
 - A Post goes out once, so it has at most one Scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the Post a Draft again. Only a Draft or a \
 Failed Post takes Feedback: a scheduled or published one doesn't.
