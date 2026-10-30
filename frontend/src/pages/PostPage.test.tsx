@@ -252,7 +252,9 @@ describe('Post page', () => {
       '/posts/drafts',
     );
     expect(
-      (await screen.findByRole('link', { name: 'Persona: @levelsio' })).closest('header'),
+      (await screen.findByRole('link', { name: 'Writing in the style of @levelsio' })).closest(
+        'header',
+      ),
     ).not.toBeNull();
   });
 
@@ -263,7 +265,9 @@ describe('Post page', () => {
     ]);
     renderPost(postWith('the final text'));
 
-    const chip = await screen.findByRole('link', { name: 'Persona: @levelsio, @paulg' });
+    const chip = await screen.findByRole('link', {
+      name: 'Writing in the style of @levelsio, @paulg',
+    });
     expect(chip).toHaveAttribute('href', '/persona');
     expect(chip.querySelector('img')).toHaveAttribute(
       'src',

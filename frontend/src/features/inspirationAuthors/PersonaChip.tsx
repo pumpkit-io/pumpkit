@@ -6,10 +6,12 @@ import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
 
 const CHIP =
-  'inline-flex h-8 items-center gap-2 rounded-full border px-3 font-sans text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'inline-flex h-8 items-center gap-2 rounded-lg border px-3 font-sans text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const LABEL = 'Writing in the style of';
 const PHOTO_PX = 24;
 const OVERLAP_PX = 8;
-const MOTION = 'duration-200 ease-out motion-reduce:transition-none';
+// Not duration-[250ms]: tailwindcss-animate makes it ambiguous, and Tailwind drops it silently.
+const MOTION = '[transition-duration:250ms] ease-in-out motion-reduce:transition-none';
 
 /** For the page header: whose style Pumpkit writes in, linking to the Persona page. */
 export function PersonaChip() {
@@ -59,13 +61,13 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
   return (
     <div className="relative h-8 shrink-0">
       <span aria-hidden className={cn(CHIP, 'invisible border-transparent')}>
-        <span className="font-medium">Persona</span>
+        <span className="font-medium max-sm:hidden">{LABEL}</span>
         <span style={{ width: restStackPx }} />
       </span>
       <Link
         ref={chipRef}
         to="/persona"
-        aria-label={`Persona: ${handles.join(', ')}`}
+        aria-label={`${LABEL} ${handles.join(', ')}`}
         onPointerEnter={(event) => event.pointerType === 'mouse' && setHovered(true)}
         onPointerLeave={(event) => event.pointerType === 'mouse' && setHovered(false)}
         onFocus={() => setFocused(true)}
@@ -82,14 +84,12 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
         }}
         className={cn(
           CHIP,
-          'absolute right-0 top-0 z-10 max-w-[calc(100vw-4.5rem)] bg-card text-muted-foreground transition-colors md:max-w-[calc(100vw-2rem)]',
+          'absolute right-0 top-0 z-10 w-max max-w-[calc(100vw-4.5rem)] bg-card text-muted-foreground transition-colors md:max-w-[calc(100vw-2rem)]',
           expanded ? 'border-border text-foreground shadow-raised' : 'border-border',
         )}
       >
-        {/* A phone lacks room for the label beside three handles; the accessible name keeps it. */}
-        <span className={cn('shrink-0 font-medium text-foreground', expanded && 'max-sm:hidden')}>
-          Persona
-        </span>
+        {/* A phone lacks room for the label beside the page title; the accessible name keeps it. */}
+        <span className="shrink-0 font-medium text-foreground max-sm:hidden">{LABEL}</span>
         <span className="flex min-w-0 items-center">
           {authors.map((author, index) => (
             <span
@@ -106,12 +106,16 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
               </span>
               <span
                 className={cn(
-                  'min-w-0 truncate whitespace-nowrap transition-[max-width,opacity,margin]',
+                  'grid min-w-0 transition-[grid-template-columns,opacity,margin]',
                   MOTION,
                 )}
                 style={handleStyle(expanded)}
               >
-                {handles[index]}
+                <span className="min-w-0 overflow-hidden">
+                  <span className="block max-w-36 truncate whitespace-nowrap">
+                    {handles[index]}
+                  </span>
+                </span>
               </span>
             </span>
           ))}
@@ -124,6 +128,6 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
 // Inline so the collapsed state also holds where no stylesheet loads (the page tests).
 function handleStyle(expanded: boolean): CSSProperties {
   return expanded
-    ? { maxWidth: '9rem', opacity: 1, marginLeft: 4 }
-    : { maxWidth: 0, opacity: 0, marginLeft: 0 };
+    ? { gridTemplateColumns: '1fr', opacity: 1, marginLeft: 4 }
+    : { gridTemplateColumns: '0fr', opacity: 0, marginLeft: 0 };
 }
