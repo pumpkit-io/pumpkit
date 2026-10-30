@@ -13,20 +13,32 @@ interface Opened {
 }
 
 function read(now: number): Opened[] {
-  const value = storage.get<unknown>('recent-drafts', []);
+  let value: unknown;
+  try {
+    value = storage.get<unknown>('recent-drafts', []);
+  } catch {
+    // Blocked storage leaves the list empty rather than breaking the Drafts tab.
+    return [];
+  }
   if (!Array.isArray(value)) return [];
   return value
-    .filter(
-      (o): o is Opened =>
-        typeof o?.id === 'string' && typeof o?.at === 'number' && now - o.at < RECENT_DRAFT_TTL_MS,
-    )
+    .filter((o): o is Opened => {
+      if (typeof o?.id !== 'string' || typeof o?.at !== 'number') return false;
+      // A negative age means the clock was ahead when it was recorded.
+      const age = now - o.at;
+      return age >= 0 && age < RECENT_DRAFT_TTL_MS;
+    })
     .slice(0, RECENT_DRAFTS_MAX);
 }
 
 /** Puts the Draft at the top of Recently opened, dropping the oldest past the limit. */
 export function recordDraftOpened(id: string, now = Date.now()): void {
   const kept = read(now).filter((o) => o.id !== id);
-  storage.set('recent-drafts', [{ id, at: now }, ...kept].slice(0, RECENT_DRAFTS_MAX));
+  try {
+    storage.set('recent-drafts', [{ id, at: now }, ...kept].slice(0, RECENT_DRAFTS_MAX));
+  } catch {
+    // Full or blocked storage must not stop the Post page from opening.
+  }
 }
 
 /** The Posts under Recently opened, most recently opened first; some may no longer be Drafts. */
