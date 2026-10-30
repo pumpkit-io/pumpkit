@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
+import { HOVER_LABEL_DELAY_MS } from '@/features/posts/panels/HoverLabel';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { track } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -9,6 +10,7 @@ const COPIED_MS = 2000;
 /** Copy as an icon: a check for two seconds once copied, and a way out when the browser refuses. */
 export function CopyTextButton({ text, disabled = false }: { text: string; disabled?: boolean }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
     if (state !== 'copied') return;
@@ -28,11 +30,12 @@ export function CopyTextButton({ text, disabled = false }: { text: string; disab
 
   const Icon = state === 'copied' ? Check : Copy;
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={HOVER_LABEL_DELAY_MS}>
       <Tooltip
-        open={state === 'failed'}
+        open={hovered || state === 'failed'}
         onOpenChange={(open) => {
-          if (!open) setState('idle');
+          setHovered(open);
+          if (!open && state === 'failed') setState('idle');
         }}
       >
         <TooltipTrigger asChild>
@@ -49,9 +52,13 @@ export function CopyTextButton({ text, disabled = false }: { text: string; disab
             <Icon className="h-4 w-4" aria-hidden />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="left" className="max-w-56 text-[13px]">
-          Couldn&apos;t copy. Select the text and copy it yourself.
-        </TooltipContent>
+        {state === 'failed' ? (
+          <TooltipContent side="left" className="max-w-56 text-[13px]">
+            Couldn&apos;t copy. Select the text and copy it yourself.
+          </TooltipContent>
+        ) : (
+          <TooltipContent>Copy post</TooltipContent>
+        )}
       </Tooltip>
       <span role="status" className="sr-only">
         {state === 'copied' ? 'Copied' : ''}

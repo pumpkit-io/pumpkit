@@ -8,6 +8,7 @@ import { shortTimeAgo } from '@/lib/relativeTime';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import { cn } from '@/lib/utils';
 import type { Version } from '@/services/postService';
+import { HoverLabel } from './HoverLabel';
 import { ICON_BUTTON } from './iconButton';
 
 const HISTORY_BILLING_SOURCE = 'post_history_restore';
@@ -160,7 +161,9 @@ export function HistoryButton({ onRestore, ...list }: HistoryProps) {
   if (phone) {
     return (
       <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
-        <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>
+        <HoverLabel label="Versions history">
+          <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>
+        </HoverLabel>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none" />
           <DialogPrimitive.Content
@@ -184,7 +187,9 @@ export function HistoryButton({ onRestore, ...list }: HistoryProps) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <HoverLabel label="Versions history">
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      </HoverLabel>
       <PopoverContent
         side="bottom"
         align="end"

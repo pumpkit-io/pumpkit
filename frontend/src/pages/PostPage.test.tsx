@@ -423,6 +423,18 @@ describe('Post page', () => {
       expect(card.getByText('the final text, edited')).toBeInTheDocument();
       expect(card.getByText('22 / 280')).toBeInTheDocument();
     });
+
+    it.each([
+      ['History', 'Versions history'],
+      ['Copy post', 'Copy post'],
+    ])('labels %s on hover', async (button, label) => {
+      renderPost(postWith('the final text'));
+      const card = await textCard();
+
+      fireEvent.pointerMove(card.getByRole('button', { name: button }), { pointerType: 'mouse' });
+
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(label);
+    });
   });
 
   describe('Copy', () => {
