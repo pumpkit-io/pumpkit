@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -58,6 +58,7 @@ import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import { billingService } from '@/services/billingService';
 import {
   postService,
+  type PostDetail,
   type PostCounts,
   type PostListItem,
   type PostsPage,
@@ -135,6 +136,7 @@ async function row(name: string | RegExp) {
 
 describe('Posts page', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue({
@@ -484,5 +486,129 @@ describe('Posts page', () => {
     fireEvent.click(alert.getByRole('button', { name: 'Try again' }));
 
     expect(await row('Back.')).toBeTruthy();
+  });
+
+  describe('Recently opened', () => {
+    function opened(id: string, text: string, extra: Partial<PostDetail> = {}): PostDetail {
+      return {
+        id,
+        brief: 'ship small things',
+        text: { format: 'post', parts: [], versionNumber: 2, edited: false },
+        versions: [1, 2].map((number) => ({
+          id: `${id}_v${number}`,
+          number,
+          feedback: number === 1 ? null : 'punchier',
+          format: 'post' as const,
+          parts: [{ text: `${text} v${number}`, charCount: 10, charLimit: 280 }],
+          createdAt: at(0, 7 + number),
+        })),
+        status: 'draft',
+        scheduledPost: null,
+        ...extra,
+      };
+    }
+
+    /** Opens each Post's page in turn, as the User would before coming back to Drafts. */
+    async function open(...posts: PostDetail[]) {
+      for (const post of posts) {
+        vi.mocked(postService.get).mockResolvedValue(post);
+        renderSignedIn(`/posts/${post.id}`);
+        await screen.findByRole('article', { name: 'Text' });
+        cleanup();
+      }
+    }
+
+    function answer(...posts: PostDetail[]) {
+      vi.mocked(postService.get).mockImplementation(async (id) => {
+        const post = posts.find((p) => p.id === id);
+        if (!post) throw apiError(404, 'Not found');
+        return post;
+      });
+    }
+
+    function section(name: string) {
+      return within(screen.getByRole('region', { name }));
+    }
+
+    it('lists a Draft the User opened above every Draft, as its row in the list shows it', async () => {
+      const post = opened('post_01', 'Revised once.');
+      await open(post);
+      answer(post);
+      renderSignedIn('/posts/drafts');
+
+      const recent = within(
+        await screen.findByRole('region', { name: 'Recently opened' }),
+      ).getByRole('listitem', { name: 'Revised once. v2' });
+      expect(within(recent).getByText('Today')).toBeInTheDocument();
+      expect(within(recent).getByText('9:00 AM')).toBeInTheDocument();
+      expect(within(recent).getByText('Single post · 2 versions')).toBeInTheDocument();
+      expect(
+        section('Recently opened').getByText('Most recently opened first.'),
+      ).toBeInTheDocument();
+      expect(section('All drafts').getByText('Newest version first.')).toBeInTheDocument();
+    });
+
+    it('keeps the three Drafts opened last, the one opened again on top', async () => {
+      const posts = ['One', 'Two', 'Three', 'Four'].map((text, i) => opened(`post_0${i}`, text));
+      const [one, two, three, four] = posts as [PostDetail, PostDetail, PostDetail, PostDetail];
+      await open(one, two, three, four, two);
+      answer(...posts);
+      renderSignedIn('/posts/drafts');
+
+      const recent = within(await screen.findByRole('region', { name: 'Recently opened' }));
+      expect(recent.getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual([
+        'Two v2',
+        'Four v2',
+        'Three v2',
+      ]);
+    });
+
+    it('drops a Draft not opened for 48 hours, and the section with it', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const post = opened('post_01', 'Left alone.');
+        await open(post);
+        answer(post);
+
+        vi.setSystemTime(Date.now() + 47 * 60 * 60 * 1000);
+        renderSignedIn('/posts/drafts');
+        expect(await screen.findByRole('region', { name: 'Recently opened' })).toBeInTheDocument();
+        cleanup();
+
+        vi.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+        vi.mocked(postService.get).mockClear();
+        renderSignedIn('/posts/drafts');
+        expect(await screen.findByText(/No drafts/)).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Recently opened' })).not.toBeInTheDocument();
+        expect(postService.get).not.toHaveBeenCalledWith('post_01');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('leaves out Posts no longer Drafts, and never lists one opened while scheduled', async () => {
+      const kept = opened('post_01', 'Kept');
+      const scheduled = opened('post_02', 'Scheduled since');
+      const deleted = opened('post_03', 'Deleted since');
+      const neverDraft = opened('post_04', 'Opened scheduled', { status: 'scheduled' });
+      await open(kept, scheduled, deleted, neverDraft);
+      answer(kept, { ...scheduled, status: 'scheduled' }, { ...neverDraft, status: 'draft' });
+      renderSignedIn('/posts/drafts');
+
+      const recent = within(await screen.findByRole('region', { name: 'Recently opened' }));
+      expect(recent.getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual([
+        'Kept v2',
+      ]);
+      cleanup();
+
+      answer(kept, scheduled);
+      renderSignedIn('/posts/drafts');
+
+      const back = within(await screen.findByRole('region', { name: 'Recently opened' }));
+      expect(back.getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual([
+        'Scheduled since v2',
+        'Kept v2',
+      ]);
+    });
   });
 });

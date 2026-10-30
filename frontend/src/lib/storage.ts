@@ -1,6 +1,7 @@
 import { APP_SLUG } from './app';
 
-export type StorageKey = 'theme' | 'posthog-identified' | 'session' | 'analytics-consent';
+export type StorageKey =
+  'theme' | 'posthog-identified' | 'session' | 'analytics-consent' | 'recent-drafts';
 
 export function storageKey(key: StorageKey): string {
   return `${APP_SLUG}:${key}`;
