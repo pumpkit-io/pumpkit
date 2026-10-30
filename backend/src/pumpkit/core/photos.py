@@ -1,11 +1,6 @@
 """
-The `PhotoFetcher` port: copies a picture another service holds (Google, Gravatar, X) into a
-data URL that fits a User's Photo. It lives in `core` because auth and the X connection both use it.
-
-It never raises: a missing, oversized or undecodable image, or a failed request, is `None`, and
-callers carry on without a Photo.
-
-Mediators reach it only through `get_photo_fetcher`; tests override it with `FakePhotoFetcher`.
+The `PhotoFetcher` port, in `core` because auth and the X connection both use it. It never
+raises: every failure is `None`, and callers carry on without a Photo.
 """
 
 import asyncio
@@ -15,9 +10,10 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Optional, Protocol
+from urllib.parse import urlsplit
 
 import httpx
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from pumpkit.core.logging import logger
 
@@ -29,6 +25,8 @@ PHOTO_DATA_URL_PATTERN = re.compile(r"data:image/(jpeg|png|webp);base64,[A-Za-z0
 PHOTO_SIZE = 256
 _JPEG_QUALITY = 85
 _TIMEOUT_SECONDS = 5.0
+_DEADLINE_SECONDS = 15.0
+_MAX_REDIRECTS = 3
 _MAX_SOURCE_BYTES = 8 * 1024 * 1024
 # Refuses decompression bombs long before Pillow's own limit of about 179 megapixels.
 _MAX_SOURCE_PIXELS = 40_000_000
@@ -40,61 +38,86 @@ class PhotoFetcher(Protocol):
         ...
 
 
+@dataclass(frozen=True)
 class HttpPhotoFetcher:
     """Downloads over HTTPS, then crops to a centred square of at most `PHOTO_SIZE`, as JPEG."""
 
+    deadline_seconds: float = _DEADLINE_SECONDS
+
     async def fetch(self, url: str) -> Optional[str]:
-        if not url.startswith("https://"):
-            return None
         try:
-            source = await _download(url)
-        except httpx.HTTPError as error:
-            logger.warning("Photo download failed: %s", type(error).__name__)
+            async with asyncio.timeout(self.deadline_seconds):
+                source = await _download(url)
+            if source is None:
+                return None
+            return await asyncio.to_thread(_to_data_url, source)
+        except Exception as error:
+            logger.warning("Photo from %s failed: %s", _host(url), type(error).__name__)
             return None
-        if source is None:
-            return None
-        return await asyncio.to_thread(_to_data_url, source)
 
 
 async def _download(url: str) -> Optional[bytes]:
-    async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS, follow_redirects=True) as client:
-        async with client.stream("GET", url) as response:
-            if response.status_code != 200:
-                logger.warning("Photo download returned %s", response.status_code)
+    async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+        for _ in range(_MAX_REDIRECTS + 1):
+            if not url.startswith("https://"):
+                logger.warning("Photo address is not HTTPS: %s", _host(url))
                 return None
-            if not response.headers.get("Content-Type", "").startswith("image/"):
-                logger.warning("Photo download returned something other than an image")
-                return None
-            body = bytearray()
-            async for chunk in response.aiter_bytes():
-                body.extend(chunk)
-                if len(body) > _MAX_SOURCE_BYTES:
-                    logger.warning("Photo download exceeded %s bytes", _MAX_SOURCE_BYTES)
-                    return None
-            return bytes(body)
+            async with client.stream("GET", url) as response:
+                if response.is_redirect:
+                    url = str(response.next_request.url) if response.next_request else ""
+                    continue
+                return await _read_image(response)
+    logger.warning("Photo download redirected more than %s times", _MAX_REDIRECTS)
+    return None
+
+
+async def _read_image(response: httpx.Response) -> Optional[bytes]:
+    if response.status_code != 200:
+        logger.warning("Photo download returned %s", response.status_code)
+        return None
+    if not response.headers.get("Content-Type", "").startswith("image/"):
+        logger.warning("Photo download returned something other than an image")
+        return None
+    body = bytearray()
+    async for chunk in response.aiter_bytes():
+        body.extend(chunk)
+        if len(body) > _MAX_SOURCE_BYTES:
+            logger.warning("Photo download exceeded %s bytes", _MAX_SOURCE_BYTES)
+            return None
+    return bytes(body)
+
+
+def _host(url: str) -> str:
+    try:
+        return urlsplit(url).hostname or "an address with no host"
+    except ValueError:
+        return "an unparseable address"
 
 
 def _to_data_url(source: bytes) -> Optional[str]:
-    try:
-        with Image.open(io.BytesIO(source)) as image:
-            width, height = image.size
-            if width * height > _MAX_SOURCE_PIXELS:
-                logger.warning("Photo has too many pixels: %sx%s", width, height)
-                return None
-            side = min(width, height)
-            left, top = (width - side) // 2, (height - side) // 2
-            square = image.convert("RGB").crop((left, top, left + side, top + side))
-            if side > PHOTO_SIZE:
-                square = square.resize((PHOTO_SIZE, PHOTO_SIZE), Image.Resampling.LANCZOS)
-            buffer = io.BytesIO()
-            square.save(buffer, format="JPEG", quality=_JPEG_QUALITY)
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as error:
-        logger.warning("Photo could not be decoded: %s", type(error).__name__)
-        return None
+    with Image.open(io.BytesIO(source)) as image:
+        width, height = image.size
+        if width * height > _MAX_SOURCE_PIXELS:
+            logger.warning("Photo has too many pixels: %sx%s", width, height)
+            return None
+        side = min(width, height)
+        left, top = (width - side) // 2, (height - side) // 2
+        square = _on_white(image).crop((left, top, left + side, top + side))
+        if side > PHOTO_SIZE:
+            square = square.resize((PHOTO_SIZE, PHOTO_SIZE), Image.Resampling.LANCZOS)
+        buffer = io.BytesIO()
+        square.save(buffer, format="JPEG", quality=_JPEG_QUALITY)
     data_url = "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
     if len(data_url) > MAX_PHOTO_DATA_URL_LENGTH:
         return None
     return data_url
+
+
+def _on_white(image: Image.Image) -> Image.Image:
+    """JPEG has no transparency: without this, transparent areas of a PNG or webp turn black."""
+    rgba = image.convert("RGBA")
+    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    return Image.alpha_composite(background, rgba).convert("RGB")
 
 
 @dataclass
