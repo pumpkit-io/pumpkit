@@ -150,3 +150,23 @@ async def record_fetch(
         if photo_url is not None:
             fetch.photo_url = photo_url
     await db.flush()
+
+
+async def listed_handles_without_photo(db: AsyncSession) -> list[str]:
+    """Each handle on some User's list whose fetch stored no photo, alphabetically."""
+    result = await db.execute(
+        select(InspirationAuthor.handle)
+        .join(AuthorFetch, AuthorFetch.handle == InspirationAuthor.handle)
+        .where(AuthorFetch.photo_url.is_(None))
+        .distinct()
+        .order_by(InspirationAuthor.handle)
+    )
+    return list(result.scalars())
+
+
+async def store_photo(db: AsyncSession, *, handle: str, photo_url: str) -> None:
+    """Set the fetched `handle`'s photo, leaving when it was last fetched alone. Flushes."""
+    fetch = await db.get(AuthorFetch, handle)
+    if fetch is not None:
+        fetch.photo_url = photo_url
+        await db.flush()
