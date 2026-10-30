@@ -21,6 +21,7 @@ export function FailedDock({
   tools,
   feedback,
   restoreError,
+  prepare,
   onRetried,
 }: {
   scheduledPost: ScheduledPost;
@@ -32,6 +33,8 @@ export function FailedDock({
   tools?: ReactNode;
   feedback: FeedbackSending;
   restoreError?: string | null;
+  /** Saves the User's last edit before "Post to…" opens. */
+  prepare: () => Promise<boolean>;
   onRetried: (scheduledPost: ScheduledPost) => void;
 }) {
   const sender = useRetryFailed(scheduledPost);
@@ -58,6 +61,7 @@ export function FailedDock({
           sender={sender}
           initialWhere={destinationDraftOf(scheduledPost)}
           disabled={feedback.isWriting}
+          prepare={prepare}
           onDone={onRetried}
         />
       }

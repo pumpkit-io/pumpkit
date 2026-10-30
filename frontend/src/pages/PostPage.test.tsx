@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   screen,
   waitFor,
@@ -47,6 +48,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     start: vi.fn(),
     addVersion: vi.fn(),
     restoreVersion: vi.fn(),
+    saveText: vi.fn(),
   },
 }));
 vi.mock('@/services/xConnectionService', () => ({
@@ -79,6 +81,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
+import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from '@/features/posts/useTextAutosave';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
@@ -656,6 +659,224 @@ describe('Post page', () => {
       expect(
         await panel('Failed').findByRole('button', { name: 'V1 · From your Brief' }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('Editing the Text', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.mocked(postService.saveText)
+        .mockReset()
+        .mockImplementation(async (_postId, texts) => ({
+          format: texts.length > 1 ? 'thread' : 'post',
+          parts: texts.map((text) => part(text)),
+          versionNumber: 1,
+          edited: true,
+        }));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function pause(ms = TEXT_SAVE_PAUSE_MS) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    }
+
+    it('edits a Draft in place, counting as the User types, and saves after a pause', async () => {
+      renderPost(postWith('the final text'));
+      const box = (await textCard()).getByRole('textbox', { name: 'Post text' });
+      expect(box).toHaveValue('the final text');
+
+      fireEvent.change(box, { target: { value: 'the final text, edited' } });
+
+      expect((await textCard()).getByText('22 / 280')).toBeInTheDocument();
+      expect(
+        panel('Draft').getByRole('button', { name: 'V1 · From your Brief · edited' }),
+      ).toBeInTheDocument();
+      expect(postService.saveText).not.toHaveBeenCalled();
+      await pause();
+      expect(postService.saveText).toHaveBeenCalledTimes(1);
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['the final text, edited']);
+    });
+
+    it('saves a burst of typing once, and tracks it once', async () => {
+      renderPost(postWith('the final text'));
+      const box = (await textCard()).getByRole('textbox', { name: 'Post text' });
+
+      fireEvent.change(box, { target: { value: 'the final text,' } });
+      await pause(TEXT_SAVE_PAUSE_MS / 2);
+      fireEvent.change(box, { target: { value: 'the final text, again' } });
+      await pause();
+
+      expect(postService.saveText).toHaveBeenCalledTimes(1);
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['the final text, again']);
+      expect(vi.mocked(track).mock.calls.filter(([event]) => event === 'post_text_edited')).toEqual(
+        [['post_text_edited', { format: 'post', part_count: 1 }]],
+      );
+    });
+
+    it('edits each Part of a Thread, keeping its Parts in number and order', async () => {
+      renderPost(threadWith([part('part one'), part('part two')]));
+      const card = await textCard();
+
+      fireEvent.change(card.getByRole('textbox', { name: 'Part 2 text' }), {
+        target: { value: 'part two, edited' },
+      });
+      await pause();
+
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', [
+        'part one',
+        'part two, edited',
+      ]);
+      expect(card.getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2);
+    });
+
+    it('locks the Parts of a Failed Thread already live on X', async () => {
+      renderPost(
+        withVersions(
+          withScheduledPost({
+            ...SCHEDULED,
+            state: 'failed',
+            parts: [
+              { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
+              { text: 'Refused two.', live: false, xPostUrl: null },
+            ],
+          }),
+          [version(1, ['Live one.', 'Refused two.']), version(2, ['Rewritten one.', 'New two.'])],
+        ),
+      );
+      const card = await textCard();
+
+      expect(card.queryByRole('textbox', { name: 'Part 1 text' })).not.toBeInTheDocument();
+      fireEvent.change(card.getByRole('textbox', { name: 'Part 2 text' }), {
+        target: { value: 'Fixed two.' },
+      });
+      await pause();
+
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', [
+        'Rewritten one.',
+        'Fixed two.',
+      ]);
+    });
+
+    it('says an edit was not saved and retries it until it is', async () => {
+      vi.mocked(postService.saveText)
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockResolvedValueOnce({
+          format: 'post',
+          parts: [part('edited')],
+          versionNumber: 1,
+          edited: true,
+        });
+      renderPost(postWith('the final text'));
+      const box = (await textCard()).getByRole('textbox', { name: 'Post text' });
+
+      fireEvent.change(box, { target: { value: 'edited' } });
+      await pause();
+
+      expect(await panel('Draft').findByText('Edit not saved. Retrying.')).toBeInTheDocument();
+      await pause(TEXT_SAVE_RETRY_MS);
+      expect(postService.saveText).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(postService.saveText).mock.calls[1]).toEqual(['post_01', ['edited']]);
+      expect(
+        await panel('Draft').findByRole('button', { name: 'V1 · From your Brief · edited' }),
+      ).toBeInTheDocument();
+      expect(panel('Draft').queryByText('Edit not saved. Retrying.')).not.toBeInTheDocument();
+    });
+
+    it('says why an edit was refused, without retrying it', async () => {
+      vi.mocked(postService.saveText).mockRejectedValue(
+        apiError(409, 'This Post is scheduled, so its Text is set.'),
+      );
+      renderPost(postWith('the final text'));
+
+      fireEvent.change((await textCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'edited' },
+      });
+      await pause();
+      await pause(TEXT_SAVE_RETRY_MS * 4);
+
+      expect(
+        await panel('Draft').findByText(
+          'Edit not saved. This Post is scheduled, so its Text is set.',
+        ),
+      ).toBeInTheDocument();
+      expect(postService.saveText).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens "Post to…" only once the edit is saved', async () => {
+      let saved: () => void = () => {};
+      vi.mocked(postService.saveText).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            saved = () =>
+              resolve({ format: 'post', parts: [part('edited')], versionNumber: 1, edited: true });
+          }),
+      );
+      renderPost(postWith('the final text'));
+      fireEvent.change((await textCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'edited' },
+      });
+
+      fireEvent.click(panel('Draft').getByRole('button', { name: 'Post to…' }));
+
+      await waitFor(() => expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']));
+      expect(screen.queryByRole('dialog', { name: 'Post to…' })).not.toBeInTheDocument();
+      expect(panel('Draft').getByRole('button', { name: 'Post to…' })).toHaveAttribute(
+        'aria-busy',
+        'true',
+      );
+      await act(async () => saved());
+      expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
+    });
+
+    it('saves the edit before sending Feedback on it', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['the second text']));
+      renderPost(postWith('the final text'));
+      fireEvent.change((await textCard()).getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'edited' },
+      });
+      fireEvent.change(panel('Draft').getByRole('textbox', { name: 'Feedback' }), {
+        target: { value: 'shorter' },
+      });
+
+      fireEvent.click(panel('Draft').getByRole('button', { name: 'Send Feedback' }));
+
+      expect(await (await textCard()).findByText('the second text')).toBeInTheDocument();
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']);
+      expect(vi.mocked(postService.saveText).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(postService.addVersion).mock.invocationCallOrder[0]!,
+      );
+      await pause();
+      expect(postService.saveText).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a Scheduled and a Published Post read-only', async () => {
+      const { unmount } = renderPost(withScheduledPost(SCHEDULED));
+      expect((await textCard()).queryByRole('textbox')).not.toBeInTheDocument();
+      unmount();
+
+      renderPost(
+        withScheduledPost({
+          ...SCHEDULED,
+          state: 'published',
+          publishedAt: '2026-10-12T07:00:00Z',
+          xPostUrl: 'https://x.com/i/web/status/1',
+        }),
+      );
+      expect((await textCard()).queryByRole('textbox')).not.toBeInTheDocument();
+    });
+
+    it('shows the Text read-only to a User who is not Subscribed', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+      renderPost(postWith('the final text'));
+
+      const card = await textCard();
+      expect(card.getByText('the final text')).toBeInTheDocument();
+      expect(card.queryByRole('textbox')).not.toBeInTheDocument();
     });
   });
 
