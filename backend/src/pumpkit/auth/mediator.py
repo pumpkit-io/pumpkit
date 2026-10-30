@@ -31,6 +31,7 @@ from pumpkit.auth.sign_up_allowlist import EMAIL_NOT_ALLOWED, EmailNotAllowedErr
 from pumpkit.core.config import settings
 from pumpkit.core.errors import report_unexpected_exception
 from pumpkit.core.logging import logger
+from pumpkit.core.photos import PhotoFetcher
 from pumpkit.core.schemas import MessageResponse
 from pumpkit.core.security import (
     decode_payload,
@@ -97,6 +98,7 @@ async def oauth_google_callback(
     request: Request,
     db: AsyncSession,
     google_sign_in: GoogleSignIn,
+    photo_fetcher: PhotoFetcher,
     code: Optional[str],
     state: Optional[str],
     error: Optional[str],
@@ -111,6 +113,7 @@ async def oauth_google_callback(
             request=request,
             db=db,
             google_sign_in=google_sign_in,
+            photo_fetcher=photo_fetcher,
             code=code,
             state=state,
             error=error,
@@ -127,6 +130,7 @@ async def _sign_in_with_google(
     request: Request,
     db: AsyncSession,
     google_sign_in: GoogleSignIn,
+    photo_fetcher: PhotoFetcher,
     code: Optional[str],
     state: Optional[str],
     error: Optional[str],
@@ -165,6 +169,8 @@ async def _sign_in_with_google(
     # One sign-in, one transaction: the User, their Google identity and the
     # Session commit together, or not at all.
     user = await google_identities_service.resolve_user(db, claims)
+    if claims.picture:
+        await _fill_empty_photo(db, user, claims.picture, photo_fetcher)
     result = await sessions.start(
         db,
         user=user,
@@ -177,6 +183,22 @@ async def _sign_in_with_google(
         return result.as_sign_in_redirect()
     await db.commit()
     return result.as_callback_redirect("/oauth/google/callback")
+
+
+async def _fill_empty_photo(
+    db: AsyncSession, user: User, photo_url: str, photo_fetcher: PhotoFetcher
+) -> None:
+    """
+    Copy the photo at `photo_url` into a User who may have one filled. A failed download leaves
+    the Photo empty, so the next sign-in tries again.
+    """
+    if not user_service.may_fill_photo(user):
+        return
+    photo_data_url = await photo_fetcher.fetch(photo_url)
+    if photo_data_url is None:
+        logger.info("No photo copied for User %s", user.id)
+        return
+    await user_service.fill_photo(db, user, photo_data_url)
 
 
 def _state_flow(state: str) -> Optional[str]:
