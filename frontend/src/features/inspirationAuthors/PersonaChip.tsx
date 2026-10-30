@@ -10,6 +10,7 @@ const CHIP =
 const LABEL = 'Writing in the style of';
 const PHOTO_PX = 24;
 const OVERLAP_PX = 8;
+// Not duration-[250ms]: tailwindcss-animate makes it ambiguous, and Tailwind drops it silently.
 const MOTION = '[transition-duration:250ms] ease-in-out motion-reduce:transition-none';
 
 /** For the page header: whose style Pumpkit writes in, linking to the Persona page. */
@@ -60,7 +61,7 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
   return (
     <div className="relative h-8 shrink-0">
       <span aria-hidden className={cn(CHIP, 'invisible border-transparent')}>
-        <span className="font-medium">{LABEL}</span>
+        <span className="font-medium max-sm:hidden">{LABEL}</span>
         <span style={{ width: restStackPx }} />
       </span>
       <Link
@@ -87,10 +88,8 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
           expanded ? 'border-border text-foreground shadow-raised' : 'border-border',
         )}
       >
-        {/* A phone lacks room for the label beside three handles; the accessible name keeps it. */}
-        <span className={cn('shrink-0 font-medium text-foreground', expanded && 'max-sm:hidden')}>
-          {LABEL}
-        </span>
+        {/* A phone lacks room for the label beside the page title; the accessible name keeps it. */}
+        <span className="shrink-0 font-medium text-foreground max-sm:hidden">{LABEL}</span>
         <span className="flex min-w-0 items-center">
           {authors.map((author, index) => (
             <span
