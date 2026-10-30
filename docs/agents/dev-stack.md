@@ -5,7 +5,7 @@
 - Project: `pumpkit`
 - Health URL: `/api/v1/health`
 - e2e: `cd e2e && npm test`
-- Cap: 4
+- Cap: 10
 - Portless: 0.15.12
 - Proxy: HTTP on 1355
 
