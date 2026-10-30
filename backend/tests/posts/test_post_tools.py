@@ -41,7 +41,7 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
 
 
 async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
-    with_author, mcp, fake_llm
+    with_author, mcp, fake_llm, fixed_clock
 ):
     fake_llm.replies = [written("the sketch"), {"post": "the final"}]
 
@@ -60,6 +60,8 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
                 "feedback": None,
                 "format": "post",
                 "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
+                "starting_text": None,
+                "created_at": "2026-10-10T12:00:30Z",
             }
         ],
     }
@@ -108,7 +110,7 @@ async def post_id(with_author, mcp, fake_llm) -> str:
 
 
 async def test_giving_feedback_returns_the_next_versions_final_and_character_count(
-    post_id, mcp, fake_llm
+    post_id, mcp, fake_llm, fixed_clock
 ):
     fake_llm.replies = [written("sketch 2"), {"post": "shorter final"}]
 
@@ -122,6 +124,51 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "feedback": "shorter",
         "format": "post",
         "parts": [{"text": "shorter final", "char_count": 13, "char_limit": X_POST_MAX_CHARS}],
+        "starting_text": None,
+        "created_at": "2026-10-10T12:00:30Z",
+    }
+
+
+async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_web(
+    client, post_id, mcp, fake_llm
+):
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="punchier")
+    await mcp.call_tool("restore_version", post_id=post_id, version_number=1)
+    await client.put(f"/api/v1/posts/{post_id}/text", json={"parts": ["final 1. Mine now."]})
+    fake_llm.replies = [written("sketch 3"), {"post": "final 3"}]
+    fake_llm.calls.clear()
+
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="warmer")
+
+    revision, humanizer = fake_llm.calls
+    assert revision.messages[-1]["content"].startswith(
+        "That was Version 2. I went back to Version 1 and changed it to:\n\n"
+        "<post>\nfinal 1. Mine now.\n</post>\n\nChange my post above according to this feedback"
+    )
+    assert "<sentence>Mine now.</sentence>" in humanizer.messages[6]["content"]
+    starting_text = {
+        "format": "post",
+        "parts": [{"text": "final 1. Mine now.", "char_count": 18, "char_limit": X_POST_MAX_CHARS}],
+        "version_number": 1,
+    }
+    assert result["structuredContent"]["starting_text"] == starting_text
+    post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
+    assert [v["starting_text"] for v in post["versions"]] == [None, None, starting_text]
+    assert (post["text"]["version_number"], post["text"]["edited"]) == (3, False)
+
+
+async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fake_llm):
+    fake_llm.replies = [written("sketch 2"), {"post": "shorter final"}]
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
+
+    text = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["text"]
+
+    assert text == {
+        "format": "post",
+        "parts": [{"text": "shorter final", "char_count": 13, "char_limit": X_POST_MAX_CHARS}],
+        "version_number": 2,
+        "edited": False,
     }
 
 
@@ -201,7 +248,15 @@ async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post
             [{"text": "final two", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
         ),
     ]
-    assert set(post["versions"][0]) == {"id", "number", "feedback", "format", "parts"}
+    assert set(post["versions"][0]) == {
+        "id",
+        "number",
+        "feedback",
+        "format",
+        "parts",
+        "starting_text",
+        "created_at",
+    }
 
 
 @pytest.fixture

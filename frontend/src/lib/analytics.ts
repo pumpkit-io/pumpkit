@@ -110,8 +110,29 @@ export const EVENTS = {
     description:
       'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
   },
+  post_text_edited: {
+    description:
+      "Post page: saved a burst of the User's edits to the Post's Text, once however many retries it took. Props: format (post | thread), part_count (number).",
+  },
+  text_undone: {
+    description:
+      "Post page: undid one step of the Post's Text with the undo button or ⌘Z. Props: step (edit | rewrite | restore).",
+  },
+  text_redone: {
+    description:
+      "Post page: redid one step of the Post's Text with the redo button or ⇧⌘Z. Props: step (edit | rewrite | restore).",
+  },
+  redo_rewrites_dropped: {
+    description:
+      'Post page: an edit after an undo dropped rewrites from redo, which stay in History. Props: count (number).',
+  },
+  version_restored: {
+    description:
+      "Post page: made an earlier Version the Post's Text again. Props: source (history | undo).",
+  },
   post_final_copied: {
-    description: 'Post page: copied the text on screen with Copy post, every Part of it.',
+    description:
+      "Post page: copied the text on screen with the card's copy icon, every Part of it.",
   },
 
   // Posting to X (the Post page and Settings) + the X callback
@@ -123,12 +144,12 @@ export const EVENTS = {
   },
   scheduled_post_created: {
     description:
-      'Post page: created a Scheduled post from a Version. Props: format (post | thread), part_count (number), source (always final: copied from a Version), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).',
+      "Post page: created a Scheduled post from the Post's Text. Props: format (post | thread), part_count (number), source (always final: copied from the Text), post_now (boolean), destination (profile | community), share_with_followers (boolean, only for a Community).",
   },
   // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
   scheduled_post_published: {
     description:
-      'Publisher or Post now: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (always final: copied from a Version), destination (profile | community), share_with_followers (boolean, only for a Community).',
+      'Publisher or Post now: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (always final: copied from the Text), destination (profile | community), share_with_followers (boolean, only for a Community).',
   },
   scheduled_post_failed: {
     description:

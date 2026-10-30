@@ -6,7 +6,7 @@ import sys
 from logging.config import fileConfig
 
 from dotenv import load_dotenv
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import Connection, engine_from_config, pool
 
 from alembic import context
 
@@ -78,7 +78,26 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _run_migrations(connection: Connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        render_as_batch=True,
+        process_revision_directives=process_revision_directives,
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_online() -> None:
+    # The tests run the migrations over a connection of their own.
+    given = config.attributes.get("connection")
+    if given is not None:
+        _run_migrations(given)
+        return
+
     config.set_main_option("sqlalchemy.url", build_connection_url())
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -87,16 +106,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            render_as_batch=True,
-            process_revision_directives=process_revision_directives,
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
+        _run_migrations(connection)
 
 
 if context.is_offline_mode():

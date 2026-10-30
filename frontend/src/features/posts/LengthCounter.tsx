@@ -10,7 +10,7 @@ export function LengthCounter({ length, max }: { length: number; max: number }) 
   return (
     <p
       className={cn(
-        'font-sans text-xs tabular-nums',
+        'font-sans text-[13px] tabular-nums',
         over > 0 ? 'font-medium text-red-700 dark:text-red-300' : 'text-muted-foreground',
       )}
     >

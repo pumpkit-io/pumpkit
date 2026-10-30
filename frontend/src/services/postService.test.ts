@@ -9,6 +9,7 @@ const VERSION = {
   format: 'post',
   parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
   tells: [{ name: 'em_dash', description: 'em dash' }],
+  created_at: '2026-10-10T12:00:30Z',
 };
 
 describe('postService', () => {
@@ -30,15 +31,22 @@ describe('postService', () => {
         format: 'post',
         parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
         tells: [{ name: 'em_dash', description: 'em dash' }],
+        createdAt: '2026-10-10T12:00:30Z',
       },
     ]);
   });
 
-  it("reads a Post's status and its Scheduled post, with the Version it was copied from", async () => {
+  it("reads a Post's Text, its status and its Scheduled post", async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {
         id: 'post_01',
         brief: 'ship',
+        text: {
+          format: 'post',
+          parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
+          version_number: 1,
+          edited: false,
+        },
         versions: [VERSION],
         status: 'failed',
         scheduled_post: {
@@ -49,7 +57,6 @@ describe('postService', () => {
           published_at: null,
           x_post_url: null,
           failed_reason: 'X refused it.',
-          source_version_id: 'version_attempt_01',
           community: null,
           share_with_followers: false,
           created_at: '2026-10-10T12:00:00Z',
@@ -60,6 +67,12 @@ describe('postService', () => {
     const post = await postService.get('post_01');
 
     expect(apiService.get).toHaveBeenCalledWith('/posts/post_01');
+    expect(post.text).toEqual({
+      format: 'post',
+      parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
+      versionNumber: 1,
+      edited: false,
+    });
     expect(post.status).toBe('failed');
     expect(post.versions[0].parts).toEqual([{ text: 'the final', charCount: 9, charLimit: 280 }]);
     expect(post.scheduledPost).toEqual({
@@ -70,10 +83,42 @@ describe('postService', () => {
       publishedAt: null,
       xPostUrl: null,
       failedReason: 'X refused it.',
-      sourceVersionId: 'version_attempt_01',
       community: null,
       shareWithFollowers: false,
       createdAt: '2026-10-10T12:00:00Z',
+    });
+  });
+
+  it("reads a Post's Text with the Version it came from and whether it was edited", async () => {
+    vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        id: 'post_01',
+        brief: 'ship',
+        text: {
+          format: 'thread',
+          parts: [
+            { text: 'one', char_count: 3, char_limit: 280 },
+            { text: 'two', char_count: 3, char_limit: 280 },
+          ],
+          version_number: 2,
+          edited: true,
+        },
+        versions: [VERSION],
+        status: 'draft',
+        scheduled_post: null,
+      },
+    } as never);
+
+    const post = await postService.get('post_01');
+
+    expect(post.text).toEqual({
+      format: 'thread',
+      parts: [
+        { text: 'one', charCount: 3, charLimit: 280 },
+        { text: 'two', charCount: 3, charLimit: 280 },
+      ],
+      versionNumber: 2,
+      edited: true,
     });
   });
 
@@ -82,6 +127,7 @@ describe('postService', () => {
       data: {
         id: 'post_01',
         brief: 'ship',
+        text: null,
         versions: [VERSION],
         status: 'draft',
         scheduled_post: null,
@@ -152,6 +198,27 @@ describe('postService', () => {
       ],
       counts: { draft: 3, scheduled: 0, published: 1, failed: 2 },
       nextOffset: 20,
+    });
+  });
+
+  it('restores a Version by its number and reads back the Text', async () => {
+    vi.spyOn(apiService, 'post').mockResolvedValue({
+      data: {
+        format: 'post',
+        parts: [{ text: 'the first', char_count: 9, char_limit: 280 }],
+        version_number: 1,
+        edited: false,
+      },
+    } as never);
+
+    const text = await postService.restoreVersion('post_01', 1);
+
+    expect(apiService.post).toHaveBeenCalledWith('/posts/post_01/versions/1/restore');
+    expect(text).toEqual({
+      format: 'post',
+      parts: [{ text: 'the first', charCount: 9, charLimit: 280 }],
+      versionNumber: 1,
+      edited: false,
     });
   });
 });

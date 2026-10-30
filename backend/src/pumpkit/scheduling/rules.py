@@ -25,6 +25,14 @@ class LivePartLocked(ConflictError):
     pass
 
 
+def check_parts_written(parts: list[str]) -> None:
+    """Every Part has some text: the User may have left one blank mid-edit."""
+    for number, part in enumerate(parts, start=1):
+        if not part:
+            name = part_name(number, len(parts))
+            raise RuleBroken(f"Write {name} first." if name else "Write the post first.")
+
+
 def check_length(parts: list[str], *, limit: int) -> None:
     """Each Part by X's own count; the refusal names the first Part over the limit."""
     for number, text in enumerate(parts, start=1):
@@ -47,6 +55,16 @@ def check_live_parts_kept(live: list[str], parts: list[str]) -> None:
             raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
     if live and len(parts) == len(live):
         raise LivePartLocked("Keep at least one Part after the ones already on X.")
+
+
+def check_text_keeps_live_parts(live_count: int, before: list[str], after: list[str]) -> None:
+    """
+    An edit of a Failed Thread's Text leaves the Text's Parts in the places of the live ones as
+    they were: those places show what X has, and a retry skips them (ADR 0014).
+    """
+    for number in range(1, min(live_count, len(before), len(after)) + 1):
+        if before[number - 1] != after[number - 1]:
+            raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
 
 
 def check_publish_at(publish_at: Optional[datetime], *, now: datetime) -> datetime:
@@ -95,11 +113,11 @@ def check_month_has_room(count: int, *, adding: int, cap: int, moment: datetime)
 @dataclass(frozen=True)
 class NewScheduledPost:
     """
-    A Scheduled post as the web app or an MCP tool asks for it: the Version whose text it copies,
+    A Scheduled post as the web app or an MCP tool asks for it: the Post whose Text it copies,
     and `publish_at` or `publish_now`.
     """
 
-    version_id: str
+    post_id: str
     publish_at: Optional[datetime] = None
     publish_now: bool = False
     # A Community URL or ID as pasted; None for the User's profile.
@@ -137,8 +155,8 @@ class ScheduledPostEdit:
 
     # Every Part in order, the live ones first and unchanged.
     parts: Optional[list[str]] = None
-    # A Version of the same Post whose text replaces the Parts not live, and which it then copies.
-    version_id: Optional[str] = None
+    # Copy the Post's Text again in place of the Parts not live.
+    copy_text: bool = False
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[datetime] = None
     # Reschedules it for now and publishes it within the request.
@@ -148,13 +166,13 @@ class ScheduledPostEdit:
     share_with_followers: Optional[bool] = None
 
     def __post_init__(self) -> None:
-        if self.parts is not None and self.version_id is not None:
-            raise RuleBroken("Give either the Parts or a Version, not both.")
+        if self.parts is not None and self.copy_text:
+            raise RuleBroken("Give either the Parts or the Post's Text, not both.")
         if self.publish_at is not None and self.publish_now:
             raise RuleBroken("Give either a publish time or publish now, not both.")
         if (
             self.parts is None
-            and self.version_id is None
+            and not self.copy_text
             and self.publish_at is None
             and not self.publish_now
             and isinstance(self.destination, KeepDestination)

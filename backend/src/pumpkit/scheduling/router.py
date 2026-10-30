@@ -12,7 +12,7 @@ from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import FeedbackRequest, VersionResponse
+from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -26,6 +26,7 @@ from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     CommunityLookupRequest,
     CommunityResponse,
+    FeedbackRequest,
     PastCommunitiesResponse,
     PostDetailResponse,
     PostsPageRequest,
@@ -33,6 +34,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostCreateRequest,
     ScheduledPostResponse,
     ScheduledPostUpdateRequest,
+    TextEditRequest,
     XConnectionResponse,
 )
 from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
@@ -123,7 +125,7 @@ async def create_scheduled_post(
 ) -> ScheduledPostResponse:
     """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
     new = NewScheduledPost(
-        version_id=create_request.source_version_id,
+        post_id=create_request.post_id,
         publish_at=create_request.publish_at,
         publish_now=create_request.publish_now,
         community=create_request.community,
@@ -160,7 +162,7 @@ async def edit_scheduled_post(
     """With `publish_now`, publishes on X before answering, as creating one does."""
     edit = ScheduledPostEdit(
         parts=update_request.parts,
-        version_id=update_request.source_version_id,
+        copy_text=update_request.copy_text,
         publish_at=update_request.publish_at,
         publish_now=update_request.publish_now,
         destination=_destination_change(update_request),
@@ -242,4 +244,45 @@ async def give_feedback(
         feedback=feedback_request.feedback,
         format=feedback_request.format,
         now=clock(),
+        sent_text=feedback_request.text,
+    )
+
+
+@posts_router.post(
+    "/posts/{post_id}/versions/{version_number}/restore",
+    response_model=TextResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def restore_version(
+    post_id: str,
+    version_number: int,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> TextResponse:
+    """
+    Makes the Version the Post's Text without writing a new one. A Scheduled or Published Post
+    is refused.
+    """
+    return await mediator.restore_version(
+        db=db, user=current_user, post_id=post_id, version_number=version_number, now=clock()
+    )
+
+
+@posts_router.put(
+    "/posts/{post_id}/text", response_model=TextResponse, status_code=status.HTTP_200_OK
+)
+async def edit_text(
+    post_id: str,
+    edit_request: TextEditRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> TextResponse:
+    """
+    Saves the User's edit of the Post's Text, every Part in order. Idempotent, so the web app
+    retries a failed save as it is. A Scheduled or Published Post is refused.
+    """
+    return await mediator.edit_text(
+        db=db, user=current_user, post_id=post_id, parts=edit_request.parts, now=clock()
     )

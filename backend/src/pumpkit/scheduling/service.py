@@ -50,15 +50,14 @@ async def create(
     user_id: str,
     x_user_id: str,
     post_id: str,
-    source_version_id: str,
     parts: list[str],
     publish_at: datetime,
     now: datetime,
     destination: Destination = Destination(),
 ) -> ScheduledPost:
     """
-    A new Scheduled post in scheduled, copied from the Version `source_version_id` of the Post
-    `post_id`. Flushes, raising IntegrityError when the Post already has one.
+    A new Scheduled post in scheduled, copied from the Text of the Post `post_id`. Flushes,
+    raising IntegrityError when the Post already has one.
     """
     scheduled_post = ScheduledPost(
         user_id=user_id,
@@ -68,7 +67,6 @@ async def create(
         community_set_at=now if destination.community else None,
         publish_at=publish_at,
         post_id=post_id,
-        source_version_id=source_version_id,
         state=SCHEDULED,
         retry_count=0,
         created_at=now,
@@ -205,7 +203,6 @@ async def edit(
     reschedule: Optional[Reschedule],
     now: datetime,
     destination: Optional[Destination] = None,
-    source_version_id: Optional[str] = None,
 ) -> bool:
     """
     Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
@@ -213,11 +210,9 @@ async def edit(
     check in the update keeps a claim by the publisher between the User's read and this write safe.
     A `destination` of None leaves it where it goes; moving it into another Community is a use.
     New `parts` replace every Part not live; the live ones, which open the list, stay as they
-    are with their X post ids. A `source_version_id` points it at the Version they came from.
+    are with their X post ids.
     """
     values: dict[str, object] = {"updated_at": now}
-    if source_version_id is not None:
-        values["source_version_id"] = source_version_id
     if destination is not None:
         community = destination.community
         values.update(_destination_columns(destination))

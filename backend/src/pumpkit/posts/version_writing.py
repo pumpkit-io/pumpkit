@@ -12,11 +12,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
+from pumpkit.core.time import as_utc
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
-from pumpkit.posts.schemas import PartResponse, TellResponse, VersionResponse
+from pumpkit.posts.schemas import (
+    PartResponse,
+    StartingTextResponse,
+    TellResponse,
+    TextResponse,
+    VersionResponse,
+)
 from pumpkit.posts.writing.corpus import Corpus
+from pumpkit.posts.writing.starting_text import StartingText, starting_text
 from pumpkit.posts.writing.versions import EarlierVersion
 from pumpkit.x_connection.x_length import x_post_max_chars, x_weighted_length
 
@@ -81,29 +89,83 @@ async def char_limit_for(db: AsyncSession, *, user_id: str) -> int:
     return x_post_max_chars(connection.subscription_type if connection else None)
 
 
+def _part_responses(parts: list[str], char_limit: int) -> list[PartResponse]:
+    return [
+        PartResponse(text=text, char_count=x_weighted_length(text), char_limit=char_limit)
+        for text in parts
+    ]
+
+
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:
     assert attempt.version_number is not None and attempt.parts is not None
     assert attempt.slop_tells is not None
-    format = attempt.format
     return VersionResponse(
         id=attempt.id,
         number=attempt.version_number,
         feedback=attempt.feedback,
-        format=format,
-        parts=[
-            PartResponse(
-                text=text,
-                char_count=x_weighted_length(text),
-                char_limit=char_limit,
-            )
-            for text in attempt.parts
-        ],
+        format=attempt.format,
+        parts=_part_responses(attempt.parts, char_limit),
         tells=[TellResponse(**tell) for tell in attempt.slop_tells],
+        starting_text=_starting_text_response(attempt, char_limit),
+        created_at=as_utc(attempt.created_at),
     )
 
 
-async def user_post(db: AsyncSession, *, user: User, post_id: str) -> Post:
-    post = await service.get_user_post(db, user_id=user.id, post_id=post_id)
+def _starting_text_response(
+    attempt: VersionAttempt, char_limit: int
+) -> Optional[StartingTextResponse]:
+    starting = stored_starting_text(attempt)
+    if starting is None:
+        return None
+    return StartingTextResponse(
+        format=starting.format,
+        parts=_part_responses(starting.parts, char_limit),
+        version_number=starting.version_number,
+    )
+
+
+def stored_starting_text(attempt: VersionAttempt) -> Optional[StartingText]:
+    if (
+        attempt.starting_text_format is None
+        or attempt.starting_text_parts is None
+        or attempt.starting_text_version_number is None
+    ):
+        return None
+    return StartingText(
+        format=attempt.starting_text_format,
+        parts=list(attempt.starting_text_parts),
+        version_number=attempt.starting_text_version_number,
+    )
+
+
+def post_text(post: Post) -> Optional[StartingText]:
+    """The Post's Text, or None while it has no Version."""
+    if post.text_format is None or post.text_parts is None or post.text_version_number is None:
+        return None
+    return StartingText(
+        format=post.text_format,
+        parts=list(post.text_parts),
+        version_number=post.text_version_number,
+    )
+
+
+def text_response(post: Post, char_limit: int) -> Optional[TextResponse]:
+    """The Post's Text, or None while it has no Version."""
+    text = post_text(post)
+    if text is None:
+        return None
+    return TextResponse(
+        format=text.format,
+        parts=_part_responses(text.parts, char_limit),
+        version_number=text.version_number,
+        edited=post.text_edited,
+    )
+
+
+async def user_post(
+    db: AsyncSession, *, user: User, post_id: str, for_update: bool = False
+) -> Post:
+    post = await service.get_user_post(db, user_id=user.id, post_id=post_id, for_update=for_update)
     if post is None:
         raise NotFoundError("Post not found.")
     return post
@@ -119,6 +181,8 @@ class NextVersion:
 
     corpus: Corpus
     earlier: list[EarlierVersion]
+    # The Post's Text, when it isn't the latest Version as written.
+    starting_text: Optional[StartingText]
     format: Format
     sequence: int
     number: int
@@ -126,23 +190,44 @@ class NextVersion:
 
 
 async def prepare_next_version(
-    db: AsyncSession, *, user: User, post: Post, format: Optional[Format], now: datetime
+    db: AsyncSession,
+    *,
+    user: User,
+    post: Post,
+    format: Optional[Format],
+    sent_text: Optional[list[str]],
+    now: datetime,
 ) -> NextVersion:
     """
-    For Feedback on `post`, in `format` or else the latest Version's, with the corpus the Post
-    started with. Raises when the Post has no Version yet or the User is over the attempt limit.
+    For Feedback on `post`'s Text, in `format` or else the Text's, with the corpus the Post
+    started with, and holds the Text until the Version is recorded. Raises when the Post has no
+    Text yet, when another Version is being written, when `sent_text` isn't the saved Text, or
+    when the User is over the attempt limit.
     """
     versions = versions_of(post)
-    if not versions:
+    text = post_text(post)
+    if not versions or text is None:
         raise ConflictError("This Post has no Version to give Feedback on. Start a new Post.")
+    service.check_not_writing(post, now=now)
+    if sent_text is not None and sent_text != text.parts:
+        raise ConflictError("Your last edit to the Text isn't saved yet. Save it, then try again.")
     await check_attempt_limit(db, user_id=user.id, now=now)
+    latest = versions[-1]
+    service.start_writing(post, now=now)
     return NextVersion(
         corpus=await service.corpus_for_post(db, post=post),
         earlier=[
-            EarlierVersion(feedback=v.feedback, format=v.format, parts=v.parts or [])
+            EarlierVersion(
+                number=v.version_number or 0,
+                feedback=v.feedback,
+                format=v.format,
+                parts=v.parts or [],
+                starting_text=stored_starting_text(v),
+            )
             for v in versions
         ],
-        format=format or versions[-1].format,
+        starting_text=starting_text(text, latest.format, latest.parts or []),
+        format=format or text.format,
         sequence=len(post.attempts) + 1,
         number=len(versions) + 1,
         char_limit=await char_limit_for(db, user_id=user.id),

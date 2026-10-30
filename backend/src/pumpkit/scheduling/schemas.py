@@ -4,7 +4,8 @@ from typing import Annotated, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from pumpkit.posts.formats import Format, part_name
-from pumpkit.posts.schemas import VersionResponse, VersionToolResponse
+from pumpkit.posts.schemas import TextResponse, VersionResponse, VersionToolResponse
+from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
 
@@ -58,8 +59,8 @@ class ScheduledPostCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # The Version whose text the server copies: a Scheduled post is never typed (ADR 0015).
-    source_version_id: str
+    # The Post whose Text the server copies: a Scheduled post is never typed (ADR 0015, 0016).
+    post_id: str
     # A time with its UTC offset, or else publish within the request.
     publish_at: Optional[AwareDatetime] = None
     publish_now: bool = False
@@ -88,8 +89,7 @@ class ScheduledPostResponse(BaseModel):
     x_post_url: Optional[str]
     # Why it Failed, in words for the User.
     failed_reason: Optional[str]
-    # The Version whose text it copied.
-    source_version_id: str
+    # The Post whose Text it copied.
     post_id: str
     # The Community it goes to; None for the User's profile.
     community: Optional[CommunityResponse]
@@ -98,10 +98,12 @@ class ScheduledPostResponse(BaseModel):
 
 
 class PostDetailResponse(BaseModel):
-    """One Post with its Versions in order, and the status its one Scheduled post gives it."""
+    """One Post with its Text, its Versions in order, and the status its Scheduled post gives it."""
 
     id: str
     brief: str
+    # None only for a Post whose first Version failed.
+    text: Optional[TextResponse]
     versions: list[VersionResponse]
     status: PostStatus
     # None while the Post is a Draft.
@@ -113,6 +115,7 @@ class PostDetailToolResponse(BaseModel):
 
     id: str
     brief: str
+    text: Optional[TextResponse]
     versions: list[VersionToolResponse]
     status: PostStatus
     scheduled_post: Optional[ScheduledPostResponse]
@@ -195,8 +198,8 @@ class ScheduledPostUpdateRequest(BaseModel):
 
     # Every Part in order, replacing those not live; live Parts come first, unchanged.
     parts: Optional[Parts] = None
-    # A Version of the same Post: its Parts after the live ones replace those not live.
-    source_version_id: Optional[str] = None
+    # Copy the Post's Text again: its Parts after the live ones replace those not live.
+    copy_text: bool = False
     # A new time reschedules the Scheduled post on the X account connected now.
     publish_at: Optional[AwareDatetime] = None
     # Publishes it within the request, on the X account connected now.
@@ -207,6 +210,32 @@ class ScheduledPostUpdateRequest(BaseModel):
     share_with_followers: Optional[bool] = None
 
     _strip = field_validator("parts")(_strip_parts)
+
+
+class FeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: str = Field(..., max_length=FEEDBACK_MAX_CHARS)
+    # None keeps the Text's Format.
+    format: Optional[Format] = None
+    # The Text's Parts as the sender shows them. When set, Feedback is refused unless they are the
+    # saved Text, so it never rewrites a Text without the User's latest edit.
+    text: Optional[Parts] = None
+
+    @field_validator("feedback")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Write some Feedback first.")
+        return stripped
+
+
+class TextEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Every Part of the Text in order, as typed, so a Part may be blank while the User writes it.
+    parts: Parts
 
 
 class XConnectionResponse(BaseModel):

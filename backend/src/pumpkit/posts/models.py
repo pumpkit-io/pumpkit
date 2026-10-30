@@ -1,7 +1,17 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal, Optional, get_args
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    false,
+)
 from sqlalchemy import Enum as PgEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -28,6 +38,18 @@ class Post(Base):
     # so changing the User's Inspiration authors later doesn't change it.
     corpus_post_ids: Mapped[list[str]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # The Text, set from each new Version; None only while the Post has no Version.
+    text_format: Mapped[Optional[Format]] = mapped_column(
+        PgEnum(*get_args(Format), name="version_format_enum")
+    )
+    text_parts: Mapped[Optional[list[str]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
+    # Versions are never removed, so the number names the one the Text came from for good.
+    text_version_number: Mapped[Optional[int]] = mapped_column(Integer)
+    text_edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # When Feedback's Version started being written, which then becomes the Text; None otherwise.
+    writing_since: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship()
     attempts: Mapped[list["VersionAttempt"]] = relationship(
@@ -88,6 +110,15 @@ class VersionAttempt(Base):
     slop_tells: Mapped[Optional[list[dict]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
+    # The Starting text: the Post's Text the Feedback was given on, kept only when it differs from
+    # the Version before. The number is the Version that Text came from.
+    starting_text_format: Mapped[Optional[Format]] = mapped_column(
+        PgEnum(*get_args(Format), name="version_format_enum")
+    )
+    starting_text_parts: Mapped[Optional[list[str]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
+    starting_text_version_number: Mapped[Optional[int]] = mapped_column(Integer)
     error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

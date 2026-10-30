@@ -83,6 +83,7 @@ const config = {
       boxShadow: {
         raised: 'var(--shadow-raised)',
         panel: 'var(--shadow-panel)',
+        glow: 'var(--shadow-glow)',
       },
       borderRadius: {
         lg: 'var(--radius)',

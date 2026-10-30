@@ -1,6 +1,6 @@
 """
-ADR 0015 through the HTTP API: every Scheduled post is copied from a Version, a Post has at most
-one, and a Scheduled or Published Post takes no Feedback.
+ADR 0015 through the HTTP API: every Scheduled post is copied from its Post's Text, a Post has at
+most one, and a Scheduled or Published Post takes no Feedback.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -45,16 +45,12 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     return started.json()
 
 
-def _version_id(post: dict) -> str:
-    return post["versions"][-1]["id"]
-
-
 async def _give_feedback(client, fake_llm, post: dict, feedback: str = "punchier"):
     fake_llm.replies = [written("sketch next"), {"post": f"Version after {feedback}."}]
     return await client.post(f"/api/v1/posts/{post['id']}/versions", json={"feedback": feedback})
 
 
-async def test_creating_a_scheduled_post_without_a_version_is_refused(
+async def test_creating_a_scheduled_post_without_a_post_is_refused(
     client, subscribed, fixed_clock, connect_x
 ):
     await connect_x()
@@ -68,7 +64,7 @@ async def test_creating_a_scheduled_post_without_a_version_is_refused(
 async def test_typed_parts_are_refused_on_creation(client, post):
     response = await client.post(
         SCHEDULED_POSTS,
-        json={"parts": ["Typed."], "source_version_id": _version_id(post), "publish_at": LATER},
+        json={"parts": ["Typed."], "post_id": post["id"], "publish_at": LATER},
     )
 
     assert response.status_code == 422
@@ -76,14 +72,10 @@ async def test_typed_parts_are_refused_on_creation(client, post):
 
 
 async def test_a_second_scheduled_post_for_the_same_post_is_refused(client, fake_llm, post):
-    first = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_at": LATER}
-    )
+    first = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_at": LATER})
     assert first.status_code == 201, first.text
 
-    again = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_now": True}
-    )
+    again = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_now": True})
 
     assert again.status_code == 409
     assert again.json()["detail"] == ALREADY_SCHEDULED
@@ -92,13 +84,11 @@ async def test_a_second_scheduled_post_for_the_same_post_is_refused(client, fake
 
 async def test_a_published_post_cannot_be_scheduled_again(client, fake_x_publisher, post):
     published = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_now": True}
+        SCHEDULED_POSTS, json={"post_id": post["id"], "publish_now": True}
     )
     assert published.json()["state"] == "published"
 
-    again = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_at": LATER}
-    )
+    again = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_at": LATER})
 
     assert again.status_code == 409
     assert again.json()["detail"] == ALREADY_SCHEDULED
@@ -109,19 +99,13 @@ async def test_a_failed_post_cannot_be_scheduled_again_until_its_scheduled_post_
     client, fake_x_publisher, post
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
-    failed = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_now": True}
-    )
+    failed = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_now": True})
     assert failed.json()["state"] == "failed"
     fake_x_publisher.fail_publish = None
 
-    refused = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_at": LATER}
-    )
+    refused = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_at": LATER})
     deleted = await client.delete(f"{SCHEDULED_POSTS}/{failed.json()['id']}")
-    again = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_at": LATER}
-    )
+    again = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_at": LATER})
 
     assert refused.status_code == 409
     assert refused.json()["detail"] == ALREADY_SCHEDULED
@@ -137,9 +121,7 @@ async def test_feedback_on_a_draft_writes_the_next_version(client, fake_llm, pos
 
 
 async def test_feedback_on_a_scheduled_post_is_refused_naming_the_fix(client, fake_llm, post):
-    await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_at": LATER}
-    )
+    await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_at": LATER})
 
     response = await _give_feedback(client, fake_llm, post)
 
@@ -153,7 +135,7 @@ async def test_feedback_on_a_post_being_published_is_refused_as_scheduled(
 ):
     scheduled = await client.post(
         SCHEDULED_POSTS,
-        json={"source_version_id": _version_id(post), "publish_at": "2026-10-10T12:02:00Z"},
+        json={"post_id": post["id"], "publish_at": "2026-10-10T12:02:00Z"},
     )
     async with db_session_maker() as session:
         fixed_clock.advance(timedelta(minutes=2))
@@ -169,9 +151,7 @@ async def test_feedback_on_a_post_being_published_is_refused_as_scheduled(
 
 
 async def test_feedback_on_a_published_post_is_refused_naming_the_fix(client, fake_llm, post):
-    await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_now": True}
-    )
+    await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_now": True})
 
     response = await _give_feedback(client, fake_llm, post)
 
@@ -183,9 +163,7 @@ async def test_feedback_on_a_failed_post_writes_the_next_version(
     client, fake_llm, fake_x_publisher, post
 ):
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
-    failed = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_now": True}
-    )
+    failed = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_now": True})
     assert failed.json()["state"] == "failed"
 
     response = await _give_feedback(client, fake_llm, post)
@@ -196,14 +174,14 @@ async def test_feedback_on_a_failed_post_writes_the_next_version(
 
 async def test_unscheduling_makes_the_post_a_draft_again(client, fake_llm, post):
     scheduled = await client.post(
-        SCHEDULED_POSTS, json={"source_version_id": _version_id(post), "publish_at": LATER}
+        SCHEDULED_POSTS, json={"post_id": post["id"], "publish_at": LATER}
     )
 
     deleted = await client.delete(f"{SCHEDULED_POSTS}/{scheduled.json()['id']}")
     feedback = await _give_feedback(client, fake_llm, post)
     again = await client.post(
         SCHEDULED_POSTS,
-        json={"source_version_id": feedback.json()["id"], "publish_at": LATER},
+        json={"post_id": post["id"], "publish_at": LATER},
     )
 
     assert deleted.status_code == 204
@@ -232,7 +210,7 @@ async def test_a_post_scheduled_while_its_feedback_version_is_written_does_not_t
                 scheduled_mid_write.append(
                     await client.post(
                         SCHEDULED_POSTS,
-                        json={"source_version_id": _version_id(post), "publish_at": LATER},
+                        json={"post_id": post["id"], "publish_at": LATER},
                     )
                 )
             return await super().structured(**kwargs)

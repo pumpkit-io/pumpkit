@@ -1,159 +1,247 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
+import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
-import { BriefBlock } from '@/features/posts/BriefBlock';
+import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
-import { DraftPanel } from '@/features/posts/panels/DraftPanel';
-import { FailedPanel } from '@/features/posts/panels/FailedPanel';
+import { DraftDock, DraftPostTo } from '@/features/posts/panels/DraftDock';
+import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import type { FeedbackSending } from '@/features/posts/panels/feedback';
-import { PublishedPanel } from '@/features/posts/panels/PublishedPanel';
-import { ScheduledPanel } from '@/features/posts/panels/ScheduledPanel';
+import { LoadingDock } from '@/features/posts/panels/FeedbackDock';
+import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
+import { OriginLine } from '@/features/posts/panels/OriginLine';
+import { PublishedDock } from '@/features/posts/panels/PublishedDock';
+import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
+import { TextHeader } from '@/features/posts/panels/TextHeader';
+import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
-import { hasScheduledPost, postTitle } from '@/features/posts/postStatus';
-import { copiedText, retryParts, shownParts } from '@/features/posts/shownText';
+import { postTitle } from '@/features/posts/postStatus';
+import { cardParts, copiedText, versionOnScreen } from '@/features/posts/shownText';
+import { TextEditor, type TextChange } from '@/features/posts/TextEditor';
+import { X_POST_MAX_CHARS } from '@/lib/xLength';
+import type { TextSaveState } from '@/features/posts/useTextAutosave';
+import type { TextTrace, UndoAnnouncement } from '@/features/posts/useUndoLine';
 import { usePost } from '@/features/posts/usePost';
-import { VersionCard } from '@/features/posts/VersionCard';
-import { VersionPager } from '@/features/posts/VersionPager';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import type { PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
-/** The Version a Post opens on: the one its Scheduled post came from, else the latest. */
-function openingIndex(post: PostDetail): number {
-  // A Failed Post is retried with the latest Version, so it opens there.
-  if (post.status === 'failed') return post.versions.length - 1;
-  const scheduled = post.versions.findIndex((v) => hasScheduledPost(post.scheduledPost, v.id));
-  return scheduled >= 0 ? scheduled : post.versions.length - 1;
-}
+const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
 
-function Page({ title, children }: { title: ReactNode; children: ReactNode }) {
+/**
+ * The dock, when there is one, stays pinned under the Topbar. A `pinned` page holds the Post's
+ * card in the height left, so only the card's Parts scroll; any other page scrolls as a whole.
+ */
+function Page({
+  title,
+  dock,
+  pinned = false,
+  children,
+}: {
+  title: ReactNode;
+  dock?: ReactNode;
+  pinned?: boolean;
+  children: ReactNode;
+}) {
   return (
     <>
       <Topbar title={title} actions={<PersonaChip />} />
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-2xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-          {children}
+      {dock}
+      {pinned ? (
+        <div className="flex min-h-0 flex-1 flex-col bg-background">
+          <div className={`${COLUMN} flex min-h-0 flex-col pb-4 pt-6 sm:pb-6`}>{children}</div>
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto bg-background">
+          <div className={`${COLUMN} space-y-6 py-6 sm:py-8`}>{children}</div>
+        </div>
+      )}
     </>
   );
+}
+
+function CardPlaceholder() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading the Post"
+      className="flex gap-3 rounded-xl border border-border bg-card px-4 py-4 sm:px-5"
+    >
+      <div aria-hidden className="h-10 w-10 shrink-0 rounded-full bg-muted" />
+      <div aria-hidden className="flex-1 space-y-3 pt-1">
+        <div className="h-3 w-40 rounded-full bg-muted" />
+        <div className="h-3 w-full rounded-full bg-muted" />
+        <div className="h-3 w-4/5 rounded-full bg-muted" />
+        <div className="h-3 w-3/5 rounded-full bg-muted" />
+      </div>
+    </div>
+  );
+}
+
+/** The in-place editing of the Text, with undo and redo, from `usePost`. */
+interface TextEditing {
+  onEdit: (texts: string[], change: TextChange) => void;
+  save: TextSaveState;
+  /** Saves the last edit now; true once the server has it. */
+  flush: () => Promise<boolean>;
+  /** Left out at either end of the undo line. */
+  onUndo?: () => void;
+  onRedo?: () => void;
+  trace: TextTrace | null;
+  announcement: UndoAnnouncement | null;
+  rewritesDropped: boolean;
 }
 
 function LoadedPost({
   post,
   feedback,
+  restore,
+  edit,
   onScheduledPost,
 }: {
   post: PostDetail;
   feedback: FeedbackSending;
+  restore: {
+    onRestore: (versionNumber: number) => void;
+    isRestoring: boolean;
+    error: string | null;
+  };
+  edit: TextEditing;
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
   const { connection } = useXConnectionContext();
+  const { subscribed } = useSubscribed();
   const location = useLocation();
-  const [index, setIndex] = useState(() => openingIndex(post));
-  const [editing, setEditing] = useState(
-    () => opensEditing(location.state) && post.scheduledPost?.state === 'scheduled',
-  );
-  const versionCount = useRef(post.versions.length);
-  const navigate = useNavigate();
   const opensEditor = opensEditing(location.state);
+  const [editing, setEditing] = useState(
+    () => opensEditor && post.scheduledPost?.state === 'scheduled',
+  );
+  const navigate = useNavigate();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
   useEffect(() => {
     if (opensEditor) navigate(location.pathname, { replace: true, state: null });
   }, [opensEditor, location.pathname, navigate]);
 
-  // A new Version from Feedback goes on screen as soon as it is in the Post.
-  useEffect(() => {
-    if (post.versions.length > versionCount.current) setIndex(post.versions.length - 1);
-    versionCount.current = post.versions.length;
-  }, [post.versions.length]);
-
-  const shown = post.versions[Math.min(index, post.versions.length - 1)];
+  const textVersion = versionOnScreen(post);
   const latest = post.versions[post.versions.length - 1];
-  if (!shown || !latest) return null;
+  if (!textVersion || !latest) return null;
   const { scheduledPost } = post;
-  const parts = shownParts(shown, scheduledPost, connection?.charLimit ?? null);
-  const text = copiedText(parts);
-  const title = postTitle(scheduledPost?.parts[0]?.text ?? latest.parts[0]?.text ?? post.brief);
+  const charLimit = connection?.charLimit ?? null;
+  const parts = cardParts(post, textVersion, charLimit);
+  const title = postTitle(parts[0]?.text ?? post.brief);
   const breadcrumb = <PostBreadcrumb status={post.status} title={title} />;
 
   if (editing && scheduledPost?.state === 'scheduled') {
-    const source = post.versions.findIndex((v) => v.id === scheduledPost.sourceVersionId);
-    const stopEditing = () => {
-      if (source >= 0) setIndex(source);
-      setEditing(false);
-    };
     return (
       <Page title={breadcrumb}>
-        <BriefBlock brief={post.brief} />
         <ScheduledPostEditor
-          version={post.versions[source] ?? shown}
           scheduledPost={scheduledPost}
-          charLimit={connection?.charLimit ?? shown.parts[0]?.charLimit ?? 280}
+          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
           onSaved={(saved) => {
             onScheduledPost(saved);
-            stopEditing();
+            setEditing(false);
           }}
           onUnscheduled={() => {
             onScheduledPost(null);
-            stopEditing();
+            setEditing(false);
           }}
-          onCancel={stopEditing}
+          onCancel={() => setEditing(false)}
         />
       </Page>
     );
   }
 
+  const origin = (
+    <OriginLine
+      brief={post.brief}
+      version={textVersion}
+      edited={post.text?.edited ?? false}
+      writing={feedback.isWriting ? latest.number + 1 : null}
+      save={edit.save}
+      rewritesDropped={edit.rewritesDropped}
+    />
+  );
+
+  const textChanges = post.status === 'draft' || post.status === 'failed';
+  const editable = textChanges && !!post.text && subscribed === true && !feedback.isWriting;
+  const onUndo = editable ? edit.onUndo : undefined;
+  const onRedo = editable ? edit.onRedo : undefined;
+  const tools = (
+    <div className="flex shrink-0 items-center gap-0.5">
+      {textChanges && <UndoRedo onUndo={onUndo} onRedo={onRedo} />}
+      <HistoryButton
+        brief={post.brief}
+        versions={post.versions}
+        textVersionNumber={textVersion.number}
+        edited={post.text?.edited ?? false}
+        onRestore={
+          textChanges && !feedback.isWriting && !restore.isRestoring ? restore.onRestore : undefined
+        }
+      />
+      <CopyTextButton text={copiedText(parts)} disabled={feedback.isWriting} />
+    </div>
+  );
+
+  let dock: ReactNode = null;
+  let postTo: ReactNode = null;
+  if (post.status === 'draft') {
+    dock = <DraftDock textVersion={textVersion} feedback={feedback} restoreError={restore.error} />;
+    postTo = (
+      <DraftPostTo
+        postId={post.id}
+        textVersion={textVersion}
+        parts={parts}
+        disabled={feedback.isWriting}
+        prepare={edit.flush}
+        onScheduled={onScheduledPost}
+      />
+    );
+  } else if (post.status === 'failed' && scheduledPost) {
+    dock = (
+      <FailedDock
+        scheduledPost={scheduledPost}
+        textVersion={textVersion}
+        feedback={feedback}
+        restoreError={restore.error}
+      />
+    );
+    postTo = (
+      <FailedPostTo
+        scheduledPost={scheduledPost}
+        textVersion={textVersion}
+        retryParts={parts}
+        disabled={feedback.isWriting}
+        prepare={edit.flush}
+        onRetried={onScheduledPost}
+      />
+    );
+  } else if (post.status === 'scheduled' && scheduledPost) {
+    dock = <ScheduledDock scheduledPost={scheduledPost} onEdit={() => setEditing(true)} />;
+  } else if (post.status === 'published' && scheduledPost) {
+    dock = <PublishedDock scheduledPost={scheduledPost} />;
+  }
+
   return (
-    <Page title={breadcrumb}>
-      <BriefBlock brief={post.brief} />
-      <div className="space-y-3">
-        <VersionCard version={shown} parts={parts} />
-        <VersionPager
-          versions={post.versions}
-          index={index}
-          onChange={setIndex}
-          scheduledPost={scheduledPost}
-          status={post.status}
-        />
-      </div>
-      {post.status === 'draft' && (
-        <DraftPanel
-          shownVersion={shown}
-          shownParts={parts}
-          shownText={text}
-          latestVersion={latest}
-          feedback={feedback}
-          onScheduled={onScheduledPost}
-        />
-      )}
-      {post.status === 'scheduled' && scheduledPost && (
-        <ScheduledPanel
-          post={post}
-          scheduledPost={scheduledPost}
-          shownText={text}
-          onEdit={() => setEditing(true)}
-        />
-      )}
-      {post.status === 'published' && scheduledPost && (
-        <PublishedPanel post={post} scheduledPost={scheduledPost} shownText={text} />
-      )}
-      {post.status === 'failed' && scheduledPost && (
-        <FailedPanel
-          scheduledPost={scheduledPost}
-          shownVersion={shown}
-          retryParts={retryParts(shown, scheduledPost, connection?.charLimit ?? null)}
-          shownText={text}
-          latestVersion={latest}
-          feedback={feedback}
-          onRetried={onScheduledPost}
-        />
-      )}
+    <Page title={breadcrumb} dock={dock} pinned>
+      <TextEditor
+        parts={parts}
+        texts={post.text?.parts.map((p) => p.text) ?? []}
+        editable={editable}
+        onEdit={edit.onEdit}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        trace={edit.trace}
+        busy={feedback.isWriting}
+        header={<TextHeader origin={origin} tools={tools} action={postTo} />}
+      />
+      <p role="status" className="sr-only">
+        {edit.announcement && <span key={edit.announcement.key}>{edit.announcement.message}</span>}
+      </p>
     </Page>
   );
 }
@@ -161,7 +249,26 @@ function LoadedPost({
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */
 export function PostPage() {
   const { id = '' } = useParams();
-  const { load, reload, setScheduledPost, addFeedback, isWriting, error, notice } = usePost(id);
+  const {
+    load,
+    reload,
+    setScheduledPost,
+    addFeedback,
+    restoreVersion,
+    restoreError,
+    isRestoring,
+    editText,
+    undo,
+    redo,
+    trace,
+    announcement,
+    rewritesDropped,
+    textSave,
+    flushText,
+    isWriting,
+    error,
+    notice,
+  } = usePost(id);
 
   if (load.kind === 'loaded') {
     return (
@@ -169,6 +276,17 @@ export function PostPage() {
         key={load.post.id}
         post={load.post}
         feedback={{ isWriting, error, notice, onSend: addFeedback }}
+        restore={{ onRestore: restoreVersion, isRestoring, error: restoreError }}
+        edit={{
+          onEdit: (texts, change) => editText(texts, change.cause),
+          save: textSave,
+          flush: flushText,
+          onUndo: undo,
+          onRedo: redo,
+          trace,
+          announcement,
+          rewritesDropped,
+        }}
         onScheduledPost={setScheduledPost}
       />
     );
@@ -180,7 +298,7 @@ export function PostPage() {
           <p className="font-sans text-sm text-foreground">
             This Post isn&apos;t here. It may have been written on another account.
           </p>
-          <Button asChild className="h-10">
+          <Button asChild variant="solid" className="h-10">
             <Link to="/new">Write a new Post</Link>
           </Button>
         </div>
@@ -195,10 +313,8 @@ export function PostPage() {
     );
   }
   return (
-    <Page title="Post">
-      <p role="status" className="font-sans text-sm text-muted-foreground">
-        Loading the Post…
-      </p>
+    <Page title="Post" dock={<LoadingDock />} pinned>
+      <CardPlaceholder />
     </Page>
   );
 }

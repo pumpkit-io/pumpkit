@@ -13,11 +13,7 @@ export function signedInRoutes() {
       <Route path="/new" element={<NewPost />} />
       <Route path="/posts" element={<Navigate to={STATUS_TAB.scheduled.path} replace />} />
       {TAB_ORDER.map((status) => (
-        <Route
-          key={status}
-          path={STATUS_TAB[status].path}
-          element={<Posts key={status} status={status} />}
-        />
+        <Route key={status} path={STATUS_TAB[status].path} element={<Posts status={status} />} />
       ))}
       <Route path="/posts/:id" element={<PostPage />} />
       <Route path="/persona" element={<Persona />} />

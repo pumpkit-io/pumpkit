@@ -26,7 +26,7 @@ test.describe('logged in', () => {
       await expect(page).toHaveURL(/\/new$/);
       await expect(page.getByRole('heading', { level: 1, name: 'New post' })).toBeVisible();
       await expect(
-        page.getByRole('region', { name: 'Write a Post' }).getByLabel('Brief'),
+        page.getByRole('region', { name: "What's the post about?" }).getByLabel('Brief'),
       ).toBeVisible();
       await expect(page.getByText('E2E User').first()).toBeVisible();
     }
@@ -56,7 +56,7 @@ test.describe('logged in', () => {
     page,
   }) => {
     await page.goto('/new');
-    const writer = page.getByRole('region', { name: 'Write a Post' });
+    const writer = page.getByRole('region', { name: "What's the post about?" });
     await expect(
       sidebar(page).getByRole('link', { name: 'Persona, 0 of 3 Inspiration authors' }),
     ).toBeVisible();

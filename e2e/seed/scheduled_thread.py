@@ -1,7 +1,8 @@
 """Give the seeded e2e user a Post with a two-Part Thread Version, scheduled for tomorrow.
 
-A Scheduled post is always copied from a Version (ADR 0015), and writing one would call the
-LLM, so the Post, its Version and the Scheduled post are written straight into the database.
+A Scheduled post is always copied from its Post's Text (ADR 0016), and writing a Version would
+call the LLM, so the Post, its Version and the Scheduled post are written straight into the
+database.
 Run it like `seed_user.py`, after it and `connect_x.py`.
 """
 
@@ -14,6 +15,7 @@ import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.auth.models import User
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.posts.service import set_text_from_version
 
 E2E_EMAIL = "e2e@e2e-user.dev"
 PARTS = ["E2E Thread, Part one.", "E2E Thread, Part two."]
@@ -35,6 +37,7 @@ async def main() -> None:
             slop_tells=[],
             created_at=now,
         )
+        set_text_from_version(post, version)
         db.add_all([post, version])
         await db.flush()
         await scheduled_posts_service.create(
@@ -42,7 +45,6 @@ async def main() -> None:
             user_id=user.id,
             x_user_id="e2e-x-user",
             post_id=post.id,
-            source_version_id=version.id,
             parts=PARTS,
             publish_at=(now + timedelta(days=1)).replace(second=0, microsecond=0),
             now=now,

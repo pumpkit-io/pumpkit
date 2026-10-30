@@ -20,8 +20,8 @@ from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
-from pumpkit.posts.models import VersionAttempt
-from pumpkit.posts.schemas import VersionResponse
+from pumpkit.posts.models import Post
+from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service
 from pumpkit.scheduling.communities import Community, Destination
@@ -31,7 +31,12 @@ from pumpkit.scheduling.models import (
     SCHEDULED,
     ScheduledPost,
 )
-from pumpkit.scheduling.post_status import PostStatus, check_takes_feedback, post_status
+from pumpkit.scheduling.post_status import (
+    PostStatus,
+    check_takes_feedback,
+    check_text_changes,
+    post_status,
+)
 from pumpkit.scheduling.publishing import publish_scheduled_post
 from pumpkit.scheduling.rules import (
     KeepDestination,
@@ -93,7 +98,6 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         if scheduled_post.state == PUBLISHED
         else None,
         failed_reason=scheduled_post.failed_reason,
-        source_version_id=scheduled_post.source_version_id,
         post_id=scheduled_post.post_id,
         community=_community_response(community_id, scheduled_post.community_name)
         if community_id
@@ -181,10 +185,10 @@ async def create_scheduled_post(
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     connection = await connection_to_publish_on(db, user_id=user.id)
-    version = await _source_version(db, user=user, version_id=new.version_id)
-    if await service.get_for_post(db, post_id=version.post_id) is not None:
+    post = await version_writing.user_post(db, user=user, post_id=new.post_id)
+    if await service.get_for_post(db, post_id=post.id) is not None:
         raise _already_scheduled()
-    parts = list(version.parts or [])
+    parts = _text_of(post)
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_monthly_cap(db, user_id=user.id, publish_at=publish_at, part_count=len(parts))
@@ -194,8 +198,7 @@ async def create_scheduled_post(
             db,
             user_id=user.id,
             x_user_id=connection.x_user_id,
-            post_id=version.post_id,
-            source_version_id=version.id,
+            post_id=post.id,
             parts=parts,
             publish_at=publish_at.replace(second=0, microsecond=0)
             if new.publish_now
@@ -218,12 +221,16 @@ def _already_scheduled() -> ConflictError:
     return ConflictError("This Post already has a Scheduled post. Edit it, or unschedule it first.")
 
 
-async def _source_version(db: AsyncSession, *, user: User, version_id: str) -> VersionAttempt:
-    """The Version a Scheduled post copies, or a 404 unless the Version is the User's."""
-    version = await posts_service.get_user_version(db, user_id=user.id, version_id=version_id)
-    if version is None or not version.parts:
-        raise NotFoundError("Version not found.")
-    return version
+def _text_of(post: Post) -> list[str]:
+    """
+    The Parts of the Post's Text, which a Scheduled post copies (ADR 0016), trimmed as typed
+    Parts are. The User may have left a Part blank mid-edit.
+    """
+    if not post.text_parts:
+        raise ConflictError("This Post has no Text to post. Start a new Post.")
+    parts = [part.strip() for part in post.text_parts]
+    rules.check_parts_written(parts)
+    return parts
 
 
 async def _post_now(
@@ -257,7 +264,7 @@ async def edit_scheduled_post(
     now: datetime,
 ) -> ScheduledPostResponse:
     """
-    New Parts or Version, time, Community or share with followers for a scheduled or Failed
+    New Parts or the Post's Text, time, Community or share with followers for a scheduled or Failed
     Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
     so a Failed one gets another try. With publish now it answers like Post now.
     """
@@ -266,14 +273,10 @@ async def edit_scheduled_post(
         raise _publishing_started()
     live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
     parts = edit.parts
-    version_id = None
-    if edit.version_id is not None:
-        version = await _source_version(db, user=user, version_id=edit.version_id)
-        if version.post_id != scheduled_post.post_id:
-            raise rules.RuleBroken("Choose a Version of this Post.")
-        # The Version's Parts in the places of the live ones are already on X as they were.
-        parts = live + list(version.parts or [])[len(live) :]
-        version_id = version.id
+    if edit.copy_text:
+        post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+        # The Text's Parts in the places of the live ones are already on X as they were.
+        parts = live + _text_of(post)[len(live) :]
     if parts is not None:
         rules.check_live_parts_kept(live, parts)
     reschedule = None
@@ -313,7 +316,6 @@ async def edit_scheduled_post(
         db,
         scheduled_post_id=scheduled_post_id,
         parts=parts,
-        source_version_id=version_id,
         reschedule=reschedule,
         destination=destination,
         now=now,
@@ -364,13 +366,14 @@ async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id:
 
 
 async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResponse:
-    """The User's Post with every Version in order, its status and its Scheduled post."""
+    """The User's Post with its Text, every Version in order, its status and Scheduled post."""
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     return PostDetailResponse(
         id=post.id,
         brief=post.brief,
+        text=version_writing.text_response(post, char_limit),
         versions=[
             version_writing.version_response(v, char_limit)
             for v in version_writing.versions_of(post)
@@ -443,17 +446,19 @@ async def give_feedback(
     feedback: str,
     format: Optional[Format],
     now: datetime,
+    sent_text: Optional[list[str]] = None,
 ) -> VersionResponse:
     """
-    Write the Post's next Version from Feedback. Only a Draft or a Failed Post takes Feedback,
-    checked again after the model calls in case the Post was scheduled meanwhile.
+    Write the Post's next Version from Feedback on its Text, which the Version then becomes. Only
+    a Draft or a Failed Post takes Feedback, checked again after the model calls in case the Post
+    was scheduled meanwhile. `sent_text`, the Parts the sender shows, must be the saved Text.
     """
-    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(
-        db, user=user, post=post, format=format, now=now
+        db, user=user, post=post, format=format, sent_text=sent_text, now=now
     )
-    # Ends the read transaction before the calls, which can take minutes.
+    # Holds the Text and ends the transaction before the calls, which can take minutes.
     await db.commit()
 
     try:
@@ -462,6 +467,7 @@ async def give_feedback(
             next_version.corpus,
             post.brief,
             next_version.earlier,
+            next_version.starting_text,
             feedback,
             next_version.format,
             next_version.char_limit,
@@ -489,9 +495,63 @@ async def give_feedback(
         feedback=feedback,
         written=written,
         now=now,
+        starting_text=next_version.starting_text,
     )
     await db.commit()
     return version_writing.version_response(version, next_version.char_limit)
+
+
+async def restore_version(
+    db: AsyncSession, user: User, post_id: str, version_number: int, now: datetime
+) -> TextResponse:
+    """
+    Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's, and not
+    while a Version is being written.
+    """
+    post, _ = await _post_whose_text_changes(db, user=user, post_id=post_id, now=now)
+    version = next(
+        (v for v in version_writing.versions_of(post) if v.version_number == version_number), None
+    )
+    if version is None:
+        raise NotFoundError(f"This Post has no Version {version_number}.")
+    posts_service.set_text_from_version(post, version)
+    return await _commit_text(db, user=user, post=post)
+
+
+async def edit_text(
+    db: AsyncSession, user: User, post_id: str, parts: list[str], now: datetime
+) -> TextResponse:
+    """
+    Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and not while a
+    Version is being written. Saving the same Parts again changes nothing, so the web app can
+    retry a save.
+    """
+    post, scheduled_post = await _post_whose_text_changes(db, user=user, post_id=post_id, now=now)
+    if scheduled_post is not None:
+        live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
+        rules.check_text_keeps_live_parts(live_count, post.text_parts or [], parts)
+    posts_service.edit_text(post, parts)
+    return await _commit_text(db, user=user, post=post)
+
+
+async def _post_whose_text_changes(
+    db: AsyncSession, *, user: User, post_id: str, now: datetime
+) -> tuple[Post, Optional[ScheduledPost]]:
+    """The User's Post, locked, with its Scheduled post, once its Text may change."""
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    posts_service.check_not_writing(post, now=now)
+    return post, scheduled_post
+
+
+async def _commit_text(db: AsyncSession, *, user: User, post: Post) -> TextResponse:
+    await db.commit()
+    char_limit = await version_writing.char_limit_for(db, user_id=user.id)
+    text = version_writing.text_response(post, char_limit)
+    # Only a Post with a Version has a Text to change.
+    assert text is not None
+    return text
 
 
 async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:

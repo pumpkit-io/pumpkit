@@ -43,6 +43,18 @@ export interface Version {
   parts: Part[];
   /** Found in any Part of the text. */
   tells: Tell[];
+  /** When Pumpkit wrote it. */
+  createdAt: string;
+}
+
+/** The one text a Post has at any time, the text meant for X (ADR 0016). */
+export interface PostText {
+  format: Format;
+  parts: Part[];
+  /** The Version it came from: the last one written or restored. */
+  versionNumber: number;
+  /** Whether the User changed it since it came from that Version. */
+  edited: boolean;
 }
 
 export interface Post {
@@ -56,6 +68,8 @@ export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
 
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
+  /** Null only for a Post whose first Version failed. */
+  text: PostText | null;
   status: PostStatus;
   /** Null while the Post is a Draft. */
   scheduledPost: ScheduledPost | null;
@@ -138,13 +152,20 @@ const toSummary = (s: ScheduledPostSummaryApi): ScheduledPostSummary => ({
 /** How many Posts a page of the Posts tabs holds. */
 export const POSTS_PAGE_SIZE = 20;
 
+interface PartApi {
+  text: string;
+  char_count: number;
+  char_limit: number;
+}
+
 interface VersionApi {
   id: string;
   number: number;
   feedback: string | null;
   format: Format;
-  parts: { text: string; char_count: number; char_limit: number }[];
+  parts: PartApi[];
   tells: Tell[];
+  created_at: string;
 }
 
 interface PostApi {
@@ -153,19 +174,51 @@ interface PostApi {
   versions: VersionApi[];
 }
 
+interface PostTextApi {
+  format: Format;
+  parts: PartApi[];
+  version_number: number;
+  edited: boolean;
+}
+
 interface PostDetailApi extends PostApi {
+  text: PostTextApi | null;
   status: PostStatus;
   scheduled_post: ScheduledPostApi | null;
 }
+
+const toPart = (p: PartApi): Part => ({
+  text: p.text,
+  charCount: p.char_count,
+  charLimit: p.char_limit,
+});
 
 const toVersion = (v: VersionApi): Version => ({
   id: v.id,
   number: v.number,
   feedback: v.feedback,
   format: v.format,
-  parts: v.parts.map((p) => ({ text: p.text, charCount: p.char_count, charLimit: p.char_limit })),
+  parts: v.parts.map(toPart),
   tells: v.tells,
+  createdAt: v.created_at,
 });
+
+const toText = (t: PostTextApi): PostText => ({
+  format: t.format,
+  parts: t.parts.map(toPart),
+  versionNumber: t.version_number,
+  edited: t.edited,
+});
+
+/** The Text a new Version gives its Post: the server sets it from every Version it writes. */
+export function textOf(version: Version): PostText {
+  return {
+    format: version.format,
+    parts: version.parts,
+    versionNumber: version.number,
+    edited: false,
+  };
+}
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
 export const BRIEF_MAX_CHARS = 200_000;
@@ -199,6 +252,7 @@ export const postService = {
     return {
       id: data.id,
       brief: data.brief,
+      text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
       status: data.status,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
@@ -209,12 +263,39 @@ export const postService = {
     const { data } = await apiService.post<PostApi>('/posts', { brief, format });
     return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
   },
-  /** Writes the next Version from Feedback before answering, which can take a minute or two. */
-  addVersion: async (postId: string, feedback: string, format: Format): Promise<Version> => {
+  /**
+   * Writes the next Version from Feedback on the Text before answering, which can take a minute
+   * or two. `text` is every Part on screen: the server refuses it while an edit isn't saved yet.
+   */
+  addVersion: async (
+    postId: string,
+    feedback: string,
+    format: Format,
+    text: string[],
+  ): Promise<Version> => {
     const { data } = await apiService.post<VersionApi>(`/posts/${postId}/versions`, {
       feedback,
       format,
+      text,
     });
     return toVersion(data);
+  },
+  /**
+   * Stores the User's edit of the Post's Text, every Part in order, as typed. Saving the same
+   * Parts again changes nothing, so a failed save can be retried as it is.
+   */
+  saveText: async (postId: string, parts: string[]): Promise<PostText> => {
+    const { data } = await apiService.put<PostTextApi>(
+      `/posts/${encodeURIComponent(postId)}/text`,
+      { parts },
+    );
+    return toText(data);
+  },
+  /** Makes the Version the Post's Text again, which writes nothing and answers at once. */
+  restoreVersion: async (postId: string, versionNumber: number): Promise<PostText> => {
+    const { data } = await apiService.post<PostTextApi>(
+      `/posts/${encodeURIComponent(postId)}/versions/${versionNumber}/restore`,
+    );
+    return toText(data);
   },
 };
