@@ -136,13 +136,13 @@ async function readyToWrite() {
   renderNewPost();
   await screen.findByRole('link', { name: 'Writing in the style of @levelsio' });
   const area = await writer();
-  await area.findByRole('button', { name: 'Write the Post' });
+  await area.findByRole('button', { name: 'Write the post' });
   return area;
 }
 
 async function writeBrief(area: Awaited<ReturnType<typeof writer>>, brief: string) {
   fireEvent.change(area.getByLabelText('Brief'), { target: { value: brief } });
-  fireEvent.click(area.getByRole('button', { name: 'Write the Post' }));
+  fireEvent.click(area.getByRole('button', { name: 'Write the post' }));
 }
 
 describe('New post', () => {
@@ -297,16 +297,16 @@ describe('New post', () => {
   });
 
   describe('Writing a Post', () => {
-    it('replaces the write button with "Set up your Persona" while the Persona is empty', async () => {
+    it('replaces the write button with "Set up your persona" while the Persona is empty', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
       renderNewPost();
 
       const area = await writer();
-      const setUp = await area.findByRole('link', { name: 'Set up your Persona' });
+      const setUp = await area.findByRole('link', { name: 'Set up your persona' });
       // No gradient on New post: the solid Pumpkin fill.
       expect(setUp).not.toHaveClass('bg-primary-gradient');
       expect(area.queryByText(/at least one Inspiration author/i)).not.toBeInTheDocument();
-      expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Write the post' })).not.toBeInTheDocument();
 
       fireEvent.click(setUp);
 
@@ -321,11 +321,11 @@ describe('New post', () => {
       const subscribe = await area.findByRole('link', { name: 'Subscribe to write' });
       expect(subscribe).not.toHaveClass('bg-primary-gradient');
       expect(area.getByLabelText('Brief')).toBeEnabled();
-      expect(area.queryByRole('button', { name: 'Write the Post' })).not.toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Write the post' })).not.toBeInTheDocument();
 
       fireEvent.click(subscribe);
 
-      expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+      expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
       expect(currentPath()).toBe('/settings');
       expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
         source: 'new_post_write',
@@ -337,18 +337,18 @@ describe('New post', () => {
 
       const area = await writer();
       expect(await area.findByRole('link', { name: 'Subscribe to write' })).toBeInTheDocument();
-      expect(area.queryByRole('link', { name: 'Set up your Persona' })).not.toBeInTheDocument();
+      expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
     });
 
     it('greys out the send arrow until something is typed', async () => {
       const area = await readyToWrite();
-      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Write the post' })).toBeDisabled();
 
       fireEvent.change(area.getByLabelText('Brief'), { target: { value: '   ' } });
-      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Write the post' })).toBeDisabled();
 
       fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
-      expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
+      expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled();
     });
 
     it.each([
@@ -388,7 +388,7 @@ describe('New post', () => {
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
       expect(area.getByRole('radio', { name: 'Thread' })).toBeDisabled();
       expect(area.getByRole('status')).toHaveTextContent(
-        'Writing your Post. This takes a minute or two.',
+        'Writing your post. This takes a minute or two.',
       );
       expect(postService.start).toHaveBeenCalledWith('ship small things', 'post');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'brief' });
@@ -437,14 +437,14 @@ describe('New post', () => {
 
     it('shows a failure, keeps the Brief and retries it as a new Post', async () => {
       vi.mocked(postService.start)
-        .mockRejectedValueOnce(apiError(502, 'Writing the Post failed. Please try again.'))
+        .mockRejectedValueOnce(apiError(502, 'Writing the post failed. Please try again.'))
         .mockResolvedValueOnce(postWith('the final text'));
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship small things');
 
       const alert = await area.findByRole('alert');
-      expect(alert).toHaveTextContent('Writing the Post failed. Please try again.');
+      expect(alert).toHaveTextContent('Writing the post failed. Please try again.');
       expect(
         area.getByLabelText('Brief').compareDocumentPosition(alert) &
           Node.DOCUMENT_POSITION_FOLLOWING,
@@ -461,7 +461,7 @@ describe('New post', () => {
 
     it('says when the User can write again once they reach the hourly limit', async () => {
       vi.mocked(postService.start).mockRejectedValue(
-        apiError(429, "You've made 30 attempts at a Version in the last hour.", {
+        apiError(429, "You've made 30 attempts at a version in the last hour.", {
           retry_at: new Date(2026, 9, 6, 15, 42).toISOString(),
         }),
       );
@@ -471,7 +471,7 @@ describe('New post', () => {
 
       expect(
         await area.findByText(
-          "You've made 30 attempts at a Version in the last hour. You can write again at 3:42 PM.",
+          "You've made 30 attempts at a version in the last hour. You can write again at 3:42 PM.",
         ),
       ).toHaveAttribute('role', 'status');
       expect(area.queryByRole('alert')).not.toBeInTheDocument();
@@ -480,10 +480,10 @@ describe('New post', () => {
     });
 
     it.each([
-      [403, 'This needs a Subscription. Subscribe to continue.'],
+      [403, 'This needs a subscription. Subscribe to continue.'],
       [422, 'The Brief is too long.'],
-      [429, "You've made 30 attempts at a Version in the last hour."],
-    ])('does not count a refusal with a %i as a failed Version', async (status, detail) => {
+      [429, "You've made 30 attempts at a version in the last hour."],
+    ])('does not count a refusal with a %i as a failed version', async (status, detail) => {
       vi.mocked(postService.start).mockRejectedValue(apiError(status, detail));
       const area = await readyToWrite();
 
@@ -494,7 +494,7 @@ describe('New post', () => {
       expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
     });
 
-    it('counts a failure without a response as a failed Version', async () => {
+    it('counts a failure without a response as a failed version', async () => {
       vi.mocked(postService.start).mockRejectedValue(new Error('Network Error'));
       const area = await readyToWrite();
 
@@ -513,11 +513,11 @@ describe('New post', () => {
 
       fireEvent.change(brief, { target: { value: 'a'.repeat(195_000) } });
       expect(area.getByText('195,000 / 200,000 characters')).toBeInTheDocument();
-      expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
+      expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled();
 
       fireEvent.change(brief, { target: { value: 'a'.repeat(200_005) } });
       expect(area.getByText('5 characters over the 200,000 limit')).toBeInTheDocument();
-      expect(area.getByRole('button', { name: 'Write the Post' })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Write the post' })).toBeDisabled();
     });
 
     it('counts an emoji in the Brief as one character, as the backend does', async () => {
@@ -528,7 +528,7 @@ describe('New post', () => {
       });
 
       expect(area.getByText('200,000 / 200,000 characters')).toBeInTheDocument();
-      expect(area.getByRole('button', { name: 'Write the Post' })).toBeEnabled();
+      expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled();
     });
   });
 
@@ -540,7 +540,7 @@ describe('New post', () => {
       renderNewPost(undefined, NO_PLANS);
 
       const area = await writer();
-      expect(await area.findByRole('button', { name: 'Write the Post' })).toBeInTheDocument();
+      expect(await area.findByRole('button', { name: 'Write the post' })).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /subscribe/i })).not.toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
     });

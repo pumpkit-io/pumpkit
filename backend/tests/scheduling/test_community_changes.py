@@ -11,7 +11,7 @@ from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
-PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
+PUBLISHING_STARTED = "Publishing has started, so this scheduled post can no longer change."
 COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
 

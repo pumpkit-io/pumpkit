@@ -64,7 +64,7 @@ export function SubscriptionCard({
       {!data ? (
         isLoading && (
           <p role="status" className="font-sans text-sm text-muted-foreground">
-            Loading your Plan…
+            Loading your plan…
           </p>
         )
       ) : subscription ? (
@@ -105,9 +105,9 @@ export function SubscriptionCard({
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-0.5">
-            <p className="font-sans text-sm font-semibold text-foreground">No Subscription</p>
+            <p className="font-sans text-sm font-semibold text-foreground">No subscription</p>
             <p className="font-sans text-sm text-muted-foreground">
-              Choose a Plan above to start writing.
+              Choose a plan above to start writing.
             </p>
           </div>
           <button

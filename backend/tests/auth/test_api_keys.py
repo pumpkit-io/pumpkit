@@ -160,7 +160,7 @@ async def test_a_user_who_isnt_subscribed_cant_create_a_key_where_plans_are_sold
     response = await client.post(API_KEYS, json={"name": "Work laptop"})
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "This needs a Subscription. Subscribe to continue."
+    assert response.json()["detail"] == "This needs a subscription. Subscribe to continue."
     assert (await client.get(API_KEYS)).json() == {"data": []}
 
 

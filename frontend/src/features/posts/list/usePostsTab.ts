@@ -39,7 +39,7 @@ export function usePostsTab(status: PostStatus) {
       setLoad({ kind: 'loaded', posts: page.posts, nextOffset: page.nextOffset, more: 'idle' });
     } catch (e) {
       if (live.current) {
-        setLoad({ kind: 'failed', message: errorMessage(e, "Couldn't load your Posts.") });
+        setLoad({ kind: 'failed', message: errorMessage(e, "Couldn't load your posts.") });
       }
     }
   }, [status, setCounts]);

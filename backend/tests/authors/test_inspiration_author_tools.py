@@ -54,7 +54,7 @@ async def test_adding_a_listed_handle_is_refused(subscribed, mcp):
 
     result = await mcp.call_tool("add_inspiration_author", handle="@levelsio")
 
-    assert error_text(result) == "@levelsio is already one of your Inspiration authors."
+    assert error_text(result) == "@levelsio is already one of your inspiration authors."
 
 
 async def test_a_fourth_author_is_refused(subscribed, mcp):
@@ -110,7 +110,7 @@ async def test_removing_an_author_takes_it_off_the_list(subscribed, mcp):
     result = await mcp.call_tool("remove_inspiration_author", handle="@LevelsIO")
 
     assert result["structuredContent"] == {
-        "message": "@levelsio is no longer one of your Inspiration authors."
+        "message": "@levelsio is no longer one of your inspiration authors."
     }
     listed = await mcp.call_tool("list_inspiration_authors")
     assert [author["handle"] for author in listed["structuredContent"]["data"]] == ["paulg"]
@@ -120,4 +120,4 @@ async def test_removing_an_author_takes_it_off_the_list(subscribed, mcp):
 async def test_removing_a_handle_that_isnt_listed_is_refused(subscribed, mcp, handle):
     result = await mcp.call_tool("remove_inspiration_author", handle=handle)
 
-    assert error_text(result) == "That handle isn't one of your Inspiration authors."
+    assert error_text(result) == "That handle isn't one of your inspiration authors."

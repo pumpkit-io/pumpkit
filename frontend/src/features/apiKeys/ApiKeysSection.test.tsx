@@ -170,14 +170,14 @@ describe('ApiKeysSection', () => {
   it('offers to subscribe when creating a key is refused for want of a Subscription', async () => {
     vi.mocked(apiKeyService.list).mockResolvedValue([]);
     vi.mocked(apiKeyService.create).mockRejectedValue(
-      failure(403, 'This needs a Subscription. Subscribe to continue.'),
+      failure(403, 'This needs a subscription. Subscribe to continue.'),
     );
     renderSection();
     await screen.findByText(/No API keys yet/);
 
     await createKey('Work laptop');
 
-    expect(await screen.findByText('Creating API keys needs a Subscription.')).toBeInTheDocument();
+    expect(await screen.findByText('Creating API keys needs a subscription.')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Subscribe' })).toHaveAttribute(
       'href',

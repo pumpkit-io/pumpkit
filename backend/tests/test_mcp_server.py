@@ -21,30 +21,30 @@ async def test_initialize_returns_the_server_instructions(subscribed, mcp):
     assert result["capabilities"]["tools"] is not None
     instructions = result["instructions"]
     for term in (
-        "Brief",
-        "Feedback",
-        "Version",
-        "Format",
-        "Thread",
-        "Part",
-        "Scheduled post",
+        "brief",
+        "feedback",
+        "version",
+        "format",
+        "thread",
+        "part",
+        "scheduled post",
         "Post now",
     ):
         assert term in instructions
-    assert "every Part" in instructions
+    assert "every part" in instructions
     assert "explicit yes" in instructions
-    assert "at most one Scheduled post" in instructions
-    assert "Only a Draft or a Failed Post takes Feedback" in instructions
+    assert "at most one scheduled post" in instructions
+    assert "Only a draft or a failed post takes feedback" in instructions
 
 
 async def test_the_instructions_and_scheduling_tools_copy_the_post_s_text(subscribed, mcp):
     instructions = (await mcp.initialize())["instructions"]
     tools = await mcp.list_tools()
 
-    assert "Every Scheduled post comes from its Post's Text" in instructions
-    assert "Version's text can become a Scheduled post" not in instructions
+    assert "Every scheduled post comes from its post's text" in instructions
+    assert "version's text can become a scheduled post" not in instructions.lower()
     for name in ("schedule_post", "post_now"):
-        assert "the Post's Text" in tools[name]["description"]
+        assert "the post's text" in tools[name]["description"]
         assert "post_id" in tools[name]["inputSchema"]["required"]
         assert "version_id" not in tools[name]["inputSchema"]["properties"]
     assert "version_id" not in tools["edit_scheduled_post"]["inputSchema"]["properties"]
@@ -54,11 +54,11 @@ async def test_the_instructions_and_give_feedback_rewrite_the_post_s_text(subscr
     instructions = (await mcp.initialize())["instructions"]
     description = (await mcp.list_tools())["give_feedback"]["description"]
 
-    assert "Feedback rewrites the Post's Text" in instructions
-    assert "Starting text" in instructions
-    assert "latest Version" not in instructions
-    assert "the Post's Text" in description
-    assert "latest Version" not in description
+    assert "Feedback rewrites the post's text" in instructions
+    assert "starting text" in instructions
+    assert "latest version" not in instructions.lower()
+    assert "the post's text" in description
+    assert "latest version" not in description.lower()
 
 
 async def test_no_instruction_or_tool_description_says_final(subscribed, mcp):
@@ -172,7 +172,7 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_ever
         result = await mcp.call_tool(name, **arguments)
 
         assert error_text(result) == (
-            "This needs a Subscription. Subscribe to continue. http://localhost:5173/billing"
+            "This needs a subscription. Subscribe to continue. http://localhost:5173/billing"
         )
         assert result["structuredContent"] == {"subscribe_url": "http://localhost:5173/billing"}
 

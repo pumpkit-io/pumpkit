@@ -30,7 +30,7 @@ def _tool_response(author: InspirationAuthorResponse) -> InspirationAuthorToolRe
 
 async def list_inspiration_authors(call: ToolCall[User]) -> InspirationAuthorsListToolResponse:
     """
-    List the User's Inspiration authors, the X accounts whose posts set the style of every Post
+    List the user's inspiration authors, the X accounts whose posts set the style of every post
     Pumpkit writes for them, in the order they were added, with how many posts each has stored.
     """
     listed = await mediator.list_authors(db=call.db, user=call.user)
@@ -43,8 +43,8 @@ async def add_inspiration_author(
     call: ToolCall[User], handle: str
 ) -> InspirationAuthorToolResponse:
     """
-    Add an X account as an Inspiration author, by its handle with or without the @. Pumpkit
-    reads its recent original posts at once. A User has up to three Inspiration authors.
+    Add an X account as an inspiration author, by its handle with or without the @. Pumpkit
+    reads its recent original posts at once. A user has up to three inspiration authors.
     """
     add_request = InspirationAuthorAddRequest(handle=handle)
     reader = await call.provide(get_x_reader)
@@ -55,10 +55,10 @@ async def add_inspiration_author(
 
 
 async def remove_inspiration_author(call: ToolCall[User], handle: str) -> MessageResponse:
-    """Remove one of the User's Inspiration authors, by its handle with or without the @."""
+    """Remove one of the user's inspiration authors, by its handle with or without the @."""
     await mediator.remove_author(db=call.db, user=call.user, handle=handle)
     return MessageResponse(
-        message=f"@{normalize_handle(handle)} is no longer one of your Inspiration authors."
+        message=f"@{normalize_handle(handle)} is no longer one of your inspiration authors."
     )
 
 

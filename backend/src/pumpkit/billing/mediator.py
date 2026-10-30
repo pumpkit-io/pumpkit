@@ -55,13 +55,13 @@ def subscription_link() -> LinkToolResponse:
     """Where the User subscribes or manages their Subscription, unless the Instance sells no Plans."""
     if not service.sells_plans():
         return LinkToolResponse(
-            message="This Instance sells no Plans: you can use all of Pumpkit without a "
-            "Subscription.",
+            message="This instance sells no plans: you can use all of Pumpkit without a "
+            "subscription.",
             url=None,
         )
     url = settings.billing_page_url()
     return LinkToolResponse(
-        message=f"Subscribe or manage your Subscription on the Settings page: {url}", url=url
+        message=f"Subscribe or manage your subscription on the Settings page: {url}", url=url
     )
 
 
@@ -157,7 +157,7 @@ async def create_checkout_session(
         _require_terms_acceptance(checkout_request)
     plan_key = checkout_request.plan_key
     if plan_key not in settings.BILLING_PLAN_KEYS:
-        raise BadRequestError("Unknown Plan.")
+        raise BadRequestError("Unknown plan.")
 
     if terms_apply:
         await service.record_terms_acceptance(
@@ -184,7 +184,7 @@ async def create_checkout_session(
         # Commit before raising, or the 409 rolls back the sync of what Stripe just said.
         await db.commit()
         raise ConflictError(
-            "You already have a Subscription. Manage it in the billing portal.",
+            "You already have a subscription. Manage it in the billing portal.",
             fix_page=BILLING_PAGE,
         )
     for incomplete in await service.list_incomplete_subscriptions(db, user_id=user.id):

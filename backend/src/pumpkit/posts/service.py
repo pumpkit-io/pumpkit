@@ -156,7 +156,7 @@ def check_not_writing(post: Post, *, now: datetime) -> None:
     """
     if post.writing_since is not None and now - as_utc(post.writing_since) < WRITING_TIMEOUT:
         raise VersionBeingWritten(
-            "Pumpkit is writing a new Version of this Post. Try again once it's written."
+            "Pumpkit is writing a new version of this post. Try again once it's written."
         )
 
 
@@ -178,12 +178,12 @@ def edit_text(post: Post, parts: list[str]) -> None:
     """
     current = post.text_parts
     if current is None:
-        raise ConflictError("This Post has no Text to edit. Start a new Post.")
+        raise ConflictError("This post has no text to edit. Start a new post.")
     if len(parts) != len(current):
         raise TextShapeKept(
-            f"Editing keeps the Text's {len(current)} Parts. Give Feedback to change its shape."
+            f"Editing keeps the text's {len(current)} parts. Give feedback to change its shape."
             if len(current) > 1
-            else "Editing keeps the Text a single post. Give Feedback to make it a Thread."
+            else "Editing keeps the text a single post. Give feedback to make it a thread."
         )
     version = next((a for a in post.attempts if a.version_number == post.text_version_number), None)
     post.text_parts = list(parts)

@@ -176,7 +176,7 @@ describe('The signed-in shell', () => {
       });
       renderSignedIn('/new');
 
-      const posts = await (await sidebar()).findByRole('link', { name: 'Posts, 3 Failed' });
+      const posts = await (await sidebar()).findByRole('link', { name: 'Posts, 3 failed' });
       expect(posts).toHaveTextContent('3');
     });
 
@@ -227,11 +227,11 @@ describe('The signed-in shell', () => {
       expect(await card.findByText('Subscribed')).toBeInTheDocument();
     });
 
-    it('says "No Subscription" in the user card of a User who is not Subscribed', async () => {
+    it('says "No subscription" in the user card of a User who is not Subscribed', async () => {
       renderSignedIn('/new');
 
       const card = within(await screen.findByRole('link', { name: /^Your account/ }));
-      expect(await card.findByText('No Subscription')).toBeInTheDocument();
+      expect(await card.findByText('No subscription')).toBeInTheDocument();
     });
 
     it('shows no Plan in the user card on an Instance that sells no Plans', async () => {
@@ -239,7 +239,7 @@ describe('The signed-in shell', () => {
 
       const card = within(await screen.findByRole('link', { name: /^Your account/ }));
       expect(await card.findByText('Ada Lovelace')).toBeInTheDocument();
-      expect(card.queryByText('No Subscription')).not.toBeInTheDocument();
+      expect(card.queryByText('No subscription')).not.toBeInTheDocument();
     });
 
     it('opens Settings from the user card', async () => {
@@ -405,7 +405,7 @@ describe('The signed-in shell', () => {
       fireEvent.change(await screen.findByLabelText('Brief'), {
         target: { value: 'ship small things' },
       });
-      fireEvent.click(await screen.findByRole('button', { name: 'Write the Post' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Write the post' }));
 
       newPostShortcut();
       fireEvent.click((await sidebar()).getByRole('link', { name: 'New post' }));

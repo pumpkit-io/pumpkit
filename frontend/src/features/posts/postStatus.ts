@@ -31,7 +31,7 @@ export const TAB_ORDER: PostStatus[] = ['scheduled', 'draft', 'published', 'fail
 /** How each tab orders its Posts, as the line under the tabs says it. */
 export const TAB_ORDER_LINE: Record<PostStatus, string> = {
   scheduled: 'Next to go out first.',
-  draft: 'Newest Version first.',
+  draft: 'Newest version first.',
   published: 'Most recently published first.',
   failed: 'Most recently due first.',
 };

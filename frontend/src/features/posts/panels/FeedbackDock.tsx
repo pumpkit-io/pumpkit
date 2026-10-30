@@ -81,7 +81,7 @@ export function FeedbackDock({
         format={format}
         onFormatChange={setFormat}
         maxLength={FEEDBACK_MAX_CHARS}
-        sendLabel="Send Feedback"
+        sendLabel="Send feedback"
         sendOnEnter
         onSend={() => void send()}
         isWriting={isWriting}
@@ -105,7 +105,7 @@ export function LoadingDock() {
         format="post"
         onFormatChange={() => {}}
         maxLength={FEEDBACK_MAX_CHARS}
-        sendLabel="Send Feedback"
+        sendLabel="Send feedback"
         onSend={() => {}}
         disabled
       />

@@ -365,9 +365,9 @@ describe('Landing pricing', () => {
         .map((row) => row.textContent),
     );
     expect(rowTexts[0]).toEqual([
-      '[What this Plan includes]',
-      '[What this Plan includes]',
-      '[What this Plan includes]',
+      '[What this plan includes]',
+      '[What this plan includes]',
+      '[What this plan includes]',
     ]);
     expect(rowTexts[1]).toEqual(rowTexts[0]);
   });

@@ -64,7 +64,7 @@ async def test_the_31st_post_within_an_hour_returns_429_with_when_to_retry_and_n
 
     assert response.status_code == 429
     assert response.json() == {
-        "detail": "You've made 30 attempts at a Version in the last hour.",
+        "detail": "You've made 30 attempts at a version in the last hour.",
         "retry_at": _iso(first + timedelta(hours=1)),
     }
     assert response.headers["Retry-After"] == str(20 * 60)

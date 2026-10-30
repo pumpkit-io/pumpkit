@@ -35,12 +35,12 @@ type Step =
   { kind: 'choose' } | { kind: 'confirm' } | { kind: 'busy'; scheduledPost: ScheduledPost };
 
 function partCount(count: number): string {
-  return `${count} ${count === 1 ? 'Part' : 'Parts'}`;
+  return `${count} ${count === 1 ? 'part' : 'parts'}`;
 }
 
 /** Parts `first` to `last`, by their numbers in the Thread. */
 function partRange(first: number, last: number): string {
-  return first === last ? `Part ${first}` : `Parts ${first} to ${last}`;
+  return first === last ? `part ${first}` : `parts ${first} to ${last}`;
 }
 
 /**
@@ -49,17 +49,18 @@ function partRange(first: number, last: number): string {
  */
 function liveNote(liveCount: number, total: number): { text: string; blocks: boolean } | null {
   if (liveCount === 0) return null;
-  const live = `${partRange(1, liveCount)} ${liveCount === 1 ? 'is' : 'are'} already on X`;
+  const first = partRange(1, liveCount);
+  const live = `${first[0].toUpperCase()}${first.slice(1)} ${liveCount === 1 ? 'is' : 'are'} already on X`;
   if (liveCount >= total) {
     const after = liveCount === 1 ? 'it' : 'them';
     return {
-      text: `${live}, and the text has no Part after ${after}. Ask for more Parts with Feedback.`,
+      text: `${live}, and the text has no part after ${after}. Ask for more parts with feedback.`,
       blocks: true,
     };
   }
   const rest = partRange(liveCount + 1, total);
   const go = total - liveCount === 1 ? 'goes' : 'go';
-  const to = liveCount === 1 ? 'it' : `Part ${liveCount}`;
+  const to = liveCount === 1 ? 'it' : `part ${liveCount}`;
   return { text: `${live}, so only ${rest} ${go} out, as replies to ${to}.`, blocks: false };
 }
 
@@ -247,16 +248,16 @@ export function PostToDialog({
     );
     footer = cancel;
   } else if (!ready) {
-    body = <ConnectXPrompt what="this Post" showError />;
+    body = <ConnectXPrompt what="this post" showError />;
     footer = cancel;
   } else if (step.kind === 'confirm') {
     const target = destination?.community
-      ? `from @${connection.handle} into the Community ${destination.community.name ?? destination.community.id}`
+      ? `from @${connection.handle} into the community ${destination.community.name ?? destination.community.id}`
       : `on @${connection.handle}`;
     body = (
       <>
         <p className="font-sans text-sm text-foreground">
-          {!thread ? 'This goes' : toSend === 1 ? 'This Part goes' : `These ${toSend} Parts go`} out{' '}
+          {!thread ? 'This goes' : toSend === 1 ? 'This part goes' : `These ${toSend} parts go`} out{' '}
           {target} straight away, in this order. Posting can&apos;t be undone.
         </p>
         {liveLine}

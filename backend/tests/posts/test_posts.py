@@ -246,7 +246,7 @@ async def test_starting_a_post_with_no_inspiration_authors_returns_422(
 
     assert response.status_code == 422
     assert response.json()["detail"] == (
-        "Add an Inspiration author with posts before writing a Post."
+        "Add an inspiration author with posts before writing a post."
     )
     assert fake_llm.calls == []
 
@@ -339,7 +339,7 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns
     response = await client.post(POSTS, json={"brief": "ship"})
 
     assert_reported_502(response)
-    assert response.json()["detail"] == "Writing the Post failed. Please try again."
+    assert response.json()["detail"] == "Writing the post failed. Please try again."
     [post] = await _stored_posts(db)
     assert post.brief == "ship"
     [attempt] = post.attempts

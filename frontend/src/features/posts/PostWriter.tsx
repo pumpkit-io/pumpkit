@@ -39,7 +39,7 @@ function useStartPost() {
         if (mounted.current) navigate(`/posts/${post.id}`);
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
-        fail(e, "Couldn't write the Post. Try again.");
+        fail(e, "Couldn't write the post. Try again.");
       } finally {
         if (mounted.current) setIsWriting(false);
       }
@@ -86,7 +86,7 @@ export function PostWriter() {
       </Button>
     ) : noCorpus ? (
       <Button asChild variant="solid" className="h-10 shrink-0">
-        <Link to="/persona">Set up your Persona</Link>
+        <Link to="/persona">Set up your persona</Link>
       </Button>
     ) : undefined;
 
@@ -108,7 +108,7 @@ export function PostWriter() {
         format={format}
         onFormatChange={setFormat}
         maxLength={BRIEF_MAX_CHARS}
-        sendLabel="Write the Post"
+        sendLabel="Write the post"
         onSend={send}
         isWriting={isWriting}
         sendDisabled={subscribed !== true || authors === null}
@@ -116,7 +116,7 @@ export function PostWriter() {
       />
       {isWriting && (
         <p role="status" className="font-sans text-[13px] text-muted-foreground">
-          Writing your Post. This takes a minute or two.
+          Writing your post. This takes a minute or two.
         </p>
       )}
       {error && <ErrorBanner message={error} onRetry={typed ? send : undefined} />}

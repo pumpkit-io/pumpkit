@@ -39,6 +39,7 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 - Use the domain language in `GLOSSARY.md`. Read ADRs in `docs/adr/` before changing an area, and flag contradictions instead of silently overriding them.
 - Work on a branch and open a PR that follows `.github/pull_request_template.md`. Never push to `main`.
 - Every PR adds a line under `## [Unreleased]` in `CHANGELOG.md` saying what changes for Users or Self-hosters, with **Upgrade notes:** for any manual step an upgrade needs; a PR nobody running or using an Instance would notice gets the `no-changelog` label instead. CI checks it.
+- Being in `GLOSSARY.md` doesn't make a term a proper noun. In text users read (UI copy, error messages, MCP tool descriptions and server instructions), capitalize by ordinary grammar: "your scheduled post", "Send feedback", "restore of version 3". Capitalize a term only at the start of a sentence, label or heading, in the name of a page, tab or button (Persona, Settings, New post, Post now, "Post to…"), or in a legal name (Terms, Privacy Policy). The legal documents keep their capitalized defined terms.
 - Coding standards live in `CODING_STANDARDS.md` and are checked at review time.
 - Backend call direction is `router → mediator → service`, never backwards. No DB queries in routers or mediators. Across areas, import only another area's service, models, schemas and domain modules, in ADR 0008's area order.
 - Stripe webhook handlers never commit: `billing/mediator.handle_webhook` owns the transaction; raise to roll back.

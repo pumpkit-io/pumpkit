@@ -19,5 +19,5 @@ def format_noun(format: Format) -> str:
 
 
 def part_name(number: int, part_count: int) -> Optional[str]:
-    """How a message names Part `number`: "Part 3" in a Thread, None in a single post."""
-    return f"Part {number}" if part_count > 1 else None
+    """How a message names Part `number` mid-sentence: "part 3" in a Thread, None in a single post."""
+    return f"part {number}" if part_count > 1 else None

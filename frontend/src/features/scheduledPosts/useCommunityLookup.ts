@@ -36,7 +36,7 @@ export function useCommunityLookup(
           settle({
             state: 'missing',
             id: lookingFor,
-            message: errorMessage(error, 'X has no Community with that ID.'),
+            message: errorMessage(error, 'X has no community with that ID.'),
           });
           return;
         }

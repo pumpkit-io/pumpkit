@@ -94,7 +94,7 @@ async def test_a_user_who_is_no_longer_subscribed_gets_a_failed_post_and_nothing
     [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"
     assert listed["failed_reason"] == (
-        "Not published: your Subscription had ended. Subscribe, then reschedule it."
+        "Not published: your subscription had ended. Subscribe, then reschedule it."
     )
     assert fake_x_publisher.published == []
 

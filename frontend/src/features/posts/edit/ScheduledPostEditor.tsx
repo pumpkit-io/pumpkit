@@ -82,8 +82,8 @@ export function ScheduledPostEditor({
           )
         }
       />
-      <Panel name="Edit the Scheduled post">
-        <p className="font-sans text-base font-semibold text-foreground">Edit the Scheduled post</p>
+      <Panel name="Edit the scheduled post">
+        <p className="font-sans text-base font-semibold text-foreground">Edit the scheduled post</p>
         <DateTimeFields
           value={edit.when}
           onChange={(when) => setEdit((current) => ({ ...current, when }))}

@@ -13,7 +13,7 @@ async def test_manage_subscription_links_to_settings_through_the_billing_route(s
     assert result["isError"] is False, result
     assert result["structuredContent"]["url"] == BILLING_PAGE
     assert result["structuredContent"]["message"] == (
-        f"Subscribe or manage your Subscription on the Settings page: {BILLING_PAGE}"
+        f"Subscribe or manage your subscription on the Settings page: {BILLING_PAGE}"
     )
 
 
@@ -33,8 +33,8 @@ async def test_an_instance_that_sells_no_plans_says_so_instead_of_linking(sells_
     result = await mcp.call_tool("manage_subscription")
 
     assert result["structuredContent"] == {
-        "message": "This Instance sells no Plans: you can use all of Pumpkit without a "
-        "Subscription.",
+        "message": "This instance sells no plans: you can use all of Pumpkit without a "
+        "subscription.",
         "url": None,
     }
 

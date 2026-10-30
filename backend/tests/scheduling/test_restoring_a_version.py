@@ -20,10 +20,10 @@ POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
 SCHEDULED_TEXT_IS_SET = (
-    "This Post is scheduled, so its Text is set. Edit its Scheduled post, or unschedule it first."
+    "This post is scheduled, so its text is set. Edit its scheduled post, or unschedule it first."
 )
 PUBLISHED_TEXT_IS_SET = (
-    "This Post is published, so its Text is set. Start a new Post to write another."
+    "This post is published, so its text is set. Start a new post to write another."
 )
 ONE = {"text": "Version one.", "char_count": 12, "char_limit": X_POST_MAX_CHARS}
 
@@ -122,7 +122,7 @@ async def test_restoring_a_version_the_post_does_not_have_is_not_found(client, p
     response = await _restore(client, post["id"], 3)
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "This Post has no Version 3."
+    assert response.json()["detail"] == "This post has no version 3."
 
 
 async def test_restoring_on_someone_else_s_post_is_not_found(client, subscribed):
@@ -165,7 +165,7 @@ async def test_the_restore_version_tool_refuses_a_scheduled_post(client, post, m
 async def test_the_restore_version_tool_says_a_missing_version_is_not_found(post, mcp):
     result = await mcp.call_tool("restore_version", post_id=post["id"], version_number=9)
 
-    assert error_text(result) == "This Post has no Version 9."
+    assert error_text(result) == "This post has no version 9."
 
 
 def test_the_server_instructions_mention_restoring_a_version():

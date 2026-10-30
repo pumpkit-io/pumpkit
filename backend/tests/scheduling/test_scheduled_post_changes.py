@@ -12,7 +12,7 @@ from pumpkit.x_connection.x_publisher import XAccount, XPostRejectedError, XRate
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
-PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
+PUBLISHING_STARTED = "Publishing has started, so this scheduled post can no longer change."
 X_ACCOUNT_CHANGED_REASON = (
     "Not published: the X account it was for is no longer connected to Pumpkit."
 )
@@ -127,7 +127,7 @@ async def test_a_failed_thread_cannot_be_cut_down_to_its_live_parts(
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Keep at least one Part after the ones already on X."
+    assert response.json()["detail"] == "Keep at least one part after the ones already on X."
     assert await _listed(client) == [failed]
 
 

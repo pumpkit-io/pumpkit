@@ -21,6 +21,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
+- The app, its error messages and the MCP tool descriptions now write words like post, version, feedback, scheduled post, community, plan and subscription in lowercase mid-sentence. Names of pages, tabs and buttons keep their capitals.
 - The Persona chip at the top of New post and each Post's page reads "Writing in the style of" (beyond phone width), with the squarer corners of the other buttons, and shows your Inspiration authors' photos as a stack, with their initial when there is none or it fails to load. Hovering or focusing it unfolds each photo with its handle over the page title, and on a touch screen the first tap unfolds it and the second opens Persona.
 - The sidebar shows Persona as a plain link, without the "N/3" count of Inspiration authors.
 - Hovering undo, redo, History or Copy on a Post's page shows what the button does: "Undo edit", "Redo edit", "Versions history" or "Copy post". Undo and redo no longer show the browser's own tooltip with their shortcut.

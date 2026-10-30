@@ -17,12 +17,12 @@ from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
-ALREADY_SCHEDULED = "This Post already has a Scheduled post. Edit it, or unschedule it first."
+ALREADY_SCHEDULED = "This post already has a scheduled post. Edit it, or unschedule it first."
 SCHEDULED_TAKES_NO_FEEDBACK = (
-    "This Post is scheduled, so it takes no Feedback. Edit its text, or unschedule it first."
+    "This post is scheduled, so it takes no feedback. Edit its text, or unschedule it first."
 )
 PUBLISHED_TAKES_NO_FEEDBACK = (
-    "This Post is published, so it takes no Feedback. Start a new Post to write another."
+    "This post is published, so it takes no feedback. Start a new post to write another."
 )
 
 

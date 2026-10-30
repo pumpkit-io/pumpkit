@@ -222,7 +222,7 @@ describe('Persona', () => {
     expect(track).toHaveBeenCalledWith('inspiration_author_removed');
   });
 
-  it('shows a User who is not Subscribed their authors and a prompt that leads to Choose a Plan', async () => {
+  it('shows a User who is not Subscribed their authors and a prompt that leads to Choose a plan', async () => {
     vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
     renderPersona();
 
@@ -234,7 +234,7 @@ describe('Persona', () => {
     expect(panel.queryByRole('button', { name: 'Refresh @levelsio' })).not.toBeInTheDocument();
 
     fireEvent.click(panel.getByRole('link', { name: 'Subscribe' }));
-    expect(await screen.findByRole('region', { name: 'Choose a Plan' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
   });
 
   it('shows the prompt to subscribe when adding is refused with a 403', async () => {
@@ -242,7 +242,7 @@ describe('Persona', () => {
       .mockResolvedValueOnce(SUBSCRIBED)
       .mockResolvedValue(NOT_SUBSCRIBED);
     vi.mocked(inspirationAuthorService.add).mockRejectedValue(
-      apiError(403, 'This needs a Subscription. Subscribe to continue.'),
+      apiError(403, 'This needs a subscription. Subscribe to continue.'),
     );
     renderPersona();
 

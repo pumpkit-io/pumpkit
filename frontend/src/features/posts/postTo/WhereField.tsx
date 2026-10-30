@@ -86,7 +86,7 @@ export function WhereField({
           {past.length > 0 && (
             <div className="space-y-1.5">
               <label htmlFor={`${id}-past`} className={LABEL}>
-                Which Community
+                Which community
               </label>
               <select
                 id={`${id}-past`}
@@ -166,7 +166,7 @@ function PastedCommunity({
       )}
       {lookup.state === 'looking' && (
         <p role="status" className="font-sans text-xs text-muted-foreground">
-          Looking up the Community…
+          Looking up the community…
         </p>
       )}
       {lookup.state === 'found' && (

@@ -34,8 +34,8 @@ export interface UndoMove {
 }
 
 function stepName(step: TextStep): string {
-  if (step.kind === 'rewrite') return 'rewrite from Feedback';
-  if (step.kind === 'restore') return `restore of Version ${step.origin.versionNumber}`;
+  if (step.kind === 'rewrite') return 'rewrite from feedback';
+  if (step.kind === 'restore') return `restore of version ${step.origin.versionNumber}`;
   return 'your edit';
 }
 
@@ -124,7 +124,7 @@ export function useUndoLine() {
       const before = h.current.parts;
       report(h.commit(parts, kind, versionNumber).droppedRewrites);
       highlight(before, parts);
-      if (kind === 'restore') announce(`Restored Version ${versionNumber}`);
+      if (kind === 'restore') announce(`Restored version ${versionNumber}`);
       sync();
     },
     [report, highlight, announce, sync],

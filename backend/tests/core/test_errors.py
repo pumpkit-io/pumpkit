@@ -31,7 +31,7 @@ ERROR_ID = re.compile(rb'"error_id":"([0-9a-f]{8})"')
 BILLING_502 = (
     b'{"detail":"Billing is unavailable right now. Please try again later.","error_id":"%s"}'
 )
-LLM_502 = b'{"detail":"Writing the Post failed. Please try again.","error_id":"%s"}'
+LLM_502 = b'{"detail":"Writing the post failed. Please try again.","error_id":"%s"}'
 X_READER_502 = b'{"detail":"X can\'t be read right now. Please try again later.","error_id":"%s"}'
 X_PUBLISHER_502 = (
     b'{"detail":"X isn\'t answering right now. Please try again later.","error_id":"%s"}'

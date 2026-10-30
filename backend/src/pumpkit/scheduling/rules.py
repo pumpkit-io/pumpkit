@@ -38,7 +38,8 @@ def check_length(parts: list[str], *, limit: int) -> None:
     for number, text in enumerate(parts, start=1):
         length = x_weighted_length(text)
         if length > limit:
-            subject = part_name(number, len(parts)) or "This post"
+            name = part_name(number, len(parts))
+            subject = name.capitalize() if name else "This post"
             raise RuleBroken(
                 f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
             )
@@ -54,7 +55,7 @@ def check_live_parts_kept(live: list[str], parts: list[str]) -> None:
         if len(parts) < number or parts[number - 1] != text:
             raise LivePartLocked(f"Part {number} is already on X, so it can't change.")
     if live and len(parts) == len(live):
-        raise LivePartLocked("Keep at least one Part after the ones already on X.")
+        raise LivePartLocked("Keep at least one part after the ones already on X.")
 
 
 def check_text_keeps_live_parts(live_count: int, before: list[str], after: list[str]) -> None:
@@ -167,7 +168,7 @@ class ScheduledPostEdit:
 
     def __post_init__(self) -> None:
         if self.parts is not None and self.copy_text:
-            raise RuleBroken("Give either the Parts or the Post's Text, not both.")
+            raise RuleBroken("Give either the parts or the post's text, not both.")
         if self.publish_at is not None and self.publish_now:
             raise RuleBroken("Give either a publish time or publish now, not both.")
         if (
@@ -179,7 +180,7 @@ class ScheduledPostEdit:
             and self.share_with_followers is None
         ):
             raise RuleBroken(
-                "Change the text, the publish time, the Community or sharing with followers."
+                "Change the text, the publish time, the community or sharing with followers."
             )
 
     @property

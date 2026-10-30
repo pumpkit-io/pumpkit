@@ -13,9 +13,9 @@ type State = { status: 'loading' } | { status: 'ready'; plans: Plan[] } | { stat
 
 // Placeholder contents, the same for every Plan until real copy exists.
 const PLAN_INCLUDES = [
-  '[What this Plan includes]',
-  '[What this Plan includes]',
-  '[What this Plan includes]',
+  '[What this plan includes]',
+  '[What this plan includes]',
+  '[What this plan includes]',
 ];
 
 function PlanTable({ plan }: { plan: Plan }) {

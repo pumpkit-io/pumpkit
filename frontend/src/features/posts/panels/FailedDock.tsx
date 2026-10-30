@@ -27,7 +27,7 @@ export function FailedDock({
       reason={
         <div className="space-y-0.5 font-sans text-[13px] text-destructive">
           <p className="font-medium">
-            This Post didn’t go out. It was due {formatWhen(scheduledPost.publishAt)}.
+            This post didn’t go out. It was due {formatWhen(scheduledPost.publishAt)}.
           </p>
           {scheduledPost.failedReason && <p>{scheduledPost.failedReason}</p>}
         </div>

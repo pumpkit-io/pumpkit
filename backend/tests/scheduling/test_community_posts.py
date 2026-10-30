@@ -77,7 +77,7 @@ async def test_text_that_is_not_a_community_is_refused(
 
     assert response.status_code == 422
     assert response.json()["detail"] == (
-        "That isn't a Community. Paste its URL from X, like https://x.com/i/communities/123, "
+        "That isn't a community. Paste its URL from X, like https://x.com/i/communities/123, "
         "or its ID."
     )
     assert fake_x_publisher.published == []
@@ -98,7 +98,7 @@ async def test_a_community_post_x_refuses_for_a_non_member_fails_with_a_membersh
     assert response.json()["state"] == "failed"
     assert response.json()["failed_reason"] == (
         "X refused the post: You do not have permission to create this Tweet. Check that your "
-        "X account is a member of this Community and allowed to post in it."
+        "X account is a member of this community and allowed to post in it."
     )
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
@@ -236,7 +236,7 @@ async def test_a_community_thread_x_refuses_partway_fails_with_the_membership_hi
     assert body["state"] == "failed"
     assert "You do not have permission to create this Tweet." in body["failed_reason"]
     assert body["failed_reason"].endswith(
-        "Check that your X account is a member of this Community and allowed to post in it."
+        "Check that your X account is a member of this community and allowed to post in it."
     )
     assert [part["live"] for part in body["parts"]] == [True, False, False]
     assert len(fake_x_publisher.published) == 2
