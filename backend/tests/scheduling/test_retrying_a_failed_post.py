@@ -117,7 +117,7 @@ async def test_a_text_with_no_part_after_the_live_ones_is_refused(
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Keep at least one Part after the ones already on X."
+    assert response.json()["detail"] == "Keep at least one part after the ones already on X."
     assert len(fake_x_publisher.published) == 2
 
 
@@ -148,7 +148,7 @@ async def test_parts_and_the_text_together_are_refused(
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Give either the Parts or the Post's Text, not both."
+    assert response.json()["detail"] == "Give either the parts or the post's text, not both."
     assert await scheduled_posts(client) == [failed]
 
 

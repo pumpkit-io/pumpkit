@@ -34,7 +34,7 @@ test('a Thread scheduled from a Version is one row that expands into its Parts',
     'Scheduled 1',
   );
 
-  await row.getByRole('button', { name: 'Show every Part' }).click();
+  await row.getByRole('button', { name: 'Show every part' }).click();
   await expect(row.getByRole('listitem', { name: 'Part 2 of 2' })).toContainText(
     'E2E Thread, Part two.',
   );

@@ -68,7 +68,7 @@ function CardPlaceholder() {
   return (
     <div
       role="status"
-      aria-label="Loading the Post"
+      aria-label="Loading the post"
       className="flex gap-3 rounded-xl border border-border bg-card px-4 py-4 sm:px-5"
     >
       <div aria-hidden className="h-10 w-10 shrink-0 rounded-full bg-muted" />
@@ -296,10 +296,10 @@ export function PostPage() {
       <Page title="Post">
         <div className="space-y-3">
           <p className="font-sans text-sm text-foreground">
-            This Post isn&apos;t here. It may have been written on another account.
+            This post isn&apos;t here. It may have been written on another account.
           </p>
           <Button asChild variant="solid" className="h-10">
-            <Link to="/new">Write a new Post</Link>
+            <Link to="/new">Write a new post</Link>
           </Button>
         </div>
       </Page>

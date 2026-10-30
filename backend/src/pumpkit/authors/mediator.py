@@ -29,7 +29,7 @@ def next_refresh_at(last_fetched_at: Optional[datetime], *, now: datetime) -> Op
 
 async def _listed_author(db: AsyncSession, *, user_id: str, handle: str) -> InspirationAuthor:
     """The User's Inspiration author for `handle` as typed in a URL, or a 404."""
-    not_listed = NotFoundError("That handle isn't one of your Inspiration authors.")
+    not_listed = NotFoundError("That handle isn't one of your inspiration authors.")
     try:
         handle = normalize_handle(handle)
     except ValueError:
@@ -55,7 +55,7 @@ async def list_authors(db: AsyncSession, user: User) -> InspirationAuthorsListRe
 
 
 def _already_listed(handle: str) -> ConflictError:
-    return ConflictError(f"@{handle} is already one of your Inspiration authors.")
+    return ConflictError(f"@{handle} is already one of your inspiration authors.")
 
 
 async def add_author(

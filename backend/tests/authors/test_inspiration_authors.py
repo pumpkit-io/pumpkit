@@ -104,7 +104,7 @@ async def test_adding_a_handle_already_listed_in_another_case_returns_409_withou
     response = await client.post(AUTHORS, json={"handle": "@LevelsIO"})
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "@levelsio is already one of your Inspiration authors."
+    assert response.json()["detail"] == "@levelsio is already one of your inspiration authors."
     assert fake_x_reader.calls == ["levelsio"]
 
 
@@ -139,7 +139,7 @@ async def test_a_user_who_is_not_subscribed_gets_403_when_adding(client, fake_x_
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "This needs a Subscription. Subscribe to continue."
+    assert response.json()["detail"] == "This needs a subscription. Subscribe to continue."
     assert fake_x_reader.calls == []
 
 

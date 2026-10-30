@@ -64,7 +64,7 @@ function AddAuthorForm({
       </div>
       {full && (
         <p id="inspiration-authors-full" className="font-sans text-sm text-muted-foreground">
-          All three places are taken. Remove an Inspiration author to add another.
+          All three places are taken. Remove an inspiration author to add another.
         </p>
       )}
     </form>
@@ -174,7 +174,7 @@ export function InspirationAuthorsPanel() {
             How your posts sound
           </h2>
           <p className="font-sans text-sm text-muted-foreground">
-            Up to three X accounts, your Inspiration authors. Their recent posts set how your posts
+            Up to three X accounts, your inspiration authors. Their recent posts set how your posts
             sound, never what they say.
           </p>
         </div>
@@ -183,7 +183,7 @@ export function InspirationAuthorsPanel() {
 
       {subscribed === false && (
         <SubscribePrompt
-          message="Adding Inspiration authors needs a Subscription."
+          message="Adding inspiration authors needs a subscription."
           source="persona_inspiration_authors"
         />
       )}
@@ -198,14 +198,14 @@ export function InspirationAuthorsPanel() {
       {notice && <LimitNotice message={notice} />}
 
       {loadFailed ? (
-        <ErrorBanner message="Couldn't load your Inspiration authors. Reload the page to try again." />
+        <ErrorBanner message="Couldn't load your inspiration authors. Reload the page to try again." />
       ) : authors === null ? (
         <p role="status" className="font-sans text-sm text-muted-foreground">
-          Loading your Inspiration authors…
+          Loading your inspiration authors…
         </p>
       ) : authors.length === 0 ? (
         <p className="font-sans text-sm text-muted-foreground">
-          No Inspiration authors yet.
+          No inspiration authors yet.
           {subscribed === true && ' Add an X handle to set the style of your posts.'}
         </p>
       ) : (

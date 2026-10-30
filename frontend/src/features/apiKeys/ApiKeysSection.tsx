@@ -234,7 +234,7 @@ export function ApiKeysSection() {
 
       {needsSubscription && (
         <SubscribePrompt
-          message="Creating API keys needs a Subscription."
+          message="Creating API keys needs a subscription."
           source="settings_api_keys"
         />
       )}

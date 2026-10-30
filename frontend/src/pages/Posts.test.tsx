@@ -190,7 +190,7 @@ describe('Posts page', () => {
     expect(tabs().getByRole('link', { name: 'Scheduled 2' })).not.toHaveAttribute('aria-current');
     expect(tabs().getByRole('link', { name: 'Published 7' })).toBeInTheDocument();
     expect(tabs().getByRole('link', { name: 'Failed 1' })).toBeInTheDocument();
-    expect(screen.getByText('Newest Version first.')).toBeInTheDocument();
+    expect(screen.getByText('Newest version first.')).toBeInTheDocument();
     expect(postService.list).toHaveBeenCalledWith('draft');
 
     fireEvent.click(tabs().getByRole('link', { name: 'Failed 1' }));
@@ -205,7 +205,7 @@ describe('Posts page', () => {
     renderSignedIn('/posts/scheduled');
 
     const nav = within(await screen.findByRole('navigation', { name: 'Main' }));
-    expect(await nav.findByRole('link', { name: 'Posts, 1 Failed' })).toBeInTheDocument();
+    expect(await nav.findByRole('link', { name: 'Posts, 1 failed' })).toBeInTheDocument();
   });
 
   describe('Scheduled', () => {
@@ -237,7 +237,7 @@ describe('Posts page', () => {
       const community = await row('Into the Community.');
       expect(community.getByText('In 3 days')).toBeInTheDocument();
       expect(community.getByText('2:00 PM')).toBeInTheDocument();
-      expect(community.getByText(/Single post · In the Community/)).toBeInTheDocument();
+      expect(community.getByText(/Single post · In the community/)).toBeInTheDocument();
       expect(community.getByRole('link', { name: 'Indie Hackers' })).toHaveAttribute(
         'href',
         'https://x.com/i/communities/1500',
@@ -263,7 +263,7 @@ describe('Posts page', () => {
       renderSignedIn('/posts/scheduled');
       const thread = await row('Ship small.');
 
-      fireEvent.click(thread.getByRole('button', { name: 'Show every Part' }));
+      fireEvent.click(thread.getByRole('button', { name: 'Show every part' }));
 
       const first = within(thread.getByRole('listitem', { name: 'Part 1 of 2' }));
       expect(first.getByText(/Second line\./)).toBeInTheDocument();
@@ -272,12 +272,12 @@ describe('Posts page', () => {
         within(thread.getByRole('listitem', { name: 'Part 2 of 2' })).getByText('9 / 280'),
       ).toBeInTheDocument();
       expect(thread.getByText(new RegExp(`9:00 AM \\(${TIME_ZONE}\\)`))).toBeInTheDocument();
-      expect(thread.getByRole('button', { name: 'Hide the Parts' })).toHaveAttribute(
+      expect(thread.getByRole('button', { name: 'Hide the parts' })).toHaveAttribute(
         'aria-expanded',
         'true',
       );
 
-      fireEvent.click(thread.getByRole('button', { name: 'Hide the Parts' }));
+      fireEvent.click(thread.getByRole('button', { name: 'Hide the parts' }));
 
       expect(thread.queryByRole('listitem', { name: 'Part 1 of 2' })).not.toBeInTheDocument();
     });
@@ -321,12 +321,12 @@ describe('Posts page', () => {
       const scheduled = await row('Ship small.');
       expect(scheduled.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
 
-      fireEvent.click(scheduled.getByRole('button', { name: 'Show every Part' }));
+      fireEvent.click(scheduled.getByRole('button', { name: 'Show every part' }));
       fireEvent.click(scheduled.getByRole('button', { name: 'Edit' }));
 
       expect(currentPath()).toBe('/posts/post_01');
       expect(
-        await screen.findByRole('region', { name: 'Edit the Scheduled post' }),
+        await screen.findByRole('region', { name: 'Edit the scheduled post' }),
       ).toBeInTheDocument();
       expect(screen.getByRole('textbox', { name: 'Post text' })).toHaveValue('Ship small.');
     });
@@ -340,7 +340,7 @@ describe('Posts page', () => {
       renderSignedIn('/posts/scheduled');
       const scheduled = await row('Ship small.');
 
-      fireEvent.click(scheduled.getByRole('button', { name: 'Show every Part' }));
+      fireEvent.click(scheduled.getByRole('button', { name: 'Show every part' }));
 
       expect(scheduled.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     });
@@ -379,7 +379,7 @@ describe('Posts page', () => {
     const draft = await row('Revised twice.');
     expect(draft.getByText('Today')).toBeInTheDocument();
     expect(draft.getByText('8:00 AM')).toBeInTheDocument();
-    expect(draft.getByText('Single post · 3 Versions')).toBeInTheDocument();
+    expect(draft.getByText('Single post · 3 versions')).toBeInTheDocument();
   });
 
   it('lists Published Posts with when they went out, where, and a link to X', async () => {
@@ -433,7 +433,7 @@ describe('Posts page', () => {
   });
 
   it.each([
-    ['/posts/drafts', /No Drafts\./],
+    ['/posts/drafts', /No drafts\./],
     ['/posts/published', /Nothing published yet\./],
     ['/posts/failed', /Nothing failed\./],
   ])('says %s is empty when it is', async (path, text) => {
@@ -469,7 +469,7 @@ describe('Posts page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
     const alert = within(await screen.findByRole('alert'));
-    expect(alert.getByText("Couldn't load more Posts.")).toBeInTheDocument();
+    expect(alert.getByText("Couldn't load more posts.")).toBeInTheDocument();
     fireEvent.click(alert.getByRole('button', { name: 'Try again' }));
 
     expect(await row('Second page.')).toBeTruthy();

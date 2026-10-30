@@ -277,7 +277,7 @@ async def test_a_scheduled_post_carries_its_own_text_and_a_summary_of_its_schedu
     client, seed_post
 ):
     post_id = await seed_post(
-        ["The Version's text."],
+        ["The version's text."],
         state=SCHEDULED,
         publish_at=T0 + timedelta(days=1),
         scheduled_parts=["Edited after scheduling."],

@@ -33,7 +33,7 @@ export function XAccountCard({ notice }: { notice: string | null }) {
   return (
     <SettingsCard
       title="X account"
-      description="The X account Pumpkit publishes your Scheduled posts on. Pumpkit never sees your X password."
+      description="The X account Pumpkit publishes your scheduled posts on. Pumpkit never sees your X password."
     >
       {notice && <LimitNotice message={notice} />}
       {error && <ErrorBanner message={error} />}
@@ -87,7 +87,7 @@ export function XAccountCard({ notice }: { notice: string | null }) {
           )}
         </div>
       ) : subscribed === false ? (
-        <SubscribePrompt message="Connecting X needs a Subscription." source="settings_x_account" />
+        <SubscribePrompt message="Connecting X needs a subscription." source="settings_x_account" />
       ) : subscribed === true ? (
         <Button className="h-10" disabled={busy} onClick={() => void connect()}>
           {busy ? 'Opening X…' : 'Connect X'}

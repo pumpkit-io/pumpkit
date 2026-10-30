@@ -92,7 +92,7 @@ async def test_a_change_in_the_number_of_parts_is_refused(client, subscribed, po
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "Editing keeps the Text's 2 Parts. Give Feedback to change its shape."
+        "Editing keeps the text's 2 parts. Give feedback to change its shape."
     )
     assert [p["text"] for p in (await _text_of(client, post_id))["parts"]] == ["One.", "Two."]
 
@@ -139,7 +139,7 @@ async def test_saving_a_scheduled_post_is_refused(
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "This Post is scheduled, so its Text is set. Edit its Scheduled post, or unschedule it"
+        "This post is scheduled, so its text is set. Edit its scheduled post, or unschedule it"
         " first."
     )
     assert (await _text_of(client, post_id))["edited"] is False
@@ -156,7 +156,7 @@ async def test_saving_a_published_post_is_refused(
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "This Post is published, so its Text is set. Start a new Post to write another."
+        "This post is published, so its text is set. Start a new post to write another."
     )
 
 

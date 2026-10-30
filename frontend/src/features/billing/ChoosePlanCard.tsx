@@ -42,26 +42,26 @@ export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: st
   return (
     <SettingsCard
       id={CHOOSE_PLAN_ID}
-      title="Choose a Plan"
-      description="Writing, scheduling and your Persona need a Subscription."
+      title="Choose a plan"
+      description="Writing, scheduling and your persona need a subscription."
       className="border-primary/40"
     >
       {error && <ErrorBanner message={error} />}
       {data.plans.length === 0 ? (
-        <p className="font-sans text-sm text-muted-foreground">No Plans are available yet.</p>
+        <p className="font-sans text-sm text-muted-foreground">No plans are available yet.</p>
       ) : (
         <>
           {hasTerms && (
             <div className="space-y-2">
               <p className="font-sans text-xs text-muted-foreground">
-                Tick the three boxes, then choose a Plan.
+                Tick the three boxes, then choose a plan.
               </p>
               <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} />
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             {data.plans.map((plan) => {
-              const action = trialDays === null ? 'Subscribe' : 'Start free Trial';
+              const action = trialDays === null ? 'Subscribe' : 'Start free trial';
               return (
                 <PlanCard
                   key={plan.key}
@@ -72,9 +72,9 @@ export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: st
                     plan.interval,
                     plan.intervalCount,
                   )}
-                  note={trialDays === null ? undefined : `${trialDays}-day free Trial`}
+                  note={trialDays === null ? undefined : `${trialDays}-day free trial`}
                   actionLabel={pendingKey === plan.key ? 'Redirecting…' : action}
-                  ariaLabel={`${trialDays === null ? 'Subscribe to' : 'Start free Trial of'} ${plan.productName}`}
+                  ariaLabel={`${trialDays === null ? 'Subscribe to' : 'Start free trial of'} ${plan.productName}`}
                   disabled={!accepted || pendingKey !== null}
                   onAction={() => void subscribe(plan.key)}
                 />

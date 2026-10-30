@@ -9,11 +9,11 @@ import {
 } from '@/components/ui/dialog';
 
 function waitingMessage(handle: string, waiting: number): string {
-  if (waiting === 0) return `No Scheduled posts are waiting to go out on @${handle}.`;
+  if (waiting === 0) return `No scheduled posts are waiting to go out on @${handle}.`;
   if (waiting === 1) {
-    return `1 Scheduled post is waiting to go out on @${handle}. It will fail unless you connect @${handle} again before its time.`;
+    return `1 scheduled post is waiting to go out on @${handle}. It will fail unless you connect @${handle} again before its time.`;
   }
-  return `${waiting} Scheduled posts are waiting to go out on @${handle}. They will fail unless you connect @${handle} again before their time.`;
+  return `${waiting} scheduled posts are waiting to go out on @${handle}. They will fail unless you connect @${handle} again before their time.`;
 }
 
 /** Asks before disconnecting X, saying how many Scheduled posts would then fail. */
@@ -40,7 +40,7 @@ export function DisconnectXDialog({
           </DialogTitle>
           <DialogDescription className="font-sans">
             {waiting === undefined
-              ? 'Checking for Scheduled posts waiting to go out…'
+              ? 'Checking for scheduled posts waiting to go out…'
               : waitingMessage(handle, waiting)}
           </DialogDescription>
         </DialogHeader>

@@ -38,7 +38,7 @@ async def test_a_community_x_does_not_have_is_refused(client, subscribed, fake_x
     response = await client.post(LOOKUPS, json={"pasted": COMMUNITY_ID})
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "X has no Community with that ID. Check the URL."
+    assert response.json()["detail"] == "X has no community with that ID. Check the URL."
 
 
 @pytest.mark.parametrize("failure", ["not_configured", "fail"])

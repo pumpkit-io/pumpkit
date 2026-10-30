@@ -43,34 +43,34 @@ TOOLS: list[McpTool] = [
 ]
 
 INSTRUCTIONS = """\
-Pumpkit writes X posts in the style of X accounts the User picks, their Inspiration authors \
+Pumpkit writes X posts in the style of X accounts the user picks, their inspiration authors \
 (up to three), and publishes them on X.
 
-- A Brief says what a Post is about and what the User thinks about it. Starting a Post from \
-a Brief makes its first Version.
-- A Post has one Text, the text meant for X, with one text per Part for a Thread. It is what \
-the User sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
-since the Version it came from.
-- Feedback rewrites the Post's Text as it is, the User's hand edits included, and makes the \
-next Version, which becomes the Text. The writing sees every Version in order, so Feedback such \
-as "like Version 2, with a different hook" works. A Version whose Feedback was given on a Text \
-other than the Version before keeps that Text as its Starting text.
-- Each Version has a Format: a single X post, or a Thread. A Thread is several ordered Parts, \
-each one X post, published on X with each Part replying to the one before. A \
-Post starts as a single X post unless the User asks for a Thread, and Feedback may switch the \
-Format.
-- Every Version stays in the Post's History. `restore_version` makes an earlier one the \
-Post's Text again, by its number, without writing a new Version; Feedback then rewrites it.
-- The Post's Text can become a Scheduled post, published at a chosen time or at once with Post \
-now: `schedule_post` and `post_now` take the Post. A Scheduled post copied from a Thread keeps \
-every Part, in order. Every Scheduled post comes from its Post's Text: there is no typing one \
+- A brief says what a post is about and what the user thinks about it. Starting a post from \
+a brief makes its first version.
+- A post has one text, the text meant for X, with one text per part for a thread. It is what \
+the user sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
+since the version it came from.
+- Feedback rewrites the post's text as it is, the user's hand edits included, and makes the \
+next version, which becomes the text. The writing sees every version in order, so feedback such \
+as "like version 2, with a different hook" works. A version whose feedback was given on a text \
+other than the version before keeps that text as its starting text.
+- Each version has a format: a single X post, or a thread. A thread is several ordered parts, \
+each one X post, published on X with each part replying to the one before. A \
+post starts as a single X post unless the user asks for a thread, and feedback may switch the \
+format.
+- Every version stays in the post's history. `restore_version` makes an earlier one the \
+post's text again, by its number, without writing a new version; feedback then rewrites it.
+- The post's text can become a scheduled post, published at a chosen time or at once with Post \
+now: `schedule_post` and `post_now` take the post. A scheduled post copied from a thread keeps \
+every part, in order. Every scheduled post comes from its post's text: there is no typing one \
 by hand.
-- A Post goes out once, so it has at most one Scheduled post. To change one already \
-scheduled, edit it, or delete it first, which makes the Post a Draft again. Only a Draft or a \
-Failed Post takes Feedback: a scheduled or published one doesn't.
+- A post goes out once, so it has at most one scheduled post. To change one already \
+scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
+failed post takes feedback: a scheduled or published one doesn't.
 - Connecting X and subscribing happen in the Pumpkit web app. The tools for them answer with \
 a link to open.
-- Before Post now, show the User the exact text of every Part that will be published, in \
+- Before Post now, show the user the exact text of every part that will be published, in \
 order, and get their explicit yes. Post now publishes at once and can't be undone.
 """
 

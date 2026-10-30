@@ -276,7 +276,7 @@ async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_memb
     assert failed["state"] == "failed"
     assert failed["failed_reason"] == (
         "X refused the post: You do not have permission to create this Tweet. Check that your "
-        "X account is a member of this Community and allowed to post in it."
+        "X account is a member of this community and allowed to post in it."
     )
 
 

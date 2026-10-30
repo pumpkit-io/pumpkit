@@ -28,7 +28,7 @@ function FailedCount({ count }: { count: number }) {
 }
 
 function ariaLabel(path: string, label: string, failed: number) {
-  if (path === '/posts' && failed > 0) return `${label}, ${failed} Failed`;
+  if (path === '/posts' && failed > 0) return `${label}, ${failed} failed`;
   return undefined;
 }
 

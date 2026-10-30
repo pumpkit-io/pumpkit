@@ -194,20 +194,20 @@ describe('Settings', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 
-  it('puts Choose a Plan first for a User who is not Subscribed', async () => {
+  it('puts Choose a plan first for a User who is not Subscribed', async () => {
     vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
     renderSettings();
 
-    await card('Choose a Plan');
+    await card('Choose a plan');
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Choose a Plan',
+      'Choose a plan',
       'Profile',
       'X account',
       'Plan',
       'API keys',
       'Appearance',
     ]);
-    expect((await card('Plan')).getByText('No Subscription')).toBeInTheDocument();
+    expect((await card('Plan')).getByText('No subscription')).toBeInTheDocument();
   });
 
   describe('Profile', () => {
@@ -450,7 +450,7 @@ describe('Settings', () => {
       expect(await x.findByText('@ada')).toBeInTheDocument();
       fireEvent.click(x.getByRole('button', { name: 'Disconnect' }));
       const dialog = within(await screen.findByRole('dialog', { name: 'Disconnect @ada?' }));
-      expect(await dialog.findByText(/3 Scheduled posts are waiting/)).toBeInTheDocument();
+      expect(await dialog.findByText(/3 scheduled posts are waiting/)).toBeInTheDocument();
       fireEvent.click(dialog.getByRole('button', { name: 'Disconnect' }));
 
       expect(await x.findByRole('button', { name: 'Connect X' })).toBeInTheDocument();
@@ -540,12 +540,12 @@ describe('Settings', () => {
       );
     });
 
-    it('sends a User who is not Subscribed to Choose a Plan instead of connecting', async () => {
+    it('sends a User who is not Subscribed to Choose a plan instead of connecting', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderSettings();
 
       const x = await card('X account');
-      expect(await x.findByText('Connecting X needs a Subscription.')).toBeInTheDocument();
+      expect(await x.findByText('Connecting X needs a subscription.')).toBeInTheDocument();
       expect(x.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
       expect(x.getByRole('link', { name: 'Subscribe' })).toHaveAttribute(
         'href',
@@ -573,7 +573,7 @@ describe('Settings', () => {
         await waitFor(() =>
           expect(redirectTo).toHaveBeenCalledWith('https://portal.stripe.test/x'),
         );
-        expect(screen.queryByRole('region', { name: 'Choose a Plan' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Choose a plan' })).not.toBeInTheDocument();
       },
     );
 
@@ -630,19 +630,19 @@ describe('Settings', () => {
     });
   });
 
-  describe('Choose a Plan', () => {
+  describe('Choose a plan', () => {
     beforeEach(() => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(WITH_TRIAL);
     });
 
-    it('offers each Plan with its price and the free Trial', async () => {
+    it('offers each Plan with its price and the free trial', async () => {
       renderSettings();
 
-      const choose = await card('Choose a Plan');
+      const choose = await card('Choose a plan');
       expect(await choose.findByText('Pro')).toBeInTheDocument();
       expect(choose.getByText('Pro yearly')).toBeInTheDocument();
       expect(choose.getByText(/€9\.00 \/ month/)).toBeInTheDocument();
-      expect(choose.getAllByText('14-day free Trial')).toHaveLength(2);
+      expect(choose.getAllByText('14-day free trial')).toHaveLength(2);
     });
 
     it('offers the Plans to a User whose Subscription is still incomplete', async () => {
@@ -652,18 +652,18 @@ describe('Settings', () => {
       });
       renderSettings();
 
-      const choose = await card('Choose a Plan');
+      const choose = await card('Choose a plan');
       expect(await choose.findByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
       expect(
         (await card('Plan')).queryByRole('button', { name: /manage/i }),
       ).not.toBeInTheDocument();
     });
 
-    it('keeps "Start free Trial" disabled until the three boxes are ticked, then starts checkout', async () => {
+    it('keeps "Start free trial" disabled until the three boxes are ticked, then starts checkout', async () => {
       renderSettings();
 
-      const choose = await card('Choose a Plan');
-      const start = await choose.findByRole('button', { name: 'Start free Trial of Pro yearly' });
+      const choose = await card('Choose a plan');
+      const start = await choose.findByRole('button', { name: 'Start free trial of Pro yearly' });
       for (const box of ACCEPTANCE_BOXES) {
         expect(start).toBeDisabled();
         fireEvent.click(choose.getByRole('checkbox', { name: box }));
@@ -686,8 +686,8 @@ describe('Settings', () => {
     it('links each acceptance box to what it refers to in the Terms', async () => {
       renderSettings();
 
-      const choose = await card('Choose a Plan');
-      await choose.findByRole('button', { name: 'Start free Trial of Pro' });
+      const choose = await card('Choose a plan');
+      await choose.findByRole('button', { name: 'Start free trial of Pro' });
       const href = (name: RegExp) => choose.getByRole('link', { name }).getAttribute('href');
       expect(href(/^Terms$/)).toBe('/terms');
       expect(href(/^Privacy Policy$/)).toBe('/privacy');
@@ -700,17 +700,17 @@ describe('Settings', () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderSettings();
 
-      const choose = await card('Choose a Plan');
+      const choose = await card('Choose a plan');
       expect(await choose.findByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
-      expect(choose.queryByText(/free Trial/)).not.toBeInTheDocument();
+      expect(choose.queryByText(/free trial/)).not.toBeInTheDocument();
     });
 
     it('starts checkout with only the Plan key where the Instance has no Terms', async () => {
       vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, termsVersion: null });
       renderSettings();
 
-      const choose = await card('Choose a Plan');
-      const start = await choose.findByRole('button', { name: 'Start free Trial of Pro' });
+      const choose = await card('Choose a plan');
+      const start = await choose.findByRole('button', { name: 'Start free trial of Pro' });
       expect(choose.queryByRole('checkbox')).not.toBeInTheDocument();
       fireEvent.click(start);
 
@@ -729,8 +729,8 @@ describe('Settings', () => {
       vi.mocked(billingService.startSubscriptionCheckout).mockRejectedValue(apiError(409, changed));
       renderSettings();
 
-      const choose = await card('Choose a Plan');
-      const start = await choose.findByRole('button', { name: 'Start free Trial of Pro' });
+      const choose = await card('Choose a plan');
+      const start = await choose.findByRole('button', { name: 'Start free trial of Pro' });
       for (const box of ACCEPTANCE_BOXES)
         fireEvent.click(choose.getByRole('checkbox', { name: box }));
       fireEvent.click(start);
@@ -754,7 +754,7 @@ describe('Settings', () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderSettings({ state: { checkoutStatus: 'cancelled' } });
 
-      const choose = await card('Choose a Plan');
+      const choose = await card('Choose a plan');
       expect(
         await choose.findByText('Checkout was cancelled. You have not been charged.'),
       ).toBeInTheDocument();
@@ -789,7 +789,7 @@ describe('Settings', () => {
   });
 
   describe('On an Instance that sells no Plans', () => {
-    it('shows neither Choose a Plan nor Plan, and asks nothing about billing', async () => {
+    it('shows neither Choose a plan nor Plan, and asks nothing about billing', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderSettings({ instance: NO_PLANS });
 

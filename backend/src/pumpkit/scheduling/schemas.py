@@ -216,7 +216,7 @@ class FeedbackRequest(BaseModel):
     def _strip(cls, value: str) -> str:
         stripped = value.strip()
         if not stripped:
-            raise ValueError("Write some Feedback first.")
+            raise ValueError("Write some feedback first.")
         return stripped
 
 

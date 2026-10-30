@@ -53,7 +53,7 @@ function liveNote(liveCount: number, total: number): { text: string; blocks: boo
   if (liveCount >= total) {
     const after = liveCount === 1 ? 'it' : 'them';
     return {
-      text: `${live}, and the text has no Part after ${after}. Ask for more Parts with Feedback.`,
+      text: `${live}, and the text has no part after ${after}. Ask for more parts with feedback.`,
       blocks: true,
     };
   }
@@ -247,16 +247,16 @@ export function PostToDialog({
     );
     footer = cancel;
   } else if (!ready) {
-    body = <ConnectXPrompt what="this Post" showError />;
+    body = <ConnectXPrompt what="this post" showError />;
     footer = cancel;
   } else if (step.kind === 'confirm') {
     const target = destination?.community
-      ? `from @${connection.handle} into the Community ${destination.community.name ?? destination.community.id}`
+      ? `from @${connection.handle} into the community ${destination.community.name ?? destination.community.id}`
       : `on @${connection.handle}`;
     body = (
       <>
         <p className="font-sans text-sm text-foreground">
-          {!thread ? 'This goes' : toSend === 1 ? 'This Part goes' : `These ${toSend} Parts go`} out{' '}
+          {!thread ? 'This goes' : toSend === 1 ? 'This part goes' : `These ${toSend} parts go`} out{' '}
           {target} straight away, in this order. Posting can&apos;t be undone.
         </p>
         {liveLine}

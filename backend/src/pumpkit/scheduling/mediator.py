@@ -118,7 +118,7 @@ async def _community(reader: XReader, pasted: str) -> Community:
     try:
         name: Optional[str] = (await reader.fetch_community(community_id)).name
     except CommunityNotFoundError:
-        raise NotFoundError("X has no Community with that ID. Check the URL.") from None
+        raise NotFoundError("X has no community with that ID. Check the URL.") from None
     except XReaderNotConfiguredError:
         name = None
     except XReaderError as error:
@@ -218,7 +218,7 @@ async def create_scheduled_post(
 
 
 def _already_scheduled() -> ConflictError:
-    return ConflictError("This Post already has a Scheduled post. Edit it, or unschedule it first.")
+    return ConflictError("This post already has a scheduled post. Edit it, or unschedule it first.")
 
 
 def _text_of(post: Post) -> list[str]:
@@ -227,7 +227,7 @@ def _text_of(post: Post) -> list[str]:
     Parts are. The User may have left a Part blank mid-edit.
     """
     if not post.text_parts:
-        raise ConflictError("This Post has no Text to post. Start a new Post.")
+        raise ConflictError("This post has no text to post. Start a new post.")
     parts = [part.strip() for part in post.text_parts]
     rules.check_parts_written(parts)
     return parts
@@ -251,7 +251,7 @@ async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> Sch
 
 
 def _publishing_started() -> ConflictError:
-    return ConflictError("Publishing has started, so this Scheduled post can no longer change.")
+    return ConflictError("Publishing has started, so this scheduled post can no longer change.")
 
 
 async def edit_scheduled_post(
@@ -513,7 +513,7 @@ async def restore_version(
         (v for v in version_writing.versions_of(post) if v.version_number == version_number), None
     )
     if version is None:
-        raise NotFoundError(f"This Post has no Version {version_number}.")
+        raise NotFoundError(f"This post has no version {version_number}.")
     posts_service.set_text_from_version(post, version)
     return await _commit_text(db, user=user, post=post)
 

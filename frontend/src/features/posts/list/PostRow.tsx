@@ -25,7 +25,7 @@ function shape(post: PostListItem): string {
 /** What a row says under its title, by the Post's status. */
 function rowFacts(post: PostListItem) {
   const scheduled = post.scheduledPost;
-  const versions = `${post.versionCount} ${post.versionCount === 1 ? 'Version' : 'Versions'}`;
+  const versions = `${post.versionCount} ${post.versionCount === 1 ? 'version' : 'versions'}`;
   if (!scheduled) return [shape(post), versions];
   const facts = [shape(post), <DestinationName key="destination" scheduledPost={scheduled} />];
   if (post.status === 'published' && scheduled.community && scheduled.shareWithFollowers) {
@@ -111,7 +111,7 @@ function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; cha
 export function PostRow({ post, charLimit }: { post: PostListItem; charLimit: number | null }) {
   const [expanded, setExpanded] = useState(false);
   const partsId = useId();
-  const title = postTitle(post.parts[0] ?? post.brief) || 'Untitled Post';
+  const title = postTitle(post.parts[0] ?? post.brief) || 'Untitled post';
   const scheduled = post.scheduledPost;
 
   return (
@@ -134,7 +134,7 @@ export function PostRow({ post, charLimit }: { post: PostListItem; charLimit: nu
             type="button"
             aria-expanded={expanded}
             aria-controls={expanded ? partsId : undefined}
-            aria-label={expanded ? 'Hide the Parts' : 'Show every Part'}
+            aria-label={expanded ? 'Hide the parts' : 'Show every part'}
             onClick={() => setExpanded((open) => !open)}
             className="-mr-2 -mt-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >

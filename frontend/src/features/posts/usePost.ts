@@ -126,7 +126,7 @@ export function usePost(postId: string) {
       setLoad({ kind: 'loaded', post });
     } catch (e) {
       if (errorStatus(e) === 404) setLoad({ kind: 'notFound' });
-      else setLoad({ kind: 'failed', message: errorMessage(e, "Couldn't load the Post.") });
+      else setLoad({ kind: 'failed', message: errorMessage(e, "Couldn't load the post.") });
     }
   }, [postId, startLine]);
 
@@ -188,7 +188,7 @@ export function usePost(postId: string) {
         return true;
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'feedback' });
-        fail(e, "Couldn't write the next Version. Try again.");
+        fail(e, "Couldn't write the next version. Try again.");
         return false;
       } finally {
         setIsWriting(false);
@@ -261,7 +261,7 @@ export function usePost(postId: string) {
           track('version_restored', { source: 'history' });
         },
         (e) =>
-          setRestoreError(errorMessage(e, `Couldn't restore Version ${versionNumber}. Try again.`)),
+          setRestoreError(errorMessage(e, `Couldn't restore version ${versionNumber}. Try again.`)),
       );
     },
     [update, commit, restoreOnServer],

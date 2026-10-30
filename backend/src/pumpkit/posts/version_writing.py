@@ -52,7 +52,7 @@ async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) 
     retry_at = next_attempt_at(attempted_at)
     if retry_at is not None:
         raise RetryLaterError(
-            f"You've made {VERSION_ATTEMPTS_PER_WINDOW} attempts at a Version in the last hour.",
+            f"You've made {VERSION_ATTEMPTS_PER_WINDOW} attempts at a version in the last hour.",
             retry_at=retry_at,
             now=now,
         )
@@ -204,10 +204,10 @@ async def prepare_next_version(
     versions = versions_of(post)
     text = post_text(post)
     if not versions or text is None:
-        raise ConflictError("This Post has no Version to give Feedback on. Start a new Post.")
+        raise ConflictError("This post has no version to give feedback on. Start a new post.")
     service.check_not_writing(post, now=now)
     if sent_text is not None and sent_text != text.parts:
-        raise ConflictError("Your last edit to the Text isn't saved yet. Save it, then try again.")
+        raise ConflictError("Your last edit to the text isn't saved yet. Save it, then try again.")
     await check_attempt_limit(db, user_id=user.id, now=now)
     latest = versions[-1]
     service.start_writing(post, now=now)

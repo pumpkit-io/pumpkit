@@ -25,7 +25,7 @@ class LLMError(AppError):
     """A model call failed: network, provider error, or an answer that can't be read."""
 
     status_code = 502
-    public_detail = "Writing the Post failed. Please try again."
+    public_detail = "Writing the post failed. Please try again."
     reported = True
 
 

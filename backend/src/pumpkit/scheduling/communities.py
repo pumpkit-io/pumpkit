@@ -7,7 +7,7 @@ from typing import Optional
 from pumpkit.scheduling.rules import RuleBroken
 
 NOT_A_COMMUNITY = (
-    "That isn't a Community. Paste its URL from X, like https://x.com/i/communities/123, or its ID."
+    "That isn't a community. Paste its URL from X, like https://x.com/i/communities/123, or its ID."
 )
 
 # X's pattern for a Community ID.

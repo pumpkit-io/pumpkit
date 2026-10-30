@@ -86,7 +86,7 @@ function HistoryRow({
           type="button"
           aria-expanded={expanded}
           aria-controls={fullId}
-          aria-label={`Show the full ${kind} of Version ${version.number}`}
+          aria-label={`Show the full ${kind.toLowerCase()} of version ${version.number}`}
           onClick={() => setExpanded((open) => !open)}
           className={cn(ICON_BUTTON, 'mt-1.5 shrink-0')}
         >

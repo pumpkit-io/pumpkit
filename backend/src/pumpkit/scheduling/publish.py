@@ -45,7 +45,7 @@ FailureCategory = Literal[
     "outcome_unknown",
 ]
 
-NOT_SUBSCRIBED_REASON = "Not published: your Subscription had ended. Subscribe, then reschedule it."
+NOT_SUBSCRIBED_REASON = "Not published: your subscription had ended. Subscribe, then reschedule it."
 X_ACCOUNT_CHANGED_REASON = (
     "Not published: the X account it was for is no longer connected to Pumpkit."
 )
@@ -60,7 +60,7 @@ OUTCOME_UNKNOWN_REASON = (
 )
 # X answers a Community post from a non-member with a 403, and can't be asked about membership.
 COMMUNITY_MEMBERSHIP_HINT = (
-    "Check that your X account is a member of this Community and allowed to post in it."
+    "Check that your X account is a member of this community and allowed to post in it."
 )
 
 # Far longer than one call to X takes: a Scheduled post publishing this long lost its publisher.

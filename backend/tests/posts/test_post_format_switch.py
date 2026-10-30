@@ -37,7 +37,7 @@ async def with_author(client, subscribed, fake_x_reader):
 
 
 async def _start(client, fake_llm, format: str) -> str:
-    """A Post whose first Version's text is "final 1", or the Thread "final a", "final b"."""
+    """A Post whose first version's text is "final 1", or the Thread "final a", "final b"."""
     if format == "thread":
         fake_llm.replies = [
             written_thread(["sketch a", "sketch b"]),

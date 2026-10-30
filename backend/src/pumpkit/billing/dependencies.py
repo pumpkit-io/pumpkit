@@ -9,7 +9,7 @@ from pumpkit.billing import service
 from pumpkit.core.db.session import get_async_db
 
 # The refusal for a User without access, shared with the MCP tools' access gate.
-SUBSCRIPTION_NEEDED = "This needs a Subscription. Subscribe to continue."
+SUBSCRIPTION_NEEDED = "This needs a subscription. Subscribe to continue."
 
 
 async def require_subscribed_user(

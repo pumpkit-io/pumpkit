@@ -237,7 +237,7 @@ async def test_a_community_x_doesnt_know_is_refused(connected, mcp, fixed_clock,
         community="123",
     )
 
-    assert error_text(result) == "X has no Community with that ID. Check the URL."
+    assert error_text(result) == "X has no community with that ID. Check the URL."
     assert (await scheduled_posts_through_mcp(mcp)) == []
 
 
@@ -332,7 +332,7 @@ async def test_editing_to_a_community_and_the_profile_at_once_is_refused(
         to_profile=True,
     )
 
-    assert error_text(result) == "Give either a Community or the profile, not both."
+    assert error_text(result) == "Give either a community or the profile, not both."
 
 
 async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
@@ -356,7 +356,7 @@ async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
     )
 
     assert error_text(changed) == "Part 1 is already on X, so it can't change."
-    assert error_text(cut) == "Keep at least one Part after the ones already on X."
+    assert error_text(cut) == "Keep at least one part after the ones already on X."
     assert fixed["isError"] is False, fixed
     assert [(p["text"], p["live"]) for p in fixed["structuredContent"]["parts"]] == [
         ("Live one.", True),
@@ -405,11 +405,11 @@ async def test_editing_with_the_text_and_parts_too_or_with_a_version_is_refused(
         "edit_scheduled_post", scheduled_post_id=scheduled["id"], version_id="version_attempt_1"
     )
 
-    assert error_text(both) == "Give either the Parts or the Post's Text, not both."
+    assert error_text(both) == "Give either the parts or the post's text, not both."
     assert a_version["isError"] is True, a_version
 
 
-PUBLISHING_STARTED = "Publishing has started, so this Scheduled post can no longer change."
+PUBLISHING_STARTED = "Publishing has started, so this scheduled post can no longer change."
 
 
 async def test_a_published_scheduled_post_can_be_neither_edited_nor_deleted(
@@ -481,7 +481,7 @@ async def test_deleting_a_waiting_scheduled_post_takes_it_off_the_list(
     result = await mcp.call_tool("delete_scheduled_post", scheduled_post_id=scheduled["id"])
 
     assert result["structuredContent"] == {
-        "message": "The Scheduled post is deleted.",
+        "message": "The scheduled post is deleted.",
         "post_url": f"{POSTS_PAGE}/{scheduled['post_id']}",
     }
     assert (await scheduled_posts_through_mcp(mcp)) == []
@@ -586,7 +586,7 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link(
     result = await mcp.call_tool(name, **arguments)
 
     assert error_text(result) == (
-        "This needs a Subscription. Subscribe to continue. http://localhost:5173/billing"
+        "This needs a subscription. Subscribe to continue. http://localhost:5173/billing"
     )
 
 
@@ -699,7 +699,7 @@ async def test_a_community_post_x_refuses_fails_with_the_membership_hint(
     assert result["structuredContent"]["state"] == "failed"
     assert result["structuredContent"]["message"] == (
         "Failed. X refused the post: You are not permitted. Check that your X account is a "
-        "member of this Community and allowed to post in it."
+        "member of this community and allowed to post in it."
     )
 
 
@@ -717,7 +717,7 @@ async def test_post_now_x_didnt_take_says_pumpkit_keeps_trying(
     assert posted["message"] == "X was busy. Pumpkit will keep trying for the next 15 minutes."
 
 
-ALREADY_SCHEDULED = "This Post already has a Scheduled post. Edit it, or unschedule it first."
+ALREADY_SCHEDULED = "This post already has a scheduled post. Edit it, or unschedule it first."
 
 
 @pytest.mark.parametrize(
@@ -797,12 +797,12 @@ async def _give_feedback(mcp, fake_llm, post_id: str) -> dict:
     [
         (
             "scheduled",
-            "This Post is scheduled, so it takes no Feedback. "
+            "This post is scheduled, so it takes no feedback. "
             "Edit its text, or unschedule it first.",
         ),
         (
             "published",
-            "This Post is published, so it takes no Feedback. Start a new Post to write another.",
+            "This post is published, so it takes no feedback. Start a new post to write another.",
         ),
     ],
 )

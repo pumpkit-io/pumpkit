@@ -33,7 +33,7 @@ async def start_post(
     corpus = await service.corpus_for_user(db, user_id=user_id)
     if not corpus.post_ids:
         raise RefusedError(
-            "Add an Inspiration author with posts before writing a Post.", fix_page=PERSONA_PAGE
+            "Add an inspiration author with posts before writing a post.", fix_page=PERSONA_PAGE
         )
     await check_attempt_limit(db, user_id=user_id, now=now)
     char_limit = await char_limit_for(db, user_id=user_id)

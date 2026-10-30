@@ -98,7 +98,7 @@ async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
     result = await mcp.call_tool("start_post", brief="ship small things")
 
     assert error_text(result) == (
-        "Add an Inspiration author with posts before writing a Post. http://localhost:5173/persona"
+        "Add an inspiration author with posts before writing a post. http://localhost:5173/persona"
     )
 
 
@@ -298,7 +298,7 @@ async def test_a_model_failure_is_a_reported_tool_error(post_id, mcp, fake_llm, 
 
     result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
 
-    assert error_text(result) == "Writing the Post failed. Please try again."
+    assert error_text(result) == "Writing the post failed. Please try again."
     error_id = result["structuredContent"]["error_id"]
     assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
 
@@ -330,7 +330,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
 
     result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
 
-    assert error_text(result) == "You've made 30 attempts at a Version in the last hour."
+    assert error_text(result) == "You've made 30 attempts at a version in the last hour."
     assert result["structuredContent"] == {"retry_at": "2026-10-10T13:00:30Z"}
     assert fake_llm.calls == []
 

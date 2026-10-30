@@ -48,7 +48,7 @@ const EMPTY: Record<PostStatus, ReactNode> = {
   ),
   draft: (
     <>
-      No Drafts. Write one on{' '}
+      No drafts. Write one on{' '}
       <Link to="/new" className={LINK}>
         New post
       </Link>
@@ -66,7 +66,7 @@ function TabBody({ status }: { status: PostStatus }) {
   if (load.kind === 'loading') {
     return (
       <p role="status" className="font-sans text-sm text-muted-foreground">
-        Loading your Posts…
+        Loading your posts…
       </p>
     );
   }
@@ -82,7 +82,7 @@ function TabBody({ status }: { status: PostStatus }) {
         ))}
       </ul>
       {load.more === 'failed' && (
-        <ErrorBanner message="Couldn't load more Posts." onRetry={showMore} />
+        <ErrorBanner message="Couldn't load more posts." onRetry={showMore} />
       )}
       {load.nextOffset !== null && load.more !== 'failed' && (
         <Button

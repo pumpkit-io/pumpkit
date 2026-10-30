@@ -28,7 +28,7 @@ export function OriginLine({
   rewritesDropped?: boolean;
 }) {
   if (writing) {
-    return <p className={`truncate ${LINE}`}>Writing Version {writing} from your Feedback…</p>;
+    return <p className={`truncate ${LINE}`}>Writing version {writing} from your feedback…</p>;
   }
   if (save?.kind === 'retrying' || save?.kind === 'refused') {
     return (
@@ -43,14 +43,14 @@ export function OriginLine({
   if (rewritesDropped) {
     return (
       <p className="truncate font-sans text-[13px] text-foreground">
-        Newer rewrites are in History
+        Newer rewrites are in history
       </p>
     );
   }
 
   const from = version.feedback
-    ? `From Feedback: “${version.feedback.replace(/\s+/g, ' ').trim()}”`
-    : 'From your Brief';
+    ? `From feedback: “${version.feedback.replace(/\s+/g, ' ').trim()}”`
+    : 'From your brief';
   const line = [`V${version.number}`, from, ...(edited ? ['edited'] : [])].join(' · ');
 
   // The Version number leads as a tag; the source gives way first when the line runs short.

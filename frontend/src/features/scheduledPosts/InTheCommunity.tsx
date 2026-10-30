@@ -4,7 +4,7 @@ import type { Community } from '@/services/scheduledPostService';
 export function InTheCommunity({ community }: { community: Community }) {
   return (
     <>
-      In the Community{' '}
+      In the community{' '}
       <a
         href={community.url}
         target="_blank"

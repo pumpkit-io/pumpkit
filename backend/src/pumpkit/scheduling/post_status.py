@@ -34,11 +34,11 @@ def check_takes_feedback(status: PostStatus) -> None:
     """Only a Draft or a Failed Post takes Feedback: the others' text is set to go, or gone."""
     if status == SCHEDULED_STATUS:
         raise TakesNoFeedback(
-            "This Post is scheduled, so it takes no Feedback. Edit its text, or unschedule it first."
+            "This post is scheduled, so it takes no feedback. Edit its text, or unschedule it first."
         )
     if status == PUBLISHED_STATUS:
         raise TakesNoFeedback(
-            "This Post is published, so it takes no Feedback. Start a new Post to write another."
+            "This post is published, so it takes no feedback. Start a new post to write another."
         )
 
 
@@ -50,10 +50,10 @@ def check_text_changes(status: PostStatus) -> None:
     """Only a Draft or a Failed Post's Text changes: the others' text is set to go, or gone."""
     if status == SCHEDULED_STATUS:
         raise TextIsSet(
-            "This Post is scheduled, so its Text is set. Edit its Scheduled post, or unschedule it"
+            "This post is scheduled, so its text is set. Edit its scheduled post, or unschedule it"
             " first."
         )
     if status == PUBLISHED_STATUS:
         raise TextIsSet(
-            "This Post is published, so its Text is set. Start a new Post to write another."
+            "This post is published, so its text is set. Start a new post to write another."
         )

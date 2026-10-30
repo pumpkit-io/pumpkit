@@ -111,7 +111,7 @@ def test_an_edit_changes_something():
         ScheduledPostEdit()
 
     assert refused.value.detail == (
-        "Change the text, the publish time, the Community or sharing with followers."
+        "Change the text, the publish time, the community or sharing with followers."
     )
 
 
@@ -479,7 +479,7 @@ async def test_a_community_x_does_not_have_is_refused(db, user, create, edit, co
     assert (
         created.value.detail
         == edited.value.detail
-        == ("X has no Community with that ID. Check the URL.")
+        == ("X has no community with that ID. Check the URL.")
     )
     assert [p.community for p in await _listed(db, user)] == [None]
 

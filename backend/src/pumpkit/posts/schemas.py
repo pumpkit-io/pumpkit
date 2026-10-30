@@ -21,7 +21,7 @@ class PostStartRequest(BaseModel):
     def _strip(cls, value: str) -> str:
         stripped = value.strip()
         if not stripped:
-            raise ValueError("Write a Brief first.")
+            raise ValueError("Write a brief first.")
         return stripped
 
 

@@ -5,7 +5,7 @@ export const PROFILE: Destination = { community: null, shareWithFollowers: false
 
 /** Mirrors the backend's message for text that names no Community. */
 export const NOT_A_COMMUNITY =
-  "That isn't a Community. Paste its URL from X, like https://x.com/i/communities/123, or its ID.";
+  "That isn't a community. Paste its URL from X, like https://x.com/i/communities/123, or its ID.";
 
 // X's pattern for a Community ID; mirrors backend/src/pumpkit/scheduling/communities.py.
 const ID = '[0-9]{1,19}';

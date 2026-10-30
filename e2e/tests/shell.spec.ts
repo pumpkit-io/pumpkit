@@ -57,7 +57,7 @@ test.describe('logged in', () => {
     const writer = page.getByRole('region', { name: "What's the post about?" });
     await expect(page.getByRole('link', { name: 'Persona: empty, set it up' })).toBeVisible();
 
-    await writer.getByRole('link', { name: 'Set up your Persona' }).click();
+    await writer.getByRole('link', { name: 'Set up your persona' }).click();
 
     await expect(page).toHaveURL(/\/persona$/);
     await expect(page.getByRole('region', { name: 'How your posts sound' })).toBeVisible();

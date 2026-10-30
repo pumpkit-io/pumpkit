@@ -14,7 +14,7 @@ from tests.mcp_client import error_text
 from tests.posts.writing_replies import written
 
 POSTS = "/api/v1/posts"
-BEING_WRITTEN = "Pumpkit is writing a new Version of this Post. Try again once it's written."
+BEING_WRITTEN = "Pumpkit is writing a new version of this post. Try again once it's written."
 
 
 @pytest.fixture

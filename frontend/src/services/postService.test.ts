@@ -14,7 +14,7 @@ const VERSION = {
 describe('postService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("reads a Version's Format and the Parts of its text", async () => {
+  it("reads a version's Format and the Parts of its text", async () => {
     vi.spyOn(apiService, 'post').mockResolvedValue({
       data: { id: 'post_01', brief: 'ship', versions: [VERSION] },
     } as never);

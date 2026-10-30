@@ -26,7 +26,7 @@ export function UserCard() {
       ? null
       : subscribed
         ? (planName ?? 'Subscribed')
-        : 'No Subscription';
+        : 'No subscription';
   const details = [connection ? `@${connection.handle}` : null, plan].filter(
     (detail): detail is string => detail !== null,
   );

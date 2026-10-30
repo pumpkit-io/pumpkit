@@ -103,12 +103,12 @@ async def schedule_post(
     share_with_followers: bool = False,
 ) -> ScheduledPostToolResponse:
     """
-    Schedule the Post's Text on the User's connected X account for `publish_at`, an ISO 8601
-    time with its UTC offset, on a whole minute and at least a minute from now. A Thread keeps
-    every Part in order. A Post goes out once: it has at most one Scheduled post, so to change
-    one already scheduled, edit it, or delete it first. The post goes to the User's profile, or
-    to the Community whose URL or ID is in `community`. In a Community, `share_with_followers`
-    also shows it to the User's followers.
+    Schedule the post's text on the user's connected X account for `publish_at`, an ISO 8601
+    time with its UTC offset, on a whole minute and at least a minute from now. A thread keeps
+    every part in order. A post goes out once: it has at most one scheduled post, so to change
+    one already scheduled, edit it, or delete it first. The post goes to the user's profile, or
+    to the community whose URL or ID is in `community`. In a community, `share_with_followers`
+    also shows it to the user's followers.
     """
     return await _create_scheduled_post(
         call,
@@ -137,11 +137,11 @@ async def post_now(
     share_with_followers: bool = False,
 ) -> PostNowToolResponse:
     """
-    Publish the Post's Text on the User's connected X account right away. Show the User the
-    exact text of every Part and get their yes first. A Thread keeps every Part in order, each
-    replying to the one before. A Post goes out once: one that already has a Scheduled post is
-    refused. The post goes to the User's profile, or to the Community whose URL or ID is in
-    `community`. In a Community, `share_with_followers` also shows it to the User's followers.
+    Publish the post's text on the user's connected X account right away. Show the user the
+    exact text of every part and get their yes first. A thread keeps every part in order, each
+    replying to the one before. A post goes out once: one that already has a scheduled post is
+    refused. The post goes to the user's profile, or to the community whose URL or ID is in
+    `community`. In a community, `share_with_followers` also shows it to the user's followers.
     """
     posted = await _create_scheduled_post(
         call,
@@ -155,15 +155,15 @@ async def post_now(
 
 async def list_past_communities(call: ToolCall[User]) -> PastCommunitiesResponse:
     """
-    List the Communities the User posted to before from the connected X account, most recently
-    used first, to offer them for a Scheduled post.
+    List the communities the user posted to before from the connected X account, most recently
+    used first, to offer them for a scheduled post.
     """
     return await mediator.list_past_communities(db=call.db, user=call.user)
 
 
 def _destination_change(community: Optional[str], to_profile: bool) -> DestinationChange:
     if community is not None and to_profile:
-        raise RefusedError("Give either a Community or the profile, not both.")
+        raise RefusedError("Give either a community or the profile, not both.")
     if community is not None:
         return ToCommunity(pasted=community)
     if to_profile:
@@ -182,13 +182,13 @@ async def edit_scheduled_post(
     share_with_followers: Optional[bool] = None,
 ) -> ScheduledPostToolResponse:
     """
-    Change a waiting or Failed Scheduled post: its text, as `parts` listing every Part in
-    order, or with `copy_text`, its Post's Text as it is now, after Feedback on a Failed Post;
-    its publish time (an ISO 8601 time with its UTC offset, which gives a Failed one another
-    try); the Community whose URL or ID `community` holds, or, with `to_profile`, the User's
-    profile instead. Leave out what stays the same. Live Parts of a Thread that failed partway
-    are on X and locked: keep them first in `parts`, unchanged; the Text's Parts in their
-    places are skipped. A new time publishes only the Parts not live, as replies to the last
+    Change a waiting or failed scheduled post: its text, as `parts` listing every part in
+    order, or with `copy_text`, its post's text as it is now, after feedback on a failed post;
+    its publish time (an ISO 8601 time with its UTC offset, which gives a failed one another
+    try); the community whose URL or ID `community` holds, or, with `to_profile`, the user's
+    profile instead. Leave out what stays the same. Live parts of a thread that failed partway
+    are on X and locked: keep them first in `parts`, unchanged; the text's parts in their
+    places are skipped. A new time publishes only the parts not live, as replies to the last
     live one.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
@@ -222,14 +222,14 @@ async def delete_scheduled_post(
     call: ToolCall[User], scheduled_post_id: str
 ) -> PostMessageToolResponse:
     """
-    Delete a waiting or Failed Scheduled post, so it is never published, and its Post is a Draft
-    again: it takes Feedback and can be scheduled anew. It can't be undone.
+    Delete a waiting or failed scheduled post, so it is never published, and its post is a draft
+    again: it takes feedback and can be scheduled anew. It can't be undone.
     """
     post_id = await mediator.cancel_scheduled_post(
         db=call.db, user=call.user, scheduled_post_id=scheduled_post_id
     )
     return PostMessageToolResponse(
-        message="The Scheduled post is deleted.", post_url=post_url(post_id)
+        message="The scheduled post is deleted.", post_url=post_url(post_id)
     )
 
 
@@ -237,14 +237,14 @@ async def list_posts(
     call: ToolCall[User], status: Optional[PostStatus] = None, limit: int = 20, offset: int = 0
 ) -> PostsPageResponse:
     """
-    List the User's Posts with their status, so the User can pick one up from an earlier
-    session. `status` lists one: "scheduled" (soonest first), "draft" (newest Version first),
+    List the user's posts with their status, so the user can pick one up from an earlier
+    session. `status` lists one: "scheduled" (soonest first), "draft" (newest version first),
     "published" (most recently published first) or "failed" (most recently due first); leave it
-    out for every Post, newest Version first. Each Post has its Brief, its text (the Scheduled
-    post's when it has one, else the latest Version's), how many Versions it has, and its
-    Scheduled post's state, time, Community, failure reason and link on X. `counts` says how
-    many Posts each status holds. Pages hold up to 50; pass `next_offset` as `offset` for the
-    next page. `get_post` reads one Post in full.
+    out for every post, newest version first. Each post has its brief, its text (the scheduled
+    post's when it has one, else the latest version's), how many versions it has, and its
+    scheduled post's state, time, community, failure reason and link on X. `counts` says how
+    many posts each status holds. Pages hold up to 50; pass `next_offset` as `offset` for the
+    next page. `get_post` reads one post in full.
     """
     page = PostsPageRequest(status=status, limit=limit, offset=offset)
     return await mediator.list_posts(
@@ -254,14 +254,14 @@ async def list_posts(
 
 async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     """
-    Read one of the User's Posts: its Brief, its Text (the text meant for X, with
-    `version_number`, the Version it came from, and `edited`, whether the User changed it by hand
-    since) and every Version in order, each with the Feedback that made it, its text, each Part's
-    character count, when it was written and its `starting_text`: the Text that Feedback was
-    given on, with the Version it came from, when it wasn't the Version before as written. `status` is "draft" with no
-    Scheduled post, else "scheduled", "published" or "failed" from its one Scheduled post,
-    returned in `scheduled_post` with its own copy of the Text, which the User may have edited
-    since. A Draft has no Scheduled post, so its Text can be scheduled.
+    Read one of the user's posts: its brief, its text (the text meant for X, with
+    `version_number`, the version it came from, and `edited`, whether the user changed it by hand
+    since) and every version in order, each with the feedback that made it, its text, each part's
+    character count, when it was written and its `starting_text`: the text that feedback was
+    given on, with the version it came from, when it wasn't the version before as written. `status` is "draft" with no
+    scheduled post, else "scheduled", "published" or "failed" from its one scheduled post,
+    returned in `scheduled_post` with its own copy of the text, which the user may have edited
+    since. A draft has no scheduled post, so its text can be scheduled.
     """
     return await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
 
@@ -270,13 +270,13 @@ async def give_feedback(
     call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
 ) -> VersionResponse:
     """
-    Give Feedback in plain words on one of the User's Posts, such as "shorter", "end with a
-    question", "make Part 3 punchier" or "like Version 2, with a different hook". It rewrites
-    the Post's Text as it is now, hand edits and a restored Version included, into the next
-    Version, which becomes the Text, keeping the earlier ones. `format` switches the new Version
-    to "post" (a single X post) or "thread"; leave it out to keep the Text's Format. Only a Draft
-    or a Failed Post takes Feedback: a scheduled one is edited or deleted first, and a published
-    one is done. Show the User the new Version's text, with every Part and its character count.
+    Give feedback in plain words on one of the user's posts, such as "shorter", "end with a
+    question", "make part 3 punchier" or "like version 2, with a different hook". It rewrites
+    the post's text as it is now, hand edits and a restored version included, into the next
+    version, which becomes the text, keeping the earlier ones. `format` switches the new version
+    to "post" (a single X post) or "thread"; leave it out to keep the text's format. Only a draft
+    or a failed post takes feedback: a scheduled one is edited or deleted first, and a published
+    one is done. Show the user the new version's text, with every part and its character count.
     Takes up to a minute.
     """
     feedback_request = FeedbackRequest(feedback=feedback, format=format)
@@ -293,11 +293,11 @@ async def give_feedback(
 
 async def restore_version(call: ToolCall[User], post_id: str, version_number: int) -> TextResponse:
     """
-    Make an earlier Version of one of the User's Posts its Text again, by its number, without
-    writing a new one: the Text is then that Version's text as written, and Feedback rewrites it from there.
-    Any hand edits to the Text are replaced (`get_post` says whether it is `edited`). Every
-    Version stays in the Post's History. Only a Draft or a Failed Post's Text changes. Answers
-    with the Text.
+    Make an earlier version of one of the user's posts its text again, by its number, without
+    writing a new one: the text is then that version's text as written, and feedback rewrites it from there.
+    Any hand edits to the text are replaced (`get_post` says whether it is `edited`). Every
+    version stays in the post's history. Only a draft or a failed post's text changes. Answers
+    with the text.
     """
     return await mediator.restore_version(
         db=call.db, user=call.user, post_id=post_id, version_number=version_number, now=call.now
@@ -306,7 +306,7 @@ async def restore_version(call: ToolCall[User], post_id: str, version_number: in
 
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
-    Where the User connects, reconnects or disconnects their X account: the Settings page of
+    Where the user connects, reconnects or disconnects their X account: the Settings page of
     the Pumpkit web app, since X asks them to sign in and approve in a browser.
     """
     url = f"{settings.frontend_url()}{mediator.X_CONNECTION_PAGE}"

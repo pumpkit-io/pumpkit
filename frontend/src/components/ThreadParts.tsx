@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 /** How many Parts a Thread has, shown above it so its Format reads at a glance. */
 export function ThreadSize({ count }: { count: number }) {
   return (
-    <p className="font-sans text-xs font-medium text-muted-foreground">Thread, {count} Parts</p>
+    <p className="font-sans text-xs font-medium text-muted-foreground">Thread, {count} parts</p>
   );
 }
 
