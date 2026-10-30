@@ -8,7 +8,7 @@ export interface UserProfile {
   avatarUrl: string | null;
 }
 
-interface UserProfileResponse {
+export interface UserProfileResponse {
   id: string;
   email: string;
   first_name: string | null;
@@ -16,7 +16,7 @@ interface UserProfileResponse {
   avatar_data_url: string | null;
 }
 
-function fromResponse(data: UserProfileResponse): UserProfile {
+export function toUserProfile(data: UserProfileResponse): UserProfile {
   return {
     id: data.id,
     email: data.email,
@@ -35,7 +35,7 @@ export interface UserProfileUpdate {
 export const userService = {
   fetchProfile: async (): Promise<UserProfile> => {
     const response = await apiService.get<UserProfileResponse>('/users/me');
-    return fromResponse(response.data);
+    return toUserProfile(response.data);
   },
 
   updateProfile: async (payload: UserProfileUpdate): Promise<UserProfile> => {
@@ -47,6 +47,6 @@ export const userService = {
     if ('avatarUrl' in payload) body.avatar_data_url = payload.avatarUrl ?? null;
 
     const response = await apiService.patch<UserProfileResponse>('/users/me', body);
-    return fromResponse(response.data);
+    return toUserProfile(response.data);
   },
 };

@@ -143,6 +143,7 @@ describe('Posts page', () => {
       needsReconnect: false,
       scheduledPostsWaiting: 0,
       photoUrl: null,
+      offerPhoto: false,
     });
   });
 

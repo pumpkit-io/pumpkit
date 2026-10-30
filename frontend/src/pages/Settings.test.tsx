@@ -26,6 +26,8 @@ vi.mock('@/services/xConnectionService', () => ({
     startAuthorization: vi.fn(),
     complete: vi.fn(),
     disconnect: vi.fn(),
+    acceptPhoto: vi.fn(),
+    declinePhoto: vi.fn(),
   },
 }));
 vi.mock('@/services/apiKeyService', () => ({
@@ -79,7 +81,12 @@ const CONNECTED: XConnection = {
   needsReconnect: false,
   scheduledPostsWaiting: 0,
   photoUrl: null,
+  offerPhoto: false,
 };
+
+const X_PHOTO = 'https://pbs.twimg.com/profile_images/1/ada_200x200.jpg';
+const X_PHOTO_DATA_URL = 'data:image/jpeg;base64,eA==';
+const OFFERING_PHOTO: XConnection = { ...CONNECTED, photoUrl: X_PHOTO, offerPhoto: true };
 
 const PERIOD_END = '2030-01-01T00:00:00Z';
 const PERIOD_END_LABEL = new Date(PERIOD_END).toLocaleDateString();
@@ -138,6 +145,11 @@ function renderSettings(options: { state?: unknown; instance?: Instance } = {}) 
   return renderSignedIn('/settings', options);
 }
 
+function sidebarPhoto() {
+  // An open dialog hides the rest of the page from the accessibility tree.
+  return screen.getByRole('link', { name: /your account/i, hidden: true }).querySelector('img');
+}
+
 async function card(name: string) {
   return within(await screen.findByRole('region', { name }));
 }
@@ -159,6 +171,8 @@ describe('Settings', () => {
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(xConnectionService.startAuthorization).mockReset();
     vi.mocked(xConnectionService.disconnect).mockReset();
+    vi.mocked(xConnectionService.acceptPhoto).mockReset();
+    vi.mocked(xConnectionService.declinePhoto).mockReset().mockResolvedValue();
     vi.mocked(apiKeyService.list).mockReset().mockResolvedValue([]);
     vi.mocked(redirectTo).mockReset();
     vi.mocked(fireSuccessConfetti).mockReset();
@@ -267,6 +281,145 @@ describe('Settings', () => {
       expect(await profile.findByRole('alert')).toHaveTextContent('Name is too long.');
       expect(profile.getByLabelText('Last name')).toHaveValue('Byron');
       expect(profile.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    });
+  });
+
+  describe('X photo offer', () => {
+    it('asks a User offered the X photo whether to use it, showing it large', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
+      renderSettings();
+
+      const dialog = await screen.findByRole('dialog', { name: 'Use your X photo?' });
+      expect(dialog.querySelector('img')).toHaveAttribute('src', X_PHOTO);
+      expect(
+        within(dialog).getByText(
+          'It will show next to your name in Pumpkit. You can change it in Settings.',
+        ),
+      ).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('x_photo_offer_shown');
+    });
+
+    it('asks nothing when the X connection offers no photo', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, photoUrl: X_PHOTO });
+      renderSettings();
+
+      await (await card('X account')).findByText('@ada');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('uses the X photo, showing it in the sidebar at once', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
+      let finish: (profile: UserProfile) => void = () => {};
+      vi.mocked(xConnectionService.acceptPhoto).mockReturnValue(
+        new Promise((resolve) => (finish = resolve)),
+      );
+      renderSettings();
+
+      const dialog = await screen.findByRole('dialog', { name: 'Use your X photo?' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Use photo' }));
+
+      expect(within(dialog).getByRole('button', { name: 'Using photo…' })).toBeDisabled();
+      finish({ ...ADA, avatarUrl: X_PHOTO_DATA_URL });
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(sidebarPhoto()).toHaveAttribute('src', X_PHOTO_DATA_URL);
+      expect(xConnectionService.declinePhoto).not.toHaveBeenCalled();
+      expect(track).toHaveBeenCalledWith('x_photo_offer_accepted');
+    });
+
+    it('keeps the dialog open with an error line when the X photo cannot be used', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
+      vi.mocked(xConnectionService.acceptPhoto).mockRejectedValue(
+        apiError(502, "Couldn't use your X photo. Try again."),
+      );
+      renderSettings();
+
+      const dialog = await screen.findByRole('dialog', { name: 'Use your X photo?' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Use photo' }));
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+        "Couldn't use your X photo. Try again.",
+      );
+      expect(within(dialog).getByRole('button', { name: 'Use photo' })).toBeEnabled();
+      expect(sidebarPhoto()).toBeNull();
+    });
+
+    it.each([
+      [
+        'Not now',
+        (dialog: HTMLElement) =>
+          fireEvent.click(within(dialog).getByRole('button', { name: 'Not now' })),
+      ],
+      [
+        'the close control',
+        (dialog: HTMLElement) =>
+          fireEvent.click(within(dialog).getByRole('button', { name: 'Close' })),
+      ],
+      ['Escape', (dialog: HTMLElement) => fireEvent.keyDown(dialog, { key: 'Escape' })],
+    ])('declines the X photo with %s', async (_way, leave) => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
+      renderSettings();
+
+      leave(await screen.findByRole('dialog', { name: 'Use your X photo?' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(xConnectionService.declinePhoto).toHaveBeenCalledTimes(1);
+      expect(xConnectionService.acceptPhoto).not.toHaveBeenCalled();
+      expect(track).toHaveBeenCalledWith('x_photo_offer_declined');
+    });
+  });
+
+  describe('Use photo from X', () => {
+    it('switches the Photo to the X photo from the profile card', async () => {
+      vi.mocked(userService.fetchProfile).mockResolvedValue({
+        ...ADA,
+        avatarUrl: 'data:image/png;base64,AAAA',
+      });
+      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, photoUrl: X_PHOTO });
+      vi.mocked(xConnectionService.acceptPhoto).mockResolvedValue({
+        ...ADA,
+        avatarUrl: X_PHOTO_DATA_URL,
+      });
+      renderSettings();
+
+      const profile = await card('Profile');
+      fireEvent.click(await profile.findByRole('button', { name: 'Use photo from X' }));
+
+      await waitFor(() => expect(sidebarPhoto()).toHaveAttribute('src', X_PHOTO_DATA_URL));
+      expect(
+        profile.getByRole('button', { name: 'Change photo' }).querySelector('img'),
+      ).toHaveAttribute('src', X_PHOTO_DATA_URL);
+      expect(track).toHaveBeenCalledWith('account_x_photo_used');
+    });
+
+    it('shows why the X photo could not be used in the profile card', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, photoUrl: X_PHOTO });
+      vi.mocked(xConnectionService.acceptPhoto).mockRejectedValue(apiError(502, 'X is down.'));
+      renderSettings();
+
+      const profile = await card('Profile');
+      fireEvent.click(await profile.findByRole('button', { name: 'Use photo from X' }));
+
+      expect(await profile.findByRole('alert')).toHaveTextContent(
+        "Couldn't use your X photo. Try again.",
+      );
+    });
+
+    it('is not offered without an X connection', async () => {
+      renderSettings();
+
+      const profile = await card('Profile');
+      await profile.findByLabelText('First name');
+      await (await card('X account')).findByRole('button', { name: 'Connect X' });
+      expect(profile.queryByRole('button', { name: 'Use photo from X' })).not.toBeInTheDocument();
+    });
+
+    it('is not offered when the X account has no photo', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      renderSettings();
+
+      const profile = await card('Profile');
+      await (await card('X account')).findByText('@ada');
+      expect(profile.queryByRole('button', { name: 'Use photo from X' })).not.toBeInTheDocument();
     });
   });
 

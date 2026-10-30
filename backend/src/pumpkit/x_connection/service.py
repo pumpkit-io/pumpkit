@@ -11,6 +11,8 @@ from typing import Optional
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.auth.models import User
+from pumpkit.auth.service.users import may_fill_photo
 from pumpkit.core.errors import AppError
 from pumpkit.core.security import decrypt, encrypt, generate_token, hash_token
 from pumpkit.core.time import as_utc
@@ -23,6 +25,16 @@ LIFETIME = timedelta(minutes=10)
 class XConnectionNotFoundError(AppError):
     status_code = 404
     public_detail = "You haven't connected an X account."
+
+
+class XPhotoNotFoundError(AppError):
+    status_code = 404
+    public_detail = "Your X account has no photo."
+
+
+class XPhotoUnavailableError(AppError):
+    status_code = 502
+    public_detail = "Couldn't use your X photo. Try again."
 
 
 async def get_connection(db: AsyncSession, *, user_id: str) -> Optional[XConnection]:
@@ -47,6 +59,7 @@ async def save_connection(
     connection.handle = account.handle
     connection.subscription_type = account.subscription_type
     connection.photo_url = account.photo_url
+    connection.photo_offer_answered_at = None
     connection.access_token_encrypted = encrypt(tokens.access_token)
     connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
     connection.access_token_expires_at = tokens.expires_at
@@ -55,6 +68,21 @@ async def save_connection(
     connection.updated_at = now
     await db.flush()
     return connection
+
+
+def offers_photo(connection: XConnection, user: User) -> bool:
+    """Whether to offer the X account's photo as the User's Photo, once per connect."""
+    return (
+        may_fill_photo(user)
+        and connection.photo_url is not None
+        and connection.photo_offer_answered_at is None
+    )
+
+
+async def answer_photo_offer(db: AsyncSession, connection: XConnection, *, now: datetime) -> None:
+    """Flushes."""
+    connection.photo_offer_answered_at = now
+    await db.flush()
 
 
 async def lock_connection(db: AsyncSession, *, user_id: str) -> Optional[XConnection]:

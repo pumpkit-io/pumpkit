@@ -238,3 +238,5 @@ class XConnectionResponse(BaseModel):
     scheduled_posts_waiting: int
     # X's URL for the X account's photo; None when X gave none.
     photo_url: Optional[str]
+    # Whether to ask the User, who has no Photo, to use the X account's photo as theirs.
+    offer_photo: bool

@@ -3,8 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
+from pumpkit.auth.schemas import UserProfileResponse
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.photos import PhotoFetcher, get_photo_fetcher
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.x_connection import mediator
@@ -42,3 +44,30 @@ async def disconnect_x(
     publisher: XPublisher = Depends(get_x_publisher),
 ) -> None:
     await mediator.disconnect(db=db, publisher=publisher, user=current_user)
+
+
+@router.post(
+    "/x-connection/photo/use",
+    response_model=UserProfileResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("10/minute")
+async def use_x_photo(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
+    clock: Clock = Depends(get_clock),
+) -> UserProfileResponse:
+    return await mediator.use_photo(
+        db=db, photo_fetcher=photo_fetcher, user=current_user, now=clock()
+    )
+
+
+@router.post("/x-connection/photo/decline", status_code=status.HTTP_204_NO_CONTENT)
+async def decline_x_photo(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    await mediator.decline_photo(db=db, user=current_user, now=clock())
