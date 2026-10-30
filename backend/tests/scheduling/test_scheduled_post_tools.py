@@ -343,7 +343,7 @@ async def test_editing_a_thread_failed_partway_keeps_its_live_part_locked(
     failed = (
         await mcp.call_tool("post_now", post_id=await post_with("Live one.", "Refused two."))
     )["structuredContent"]
-    assert failed["failed_reason"] == "X refused Part 2: Nope"
+    assert failed["failed_reason"] == "X refused part 2: Nope"
 
     changed = await mcp.call_tool(
         "edit_scheduled_post", scheduled_post_id=failed["id"], parts=["Changed.", "Fixed two."]

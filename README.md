@@ -64,7 +64,7 @@ To sign in, open http://localhost:8080, choose **Get started** and send yourself
 docker compose logs backend | grep "Magic link for"
 ```
 
-Open the link in the same browser. On Home, add an X handle under **Inspiration authors**, type a Brief and choose **Write the Post**.
+Open the link in the same browser. On Home, add an X handle under **Inspiration authors**, type a Brief and choose **Write the post**.
 
 To run Pumpkit on a server with your own domain and HTTPS, follow [the guide](./docs/self-hosting.md). [Configure SMTP](./docs/self-hosting.md#smtp) before you invite anyone else.
 

@@ -391,8 +391,8 @@ describe('Post page', () => {
       const only = card.getByRole('listitem', { name: 'Post' });
       expect(within(only).getByText('14 / 280')).toBeInTheDocument();
       expect(within(only).queryByText('1/1')).not.toBeInTheDocument();
-      expect(card.queryByText(/Version 1/)).not.toBeInTheDocument();
-      expect(card.queryByText(/Single post|1 Part/)).not.toBeInTheDocument();
+      expect(card.queryByText(/version 1/i)).not.toBeInTheDocument();
+      expect(card.queryByText(/Single post|1 part/i)).not.toBeInTheDocument();
     });
 
     it("shows the Post's Text, not its latest Version", async () => {
@@ -2133,8 +2133,8 @@ describe('Post page', () => {
     it('names the Format, the Part count and the X account it posts as, and no version', async () => {
       const dialog = await openPostTo(threadWith([part('the first part'), part('the second')]));
 
-      expect(dialog.getByText('Thread · 2 Parts · as @ada')).toBeInTheDocument();
-      expect(dialog.queryByText(/Version 1/)).not.toBeInTheDocument();
+      expect(dialog.getByText('Thread · 2 parts · as @ada')).toBeInTheDocument();
+      expect(dialog.queryByText(/version 1/i)).not.toBeInTheDocument();
     });
 
     it("schedules the Post's Text to the User's profile for a day and time in their time zone", async () => {
@@ -2475,7 +2475,7 @@ describe('Post page', () => {
     const FAILED_PARTWAY: ScheduledPost = {
       ...FAILED,
       parts: [LIVE_ONE, { text: 'Refused two.', live: false, xPostUrl: null }],
-      failedReason: 'X refused Part 2: Nope',
+      failedReason: 'X refused part 2: Nope',
     };
 
     function failedThread(latest: Version): PostDetail {
@@ -2520,7 +2520,7 @@ describe('Post page', () => {
       });
       const dialog = await openRetry();
 
-      expect(dialog.getByText('Single post · 1 Part · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Single post · 1 part · as @ada')).toBeInTheDocument();
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
 
@@ -2619,9 +2619,9 @@ describe('Post page', () => {
         failedThread(version(2, ['Rewritten one.', 'Fixed two.', 'New three.'])),
       );
 
-      expect(dialog.getByText('Thread · 3 Parts · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Thread · 3 parts · as @ada')).toBeInTheDocument();
       expect(
-        dialog.getByText('Part 1 is already on X, so only Parts 2 to 3 go out, as replies to it.'),
+        dialog.getByText('Part 1 is already on X, so only parts 2 to 3 go out, as replies to it.'),
       ).toBeInTheDocument();
       fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
 

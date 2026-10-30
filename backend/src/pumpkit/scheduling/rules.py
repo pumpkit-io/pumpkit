@@ -38,7 +38,8 @@ def check_length(parts: list[str], *, limit: int) -> None:
     for number, text in enumerate(parts, start=1):
         length = x_weighted_length(text)
         if length > limit:
-            subject = part_name(number, len(parts)) or "This post"
+            name = part_name(number, len(parts))
+            subject = name.capitalize() if name else "This post"
             raise RuleBroken(
                 f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
             )

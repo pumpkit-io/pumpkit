@@ -19,7 +19,7 @@ import { rowMoment, rowWhen } from './rowWhen';
 const EDIT_STATE: PostPageState = { edit: true };
 
 function shape(post: PostListItem): string {
-  return post.format === 'thread' ? `Thread · ${post.parts.length} Parts` : 'Single post';
+  return post.format === 'thread' ? `Thread · ${post.parts.length} parts` : 'Single post';
 }
 
 /** What a row says under its title, by the Post's status. */

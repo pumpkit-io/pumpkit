@@ -195,7 +195,7 @@ def _subject(scheduled_post: ScheduledPost, part: ScheduledPostPart) -> Optional
 
 
 def _not_published(subject: Optional[str], why: str) -> str:
-    return f"{subject} not published: {why}" if subject else f"Not published: {why}"
+    return f"{subject.capitalize()} not published: {why}" if subject else f"Not published: {why}"
 
 
 def _outcome_unknown(subject: Optional[str]) -> str:

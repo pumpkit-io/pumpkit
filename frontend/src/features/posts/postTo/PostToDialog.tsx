@@ -35,12 +35,12 @@ type Step =
   { kind: 'choose' } | { kind: 'confirm' } | { kind: 'busy'; scheduledPost: ScheduledPost };
 
 function partCount(count: number): string {
-  return `${count} ${count === 1 ? 'Part' : 'Parts'}`;
+  return `${count} ${count === 1 ? 'part' : 'parts'}`;
 }
 
 /** Parts `first` to `last`, by their numbers in the Thread. */
 function partRange(first: number, last: number): string {
-  return first === last ? `Part ${first}` : `Parts ${first} to ${last}`;
+  return first === last ? `part ${first}` : `parts ${first} to ${last}`;
 }
 
 /**
@@ -49,7 +49,8 @@ function partRange(first: number, last: number): string {
  */
 function liveNote(liveCount: number, total: number): { text: string; blocks: boolean } | null {
   if (liveCount === 0) return null;
-  const live = `${partRange(1, liveCount)} ${liveCount === 1 ? 'is' : 'are'} already on X`;
+  const first = partRange(1, liveCount);
+  const live = `${first[0].toUpperCase()}${first.slice(1)} ${liveCount === 1 ? 'is' : 'are'} already on X`;
   if (liveCount >= total) {
     const after = liveCount === 1 ? 'it' : 'them';
     return {
@@ -59,7 +60,7 @@ function liveNote(liveCount: number, total: number): { text: string; blocks: boo
   }
   const rest = partRange(liveCount + 1, total);
   const go = total - liveCount === 1 ? 'goes' : 'go';
-  const to = liveCount === 1 ? 'it' : `Part ${liveCount}`;
+  const to = liveCount === 1 ? 'it' : `part ${liveCount}`;
   return { text: `${live}, so only ${rest} ${go} out, as replies to ${to}.`, blocks: false };
 }
 

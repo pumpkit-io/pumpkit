@@ -157,7 +157,7 @@ backend-1  | [2026-10-12 08:24:55] [mailer.py:send_magic_link:130] [WARNING] Mag
 
 Open that URL in the same browser within 15 minutes. **Check:** the browser lands on `PUBLIC_URL/new`, the **New post** page, which shows your address in the sidebar.
 
-To write a first Post, add an X handle on the **Persona** page, then type a Brief on **New post** and choose **Write the Post**. **Check:** after a minute or two a Version appears.
+To write a first Post, add an X handle on the **Persona** page, then type a Brief on **New post** and choose **Write the post**. **Check:** after a minute or two a Version appears.
 
 ### 7. Configure SMTP before inviting anyone
 

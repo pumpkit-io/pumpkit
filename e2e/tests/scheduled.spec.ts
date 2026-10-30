@@ -29,7 +29,7 @@ test('a Thread scheduled from a Version is one row that expands into its Parts',
 
   const row = page.getByRole('listitem', { name: 'E2E Thread, Part one.' });
   await expect(row.getByText('Tomorrow')).toBeVisible();
-  await expect(row.getByText(/Thread · 2 Parts · Your profile/)).toBeVisible();
+  await expect(row.getByText(/Thread · 2 parts · Your profile/)).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Posts by status' })).toContainText(
     'Scheduled 1',
   );

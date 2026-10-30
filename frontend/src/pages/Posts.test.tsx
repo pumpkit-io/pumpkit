@@ -231,7 +231,7 @@ describe('Posts page', () => {
       const thread = await row('Ship small every week.');
       expect(thread.getByText('Tomorrow')).toBeInTheDocument();
       expect(thread.getByText('9:00 AM')).toBeInTheDocument();
-      expect(thread.getByText(/Thread · 3 Parts · Your profile/)).toBeInTheDocument();
+      expect(thread.getByText(/Thread · 3 parts · Your profile/)).toBeInTheDocument();
       expect(thread.getByText('Scheduled')).toBeInTheDocument();
       expect(thread.queryByText('It compounds.')).not.toBeInTheDocument();
       const community = await row('Into the Community.');

@@ -222,7 +222,7 @@ async def test_scheduling_a_text_with_a_blank_part_is_refused(
     response = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Write Part 2 first."
+    assert response.json()["detail"] == "Write part 2 first."
     assert (await client.get(f"{POSTS}/{post_id}")).json()["status"] == "draft"
 
 

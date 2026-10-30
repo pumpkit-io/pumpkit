@@ -175,7 +175,7 @@ async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_
 
     failed = (await _listed(client))["A"]
     assert failed["state"] == "failed"
-    assert failed["failed_reason"] == "X refused Part 3: Duplicate content."
+    assert failed["failed_reason"] == "X refused part 3: Duplicate content."
     assert [(p["live"], p["x_post_url"]) for p in failed["parts"]] == [
         (True, "https://x.com/i/web/status/1890000000000000001"),
         (True, "https://x.com/i/web/status/1890000000000000002"),
@@ -202,7 +202,7 @@ async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_chec
     failed = (await _listed(client))["A"]
     assert failed["state"] == "failed"
     assert failed["failed_reason"] == (
-        "X didn't confirm Part 3. It may have been published. Check your X profile."
+        "X didn't confirm part 3. It may have been published. Check your X profile."
     )
     assert [p["live"] for p in failed["parts"]] == [True, True, False, False, False]
     assert len(fake_x_publisher.published) == 3
@@ -509,7 +509,7 @@ async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_li
     stuck = (await _listed(client))["Went out"]
     assert stuck["state"] == "failed"
     assert stuck["failed_reason"] == (
-        "X didn't confirm Part 2. It may have been published. Check your X profile."
+        "X didn't confirm part 2. It may have been published. Check your X profile."
     )
     assert [(p["live"], p["x_post_url"]) for p in stuck["parts"]] == [
         (True, "https://x.com/i/web/status/1890000000000000777"),
