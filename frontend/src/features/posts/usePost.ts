@@ -65,11 +65,19 @@ export function usePost(postId: string) {
   const { fail, clear } = writing;
   const { refresh: refreshCounts } = usePostCounts();
   const autosave = useTextAutosave(postId);
-  const { edit: saveSoon, flush: flushText, discard: discardEdits } = autosave;
+  const { edit: saveSoon, flush: flushEdits, discard: discardEdits } = autosave;
   const line = useUndoLine();
   const { start: startLine, edit: recordEdit, commit, move, takeBack, currentParts } = line;
   // Restores for undo and redo go out one at a time, so the server ends on the last one.
   const restoring = useRef<Promise<void>>(Promise.resolve());
+  const restoresOut = useRef(0);
+
+  /** Saves the Text on screen now, an undo's restore included; true once the server has it. */
+  const flushText = useCallback(
+    (): Promise<boolean> =>
+      restoresOut.current > 0 ? restoring.current.then(flushEdits) : flushEdits(),
+    [flushEdits],
+  );
 
   const reload = useCallback(async () => {
     setLoad({ kind: 'loading' });
@@ -176,6 +184,7 @@ export function usePost(postId: string) {
         saveSoon(to.parts);
         return;
       }
+      restoresOut.current += 1;
       restoring.current = restoring.current.then(async () => {
         await discardEdits();
         try {
@@ -189,6 +198,8 @@ export function usePost(postId: string) {
           takeBack(direction);
           showText(from.parts, from.origin.versionNumber);
           setRestoreError(errorMessage(e, `Couldn't ${direction} that change. Try again.`));
+        } finally {
+          restoresOut.current -= 1;
         }
       });
     },

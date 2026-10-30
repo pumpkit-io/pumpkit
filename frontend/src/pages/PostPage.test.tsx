@@ -1040,6 +1040,32 @@ describe('Post page', () => {
       expect(postService.saveText).toHaveBeenCalledTimes(saves);
     });
 
+    it('sends Feedback only once an undo across a rewrite has reached the server', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(TWO[1]!);
+      renderPost(draft([TWO[0]!]));
+      await sendFeedback('Punchier hook');
+      await boxHolds('the second text');
+      let restored: () => void = () => {};
+      vi.mocked(postService.restoreVersion).mockImplementationOnce(
+        () => new Promise((resolve) => (restored = () => resolve(textOf(TWO[0]!)))),
+      );
+      fireEvent.click(button('Undo'));
+      await boxHolds('the first text');
+
+      await sendFeedback('Shorter');
+
+      await waitFor(() => expect(postService.restoreVersion).toHaveBeenCalledWith('post_01', 1));
+      expect(postService.addVersion).toHaveBeenCalledTimes(1);
+      await act(async () => restored());
+      await waitFor(() => expect(postService.addVersion).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(postService.addVersion).mock.calls[1]).toEqual([
+        'post_01',
+        'Shorter',
+        'post',
+        ['the first text'],
+      ]);
+    });
+
     it('undoes a restore in one step', async () => {
       renderPost(draft(TWO));
       await textCard();
