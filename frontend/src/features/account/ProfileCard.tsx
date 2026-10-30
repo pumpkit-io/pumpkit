@@ -4,6 +4,7 @@ import { SettingsCard } from '@/components/SettingsCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useInstance } from '@/features/instance/useInstance';
+import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { track } from '@/lib/analytics';
 import { identifyUser } from '@/lib/analyticsConsent';
 import { useProfile, useProfileMutator } from '@/pages/layout/ProfileContext';
@@ -49,6 +50,8 @@ function saveError(e: unknown): string {
   return errorMessage(e, "Couldn't save your changes. Try again.");
 }
 
+const X_PHOTO_FAILED = "Couldn't use your X photo. Try again.";
+
 const LABEL = 'font-sans text-xs font-medium text-muted-foreground';
 
 /** The photo and names Parts are shown with, and the sign-in email, which only sign-in changes. */
@@ -60,6 +63,8 @@ export function ProfileCard() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { connection, acceptPhoto } = useXConnectionContext();
+  const [usingXPhoto, setUsingXPhoto] = useState(false);
 
   // Reseed from every new profile, the one a save answers with included.
   useEffect(() => {
@@ -104,6 +109,19 @@ export function ProfileCard() {
     }
   };
 
+  const takeXPhoto = async () => {
+    setUsingXPhoto(true);
+    setError(null);
+    try {
+      setProfile(await acceptPhoto());
+      track('account_x_photo_used');
+    } catch {
+      setError(X_PHOTO_FAILED);
+    } finally {
+      setUsingXPhoto(false);
+    }
+  };
+
   return (
     <SettingsCard title="Profile" description={`How you appear across ${app_name}.`}>
       {!profile || !form ? (
@@ -124,6 +142,8 @@ export function ProfileCard() {
               initials={initialsFor(form.firstName, form.lastName, profile.email)}
               onChange={(avatarUrl) => edit({ avatarUrl })}
               onError={setError}
+              onUseXPhoto={connection?.photoUrl ? () => void takeXPhoto() : undefined}
+              usingXPhoto={usingXPhoto}
             />
             <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">

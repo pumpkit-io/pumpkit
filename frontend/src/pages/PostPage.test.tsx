@@ -114,6 +114,7 @@ const CONNECTED: XConnection = {
   needsReconnect: false,
   scheduledPostsWaiting: 0,
   photoUrl: null,
+  offerPhoto: false,
 };
 
 function part(text: string, charCount = text.length): Part {

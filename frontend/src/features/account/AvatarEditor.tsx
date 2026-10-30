@@ -7,9 +7,19 @@ interface AvatarEditorProps {
   initials: string;
   onChange: (next: string | null) => void;
   onError: (message: string | null) => void;
+  /** Offered while the connected X account has a photo. */
+  onUseXPhoto?: () => void;
+  usingXPhoto?: boolean;
 }
 
-export function AvatarEditor({ value, initials, onChange, onError }: AvatarEditorProps) {
+export function AvatarEditor({
+  value,
+  initials,
+  onChange,
+  onError,
+  onUseXPhoto,
+  usingXPhoto = false,
+}: AvatarEditorProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -82,6 +92,17 @@ export function AvatarEditor({ value, initials, onChange, onError }: AvatarEdito
           className="font-sans text-[11px] text-muted-foreground underline-offset-2 hover:underline"
         >
           Remove photo
+        </button>
+      )}
+
+      {onUseXPhoto && !busy && (
+        <button
+          type="button"
+          onClick={onUseXPhoto}
+          disabled={usingXPhoto}
+          className="font-sans text-[11px] text-muted-foreground underline-offset-2 hover:underline disabled:no-underline"
+        >
+          {usingXPhoto ? 'Using photo from X…' : 'Use photo from X'}
         </button>
       )}
 

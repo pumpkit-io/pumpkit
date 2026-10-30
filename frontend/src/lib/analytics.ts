@@ -76,6 +76,9 @@ export const EVENTS = {
   account_profile_save_failed: {
     description: 'Account: profile save failed. Props: error_message.',
   },
+  account_x_photo_used: {
+    description: 'Account: made the X account\'s photo the Photo with "Use photo from X".',
+  },
 
   billing_choose_plan_opened: {
     description: 'Billing: a prompt to subscribe sent the User to Choose a Plan. Props: source.',
@@ -138,6 +141,15 @@ export const EVENTS = {
   // Posting to X (the Post page and Settings) + the X callback
   x_connected: { description: 'Settings: connected an X account through X consent screen.' },
   x_disconnected: { description: 'Settings: disconnected the X account.' },
+  x_photo_offer_shown: {
+    description: "Settings: asked a User with no Photo whether to use the X account's photo.",
+  },
+  x_photo_offer_accepted: {
+    description: "Settings: made the X account's photo the Photo from the X photo offer.",
+  },
+  x_photo_offer_declined: {
+    description: 'Settings: answered the X photo offer with Not now, Escape or the close control.',
+  },
   community_looked_up: {
     description:
       'Post to… or the inline edit: looked up a Community pasted by its URL or ID. Props: found (boolean), named (boolean, only when found).',

@@ -3,6 +3,7 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
+import type { UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 
 /** The User's X connection, loaded on mount, with connect and disconnect. */
@@ -73,5 +74,32 @@ export function useXConnection() {
     }
   }, []);
 
-  return { connection, loadFailed, busy, error, connect, disconnect, reload };
+  const answerPhotoOffer = useCallback(() => {
+    setConnection((current) => (current ? { ...current, offerPhoto: false } : current));
+  }, []);
+
+  /** Makes the X account's photo the User's Photo; rejects when it can't be copied. */
+  const acceptPhoto = useCallback(async (): Promise<UserProfile> => {
+    const profile = await xConnectionService.acceptPhoto();
+    answerPhotoOffer();
+    return profile;
+  }, [answerPhotoOffer]);
+
+  const declinePhoto = useCallback(() => {
+    answerPhotoOffer();
+    // A lost decline only means the offer comes back on the next visit.
+    xConnectionService.declinePhoto().catch(() => {});
+  }, [answerPhotoOffer]);
+
+  return {
+    connection,
+    loadFailed,
+    busy,
+    error,
+    connect,
+    disconnect,
+    reload,
+    acceptPhoto,
+    declinePhoto,
+  };
 }

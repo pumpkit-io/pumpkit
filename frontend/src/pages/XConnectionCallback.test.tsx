@@ -64,6 +64,7 @@ describe('the X callback', () => {
       needsReconnect: false,
       scheduledPostsWaiting: 0,
       photoUrl: null,
+      offerPhoto: false,
     });
 
     renderCallback('?state=the-state&code=the-code');

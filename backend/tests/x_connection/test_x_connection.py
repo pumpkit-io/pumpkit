@@ -61,6 +61,7 @@ async def test_a_subscribed_user_connects_and_then_sees_their_handle(
         "needs_reconnect": False,
         "scheduled_posts_waiting": 0,
         "photo_url": None,
+        "offer_photo": False,
     }
     assert completed.json() == expected
     assert (await client.get(X_CONNECTION)).json() == expected
