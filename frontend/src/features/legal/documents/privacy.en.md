@@ -20,20 +20,20 @@ Each category below says what the data is, what the Operator uses it for, and th
 
 ### Account and profile {#data-account}
 
-- **What:** your email address, your name, and the profile picture you upload, if any.
+- **What:** your email address, your name, and your Photo, if you have one.
 - **Why:** to create your account, sign you in and show your profile.
 - **Legal basis:** performance of the contract with you (Art. 6(1)(b) GDPR).
 
 ### Google identity {#data-google}
 
 - **What:** if you sign in with Google, your Google account identifier, the profile Google shares with Pumpkit (name, email address and picture) and the sign-in token Google issues, stored encrypted.
-- **Why:** to sign you in with your Google account. If you have no profile picture and have never uploaded or removed one, Pumpkit downloads a copy of your Google account's picture and uses it as your profile picture. You can change or remove it in Settings, and Pumpkit then never replaces it.
+- **Why:** to sign you in with your Google account. If you have no Photo and have never chosen or removed one, Pumpkit downloads a copy of your Google account's picture and uses it as your Photo. You can change or remove it in Settings, and Pumpkit then never replaces it.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
 ### Gravatar picture {#data-gravatar}
 
-- **What:** if you sign in with a Magic link, have no profile picture and have never uploaded or removed one, Pumpkit sends Gravatar, run by Automattic, a hash of your email address to look up the picture you published there. Your email address itself is not sent.
-- **Why:** to use your Gravatar picture as your profile picture. Pumpkit downloads a copy of it; if you have none, you keep your initials. You can change or remove it in Settings, and Pumpkit then never replaces it.
+- **What:** if you sign in with a Magic link, have no Photo and have never chosen or removed one, Pumpkit sends Gravatar, run by Automattic, a hash of your email address to look up the picture you published there. Your email address itself is not sent.
+- **Why:** to use your Gravatar picture as your Photo. Pumpkit downloads a copy of it; if you have none, you keep your initials. You can change or remove it in Settings, and Pumpkit then never replaces it.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
 ### Session and Magic link records {#data-sessions}
@@ -64,7 +64,7 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 ### X connection {#data-x-connection}
 
-- **What:** your X account identifier, handle and the address of its photo, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted. Pumpkit shows your X account's photo by having your browser load it from X.
+- **What:** your X account identifier, handle and the address of its photo, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted. Pumpkit shows your X account's photo by having your browser load it from X. If you choose "Use photo", Pumpkit stores a copy of that photo as your Photo.
 - **Why:** to publish on your X account when you ask Pumpkit to.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
@@ -94,7 +94,7 @@ The Operator shares personal data only with the providers below, and each receiv
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------ |
 | DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                             | Frankfurt, Germany |
 | Google (sign-in)                                                 | Your sign-in request when you choose Google                                                                      | United States      |
-| Gravatar, run by Automattic (profile picture)                    | A hash of your email address, when you sign in with a Magic link and have no profile picture                     | United States      |
+| Gravatar, run by Automattic (Photo)                              | A hash of your email address, when you sign in with a Magic link and have no Photo                               | United States      |
 | Resend (email)                                                   | Your email address and the Magic link email                                                                      | United States      |
 | Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout               | United States      |
 | X (X connection and publishing)                                  | Your authorization when you connect, and the text of each Scheduled post when it is published                    | United States      |
@@ -151,7 +151,7 @@ If you think the Operator processes your data unlawfully, you can complain to th
 
 This section is for the holders of X accounts that a User picks as an Inspiration author.
 
-When a User picks your X account as an Inspiration author, Pumpkit fetches your recent public posts through twitterapi.io, stores them, and sends them to OpenRouter so that the User's Posts follow your writing style. Your posts set only the style of those Posts, never their content. Pumpkit does not publish your posts and does not contact you.
+When a User picks your X account as an Inspiration author, Pumpkit fetches your recent public posts through twitterapi.io, stores them, and sends them to OpenRouter so that the User's Posts follow your writing style. Your posts set only the style of those Posts, never their content. Pumpkit does not publish your posts and does not contact you. Pumpkit also stores the address of your X photo, which the User's browser loads from X to show it beside your handle.
 
 - **Source:** your public posts on X, read through twitterapi.io.
 - **Legal basis:** the legitimate interest of the Operator and its Users in learning writing style from posts you made public (Art. 6(1)(f) GDPR).

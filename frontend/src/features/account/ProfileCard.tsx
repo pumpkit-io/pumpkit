@@ -4,6 +4,7 @@ import { SettingsCard } from '@/components/SettingsCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useInstance } from '@/features/instance/useInstance';
+import { USE_X_PHOTO_FAILED } from '@/features/xConnection/useXConnection';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { track } from '@/lib/analytics';
 import { identifyUser } from '@/lib/analyticsConsent';
@@ -49,8 +50,6 @@ function saveError(e: unknown): string {
   if (Array.isArray(detail) && typeof detail[0]?.msg === 'string') return detail[0].msg;
   return errorMessage(e, "Couldn't save your changes. Try again.");
 }
-
-const X_PHOTO_FAILED = "Couldn't use your X photo. Try again.";
 
 const LABEL = 'font-sans text-xs font-medium text-muted-foreground';
 
@@ -116,7 +115,7 @@ export function ProfileCard() {
       setProfile(await acceptPhoto());
       track('account_x_photo_used');
     } catch {
-      setError(X_PHOTO_FAILED);
+      setError(USE_X_PHOTO_FAILED);
     } finally {
       setUsingXPhoto(false);
     }

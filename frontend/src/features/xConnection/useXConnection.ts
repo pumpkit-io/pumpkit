@@ -6,6 +6,9 @@ import { errorMessage, errorStatus } from '@/services/apiErrors';
 import type { UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 
+/** Shown wherever `acceptPhoto` rejects. */
+export const USE_X_PHOTO_FAILED = "Couldn't use your X photo. Try again.";
+
 /** The User's X connection, loaded on mount, with connect and disconnect. */
 export function useXConnection() {
   const { refresh: refreshSubscribed } = useSubscribed();

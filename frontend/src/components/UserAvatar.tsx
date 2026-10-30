@@ -22,6 +22,7 @@ export function UserAvatar({
   className?: string;
 }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const shown = avatarUrl && avatarUrl !== failedUrl ? avatarUrl : null;
   return (
     <span
@@ -31,13 +32,16 @@ export function UserAvatar({
         className,
       )}
     >
-      <span className="bg-primary-gradient bg-clip-text text-transparent">{initials(name)}</span>
+      {(!shown || shown !== loadedUrl) && (
+        <span className="bg-primary-gradient bg-clip-text text-transparent">{initials(name)}</span>
+      )}
       {shown && (
         <img
           src={shown}
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
           draggable={false}
+          onLoad={() => setLoadedUrl(shown)}
           onError={() => setFailedUrl(shown)}
         />
       )}

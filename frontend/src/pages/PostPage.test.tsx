@@ -350,6 +350,21 @@ describe('Post page', () => {
       );
     });
 
+    it("hides the User's initials once the X account's photo has loaded", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...CONNECTED,
+        photoUrl: 'https://pbs.twimg.com/ada_200x200.jpg',
+      });
+      renderPost(postWith('the final text'));
+
+      const only = (await screen.findByRole('article', { name: 'Text' })).querySelector('li')!;
+      await within(only).findByText('@ada');
+      expect(within(only).getByText('AL')).toBeInTheDocument();
+      fireEvent.load(only.querySelector('img')!);
+
+      expect(within(only).queryByText('AL')).not.toBeInTheDocument();
+    });
+
     it("shows the User's initials when the X account's photo fails to load", async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({
         ...CONNECTED,

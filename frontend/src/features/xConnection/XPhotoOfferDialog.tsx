@@ -13,9 +13,8 @@ import {
 import { useInstance } from '@/features/instance/useInstance';
 import { track } from '@/lib/analytics';
 import { useProfileMutator } from '@/pages/layout/ProfileContext';
+import { USE_X_PHOTO_FAILED } from './useXConnection';
 import { useXConnectionContext } from './useXConnectionContext';
-
-const USE_FAILED = "Couldn't use your X photo. Try again.";
 
 /** Asks a User with no Photo, once per X connection, whether to use the X account's photo. */
 export function XPhotoOfferDialog() {
@@ -38,7 +37,7 @@ export function XPhotoOfferDialog() {
       setProfile(await acceptPhoto());
       track('x_photo_offer_accepted');
     } catch {
-      setError(USE_FAILED);
+      setError(USE_X_PHOTO_FAILED);
     } finally {
       setSaving(false);
     }
