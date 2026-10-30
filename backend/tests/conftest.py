@@ -83,6 +83,7 @@ from pumpkit.core.classifier import FakeClassifier, get_classifier  # noqa: E402
 from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402
+from pumpkit.core.photos import FakePhotoFetcher, get_photo_fetcher  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
@@ -155,6 +156,18 @@ def fake_google():
     app.dependency_overrides[get_google_sign_in] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_google_sign_in, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_photo_fetcher():
+    """
+    Every test copies photos with a fake instead of downloading them. Request it by name to map
+    URLs to data URLs in `fake_photo_fetcher.photos`; any other URL fails to download.
+    """
+    fake = FakePhotoFetcher()
+    app.dependency_overrides[get_photo_fetcher] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_photo_fetcher, None)
 
 
 @pytest.fixture(autouse=True)

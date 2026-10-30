@@ -43,6 +43,9 @@ class User(Base):
     first_name: Mapped[Optional[str]] = mapped_column(String)
     last_name: Mapped[Optional[str]] = mapped_column(String)
     avatar_data_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # When the User first saved or cleared a Photo themselves. Until then, with no Photo,
+    # Pumpkit may fill one from a Sign-in method; filling it leaves this NULL.
+    photo_chosen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

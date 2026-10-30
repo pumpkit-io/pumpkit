@@ -9,6 +9,8 @@ export interface XConnection {
   needsReconnect: boolean;
   /** Scheduled posts for this X account not yet published; disconnecting makes them fail. */
   scheduledPostsWaiting: number;
+  /** X's URL for the X account's photo; null when X gave none. */
+  photoUrl: string | null;
 }
 
 interface XConnectionApi {
@@ -16,6 +18,7 @@ interface XConnectionApi {
   char_limit: number;
   needs_reconnect: boolean;
   scheduled_posts_waiting: number;
+  photo_url: string | null;
 }
 
 const toXConnection = (c: XConnectionApi): XConnection => ({
@@ -23,6 +26,7 @@ const toXConnection = (c: XConnectionApi): XConnection => ({
   charLimit: c.char_limit,
   needsReconnect: c.needs_reconnect,
   scheduledPostsWaiting: c.scheduled_posts_waiting,
+  photoUrl: c.photo_url,
 });
 
 export const xConnectionService = {

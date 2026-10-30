@@ -197,7 +197,7 @@ async def test_reading_the_account_returns_its_id_handle_and_subscription_type()
     assert account == XAccount(user_id="42", handle="ada", subscription_type="Premium")
     request = route.calls.last.request
     assert request.headers["Authorization"] == "Bearer access-1"
-    assert request.url.params["user.fields"] == "subscription_type"
+    assert request.url.params["user.fields"] == "subscription_type,profile_image_url"
 
 
 @respx.mock
@@ -209,6 +209,31 @@ async def test_an_account_without_a_subscription_type_reads_as_none():
     account = await OfficialXPublisher().fetch_account(access_token="access-1")
 
     assert account.subscription_type is None
+
+
+@respx.mock
+async def test_the_account_s_photo_is_read_in_its_larger_size():
+    small = "https://pbs.twimg.com/profile_images/1/ada_normal.jpg"
+    respx.get(X_USERS_ME_URL).mock(
+        return_value=httpx.Response(
+            200, json={"data": {"id": "42", "username": "ada", "profile_image_url": small}}
+        )
+    )
+
+    account = await OfficialXPublisher().fetch_account(access_token="access-1")
+
+    assert account.photo_url == "https://pbs.twimg.com/profile_images/1/ada_200x200.jpg"
+
+
+@respx.mock
+async def test_an_account_without_a_photo_reads_as_none():
+    respx.get(X_USERS_ME_URL).mock(
+        return_value=httpx.Response(200, json={"data": {"id": "42", "username": "ada"}})
+    )
+
+    account = await OfficialXPublisher().fetch_account(access_token="access-1")
+
+    assert account.photo_url is None
 
 
 @respx.mock

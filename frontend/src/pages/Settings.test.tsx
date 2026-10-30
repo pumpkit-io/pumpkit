@@ -78,6 +78,7 @@ const CONNECTED: XConnection = {
   charLimit: 280,
   needsReconnect: false,
   scheduledPostsWaiting: 0,
+  photoUrl: null,
 };
 
 const PERIOD_END = '2030-01-01T00:00:00Z';
@@ -339,6 +340,36 @@ describe('Settings', () => {
       const x = await card('X account');
       expect(await x.findByText('@ada')).toBeInTheDocument();
       expect(x.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+    });
+
+    it("shows the X account's photo beside its handle", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...CONNECTED,
+        photoUrl: 'https://pbs.twimg.com/ada_200x200.jpg',
+      });
+      renderSettings();
+
+      const x = await screen.findByRole('region', { name: 'X account' });
+      await within(x).findByText('@ada');
+      expect(x.querySelector('img')).toHaveAttribute(
+        'src',
+        'https://pbs.twimg.com/ada_200x200.jpg',
+      );
+    });
+
+    it("shows the X account's initials when its photo fails to load", async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...CONNECTED,
+        photoUrl: 'https://pbs.twimg.com/gone.jpg',
+      });
+      renderSettings();
+
+      const x = await screen.findByRole('region', { name: 'X account' });
+      await within(x).findByText('@ada');
+      fireEvent.error(x.querySelector('img')!);
+
+      expect(x.querySelector('img')).toBeNull();
+      expect(within(x).getByText('A')).toBeInTheDocument();
     });
 
     it('shows the message the X callback left behind', async () => {

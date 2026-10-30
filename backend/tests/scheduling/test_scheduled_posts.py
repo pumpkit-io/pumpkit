@@ -110,6 +110,23 @@ async def test_buying_or_dropping_x_premium_changes_the_limit_at_the_next_token_
     assert (await client.get(X_CONNECTION)).json()["char_limit"] == char_limit
 
 
+async def test_the_x_account_s_photo_is_refreshed_at_the_next_token_refresh(
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
+):
+    fake_x_publisher.account = XAccount(
+        user_id="1001", handle="ada", subscription_type="None", photo_url="https://x/old.jpg"
+    )
+    await connect_x()
+    fake_x_publisher.account = XAccount(
+        user_id="1001", handle="ada", subscription_type="None", photo_url="https://x/new.jpg"
+    )
+    clock.advance(timedelta(hours=1, minutes=56))
+
+    await _post_now(client, post_with)
+
+    assert (await client.get(X_CONNECTION)).json()["photo_url"] == "https://x/new.jpg"
+
+
 async def test_a_failed_subscription_type_read_keeps_the_refreshed_tokens_and_publishes(
     client, subscribed, fake_x_publisher, clock, connect_x, post_with
 ):

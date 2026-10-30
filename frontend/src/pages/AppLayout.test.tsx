@@ -208,6 +208,7 @@ describe('The signed-in shell', () => {
         charLimit: 280,
         needsReconnect: false,
         scheduledPostsWaiting: 0,
+        photoUrl: null,
       });
       renderSignedIn('/new');
 
@@ -271,6 +272,7 @@ describe('The signed-in shell', () => {
       charLimit: 280,
       needsReconnect: true,
       scheduledPostsWaiting: 2,
+      photoUrl: null,
     };
 
     it.each(['/new', '/posts', '/persona', '/settings'])(

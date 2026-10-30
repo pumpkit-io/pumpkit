@@ -27,7 +27,7 @@ Each category below says what the data is, what the Operator uses it for, and th
 ### Google identity {#data-google}
 
 - **What:** if you sign in with Google, your Google account identifier, the profile Google shares with Pumpkit (name, email address and picture) and the sign-in token Google issues, stored encrypted.
-- **Why:** to sign you in with your Google account.
+- **Why:** to sign you in with your Google account. If you have no profile picture and have never uploaded or removed one, Pumpkit downloads a copy of your Google account's picture and uses it as your profile picture. You can change or remove it in Settings, and Pumpkit then never replaces it.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
 ### Session and Magic link records {#data-sessions}
@@ -58,7 +58,7 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 ### X connection {#data-x-connection}
 
-- **What:** your X account identifier and handle, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted.
+- **What:** your X account identifier, handle and the address of its photo, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted. Pumpkit shows your X account's photo by having your browser load it from X.
 - **Why:** to publish on your X account when you ask Pumpkit to.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 

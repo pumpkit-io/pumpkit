@@ -38,6 +38,9 @@ _DEFAULT_EXPIRES_IN_SECONDS = 7200
 _MAX_DETAIL_CHARS = 300
 # OAuth errors no retry fixes: the code or refresh token is spent or revoked, or the app is wrong.
 _PERMANENT_TOKEN_ERRORS = {"invalid_grant", "invalid_client"}
+# X names its 48px photo `..._normal.jpg`; `_200x200` is the same image, sharp at 96px on 2x screens.
+_SMALL_PHOTO_SUFFIX = "_normal"
+_LARGER_PHOTO_SUFFIX = "_200x200"
 
 TokenTypeHint = Literal["access_token", "refresh_token"]
 
@@ -100,6 +103,7 @@ class XAccount:
     handle: str
     # X's `subscription_type` ("None", "Basic", "Premium", "PremiumPlus"); None when left out.
     subscription_type: Optional[str]
+    photo_url: Optional[str] = None
 
 
 def new_code_verifier() -> str:
@@ -207,7 +211,7 @@ class OfficialXPublisher:
                 response = await client.get(
                     X_USERS_ME_URL,
                     headers={"Authorization": f"Bearer {access_token}"},
-                    params={"user.fields": "subscription_type"},
+                    params={"user.fields": "subscription_type,profile_image_url"},
                 )
         except httpx.HTTPError as error:
             raise XPublisherError(f"X unreachable: {type(error).__name__}") from error
@@ -223,10 +227,14 @@ class OfficialXPublisher:
         if not isinstance(user_id, str) or not user_id or not isinstance(handle, str) or not handle:
             raise XPublisherError("X users/me returned no id or username")
         subscription_type = data.get("subscription_type")
+        photo_url = data.get("profile_image_url")
         return XAccount(
             user_id=user_id,
             handle=handle,
             subscription_type=subscription_type if isinstance(subscription_type, str) else None,
+            photo_url=_larger_photo(photo_url)
+            if isinstance(photo_url, str) and photo_url
+            else None,
         )
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
@@ -277,6 +285,16 @@ class OfficialXPublisher:
         if status >= 500:
             raise XOutcomeUnknownError(f"X answered HTTP {status} publishing a post")
         raise XPostRejectedError(status, _detail(response))
+
+
+def _larger_photo(url: str) -> str:
+    """The `_200x200` variant of X's photo URL; a URL without `_normal` is kept as X gave it."""
+    stem, dot, extension = url.rpartition(".")
+    if not dot or "/" in extension:
+        stem, dot, extension = url, "", ""
+    if not stem.endswith(_SMALL_PHOTO_SUFFIX):
+        return url
+    return f"{stem[: -len(_SMALL_PHOTO_SUFFIX)]}{_LARGER_PHOTO_SUFFIX}{dot}{extension}"
 
 
 def _tokens_from(body: dict[str, Any], *, now: datetime, previous_refresh_token: str) -> XTokens:

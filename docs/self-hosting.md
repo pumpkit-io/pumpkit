@@ -396,6 +396,13 @@ Before 1.0, an upgrade may need manual steps. Each release lists them under **Up
    ```
 
    **Check:** `{"status":"ok"}`, and the `TAG` column shows the new version for `pumpkit-backend` and `pumpkit-web`.
+6. Run any one-off command the **Upgrade notes** ask for, once, inside the running backend. For example, the author photo backfill:
+
+   ```sh
+   docker compose exec backend python -m pumpkit.authors.photo_backfill
+   ```
+
+   **Check:** its last line reports how many it filled and how many it skipped. Running it again only retries the skipped ones.
 
 ### Building from source
 
