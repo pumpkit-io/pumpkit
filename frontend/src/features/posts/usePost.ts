@@ -6,7 +6,7 @@ import { postService, type Format, type PostDetail } from '@/services/postServic
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { statusFrom } from './postStatus';
 import { browserClock } from './text/clock';
-import { TextController, type TextSnapshot } from './text/textController';
+import { TextController, type DroppedRewrites, type TextSnapshot } from './text/textController';
 import { usePostCounts } from './usePostCounts';
 import { useWritingFailure } from './useWritingFailure';
 
@@ -32,14 +32,12 @@ function controllerFor(post: PostDetail): TextController {
   });
 }
 
-const noController = () => () => {};
+const noSubscribe = () => () => {};
 const noSnapshot = () => null;
 
 /**
- * One Post as the server has it. Its Text, Versions and the tools on them come from the Post's
- * `TextController`, as `text`. After an action that changes its Scheduled post, pass the answer
- * to `setScheduledPost` (null once deleted): the status follows, and so do the Post counts
- * behind the sidebar's Failed badge.
+ * One Post as the server has it, its Text and Versions as `text` from its `TextController`. Pass
+ * `setScheduledPost` each new Scheduled post (null once deleted): status and Post counts follow.
  */
 export function usePost(postId: string) {
   const [load, setLoad] = useState<PostLoad>({ kind: 'loading' });
@@ -51,7 +49,7 @@ export function usePost(postId: string) {
   const status = load.kind === 'loaded' ? load.post.status : null;
 
   const text: TextSnapshot | null = useSyncExternalStore(
-    controller?.subscribe ?? noController,
+    controller?.subscribe ?? noSubscribe,
     controller?.snapshot ?? noSnapshot,
   );
 
@@ -77,13 +75,14 @@ export function usePost(postId: string) {
     if (controller && status) controller.setGate({ status, subscribed });
   }, [controller, status, subscribed]);
 
-  const dropKey = text?.droppedRewrites?.key ?? null;
-  const [dismissedDrop, setDismissedDrop] = useState<number | null>(null);
+  // Compared by identity: each controller counts its keys from 1, so a key repeats across Posts.
+  const dropped = text?.droppedRewrites ?? null;
+  const [dismissedDrop, setDismissedDrop] = useState<DroppedRewrites | null>(null);
   useEffect(() => {
-    if (dropKey === null) return;
-    const timer = setTimeout(() => setDismissedDrop(dropKey), REWRITES_DROPPED_MS);
+    if (!dropped) return;
+    const timer = setTimeout(() => setDismissedDrop(dropped), REWRITES_DROPPED_MS);
     return () => clearTimeout(timer);
-  }, [dropKey]);
+  }, [dropped]);
 
   const setScheduledPost = useCallback(
     (scheduledPost: ScheduledPost | null) => {
@@ -121,10 +120,9 @@ export function usePost(postId: string) {
     load,
     reload,
     setScheduledPost,
-    controller,
     text,
     sendFeedback,
-    rewritesDropped: dropKey !== null && dropKey !== dismissedDrop,
+    rewritesDropped: dropped !== null && dropped !== dismissedDrop,
     error: writing.error,
     notice: writing.notice,
   };

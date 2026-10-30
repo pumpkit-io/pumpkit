@@ -10,10 +10,18 @@ import {
   type PostText,
   type Version,
 } from '@/services/postService';
-import { TextHistory, type CommitKind, type EditCause, type TextStep } from '../textHistory';
+import {
+  sameParts,
+  TextHistory,
+  type CommitKind,
+  type EditCause,
+  type TextStep,
+} from '../textHistory';
 import { isRefusal } from '../useWritingFailure';
 import type { Clock } from './clock';
 import { TextSaver, type TextSaveState } from './textSaver';
+
+export type { TextSaveState };
 
 /** The server calls the Text needs, for one Post: `postService` in production. */
 export interface TextBackend {
@@ -81,9 +89,6 @@ type Direction = 'undo' | 'redo';
 
 const textsOf = (parts: { text: string }[]) => parts.map((p) => p.text);
 
-const sameParts = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((text, i) => text === b[i]);
-
 function stepName(step: TextStep): string {
   if (step.kind === 'rewrite') return 'rewrite from feedback';
   if (step.kind === 'restore') return `restore of version ${step.origin.versionNumber}`;
@@ -91,9 +96,8 @@ function stepName(step: TextStep): string {
 }
 
 /**
- * One loaded Post's Text and Versions in this tab: edits shown at once and saved after a pause,
- * the undo line over every change, restores and Feedback. One restore is out at a time, and no
- * undo, redo or other restore starts until it lands, so a refused one only takes back its own move.
+ * One loaded Post's Text and Versions in this tab: edits, autosave, undo, redo, restores, Feedback.
+ * One restore is out at a time, and no undo, redo or restore starts before it lands.
  */
 export class TextController {
   private text: PostText | null;
@@ -385,7 +389,7 @@ export class TextController {
         undo: edit && !restoring && !!history?.canUndo,
         redo: edit && !restoring && !!history?.canRedo,
         restore: textChanges && !writing && !restoring,
-        sendFeedback: textChanges && !!text && gate.subscribed === true && !writing,
+        sendFeedback: edit,
         postTo: textChanges && !writing,
       },
       writing,

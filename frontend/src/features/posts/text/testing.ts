@@ -7,6 +7,7 @@ import {
   type PostText,
   type Version,
 } from '@/services/postService';
+import { sameParts } from '../textHistory';
 import type { Clock, TimerId } from './clock';
 import type { TextBackend } from './textController';
 
@@ -71,9 +72,6 @@ export interface HeldCall {
   fail: (error: unknown) => Promise<void>;
 }
 
-const sameParts = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((text, i) => text === b[i]);
-
 /**
  * One Post's Text and Versions held the way the server holds them, behind the controller's
  * backend port. A call changes them only when it lands, so a held call changes nothing yet.
@@ -100,12 +98,11 @@ export class MemoryBackend {
     return this.calls.filter((c) => c.method === method).map((c) => c.args);
   }
 
-  /** Fails the next `times` calls of `method` with `error`. */
   failNext(method: Method, error: unknown, times = 1) {
     for (let i = 0; i < times; i++) this.failures.push({ method, error });
   }
 
-  /** Holds the next call of `method` open. */
+  /** The held call lands or fails only when the test says, with the server as it is then. */
   hold(method: Method): HeldCall {
     let answer: (outcome: 'release' | { error: unknown }) => void = () => {};
     const call = new Promise<'release' | { error: unknown }>((resolve) => (answer = resolve));

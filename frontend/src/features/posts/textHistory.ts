@@ -49,7 +49,7 @@ interface Burst {
   closed: boolean;
 }
 
-const sameParts = (a: readonly string[], b: readonly string[]) =>
+export const sameParts = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((text, i) => text === b[i]);
 
 const modeOf = (cause: EditCause): Burst['mode'] =>

@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Version } from '@/services/postService';
-import type { TextSaveState } from '../text/textSaver';
+import type { TextSaveState } from '../text/textController';
 
 const LINE = 'font-sans text-[13px] tabular-nums text-muted-foreground';
 
