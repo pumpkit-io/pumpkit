@@ -847,6 +847,7 @@ describe('Post page', () => {
 
       expect(await (await textCard()).findByText('the second text')).toBeInTheDocument();
       expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']);
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'shorter', 'post', ['edited']);
       expect(vi.mocked(postService.saveText).mock.invocationCallOrder[0]).toBeLessThan(
         vi.mocked(postService.addVersion).mock.invocationCallOrder[0]!,
       );
@@ -946,7 +947,9 @@ describe('Post page', () => {
       expect(dock.getByRole('button', { name: 'Writing…' })).toBeDisabled();
       expect(dock.getByText('Writing Version 2 from your Feedback…')).toBeInTheDocument();
       expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true');
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post');
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post', [
+        'the first final',
+      ]);
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'feedback' });
 
       answer(versionTwo);
@@ -974,7 +977,9 @@ describe('Post page', () => {
       fireEvent.click(format().getByRole('radio', { name: 'Thread' }));
       await sendFeedback('expand it');
 
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'expand it', 'thread');
+      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'expand it', 'thread', [
+        'the first final',
+      ]);
       expect(
         await (await textCard()).findAllByRole('listitem', { name: /^Part \d of 3$/ }),
       ).toHaveLength(3);
@@ -1008,7 +1013,12 @@ describe('Post page', () => {
       fireEvent.click(dock.getByRole('button', { name: 'Try again' }));
 
       expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
-      expect(postService.addVersion).toHaveBeenLastCalledWith('post_01', 'make it shorter', 'post');
+      expect(postService.addVersion).toHaveBeenLastCalledWith(
+        'post_01',
+        'make it shorter',
+        'post',
+        ['the first final'],
+      );
       expect(dock.queryByRole('alert')).not.toBeInTheDocument();
     });
 

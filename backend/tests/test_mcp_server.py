@@ -50,6 +50,17 @@ async def test_the_instructions_and_scheduling_tools_copy_the_post_s_text(subscr
     assert "version_id" not in tools["edit_scheduled_post"]["inputSchema"]["properties"]
 
 
+async def test_the_instructions_and_give_feedback_rewrite_the_post_s_text(subscribed, mcp):
+    instructions = (await mcp.initialize())["instructions"]
+    description = (await mcp.list_tools())["give_feedback"]["description"]
+
+    assert "Feedback rewrites the Post's Text" in instructions
+    assert "Starting text" in instructions
+    assert "latest Version" not in instructions
+    assert "the Post's Text" in description
+    assert "latest Version" not in description
+
+
 async def test_no_instruction_or_tool_description_says_final(subscribed, mcp):
     instructions = (await mcp.initialize())["instructions"]
     tools = await mcp.list_tools()

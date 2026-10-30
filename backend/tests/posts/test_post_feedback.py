@@ -61,6 +61,7 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
         {"text": "final 2", "char_count": 7, "char_limit": X_POST_MAX_CHARS}
     ]
     assert version["tells"] == []
+    assert version["starting_text"] is None
 
 
 async def test_a_feedback_version_reports_the_tells_in_its_final(client, post_id, fake_llm):
@@ -84,9 +85,13 @@ def _assistant(content: str) -> dict:
     return {"role": "assistant", "content": content}
 
 
-def _framed(feedback: str) -> str:
-    """pumpkit-v6's feedback message, typed out here so a drift in the port fails the test."""
+def _framed(feedback: str, version: int) -> str:
+    """
+    pumpkit-v6's feedback message after the number of the Version it was given on, typed out here
+    so a drift in the port fails the test.
+    """
     return (
+        f"That was Version {version}.\n\n"
         "Change the post you just wrote according to this feedback, and change nothing else. "
         "Keep every part the feedback does not ask about exactly as it is, and return the whole "
         "post rather than only the part that changed.\n\n"
@@ -125,16 +130,16 @@ async def test_the_revision_call_continues_the_conversation_with_finals_and_feed
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
-        _user(_framed("shorter")),
+        _user(_framed("shorter", 1)),
     ]
     assert second_revision.messages == [
         _system(sketch_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
         _assistant("final 1"),
-        _user(_framed("shorter")),
+        _user(_framed("shorter", 1)),
         _assistant("final 2"),
-        _user(_framed("warmer")),
+        _user(_framed("warmer", 2)),
     ]
 
 
@@ -202,7 +207,17 @@ async def test_the_humanizer_gets_the_previous_final_the_feedback_and_the_scrubb
     ]
 
 
-async def test_the_humanizer_gets_only_the_latest_feedback_and_the_latest_final(
+def _earlier_feedback(*feedback: str) -> str:
+    items = "\n".join(f"<feedback>\n{text}\n</feedback>" for text in feedback)
+    return (
+        "This is the feedback I gave before my latest, oldest first. Each one was applied when I "
+        "gave it, so don't apply any of it again. Read it only so the rewrite doesn't undo "
+        "something I asked for that still holds, such as a length or a word I don't want.\n\n"
+        f"<earlier_feedback>\n{items}\n</earlier_feedback>"
+    )
+
+
+async def test_the_humanizer_gets_every_earlier_feedback_in_order_framed_as_done(
     client, post_id, fake_llm
 ):
     fake_llm.replies = [
@@ -210,15 +225,19 @@ async def test_the_humanizer_gets_only_the_latest_feedback_and_the_latest_final(
         {"post": "final 2"},
         written("sketch 3"),
         {"post": "final 3"},
+        written("sketch 4"),
+        {"post": "final 4"},
     ]
 
+    await client.post(_versions_url(post_id), json={"feedback": "keep it under 200 characters"})
     await client.post(_versions_url(post_id), json={"feedback": "write a much longer version"})
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
-    assert fake_llm.calls[3].messages[3:] == [
-        _user(_previous("final 2")),
+    assert fake_llm.calls[5].messages[3:] == [
+        _user(_earlier_feedback("keep it under 200 characters", "write a much longer version")),
+        _user(_previous("final 3")),
         _user(_latest_feedback("shorter")),
-        _user(_to_rewrite("sketch 3")),
+        _user(_to_rewrite("sketch 4")),
     ]
 
 
@@ -343,7 +362,7 @@ async def test_a_failed_attempt_stays_out_of_the_conversation_and_the_numbering(
     assert fake_llm.calls[1].messages[2:] == [
         _user("ship small things"),
         _assistant("final 1"),
-        _user(_framed("shorter")),
+        _user(_framed("shorter", 1)),
     ]
     post = await _stored_post(db, post_id)
     assert [(a.sequence, a.version_number) for a in post.attempts] == [(1, 1), (2, None), (3, 2)]
@@ -363,3 +382,208 @@ async def test_a_version_stores_its_feedback_models_and_usage(client, db, post_i
     )
     assert (version.sketch_model, version.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
     assert version.sketch_usage is not None and version.humanizing_usage is not None
+
+
+def _text_url(post_id: str) -> str:
+    return f"{POSTS}/{post_id}/text"
+
+
+def _restore_url(post_id: str, number: int) -> str:
+    return f"{POSTS}/{post_id}/versions/{number}/restore"
+
+
+def _asked(subject: str, feedback: str) -> str:
+    return (
+        f"Change {subject} according to this feedback, and change nothing else. Keep every part "
+        "the feedback does not ask about exactly as it is, and return the whole post rather than "
+        f"only the part that changed.\n\nThe feedback:\n{feedback}"
+    )
+
+
+def _hand_written(*sentences: str) -> str:
+    items = "\n".join(f"<sentence>{sentence}</sentence>" for sentence in sentences)
+    return (
+        "I wrote these sentences myself. Wherever one of them is in the post below, even with "
+        "different punctuation, return it exactly as I wrote it here, even if your guidelines "
+        "would change it, unless my latest feedback asks to change it.\n\n"
+        f"<my_sentences>\n{items}\n</my_sentences>"
+    )
+
+
+def _starting(text: str, version_number: int) -> dict:
+    return {
+        "format": "post",
+        "parts": [{"text": text, "char_count": len(text), "char_limit": X_POST_MAX_CHARS}],
+        "version_number": version_number,
+    }
+
+
+@pytest.fixture
+async def two_versions(client, post_id, fake_llm) -> str:
+    """The Post with Version 2, "final 2", from the Feedback "punchier"."""
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    assert (await client.post(_versions_url(post_id), json={"feedback": "punchier"})).is_success
+    fake_llm.calls.clear()
+    return post_id
+
+
+async def test_feedback_after_restoring_a_version_says_the_user_went_back_to_it(
+    client, two_versions, fake_llm
+):
+    await client.post(_restore_url(two_versions, 1))
+    fake_llm.replies = [written("sketch 3"), {"post": "final 3"}]
+
+    response = await client.post(_versions_url(two_versions), json={"feedback": "warmer"})
+
+    assert response.status_code == 201
+    assert response.json()["starting_text"] == _starting("final 1", 1)
+    revision, humanizer = fake_llm.calls
+    assert revision.messages[3:] == [
+        _assistant("final 1"),
+        _user(_framed("punchier", 1)),
+        _assistant("final 2"),
+        _user("That was Version 2. I went back to Version 1.\n\n" + _asked("Version 1", "warmer")),
+    ]
+    assert humanizer.messages[3:] == [
+        _user(_earlier_feedback("punchier")),
+        _user(_previous("final 1")),
+        _user(_latest_feedback("warmer")),
+        _user(_to_rewrite("sketch 3")),
+    ]
+
+
+async def test_feedback_after_hand_edits_says_what_the_user_changed_the_text_to(
+    client, post_id, fake_llm
+):
+    edited = "final one. I wrote this bit myself!"
+    await client.put(_text_url(post_id), json={"parts": [edited]})
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+
+    response = await client.post(_versions_url(post_id), json={"feedback": "warmer"})
+
+    assert response.json()["starting_text"] == _starting(edited, 1)
+    revision, humanizer = fake_llm.calls
+    assert revision.messages[3:] == [
+        _assistant("final 1"),
+        _user(
+            "That was Version 1. I changed the text to:\n\n"
+            f"<post>\n{edited}\n</post>\n\n" + _asked("my post above", "warmer")
+        ),
+    ]
+    assert humanizer.messages[3:] == [
+        _user(_previous(edited)),
+        _user(_latest_feedback("warmer")),
+        _user(_hand_written("final one.", "I wrote this bit myself!")),
+        _user(_to_rewrite("sketch 2")),
+    ]
+
+
+async def test_only_the_sentences_the_user_typed_or_reworded_count_as_hand_written(
+    client, post_id, fake_llm
+):
+    fake_llm.replies = [
+        written("sketch 2"),
+        {"post": "Ship small. Ship often!\nThen rest"},
+        written("sketch 3"),
+        {"post": "final 3"},
+    ]
+    await client.post(_versions_url(post_id), json={"feedback": "longer"})
+    await client.put(
+        _text_url(post_id), json={"parts": ["Ship often. Ship small, mostly.\nThen rest."]}
+    )
+
+    await client.post(_versions_url(post_id), json={"feedback": "warmer"})
+
+    assert fake_llm.calls[3].messages[6] == _user(_hand_written("Ship small, mostly."))
+
+
+async def test_feedback_after_restoring_and_editing_says_the_user_went_back_and_changed_it(
+    client, two_versions, fake_llm
+):
+    await client.post(_restore_url(two_versions, 1))
+    await client.put(_text_url(two_versions), json={"parts": ["final 1, by hand"]})
+    fake_llm.replies = [
+        written("sketch 3"),
+        {"post": "final 3"},
+        written("sketch 4"),
+        {"post": "final 4"},
+    ]
+
+    await client.post(_versions_url(two_versions), json={"feedback": "warmer"})
+    await client.post(_versions_url(two_versions), json={"feedback": "shorter"})
+
+    went_back_and_changed = _user(
+        "That was Version 2. I went back to Version 1 and changed it to:\n\n"
+        "<post>\nfinal 1, by hand\n</post>\n\n" + _asked("my post above", "warmer")
+    )
+    assert fake_llm.calls[0].messages[-1] == went_back_and_changed
+    assert fake_llm.calls[2].messages[3:] == [
+        _assistant("final 1"),
+        _user(_framed("punchier", 1)),
+        _assistant("final 2"),
+        went_back_and_changed,
+        _assistant("final 3"),
+        _user(_framed("shorter", 3)),
+    ]
+    assert fake_llm.calls[1].messages[6] == _user(_hand_written("final 1, by hand"))
+
+
+async def test_a_text_edited_back_to_an_earlier_version_reads_as_going_back_to_it(
+    client, two_versions, fake_llm
+):
+    await client.put(_text_url(two_versions), json={"parts": ["final 1"]})
+    fake_llm.replies = [written("sketch 3"), {"post": "final 3"}]
+
+    await client.post(_versions_url(two_versions), json={"feedback": "warmer"})
+
+    assert fake_llm.calls[0].messages[-1] == _user(
+        "That was Version 2. I went back to Version 1.\n\n" + _asked("Version 1", "warmer")
+    )
+
+
+async def test_feedback_on_the_latest_version_as_written_stores_no_starting_text(
+    client, two_versions, fake_llm
+):
+    await client.post(_restore_url(two_versions, 1))
+    await client.post(_restore_url(two_versions, 2))
+    fake_llm.replies = [written("sketch 3"), {"post": "final 3"}]
+
+    response = await client.post(_versions_url(two_versions), json={"feedback": "warmer"})
+
+    assert response.json()["starting_text"] is None
+    assert fake_llm.calls[0].messages[-1] == _user(_framed("warmer", 2))
+
+
+async def test_the_new_version_becomes_the_text_not_edited(client, post_id, fake_llm):
+    await client.put(_text_url(post_id), json={"parts": ["by hand"]})
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+
+    await client.post(_versions_url(post_id), json={"feedback": "warmer"})
+
+    post = (await client.get(f"{POSTS}/{post_id}")).json()
+    assert (post["text"]["parts"][0]["text"], post["text"]["version_number"]) == ("final 2", 2)
+    assert post["text"]["edited"] is False
+    assert [v["starting_text"] for v in post["versions"]] == [None, _starting("by hand", 1)]
+
+
+async def test_feedback_sent_with_a_text_that_is_not_saved_is_refused(client, post_id, fake_llm):
+    await client.put(_text_url(post_id), json={"parts": ["saved by hand"]})
+
+    response = await client.post(
+        _versions_url(post_id), json={"feedback": "warmer", "text": ["still typing"]}
+    )
+
+    assert response.status_code == 409
+    assert "isn't saved" in response.json()["detail"]
+    assert fake_llm.calls == []
+
+
+async def test_feedback_sent_with_the_saved_text_is_written(client, post_id, fake_llm):
+    await client.put(_text_url(post_id), json={"parts": ["saved by hand"]})
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+
+    response = await client.post(
+        _versions_url(post_id), json={"feedback": "warmer", "text": ["saved by hand"]}
+    )
+
+    assert response.status_code == 201

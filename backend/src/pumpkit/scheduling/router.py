@@ -243,6 +243,7 @@ async def give_feedback(
         feedback=feedback_request.feedback,
         format=feedback_request.format,
         now=clock(),
+        sent_text=feedback_request.text,
     )
 
 

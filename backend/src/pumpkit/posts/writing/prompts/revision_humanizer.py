@@ -9,6 +9,20 @@ from pumpkit.posts.formats import Format, format_noun
 from pumpkit.posts.writing.prompts.parts import format_text
 
 
+def earlier_feedback_message(feedback: list[str]) -> str:
+    """
+    Framed as done and as context only: handed earlier Feedback as standing asks, the humanizer
+    applied "write a much longer version" again on every later Version.
+    """
+    items = "\n".join(f"<feedback>\n{text}\n</feedback>" for text in feedback)
+    return (
+        "This is the feedback I gave before my latest, oldest first. Each one was applied when I "
+        "gave it, so don't apply any of it again. Read it only so the rewrite doesn't undo "
+        "something I asked for that still holds, such as a length or a word I don't want.\n\n"
+        f"<earlier_feedback>\n{items}\n</earlier_feedback>"
+    )
+
+
 def previous_final_message(format: Format, parts: list[str]) -> str:
     noun = format_noun(format)
     return (
@@ -18,10 +32,6 @@ def previous_final_message(format: Format, parts: list[str]) -> str:
 
 
 def latest_feedback_message(feedback: str, previous: Format, format: Format) -> str:
-    """
-    Only the latest, framed as done: handed earlier Feedback as standing asks, the humanizer
-    applied "write a much longer version" again on every later Version.
-    """
     noun = format_noun(format)
     switch = ""
     if previous != format:
@@ -31,6 +41,17 @@ def latest_feedback_message(feedback: str, previous: Format, format: Format) -> 
         f"applies it{switch}, so don't apply it again, and don't add, remove or reorder "
         "anything to serve it. If it asks for something your guidelines would undo, keep what "
         f"it asks for.\n\n<feedback>\n{feedback}\n</feedback>"
+    )
+
+
+def hand_written_message(sentences: list[str], format: Format) -> str:
+    """The User's own words outrank the guidelines, as in the Feedback that asked for something."""
+    items = "\n".join(f"<sentence>{sentence}</sentence>" for sentence in sentences)
+    return (
+        "I wrote these sentences myself. Wherever one of them is in the "
+        f"{format_noun(format)} below, even with different punctuation, return it exactly as I "
+        "wrote it here, even if your guidelines would change it, unless my latest feedback asks "
+        f"to change it.\n\n<my_sentences>\n{items}\n</my_sentences>"
     )
 
 

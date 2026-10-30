@@ -69,6 +69,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
                 "format": "post",
                 "parts": [one],
                 "tells": [],
+                "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }
         ],
@@ -221,6 +222,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
                 "feedback": None,
                 "format": "post",
                 "parts": [one],
+                "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }
         ],
