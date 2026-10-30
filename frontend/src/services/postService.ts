@@ -7,12 +7,6 @@ import {
   type ScheduledPostState,
 } from './scheduledPostService';
 
-/** A machine-written pattern the slop check found in a Version's text. */
-export interface Tell {
-  name: string;
-  description: string;
-}
-
 /** The shape of a Version's text: a single X post, or a Thread. */
 export type Format = 'post' | 'thread';
 export const FORMAT_POST: Format = 'post';
@@ -41,8 +35,6 @@ export interface Version {
   format: Format;
   /** A single X post has one Part. */
   parts: Part[];
-  /** Found in any Part of the text. */
-  tells: Tell[];
   /** When Pumpkit wrote it. */
   createdAt: string;
 }
@@ -164,7 +156,6 @@ interface VersionApi {
   feedback: string | null;
   format: Format;
   parts: PartApi[];
-  tells: Tell[];
   created_at: string;
 }
 
@@ -199,7 +190,6 @@ const toVersion = (v: VersionApi): Version => ({
   feedback: v.feedback,
   format: v.format,
   parts: v.parts.map(toPart),
-  tells: v.tells,
   createdAt: v.created_at,
 });
 

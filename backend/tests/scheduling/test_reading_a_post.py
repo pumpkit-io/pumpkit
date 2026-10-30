@@ -68,7 +68,6 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
                 "feedback": None,
                 "format": "post",
                 "parts": [one],
-                "tells": [],
                 "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }

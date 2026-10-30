@@ -6,7 +6,6 @@ negatives: text a person typed must come out exactly as it went in.
 
 import pytest
 
-from pumpkit.posts.writing import slop
 from pumpkit.posts.writing.scrub import scrub
 
 # Em and en dashes
@@ -83,7 +82,7 @@ def test_a_left_arrow_becomes_a_typed_arrow():
 
 
 def test_up_and_down_arrows_are_left_alone():
-    # No typed equivalent anyone uses; the slop check is where they would be judged.
+    # No typed equivalent anyone uses.
     assert scrub("revenue ↑ churn ↓") == "revenue ↑ churn ↓"
 
 
@@ -132,9 +131,3 @@ def test_text_a_person_typed_comes_through_unchanged(text):
 def test_scrubbing_twice_changes_nothing_more():
     once = scrub("one—two–x “three” … → • 3×  ​")
     assert scrub(once) == once
-
-
-def test_the_scrubbed_text_trips_none_of_the_character_tells():
-    names = dict(slop.find(scrub("it’s later—after the “questions”…")))
-    assert "em_dash" not in names
-    assert "curly_quote" not in names

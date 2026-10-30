@@ -461,7 +461,6 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
             version_number=1,
             sketch_parts=list(parts),
             parts=list(parts),
-            slop_tells=[],
             created_at=now,
         )
         set_text_from_version(post, version)
@@ -490,7 +489,6 @@ def next_version(db) -> Callable[..., Awaitable[None]]:
             feedback="Try again",
             sketch_parts=list(parts),
             parts=list(parts),
-            slop_tells=[],
             created_at=now,
         )
         set_text_from_version(post, version)

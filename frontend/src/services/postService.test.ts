@@ -8,7 +8,6 @@ const VERSION = {
   feedback: null,
   format: 'post',
   parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
-  tells: [{ name: 'em_dash', description: 'em dash' }],
   created_at: '2026-10-10T12:00:30Z',
 };
 
@@ -30,7 +29,6 @@ describe('postService', () => {
         feedback: null,
         format: 'post',
         parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
-        tells: [{ name: 'em_dash', description: 'em dash' }],
         createdAt: '2026-10-10T12:00:30Z',
       },
     ]);

@@ -25,11 +25,6 @@ class PostStartRequest(BaseModel):
         return stripped
 
 
-class TellResponse(BaseModel):
-    name: str
-    description: str
-
-
 class PartResponse(BaseModel):
     """One Part of a Version's text."""
 
@@ -55,8 +50,6 @@ class VersionResponse(BaseModel):
     format: Format
     # The Version's text, one Part at a time, in order.
     parts: list[PartResponse]
-    # What the slop check found in any Part of the text, for the User to judge.
-    tells: list[TellResponse]
     starting_text: Optional[StartingTextResponse]
     created_at: datetime
 
@@ -75,21 +68,3 @@ class PostResponse(BaseModel):
     id: str
     brief: str
     versions: list[VersionResponse]
-
-
-class VersionToolResponse(BaseModel):
-    """A Version as the MCP tools answer with it, without the tells."""
-
-    id: str
-    number: int
-    feedback: Optional[str]
-    format: Format
-    parts: list[PartResponse]
-    starting_text: Optional[StartingTextResponse]
-    created_at: datetime
-
-
-class PostToolResponse(BaseModel):
-    id: str
-    brief: str
-    versions: list[VersionToolResponse]

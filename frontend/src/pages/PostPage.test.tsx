@@ -91,7 +91,6 @@ import {
   textOf,
   type Part,
   type PostDetail,
-  type Tell,
   type Version,
 } from '@/services/postService';
 import {
@@ -127,7 +126,6 @@ function version(number: number, texts: string[], extra: Partial<Version> = {}):
     feedback: number === 1 ? null : 'punchier',
     format: texts.length > 1 ? 'thread' : 'post',
     parts: texts.map((text) => part(text)),
-    tells: [],
     createdAt: `2026-10-10T0${number}:00:00Z`,
     ...extra,
   };
@@ -153,8 +151,8 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
   );
 }
 
-function postWith(final: string, finalCharCount = final.length, tells: Tell[] = []): PostDetail {
-  return draft([version(1, [final], { parts: [part(final, finalCharCount)], tells })]);
+function postWith(final: string, finalCharCount = final.length): PostDetail {
+  return draft([version(1, [final], { parts: [part(final, finalCharCount)] })]);
 }
 
 function threadWith(parts: Part[]): PostDetail {
@@ -321,18 +319,6 @@ describe('Post page', () => {
       expect(within(only).queryByText('1/1')).not.toBeInTheDocument();
       expect(card.queryByText(/Version 1/)).not.toBeInTheDocument();
       expect(card.queryByText(/Single post|1 Part/)).not.toBeInTheDocument();
-    });
-
-    it('shows no machine-written tells', async () => {
-      renderPost(
-        postWith('the unfair advantage — distribution', undefined, [
-          { name: 'em_dash', description: 'em dash' },
-        ]),
-      );
-
-      await textCard();
-      expect(screen.queryByText(/machine-written/i)).not.toBeInTheDocument();
-      expect(screen.queryByText('em dash')).not.toBeInTheDocument();
     });
 
     it("shows the Post's Text, not its latest Version", async () => {

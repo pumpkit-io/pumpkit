@@ -68,7 +68,6 @@ def seed_post(db, user):
                     version_number=number,
                     sketch_parts=parts,
                     parts=parts,
-                    slop_tells=[],
                     created_at=written_at - timedelta(hours=len(versions) - number),
                 )
             )

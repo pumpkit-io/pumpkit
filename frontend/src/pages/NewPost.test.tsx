@@ -109,7 +109,6 @@ function postWith(final: string): PostDetail {
         feedback: null,
         format: 'post',
         parts: [{ text: final, charCount: final.length, charLimit: 280 }],
-        tells: [],
         createdAt: '2026-10-10T12:00:30Z',
       },
     ],
