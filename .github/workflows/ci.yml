@@ -69,6 +69,10 @@ jobs:
           STRIPE_PUBLISHABLE_KEY=pk_test_dummy
           STRIPE_WEBHOOK_SECRET=whsec_dummy
           BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'
+          BILLING_TOP_UP_KEY=pumpkit_top_up
+          GENERATIONS_MONTHLY_CAP=500
+          X_POSTS_MONTHLY_CAP=100
+          X_LINK_POSTS_MONTHLY_CAP=10
           EOF
       - uses: actions/setup-node@v4
         with:
