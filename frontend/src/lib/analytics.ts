@@ -96,6 +96,10 @@ export const EVENTS = {
     description: 'Billing: returned from Stripe via the cancel URL.',
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
+  billing_subscribe_now_confirmed: {
+    description:
+      'Billing: a Trial User confirmed Subscribe now and the Trial ended, from the Usage card or a limit notice.',
+  },
 
   // Writing: Persona, New post and the Post page
   inspiration_author_added: {

@@ -65,6 +65,21 @@ async def create_billing_checkout(
 
 
 @router.post(
+    "/billing/subscribe-now",
+    response_model=BillingMeResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("5/minute")
+async def subscribe_now(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> BillingMeResponse:
+    return await mediator.subscribe_now(db=db, gateway=gateway, user=current_user)
+
+
+@router.post(
     "/billing/portal",
     response_model=BillingPortalResponse,
     status_code=status.HTTP_200_OK,

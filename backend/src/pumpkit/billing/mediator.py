@@ -26,7 +26,7 @@ from pumpkit.billing.schemas import (
 )
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import BILLING_PAGE, settings
-from pumpkit.core.errors import BadRequestError, ConflictError, RefusedError
+from pumpkit.core.errors import BadRequestError, ConflictError, RefusalError, RefusedError
 from pumpkit.core.logging import logger
 from pumpkit.core.schemas import LinkToolResponse
 
@@ -212,6 +212,48 @@ async def create_checkout_session(
     )
     await db.commit()
     return CheckoutResponse(url=session.url, session_id=session.id)
+
+
+class FirstChargeFailed(RefusalError):
+    """Subscribing now ended the Trial, but the provider couldn't charge the first period."""
+
+    status_code = 402
+
+
+async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -> BillingMeResponse:
+    """
+    End the User's Trial now, so the provider charges the first period and the paid Allowance
+    starts at once. The Terms accepted at Checkout already cover it (ADR 0010).
+
+    The sync from Stripe runs first (ADR 0004), so a Trial that already ended there is a 409, as is
+    a User with no trialing Subscription. The User's row stays locked across both provider calls.
+    A failed charge leaves the Subscription as Stripe reports it (past due keeps access) and is a 402.
+    """
+    if not user.stripe_customer_id:
+        raise _not_trialing()
+    customer_id = user.stripe_customer_id
+    await users_service.lock_user(db, user)
+    await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+    subscription = await service.get_user_subscription(db, user_id=user.id)
+    if subscription is None or subscription.status != "trialing":
+        # Commit before raising, or the 409 rolls back the sync of what Stripe just said.
+        await db.commit()
+        raise _not_trialing()
+
+    await gateway.end_trial(subscription_id=subscription.stripe_subscription_id)
+    await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+    await db.commit()
+    if subscription.status != "active":
+        raise FirstChargeFailed(
+            "Your trial has ended, but the first payment didn't go through. "
+            "Update your payment method to keep writing.",
+            fix_page=BILLING_PAGE,
+        )
+    return await get_billing_me(db, user)
+
+
+def _not_trialing() -> ConflictError:
+    return ConflictError("You're not in a trial, so there's no trial to end.")
 
 
 async def create_billing_portal_session(

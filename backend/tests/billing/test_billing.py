@@ -694,6 +694,7 @@ async def test_billing_api_serves_only_subscription_routes(client):
         "/api/v1/billing/plans",
         "/api/v1/billing/checkout",
         "/api/v1/billing/portal",
+        "/api/v1/billing/subscribe-now",
         "/api/v1/stripe/webhook",
     }
 

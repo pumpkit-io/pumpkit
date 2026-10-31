@@ -30,3 +30,33 @@ describe('billingService.startSubscriptionCheckout', () => {
     });
   });
 });
+
+describe('billingService.subscribeNow', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('ends the trial and answers with what the User now holds', async () => {
+    const post = vi.spyOn(apiService, 'post').mockResolvedValue({
+      data: {
+        subscription: {
+          status: 'active',
+          plan_key: 'pumpkit_pro_monthly',
+          current_period_end: '2026-11-10T12:00:30Z',
+          cancel_at_period_end: false,
+        },
+        subscribed: true,
+        may_subscribe: false,
+        trial_days: null,
+      },
+    } as never);
+
+    const me = await billingService.subscribeNow();
+
+    expect(post).toHaveBeenCalledWith('/billing/subscribe-now');
+    expect(me.subscription).toEqual({
+      status: 'active',
+      planKey: 'pumpkit_pro_monthly',
+      currentPeriodEnd: '2026-11-10T12:00:30Z',
+      cancelAtPeriodEnd: false,
+    });
+  });
+});

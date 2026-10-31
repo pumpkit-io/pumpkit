@@ -105,21 +105,25 @@ function offeredAllowance(a: OfferedAllowanceApi): OfferedAllowance {
   return { generations: a.generations, xPosts: a.x_posts, linkXPosts: a.link_x_posts };
 }
 
+function billingMe(data: BillingMeApi): BillingMe {
+  const s = data.subscription;
+  return {
+    subscription: s && {
+      status: s.status,
+      planKey: s.plan_key,
+      currentPeriodEnd: s.current_period_end,
+      cancelAtPeriodEnd: s.cancel_at_period_end,
+    },
+    subscribed: data.subscribed,
+    maySubscribe: data.may_subscribe,
+    trialDays: data.trial_days,
+  };
+}
+
 export const billingService = {
   fetchBillingMe: async (): Promise<BillingMe> => {
     const { data } = await apiService.get<BillingMeApi>('/billing/me');
-    const s = data.subscription;
-    return {
-      subscription: s && {
-        status: s.status,
-        planKey: s.plan_key,
-        currentPeriodEnd: s.current_period_end,
-        cancelAtPeriodEnd: s.cancel_at_period_end,
-      },
-      subscribed: data.subscribed,
-      maySubscribe: data.may_subscribe,
-      trialDays: data.trial_days,
-    };
+    return billingMe(data);
   },
 
   fetchPlans: async (): Promise<PlanCatalog> => {
@@ -161,6 +165,15 @@ export const billingService = {
       ...terms,
     });
     return data.url;
+  },
+
+  /**
+   * Ends the User's Trial now, so the first period is charged today and the monthly Allowance
+   * starts at once. A failed charge rejects with the backend's message (a 402).
+   */
+  subscribeNow: async (): Promise<BillingMe> => {
+    const { data } = await apiService.post<BillingMeApi>('/billing/subscribe-now');
+    return billingMe(data);
   },
 
   openBillingPortal: async (): Promise<string> => {

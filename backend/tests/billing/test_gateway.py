@@ -169,6 +169,54 @@ async def test_the_stripe_adapter_cancels_a_subscription_now():
     assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1Incomplete"
 
 
+async def test_the_stripe_adapter_ends_a_trial_now_and_keeps_the_update_if_the_charge_fails():
+    listing = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
+    http = _RecordedStripe(json.dumps(listing["data"][0]))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    await gateway.end_trial(subscription_id="sub_1QaRunning")
+
+    assert http.methods == ["post"]
+    assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1QaRunning"
+    [form] = http.forms
+    assert form["trial_end"] == ["now"]
+    assert form["payment_behavior"] == ["allow_incomplete"]
+
+
+async def test_the_fake_ends_a_trial_at_its_clock_and_starts_the_paid_period():
+    now = datetime(2026, 10, 10, 12, tzinfo=timezone.utc)
+    gateway = FakeBillingGateway(clock=lambda: now)
+    trialing = SubscriptionState(
+        id="sub_1",
+        status="trialing",
+        price_id="price_monthly",
+        plan_key="pumpkit_pro_monthly",
+        current_period_end=datetime(2026, 10, 14, tzinfo=timezone.utc),
+        cancel_at_period_end=False,
+        created_at=datetime(2026, 10, 7, tzinfo=timezone.utc),
+        trial_start=datetime(2026, 10, 7, tzinfo=timezone.utc),
+        trial_end=datetime(2026, 10, 14, tzinfo=timezone.utc),
+        billing_cycle_anchor=datetime(2026, 10, 14, tzinfo=timezone.utc),
+    )
+    gateway.set_subscription("cus_1", trialing)
+
+    await gateway.end_trial(subscription_id="sub_1")
+
+    [ended] = await gateway.list_subscriptions(customer_id="cus_1")
+    assert (
+        ended.status,
+        ended.trial_end,
+        ended.billing_cycle_anchor,
+        ended.current_period_end,
+    ) == (
+        "active",
+        now,
+        now,
+        datetime(2026, 11, 10, 12, tzinfo=timezone.utc),
+    )
+    assert gateway.ended_trials == ["sub_1"]
+
+
 async def test_the_stripe_checkout_charges_vat_as_the_seller_and_collects_vat_ids():
     http = _RecordedStripe(
         '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'

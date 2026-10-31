@@ -8,6 +8,7 @@ import { errorMessage } from '@/services/apiErrors';
 import { billingService } from '@/services/billingService';
 import type { AllowanceUsage, UsageCount } from '@/services/usageService';
 import { AllowanceInfo, type AllowanceTopic } from './AllowanceInfo';
+import { SubscribeNowButton } from './SubscribeNow';
 import { allowanceDay, isLow } from './usage';
 import { useUsage } from './useUsage';
 
@@ -74,7 +75,13 @@ function CountLeft({
   );
 }
 
-function UsageDetails({ allowance }: { allowance: AllowanceUsage }) {
+function UsageDetails({
+  allowance,
+  onSubscribed,
+}: {
+  allowance: AllowanceUsage;
+  onSubscribed: () => void;
+}) {
   const [error, setError] = useState<string | null>(null);
   const { trial, generations, xPosts, linkXPosts, resetsAt, wayOut } = allowance;
 
@@ -119,7 +126,10 @@ function UsageDetails({ allowance }: { allowance: AllowanceUsage }) {
         </p>
         <p>Unused generations and X posts don&apos;t carry over.</p>
       </div>
-      {/* The Top-up block and Buy top-up (#233), and Subscribe now during a Trial (#235), go here. */}
+      {/* The Top-up block and Buy top-up (#233) go here. */}
+      {wayOut === 'subscribe_now' && (
+        <SubscribeNowButton className="h-10" onSubscribed={onSubscribed} />
+      )}
       {wayOut === 'update_payment' && (
         <button
           type="button"
@@ -158,13 +168,13 @@ function UsageSkeleton() {
  * bar under each count. Renders nothing where there is no Allowance.
  */
 export function UsageCard() {
-  const { usage, failed } = useUsage();
+  const { usage, failed, reload } = useUsage();
 
   if (usage && !usage.allowance) return null;
   return (
     <SettingsCard title="Usage">
       {usage?.allowance ? (
-        <UsageDetails allowance={usage.allowance} />
+        <UsageDetails allowance={usage.allowance} onSubscribed={reload} />
       ) : failed ? (
         <ErrorBanner message="Couldn't load your usage. Reload the page to try again." />
       ) : (

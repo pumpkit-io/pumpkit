@@ -14,6 +14,7 @@ vi.mock('@/services/billingService', () => ({
     fetchPlans: vi.fn(),
     startSubscriptionCheckout: vi.fn(),
     openBillingPortal: vi.fn(),
+    subscribeNow: vi.fn(),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
@@ -185,6 +186,7 @@ describe('Settings', () => {
     vi.mocked(billingService.openBillingPortal)
       .mockReset()
       .mockResolvedValue('https://portal.stripe.test/x');
+    vi.mocked(billingService.subscribeNow).mockReset();
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(xConnectionService.startAuthorization).mockReset();
     vi.mocked(xConnectionService.disconnect).mockReset();
@@ -732,6 +734,111 @@ describe('Settings', () => {
       ).toBeInTheDocument();
       expect(usageCard.getByText('Your trial ends on 7 November')).toBeInTheDocument();
       expect(usageCard.queryByText(/Resets on/)).not.toBeInTheDocument();
+    });
+
+    describe('Subscribe now during a trial', () => {
+      const TRIAL_USAGE = usageWith({
+        trial: true,
+        resetsAt: new Date('2026-11-07T09:00:00Z'),
+        generations: { limit: 125, used: 125, left: 0 },
+        xPosts: { limit: 25, used: 5, left: 20 },
+        linkXPosts: { limit: 2, used: 0, left: 2 },
+        wayOut: 'subscribe_now',
+      });
+
+      beforeEach(() => {
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('trialing', true));
+        vi.mocked(usageService.get).mockResolvedValue(TRIAL_USAGE);
+      });
+
+      async function openDialog() {
+        renderSettings();
+        fireEvent.click(
+          await (await card('Usage')).findByRole('button', { name: 'Subscribe now' }),
+        );
+        return within(await screen.findByRole('dialog'));
+      }
+
+      it("says the trial ends now and states the Plan's price and the monthly allowance", async () => {
+        const dialog = await openDialog();
+
+        expect(
+          await dialog.findByText(
+            "Your trial ends now and you're charged €9.00 today for your first month. Your monthly allowance of 500 generations and 100 X posts starts at once.",
+          ),
+        ).toBeInTheDocument();
+      });
+
+      it('names the interval of a yearly Plan', async () => {
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+          ...holding('trialing', true),
+          subscription: {
+            ...holding('trialing', true).subscription!,
+            planKey: 'pumpkit_pro_yearly',
+          },
+        });
+        const dialog = await openDialog();
+
+        expect(
+          await dialog.findByText(/you're charged €90\.00 today for your first year\./),
+        ).toBeInTheDocument();
+      });
+
+      it('subscribes, says the monthly allowance has started and loads usage again', async () => {
+        vi.mocked(billingService.subscribeNow).mockResolvedValue(holding('active', true));
+        const dialog = await openDialog();
+        vi.mocked(usageService.get).mockResolvedValue(usageWith());
+
+        fireEvent.click(await dialog.findByRole('button', { name: 'Subscribe now' }));
+
+        expect(
+          await screen.findByText('Subscribed. Your monthly allowance has started.'),
+        ).toBeInTheDocument();
+        expect(billingService.subscribeNow).toHaveBeenCalledOnce();
+        expect(track).toHaveBeenCalledWith('billing_subscribe_now_confirmed');
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(
+          await (await card('Usage')).findByText(reading('382 generations left')),
+        ).toBeInTheDocument();
+      });
+
+      it("shows the API's message when the first charge fails", async () => {
+        vi.mocked(billingService.subscribeNow).mockRejectedValue(
+          apiError(
+            402,
+            "Your trial has ended, but the first payment didn't go through. Update your payment method to keep writing.",
+          ),
+        );
+        const dialog = await openDialog();
+
+        fireEvent.click(await dialog.findByRole('button', { name: 'Subscribe now' }));
+
+        expect(
+          await dialog.findByText(
+            "Your trial has ended, but the first payment didn't go through. Update your payment method to keep writing.",
+          ),
+        ).toBeInTheDocument();
+        expect(track).not.toHaveBeenCalledWith('billing_subscribe_now_confirmed');
+      });
+
+      it('closes on Cancel without subscribing', async () => {
+        const dialog = await openDialog();
+
+        fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(billingService.subscribeNow).not.toHaveBeenCalled();
+      });
+
+      it('is not offered to a paid-up User', async () => {
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+        vi.mocked(usageService.get).mockResolvedValue(usageWith());
+        renderSettings();
+
+        const usageCard = await card('Usage');
+        await usageCard.findByText(reading('382 generations left'));
+        expect(usageCard.queryByRole('button', { name: 'Subscribe now' })).not.toBeInTheDocument();
+      });
     });
 
     it('sends a User behind on payment to the billing portal to update their payment method', async () => {
