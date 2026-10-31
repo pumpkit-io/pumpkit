@@ -73,11 +73,7 @@ class Settings(BaseSettings):
 
     # Optional group: the company running this Instance, shown with its legal pages (ADR 0011).
     OPERATOR_NAME: Optional[str] = None
-    OPERATOR_ADDRESS: Optional[str] = None
     OPERATOR_VAT_ID: Optional[str] = None
-    OPERATOR_REA: Optional[str] = None
-    OPERATOR_SHARE_CAPITAL: Optional[str] = None
-    OPERATOR_PEC: Optional[str] = None
 
     # Optional: where the support link sends Users' email; unset hides the link.
     # Required with Operator details, since their company footer gives it as the contact address.
@@ -190,7 +186,6 @@ class Settings(BaseSettings):
             ProviderGroup.SMTP: {"SMTP_HOST": self.SMTP_HOST, "EMAIL_FROM": self.EMAIL_FROM},
             ProviderGroup.OPERATOR_DETAILS: {
                 "OPERATOR_NAME": self.OPERATOR_NAME,
-                "OPERATOR_ADDRESS": self.OPERATOR_ADDRESS,
             },
         }
 

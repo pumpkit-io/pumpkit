@@ -268,33 +268,36 @@ describe('Landing authors', () => {
 });
 
 describe('Landing footer', () => {
-  it('names the Operator with its company details from the Instance', () => {
+  it('names the Operator with its VAT ID on one copyright line for the current year', () => {
+    vi.setSystemTime(new Date('2027-03-01T12:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     renderLanding(WITH_OPERATOR);
     const footer = screen.getByRole('contentinfo');
-    expect(within(footer).getByText('Example S.R.L.')).toBeInTheDocument();
-    expect(within(footer).getByText('Via Roma 1, Milano, Italy')).toBeInTheDocument();
     expect(
-      within(footer).getByText(
-        'VAT ID IT01234567890 · REA MI-123456 · Share capital €10,000 fully paid in',
-      ),
+      within(footer).getByText('© 2027 Example S.R.L. · VAT ID IT01234567890'),
     ).toBeInTheDocument();
-    expect(within(footer).getByText('PEC example@pec.it')).toBeInTheDocument();
   });
 
-  it('leaves out the company identifiers the Operator details do not set', () => {
-    renderLanding({
-      ...WITH_OPERATOR,
-      operator: {
-        ...WITH_OPERATOR.operator!,
-        vat_id: null,
-        rea: 'MI-123456',
-        share_capital: null,
-        pec: null,
-      },
+  it('names only the Operator when it has no VAT ID', () => {
+    vi.setSystemTime(new Date('2027-03-01T12:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
     });
+    renderLanding({ ...WITH_OPERATOR, operator: { name: 'Example S.R.L.', vat_id: null } });
     const footer = screen.getByRole('contentinfo');
-    expect(within(footer).getByText('REA MI-123456')).toBeInTheDocument();
-    expect(within(footer).queryByText(/VAT ID|Share capital|PEC/)).not.toBeInTheDocument();
+    expect(within(footer).getByText('© 2027 Example S.R.L.')).toBeInTheDocument();
+    expect(within(footer).queryByText(/VAT ID/)).not.toBeInTheDocument();
+  });
+
+  it('links Company details to the Operator section of the Terms', () => {
+    renderLanding(WITH_OPERATOR);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: 'Company details' })).toHaveAttribute(
+      'href',
+      '/terms#operator',
+    );
   });
 
   it('offers Cookie settings', () => {
@@ -330,7 +333,7 @@ describe('Landing footer', () => {
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByRole('button', { name: 'Cookie settings' })).toBeInTheDocument();
     expect(within(footer).queryByRole('link')).not.toBeInTheDocument();
-    expect(footer.querySelector('address')).toBeNull();
+    expect(within(footer).queryByText(/©/)).not.toBeInTheDocument();
   });
 
   it('shows only the support address on an Instance with it but no Operator details', () => {
@@ -341,7 +344,8 @@ describe('Landing footer', () => {
       'mailto:help@example.org',
     );
     expect(within(footer).queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
-    expect(footer.querySelector('address')).toBeNull();
+    expect(within(footer).queryByRole('link', { name: 'Company details' })).not.toBeInTheDocument();
+    expect(within(footer).queryByText(/©/)).not.toBeInTheDocument();
   });
 
   it('has no footer on an Instance with neither Operator details nor analytics', () => {

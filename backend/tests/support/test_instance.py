@@ -103,19 +103,13 @@ async def test_instance_with_support_email_alone_carries_it_without_operator(
 
 async def test_instance_with_operator_details_carries_them(client, monkeypatch):
     monkeypatch.setattr(settings, "OPERATOR_NAME", "Example S.R.L.")
-    monkeypatch.setattr(settings, "OPERATOR_ADDRESS", "Via Roma 1, Milano, Italy")
     monkeypatch.setattr(settings, "SUPPORT_EMAIL", "help@example.org")
     monkeypatch.setattr(settings, "OPERATOR_VAT_ID", "IT01234567890")
-    monkeypatch.setattr(settings, "OPERATOR_PEC", "example@pec.it")
 
     response = await client.get("/api/v1/instance")
 
     assert response.json()["operator"] == {
         "name": "Example S.R.L.",
-        "address": "Via Roma 1, Milano, Italy",
         "vat_id": "IT01234567890",
-        "rea": None,
-        "share_capital": None,
-        "pec": "example@pec.it",
     }
     assert response.json()["support_email"] == "help@example.org"
