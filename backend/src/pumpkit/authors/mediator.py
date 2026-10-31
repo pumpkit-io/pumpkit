@@ -9,6 +9,8 @@ from pumpkit.authors import service
 from pumpkit.authors.handles import normalize_handle
 from pumpkit.authors.models import InspirationAuthor
 from pumpkit.authors.schemas import (
+    AuthorDirectoryEntryResponse,
+    AuthorDirectoryResponse,
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
 )
@@ -45,6 +47,7 @@ def _response(summary: service.AuthorSummary) -> InspirationAuthorResponse:
         handle=summary.handle,
         last_fetched_at=summary.last_fetched_at,
         post_count=summary.post_count,
+        name=summary.name,
         photo_url=summary.photo_url,
     )
 
@@ -52,6 +55,21 @@ def _response(summary: service.AuthorSummary) -> InspirationAuthorResponse:
 async def list_authors(db: AsyncSession, user: User) -> InspirationAuthorsListResponse:
     summaries = await service.list_authors(db, user_id=user.id)
     return InspirationAuthorsListResponse(data=[_response(summary) for summary in summaries])
+
+
+async def list_directory(db: AsyncSession) -> AuthorDirectoryResponse:
+    entries = await service.list_directory(db)
+    return AuthorDirectoryResponse(
+        data=[
+            AuthorDirectoryEntryResponse(
+                handle=entry.handle,
+                name=entry.name,
+                photo_url=entry.photo_url,
+                persona_count=entry.persona_count,
+            )
+            for entry in entries
+        ]
+    )
 
 
 def _already_listed(handle: str) -> ConflictError:
@@ -83,7 +101,7 @@ async def add_author(
         has_posts = bool(recent.posts)
         if has_posts:
             await service.store_new_posts(db, handle=handle, posts=recent.posts, now=now)
-            await service.record_fetch(db, handle=handle, now=now, photo_url=recent.photo_url)
+            await _record_fetch(db, handle=handle, recent=recent, now=now)
     else:
         has_posts = await service.count_posts(db, handle=handle) > 0
     if not has_posts:
@@ -118,7 +136,7 @@ async def refresh_author(
 
     recent = await _fetch(reader, handle)
     await service.store_new_posts(db, handle=handle, posts=recent.posts, now=now)
-    await service.record_fetch(db, handle=handle, now=now, photo_url=recent.photo_url)
+    await _record_fetch(db, handle=handle, recent=recent, now=now)
     await db.commit()
     return await _author_response(db, user_id=user_id, handle=handle)
 
@@ -128,6 +146,14 @@ async def _fetch(reader: XReader, handle: str) -> RecentPosts:
         return await reader.fetch_recent_posts(handle)
     except HandleNotFoundError:
         raise NotFoundError(f"@{handle} doesn't exist on X.")
+
+
+async def _record_fetch(
+    db: AsyncSession, *, handle: str, recent: RecentPosts, now: datetime
+) -> None:
+    await service.record_fetch(
+        db, handle=handle, now=now, name=recent.name, photo_url=recent.photo_url
+    )
 
 
 async def remove_author(db: AsyncSession, user: User, handle: str) -> None:
