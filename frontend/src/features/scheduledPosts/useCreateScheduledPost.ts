@@ -2,7 +2,12 @@ import { useCallback, useState } from 'react';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { track } from '@/lib/analytics';
-import { errorMessage, errorStatus } from '@/services/apiErrors';
+import {
+  errorAllowanceUsedUp,
+  errorMessage,
+  errorStatus,
+  type AllowanceUsedUp,
+} from '@/services/apiErrors';
 import { formatOf } from '@/services/postService';
 import {
   scheduledPostService,
@@ -28,13 +33,15 @@ export type CreateOutcome =
 
 /**
  * Sends a new Scheduled post copied from the Post's Text. A refusal sets `error`, except one
- * for want of a Subscription, which the caller turns into the prompt to subscribe.
+ * for want of a Subscription, which the caller turns into the prompt to subscribe, and one for
+ * want of X posts left, which sets `allowanceUsedUp`.
  */
 export function useCreateScheduledPost() {
   const { refresh: refreshSubscribed } = useSubscribed();
   const { reload: reloadXConnection } = useXConnectionContext();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allowanceUsedUp, setAllowanceUsedUp] = useState<AllowanceUsedUp | null>(null);
 
   const create = useCallback(
     async (request: NewScheduledPost): Promise<CreateOutcome> => {
@@ -42,6 +49,7 @@ export function useCreateScheduledPost() {
       const post: ScheduledPostSource = { postId: request.postId };
       setSending(true);
       setError(null);
+      setAllowanceUsedUp(null);
       try {
         const created = request.postNow
           ? await scheduledPostService.postNow(post, destination)
@@ -65,6 +73,12 @@ export function useCreateScheduledPost() {
           refreshSubscribed();
           return { kind: 'notSubscribed' };
         }
+        const usedUp = errorAllowanceUsedUp(e);
+        if (usedUp) {
+          track('allowance_used_up', { ran_out: usedUp.ranOut });
+          setAllowanceUsedUp(usedUp);
+          return { kind: 'refused' };
+        }
         setError(
           errorMessage(
             e,
@@ -83,5 +97,5 @@ export function useCreateScheduledPost() {
     [refreshSubscribed, reloadXConnection],
   );
 
-  return { sending, error, create };
+  return { sending, error, allowanceUsedUp, create };
 }

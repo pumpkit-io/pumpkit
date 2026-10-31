@@ -69,6 +69,9 @@ vi.mock('@/services/scheduledPostService', () => ({
     lookUpCommunity: vi.fn(),
   },
 }));
+vi.mock('@/services/usageService', () => ({
+  usageService: { get: vi.fn() },
+}));
 // Choose a plan lands on Settings, which lists the API keys.
 vi.mock('@/services/apiKeyService', () => ({
   apiKeyService: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), revoke: vi.fn() },
@@ -98,6 +101,7 @@ import {
   type Community,
   type ScheduledPost,
 } from '@/services/scheduledPostService';
+import { usageService, type Usage } from '@/services/usageService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import {
   LEVELSIO,
@@ -236,6 +240,7 @@ describe('Post page', () => {
     vi.mocked(postService.restoreVersion).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
     vi.mocked(track).mockClear();
   });
 
@@ -1914,6 +1919,67 @@ describe('Post page', () => {
         await dialog.findByText('Pick a time at least a minute from now.'),
       ).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: /^Schedule for/ })).toBeEnabled();
+    });
+
+    function usageWithLinkPostsLeft(left: number): Usage {
+      return {
+        allowance: {
+          trial: false,
+          resetsAt: new Date('2026-11-14T09:00:00Z'),
+          xPosts: { limit: 100, used: 39, left: 61 },
+          linkXPosts: { limit: 10, used: 10 - left, left },
+        },
+      };
+    }
+
+    it('says when the text contains a link and how many link posts are left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
+      const dialog = await openPostTo(postWith('Read pumpkit.io today'));
+
+      expect(
+        await dialog.findByText('Contains a link: uses 1 of your 8 link posts'),
+      ).toBeInTheDocument();
+    });
+
+    it('counts each part of a thread that contains a link', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
+      const dialog = await openPostTo(
+        threadWith([part('See https://example.com'), part('No link'), part('x.com too')]),
+      );
+
+      expect(
+        await dialog.findByText('Contains links: uses 2 of your 8 link posts'),
+      ).toBeInTheDocument();
+    });
+
+    it('says nothing about links for a text without one', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
+      const plain = await openPostTo(postWith('No link in this one.'));
+      await vi.waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(plain.queryByText(/Contains a link/)).not.toBeInTheDocument();
+    });
+
+    it('says nothing about links on an Instance without allowances', async () => {
+      const dialog = await openPostTo(postWith('Read pumpkit.io today'));
+      await vi.waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(dialog.queryByText(/Contains a link/)).not.toBeInTheDocument();
+    });
+
+    it('shows the Allowance refusal in place of the error banner', async () => {
+      const refusal = "You've used this period's 100 X posts. They reset on 14 November.";
+      vi.mocked(scheduledPostService.schedule).mockRejectedValue(
+        allowanceUsedUp(refusal, { ran_out: 'x_posts' }),
+      );
+      const dialog = await openPostTo();
+
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
+
+      expect(await dialog.findByText(refusal)).toBeInTheDocument();
+      expect(dialog.queryByRole('alert')).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'x_posts' });
     });
 
     it('schedules into a pasted Community, shared with followers unless unticked', async () => {

@@ -240,3 +240,27 @@ class XConnectionResponse(BaseModel):
     photo_url: Optional[str]
     # Whether to ask the User, who has no Photo, to use the X account's photo as theirs.
     offer_photo: bool
+
+
+class UsageCountResponse(BaseModel):
+    """One count of an Allowance in the current period. A limit of None is no cap."""
+
+    limit: Optional[int]
+    used: int
+    left: Optional[int]
+
+
+class AllowanceUsageResponse(BaseModel):
+    """What the User has used and has left of the Allowance period holding now."""
+
+    trial: bool
+    # When the period ends: the next reset, or the Trial's end.
+    resets_at: datetime
+    x_posts: UsageCountResponse
+    # Of the X posts, those containing a link.
+    link_x_posts: UsageCountResponse
+
+
+class UsageResponse(BaseModel):
+    # None where the Instance sells no Plans or the User isn't Subscribed.
+    allowance: Optional[AllowanceUsageResponse]

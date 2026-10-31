@@ -10,7 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
+import { useUsage } from '@/features/billing/useUsage';
 import {
   destinationFrom,
   PROFILE_DRAFT,
@@ -22,7 +24,7 @@ import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { formatCount } from '@/lib/characters';
-import { xWeightedLength } from '@/lib/xLength';
+import { hasLink, xWeightedLength } from '@/lib/xLength';
 import { FORMAT_THREAD, type Format } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { formatWhen } from '../panels/panelFacts';
@@ -78,6 +80,16 @@ function overLimit(
     const characters = `${formatCount(over)} ${over === 1 ? 'character' : 'characters'}`;
     return [`${what} is ${characters} over X's ${formatCount(limit)}-character limit.`];
   });
+}
+
+/**
+ * What the Parts about to go out with a link use of the link posts left; null without a link,
+ * or without a cap on them.
+ */
+function linkNote(linkCount: number, left: number | null | undefined): string | null {
+  if (linkCount === 0 || left === null || left === undefined) return null;
+  const links = linkCount === 1 ? 'Contains a link' : 'Contains links';
+  return `${links}: uses ${linkCount} of your ${left} link ${left === 1 ? 'post' : 'posts'}`;
 }
 
 const PART_TEXT = 'whitespace-pre-wrap break-words font-sans text-sm text-foreground';
@@ -162,7 +174,8 @@ export function PostToDialog({
 }) {
   const goToChoosePlan = useGoToChoosePlan();
   const { connection } = useXConnectionContext();
-  const { sending, error, send } = sender;
+  const { sending, error, allowanceUsedUp, send } = sender;
+  const usage = useUsage();
   const [step, setStep] = useState<Step>({ kind: 'choose' });
   const [where, setWhere] = useState<DestinationDraft>(initialWhere);
   const [when, setWhen] = useState<WhenDraft>(initialWhen);
@@ -176,6 +189,15 @@ export function PostToDialog({
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
   const tooLong = ready ? overLimit(parts, lengths, connection.charLimit, thread) : [];
+  const links = linkNote(
+    parts.filter((part) => !part.live && hasLink(part.text)).length,
+    usage?.allowance?.linkXPosts.left,
+  );
+  const refusal = allowanceUsedUp ? (
+    <AllowanceNotice refusal={allowanceUsedUp} />
+  ) : (
+    error && <ErrorBanner message={error} />
+  );
   const liveLine = live && (
     <p
       className={
@@ -262,7 +284,7 @@ export function PostToDialog({
         </p>
         {liveLine}
         <PartsToPost parts={parts} lengths={lengths} limit={connection.charLimit} thread={thread} />
-        {error && <ErrorBanner message={error} />}
+        {refusal}
       </>
     );
     footer = (
@@ -298,7 +320,8 @@ export function PostToDialog({
             {problem}
           </p>
         ))}
-        {error && <ErrorBanner message={error} />}
+        {links && <p className="font-sans text-xs text-muted-foreground">{links}</p>}
+        {refusal}
       </>
     );
     footer = (

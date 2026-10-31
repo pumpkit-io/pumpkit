@@ -42,6 +42,7 @@ from pumpkit.scheduling.post_status import (
     STATUS_OF_STATE,
     PostStatus,
 )
+from pumpkit.scheduling.rules import XPosts, x_posts_in
 
 
 async def create(
@@ -414,29 +415,32 @@ async def past_communities(db: AsyncSession, *, user_id: str, x_user_id: str) ->
     return [Community(id=community_id, name=name) for community_id, name in names.items()]
 
 
-async def count_x_posts_between(
+async def x_posts_used_between(
     db: AsyncSession,
     *,
     user_id: str,
     start: datetime,
     end: datetime,
     excluding_id: Optional[str] = None,
-) -> int:
-    """The Parts of the User's Scheduled posts in any state with `start <= publish_at < end`."""
+) -> XPosts:
+    """
+    The X posts and link posts of the User's Scheduled posts with `start <= publish_at < end`:
+    every Part, except those of a Failed one that X never accepted, which cost nothing.
+    """
     query = (
-        select(func.count())
-        .select_from(ScheduledPostPart)
+        select(ScheduledPostPart.text)
         .join(ScheduledPost)
         .where(
             ScheduledPost.user_id == user_id,
             ScheduledPost.publish_at >= start,
             ScheduledPost.publish_at < end,
+            or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None)),
         )
     )
     if excluding_id is not None:
         query = query.where(ScheduledPost.id != excluding_id)
     result = await db.execute(query)
-    return result.scalar_one()
+    return x_posts_in(list(result.scalars()))
 
 
 async def release_for_retry(

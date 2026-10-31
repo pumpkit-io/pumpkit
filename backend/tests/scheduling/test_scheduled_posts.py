@@ -648,7 +648,8 @@ async def test_a_source_version_is_no_longer_taken(
 
 
 @pytest.fixture
-def cap_of_two(monkeypatch):
+def cap_of_two(monkeypatch, sells_no_plans):
+    """The calendar-month cap of an Instance that sells no Plans, at 2 X posts."""
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
@@ -659,7 +660,7 @@ OCTOBER_FULL = (
 
 
 async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
+    client, sells_no_plans, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
     await connect_x()
@@ -683,7 +684,7 @@ async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
 
 
 async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is_scheduled(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
+    client, sells_no_plans, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
     await connect_x()

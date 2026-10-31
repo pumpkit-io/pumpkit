@@ -41,6 +41,9 @@ class Allowance:
 
     period: AllowancePeriod
     generations: Optional[int]
+    x_posts: Optional[int]
+    # Of the X posts, how many may contain a link.
+    link_x_posts: Optional[int]
     way_out: Optional[WayOut]
 
 
@@ -94,10 +97,15 @@ def way_out_for(subscription: Subscription) -> Optional[WayOut]:
 def allowance_at(subscription: Subscription, moment: datetime) -> Allowance:
     """The Allowance of a Subscribed User's `subscription` at `moment`."""
     period = period_at(subscription, moment)
-    generations = settings.GENERATIONS_MONTHLY_CAP
+
+    def share(cap: Optional[int]) -> Optional[int]:
+        return trial_share(cap) if period.trial else cap
+
     return Allowance(
         period=period,
-        generations=trial_share(generations) if period.trial else generations,
+        generations=share(settings.GENERATIONS_MONTHLY_CAP),
+        x_posts=share(settings.X_POSTS_MONTHLY_CAP),
+        link_x_posts=share(settings.X_LINK_POSTS_MONTHLY_CAP),
         way_out=way_out_for(subscription),
     )
 
@@ -124,12 +132,18 @@ class AllowanceUsedUp(ConflictError):
     ) -> None:
         period = allowance.period
         noun = _NOUNS[ran_out]
-        if period.trial:
-            used = (
-                f"You've used your trial's {limit} {noun}. Your trial ends on {_day(period.end)}."
-            )
+        if needed > 1 and left > 0:
+            # Only a Thread needs several at once, and it is refused whole.
+            in_trial = " in your trial" if period.trial else ""
+            used = f"This thread needs {needed} {noun} and you have {left} left{in_trial}."
+        elif period.trial:
+            used = f"You've used your trial's {limit} {noun}."
         else:
-            used = f"You've used this period's {limit} {noun}. They reset on {_day(period.end)}."
+            used = f"You've used this period's {limit} {noun}."
+        if period.trial:
+            used = f"{used} Your trial ends on {_day(period.end)}."
+        else:
+            used = f"{used} They reset on {_day(period.end)}."
         if ran_out == "generations":
             used = f"{used} Failed attempts don't count."
         super().__init__(used, fix_page=SETTINGS_PAGE)

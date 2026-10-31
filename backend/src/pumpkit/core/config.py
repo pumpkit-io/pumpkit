@@ -130,8 +130,11 @@ class Settings(BaseSettings):
     PUBLISHER_ENABLED: bool = True
     # How often the publisher process looks for due Scheduled posts.
     PUBLISHER_POLL_INTERVAL_SECONDS: int = Field(default=30, ge=1)
-    # Each User's X posts (Parts) per UTC calendar month of publish time (ADR 0006); None is no cap.
+    # Each User's X posts (Parts) per Allowance period of publish time where Plans are sold, else
+    # per UTC calendar month (ADR 0006); a Trial gets a quarter. None is no cap.
     X_POSTS_MONTHLY_CAP: Optional[int] = Field(default=100, ge=0)
+    # How many of those X posts may contain a link, which X charges far more for; counted the same way.
+    X_LINK_POSTS_MONTHLY_CAP: Optional[int] = Field(default=10, ge=0)
 
     # Optional group: the project key turns on browser analytics behind the consent banner.
     # Backend events also need POSTHOG_ENABLED=true, so dev and test Instances send none.
@@ -255,7 +258,13 @@ class Settings(BaseSettings):
             return json.loads(value) if value.strip() else []
         return value
 
-    @field_validator("X_POSTS_MONTHLY_CAP", "GENERATIONS_MONTHLY_CAP", "SMTP_PORT", mode="before")
+    @field_validator(
+        "X_POSTS_MONTHLY_CAP",
+        "X_LINK_POSTS_MONTHLY_CAP",
+        "GENERATIONS_MONTHLY_CAP",
+        "SMTP_PORT",
+        mode="before",
+    )
     @classmethod
     def _empty_int_is_none(cls, value: object) -> object:
         # Pydantic would reject the empty string an `.env` line leaves for an int.

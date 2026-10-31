@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.billing.service as billing_service
 import pumpkit.posts.service as posts_service
 import pumpkit.posts.version_writing as version_writing
 import pumpkit.x_connection.service as x_connections_service
@@ -14,6 +15,7 @@ from pumpkit.authors.x_reader import (
     XReaderError,
     XReaderNotConfiguredError,
 )
+from pumpkit.billing.allowance import AllowanceCount, check_room
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
@@ -46,6 +48,7 @@ from pumpkit.scheduling.rules import (
     ToProfile,
 )
 from pumpkit.scheduling.schemas import (
+    AllowanceUsageResponse,
     CommunityResponse,
     PastCommunitiesResponse,
     PostCountsResponse,
@@ -55,6 +58,8 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostPartResponse,
     ScheduledPostResponse,
     ScheduledPostSummaryResponse,
+    UsageCountResponse,
+    UsageResponse,
     XConnectionResponse,
 )
 from pumpkit.x_connection.models import XConnection
@@ -150,26 +155,82 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     return connection
 
 
-async def check_monthly_cap(
+async def check_x_posts_room(
     db: AsyncSession,
     *,
     user_id: str,
     publish_at: datetime,
-    part_count: int,
+    parts: list[str],
     excluding_id: Optional[str] = None,
+    before: Optional[rules.XPosts] = None,
 ) -> None:
     """
-    Room for `part_count` X posts in the month. Pass `excluding_id` when changing an existing
-    one, so it doesn't count itself.
+    Room for `parts` as X posts and link posts publishing at `publish_at`: in its Allowance
+    period where Plans are sold, else in its UTC calendar month. Pass `excluding_id` when
+    changing an existing one, so it doesn't count itself, and `before`, what it used, when it
+    stays in place, so only what grows is checked.
     """
-    cap = settings.X_POSTS_MONTHLY_CAP
-    if cap is None:
-        return
-    start, end = rules.month_bounds(publish_at)
-    count = await service.count_x_posts_between(
+    needed = rules.x_posts_in(parts)
+    if billing_service.sells_plans():
+        allowance = await billing_service.get_allowance(db, user_id=user_id, moment=publish_at)
+        if allowance is None:
+            return
+        start, end = allowance.period.start, allowance.period.end
+        limits = (allowance.x_posts, allowance.link_x_posts)
+    else:
+        allowance = None
+        start, end = rules.month_bounds(publish_at)
+        limits = (settings.X_POSTS_MONTHLY_CAP, settings.X_LINK_POSTS_MONTHLY_CAP)
+    used = await service.x_posts_used_between(
         db, user_id=user_id, start=start, end=end, excluding_id=excluding_id
     )
-    rules.check_month_has_room(count, adding=part_count, cap=cap, moment=publish_at)
+    counts: list[tuple[AllowanceCount, Optional[int], int, int, int]] = [
+        ("x_posts", limits[0], used.x_posts, needed.x_posts, before.x_posts if before else 0),
+        (
+            "link_x_posts",
+            limits[1],
+            used.link_x_posts,
+            needed.link_x_posts,
+            before.link_x_posts if before else 0,
+        ),
+    ]
+    for ran_out, limit, count, adding, had in counts:
+        if limit is None or (before is not None and adding <= had):
+            continue
+        if allowance is not None:
+            check_room(ran_out=ran_out, limit=limit, used=count, needed=adding, allowance=allowance)
+        else:
+            rules.check_month_has_room(
+                count,
+                adding=adding,
+                cap=limit,
+                moment=publish_at,
+                noun="X posts" if ran_out == "x_posts" else "X posts with a link",
+            )
+
+
+def _usage_count(limit: Optional[int], used: int) -> UsageCountResponse:
+    return UsageCountResponse(
+        limit=limit, used=used, left=None if limit is None else max(0, limit - used)
+    )
+
+
+async def get_usage(db: AsyncSession, user: User, now: datetime) -> UsageResponse:
+    allowance = await billing_service.get_allowance(db, user_id=user.id, moment=now)
+    if allowance is None:
+        return UsageResponse(allowance=None)
+    period = allowance.period
+    used = await service.x_posts_used_between(
+        db, user_id=user.id, start=period.start, end=period.end
+    )
+    return UsageResponse(
+        allowance=AllowanceUsageResponse(
+            trial=period.trial,
+            resets_at=period.end,
+            x_posts=_usage_count(allowance.x_posts, used.x_posts),
+            link_x_posts=_usage_count(allowance.link_x_posts, used.link_x_posts),
+        )
+    )
 
 
 async def create_scheduled_post(
@@ -191,7 +252,7 @@ async def create_scheduled_post(
     parts = _text_of(post)
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
-    await check_monthly_cap(db, user_id=user.id, publish_at=publish_at, part_count=len(parts))
+    await check_x_posts_room(db, user_id=user.id, publish_at=publish_at, parts=parts)
     community = await _community(reader, new.community) if new.community is not None else None
     try:
         scheduled_post = await service.create(
@@ -288,28 +349,30 @@ async def edit_scheduled_post(
     if parts is not None:
         subscription_type = connection.subscription_type if connection else None
         rules.check_length(parts, limit=x_post_max_chars(subscription_type))
-    part_count = len(parts if parts is not None else scheduled_post.parts)
+    current = [part.text for part in scheduled_post.parts]
     if connection is not None and edit.reschedules:
         new_publish_at = (
             now.replace(second=0, microsecond=0)
             if edit.publish_now
             else rules.check_publish_at(edit.publish_at, now=now)
         )
-        await check_monthly_cap(
+        await check_x_posts_room(
             db,
             user_id=user.id,
             publish_at=new_publish_at,
-            part_count=part_count,
+            parts=parts if parts is not None else current,
             excluding_id=scheduled_post_id,
         )
         reschedule = service.Reschedule(publish_at=new_publish_at, x_user_id=connection.x_user_id)
-    elif part_count > len(scheduled_post.parts):
-        await check_monthly_cap(
+    elif parts is not None and scheduled_post.state == SCHEDULED:
+        # A Failed one left in place publishes nothing more, so its new Parts cost nothing yet.
+        await check_x_posts_room(
             db,
             user_id=user.id,
             publish_at=as_utc(scheduled_post.publish_at),
-            part_count=part_count,
+            parts=parts,
             excluding_id=scheduled_post_id,
+            before=rules.x_posts_in(current),
         )
     destination = await _destination_after_edit(reader, scheduled_post, edit)
     if not await service.edit(

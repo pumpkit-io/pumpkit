@@ -123,6 +123,11 @@ export function xWeightedLength(text: string): number {
   return Math.floor(units / SCALE);
 }
 
+/** Whether X would turn something in `text` into a link, a bare domain such as pumpkit.io too. */
+export function hasLink(text: string): boolean {
+  return urlSpans(text.normalize('NFC')).size > 0;
+}
+
 function weight(codePoint: number): number {
   return LIGHT_RANGES.some(([start, end]) => start <= codePoint && codePoint <= end)
     ? SCALE

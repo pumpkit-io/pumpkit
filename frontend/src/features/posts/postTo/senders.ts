@@ -3,18 +3,24 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useCreateScheduledPost } from '@/features/scheduledPosts/useCreateScheduledPost';
 import { pastCommunitiesChanged } from '@/features/scheduledPosts/usePastCommunities';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
-import { errorMessage, errorStatus } from '@/services/apiErrors';
+import { track } from '@/lib/analytics';
+import {
+  errorAllowanceUsedUp,
+  errorMessage,
+  errorStatus,
+  type AllowanceUsedUp,
+} from '@/services/apiErrors';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import type { PostToChoice, PostToSender } from './postTo';
 
 /** Sends a Draft's Text as its new Scheduled post. */
 export function useCreateFromText(postId: string): PostToSender {
-  const { sending, error, create } = useCreateScheduledPost();
+  const { sending, error, allowanceUsedUp, create } = useCreateScheduledPost();
   const send = useCallback(
     ({ destination, when }: PostToChoice) => create({ postId, destination, ...when }),
     [create, postId],
   );
-  return { sending, error, send };
+  return { sending, error, allowanceUsedUp, send };
 }
 
 /**
@@ -26,12 +32,14 @@ export function useRetryFailed(scheduledPost: ScheduledPost): PostToSender {
   const { reload: reloadXConnection } = useXConnectionContext();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allowanceUsedUp, setAllowanceUsedUp] = useState<AllowanceUsedUp | null>(null);
   const { id } = scheduledPost;
 
   const send = useCallback(
     async ({ destination, when }: PostToChoice) => {
       setSending(true);
       setError(null);
+      setAllowanceUsedUp(null);
       try {
         const retried = await scheduledPostService.edit(id, {
           copyText: true,
@@ -47,6 +55,12 @@ export function useRetryFailed(scheduledPost: ScheduledPost): PostToSender {
         if (errorStatus(e) === 403) {
           refreshSubscribed();
           return { kind: 'notSubscribed' } as const;
+        }
+        const usedUp = errorAllowanceUsedUp(e);
+        if (usedUp) {
+          track('allowance_used_up', { ran_out: usedUp.ranOut });
+          setAllowanceUsedUp(usedUp);
+          return { kind: 'refused' } as const;
         }
         setError(
           errorMessage(
@@ -65,5 +79,5 @@ export function useRetryFailed(scheduledPost: ScheduledPost): PostToSender {
     [id, refreshSubscribed, reloadXConnection],
   );
 
-  return { sending, error, send };
+  return { sending, error, allowanceUsedUp, send };
 }

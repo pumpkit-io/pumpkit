@@ -429,7 +429,8 @@ async def test_a_user_who_is_not_subscribed_cannot_edit(client, fake_x_publisher
 
 
 @pytest.fixture
-def cap_of_two(monkeypatch):
+def cap_of_two(monkeypatch, sells_no_plans):
+    """The calendar-month cap of an Instance that sells no Plans, at 2 X posts."""
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 

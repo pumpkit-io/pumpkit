@@ -35,6 +35,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostResponse,
     ScheduledPostUpdateRequest,
     TextEditRequest,
+    UsageResponse,
     XConnectionResponse,
 )
 from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
@@ -48,6 +49,18 @@ posts_router = APIRouter(tags=["posts"])
 # can mount them around x_connection's router and keep the OpenAPI document's order.
 x_connection_router = APIRouter(tags=["x-connection"])
 x_authorization_router = APIRouter(tags=["x-connection"])
+# Served here, not from billing: scheduling and posts count the usage, and billing sits below them.
+usage_router = APIRouter(tags=["usage"])
+
+
+# Open to Users who aren't Subscribed, who have no Allowance.
+@usage_router.get("/usage", response_model=UsageResponse, status_code=status.HTTP_200_OK)
+async def get_usage(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> UsageResponse:
+    return await mediator.get_usage(db=db, user=current_user, now=clock())
 
 
 @x_connection_router.get(
