@@ -6,6 +6,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors import mediator
 from pumpkit.authors.schemas import (
     WRITE_RATE,
+    AuthorDirectoryResponse,
     InspirationAuthorAddRequest,
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
@@ -17,6 +18,18 @@ from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 
 router = APIRouter(tags=["inspiration-authors"])
+
+
+@router.get(
+    "/author-directory",
+    response_model=AuthorDirectoryResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def list_author_directory(
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> AuthorDirectoryResponse:
+    return await mediator.list_directory(db=db)
 
 
 @router.get(

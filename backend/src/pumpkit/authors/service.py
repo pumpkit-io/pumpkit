@@ -5,7 +5,13 @@ from typing import Optional, Sequence
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.authors.models import AuthorFetch, AuthorPost, InspirationAuthor
+from pumpkit.authors.models import (
+    SOURCE_LOOKUP,
+    AuthorDirectoryEntry,
+    AuthorFetch,
+    AuthorPost,
+    InspirationAuthor,
+)
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.time import as_utc
 
@@ -15,7 +21,16 @@ class AuthorSummary:
     handle: str
     last_fetched_at: Optional[datetime]
     post_count: int
+    name: Optional[str]
     photo_url: Optional[str]
+
+
+@dataclass(frozen=True)
+class DirectoryEntrySummary:
+    handle: str
+    name: Optional[str]
+    photo_url: Optional[str]
+    persona_count: int
 
 
 async def list_authors(db: AsyncSession, *, user_id: str) -> list[AuthorSummary]:
@@ -30,10 +45,12 @@ async def list_authors(db: AsyncSession, *, user_id: str) -> list[AuthorSummary]
             InspirationAuthor.handle,
             AuthorFetch.last_fetched_at,
             func.coalesce(post_counts.c.post_count, 0),
-            AuthorFetch.photo_url,
+            AuthorDirectoryEntry.name,
+            AuthorDirectoryEntry.photo_url,
         )
         .outerjoin(AuthorFetch, AuthorFetch.handle == InspirationAuthor.handle)
         .outerjoin(post_counts, post_counts.c.handle == InspirationAuthor.handle)
+        .outerjoin(AuthorDirectoryEntry, AuthorDirectoryEntry.handle == InspirationAuthor.handle)
         .where(InspirationAuthor.user_id == user_id)
         .order_by(InspirationAuthor.position)
     )
@@ -42,9 +59,35 @@ async def list_authors(db: AsyncSession, *, user_id: str) -> list[AuthorSummary]
             handle=handle,
             last_fetched_at=None if last_fetched_at is None else as_utc(last_fetched_at),
             post_count=post_count,
+            name=name,
             photo_url=photo_url,
         )
-        for handle, last_fetched_at, post_count, photo_url in result.all()
+        for handle, last_fetched_at, post_count, name, photo_url in result.all()
+    ]
+
+
+async def list_directory(db: AsyncSession) -> list[DirectoryEntrySummary]:
+    """Every Author directory entry by handle, with how many Users have it in their Persona."""
+    persona_counts = (
+        select(InspirationAuthor.handle, func.count().label("persona_count"))
+        .group_by(InspirationAuthor.handle)
+        .subquery()
+    )
+    result = await db.execute(
+        select(
+            AuthorDirectoryEntry.handle,
+            AuthorDirectoryEntry.name,
+            AuthorDirectoryEntry.photo_url,
+            func.coalesce(persona_counts.c.persona_count, 0),
+        )
+        .outerjoin(persona_counts, persona_counts.c.handle == AuthorDirectoryEntry.handle)
+        .order_by(AuthorDirectoryEntry.handle)
+    )
+    return [
+        DirectoryEntrySummary(
+            handle=handle, name=name, photo_url=photo_url, persona_count=persona_count
+        )
+        for handle, name, photo_url, persona_count in result.all()
     ]
 
 
@@ -136,36 +179,28 @@ async def last_fetched_at(db: AsyncSession, *, handle: str) -> Optional[datetime
 
 
 async def record_fetch(
-    db: AsyncSession, *, handle: str, now: datetime, photo_url: Optional[str]
+    db: AsyncSession,
+    *,
+    handle: str,
+    now: datetime,
+    name: Optional[str],
+    photo_url: Optional[str],
 ) -> None:
     """
-    Set when `handle` was last fetched, and its photo when the fetch found one: a fetch
-    without one keeps the stored photo. Flushes.
+    Set when `handle` was last fetched, and its directory entry's name and photo from what the
+    fetch found, adding the entry if it has none. What the fetch didn't find stays. Flushes.
     """
     fetch = await db.get(AuthorFetch, handle)
     if fetch is None:
-        db.add(AuthorFetch(handle=handle, last_fetched_at=now, photo_url=photo_url))
+        db.add(AuthorFetch(handle=handle, last_fetched_at=now))
     else:
         fetch.last_fetched_at = now
-        if photo_url is not None:
-            fetch.photo_url = photo_url
-    await db.flush()
-
-
-async def listed_handles_without_photo(db: AsyncSession) -> list[str]:
-    """Each handle on some User's list whose fetch stored no photo, alphabetically."""
-    result = await db.execute(
-        select(InspirationAuthor.handle)
-        .join(AuthorFetch, AuthorFetch.handle == InspirationAuthor.handle)
-        .where(AuthorFetch.photo_url.is_(None))
-        .distinct()
-        .order_by(InspirationAuthor.handle)
-    )
-    return list(result.scalars())
-
-
-async def store_photo(db: AsyncSession, *, handle: str, photo_url: str) -> None:
-    """Set the fetched `handle`'s photo, leaving when it was last fetched alone. Flushes."""
-    fetch = await db.get_one(AuthorFetch, handle)
-    fetch.photo_url = photo_url
+    entry = await db.get(AuthorDirectoryEntry, handle)
+    if entry is None:
+        entry = AuthorDirectoryEntry(handle=handle, added_at=now, source=SOURCE_LOOKUP)
+        db.add(entry)
+    if name is not None:
+        entry.name = name
+    if photo_url is not None:
+        entry.photo_url = photo_url
     await db.flush()

@@ -9,6 +9,8 @@ export interface InspirationAuthor {
   handle: string;
   lastFetchedAt: string | null;
   postCount: number;
+  /** The account's name in the Author directory, when it has one. */
+  name: string | null;
   /** X's URL for the author's photo, loaded from X; null until a fetch finds one. */
   photoUrl: string | null;
 }
@@ -17,6 +19,7 @@ interface InspirationAuthorApi {
   handle: string;
   last_fetched_at: string | null;
   post_count: number;
+  name: string | null;
   photo_url: string | null;
 }
 
@@ -24,6 +27,7 @@ const toAuthor = (a: InspirationAuthorApi): InspirationAuthor => ({
   handle: a.handle,
   lastFetchedAt: a.last_fetched_at,
   postCount: a.post_count,
+  name: a.name,
   photoUrl: a.photo_url,
 });
 

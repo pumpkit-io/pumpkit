@@ -53,14 +53,31 @@ class AuthorPost(Base):
 
 
 class AuthorFetch(Base):
-    """
-    When a handle's posts were last fetched, and the author's photo as that fetch found it,
-    shared by every User who lists it.
-    """
+    """When a handle's posts were last fetched, shared by every User who lists it."""
 
     __tablename__ = "author_fetches"
 
     handle: Mapped[str] = mapped_column(String, primary_key=True)
     last_fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# Where a directory entry came from: the seed list every Instance starts with, or X.
+SOURCE_SEED = "seed"
+SOURCE_LOOKUP = "lookup"
+
+
+class AuthorDirectoryEntry(Base):
+    """
+    An X account in the Author directory, the one home of its name and photo. Entries are never
+    deleted, so an account nobody lists any more stays for the next User to pick.
+    """
+
+    __tablename__ = "author_directory"
+
+    # Normalised: no @, lowercased, as on an Inspiration author.
+    handle: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # X's URL for the photo, never a copy; the browser loads it from X.
     photo_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String)
