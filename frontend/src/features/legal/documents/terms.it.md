@@ -2,10 +2,11 @@ I presenti Termini costituiscono il contratto tra te e il Gestore, INCEPTIONAL S
 
 ## 1. Il Gestore e i presenti Termini {#operator}
 
-Pumpkit è gestito da INCEPTIONAL S.R.L., di seguito il Gestore:
+Pumpkit è gestito da INCEPTIONAL S.R.L., società a responsabilità limitata a socio unico, di seguito il Gestore:
 
 - sede legale: Via Eugenio Curiel, 34, Fano (PU), Italia
-- partita IVA: IT02853580419
+- iscritta al Registro delle Imprese delle Marche al n. 02853580419
+- codice fiscale e partita IVA: 02853580419
 - REA: PS-307481
 - capitale sociale: €1, interamente versato
 - posta elettronica certificata (PEC): inceptional@pec.it

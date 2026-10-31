@@ -7,11 +7,7 @@ SignInMethod = Literal["magic_link", "google"]
 
 class OperatorDetails(BaseModel):
     name: str
-    address: str
     vat_id: Optional[str] = None
-    rea: Optional[str] = None
-    share_capital: Optional[str] = None
-    pec: Optional[str] = None
 
 
 class AnalyticsSettings(BaseModel):

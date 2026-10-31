@@ -6,11 +6,7 @@ export type SignInMethod = 'magic_link' | 'google';
 
 export interface OperatorDetails {
   name: string;
-  address: string;
   vat_id: string | null;
-  rea: string | null;
-  share_capital: string | null;
-  pec: string | null;
 }
 
 export interface AnalyticsSettings {
