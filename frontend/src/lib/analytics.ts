@@ -95,6 +95,15 @@ export const EVENTS = {
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
 
+  // Onboarding (/onboarding)
+  onboarding_step_viewed: {
+    description: 'Onboarding: a step was shown. Props: step (persona).',
+  },
+  onboarding_finished: {
+    description:
+      'Onboarding: pressed Continue on the last step and Onboarding was recorded as finished.',
+  },
+
   // Writing: Persona, New post and the Post page
   inspiration_author_added: {
     description: 'Persona: added an Inspiration author and its posts were fetched.',

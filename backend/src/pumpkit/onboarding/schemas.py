@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-NextStep = Literal["paywall"]
+NextStep = Literal["paywall", "persona"]
 
 
 class OnboardingResponse(BaseModel):

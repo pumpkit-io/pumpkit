@@ -1,9 +1,10 @@
 import { Navigate, Route } from 'react-router-dom';
 import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
-import { APP_HOME, PAYWALL_PATH } from '@/features/onboarding/paths';
+import { APP_HOME, ONBOARDING_PATH, PAYWALL_PATH } from '@/features/onboarding/paths';
 import { STATUS_TAB, TAB_ORDER } from '@/features/posts/postStatus';
 import { AppLayout } from './AppLayout';
 import { NewPost } from './NewPost';
+import { Onboarding } from './Onboarding';
 import { OnboardingLayout } from './OnboardingLayout';
 import { Paywall } from './Paywall';
 import { Persona } from './Persona';
@@ -44,6 +45,15 @@ export function signedInRoutes() {
         }
       >
         <Route path={PAYWALL_PATH} element={<Paywall />} />
+      </Route>
+      <Route
+        element={
+          <OnboardingGate home={ONBOARDING_PATH}>
+            <OnboardingLayout />
+          </OnboardingGate>
+        }
+      >
+        <Route path={ONBOARDING_PATH} element={<Onboarding />} />
       </Route>
     </>
   );
