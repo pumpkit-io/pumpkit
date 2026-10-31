@@ -877,15 +877,19 @@ describe('Settings', () => {
       ui_host: 'https://eu.posthog.com',
     };
 
-    it('links to the Privacy Policy and the Terms in a new tab', async () => {
+    it('links to the company details, the Privacy Policy and the Terms in a new tab', async () => {
       renderSettings({ instance: WITH_OPERATOR });
 
       const legal = within(await screen.findByRole('navigation', { name: 'Legal' }));
+      const company = legal.getByRole('link', { name: 'Company details' });
       const privacy = legal.getByRole('link', { name: 'Privacy Policy' });
       const terms = legal.getByRole('link', { name: 'Terms' });
+      expect(company).toHaveAttribute('href', '/terms#operator');
       expect(privacy).toHaveAttribute('href', '/privacy');
       expect(terms).toHaveAttribute('href', '/terms');
-      for (const link of [privacy, terms]) expect(link).toHaveAttribute('target', '_blank');
+      for (const link of [company, privacy, terms]) {
+        expect(link).toHaveAttribute('target', '_blank');
+      }
     });
 
     it('offers Cookie settings next to the legal links', async () => {

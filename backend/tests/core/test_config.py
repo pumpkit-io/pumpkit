@@ -269,7 +269,6 @@ def test_operator_details_with_support_email_turn_both_on(instance_env):
 
 
 def test_removed_operator_settings_left_in_the_env_still_boot(instance_env):
-    # Instances upgraded from before the footer shrank may still set these.
     s = instance_env(
         **_OPERATOR_ENV,
         SUPPORT_EMAIL="support@example.org",

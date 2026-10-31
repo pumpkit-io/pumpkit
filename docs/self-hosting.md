@@ -249,7 +249,7 @@ Sells Plans. Without it the Instance sells no Plans and every signed-in User may
 ### Support address and Operator details
 
 - `SUPPORT_EMAIL` alone shows a support link and the address in the footer. Without it, both are hidden.
-- `OPERATOR_NAME`, with `SUPPORT_EMAIL`, names the company that runs the Instance. It turns on the company line in the footer, the Terms and Privacy Policy pages, the Terms notice at sign-in and, when the Instance sells Plans, accepting the Terms at checkout. `OPERATOR_VAT_ID` adds the VAT ID to the company line. The rest of the company details belong in your Terms, which the footer's Company details link opens at their first section. Set them only together with [your own legal documents](#replace-the-legal-documents): the bundled ones are the Operator's, for pumpkit.io.
+- `OPERATOR_NAME`, with `SUPPORT_EMAIL`, names the company that runs the Instance. It turns on the company line in the footer, the Terms and Privacy Policy pages, the Terms notice at sign-in and, when the Instance sells Plans, accepting the Terms at checkout. `OPERATOR_VAT_ID` adds the VAT ID to the company line. The rest of the company details belong in your Terms, which the footer's Company details link opens at the section with the `operator` anchor. Set `OPERATOR_NAME` only together with [your own legal documents](#replace-the-legal-documents): the bundled ones are the Operator's, for pumpkit.io.
 - Pricing: none.
 
 ```sh
@@ -312,6 +312,7 @@ Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.st
 The Terms and Privacy Policy bundled with Pumpkit are the Operator's, for pumpkit.io, in English and Italian. They are part of the web image, so a Self-hoster who shows them builds the image from their own checkout:
 
 1. Replace the four files in `frontend/src/features/legal/documents/` with your own, following [Changing the Terms or the Privacy Policy](development.md#changing-the-terms-or-the-privacy-policy) (it also covers the Terms version that checkout checks).
+   Keep a section headed with `{#operator}` in your Terms for your company details: the footer's Company details link opens it.
 2. Set `OPERATOR_NAME` and `SUPPORT_EMAIL` with `setup.sh`.
 3. Build and start from the checkout: `docker compose up -d --wait --build`. Upgrade the same way ([Upgrades](#upgrades), building from source).
 

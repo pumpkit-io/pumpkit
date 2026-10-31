@@ -262,20 +262,26 @@ describe('Landing authors', () => {
 });
 
 describe('Landing footer', () => {
-  it('names the Operator with its VAT ID on one copyright line', () => {
+  it('names the Operator with its VAT ID on one copyright line for the current year', () => {
+    vi.setSystemTime(new Date('2027-03-01T12:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     renderLanding(WITH_OPERATOR);
     const footer = screen.getByRole('contentinfo');
-    const year = new Date().getFullYear();
     expect(
-      within(footer).getByText(`© ${year} Example S.R.L. · VAT ID IT01234567890`),
+      within(footer).getByText('© 2027 Example S.R.L. · VAT ID IT01234567890'),
     ).toBeInTheDocument();
   });
 
   it('names only the Operator when it has no VAT ID', () => {
+    vi.setSystemTime(new Date('2027-03-01T12:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     renderLanding({ ...WITH_OPERATOR, operator: { name: 'Example S.R.L.', vat_id: null } });
     const footer = screen.getByRole('contentinfo');
-    const year = new Date().getFullYear();
-    expect(within(footer).getByText(`© ${year} Example S.R.L.`)).toBeInTheDocument();
+    expect(within(footer).getByText('© 2027 Example S.R.L.')).toBeInTheDocument();
     expect(within(footer).queryByText(/VAT ID/)).not.toBeInTheDocument();
   });
 
