@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { errorMessage } from '@/services/apiErrors';
 import { billingService } from '@/services/billingService';
 import type { AllowanceUsage, UsageCount } from '@/services/usageService';
-import { AllowanceInfo, type AllowanceInfoTopic } from './AllowanceInfo';
+import { AllowanceInfo, type AllowanceTopic } from './AllowanceInfo';
 import { allowanceDay, isLow } from './usage';
 import { useUsage } from './useUsage';
 
@@ -60,7 +60,7 @@ function CountLeft({
   count: UsageCount;
   line: ReactNode;
   label: string;
-  topic: AllowanceInfoTopic;
+  topic: AllowanceTopic;
 }) {
   if (count.limit === null) return null;
   return (
@@ -109,7 +109,7 @@ function UsageDetails({ allowance }: { allowance: AllowanceUsage }) {
           </>
         }
         label="X posts left"
-        topic="x_posts"
+        topic="xPosts"
       />
       <div className="space-y-0.5 font-sans text-xs text-muted-foreground">
         <p>

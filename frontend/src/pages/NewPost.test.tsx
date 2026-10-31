@@ -16,7 +16,12 @@ vi.mock('@/services/userService', () => ({
 vi.mock('@/services/billingService', () => ({
   billingService: {
     fetchBillingMe: vi.fn(),
-    fetchPlans: vi.fn().mockResolvedValue({ plans: [], termsVersion: '2026-10-11' }),
+    fetchPlans: vi.fn().mockResolvedValue({
+      plans: [],
+      termsVersion: '2026-10-11',
+      allowance: { generations: null, xPosts: null, linkXPosts: null },
+      trial: null,
+    }),
     openBillingPortal: vi.fn(),
   },
 }));

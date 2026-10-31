@@ -1,33 +1,40 @@
 import { Info } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-/** What an info button explains: what counts against that part of the Allowance. */
-export type AllowanceInfoTopic = 'generations' | 'x_posts';
-
-const INFO: Record<AllowanceInfoTopic, { label: string; text: string }> = {
+/** What counts against each Allowance count a User can ask about. */
+const WHAT_COUNTS = {
   generations: {
-    label: 'What counts as a generation',
+    label: 'About generations',
     text: 'Every prompt to generate or refine a post counts as one generation.',
   },
-  x_posts: {
-    label: 'What counts as an X post',
+  xPosts: {
+    label: 'About X posts',
     text: 'Scheduled posts and posts you post now both count. For threads, each post in the thread counts.',
   },
-};
+} as const;
 
-/** An info button beside an Allowance line, opening what counts against it. */
-export function AllowanceInfo({ topic }: { topic: AllowanceInfoTopic }) {
-  const { label, text } = INFO[topic];
+export type AllowanceTopic = keyof typeof WHAT_COUNTS;
+
+/** An info button that opens what counts as one generation or one X post. */
+export function AllowanceInfo({ topic, className }: { topic: AllowanceTopic; className?: string }) {
+  const { label, text } = WHAT_COUNTS[topic];
   return (
     <Popover>
-      <PopoverTrigger
-        aria-label={label}
-        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Info className="size-4" aria-hidden="true" />
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          className={cn(
+            'inline-flex size-5 shrink-0 items-center justify-center rounded-full align-middle text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
+            className,
+          )}
+        >
+          <Info aria-hidden className="size-3.5" />
+        </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 font-sans text-sm text-foreground">
-        {text}
+      <PopoverContent side="top" aria-label={label} className="w-64">
+        <p className="font-sans text-sm leading-6 text-foreground">{text}</p>
       </PopoverContent>
     </Popover>
   );

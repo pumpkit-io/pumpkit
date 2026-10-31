@@ -79,11 +79,28 @@ class PlanResponse(BaseModel):
     interval_count: int
 
 
+class OfferedAllowanceResponse(BaseModel):
+    """What each Allowance period of a Plan allows; a cap of None is no cap."""
+
+    generations: Optional[int]
+    x_posts: Optional[int]
+    link_x_posts: Optional[int]
+
+
+class OfferedTrialResponse(OfferedAllowanceResponse):
+    """The Trial a first Subscription starts with: its length and its own Allowance."""
+
+    days: int
+
+
 class PlansListResponse(BaseModel):
     """
     The Plans Pumpkit sells, in display order, and the Terms version a checkout must accept.
     `terms_version` is None where the Instance has no Operator details, so no Terms to accept.
+    `trial` is None where the Instance offers no Trial; whether a User gets one is in `/billing/me`.
     """
 
     data: list[PlanResponse]
     terms_version: Optional[str]
+    allowance: OfferedAllowanceResponse
+    trial: Optional[OfferedTrialResponse]

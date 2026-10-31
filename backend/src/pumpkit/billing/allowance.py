@@ -52,6 +52,28 @@ def trial_share(cap: Optional[int]) -> Optional[int]:
     return None if cap is None else cap // 4
 
 
+@dataclass(frozen=True)
+class Limits:
+    """What one Allowance period allows: None is no cap."""
+
+    generations: Optional[int]
+    x_posts: Optional[int]
+    link_x_posts: Optional[int]
+
+
+def limits(*, trial: bool) -> Limits:
+    """The Instance's limits for a paid period, or for a Trial."""
+
+    def share(cap: Optional[int]) -> Optional[int]:
+        return trial_share(cap) if trial else cap
+
+    return Limits(
+        generations=share(settings.GENERATIONS_MONTHLY_CAP),
+        x_posts=share(settings.X_POSTS_MONTHLY_CAP),
+        link_x_posts=share(settings.X_LINK_POSTS_MONTHLY_CAP),
+    )
+
+
 def months_after(anchor: datetime, months: int) -> datetime:
     """`anchor` moved by whole months, on the anchor's day or the last day of a shorter month."""
     index = anchor.year * 12 + anchor.month - 1 + months
@@ -97,15 +119,12 @@ def way_out_for(subscription: Subscription) -> Optional[WayOut]:
 def allowance_at(subscription: Subscription, moment: datetime) -> Allowance:
     """The Allowance of a Subscribed User's `subscription` at `moment`."""
     period = period_at(subscription, moment)
-
-    def share(cap: Optional[int]) -> Optional[int]:
-        return trial_share(cap) if period.trial else cap
-
+    caps = limits(trial=period.trial)
     return Allowance(
         period=period,
-        generations=share(settings.GENERATIONS_MONTHLY_CAP),
-        x_posts=share(settings.X_POSTS_MONTHLY_CAP),
-        link_x_posts=share(settings.X_LINK_POSTS_MONTHLY_CAP),
+        generations=caps.generations,
+        x_posts=caps.x_posts,
+        link_x_posts=caps.link_x_posts,
         way_out=way_out_for(subscription),
     )
 
