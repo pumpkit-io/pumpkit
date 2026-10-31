@@ -23,6 +23,12 @@ const config = {
           '"Segoe UI"',
           'sans-serif',
         ],
+        display: [
+          '"Bricolage Grotesque Variable"',
+          '"Inter Variable"',
+          'ui-sans-serif',
+          'sans-serif',
+        ],
         mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       keyframes: {

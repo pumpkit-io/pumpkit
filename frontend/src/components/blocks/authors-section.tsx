@@ -25,7 +25,7 @@ export function AuthorsSection() {
           <Eyebrow>Learn from the best on X</Eyebrow>
           <h2
             id="authors-heading"
-            className="mt-3 text-balance text-2xl font-semibold tracking-tight md:text-3xl"
+            className="mt-3 text-balance font-display text-2xl font-semibold tracking-tight md:text-3xl"
           >
             Pick the authors whose style you want.
           </h2>

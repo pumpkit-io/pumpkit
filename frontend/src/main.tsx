@@ -1,4 +1,5 @@
 import '@fontsource-variable/inter/wght.css';
+import '@fontsource-variable/bricolage-grotesque/wght.css';
 import '@fontsource/geist-mono/400.css';
 import '@fontsource/geist-mono/500.css';
 import './index.css';
