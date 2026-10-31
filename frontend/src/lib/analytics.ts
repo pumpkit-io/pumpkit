@@ -100,6 +100,10 @@ export const EVENTS = {
     description: 'Persona: added an Inspiration author and its posts were fetched.',
   },
   inspiration_author_removed: { description: 'Persona: removed an Inspiration author.' },
+  author_looked_up: {
+    description:
+      'Author picker: chose "Look up @… on X" and the add answered. Props: result (found | missing | private | no_posts | limited).',
+  },
   inspiration_authors_refreshed: {
     description: 'Persona: refreshed an Inspiration author and its latest posts were fetched.',
   },
