@@ -297,6 +297,27 @@ async def test_a_paid_top_up_first_synced_sends_top_up_added(
     analytics.capture.assert_called_once_with("top_up_added", distinct_id=subscribed.user_id)
 
 
+@pytest.mark.parametrize("paid_at", [_utc(2025, 10, 3, 8), _utc(2025, 10, 10, 12, 0, 30)])
+async def test_a_top_up_expired_before_its_first_sync_sends_no_top_up_added(
+    client,
+    subscribed,
+    stripe_customer,
+    fake_billing,
+    sells_top_ups,
+    fixed_clock,
+    analytics,
+    paid_at,
+):
+    fake_billing.set_top_up(stripe_customer, _purchase(paid_at=paid_at))
+
+    response = await _send(
+        client, fake_billing, "evt_1", "checkout.session.completed", {"customer": "cus_1"}
+    )
+
+    assert response.status_code == 200
+    analytics.capture.assert_not_called()
+
+
 async def test_a_top_up_refunded_before_its_first_sync_sends_no_top_up_added(
     client, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, analytics
 ):

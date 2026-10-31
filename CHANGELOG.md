@@ -27,6 +27,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Fixed
 
+- Instances with analytics enabled no longer send `top_up_added` for a top-up first synced at or after its expiry.
 - A top-up refunded or disputed before Pumpkit first synced it no longer sends the `top_up_added` analytics event.
 
 ## [0.3.0] - 2026-10-31
