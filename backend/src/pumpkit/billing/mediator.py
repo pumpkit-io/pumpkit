@@ -404,7 +404,7 @@ def _is_subscription_nudge(event: WebhookEvent) -> bool:
 async def _dispatch_event(
     db: AsyncSession, gateway: BillingGateway, event: WebhookEvent
 ) -> list[TopUp]:
-    """Act on a verified, first-seen Stripe event; returns the Top-ups it added. Must not commit."""
+    """Act on a verified, first-seen Stripe event; returns the spendable Top-ups it added. Must not commit."""
     syncs_subscriptions = _is_subscription_nudge(event)
     syncs_top_ups = event.type in _TOP_UP_NUDGES
     if not (syncs_subscriptions or syncs_top_ups):

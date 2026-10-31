@@ -5,10 +5,12 @@ paid Checkout, a refund or a dispute (ADR 0004). What a Top-up has left shows in
 
 from datetime import datetime, timezone
 from typing import Any, Optional
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import select
 
+from pumpkit.billing import mediator as billing_mediator
 from pumpkit.billing.gateway import OneOffPrice, TopUpCheckoutCall, TopUpPurchase
 from pumpkit.billing.models import Subscription, TermsAcceptance
 from pumpkit.billing.subscription_status import SubscriptionStatus
@@ -40,6 +42,13 @@ def sells_top_ups(monkeypatch, fake_billing):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 100)
     monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", 10)
     fake_billing.prices = [TOP_UP_PRICE]
+
+
+@pytest.fixture
+def analytics(monkeypatch) -> MagicMock:
+    fake = MagicMock()
+    monkeypatch.setattr(billing_mediator, "posthog_client", fake)
+    return fake
 
 
 @pytest.fixture
@@ -276,6 +285,27 @@ async def test_a_top_up_refunded_before_its_first_sync_is_never_spendable(
     await _send(client, fake_billing, "evt_1", "charge.refunded", {"customer": "cus_1"})
 
     assert await _top_ups(client) == []
+
+
+async def test_a_paid_top_up_first_synced_sends_top_up_added(
+    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, analytics
+):
+    fake_billing.set_top_up(stripe_customer, _purchase())
+
+    await _send(client, fake_billing, "evt_1", "checkout.session.completed", {"customer": "cus_1"})
+
+    analytics.capture.assert_called_once_with("top_up_added", distinct_id=subscribed.user_id)
+
+
+async def test_a_top_up_refunded_before_its_first_sync_sends_no_top_up_added(
+    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, analytics
+):
+    fake_billing.set_top_up(stripe_customer, _purchase(reversed=True))
+
+    response = await _send(client, fake_billing, "evt_1", "charge.refunded", {"customer": "cus_1"})
+
+    assert response.status_code == 200
+    analytics.capture.assert_not_called()
 
 
 async def test_a_failed_top_up_sync_rolls_back_for_stripe_to_retry(

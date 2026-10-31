@@ -467,7 +467,8 @@ async def sync_top_ups(
 ) -> list[TopUp]:
     """
     Make Pumpkit's copy of the customer's Top-ups match the provider's now: add the paid ones it
-    lacks, and remove refunded or disputed ones, for good. Returns the added ones. Flushes.
+    lacks, and remove refunded or disputed ones, for good. Returns the added ones not already
+    removed. Flushes.
     """
     added: list[TopUp] = []
     for purchase in await gateway.list_top_ups(customer_id=customer_id):
@@ -493,6 +494,7 @@ async def sync_top_ups(
             removed=purchase.reversed,
         )
         db.add(top_up)
-        added.append(top_up)
+        if not top_up.removed:
+            added.append(top_up)
     await db.flush()
     return added
