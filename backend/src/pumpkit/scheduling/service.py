@@ -12,6 +12,7 @@ from sqlalchemy import (
     ColumnElement,
     CursorResult,
     Exists,
+    Select,
     and_,
     case,
     delete,
@@ -175,12 +176,22 @@ async def count_posts(db: AsyncSession, *, user_id: str) -> dict[PostStatus, int
 
 async def get(db: AsyncSession, *, scheduled_post_id: str) -> Optional[ScheduledPost]:
     """Reloaded from the database, since claims change rows behind the session's back."""
-    result = await db.execute(
+    result = await db.execute(_reload(scheduled_post_id))
+    return result.scalar_one_or_none()
+
+
+async def get_existing(db: AsyncSession, *, scheduled_post_id: str) -> ScheduledPost:
+    """Reloaded like `get`, for one the caller knows exists: raises `NoResultFound` otherwise."""
+    result = await db.execute(_reload(scheduled_post_id))
+    return result.scalar_one()
+
+
+def _reload(scheduled_post_id: str) -> Select[tuple[ScheduledPost]]:
+    return (
         select(ScheduledPost)
         .where(ScheduledPost.id == scheduled_post_id)
         .execution_options(populate_existing=True)
     )
-    return result.scalar_one_or_none()
 
 
 async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledPost]:

@@ -66,8 +66,7 @@ async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
 async def _publish_claimed(
     db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
 ) -> None:
-    scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
-    assert scheduled_post is not None
+    scheduled_post = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
 
     try:
         await _publish(db, publisher, scheduled_post, now=now)
