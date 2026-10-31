@@ -10,6 +10,7 @@ from pumpkit.posts.llm import LLM
 from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
+    charge_generation,
     check_attempt_limit,
     check_generation_left,
     record_failed_attempt,
@@ -57,6 +58,7 @@ async def start_post(
     version = await service.record_version(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now
     )
+    await charge_generation(db, user_id=user_id, version=version, now=now)
     await db.commit()
     return PostResponse(
         id=post.id, brief=post.brief, versions=[version_response(version, char_limit)]

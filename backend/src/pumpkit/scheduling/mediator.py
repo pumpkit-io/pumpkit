@@ -58,6 +58,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostPartResponse,
     ScheduledPostResponse,
     ScheduledPostSummaryResponse,
+    TopUpUsageResponse,
     UsageCountResponse,
     UsageResponse,
     XConnectionResponse,
@@ -234,6 +235,17 @@ async def get_usage(db: AsyncSession, user: User, now: datetime) -> UsageRespons
             x_posts=_usage_count(allowance.x_posts, used.x_posts),
             link_x_posts=_usage_count(allowance.link_x_posts, used.link_x_posts),
             way_out=allowance.way_out,
+            top_ups=[
+                TopUpUsageResponse(
+                    generations_left=top_up.left("generations"),
+                    x_posts_left=top_up.left("x_posts"),
+                    link_x_posts_left=top_up.left("link_x_posts"),
+                    expires_at=top_up.expires_at,
+                )
+                for top_up in await billing_service.top_up_balances(db, user_id=user.id, moment=now)
+                if top_up.has_left()
+            ],
+            may_buy_top_up=allowance.way_out == "top_up",
         )
     )
 
@@ -565,6 +577,7 @@ async def give_feedback(
         now=now,
         starting_text=next_version.starting_text,
     )
+    await version_writing.charge_generation(db, user_id=user.id, version=version, now=now)
     await db.commit()
     return version_writing.version_response(version, next_version.char_limit)
 

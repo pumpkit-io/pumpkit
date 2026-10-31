@@ -251,6 +251,15 @@ class UsageCountResponse(BaseModel):
     left: Optional[int]
 
 
+class TopUpUsageResponse(BaseModel):
+    """What one unexpired Top-up has left, spent only once the Allowance is used up."""
+
+    generations_left: int
+    x_posts_left: int
+    link_x_posts_left: int
+    expires_at: datetime
+
+
 class AllowanceUsageResponse(BaseModel):
     """What the User has used and has left of the Allowance period holding now."""
 
@@ -263,6 +272,9 @@ class AllowanceUsageResponse(BaseModel):
     link_x_posts: UsageCountResponse
     # What the User can do at a limit before the period resets; None when nothing.
     way_out: Optional[WayOut]
+    # The User's Top-ups with something left, first to expire first.
+    top_ups: list[TopUpUsageResponse]
+    may_buy_top_up: bool
 
 
 class UsageResponse(BaseModel):

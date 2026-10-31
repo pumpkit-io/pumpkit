@@ -124,7 +124,11 @@ async function withPostOnScreen() {
   await screen.findByRole('article', { name: 'Text' });
 }
 
-const NO_CAPS = { allowance: { generations: null, xPosts: null, linkXPosts: null }, trial: null };
+const NO_CAPS = {
+  allowance: { generations: null, xPosts: null, linkXPosts: null },
+  trial: null,
+  topUp: null,
+};
 
 describe('The signed-in shell', () => {
   beforeEach(() => {

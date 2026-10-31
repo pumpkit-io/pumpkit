@@ -4,10 +4,11 @@ import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { errorMessage, type AllowanceUsedUp } from '@/services/apiErrors';
+import { BuyTopUpButton } from './BuyTopUp';
 
 /**
  * The Allowance refusal where the User acted, in place of the action's error banner, with the
- * way out the backend offers. Way outs without a flow yet (Top-ups, subscribe now) show nothing.
+ * way out the backend offers. Way outs without a flow yet (subscribe now) show nothing.
  */
 export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
           Update your payment method
         </Button>
       )}
+      {refusal.wayOut === 'top_up' && <BuyTopUpButton />}
       {error && <p className="text-destructive">{error}</p>}
     </div>
   );

@@ -1,5 +1,5 @@
 """
-Pumpkit's copy of each Subscription, synced from the billing provider (ADR 0004),
+Pumpkit's copy of each Subscription and Top-up, synced from the billing provider (ADR 0004),
 the Stripe event log that makes webhooks idempotent, and Users' acceptances of the Terms.
 """
 
@@ -7,15 +7,33 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.billing.allowance import Allowance, allowance_at
+from pumpkit.billing.allowance import (
+    Allowance,
+    AllowanceUsedUp,
+    allowance_at,
+    months_after,
+    top_up_pack,
+)
 from pumpkit.billing.gateway import BillingGateway
-from pumpkit.billing.models import StripeEvent, Subscription, TermsAcceptance
+from pumpkit.billing.models import (
+    AllowanceCount,
+    StripeEvent,
+    Subscription,
+    TermsAcceptance,
+    TopUp,
+    TopUpCharge,
+)
 from pumpkit.billing.subscription_status import SubscriptionStatus
+from pumpkit.billing.top_ups import TopUpBalance, allocate, shortfall
 from pumpkit.core.config import settings
+from pumpkit.core.time import as_utc
+
+# How long a Top-up lasts from its purchase.
+TOP_UP_MONTHS = 12
 
 # An Ended Subscription can never run again.
 _ENDED_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
@@ -221,3 +239,146 @@ async def try_record_event(
     except IntegrityError:
         return False
     return True
+
+
+async def top_up_balances(
+    db: AsyncSession, *, user_id: str, moment: datetime
+) -> list[TopUpBalance]:
+    """What each of the User's Top-ups unexpired at `moment` has left, first to expire first."""
+    top_ups = list(
+        (
+            await db.execute(
+                select(TopUp)
+                .where(
+                    TopUp.user_id == user_id,
+                    TopUp.removed.is_(False),
+                    TopUp.expires_at > moment,
+                )
+                .order_by(TopUp.expires_at, TopUp.id)
+            )
+        ).scalars()
+    )
+    if not top_ups:
+        return []
+    charged: dict[tuple[str, str], int] = {
+        (top_up_id, count): quantity
+        for top_up_id, count, quantity in (
+            await db.execute(
+                select(TopUpCharge.top_up_id, TopUpCharge.count, func.sum(TopUpCharge.quantity))
+                .where(TopUpCharge.top_up_id.in_([t.id for t in top_ups]))
+                .group_by(TopUpCharge.top_up_id, TopUpCharge.count)
+            )
+        ).tuples()
+    }
+    return [
+        TopUpBalance(
+            id=t.id,
+            expires_at=as_utc(t.expires_at),
+            generations=t.generations - charged.get((t.id, "generations"), 0),
+            x_posts=t.x_posts - charged.get((t.id, "x_posts"), 0),
+            link_x_posts=t.link_x_posts - charged.get((t.id, "link_x_posts"), 0),
+        )
+        for t in top_ups
+    ]
+
+
+async def check_room_with_top_ups(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    allowance: Allowance,
+    count: AllowanceCount,
+    used: int,
+    needed: int,
+    moment: datetime,
+) -> None:
+    """
+    Raise `AllowanceUsedUp` unless the Allowance, with `used` gone, and the User's Top-ups
+    unexpired at `moment` together have room for `needed` more of `count`.
+    """
+    limit: Optional[int] = getattr(allowance, count)
+    short = shortfall(limit=limit, used=used, needed=needed)
+    if limit is None or short == 0:
+        return
+    in_top_ups = sum(
+        b.left(count) for b in await top_up_balances(db, user_id=user_id, moment=moment)
+    )
+    if in_top_ups >= short:
+        return
+    raise AllowanceUsedUp(
+        ran_out=count,
+        needed=needed,
+        left=max(0, limit - used) + in_top_ups,
+        limit=limit,
+        allowance=allowance,
+    )
+
+
+async def charge_shortfall(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    allowance: Allowance,
+    count: AllowanceCount,
+    used: int,
+    needed: int,
+    moment: datetime,
+    version_attempt_id: Optional[str] = None,
+    scheduled_post_id: Optional[str] = None,
+) -> None:
+    """
+    Charge what the Allowance, with `used` gone, can't cover of `needed` to the Top-ups unexpired
+    at `moment`, first to expire first. What they can't cover either stays on the Allowance, over
+    its limit. Flushes.
+    """
+    short = shortfall(limit=getattr(allowance, count), used=used, needed=needed)
+    if short == 0:
+        return
+    balances = await top_up_balances(db, user_id=user_id, moment=moment)
+    for top_up_id, quantity in allocate(balances, count=count, quantity=short):
+        db.add(
+            TopUpCharge(
+                top_up_id=top_up_id,
+                count=count,
+                quantity=quantity,
+                version_attempt_id=version_attempt_id,
+                scheduled_post_id=scheduled_post_id,
+            )
+        )
+    await db.flush()
+
+
+async def sync_top_ups(
+    db: AsyncSession, gateway: BillingGateway, *, user_id: str, customer_id: str
+) -> list[TopUp]:
+    """
+    Make Pumpkit's copy of the customer's Top-ups match the provider's now: add the paid ones it
+    lacks, and remove refunded or disputed ones, for good. Returns the added ones. Flushes.
+    """
+    added: list[TopUp] = []
+    for purchase in await gateway.list_top_ups(customer_id=customer_id):
+        top_up = (
+            await db.execute(
+                select(TopUp).where(
+                    TopUp.stripe_checkout_session_id == purchase.checkout_session_id
+                )
+            )
+        ).scalar_one_or_none()
+        if top_up is not None:
+            top_up.removed = top_up.removed or purchase.reversed
+            continue
+        pack = top_up_pack()
+        top_up = TopUp(
+            user_id=user_id,
+            stripe_checkout_session_id=purchase.checkout_session_id,
+            generations=pack.generations or 0,
+            x_posts=pack.x_posts or 0,
+            link_x_posts=pack.link_x_posts or 0,
+            purchased_at=purchase.paid_at,
+            expires_at=months_after(purchase.paid_at, TOP_UP_MONTHS),
+            removed=purchase.reversed,
+        )
+        db.add(top_up)
+        added.append(top_up)
+    await db.flush()
+    return added

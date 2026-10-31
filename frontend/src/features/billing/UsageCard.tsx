@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
 import { track } from '@/lib/analytics';
@@ -6,8 +6,9 @@ import { redirectTo } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import { errorMessage } from '@/services/apiErrors';
 import { billingService } from '@/services/billingService';
-import type { AllowanceUsage, UsageCount } from '@/services/usageService';
+import type { AllowanceUsage, TopUpUsage, UsageCount } from '@/services/usageService';
 import { AllowanceInfo, type AllowanceTopic } from './AllowanceInfo';
+import { BuyTopUpButton } from './BuyTopUp';
 import { allowanceDay, isLow } from './usage';
 import { useUsage } from './useUsage';
 
@@ -74,9 +75,35 @@ function CountLeft({
   );
 }
 
+/** A Top-up's expiry, with its year: it lasts 12 months. */
+function topUpDay(moment: Date): string {
+  return moment.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** What each Top-up has left, first to expire first; nothing while none has anything left. */
+function TopUpsLeft({ topUps }: { topUps: TopUpUsage[] }) {
+  if (topUps.length === 0) return null;
+  return (
+    <ul aria-label="Top-ups" className="space-y-1 font-sans text-sm text-foreground">
+      {topUps.map((topUp) => (
+        <li key={topUp.expiresAt.toISOString()}>
+          Top-up: {topUp.generationsLeft} generations and {topUp.xPostsLeft} X posts left, until{' '}
+          {topUpDay(topUp.expiresAt)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function UsageDetails({ allowance }: { allowance: AllowanceUsage }) {
   const [error, setError] = useState<string | null>(null);
-  const { trial, generations, xPosts, linkXPosts, resetsAt, wayOut } = allowance;
+  const { trial, generations, xPosts, linkXPosts, resetsAt, wayOut, topUps, mayBuyTopUp } =
+    allowance;
 
   const openPortal = async () => {
     setError(null);
@@ -119,7 +146,13 @@ function UsageDetails({ allowance }: { allowance: AllowanceUsage }) {
         </p>
         <p>Unused generations and X posts don&apos;t carry over.</p>
       </div>
-      {/* The Top-up block and Buy top-up (#233), and Subscribe now during a Trial (#235), go here. */}
+      {/* Subscribe now during a Trial (#235) goes here. */}
+      {(topUps.length > 0 || mayBuyTopUp) && (
+        <div className="space-y-3">
+          <TopUpsLeft topUps={topUps} />
+          {mayBuyTopUp && <BuyTopUpButton className="h-9" />}
+        </div>
+      )}
       {wayOut === 'update_payment' && (
         <button
           type="button"
@@ -153,12 +186,25 @@ function UsageSkeleton() {
   );
 }
 
+// How long the webhook that adds a bought Top-up usually takes to land after Stripe's redirect.
+const TOP_UP_SYNC_WAIT_MS = 4000;
+
+/** Back from buying a Top-up, loads usage once more after a wait, in case the webhook was late. */
+function useReloadAfterTopUp(topUpBought: boolean, reload: () => void) {
+  useEffect(() => {
+    if (!topUpBought) return;
+    const timeout = window.setTimeout(reload, TOP_UP_SYNC_WAIT_MS);
+    return () => window.clearTimeout(timeout);
+  }, [topUpBought, reload]);
+}
+
 /**
  * What a Subscribed User has left of their Allowance this period, counted in what is left with a
  * bar under each count. Renders nothing where there is no Allowance.
  */
-export function UsageCard() {
-  const { usage, failed } = useUsage();
+export function UsageCard({ topUpBought = false }: { topUpBought?: boolean }) {
+  const { usage, failed, reload } = useUsage();
+  useReloadAfterTopUp(topUpBought, reload);
 
   if (usage && !usage.allowance) return null;
   return (

@@ -96,6 +96,12 @@ export const EVENTS = {
     description: 'Billing: returned from Stripe via the cancel URL.',
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
+  top_up_checkout_started: {
+    description: 'Billing: paid for a Top-up in the Buy top-up dialog, starting its checkout.',
+  },
+  top_up_bought: {
+    description: 'Billing: returned from Stripe via the Top-up success URL.',
+  },
 
   // Writing: Persona, New post and the Post page
   inspiration_author_added: {

@@ -104,6 +104,8 @@ class Settings(BaseSettings):
     BILLING_TRIAL_PERIOD_DAYS: int = Field(default=14, ge=0)
     # Generations per Allowance period, only where Plans are sold; a Trial gets a quarter. None is no cap.
     GENERATIONS_MONTHLY_CAP: Optional[int] = Field(default=500, ge=0)
+    # The Top-up's one-off price, as a Stripe price lookup key; unset or empty sells no Top-ups.
+    BILLING_TOP_UP_KEY: Optional[str] = None
 
     # Any OpenAI-compatible chat completions endpoint; OpenRouter by default.
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
@@ -239,6 +241,9 @@ class Settings(BaseSettings):
 
     def stripe_checkout_success_url(self) -> str:
         return f"{self.frontend_url()}/billing/success"
+
+    def stripe_top_up_success_url(self) -> str:
+        return f"{self.frontend_url()}/billing/top-up/success"
 
     def stripe_checkout_cancel_url(self) -> str:
         return f"{self.frontend_url()}/billing/cancelled"

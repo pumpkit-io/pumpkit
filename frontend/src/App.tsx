@@ -6,7 +6,11 @@ import { Landing } from './pages/Landing';
 import { GoogleAuthCallback } from './components/google/GoogleAuthCallback';
 import { MagicLinkCallback } from './pages/MagicLinkCallback';
 import { MagicLinkSent } from './pages/MagicLinkSent';
-import { BillingCancelledRedirect, BillingSuccessRedirect } from './pages/BillingRedirect';
+import {
+  BillingCancelledRedirect,
+  BillingSuccessRedirect,
+  TopUpBoughtRedirect,
+} from './pages/BillingRedirect';
 import { AuthProvider, BYPASS_AUTH, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { signedInRoutes } from './pages/signedInRoutes';
@@ -72,6 +76,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute>
                 <BillingSuccessRedirect />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/billing/top-up/success"
+            element={
+              <ProtectedRoute>
+                <TopUpBoughtRedirect />
               </ProtectedRoute>
             }
           />

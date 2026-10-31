@@ -57,6 +57,12 @@ export interface OfferedTrial extends OfferedAllowance {
   days: number;
 }
 
+/** The Top-up a paid-up User may buy: its price in minor units and what it adds. */
+export interface TopUpOffer extends OfferedAllowance {
+  amount: number;
+  currency: string;
+}
+
 /** The Plans on sale, what they allow, and the Terms version a checkout must accept. */
 export interface PlanCatalog {
   plans: Plan[];
@@ -65,6 +71,8 @@ export interface PlanCatalog {
   allowance: OfferedAllowance;
   /** Null where the Instance offers no Trial; whether this User gets one is `BillingMe.trialDays`. */
   trial: OfferedTrial | null;
+  /** Null where the Instance sells no Top-ups; whether this User may buy one is in usage. */
+  topUp: TopUpOffer | null;
 }
 
 interface BillingMeApi {
@@ -99,10 +107,22 @@ interface PlansApi {
   terms_version: string | null;
   allowance: OfferedAllowanceApi;
   trial: (OfferedAllowanceApi & { days: number }) | null;
+  top_up: (OfferedAllowanceApi & { amount: number; currency: string }) | null;
 }
 
 function offeredAllowance(a: OfferedAllowanceApi): OfferedAllowance {
   return { generations: a.generations, xPosts: a.x_posts, linkXPosts: a.link_x_posts };
+}
+
+function termsFields(termsVersion: string | null, acceptance: TermsAcceptance) {
+  return termsVersion
+    ? {
+        terms_version: termsVersion,
+        accepted_terms: acceptance.acceptedTerms,
+        requested_immediate_start: acceptance.requestedImmediateStart,
+        approved_specific_clauses: acceptance.approvedSpecificClauses,
+      }
+    : {};
 }
 
 export const billingService = {
@@ -136,6 +156,13 @@ export const billingService = {
       termsVersion: data.terms_version,
       allowance: offeredAllowance(data.allowance),
       trial: data.trial && { days: data.trial.days, ...offeredAllowance(data.trial) },
+      topUp: data.top_up
+        ? {
+            amount: data.top_up.amount,
+            currency: data.top_up.currency,
+            ...offeredAllowance(data.top_up),
+          }
+        : null,
     };
   },
 
@@ -150,16 +177,25 @@ export const billingService = {
     termsVersion: string | null,
     acceptance: TermsAcceptance,
   ): Promise<string> => {
-    const terms = termsVersion && {
-      terms_version: termsVersion,
-      accepted_terms: acceptance.acceptedTerms,
-      requested_immediate_start: acceptance.requestedImmediateStart,
-      approved_specific_clauses: acceptance.approvedSpecificClauses,
-    };
     const { data } = await apiService.post<{ url: string }>('/billing/checkout', {
       plan_key: planKey,
-      ...terms,
+      ...termsFields(termsVersion, acceptance),
     });
+    return data.url;
+  },
+
+  /**
+   * Starts Stripe Checkout for one Top-up, with the same acceptance of the Terms as a
+   * Subscription's (ADR 0010). The server refuses with a 409 unless the User is paid up.
+   */
+  startTopUpCheckout: async (
+    termsVersion: string | null,
+    acceptance: TermsAcceptance,
+  ): Promise<string> => {
+    const { data } = await apiService.post<{ url: string }>(
+      '/billing/top-ups/checkout',
+      termsFields(termsVersion, acceptance),
+    );
     return data.url;
   },
 

@@ -504,6 +504,7 @@ async def test_the_plans_endpoint_returns_only_the_configured_plans_and_the_term
         "terms_version": TERMS_VERSION,
         "allowance": {"generations": 500, "x_posts": 100, "link_x_posts": 10},
         "trial": {"days": 14, "generations": 125, "x_posts": 25, "link_x_posts": 2},
+        "top_up": None,
     }
 
 
@@ -679,8 +680,8 @@ async def test_the_cardless_trial_route_no_longer_exists(client, fake_billing):
     assert fake_billing.customers_created == []
 
 
-async def test_billing_api_serves_only_subscription_routes(client):
-    """Pumpkit bills only by Subscription (ADR 0003): no other billing routes exist."""
+async def test_billing_api_serves_only_subscription_and_top_up_routes(client):
+    """Pumpkit bills by Subscription (ADR 0003) and sells Top-ups (ADR 0017), nothing else."""
     response = await client.get("/openapi.json")
 
     assert response.status_code == 200
@@ -693,6 +694,7 @@ async def test_billing_api_serves_only_subscription_routes(client):
         "/api/v1/billing/me",
         "/api/v1/billing/plans",
         "/api/v1/billing/checkout",
+        "/api/v1/billing/top-ups/checkout",
         "/api/v1/billing/portal",
         "/api/v1/stripe/webhook",
     }

@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -13,6 +13,7 @@ vi.mock('@/services/billingService', () => ({
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn(),
     startSubscriptionCheckout: vi.fn(),
+    startTopUpCheckout: vi.fn(),
     openBillingPortal: vi.fn(),
   },
 }));
@@ -121,7 +122,10 @@ const CATALOG: PlanCatalog = {
   termsVersion: '2026-10-11',
   allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
   trial: { days: 7, generations: 125, xPosts: 25, linkXPosts: 2 },
+  topUp: null,
 };
+
+const TOP_UP = { amount: 1000, currency: 'eur', generations: 250, xPosts: 50, linkXPosts: 5 };
 
 const WITH_TRIAL: BillingMe = { ...NOT_SUBSCRIBED, trialDays: 7 };
 
@@ -747,6 +751,66 @@ describe('Settings', () => {
       );
 
       await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://portal.stripe.test/x'));
+    });
+
+    it('shows what each top-up has left and until when, and offers to buy another', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          topUps: [
+            {
+              generationsLeft: 250,
+              xPostsLeft: 50,
+              linkXPostsLeft: 5,
+              expiresAt: new Date('2027-10-03T08:00:00Z'),
+            },
+          ],
+          mayBuyTopUp: true,
+        }),
+      );
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      expect(
+        await usageCard.findByText(
+          'Top-up: 250 generations and 50 X posts left, until 3 October 2027',
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(await usageCard.findByRole('button', { name: 'Buy top-up, €10' }));
+      expect(await screen.findByRole('dialog', { name: 'Buy a top-up' })).toBeInTheDocument();
+    });
+
+    it('offers only Buy top-up while no top-up has anything left', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
+      vi.mocked(usageService.get).mockResolvedValue(usageWith({ mayBuyTopUp: true }));
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      expect(await usageCard.findByRole('button', { name: 'Buy top-up, €10' })).toBeVisible();
+      expect(usageCard.queryByText(/^Top-up:/)).not.toBeInTheDocument();
+    });
+
+    it('offers no top-up to a User who may not buy one', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      await usageCard.findByText(reading('382 generations left'));
+      expect(usageCard.queryByRole('button', { name: /Buy top-up/ })).not.toBeInTheDocument();
+    });
+
+    it('greets a bought top-up and loads usage once more after a short wait', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      renderSettings({ state: { checkoutStatus: 'top_up_bought' } });
+
+      await card('Usage');
+      await waitFor(() => expect(usageService.get).toHaveBeenCalledTimes(1));
+      expect(track).toHaveBeenCalledWith('top_up_bought');
+      await act(() => vi.advanceTimersByTimeAsync(5000));
+      expect(usageService.get).toHaveBeenCalledTimes(2);
     });
 
     it('says nothing about a limit set to no cap', async () => {

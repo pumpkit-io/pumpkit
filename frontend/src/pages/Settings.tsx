@@ -21,7 +21,7 @@ import { fireSuccessConfetti } from '@/lib/confetti';
 /** What the X callback and the Stripe return routes leave in the location state for Settings. */
 export interface SettingsLocationState {
   xConnectionNotice?: string;
-  checkoutStatus?: 'success' | 'cancelled';
+  checkoutStatus?: 'success' | 'cancelled' | 'top_up_bought';
 }
 
 const CHECKOUT_CANCELLED = 'Checkout was cancelled. You have not been charged.';
@@ -64,6 +64,8 @@ function useBillingOnArrival(checkoutStatus: SettingsLocationState['checkoutStat
       fireSuccessConfetti(null);
     } else if (checkoutStatus === 'cancelled') {
       track('billing_checkout_cancelled');
+    } else if (checkoutStatus === 'top_up_bought') {
+      track('top_up_bought');
     }
   }, [sells_plans, load, checkoutStatus]);
 }
@@ -128,7 +130,9 @@ export function Settings() {
               loadError={billing.loadError}
             />
           )}
-          {sells_plans && data?.me.subscribed && <UsageCard />}
+          {sells_plans && data?.me.subscribed && (
+            <UsageCard topUpBought={arrival.checkoutStatus === 'top_up_bought'} />
+          )}
           <ApiKeysSection />
           <AppearanceCard />
           <footer className="pt-4">

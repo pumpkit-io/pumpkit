@@ -74,6 +74,8 @@ async def test_usage_counts_the_generations_written_this_period(
             "x_posts": {"limit": 100, "used": 0, "left": 100},
             "link_x_posts": {"limit": 10, "used": 0, "left": 10},
             "way_out": None,
+            "top_ups": [],
+            "may_buy_top_up": False,
         }
     }
 

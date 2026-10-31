@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.models import AuthorPost, InspirationAuthor
+from pumpkit.billing.models import TopUpCharge
 from pumpkit.core.errors import ConflictError
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import Format
@@ -87,7 +88,10 @@ async def attempt_times_since(db: AsyncSession, *, user_id: str, since: datetime
 async def count_versions_between(
     db: AsyncSession, *, user_id: str, start: datetime, end: datetime
 ) -> int:
-    """The User's Versions written in `[start, end)`: succeeded attempts only."""
+    """
+    The Generations of the User's Allowance used in `[start, end)`: succeeded attempts only, less
+    those charged to a Top-up.
+    """
     result = await db.execute(
         select(func.count())
         .select_from(VersionAttempt)
@@ -97,6 +101,7 @@ async def count_versions_between(
             VersionAttempt.status == ATTEMPT_SUCCEEDED,
             VersionAttempt.created_at >= start,
             VersionAttempt.created_at < end,
+            ~exists().where(TopUpCharge.version_attempt_id == VersionAttempt.id),
         )
     )
     return result.scalar_one()

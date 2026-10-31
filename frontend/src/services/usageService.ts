@@ -8,6 +8,14 @@ export interface UsageCount {
   left: number | null;
 }
 
+/** What one unexpired Top-up has left, spent only once the Allowance is used up. */
+export interface TopUpUsage {
+  generationsLeft: number;
+  xPostsLeft: number;
+  linkXPostsLeft: number;
+  expiresAt: Date;
+}
+
 /** What the User has used and has left of the Allowance period holding now. */
 export interface AllowanceUsage {
   trial: boolean;
@@ -19,6 +27,9 @@ export interface AllowanceUsage {
   linkXPosts: UsageCount;
   /** What the User can do at a limit before the period resets. */
   wayOut: AllowanceWayOut | null;
+  /** The User's Top-ups with something left, first to expire first. */
+  topUps: TopUpUsage[];
+  mayBuyTopUp: boolean;
 }
 
 export interface Usage {
@@ -34,6 +45,13 @@ interface UsageApi {
     x_posts: UsageCount;
     link_x_posts: UsageCount;
     way_out: AllowanceWayOut | null;
+    top_ups: {
+      generations_left: number;
+      x_posts_left: number;
+      link_x_posts_left: number;
+      expires_at: string;
+    }[];
+    may_buy_top_up: boolean;
   } | null;
 }
 
@@ -49,6 +67,13 @@ export const usageService = {
         xPosts: allowance.x_posts,
         linkXPosts: allowance.link_x_posts,
         wayOut: allowance.way_out,
+        topUps: allowance.top_ups.map((topUp) => ({
+          generationsLeft: topUp.generations_left,
+          xPostsLeft: topUp.x_posts_left,
+          linkXPostsLeft: topUp.link_x_posts_left,
+          expiresAt: new Date(topUp.expires_at),
+        })),
+        mayBuyTopUp: allowance.may_buy_top_up,
       },
     };
   },

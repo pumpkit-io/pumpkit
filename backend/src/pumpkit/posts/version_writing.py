@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.billing.service as billing_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
-from pumpkit.billing.allowance import check_room
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
@@ -62,8 +61,9 @@ async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) 
 
 async def check_generation_left(db: AsyncSession, *, user_id: str, now: datetime) -> None:
     """
-    Room in the User's Allowance for one more Generation, checked before the model calls. A
-    Version recorded after concurrent requests filled it is kept, over the limit.
+    Room for one more Generation in the User's Allowance or, once it is used up, their Top-ups,
+    checked before the model calls. A Version recorded after concurrent requests filled both is
+    kept, over the limit.
     """
     allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
     if allowance is None or allowance.generations is None:
@@ -71,12 +71,37 @@ async def check_generation_left(db: AsyncSession, *, user_id: str, now: datetime
     used = await service.count_versions_between(
         db, user_id=user_id, start=allowance.period.start, end=allowance.period.end
     )
-    check_room(
-        ran_out="generations",
-        limit=allowance.generations,
+    await billing_service.check_room_with_top_ups(
+        db,
+        user_id=user_id,
+        allowance=allowance,
+        count="generations",
         used=used,
         needed=1,
+        moment=now,
+    )
+
+
+async def charge_generation(
+    db: AsyncSession, *, user_id: str, version: VersionAttempt, now: datetime
+) -> None:
+    """Charge a just-recorded Version to a Top-up when the Allowance had no Generation left."""
+    allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
+    if allowance is None or allowance.generations is None:
+        return
+    used = await service.count_versions_between(
+        db, user_id=user_id, start=allowance.period.start, end=allowance.period.end
+    )
+    await billing_service.charge_shortfall(
+        db,
+        user_id=user_id,
         allowance=allowance,
+        count="generations",
+        # The count includes `version` itself.
+        used=used - 1,
+        needed=1,
+        moment=now,
+        version_attempt_id=version.id,
     )
 
 

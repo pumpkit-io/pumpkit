@@ -30,3 +30,41 @@ describe('billingService.startSubscriptionCheckout', () => {
     });
   });
 });
+
+describe('billingService.startTopUpCheckout', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sends only the acceptance: the server decides the price and the pack', async () => {
+    const post = vi
+      .spyOn(apiService, 'post')
+      .mockResolvedValue({ data: { url: 'https://checkout.stripe.test/t' } } as never);
+
+    const url = await billingService.startTopUpCheckout('2026-10-11', {
+      acceptedTerms: true,
+      requestedImmediateStart: true,
+      approvedSpecificClauses: true,
+    });
+
+    expect(url).toBe('https://checkout.stripe.test/t');
+    expect(post).toHaveBeenCalledWith('/billing/top-ups/checkout', {
+      terms_version: '2026-10-11',
+      accepted_terms: true,
+      requested_immediate_start: true,
+      approved_specific_clauses: true,
+    });
+  });
+
+  it('sends no acceptance where the Instance has no Terms', async () => {
+    const post = vi
+      .spyOn(apiService, 'post')
+      .mockResolvedValue({ data: { url: 'https://checkout.stripe.test/t' } } as never);
+
+    await billingService.startTopUpCheckout(null, {
+      acceptedTerms: false,
+      requestedImmediateStart: false,
+      approvedSpecificClauses: false,
+    });
+
+    expect(post).toHaveBeenCalledWith('/billing/top-ups/checkout', {});
+  });
+});

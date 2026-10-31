@@ -122,6 +122,8 @@ export function usageWith(changes: Partial<AllowanceUsage> = {}): Usage {
       xPosts: { limit: 100, used: 39, left: 61 },
       linkXPosts: { limit: 10, used: 2, left: 8 },
       wayOut: null,
+      topUps: [],
+      mayBuyTopUp: false,
       ...changes,
     },
   };

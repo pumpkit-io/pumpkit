@@ -311,8 +311,9 @@ async def get_usage(call: ToolCall[User]) -> UsageResponse:
     each feedback uses one), X posts (each part of a thread is one) and, of those, X posts with
     a link, each with its limit, how many are used and how many are left (a limit of null is no
     cap), `resets_at`, when the period ends: the next reset, or the trial's end, and `way_out`,
-    what the user can do at a limit before then. `allowance` is null where there are no
-    allowances, or the user isn't subscribed.
+    what the user can do at a limit before then. `top_ups` lists the user's top-ups with
+    something left and when each expires: they are spent only once the allowance is used up.
+    `allowance` is null where there are no allowances, or the user isn't subscribed.
     """
     return await mediator.get_usage(db=call.db, user=call.user, now=call.now)
 

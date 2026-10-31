@@ -86,15 +86,39 @@ class SubscriptionState:
 
 
 @dataclass(frozen=True)
+class OneOffPrice:
+    """A price lookup key resolved to its current one-off price, in the currency's minor units."""
+
+    key: str
+    price_id: str
+    amount: int
+    currency: str
+
+
+@dataclass(frozen=True)
+class TopUpPurchase:
+    """
+    A paid Top-up Checkout as the provider holds it now. `reversed` when its payment was refunded,
+    in whole or in part, or disputed: what is left of the Top-up is then removed.
+    """
+
+    checkout_session_id: str
+    paid_at: datetime
+    reversed: bool
+    charge_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class WebhookEvent:
     """
     A verified webhook event. Webhooks are nudges (ADR 0004): nothing else of
-    the payload leaves the gateway.
+    the payload leaves the gateway. A dispute names no customer, only its `charge_id`.
     """
 
     id: str
     type: str
     customer_id: Optional[str]
+    charge_id: Optional[str] = None
 
 
 class BillingGateway(Protocol):
@@ -140,6 +164,24 @@ class BillingGateway(Protocol):
 
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         """Verify a webhook payload and its signature, or raise `WebhookSignatureError`."""
+        ...
+
+    async def get_one_off_price(self, key: str) -> Optional[OneOffPrice]:
+        """The active one-off price with lookup key `key`, or None when the provider has none."""
+        ...
+
+    async def create_top_up_checkout(
+        self, *, customer_id: str, price_id: str, user_id: str
+    ) -> CheckoutSession:
+        """A hosted Checkout that takes one payment for one Top-up."""
+        ...
+
+    async def list_top_ups(self, *, customer_id: str) -> list[TopUpPurchase]:
+        """Every paid Top-up Checkout of the customer, refunded and disputed ones included."""
+        ...
+
+    async def get_charge_customer(self, *, charge_id: str) -> Optional[str]:
+        """The customer a charge belongs to, for events that name only the charge."""
         ...
 
 
@@ -211,12 +253,51 @@ def _customer_id(customer: Any) -> Optional[str]:
     return None
 
 
+# Marks the Checkouts that buy a Top-up among a customer's Checkouts.
+_TOP_UP_METADATA = {"pumpkit_purchase": "top_up"}
+
+
+def _one_off_price(price: dict[str, Any]) -> Optional[OneOffPrice]:
+    if price.get("type") != "one_time" or price.get("unit_amount") is None:
+        return None
+    return OneOffPrice(
+        key=price["lookup_key"],
+        price_id=price["id"],
+        amount=price["unit_amount"],
+        currency=price["currency"],
+    )
+
+
+def _top_up_purchase(session: dict[str, Any]) -> Optional[TopUpPurchase]:
+    """A Checkout as a paid Top-up, or None when it buys something else or isn't paid yet."""
+    metadata = session.get("metadata") or {}
+    if (
+        session.get("mode") != "payment"
+        or metadata.get("pumpkit_purchase") != _TOP_UP_METADATA["pumpkit_purchase"]
+        or session.get("payment_status") != "paid"
+    ):
+        return None
+    intent = session.get("payment_intent")
+    charge = intent.get("latest_charge") if isinstance(intent, dict) else None
+    if not isinstance(charge, dict):
+        charge = {}
+    return TopUpPurchase(
+        checkout_session_id=session["id"],
+        paid_at=_timestamp(charge.get("created") or session["created"]),
+        reversed=bool(charge.get("amount_refunded") or charge.get("disputed")),
+        charge_id=charge.get("id"),
+    )
+
+
 def _webhook_event(event: dict[str, Any]) -> WebhookEvent:
     try:
+        data_object = event["data"]["object"]
+        charge = data_object.get("charge")
         return WebhookEvent(
             id=event["id"],
             type=event["type"],
-            customer_id=_customer_id(event["data"]["object"].get("customer")),
+            customer_id=_customer_id(data_object.get("customer")),
+            charge_id=charge if isinstance(charge, str) else None,
         )
     except (KeyError, TypeError, AttributeError) as error:
         raise WebhookSignatureError("Webhook payload is not an event") from error
@@ -356,6 +437,60 @@ class StripeBillingGateway:
             raise WebhookSignatureError("Invalid Stripe webhook") from error
         return _webhook_event(event.to_dict())
 
+    async def get_one_off_price(self, key: str) -> Optional[OneOffPrice]:
+        prices = await self._call(
+            "look up the Top-up price",
+            lambda: self._client.v1.prices.list({"active": True, "lookup_keys": [key], "limit": 1}),
+        )
+        return next((price for p in prices.data if (price := _one_off_price(p.to_dict()))), None)
+
+    async def create_top_up_checkout(
+        self, *, customer_id: str, price_id: str, user_id: str
+    ) -> CheckoutSession:
+        params: CheckoutSessionCreateParams = {
+            "mode": "payment",
+            "customer": customer_id,
+            "client_reference_id": user_id,
+            "line_items": [{"price": price_id, "quantity": 1}],
+            "metadata": _TOP_UP_METADATA,
+            "success_url": settings.stripe_top_up_success_url(),
+            "cancel_url": settings.billing_page_url(),
+            "automatic_tax": {"enabled": True},
+            "tax_id_collection": {"enabled": True},
+            "customer_update": {"address": "auto", "name": "auto"},
+            "managed_payments": {"enabled": False},
+        }
+        session = await self._call(
+            "create a Top-up Checkout", lambda: self._client.v1.checkout.sessions.create(params)
+        )
+        if not session.url:
+            raise BillingProviderError(f"Stripe Checkout {session.id} has no URL")
+        return CheckoutSession(id=session.id, url=session.url)
+
+    async def list_top_ups(self, *, customer_id: str) -> list[TopUpPurchase]:
+        # One listing of completed Checkouts, each expanded down to its charge, reads the refund
+        # and dispute state too: one call per 100 Checkouts, where listing charges would need
+        # another call per charge to find its Checkout.
+        def list_all() -> list[dict[str, Any]]:
+            sessions = self._client.v1.checkout.sessions.list(
+                {
+                    "customer": customer_id,
+                    "status": "complete",
+                    "expand": ["data.payment_intent.latest_charge"],
+                    "limit": 100,
+                }
+            )
+            return [session.to_dict() for session in sessions.auto_paging_iter()]
+
+        sessions = await self._call("list Top-ups", list_all)
+        return [purchase for s in sessions if (purchase := _top_up_purchase(s))]
+
+    async def get_charge_customer(self, *, charge_id: str) -> Optional[str]:
+        charge = await self._call(
+            "look up a charge", lambda: self._client.v1.charges.retrieve(charge_id)
+        )
+        return _customer_id(charge.to_dict().get("customer"))
+
 
 @dataclass(frozen=True)
 class CustomerCall:
@@ -372,6 +507,13 @@ class CheckoutCall:
     quantity: int
     user_id: str
     trial_period_days: Optional[int]
+
+
+@dataclass(frozen=True)
+class TopUpCheckoutCall:
+    customer_id: str
+    price_id: str
+    user_id: str
 
 
 @dataclass
@@ -393,12 +535,15 @@ class FakeBillingGateway:
     plan_lookups: list[list[str]] = field(default_factory=list)
     expired_checkouts: list[str] = field(default_factory=list)
     cancelled_subscriptions: list[str] = field(default_factory=list)
+    prices: list[OneOffPrice] = field(default_factory=list)
+    top_up_checkouts: list[TopUpCheckoutCall] = field(default_factory=list)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
     _subscriptions: dict[str, dict[str, SubscriptionState]] = field(
         default_factory=dict, init=False
     )
     _customers_by_idempotency_key: dict[str, str] = field(default_factory=dict, init=False)
+    _top_ups: dict[str, dict[str, TopUpPurchase]] = field(default_factory=dict, init=False)
 
     def _maybe_fail(self, method: str) -> None:
         if method in self.fail_on:
@@ -496,6 +641,40 @@ class FakeBillingGateway:
         except ValueError as error:
             raise WebhookSignatureError("Payload is not JSON") from error
         return _webhook_event(event)
+
+    async def get_one_off_price(self, key: str) -> Optional[OneOffPrice]:
+        self._maybe_fail("get_one_off_price")
+        return next((price for price in self.prices if price.key == key), None)
+
+    async def create_top_up_checkout(
+        self, *, customer_id: str, price_id: str, user_id: str
+    ) -> CheckoutSession:
+        self._maybe_fail("create_top_up_checkout")
+        self.top_up_checkouts.append(
+            TopUpCheckoutCall(customer_id=customer_id, price_id=price_id, user_id=user_id)
+        )
+        return CheckoutSession(
+            id=f"cs_top_up_fake_{len(self.top_up_checkouts)}", url=self.checkout_url
+        )
+
+    def set_top_up(self, customer_id: str, purchase: TopUpPurchase) -> None:
+        """Make `purchase` what the provider holds now, replacing any for its Checkout."""
+        self._top_ups.setdefault(customer_id, {})[purchase.checkout_session_id] = purchase
+
+    async def list_top_ups(self, *, customer_id: str) -> list[TopUpPurchase]:
+        self._maybe_fail("list_top_ups")
+        return list(self._top_ups.get(customer_id, {}).values())
+
+    async def get_charge_customer(self, *, charge_id: str) -> Optional[str]:
+        self._maybe_fail("get_charge_customer")
+        return next(
+            (
+                customer_id
+                for customer_id, purchases in self._top_ups.items()
+                if any(p.charge_id == charge_id for p in purchases.values())
+            ),
+            None,
+        )
 
     def _sign(self, timestamp: str, payload: bytes) -> str:
         signed = f"{timestamp}.".encode() + payload

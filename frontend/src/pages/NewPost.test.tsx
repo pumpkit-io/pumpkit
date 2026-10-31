@@ -1,5 +1,5 @@
 import { act, createEvent, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -23,6 +23,7 @@ vi.mock('@/services/billingService', () => ({
       trial: null,
     }),
     openBillingPortal: vi.fn(),
+    startTopUpCheckout: vi.fn(),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
@@ -154,6 +155,22 @@ async function readyToWrite() {
 async function writeBrief(area: Awaited<ReturnType<typeof writer>>, brief: string) {
   fireEvent.change(area.getByLabelText('Brief'), { target: { value: brief } });
   fireEvent.click(area.getByRole('button', { name: 'Write the post' }));
+}
+
+/** Make billing offer a €10 Top-up, behind Terms of `termsVersion`, for this test only. */
+function sellingTopUps(termsVersion: string | null) {
+  const fetchPlans = vi.mocked(billingService.fetchPlans);
+  const before = fetchPlans.getMockImplementation();
+  fetchPlans.mockResolvedValue({
+    plans: [],
+    termsVersion,
+    allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+    trial: null,
+    topUp: { amount: 1000, currency: 'eur', generations: 250, xPosts: 50, linkXPosts: 5 },
+  });
+  onTestFinished(() => {
+    fetchPlans.mockImplementation(before ?? (() => Promise.reject(new Error('unmocked'))));
+  });
 }
 
 describe('New post', () => {
@@ -546,6 +563,60 @@ describe('New post', () => {
       fireEvent.click(await area.findByRole('button', { name: 'Update your payment method' }));
 
       await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://billing.test/portal'));
+    });
+
+    it('offers a paid-up User at the limit to buy a top-up, behind the Terms', async () => {
+      sellingTopUps('2026-10-11');
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+          { way_out: 'top_up' },
+        ),
+      );
+      vi.mocked(billingService.startTopUpCheckout).mockResolvedValue('https://checkout.test/t');
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Buy top-up, €10' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Buy a top-up' });
+      expect(
+        within(dialog).getByText(
+          '250 generations and 50 X posts, up to 5 with a link, for €10. Lasts 12 months, used after your monthly allowance.',
+        ),
+      ).toBeInTheDocument();
+      const pay = within(dialog).getByRole('button', { name: 'Pay €10' });
+      expect(pay).toBeDisabled();
+      for (const box of within(dialog).getAllByRole('checkbox')) fireEvent.click(box);
+      fireEvent.click(pay);
+
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://checkout.test/t'));
+      expect(billingService.startTopUpCheckout).toHaveBeenCalledWith('2026-10-11', {
+        acceptedTerms: true,
+        requestedImmediateStart: true,
+        approvedSpecificClauses: true,
+      });
+      expect(track).toHaveBeenCalledWith('top_up_checkout_started');
+    });
+
+    it("shows the API's refusal of a top-up checkout in the dialog", async () => {
+      sellingTopUps(null);
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp("You've used this period's 500 generations.", { way_out: 'top_up' }),
+      );
+      vi.mocked(billingService.startTopUpCheckout).mockRejectedValue(
+        apiError(409, 'Update your payment method to buy a top-up.'),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Buy top-up, €10' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Buy a top-up' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Pay €10' }));
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+        'Update your payment method to buy a top-up.',
+      );
     });
 
     it.each([

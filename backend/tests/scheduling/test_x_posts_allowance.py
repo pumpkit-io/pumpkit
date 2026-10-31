@@ -333,6 +333,8 @@ async def test_usage_says_how_many_x_posts_and_link_posts_are_left(client, ready
             "x_posts": {"limit": 5, "used": 2, "left": 3},
             "link_x_posts": {"limit": 2, "used": 1, "left": 1},
             "way_out": None,
+            "top_ups": [],
+            "may_buy_top_up": False,
         }
     }
 

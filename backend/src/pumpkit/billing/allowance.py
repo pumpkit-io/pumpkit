@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from pumpkit.billing.models import Subscription
+from pumpkit.billing.models import AllowanceCount, Subscription
 from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError
 from pumpkit.core.time import as_utc
@@ -17,8 +17,6 @@ from pumpkit.core.time import as_utc
 # Where the User sees their Allowance and finds the way out.
 SETTINGS_PAGE = "/settings"
 
-# What an Allowance counts.
-AllowanceCount = Literal["generations", "x_posts", "link_x_posts"]
 # What a User at a limit can do before the period resets.
 WayOut = Literal["top_up", "subscribe_now", "update_payment"]
 
@@ -74,6 +72,24 @@ def limits(*, trial: bool) -> Limits:
     )
 
 
+def top_up_pack() -> Limits:
+    """A Top-up is half of each cap, so changing a cap keeps it in proportion (ADR 0017)."""
+
+    def half(cap: Optional[int]) -> Optional[int]:
+        return None if cap is None else cap // 2
+
+    return Limits(
+        generations=half(settings.GENERATIONS_MONTHLY_CAP),
+        x_posts=half(settings.X_POSTS_MONTHLY_CAP),
+        link_x_posts=half(settings.X_LINK_POSTS_MONTHLY_CAP),
+    )
+
+
+def sells_top_ups() -> bool:
+    """Whether this Instance sells Top-ups: only where it sells Plans and names the Top-up's price."""
+    return settings.is_stripe_billing_configured() and bool(settings.BILLING_TOP_UP_KEY)
+
+
 def months_after(anchor: datetime, months: int) -> datetime:
     """`anchor` moved by whole months, on the anchor's day or the last day of a shorter month."""
     index = anchor.year * 12 + anchor.month - 1 + months
@@ -113,7 +129,14 @@ def way_out_for(subscription: Subscription) -> Optional[WayOut]:
         return "subscribe_now"
     if subscription.status == "past_due":
         return "update_payment"
+    if may_buy_top_up(subscription):
+        return "top_up"
     return None
+
+
+def may_buy_top_up(subscription: Optional[Subscription]) -> bool:
+    """Only a paid-up paid Subscription buys a Top-up: not in a Trial, not behind on payment."""
+    return sells_top_ups() and subscription is not None and subscription.status == "active"
 
 
 def allowance_at(subscription: Subscription, moment: datetime) -> Allowance:
