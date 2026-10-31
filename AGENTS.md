@@ -57,7 +57,9 @@ Single-context: one root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain
 
 ### PR review
 
-The required `review` check runs the `review-changes` skill on Claude Code, from `.github/workflows/sdlc-review-llm.yml`. It never runs on its own: a repository admin starts it on a PR's branch, and so can an agent whose `gh` is logged in as one, when the user asks. Start it with `gh workflow run sdlc-review-llm.yml --ref <branch>` and follow it with `gh run watch`; the verdict lands as a PR comment. It reviews the branch's head commit, so run it again after every push.
+The required `review` check runs the `review-changes` skill on Claude Code, from `.github/workflows/sdlc-review-llm.yml`. It never runs on its own, because each run spends the maintainer's usage, and only a repository admin can start it. It reviews the branch's head commit, so a later push needs a new run.
+
+When you have opened or updated a PR and expect no more pushes to it, check whether your `gh` login is an admin: `gh api repos/pumpkit-io/pumpkit --jq .permissions.admin`. If it is, start the review once with `gh workflow run sdlc-review-llm.yml --ref <branch>`, wait for the run (`gh run list --workflow sdlc-review-llm.yml --branch <branch> --limit 1`, then `gh run watch <id>`), and report its verdict and the link to its PR comment. On a blocking verdict, report the findings and ask before fixing and running it again. If your login isn't an admin, leave the review to a maintainer and say so.
 
 ### Code comments
 
