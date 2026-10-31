@@ -78,8 +78,6 @@ export interface TextSnapshot {
 /** What the Text's tools hang on that the controller doesn't own. */
 export interface TextGate {
   status: PostStatus;
-  /** Null until the Subscription has loaded. */
-  subscribed: boolean | null;
 }
 
 /** 'notSaved' when the last edit didn't reach the server, or nothing was sent at all. */
@@ -122,7 +120,7 @@ export class TextController {
   ) {
     this.text = post.text;
     this.versions = post.versions;
-    this.gate = { status: post.status, subscribed: null };
+    this.gate = { status: post.status };
     this.history = this.historyOf(post);
     this.saver = new TextSaver(
       (parts) => this.saveOnServer(parts),
@@ -145,7 +143,7 @@ export class TextController {
   snapshot = (): TextSnapshot => this.current;
 
   setGate(gate: TextGate) {
-    if (gate.status === this.gate.status && gate.subscribed === this.gate.subscribed) return;
+    if (gate.status === this.gate.status) return;
     this.gate = gate;
     this.emit();
   }
@@ -375,7 +373,7 @@ export class TextController {
     const { text, versions, gate, writing, history } = this;
     const restoring = this.restoring !== null;
     const textChanges = gate.status === 'draft' || gate.status === 'failed';
-    const edit = textChanges && !!text && gate.subscribed === true && !writing;
+    const edit = textChanges && !!text && !writing;
     const latest = versions[versions.length - 1];
     const source = text
       ? (versions.find((v) => v.number === text.versionNumber) ?? latest)

@@ -25,8 +25,8 @@ async def test_a_user_whose_subscription_ended_gets_the_link_to_subscribe_again(
 
     result = await mcp.call_tool("manage_subscription")
 
-    assert result["isError"] is False, result
-    assert result["structuredContent"]["url"] == BILLING_PAGE
+    assert result["isError"] is True, result
+    assert result["structuredContent"]["subscribe_url"] == BILLING_PAGE
 
 
 async def test_an_instance_that_sells_no_plans_says_so_instead_of_linking(sells_no_plans, mcp):

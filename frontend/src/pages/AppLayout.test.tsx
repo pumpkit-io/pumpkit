@@ -227,13 +227,6 @@ describe('The signed-in shell', () => {
       expect(await card.findByText('Subscribed')).toBeInTheDocument();
     });
 
-    it('says "No subscription" in the user card of a User who is not Subscribed', async () => {
-      renderSignedIn('/new');
-
-      const card = within(await screen.findByRole('link', { name: /^Your account/ }));
-      expect(await card.findByText('No subscription')).toBeInTheDocument();
-    });
-
     it('shows no Plan in the user card on an Instance that sells no Plans', async () => {
       renderSignedIn('/new', { instance: { ...SELLS_PLANS, sells_plans: false } });
 

@@ -172,15 +172,6 @@ async def test_unscheduling_reads_the_post_as_a_draft_again(client, post):
     assert (read["status"], read["scheduled_post"]) == ("draft", None)
 
 
-async def test_a_user_who_is_not_subscribed_still_reads_their_post(client, db, post, subscribed):
-    await db.delete(subscribed)
-    await db.commit()
-
-    response = await client.get(f"{POSTS}/{post['id']}")
-
-    assert response.status_code == 200, response.text
-
-
 @pytest.fixture
 async def bobs_post_id(db, fixed_clock) -> str:
     bob = User(email="bob@example.com", display_name="Bob")

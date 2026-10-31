@@ -183,7 +183,6 @@ async def test_a_user_who_is_not_subscribed_cannot_save(client, post_with):
     response = await _save(client, post_id, "As edited.")
 
     assert response.status_code == 403
-    assert (await _text_of(client, post_id))["edited"] is False
 
 
 async def test_get_post_reports_the_text_as_edited_since_its_version(

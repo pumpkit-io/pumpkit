@@ -1,16 +1,14 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useGoToChoosePlan } from '@/features/billing/choosePlan';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import type { DestinationDraft } from '@/features/scheduledPosts/communities';
 import type { Format } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { ShownPart } from '../shownText';
-import { POST_TO_BILLING_SOURCE, type PostToSender } from './postTo';
+import type { PostToSender } from './postTo';
 import { PostToDialog } from './PostToDialog';
 
-/** "Post to…" on a Draft or a Failed Post; a User who isn't Subscribed goes to Choose a Plan. */
+/** "Post to…" on a Draft or a Failed Post. */
 export function PostToButton({
   format,
   parts,
@@ -30,16 +28,10 @@ export function PostToButton({
   prepare?: () => Promise<boolean>;
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
-  const { subscribed } = useSubscribed();
-  const goToChoosePlan = useGoToChoosePlan();
   const [open, setOpen] = useState(false);
   const [preparing, setPreparing] = useState(false);
 
   const start = async () => {
-    if (subscribed === false) {
-      goToChoosePlan(POST_TO_BILLING_SOURCE);
-      return;
-    }
     if (prepare) {
       setPreparing(true);
       const ready = await prepare();

@@ -68,13 +68,6 @@ async def test_the_list_shows_authors_in_the_order_they_were_added(
     }
 
 
-async def test_a_user_who_is_not_subscribed_may_list_authors(client):
-    response = await client.get(AUTHORS)
-
-    assert response.status_code == 200
-    assert response.json() == {"data": []}
-
-
 async def test_adding_a_handle_x_does_not_know_returns_404(client, subscribed):
     response = await client.post(AUTHORS, json={"handle": "nobody_here"})
 
@@ -166,6 +159,8 @@ async def test_a_user_whose_subscription_ended_gets_403_when_removing(
     response = await client.delete(f"{AUTHORS}/levelsio")
 
     assert response.status_code == 403
+    subscribed.status = "active"
+    await db.commit()
     assert [a["handle"] for a in (await client.get(AUTHORS)).json()["data"]] == ["levelsio"]
 
 

@@ -4,14 +4,11 @@ import { LimitNotice } from '@/components/LimitNotice';
 import { SettingsCard } from '@/components/SettingsCard';
 import { UserAvatar } from '@/components/UserAvatar';
 import { Button } from '@/components/ui/button';
-import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import { DisconnectXDialog } from './DisconnectXDialog';
 import { useXConnectionContext } from './useXConnectionContext';
 
 /** The X account Scheduled posts go out on, with connect and disconnect. */
 export function XAccountCard({ notice }: { notice: string | null }) {
-  const { subscribed } = useSubscribed();
   const { connection, loadFailed, busy, error, connect, disconnect, reload } =
     useXConnectionContext();
   const [confirming, setConfirming] = useState(false);
@@ -86,13 +83,11 @@ export function XAccountCard({ notice }: { notice: string | null }) {
             </div>
           )}
         </div>
-      ) : subscribed === false ? (
-        <SubscribePrompt message="Connecting X needs a subscription." source="settings_x_account" />
-      ) : subscribed === true ? (
+      ) : (
         <Button className="h-10" disabled={busy} onClick={() => void connect()}>
           {busy ? 'Opening X…' : 'Connect X'}
         </Button>
-      ) : null}
+      )}
     </SettingsCard>
   );
 }

@@ -1,17 +1,15 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { SettingsLocationState } from './Settings';
+import type { CheckoutArrival, CheckoutStatus } from '@/features/billing/checkoutArrival';
 
-type BillingRedirectStatus = 'success' | 'cancelled';
-
-/** Stripe return URLs: hand the outcome to Settings via router state, then go there. */
-function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
+/** Stripe return URLs: hand the outcome to `/` via router state, which routes by the next step. */
+function BillingRedirect({ status }: { status: CheckoutStatus }) {
   const navigate = useNavigate();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      const state: SettingsLocationState = { checkoutStatus: status };
-      navigate('/settings', { replace: true, state });
+      const state: CheckoutArrival = { checkoutStatus: status };
+      navigate('/', { replace: true, state });
     }, 150);
     return () => window.clearTimeout(timeout);
   }, [navigate, status]);
@@ -19,7 +17,7 @@ function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background text-foreground">
       <div role="status" className="font-sans text-sm text-muted-foreground">
-        {status === 'success' ? 'Confirming your subscription…' : 'Returning to Settings…'}
+        {status === 'success' ? 'Confirming your subscription…' : 'Returning to Pumpkit…'}
       </div>
     </div>
   );

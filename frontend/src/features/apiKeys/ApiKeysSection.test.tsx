@@ -6,13 +6,18 @@ vi.mock('@/services/apiKeyService', () => ({
 }));
 
 import { MemoryRouter } from 'react-router-dom';
+import { SubscribedContext } from '@/features/billing/SubscribedProvider';
 import { apiKeyService, type ApiKey } from '@/services/apiKeyService';
 import { ApiKeysSection } from './ApiKeysSection';
+
+const checkPaywall = vi.fn();
 
 function renderSection() {
   return render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <ApiKeysSection />
+      <SubscribedContext.Provider value={{ planName: null, refresh: checkPaywall }}>
+        <ApiKeysSection />
+      </SubscribedContext.Provider>
     </MemoryRouter>,
   );
 }
@@ -167,7 +172,7 @@ describe('ApiKeysSection', () => {
     expect(screen.queryByText(/won’t be shown again/)).not.toBeInTheDocument();
   });
 
-  it('offers to subscribe when creating a key is refused for want of a Subscription', async () => {
+  it('checks the Paywall again when creating a key is refused for want of a Subscription', async () => {
     vi.mocked(apiKeyService.list).mockResolvedValue([]);
     vi.mocked(apiKeyService.create).mockRejectedValue(
       failure(403, 'This needs a subscription. Subscribe to continue.'),
@@ -177,12 +182,8 @@ describe('ApiKeysSection', () => {
 
     await createKey('Work laptop');
 
-    expect(await screen.findByText('Creating API keys needs a subscription.')).toBeInTheDocument();
+    await waitFor(() => expect(checkPaywall).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Subscribe' })).toHaveAttribute(
-      'href',
-      '/settings#choose-a-plan',
-    );
   });
 
   it('says when the keys couldn’t be loaded', async () => {
