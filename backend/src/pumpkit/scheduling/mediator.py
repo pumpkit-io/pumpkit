@@ -161,14 +161,16 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
 
 def _growing(
     needed: rules.XPosts, before: Optional[rules.XPosts], caps: dict[AllowanceCount, Optional[int]]
-) -> list[AllowanceCount]:
-    """The capped counts the change adds to: all it needs when new or moving, else what grows."""
-    return [
-        count
-        for count in caps
-        if caps[count] is not None
-        and (before is None or getattr(needed, count) > getattr(before, count))
-    ]
+) -> dict[AllowanceCount, int]:
+    """
+    The capped counts the change adds to, with their caps: all it needs when new or moving, else
+    what grows.
+    """
+    return {
+        count: cap
+        for count, cap in caps.items()
+        if cap is not None and (before is None or getattr(needed, count) > getattr(before, count))
+    }
 
 
 async def check_x_posts_room(
@@ -192,19 +194,19 @@ async def check_x_posts_room(
         allowance = await billing_service.get_allowance(db, user_id=user_id, moment=publish_at)
         if allowance is None:
             return
-        counts = _growing(
+        limits = _growing(
             needed,
             before,
             {"x_posts": allowance.x_posts, "link_x_posts": allowance.link_x_posts},
         )
-        if counts:
+        if limits:
             await top_up_charges.check_room(
                 db,
                 user_id=user_id,
                 allowance=allowance,
                 publish_at=publish_at,
                 needed=needed,
-                counts=counts,
+                limits=limits,
                 changing_id=excluding_id,
             )
         return
@@ -220,9 +222,7 @@ async def check_x_posts_room(
         end=end,
         excluding=[excluding_id] if excluding_id is not None else (),
     )
-    for count in _growing(needed, before, caps):
-        cap = caps[count]
-        assert cap is not None
+    for count, cap in _growing(needed, before, caps).items():
         rules.check_month_has_room(
             getattr(used, count),
             adding=getattr(needed, count),
@@ -344,8 +344,7 @@ async def _post_now(
 ) -> ScheduledPostResponse:
     # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
-    published = await service.get(db, scheduled_post_id=scheduled_post_id)
-    assert published is not None
+    published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
     return scheduled_post_response(published)
 
 
@@ -674,8 +673,8 @@ async def _commit_text(db: AsyncSession, *, user: User, post: Post) -> TextRespo
     await db.commit()
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     text = version_writing.text_response(post, char_limit)
-    # Only a Post with a Version has a Text to change.
-    assert text is not None
+    if text is None:
+        raise ConflictError("This post has no text to edit. Start a new post.")
     return text
 
 

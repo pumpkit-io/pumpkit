@@ -215,23 +215,22 @@ async def check_room(
     allowance: Allowance,
     publish_at: datetime,
     needed: XPosts,
-    counts: list[AllowanceCount],
+    limits: dict[AllowanceCount, int],
     changing_id: Optional[str] = None,
 ) -> None:
     """
     Raise `AllowanceUsedUp` when charging the periods afresh with a Scheduled post needing
     `needed` at `publish_at` leaves some post there less covered than it is now, by the Allowance
-    or by Top-ups unexpired at its own publish time, for any of `counts`. A post already over a
-    lowered limit doesn't block a change that takes no room from it. A post earlier in the period
-    can push a later one onto a Top-up that has expired by then. Pass `changing_id` when changing
-    an existing one, which leaves its old place and keeps what a removed Top-up paid for. Call it
-    with the User locked.
+    or by Top-ups unexpired at its own publish time, for any count in `limits`, the Allowance's
+    limits. A post already over a lowered limit doesn't block a change that takes no room from it.
+    A post earlier in the period can push a later one onto a Top-up that has expired by then. Pass
+    `changing_id` when changing an existing one, which leaves its old place and keeps what a
+    removed Top-up paid for. Call it with the User locked.
     """
     moments = [publish_at]
     paid = XPosts(x_posts=0, link_x_posts=0)
     if changing_id is not None:
-        changing = await service.get(db, scheduled_post_id=changing_id)
-        assert changing is not None
+        changing = await service.get_existing(db, scheduled_post_id=changing_id)
         moments.append(as_utc(changing.publish_at))
         paid = await _paid_on_removed(
             db, scheduled_post_id=changing_id, needed=needed, trimming=False
@@ -266,13 +265,11 @@ async def check_room(
         after = _uncovered(periods, balances, count=count)
         return any(left > before.get(post, 0) for post, left in after.items())
 
-    for count in counts:
+    for count, limit in limits.items():
         quantity: int = getattr(needed, count)
         if not worse(count, quantity):
             continue
         left = next((k for k in range(quantity - 1, -1, -1) if not worse(count, k)), 0)
-        limit = getattr(allowance, count)
-        assert limit is not None
         raise AllowanceUsedUp(
             ran_out=count, needed=quantity, left=left, limit=limit, allowance=allowance
         )
