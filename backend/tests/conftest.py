@@ -38,7 +38,7 @@ _TEST_ENV = {
     "STRIPE_PUBLISHABLE_KEY": "pk_test_dummy",
     "STRIPE_WEBHOOK_SECRET": "whsec_dummy",
     "BILLING_PLAN_KEYS": '["pumpkit_pro_monthly"]',
-    "BILLING_TRIAL_PERIOD_DAYS": "14",
+    "BILLING_TRIAL_PERIOD_DAYS": "7",
     "LLM_API_KEY": "sk-test",
     "POSTHOG_ENABLED": "false",
 }
