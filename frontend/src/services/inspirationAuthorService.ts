@@ -37,7 +37,10 @@ export const inspirationAuthorService = {
     return data.data.map(toAuthor);
   },
 
-  /** Fetches the handle's posts before answering, so it can take a few seconds. */
+  /**
+   * Looks the handle up on X when the Author directory lacks it and fetches its posts before
+   * answering, so it can take a few seconds. Refused with a 429 over the lookup limits.
+   */
   add: async (handle: string): Promise<InspirationAuthor> => {
     const { data } = await apiService.post<InspirationAuthorApi>('/inspiration-authors', {
       handle,

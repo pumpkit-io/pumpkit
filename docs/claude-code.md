@@ -23,7 +23,7 @@ On an Instance that sells Plans, creating a key and using the tools need a Subsc
 | Tool | What it does |
 | --- | --- |
 | `list_inspiration_authors` | Lists your Inspiration authors, in the order you added them, with how many posts Pumpkit holds for each. |
-| `add_inspiration_author` | Adds an X account as an Inspiration author, by its handle with or without the @, and reads its recent posts. You can have up to three. |
+| `add_inspiration_author` | Adds an X account as an Inspiration author, by its handle with or without the @, and reads its recent posts. You can have up to three. An account Pumpkit doesn't know yet is looked up on X first, as in the web app: a handle that isn't on X or is private is refused, and lookups are limited per User and per Instance. |
 | `remove_inspiration_author` | Removes one of your Inspiration authors. Claude Code asks before calling it. |
 
 Each tool refuses what the web app refuses, with the same message. Tools are limited per User: 20 calls a minute to add or remove an Inspiration author, and 60 for the tools that only read. Over the limit, a tool answers with when to try again.

@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.authors.models import (
     SOURCE_LOOKUP,
+    SOURCE_SEED,
     AuthorDirectoryEntry,
     AuthorFetch,
+    AuthorHandleMiss,
+    AuthorLookup,
     AuthorPost,
     InspirationAuthor,
 )
@@ -188,7 +191,8 @@ async def record_fetch(
 ) -> None:
     """
     Set when `handle` was last fetched, and its directory entry's name and photo from what the
-    fetch found, adding the entry if it has none. What the fetch didn't find stays. Flushes.
+    fetch found, adding the entry if it has none. What the fetch didn't find stays, and so does
+    a seeded entry's name, which was curated. Flushes.
     """
     fetch = await db.get(AuthorFetch, handle)
     if fetch is None:
@@ -199,8 +203,78 @@ async def record_fetch(
     if entry is None:
         entry = AuthorDirectoryEntry(handle=handle, added_at=now, source=SOURCE_LOOKUP)
         db.add(entry)
-    if name is not None:
+    if name is not None and entry.source != SOURCE_SEED:
         entry.name = name
     if photo_url is not None:
         entry.photo_url = photo_url
     await db.flush()
+
+
+async def in_directory(db: AsyncSession, *, handle: str) -> bool:
+    return await db.get(AuthorDirectoryEntry, handle) is not None
+
+
+async def add_directory_entry(
+    db: AsyncSession,
+    *,
+    handle: str,
+    name: Optional[str],
+    photo_url: Optional[str],
+    now: datetime,
+) -> None:
+    """Add `handle` to the Author directory as found by a lookup on X. Flushes."""
+    db.add(
+        AuthorDirectoryEntry(
+            handle=handle, name=name, photo_url=photo_url, added_at=now, source=SOURCE_LOOKUP
+        )
+    )
+    await db.flush()
+
+
+async def remembered_miss(db: AsyncSession, *, handle: str, now: datetime) -> Optional[str]:
+    """Why a lookup of `handle` found it unusable, while that is still remembered."""
+    miss = await db.get(AuthorHandleMiss, handle)
+    if miss is None or now >= as_utc(miss.remembered_until):
+        return None
+    return miss.reason
+
+
+async def remember_miss(
+    db: AsyncSession, *, handle: str, reason: str, remembered_until: datetime
+) -> None:
+    """Remember why `handle` is unusable until `remembered_until`, replacing an older miss. Flushes."""
+    miss = await db.get(AuthorHandleMiss, handle)
+    if miss is None:
+        db.add(AuthorHandleMiss(handle=handle, reason=reason, remembered_until=remembered_until))
+    else:
+        miss.reason = reason
+        miss.remembered_until = remembered_until
+    await db.flush()
+
+
+async def log_lookup(
+    db: AsyncSession, *, user_id: str, handle: str, now: datetime, result: str
+) -> None:
+    """Record one profile lookup on twitterapi.io. Flushes."""
+    db.add(AuthorLookup(user_id=user_id, handle=handle, looked_up_at=now, result=result))
+    await db.flush()
+
+
+@dataclass(frozen=True)
+class LookupCount:
+    count: int
+    # When the oldest counted lookup was made; None when none was.
+    oldest: Optional[datetime]
+
+
+async def count_lookups(
+    db: AsyncSession, *, since: datetime, user_id: Optional[str] = None
+) -> LookupCount:
+    """The lookups made after `since`, by one User or, without `user_id`, by the whole Instance."""
+    query = select(func.count(), func.min(AuthorLookup.looked_up_at)).where(
+        AuthorLookup.looked_up_at > since
+    )
+    if user_id is not None:
+        query = query.where(AuthorLookup.user_id == user_id)
+    count, oldest = (await db.execute(query)).one()
+    return LookupCount(count=count, oldest=None if oldest is None else as_utc(oldest))
