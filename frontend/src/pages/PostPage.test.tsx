@@ -1979,6 +1979,27 @@ describe('Post page', () => {
       ).toBeInTheDocument();
     });
 
+    it('counts the link posts left in top-ups with those left this period', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          linkXPosts: { limit: 10, used: 10, left: 0 },
+          topUps: [
+            {
+              generationsLeft: 250,
+              xPostsLeft: 20,
+              linkXPostsLeft: 3,
+              expiresAt: new Date('2027-10-03T00:00:00Z'),
+            },
+          ],
+        }),
+      );
+      const dialog = await openPostTo(postWith('Read pumpkit.io today'));
+
+      expect(
+        await dialog.findByText('Contains a link: uses 1 of your 3 link posts'),
+      ).toBeInTheDocument();
+    });
+
     it('says nothing about links for a text without one', async () => {
       vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
       const plain = await openPostTo(postWith('No link in this one.'));
@@ -1994,6 +2015,26 @@ describe('Post page', () => {
       const dialog = await openPostTo(postWith('No link in this one.'));
 
       expect(await dialog.findByText('5 X posts left until 14 November')).toBeInTheDocument();
+    });
+
+    it('gives no low warning while a top-up has X posts left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          xPosts: { limit: 100, used: 95, left: 5 },
+          topUps: [
+            {
+              generationsLeft: 250,
+              xPostsLeft: 20,
+              linkXPostsLeft: 3,
+              expiresAt: new Date('2027-10-03T00:00:00Z'),
+            },
+          ],
+        }),
+      );
+      const dialog = await openPostTo(postWith('No link in this one.'));
+      await vi.waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(dialog.queryByText(/X posts left until/)).not.toBeInTheDocument();
     });
 
     it('says nothing about links on an Instance without allowances', async () => {

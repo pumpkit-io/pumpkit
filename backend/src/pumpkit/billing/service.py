@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -242,9 +242,16 @@ async def try_record_event(
 
 
 async def top_up_balances(
-    db: AsyncSession, *, user_id: str, moment: datetime
+    db: AsyncSession,
+    *,
+    user_id: str,
+    moment: datetime,
+    giving_back: Optional[str] = None,
 ) -> list[TopUpBalance]:
-    """What each of the User's Top-ups unexpired at `moment` has left, first to expire first."""
+    """
+    What each of the User's Top-ups unexpired at `moment` has left, first to expire first, with
+    the charges of the Scheduled post `giving_back` given back.
+    """
     top_ups = list(
         (
             await db.execute(
@@ -265,7 +272,13 @@ async def top_up_balances(
         for top_up_id, count, quantity in (
             await db.execute(
                 select(TopUpCharge.top_up_id, TopUpCharge.count, func.sum(TopUpCharge.quantity))
-                .where(TopUpCharge.top_up_id.in_([t.id for t in top_ups]))
+                .where(
+                    TopUpCharge.top_up_id.in_([t.id for t in top_ups]),
+                    or_(
+                        TopUpCharge.scheduled_post_id.is_(None),
+                        TopUpCharge.scheduled_post_id != giving_back,
+                    ),
+                )
                 .group_by(TopUpCharge.top_up_id, TopUpCharge.count)
             )
         ).tuples()
@@ -291,17 +304,20 @@ async def check_room_with_top_ups(
     used: int,
     needed: int,
     moment: datetime,
+    giving_back: Optional[str] = None,
 ) -> None:
     """
     Raise `AllowanceUsedUp` unless the Allowance, with `used` gone, and the User's Top-ups
-    unexpired at `moment` together have room for `needed` more of `count`.
+    unexpired at `moment` together have room for `needed` more of `count`. Pass `giving_back`
+    when changing a Scheduled post, so what it took from the Top-ups counts as theirs again.
     """
     limit: Optional[int] = getattr(allowance, count)
     short = shortfall(limit=limit, used=used, needed=needed)
     if limit is None or short == 0:
         return
     in_top_ups = sum(
-        b.left(count) for b in await top_up_balances(db, user_id=user_id, moment=moment)
+        b.left(count)
+        for b in await top_up_balances(db, user_id=user_id, moment=moment, giving_back=giving_back)
     )
     if in_top_ups >= short:
         return
@@ -345,6 +361,12 @@ async def charge_shortfall(
                 scheduled_post_id=scheduled_post_id,
             )
         )
+    await db.flush()
+
+
+async def give_back_charges(db: AsyncSession, *, scheduled_post_id: str) -> None:
+    """Delete what the Scheduled post took from Top-ups, so they have it again. Flushes."""
+    await db.execute(delete(TopUpCharge).where(TopUpCharge.scheduled_post_id == scheduled_post_id))
     await db.flush()
 
 

@@ -13,6 +13,7 @@ import {
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
+import { leftInTopUps } from '@/features/billing/usage';
 import { useUsage } from '@/features/billing/useUsage';
 import {
   destinationFrom,
@@ -28,6 +29,7 @@ import { formatCount } from '@/lib/characters';
 import { hasLink, xWeightedLength } from '@/lib/xLength';
 import { FORMAT_THREAD, type Format } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
+import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import type { ShownPart } from '../shownText';
 import { POST_TO_BILLING_SOURCE, type PostToSender } from './postTo';
@@ -84,11 +86,13 @@ function overLimit(
 }
 
 /**
- * What the Parts about to go out with a link use of the link posts left; null without a link,
- * or without a cap on them.
+ * What the Parts about to go out with a link use of the link posts left, in the period and in
+ * Top-ups; null without a link, or without a cap on them.
  */
-function linkNote(linkCount: number, left: number | null | undefined): string | null {
-  if (linkCount === 0 || left === null || left === undefined) return null;
+function linkNote(linkCount: number, allowance: AllowanceUsage | null | undefined): string | null {
+  const inPeriod = allowance?.linkXPosts.left;
+  if (linkCount === 0 || !allowance || inPeriod === null || inPeriod === undefined) return null;
+  const left = inPeriod + leftInTopUps(allowance, 'linkXPosts');
   const links = linkCount === 1 ? 'Contains a link' : 'Contains links';
   return `${links}: uses ${linkCount} of your ${left} link ${left === 1 ? 'post' : 'posts'}`;
 }
@@ -192,7 +196,7 @@ export function PostToDialog({
   const tooLong = ready ? overLimit(parts, lengths, connection.charLimit, thread) : [];
   const links = linkNote(
     parts.filter((part) => !part.live && hasLink(part.text)).length,
-    usage?.allowance?.linkXPosts.left,
+    usage?.allowance,
   );
   const refusal = allowanceUsedUp ? (
     <AllowanceNotice refusal={allowanceUsedUp} />

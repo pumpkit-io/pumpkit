@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Subquery
 
+from pumpkit.billing.models import TopUpCharge
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -425,22 +426,57 @@ async def x_posts_used_between(
 ) -> XPosts:
     """
     The X posts and link posts of the User's Scheduled posts with `start <= publish_at < end`:
-    every Part, except those of a Failed one that X never accepted, which cost nothing.
+    every Part, except those of a Failed one that X never accepted, which cost nothing, less
+    those charged to a Top-up.
     """
-    query = (
+    in_window = [
+        ScheduledPost.user_id == user_id,
+        ScheduledPost.publish_at >= start,
+        ScheduledPost.publish_at < end,
+    ]
+    if excluding_id is not None:
+        in_window.append(ScheduledPost.id != excluding_id)
+    parts = await db.execute(
         select(ScheduledPostPart.text)
         .join(ScheduledPost)
         .where(
-            ScheduledPost.user_id == user_id,
-            ScheduledPost.publish_at >= start,
-            ScheduledPost.publish_at < end,
+            *in_window,
             or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None)),
         )
     )
-    if excluding_id is not None:
-        query = query.where(ScheduledPost.id != excluding_id)
-    result = await db.execute(query)
-    return x_posts_in(list(result.scalars()))
+    charged: dict[str, int] = {
+        count: quantity
+        for count, quantity in (
+            await db.execute(
+                select(TopUpCharge.count, func.sum(TopUpCharge.quantity))
+                .join(ScheduledPost, TopUpCharge.scheduled_post_id == ScheduledPost.id)
+                .where(*in_window)
+                .group_by(TopUpCharge.count)
+            )
+        ).tuples()
+    }
+    counted = x_posts_in(list(parts.scalars()))
+    return XPosts(
+        x_posts=counted.x_posts - charged.get("x_posts", 0),
+        link_x_posts=counted.link_x_posts - charged.get("link_x_posts", 0),
+    )
+
+
+async def counted_parts(db: AsyncSession, *, scheduled_post_id: str) -> list[str]:
+    """
+    The Parts of the Scheduled post that count as X posts: every one, or of a Failed one only
+    those X accepted.
+    """
+    result = await db.execute(
+        select(ScheduledPostPart.text)
+        .join(ScheduledPost)
+        .where(
+            ScheduledPost.id == scheduled_post_id,
+            or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None)),
+        )
+        .order_by(ScheduledPostPart.position)
+    )
+    return list(result.scalars())
 
 
 async def release_for_retry(

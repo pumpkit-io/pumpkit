@@ -15,7 +15,7 @@ from pumpkit.authors.x_reader import (
     XReaderError,
     XReaderNotConfiguredError,
 )
-from pumpkit.billing.allowance import AllowanceCount, check_room
+from pumpkit.billing.allowance import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
@@ -63,6 +63,7 @@ from pumpkit.scheduling.schemas import (
     UsageResponse,
     XConnectionResponse,
 )
+from pumpkit.scheduling.top_up_charges import charge_top_ups
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
@@ -167,7 +168,8 @@ async def check_x_posts_room(
 ) -> None:
     """
     Room for `parts` as X posts and link posts publishing at `publish_at`: in its Allowance
-    period where Plans are sold, else in its UTC calendar month. Pass `excluding_id` when
+    period, then the Top-ups unexpired at `publish_at`, where Plans are sold, else in its UTC
+    calendar month. Pass `excluding_id` when
     changing an existing one, so it doesn't count itself, and `before`, what it used, when it
     stays in place, so only what grows is checked.
     """
@@ -199,7 +201,16 @@ async def check_x_posts_room(
         if limit is None or (before is not None and adding <= had):
             continue
         if allowance is not None:
-            check_room(ran_out=ran_out, limit=limit, used=count, needed=adding, allowance=allowance)
+            await billing_service.check_room_with_top_ups(
+                db,
+                user_id=user_id,
+                allowance=allowance,
+                count=ran_out,
+                used=count,
+                needed=adding,
+                moment=publish_at,
+                giving_back=excluding_id,
+            )
         else:
             rules.check_month_has_room(
                 count,
@@ -289,6 +300,7 @@ async def create_scheduled_post(
     except IntegrityError:
         # Another request scheduled the same Post between the check and the insert.
         raise _already_scheduled()
+    await charge_top_ups(db, scheduled_post_id=scheduled_post.id)
     if new.publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
     await db.commit()
@@ -401,6 +413,7 @@ async def edit_scheduled_post(
         now=now,
     ):
         raise _publishing_started()
+    await charge_top_ups(db, scheduled_post_id=scheduled_post_id)
     if edit.publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     await db.commit()
@@ -439,6 +452,8 @@ async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id:
     """
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     post_id = scheduled_post.post_id
+    # Postgres cascades this from the delete; SQLite skips foreign keys without a pragma.
+    await billing_service.give_back_charges(db, scheduled_post_id=scheduled_post_id)
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
     await db.commit()

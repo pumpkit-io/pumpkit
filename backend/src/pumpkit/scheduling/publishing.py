@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.scheduling import publish, service
 from pumpkit.scheduling.models import ScheduledPost
+from pumpkit.scheduling.top_up_charges import charge_top_ups
 from pumpkit.x_connection.x_publisher import XPublisher
 
 
@@ -39,6 +40,8 @@ async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: date
 
 async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
     recovered = await publish.recover_stuck(db, now=now)
+    for scheduled_post in recovered.failed:
+        await charge_top_ups(db, scheduled_post_id=scheduled_post.id)
     await db.commit()
     for scheduled_post in recovered.published:
         publish.capture_published(scheduled_post)
@@ -56,6 +59,8 @@ async def _publish_claimed(
         await _publish(db, publisher, scheduled_post, now=now)
     except publish.Failed as failed:
         failed_for_good = await publish.record_failure(db, scheduled_post, failed, now=now)
+        if failed_for_good:
+            await charge_top_ups(db, scheduled_post_id=scheduled_post_id)
         await db.commit()
         if failed_for_good:
             publish.capture_failed(scheduled_post, failed.category)
