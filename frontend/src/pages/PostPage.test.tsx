@@ -1778,8 +1778,11 @@ describe('Post page', () => {
     });
 
     /** Opens "Post to…" on the Draft `post`, once its Version is on screen. */
-    async function openPostTo(post: PostDetail = postWith('the final text')): Promise<Dialog> {
-      renderPost(post);
+    async function openPostTo(
+      post: PostDetail = postWith('the final text'),
+      instance: Instance = SELLS_PLANS,
+    ): Promise<Dialog> {
+      renderPost(post, instance);
       await textCard();
       fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
       return within(await screen.findByRole('dialog', { name: 'Post to…' }));
@@ -2094,6 +2097,16 @@ describe('Post page', () => {
       await waitFor(() =>
         expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
       );
+    });
+
+    it('says posting to X is not set up on an Instance without X, offering no Connect X', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(null);
+      const dialog = await openPostTo(undefined, { ...SELLS_PLANS, x_connection: false });
+
+      expect(
+        dialog.getByText("Posting to X isn't set up on this Pumpkit yet."),
+      ).toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
     });
 
     it('asks the User to reconnect X when X no longer accepts its access', async () => {

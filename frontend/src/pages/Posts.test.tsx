@@ -54,6 +54,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
   track: vi.fn(),
 }));
 
+import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import { billingService } from '@/services/billingService';
 import {
@@ -176,6 +177,15 @@ describe('Posts page', () => {
       'href',
       '/settings',
     );
+  });
+
+  it('offers no X connection on an Instance without X', async () => {
+    vi.mocked(xConnectionService.get).mockResolvedValue(null);
+    renderSignedIn('/posts/scheduled', { instance: { ...SELLS_PLANS, x_connection: false } });
+
+    const header = within(screen.getByRole('banner'));
+    expect(await header.findByText(TIME_ZONE)).toBeInTheDocument();
+    expect(header.queryByRole('link', { name: 'Connect X to post' })).not.toBeInTheDocument();
   });
 
   it('has a tab for each status with its count, each at its own address', async () => {

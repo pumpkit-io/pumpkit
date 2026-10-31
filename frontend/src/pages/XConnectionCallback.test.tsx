@@ -11,12 +11,18 @@ vi.mock('@/services/xConnectionService', () => ({
     disconnect: vi.fn(),
   },
 }));
+vi.mock('@/services/onboardingService', () => ({
+  onboardingService: { fetchNextStep: vi.fn(), finish: vi.fn() },
+}));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
   track: vi.fn(),
 }));
 
+import { AuthProvider } from '@/contexts/AuthContext';
+import { OnboardingProvider } from '@/features/onboarding/OnboardingProvider';
 import { track } from '@/lib/analytics';
+import { onboardingService } from '@/services/onboardingService';
 import { xConnectionService } from '@/services/xConnectionService';
 import { XConnectionCallback } from './XConnectionCallback';
 
@@ -27,6 +33,13 @@ function Destination() {
   return <p>{`at ${location.pathname} via ${useNavigationType()}: ${notice ?? 'no notice'}`}</p>;
 }
 
+/** Shows where the callback navigated to and what it handed Onboarding. */
+function OnboardingDestination() {
+  const location = useLocation();
+  const arrival = (location.state as { xConnection?: unknown } | null)?.xConnection;
+  return <p>{`at ${location.pathname} via ${useNavigationType()}: ${JSON.stringify(arrival)}`}</p>;
+}
+
 function renderCallback(search: string) {
   render(
     <StrictMode>
@@ -35,10 +48,15 @@ function renderCallback(search: string) {
         initialIndex={1}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
-        <Routes>
-          <Route path="/oauth/x/callback" element={<XConnectionCallback />} />
-          <Route path="/settings" element={<Destination />} />
-        </Routes>
+        <AuthProvider>
+          <OnboardingProvider initialNextStep="x_connection">
+            <Routes>
+              <Route path="/oauth/x/callback" element={<XConnectionCallback />} />
+              <Route path="/settings" element={<Destination />} />
+              <Route path="/onboarding" element={<OnboardingDestination />} />
+            </Routes>
+          </OnboardingProvider>
+        </AuthProvider>
       </MemoryRouter>
     </StrictMode>,
   );
@@ -51,10 +69,20 @@ function apiError(status: number, detail: string) {
   });
 }
 
+const ADA = {
+  handle: 'ada',
+  charLimit: 280,
+  needsReconnect: false,
+  scheduledPostsWaiting: 0,
+  photoUrl: 'https://pbs.twimg.com/ada.jpg',
+  offerPhoto: false,
+};
+
 describe('the X callback', () => {
   beforeEach(() => {
     vi.mocked(xConnectionService.complete).mockReset();
     vi.mocked(track).mockClear();
+    vi.mocked(onboardingService.fetchNextStep).mockReset().mockResolvedValue(null);
   });
 
   it('completes the authorization once and returns to Settings', async () => {
@@ -112,5 +140,65 @@ describe('the X callback', () => {
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();
+  });
+
+  describe('during Onboarding', () => {
+    beforeEach(() => {
+      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('persona');
+    });
+
+    it('returns to Onboarding with the connected account', async () => {
+      vi.mocked(xConnectionService.complete).mockResolvedValue(ADA);
+
+      renderCallback('?state=the-state&code=the-code');
+
+      expect(
+        await screen.findByText(
+          'at /onboarding via REPLACE: {"outcome":"connected","handle":"ada","photoUrl":"https://pbs.twimg.com/ada.jpg"}',
+        ),
+      ).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('x_connected');
+    });
+
+    it('returns to the X step with the reason when completing fails', async () => {
+      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
+      vi.mocked(xConnectionService.complete).mockRejectedValue(
+        apiError(400, "X didn't give Pumpkit access to your account. Connect X again."),
+      );
+
+      renderCallback('?state=the-state&code=the-code');
+
+      expect(
+        await screen.findByText(
+          'at /onboarding via REPLACE: {"outcome":"failed","reason":"X didn\'t give Pumpkit access to your account. Connect X again."}',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('returns to the X step saying the account is taken', async () => {
+      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
+      vi.mocked(xConnectionService.complete).mockRejectedValue(
+        apiError(409, '@ada is already connected to another Pumpkit account.'),
+      );
+
+      renderCallback('?state=the-state&code=the-code');
+
+      expect(
+        await screen.findByText('at /onboarding via REPLACE: {"outcome":"taken"}'),
+      ).toBeInTheDocument();
+    });
+
+    it('returns to the X step when the User cancelled on X', async () => {
+      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
+
+      renderCallback('?error=access_denied&state=the-state');
+
+      expect(
+        await screen.findByText(
+          'at /onboarding via REPLACE: {"outcome":"failed","reason":"You cancelled connecting X. Connect it whenever you\'re ready."}',
+        ),
+      ).toBeInTheDocument();
+      expect(xConnectionService.complete).not.toHaveBeenCalled();
+    });
   });
 });

@@ -209,6 +209,10 @@ class Settings(BaseSettings):
     def is_operator_configured(self) -> bool:
         return self._is_configured(ProviderGroup.OPERATOR_DETAILS)
 
+    def is_x_configured(self) -> bool:
+        """Whether Users can connect X accounts, which publishing on X needs (ADR 0006)."""
+        return bool(self.X_CLIENT_ID and self.X_CLIENT_SECRET)
+
     def has_support_email(self) -> bool:
         return bool(self.SUPPORT_EMAIL)
 

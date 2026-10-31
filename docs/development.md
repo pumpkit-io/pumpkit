@@ -36,7 +36,7 @@ Every area is built from the same modules: `router.py` (HTTP only: dependencies,
 The signed-in web app is one route table, `pages/signedInRoutes.tsx`. `OnboardingProvider` (`features/onboarding/`) reads `GET /api/v1/onboarding` on every sign-in and page load, and each layout sits behind an `OnboardingGate` that sends the User to the page their `next_step` is on (ADR 0018): `/subscribe` for `paywall`, `/onboarding` for an Onboarding step, else the app. `/` routes the same way, after greeting a return from checkout. The step is never in the URL.
 
 - `/subscribe` (`pages/Paywall.tsx`): the Paywall, inside `pages/OnboardingLayout.tsx` (no sidebar: the wordmark, the step indicator, the account menu and the legal links). It offers the Plans through `features/billing/PlanPicker.tsx`, with the Terms boxes.
-- `/onboarding` (`pages/Onboarding.tsx`): the Onboarding step `next_step` names, in the same shell. The Persona step (`features/onboarding/PersonaStep.tsx`) is the Persona page's `InspirationAuthorsPanel` with Continue, which calls `POST /api/v1/onboarding/finish`; the gate then sends the finished User to New post. The `onboarding` area stores only that a User finished (ADR 0018), so emptying the Persona later never sends them back.
+- `/onboarding` (`pages/Onboarding.tsx`): the Onboarding step `next_step` names, in the same shell. The X step (`features/onboarding/XStep.tsx`, `next_step` `x_connection`) comes first on an Instance with X and while the User has no X connection; it starts an authorization and asks `GET /onboarding` again whenever the tab regains focus, since X may have been connected in another tab. The X callback (`pages/XConnectionCallback.tsx`) asks `GET /onboarding` after completing: while Onboarding isn't finished it returns to `/onboarding` with the outcome in the location state (the connected account, shown for a moment before the next step, or the reason it failed), and to Settings with its notice otherwise. The Persona step (`features/onboarding/PersonaStep.tsx`) is the Persona page's `InspirationAuthorsPanel` with Continue, which calls `POST /api/v1/onboarding/finish`; the gate then sends the finished User to New post. The `onboarding` area stores only that a User finished (ADR 0018), so emptying the Persona later never sends them back.
 
 Every other page renders inside `pages/AppLayout.tsx` (the providers, the sidebar and the Reconnect X banner):
 
@@ -86,7 +86,9 @@ The prompts in `src/pumpkit/posts/writing/prompts/` are copied word for word fro
 
 ### Schedule a post
 
-A Subscribed User connects X in Settings' X account card (`x_connection/router.py` and `scheduling/router.py`; the X publisher port in `x_connection/x_publisher.py`). While X no longer accepts the X connection, `ReconnectXBanner` (`features/xConnection/`) sits above every page's header.
+On an Instance without `X_CLIENT_ID` and `X_CLIENT_SECRET`, `GET /instance` answers `x_connection: false` (`settings.is_x_configured()`): Onboarding has no X step, and the web app shows no control to connect or reconnect X. Read it from `useInstance()` before offering one. Backend tests set the keys with the `x_configured` fixture; the test environment leaves them unset.
+
+A Subscribed User connects X in Onboarding's X step or in Settings' X account card (`x_connection/router.py` and `scheduling/router.py`; the X publisher port in `x_connection/x_publisher.py`). While X no longer accepts the X connection, `ReconnectXBanner` (`features/xConnection/`) sits above every page's header.
 
 Every Scheduled post is copied from its Post's Text (ADR 0016), and a Post goes out once, so it has at most one Scheduled post (ADR 0015). The Post takes its status from it, never stored: none is `draft`, `scheduled` or `publishing` is `scheduled`, then `published` or `failed` (`scheduling/post_status.py`; the frontend mirrors it in `features/posts/postStatus.ts`). `scheduled_posts.post_id` is unique, so the database holds the rule too.
 

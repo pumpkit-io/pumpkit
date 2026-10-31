@@ -105,7 +105,7 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 
 | Variable | Meaning |
 | --- | --- |
-| `X_CLIENT_ID` | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the X settings; connecting an X account then fails with a 503 naming them. Register `PUBLIC_URL/oauth/x/callback` as a callback URL on the X app. |
+| `X_CLIENT_ID` | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the X settings; Onboarding then skips its X step, the web app offers no way to connect X, and the API's authorization route answers a 503 naming them. Register `PUBLIC_URL/oauth/x/callback` as a callback URL on the X app. |
 | `X_CLIENT_SECRET` | That X app's client secret. Pumpkit calls X as a confidential client. |
 | `PUBLISHER_ENABLED` | `false` keeps the publisher process running without publishing anything, so Scheduled posts wait until it is `true` again. Defaults to `true`. `scripts/dev-stack` sets it to `false` for each development copy of the app, which may share an `.env` holding real X credentials. |
 | `PUBLISHER_POLL_INTERVAL_SECONDS` | How often the publisher process looks for due Scheduled posts. Defaults to 30, so a Scheduled post goes out within about 30 seconds of its time. |

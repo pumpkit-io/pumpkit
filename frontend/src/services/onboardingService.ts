@@ -1,7 +1,7 @@
 import { apiService } from './apiService';
 
 /** Where the backend sends the signed-in User next; null once Pumpkit is open to them. */
-export type NextStep = 'paywall' | 'persona';
+export type NextStep = 'paywall' | 'x_connection' | 'persona';
 
 export const onboardingService = {
   fetchNextStep: async (): Promise<NextStep | null> => {

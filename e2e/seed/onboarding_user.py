@@ -1,8 +1,9 @@
-"""Seed a Subscribed user at the start of the Persona step, and print `E2E_ACCESS_TOKEN=<jwt>`.
+"""Seed a Subscribed user at the start of Onboarding, and print `E2E_ACCESS_TOKEN=<jwt>`.
 
-The user has no Inspiration authors and hasn't finished Onboarding. The Author directory gets
-`e2e_author`, whose posts were just fetched, so picking it reuses them and never calls
-twitterapi.io. Run it like `seed_user.py`.
+The user has no X connection, no Inspiration authors and hasn't finished Onboarding, so it starts
+at the X step where the Instance has X, and `connect_x.py` with its email moves it to the Persona
+step. The Author directory gets `e2e_author`, whose posts were just fetched, so picking it reuses
+them and never calls twitterapi.io. Run it like `seed_user.py`.
 """
 
 import asyncio
@@ -22,6 +23,7 @@ from pumpkit.authors.models import (
 from pumpkit.billing.models import Subscription
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.onboarding.models import OnboardingFinish
+from pumpkit.x_connection.models import XConnection
 
 E2E_EMAIL = "e2e-onboarding@e2e-user.dev"
 AUTHOR = "e2e_author"
@@ -38,6 +40,7 @@ async def main() -> None:
 
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))
         await db.execute(delete(OnboardingFinish).where(OnboardingFinish.user_id == user.id))
+        await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
         held = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
         if held.first() is None:
             db.add(

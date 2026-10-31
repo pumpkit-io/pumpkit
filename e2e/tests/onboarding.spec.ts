@@ -1,8 +1,16 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { runSeedScript } from '../backend';
 
-// Not the suite's own User, who has finished Onboarding: this one starts at the Persona step.
+const EMAIL = 'e2e-onboarding@e2e-user.dev';
+
+// Not the suite's own User, who has finished Onboarding: this one starts at the X step.
 test.use({ storageState: { cookies: [], origins: [] } });
+
+/** Whether the stack under test has X's app keys, which decides if Onboarding has an X step. */
+async function offersX(page: Page): Promise<boolean> {
+  const instance = await (await page.request.get('/api/v1/instance')).json();
+  return instance.x_connection === true;
+}
 
 test.beforeEach(async ({ page }) => {
   const out = runSeedScript('onboarding_user.py');
@@ -17,9 +25,39 @@ test.beforeEach(async ({ page }) => {
   }, token);
 });
 
+test('the X step waits for X, then moves on once X is connected elsewhere', async ({ page }) => {
+  test.skip(!(await offersX(page)), 'The stack has no X keys, so Onboarding has no X step.');
+  await page.goto('/new');
+
+  await expect(page).toHaveURL(/\/onboarding$/);
+  const step = page.getByRole('region', { name: 'Connect your X account' });
+  await expect(step.getByRole('button', { name: 'Connect X' })).toBeEnabled();
+  await expect(
+    page.getByRole('navigation', { name: 'Steps' }).locator('[aria-current="step"]'),
+  ).toHaveText('2Connect X');
+
+  runSeedScript('connect_x.py', [EMAIL]);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+  await expect(
+    page.getByRole('region', { name: 'Choose up to three authors to write like' }),
+  ).toBeVisible();
+});
+
+test('an Instance without X starts Onboarding at the Persona step', async ({ page }) => {
+  test.skip(await offersX(page), 'The stack has X keys, so Onboarding has an X step.');
+  await page.goto('/new');
+
+  await expect(
+    page.getByRole('region', { name: 'Choose up to three authors to write like' }),
+  ).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Steps' })).not.toContainText('Connect X');
+});
+
 test('the Persona step resumes after a reload, and Continue opens New post for good', async ({
   page,
 }) => {
+  runSeedScript('connect_x.py', [EMAIL]);
   await page.goto('/new');
 
   await expect(page).toHaveURL(/\/onboarding$/);

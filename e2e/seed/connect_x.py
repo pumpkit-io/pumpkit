@@ -1,10 +1,12 @@
 """Give the seeded e2e user an X connection, so "Post to…" lets them schedule.
 
 Its tokens are fakes: nothing in the smoke tests reaches X, and `seed_user.py` removes the
-connection again on the next run. Run it like `seed_user.py`, after it.
+connection again on the next run. Run it like `seed_user.py`, after it. An email argument
+connects that seeded user instead, as `onboarding_user.py`'s to pass the X step.
 """
 
 import asyncio
+import sys
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -14,7 +16,13 @@ from pumpkit.auth.models import User
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.x_connection.x_publisher import XAccount, XTokens
 
-E2E_EMAIL = "e2e@e2e-user.dev"
+# X account ids are unique across Users, so each seeded user gets its own X account.
+ACCOUNTS = {
+    "e2e@e2e-user.dev": ("e2e-x-user", "e2e_user"),
+    "e2e-onboarding@e2e-user.dev": ("e2e-x-onboarding", "e2e_newcomer"),
+}
+E2E_EMAIL = sys.argv[1] if len(sys.argv) > 1 else "e2e@e2e-user.dev"
+X_USER_ID, HANDLE = ACCOUNTS[E2E_EMAIL]
 
 
 async def main() -> None:
@@ -24,7 +32,7 @@ async def main() -> None:
         await x_connections_service.save_connection(
             db,
             user_id=user.id,
-            account=XAccount(user_id="e2e-x-user", handle="e2e_user", subscription_type="None"),
+            account=XAccount(user_id=X_USER_ID, handle=HANDLE, subscription_type="None"),
             tokens=XTokens(
                 access_token="e2e-access",
                 refresh_token="e2e-refresh",

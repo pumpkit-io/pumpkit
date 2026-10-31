@@ -127,3 +127,86 @@ async def test_a_signed_out_visitor_is_refused(new_browser):
     response = await new_browser().get(ONBOARDING)
 
     assert response.status_code == 401
+
+
+async def test_a_subscribed_user_without_x_is_sent_to_the_x_step(client, subscribed, x_configured):
+    response = await client.get(ONBOARDING)
+
+    assert response.json() == {"next_step": "x_connection"}
+
+
+async def test_the_x_step_comes_before_the_persona_even_with_an_author(
+    client, subscribed, x_configured, fake_x_reader
+):
+    await _add_author(client, fake_x_reader)
+
+    response = await client.get(ONBOARDING)
+
+    assert response.json() == {"next_step": "x_connection"}
+
+
+async def test_a_user_who_connected_x_moves_on_to_the_persona_step(
+    client, subscribed, x_configured, connect_x
+):
+    await connect_x()
+
+    response = await client.get(ONBOARDING)
+
+    assert response.json() == {"next_step": "persona"}
+
+
+async def test_an_instance_without_x_skips_the_x_step(client, subscribed):
+    response = await client.get(ONBOARDING)
+
+    assert response.json() == {"next_step": "persona"}
+
+
+async def test_the_paywall_comes_before_the_x_step(client, x_configured):
+    response = await client.get(ONBOARDING)
+
+    assert response.json() == {"next_step": "paywall"}
+
+
+async def test_an_instance_that_sells_no_plans_starts_at_the_x_step(
+    client, sells_no_plans, x_configured
+):
+    response = await client.get(ONBOARDING)
+
+    assert response.json() == {"next_step": "x_connection"}
+
+
+async def test_finishing_without_x_is_refused_while_the_x_step_is_required(
+    client, subscribed, x_configured, fake_x_reader
+):
+    await _add_author(client, fake_x_reader)
+
+    response = await client.post(FINISH)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Connect your X account to continue."
+    assert (await client.get(ONBOARDING)).json() == {"next_step": "x_connection"}
+
+
+async def test_finishing_after_connecting_x_opens_pumpkit(
+    client, subscribed, x_configured, connect_x, fake_x_reader
+):
+    await connect_x()
+    await _add_author(client, fake_x_reader)
+
+    response = await client.post(FINISH)
+
+    assert response.status_code == 204
+    assert (await client.get(ONBOARDING)).json() == {"next_step": None}
+
+
+async def test_a_finished_user_stays_finished_after_disconnecting_x(
+    client, subscribed, x_configured, connect_x, fake_x_reader
+):
+    await connect_x()
+    await _add_author(client, fake_x_reader)
+    await client.post(FINISH)
+
+    disconnected = await client.delete("/api/v1/x-connection")
+
+    assert disconnected.status_code == 204
+    assert (await client.get(ONBOARDING)).json() == {"next_step": None}

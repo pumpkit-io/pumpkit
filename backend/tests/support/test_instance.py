@@ -36,6 +36,7 @@ async def test_instance_without_posthog_has_no_analytics(
         "operator": None,
         "support_email": None,
         "analytics": None,
+        "x_connection": False,
     }
 
 
@@ -113,3 +114,23 @@ async def test_instance_with_operator_details_carries_them(client, monkeypatch):
         "vat_id": "IT01234567890",
     }
     assert response.json()["support_email"] == "help@example.org"
+
+
+async def test_an_instance_without_x_keys_offers_no_x_connection(client):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["x_connection"] is False
+
+
+async def test_an_instance_with_x_keys_offers_the_x_connection(client, x_configured):
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["x_connection"] is True
+
+
+async def test_an_instance_with_only_one_x_key_offers_no_x_connection(client, monkeypatch):
+    monkeypatch.setattr(settings, "X_CLIENT_ID", "x-client-id")
+
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["x_connection"] is False
