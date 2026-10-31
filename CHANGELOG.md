@@ -10,6 +10,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - New Terms on pumpkit.io, dated 1 November 2026, in English and Italian: a new clause 11, Allowance and Top-ups, says what the allowance and a top-up hold, that a top-up lasts 12 months, is spent only after the allowance and waits for your next subscription, and that it can't be refunded once any of it is spent. The withdrawal, no-refunds and ending clauses now cover top-ups, and the clauses from 11 on move down by one. Your next checkout asks you to accept the new Terms. The top-up dialog's second box now reads "I ask for the top-up to be available immediately, and acknowledge I lose the 14-day right of withdrawal once I use any of it." **Upgrade notes:** if you replaced the Terms with your own, keep your own `TERMS_VERSION` (`backend/src/pumpkit/billing/terms.py`), `TERMS_LAST_UPDATED` (`frontend/src/features/legal/documents.ts`) and `ONEROUS_CLAUSES` (`frontend/src/features/billing/TermsAcceptanceFields.tsx`) when you merge, since this release renumbers the onerous clauses to match pumpkit.io's Terms.
 
+### Fixed
+
+- A top-up refunded or disputed before Pumpkit first synced it no longer sends the `top_up_added` analytics event.
+
 ## [0.3.0] - 2026-10-31
 
 ### Added
