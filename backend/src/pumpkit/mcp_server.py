@@ -97,7 +97,7 @@ _caller: ContextVar[_Caller] = ContextVar("mcp_caller")
 
 
 def _subscription_needed() -> CallToolResult:
-    subscribe_url = settings.billing_page_url()
+    subscribe_url = settings.paywall_url()
     return tool_error(f"{SUBSCRIPTION_NEEDED} {subscribe_url}", subscribe_url=subscribe_url)
 
 

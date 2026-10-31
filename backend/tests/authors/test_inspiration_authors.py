@@ -72,7 +72,7 @@ async def test_adding_a_handle_x_does_not_know_returns_404(client, subscribed):
     response = await client.post(AUTHORS, json={"handle": "nobody_here"})
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "@nobody_here isn't on X"
+    assert response.json() == {"detail": "@nobody_here isn't on X.", "code": "HANDLE_NOT_ON_X"}
     assert (await client.get(AUTHORS)).json() == {"data": []}
 
 
@@ -84,7 +84,10 @@ async def test_adding_a_handle_with_no_original_posts_returns_422(
     response = await client.post(AUTHORS, json={"handle": "replyguy"})
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "@replyguy has no posts of its own to learn from"
+    assert response.json() == {
+        "detail": "@replyguy has no posts of its own to learn from.",
+        "code": "HANDLE_HAS_NO_POSTS",
+    }
     assert (await client.get(AUTHORS)).json() == {"data": []}
 
 
@@ -418,4 +421,4 @@ async def test_refreshing_a_handle_x_no_longer_knows_returns_404(
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "@levelsio isn't on X"
+    assert response.json()["detail"] == "@levelsio isn't on X."

@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional, Sequence
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.authors.models import (
@@ -223,12 +224,20 @@ async def add_directory_entry(
     now: datetime,
 ) -> None:
     """Add `handle` to the Author directory as found by a lookup on X. Flushes."""
-    db.add(
-        AuthorDirectoryEntry(
-            handle=handle, name=name, photo_url=photo_url, added_at=now, source=SOURCE_LOOKUP
-        )
-    )
-    await db.flush()
+    try:
+        async with db.begin_nested():
+            db.add(
+                AuthorDirectoryEntry(
+                    handle=handle,
+                    name=name,
+                    photo_url=photo_url,
+                    added_at=now,
+                    source=SOURCE_LOOKUP,
+                )
+            )
+    except IntegrityError:
+        # A concurrent lookup of the same handle added it first.
+        pass
 
 
 async def remembered_miss(db: AsyncSession, *, handle: str, now: datetime) -> Optional[str]:
@@ -245,10 +254,20 @@ async def remember_miss(
     """Remember why `handle` is unusable until `remembered_until`, replacing an older miss. Flushes."""
     miss = await db.get(AuthorHandleMiss, handle)
     if miss is None:
-        db.add(AuthorHandleMiss(handle=handle, reason=reason, remembered_until=remembered_until))
-    else:
-        miss.reason = reason
-        miss.remembered_until = remembered_until
+        try:
+            async with db.begin_nested():
+                db.add(
+                    AuthorHandleMiss(
+                        handle=handle, reason=reason, remembered_until=remembered_until
+                    )
+                )
+            return
+        except IntegrityError:
+            # A concurrent lookup remembered a miss first; this one replaces it.
+            miss = await db.get(AuthorHandleMiss, handle)
+            assert miss is not None
+    miss.reason = reason
+    miss.remembered_until = remembered_until
     await db.flush()
 
 

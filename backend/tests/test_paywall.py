@@ -13,7 +13,7 @@ from pumpkit.billing.models import Subscription
 
 SUBSCRIPTION_NEEDED = "This needs a subscription. Subscribe to continue."
 
-GATED_READS = [
+GATED_ROUTES = [
     ("GET", "/api/v1/inspiration-authors"),
     ("GET", "/api/v1/x-connection"),
     ("DELETE", "/api/v1/x-connection"),
@@ -23,6 +23,15 @@ GATED_READS = [
     ("DELETE", "/api/v1/api-keys/key_unknown"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/posts/post_unknown"),
+    ("GET", "/api/v1/scheduled-posts/communities"),
+    ("GET", "/api/v1/usage"),
+]
+
+# The gated routes a new User, with nothing stored yet, reads successfully.
+READS_OF_NOTHING_YET = [
+    ("GET", "/api/v1/inspiration-authors"),
+    ("GET", "/api/v1/api-keys"),
+    ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/scheduled-posts/communities"),
     ("GET", "/api/v1/usage"),
 ]
@@ -49,15 +58,15 @@ async def _hold(db, user, status: str) -> None:
     await db.commit()
 
 
-@pytest.mark.parametrize(("method", "path"), GATED_READS)
-async def test_a_user_who_isnt_subscribed_is_refused_every_read(client, method, path):
+@pytest.mark.parametrize(("method", "path"), GATED_ROUTES)
+async def test_a_user_who_isnt_subscribed_is_refused_every_gated_route(client, method, path):
     response = await client.request(method, path)
 
     assert response.status_code == 403
     assert response.json()["detail"] == SUBSCRIPTION_NEEDED
 
 
-@pytest.mark.parametrize(("method", "path"), GATED_READS)
+@pytest.mark.parametrize(("method", "path"), GATED_ROUTES)
 async def test_a_user_whose_first_payment_is_still_processing_is_refused(
     client, db, user, method, path
 ):
@@ -68,7 +77,7 @@ async def test_a_user_whose_first_payment_is_still_processing_is_refused(
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize(("method", "path"), GATED_READS)
+@pytest.mark.parametrize(("method", "path"), GATED_ROUTES)
 async def test_a_user_whose_subscription_ended_is_refused(client, db, subscribed, method, path):
     await db.execute(delete(Subscription))
     await db.commit()
@@ -101,8 +110,8 @@ async def test_a_user_who_isnt_subscribed_can_sign_out(client):
     assert response.status_code == 200
 
 
-@pytest.mark.parametrize(("method", "path"), GATED_READS)
+@pytest.mark.parametrize(("method", "path"), READS_OF_NOTHING_YET)
 async def test_an_instance_that_sells_no_plans_gates_nothing(client, sells_no_plans, method, path):
     response = await client.request(method, path)
 
-    assert response.status_code != 403
+    assert response.status_code == 200

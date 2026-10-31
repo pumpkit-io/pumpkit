@@ -151,7 +151,7 @@ function PaywallContent() {
   if (status === 'incomplete') {
     return (
       <PortalState
-        title="Your payment is still processing."
+        title="Your payment is still processing"
         lead="Open the billing portal to see where it stands. You don't need to check out again."
       />
     );

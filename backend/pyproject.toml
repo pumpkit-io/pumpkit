@@ -168,9 +168,9 @@ protected_modules = ["pumpkit.scheduling.router", "pumpkit.scheduling.mediator"]
 allowed_importers = ["pumpkit.scheduling", "pumpkit.main"]
 
 [[tool.importlinter.contracts]]
-name = "Only onboarding and pumpkit.main import onboarding.router"
+name = "Only onboarding and pumpkit.main import onboarding.router or onboarding.mediator"
 type = "protected"
-protected_modules = ["pumpkit.onboarding.router"]
+protected_modules = ["pumpkit.onboarding.router", "pumpkit.onboarding.mediator"]
 allowed_importers = ["pumpkit.onboarding", "pumpkit.main"]
 
 [[tool.importlinter.contracts]]

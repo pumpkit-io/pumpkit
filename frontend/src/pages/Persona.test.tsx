@@ -504,20 +504,23 @@ describe('Persona', () => {
     });
 
     it.each([
-      [404, "@nobody isn't on X", 'missing'],
-      [422, "@nobody is private, so Pumpkit can't read its posts", 'private'],
-      [422, '@nobody has no posts of its own to learn from', 'no_posts'],
-      [429, "You've looked up a lot of handles. Try again in 40 minutes.", 'limited'],
+      [404, "@nobody isn't on X.", 'HANDLE_NOT_ON_X', 'missing'],
+      [422, "@nobody is private, so Pumpkit can't read its posts.", 'HANDLE_PRIVATE', 'private'],
+      [422, '@nobody has no posts of its own to learn from.', 'HANDLE_HAS_NO_POSTS', 'no_posts'],
+      [429, "You've looked up a lot of handles. Try again in 40 minutes.", null, 'limited'],
       [
         429,
         'Looking up new handles is paused for today. Pick from the suggestions or try again tomorrow.',
+        null,
         'limited',
       ],
-      [409, 'You can have up to 3 Inspiration authors. Remove one to add another.', null],
+      [409, 'You can have up to 3 Inspiration authors. Remove one to add another.', null, null],
     ])(
       'says under the field why a lookup was refused with a %i, keeping the query',
-      async (status, detail, result) => {
-        vi.mocked(inspirationAuthorService.add).mockRejectedValue(apiError(status, detail));
+      async (status, detail, code, result) => {
+        vi.mocked(inspirationAuthorService.add).mockRejectedValue(
+          apiError(status, detail, code ? { code } : {}),
+        );
         renderPersona();
 
         const field = await type('@nobody');
@@ -532,14 +535,14 @@ describe('Persona', () => {
       },
     );
 
-    it('says "Couldn\'t load suggestions" when the directory fails, and still looks handles up', async () => {
+    it('says "Couldn\'t load suggestions." when the directory fails, and still looks handles up', async () => {
       vi.mocked(authorDirectoryService.list).mockRejectedValue(apiError(500, 'boom'));
       vi.mocked(inspirationAuthorService.add).mockResolvedValue(LEVELSIO);
       renderPersona();
 
       const field = await searchField();
       fireEvent.focus(field);
-      expect(await screen.findByText("Couldn't load suggestions")).toBeInTheDocument();
+      expect(await screen.findByText("Couldn't load suggestions.")).toBeInTheDocument();
 
       fireEvent.change(field, { target: { value: '@levelsio' } });
       await waitFor(() => expect(rows()).toEqual(['Look up @levelsio on X']));

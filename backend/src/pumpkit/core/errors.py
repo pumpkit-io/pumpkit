@@ -63,15 +63,21 @@ class RefusalError(AppError):
     A request refused in words for the User, from a mediator that serves both the web routes and
     the MCP tools. `fix_page` is the web app path where the User can fix it, such as `/scheduled`;
     the HTTP body carries its full URL as `url`, and a tool error appends it to the text.
+    `code`, in the body too, names the refusal for a client that tells apart two of one status.
     """
 
-    def __init__(self, detail: str, *, fix_page: Optional[str] = None) -> None:
+    def __init__(
+        self, detail: str, *, fix_page: Optional[str] = None, code: Optional[str] = None
+    ) -> None:
         super().__init__(detail)
         self.detail = detail
         self.fix_page = fix_page
+        self.code = code
 
     def response_body(self) -> dict[str, Any]:
         body: dict[str, Any] = {"detail": self.detail}
+        if self.code is not None:
+            body["code"] = self.code
         if self.fix_page is not None:
             body["url"] = f"{settings.frontend_url()}{self.fix_page}"
         return body

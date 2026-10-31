@@ -586,7 +586,7 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link(
     result = await mcp.call_tool(name, **arguments)
 
     assert error_text(result) == (
-        "This needs a subscription. Subscribe to continue. http://localhost:5173/billing"
+        "This needs a subscription. Subscribe to continue. http://localhost:5173/subscribe"
     )
 
 

@@ -130,7 +130,9 @@ async def add_author(
     else:
         has_posts = await service.count_posts(db, handle=handle) > 0
     if not has_posts:
-        raise RefusedError(f"@{handle} has no posts of its own to learn from")
+        raise RefusedError(
+            f"@{handle} has no posts of its own to learn from.", code="HANDLE_HAS_NO_POSTS"
+        )
 
     try:
         await service.add_author(db, user_id=user_id, handle=handle, now=now)
@@ -143,12 +145,14 @@ async def add_author(
 
 
 def _isnt_on_x(handle: str) -> RefusalError:
-    return NotFoundError(f"@{handle} isn't on X")
+    return NotFoundError(f"@{handle} isn't on X.", code="HANDLE_NOT_ON_X")
 
 
 def _miss_error(handle: str, reason: str) -> RefusalError:
     if reason == MISS_PRIVATE:
-        return RefusedError(f"@{handle} is private, so Pumpkit can't read its posts")
+        return RefusedError(
+            f"@{handle} is private, so Pumpkit can't read its posts.", code="HANDLE_PRIVATE"
+        )
     return _isnt_on_x(handle)
 
 
@@ -163,6 +167,9 @@ async def _look_up(
     if reason is not None:
         raise _miss_error(handle, reason)
     await _check_lookup_limits(db, user_id=user_id, now=now)
+    # Early commit: ends the read transaction, so no connection is held across the lookup and
+    # what a concurrent lookup of the same handle stores meanwhile is seen afterwards.
+    await db.commit()
 
     profile: Optional[FetchedProfile] = None
     try:
@@ -189,11 +196,7 @@ async def _look_up(
             db, handle=handle, name=profile.name, photo_url=profile.photo_url, now=now
         )
     # Early commit: the lookup was paid for, so its answer outlives a failed posts fetch.
-    try:
-        await db.commit()
-    except IntegrityError:
-        # A concurrent lookup of the same handle stored its answer first.
-        await db.rollback()
+    await db.commit()
     if reason is not None:
         raise _miss_error(handle, reason)
 

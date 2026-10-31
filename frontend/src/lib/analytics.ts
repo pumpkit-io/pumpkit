@@ -107,7 +107,7 @@ export const EVENTS = {
 
   // Onboarding (/onboarding)
   onboarding_step_viewed: {
-    description: 'Onboarding: a step was shown. Props: step (persona).',
+    description: 'Onboarding: a step was shown. Props: step (x_connection | persona).',
   },
   onboarding_finished: {
     description:

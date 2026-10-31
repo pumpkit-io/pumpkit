@@ -6,7 +6,7 @@ from pumpkit.auth.models import User
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.time import Clock, get_clock
-from pumpkit.onboarding import service
+from pumpkit.onboarding import mediator
 from pumpkit.onboarding.schemas import OnboardingResponse
 
 router = APIRouter(tags=["onboarding"])
@@ -18,7 +18,7 @@ async def get_onboarding(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> OnboardingResponse:
-    return OnboardingResponse(next_step=await service.next_step(db, user_id=current_user.id))
+    return await mediator.get_onboarding(db, current_user)
 
 
 @router.post("/onboarding/finish", status_code=status.HTTP_204_NO_CONTENT)
@@ -27,5 +27,4 @@ async def finish_onboarding(
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> None:
-    await service.finish(db, user_id=current_user.id, now=clock())
-    await db.commit()
+    await mediator.finish(db, current_user, clock())

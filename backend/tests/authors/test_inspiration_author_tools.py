@@ -81,7 +81,7 @@ async def test_a_handle_that_isnt_valid_is_refused_without_reading_x(
 async def test_a_handle_x_doesnt_know_is_refused(subscribed, mcp):
     result = await mcp.call_tool("add_inspiration_author", handle="nobody")
 
-    assert error_text(result) == "@nobody isn't on X"
+    assert error_text(result) == "@nobody isn't on X."
 
 
 async def test_a_handle_x_doesnt_know_is_remembered_without_asking_x_again(
@@ -91,7 +91,7 @@ async def test_a_handle_x_doesnt_know_is_remembered_without_asking_x_again(
 
     result = await mcp.call_tool("add_inspiration_author", handle="nobody")
 
-    assert error_text(result) == "@nobody isn't on X"
+    assert error_text(result) == "@nobody isn't on X."
     assert fake_x_reader.profile_calls == ["nobody"]
 
 
@@ -102,7 +102,7 @@ async def test_a_private_account_is_refused(subscribed, mcp, fake_x_reader):
 
     result = await mcp.call_tool("add_inspiration_author", handle="shy")
 
-    assert error_text(result) == "@shy is private, so Pumpkit can't read its posts"
+    assert error_text(result) == "@shy is private, so Pumpkit can't read its posts."
 
 
 async def test_a_lookup_over_the_user_s_limit_is_refused_with_when_to_try_again(
@@ -137,7 +137,7 @@ async def test_a_handle_without_original_posts_is_refused(subscribed, mcp, fake_
 
     result = await mcp.call_tool("add_inspiration_author", handle="quiet")
 
-    assert error_text(result) == "@quiet has no posts of its own to learn from"
+    assert error_text(result) == "@quiet has no posts of its own to learn from."
 
 
 async def test_x_unreadable_is_refused_and_reported(subscribed, mcp, fake_x_reader, fake_posthog):

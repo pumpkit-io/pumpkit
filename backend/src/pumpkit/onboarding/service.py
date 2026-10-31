@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.authors import service as authors_service
@@ -39,5 +40,9 @@ async def finish(db: AsyncSession, *, user_id: str, now: datetime) -> None:
     authors = await authors_service.list_authors(db, user_id=user_id)
     if not any(author.post_count > 0 for author in authors):
         raise ConflictError("Pick at least one inspiration author to continue.")
-    db.add(OnboardingFinish(user_id=user_id, finished_at=now))
-    await db.flush()
+    try:
+        async with db.begin_nested():
+            db.add(OnboardingFinish(user_id=user_id, finished_at=now))
+    except IntegrityError:
+        # A concurrent finish passed the check above too and inserted first.
+        pass

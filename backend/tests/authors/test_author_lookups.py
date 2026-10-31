@@ -1,12 +1,20 @@
 """Adding a handle not in the Author directory: the lookup on X, its miss memory and its limits."""
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any, Awaitable, Callable, Optional
 
 import pytest
 
-from pumpkit.authors.models import SOURCE_SEED, AuthorDirectoryEntry
-from pumpkit.authors.x_reader import FetchedPost, FetchedProfile
+from pumpkit.authors.models import (
+    MISS_MISSING,
+    SOURCE_SEED,
+    AuthorDirectoryEntry,
+    AuthorHandleMiss,
+)
+from pumpkit.authors.x_reader import FakeXReader, FetchedPost, FetchedProfile, get_x_reader
 from pumpkit.core.config import settings
+from pumpkit.main import app
 
 AUTHORS = "/api/v1/inspiration-authors"
 DIRECTORY = "/api/v1/author-directory"
@@ -94,7 +102,7 @@ async def test_a_found_account_without_posts_of_its_own_stays_in_the_directory(
     response = await client.post(AUTHORS, json={"handle": "replyguy"})
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "@replyguy has no posts of its own to learn from"
+    assert response.json()["detail"] == "@replyguy has no posts of its own to learn from."
     assert "replyguy" in await _directory(client)
     readded = await client.post(AUTHORS, json={"handle": "replyguy"})
     assert readded.status_code == 422
@@ -144,7 +152,14 @@ async def test_a_handle_that_isnt_on_x_is_remembered_for_a_week(
     remembered = await client.post(AUTHORS, json={"handle": "@Gone"})
 
     assert first.status_code == remembered.status_code == 404
-    assert first.json()["detail"] == remembered.json()["detail"] == "@gone isn't on X"
+    assert (
+        first.json()
+        == remembered.json()
+        == {
+            "detail": "@gone isn't on X.",
+            "code": "HANDLE_NOT_ON_X",
+        }
+    )
     assert fake_x_reader.profile_calls == ["gone"]
     clock.advance(timedelta(seconds=1))
     assert (await client.post(AUTHORS, json={"handle": "gone"})).status_code == 404
@@ -165,9 +180,12 @@ async def test_a_private_account_is_remembered_for_a_day_and_then_looked_up_agai
 
     assert first.status_code == remembered.status_code == 422
     assert (
-        first.json()["detail"]
-        == remembered.json()["detail"]
-        == ("@shy is private, so Pumpkit can't read its posts")
+        first.json()
+        == remembered.json()
+        == {
+            "detail": "@shy is private, so Pumpkit can't read its posts.",
+            "code": "HANDLE_PRIVATE",
+        }
     )
     assert fake_x_reader.profile_calls == ["shy"]
     assert "shy" not in await _directory(client)
@@ -330,3 +348,51 @@ async def test_a_lookup_x_can_t_answer_is_not_remembered_or_counted(
     fake_x_reader.fail = False
     fake_x_reader.posts["levelsio"] = _posts("1")
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
+
+
+@dataclass
+class _AnsweredFirstElsewhere(FakeXReader):
+    """X, where a concurrent add of the same handle stores its answer during this lookup."""
+
+    elsewhere: Optional[Callable[[], Awaitable[Any]]] = None
+
+    async def look_up_profile(self, handle: str) -> FetchedProfile:
+        if self.elsewhere is not None:
+            elsewhere, self.elsewhere = self.elsewhere, None
+            await elsewhere()
+        return await super().look_up_profile(handle)
+
+
+async def test_a_handle_another_user_s_lookup_added_meanwhile_is_still_added(
+    client, db, subscribed
+):
+    reader = _AnsweredFirstElsewhere(posts={"levelsio": _posts("1")})
+    reader.elsewhere = lambda: _seed(db, "levelsio")
+    app.dependency_overrides[get_x_reader] = lambda: reader
+
+    response = await client.post(AUTHORS, json={"handle": "levelsio"})
+
+    assert response.status_code == 201
+    assert list(await _directory(client)) == ["levelsio"]
+
+
+async def test_a_miss_another_user_s_lookup_remembered_meanwhile_is_still_refused(
+    client, db, subscribed, clock
+):
+    async def remember_elsewhere() -> None:
+        db.add(
+            AuthorHandleMiss(
+                handle="gone", reason=MISS_MISSING, remembered_until=clock() + timedelta(days=7)
+            )
+        )
+        await db.commit()
+
+    reader = _AnsweredFirstElsewhere()
+    reader.elsewhere = remember_elsewhere
+    app.dependency_overrides[get_x_reader] = lambda: reader
+
+    first = await client.post(AUTHORS, json={"handle": "gone"})
+    again = await client.post(AUTHORS, json={"handle": "gone"})
+
+    assert first.status_code == again.status_code == 404
+    assert reader.profile_calls == ["gone"]

@@ -10,8 +10,8 @@ const FOOTER_LINK_CLASS =
   'rounded-sm underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 /**
- * The focused shell of the Paywall: no sidebar, the steps before Pumpkit opens, the account
- * menu and the legal links. Content sits left-aligned in one column on the raised panel.
+ * The focused shell of the Paywall and Onboarding: no sidebar, the steps before Pumpkit opens,
+ * the account menu and the legal links.
  */
 export function OnboardingLayout() {
   const { state } = useOnboarding();

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { dayAndTime } from '@/lib/relativeTime';
-import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
+import { errorCode, errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
 import {
   inspirationAuthorService,
   type InspirationAuthor,
@@ -12,12 +12,17 @@ type LookupResult = 'found' | 'missing' | 'private' | 'no_posts' | 'limited';
 
 /** What a refused lookup tells the funnel, or null when the refusal came before any lookup. */
 function lookupResult(e: unknown): LookupResult | null {
-  const status = errorStatus(e);
-  if (status === 404) return 'missing';
-  if (status === 429) return 'limited';
-  // Both answers are 422s; only the sentence tells a private account from one with no posts.
-  if (status === 422) return errorMessage(e, '').includes('is private') ? 'private' : 'no_posts';
-  return null;
+  if (errorStatus(e) === 429) return 'limited';
+  switch (errorCode(e)) {
+    case 'HANDLE_NOT_ON_X':
+      return 'missing';
+    case 'HANDLE_PRIVATE':
+      return 'private';
+    case 'HANDLE_HAS_NO_POSTS':
+      return 'no_posts';
+    default:
+      return null;
+  }
 }
 
 /** The User's Inspiration authors, loaded on mount, with add, refresh and remove. */

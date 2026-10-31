@@ -15,6 +15,7 @@ SmtpSecurity = Literal["starttls", "tls", "none"]
 _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "none": 25}
 
 BILLING_PAGE = "/billing"
+PAYWALL_PAGE = "/subscribe"
 
 
 class ProviderGroup(StrEnum):
@@ -257,8 +258,12 @@ class Settings(BaseSettings):
         return f"{self.frontend_url()}/billing/cancelled"
 
     def billing_page_url(self) -> str:
-        """The web app page where a User subscribes or manages their Subscription."""
+        """The web app page where a Subscribed User manages their Subscription."""
         return f"{self.frontend_url()}{BILLING_PAGE}"
+
+    def paywall_url(self) -> str:
+        """The web app page where a User who isn't Subscribed subscribes (ADR 0018)."""
+        return f"{self.frontend_url()}{PAYWALL_PAGE}"
 
     def stripe_billing_portal_return_url(self) -> str:
         return self.billing_page_url()

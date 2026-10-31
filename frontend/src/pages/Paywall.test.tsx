@@ -428,7 +428,7 @@ describe('Paywall', () => {
 
       const area = await paywall();
       expect(
-        await area.findByRole('heading', { name: 'Your payment is still processing.' }),
+        await area.findByRole('heading', { name: 'Your payment is still processing' }),
       ).toBeInTheDocument();
       expect(area.queryByRole('button', { name: /^Subscribe: / })).not.toBeInTheDocument();
       fireEvent.click(area.getByRole('button', { name: 'Open billing portal' }));
