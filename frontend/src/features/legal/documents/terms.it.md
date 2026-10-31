@@ -14,7 +14,7 @@ Pumpkit è gestito da INCEPTIONAL S.R.L., società a responsabilità limitata a 
 
 I presenti Termini riguardano soltanto il servizio ospitato su pumpkit.io. Il codice di Pumpkit è open source e chiunque può eseguirne una propria copia. Il Gestore non gestisce tali istanze installate in proprio e i presenti Termini non si applicano a esse.
 
-I presenti Termini si applicano dal momento in cui accedi. Li accetti di nuovo nella pagina Settings prima di ogni pagamento, dove confermi anche, spuntando caselle separate, la tua richiesta che il servizio inizi immediatamente (clausola 13) e la tua approvazione specifica, che ogni Utente dà, delle clausole lì elencate ai sensi degli artt. 1341 e 1342 del Codice civile.
+I presenti Termini si applicano dal momento in cui accedi. Li accetti di nuovo prima di ogni pagamento, dove confermi anche, spuntando caselle separate, la tua richiesta che il servizio inizi immediatamente (clausola 13) e la tua approvazione specifica, che ogni Utente dà, delle clausole lì elencate ai sensi degli artt. 1341 e 1342 del Codice civile.
 
 Nei presenti Termini, è **consumatore** la persona fisica che usa Pumpkit per scopi estranei alla propria attività imprenditoriale, commerciale, artigianale o professionale. È **impresa** chiunque altro, compresi l'imprenditore individuale e il libero professionista che usano Pumpkit per il proprio lavoro.
 
@@ -96,7 +96,7 @@ Ogni Abbonamento ti dà un'Allowance per ciascun periodo di Allowance (Allowance
 
 Un periodo di Allowance dura un mese, a partire ogni mese dal giorno in cui è iniziato il tuo Abbonamento, anche con un Piano annuale. Un Trial costituisce da solo un periodo di Allowance, con un'Allowance più ridotta. Quanto resta di un'Allowance alla fine del suo periodo di Allowance non si riporta al periodo successivo. La pagina Settings mostra l'Allowance prima della sottoscrizione, e quanto ne resta.
 
-Se esaurisci la tua Allowance prima della fine del suo periodo di Allowance, puoi acquistare un Top-up: un acquisto una tantum di Generazioni e X post aggiuntivi, di cui solo pochi possono contenere un link. La pagina Settings mostra cosa comprende un Top-up e il suo prezzo prima del pagamento. Lo paghi una sola volta, tramite Stripe Checkout, e non si rinnova mai. Puoi acquistare un Top-up solo se il tuo Abbonamento a pagamento è in regola con i pagamenti: non durante il Trial, e non mentre un pagamento è scaduto.
+Se ti serve più della tua Allowance, puoi acquistare un Top-up: un acquisto una tantum di Generazioni e X post aggiuntivi, di cui solo pochi possono contenere un link. Pumpkit mostra cosa comprende un Top-up e il suo prezzo prima del pagamento. Lo paghi una sola volta, tramite Stripe Checkout, e non si rinnova mai. Puoi acquistare un Top-up solo se il tuo Abbonamento a pagamento è in regola con i pagamenti: non durante il Trial, e non mentre un pagamento è insoluto.
 
 Un Top-up:
 

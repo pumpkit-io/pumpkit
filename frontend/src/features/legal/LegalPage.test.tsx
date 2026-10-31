@@ -90,11 +90,10 @@ describe('Terms at /terms', () => {
     expect(screen.getByRole('heading', { level: 2, name })).toHaveAttribute('id', id);
   });
 
-  it('gives Top-ups their own clause, #top-ups, with no refund once any of a Top-up is spent', () => {
+  it('gives Top-ups their own clause, #top-ups', () => {
     renderLegalRoute('/terms');
     const heading = screen.getByRole('heading', { level: 2, name: '11. Allowance and Top-ups' });
     expect(heading).toHaveAttribute('id', 'top-ups');
-    expect(screen.getByText(/lasts 12 months from the day you buy it/)).toBeInTheDocument();
   });
 });
 

@@ -14,7 +14,7 @@ Pumpkit is run by INCEPTIONAL S.R.L., a single-member limited liability company 
 
 These Terms cover only the hosted service at pumpkit.io. Pumpkit's code is open source, and anyone can run their own copy. The Operator does not run those self-hosted instances, and these Terms do not apply to them.
 
-These Terms apply from the moment you sign in. You accept them again in Settings before every checkout, where you also confirm, by ticking separate boxes, your request for the service to start immediately (clause 13) and your specific approval, which every User gives, of the clauses listed there under arts. 1341 and 1342 of the Italian Civil Code.
+These Terms apply from the moment you sign in. You accept them again before every checkout, where you also confirm, by ticking separate boxes, your request for the service to start immediately (clause 13) and your specific approval, which every User gives, of the clauses listed there under arts. 1341 and 1342 of the Italian Civil Code.
 
 In these Terms, a **consumer** is a person using Pumpkit for purposes outside their trade, business, craft or profession. A **business** is anyone else, including a sole trader or freelancer using Pumpkit for their work.
 
@@ -96,7 +96,7 @@ Each Subscription gives you an Allowance for each Allowance period: a number of 
 
 An Allowance period is a month, starting each month on the day your Subscription started, also on an annual Plan. A Trial is one Allowance period on its own, with a smaller Allowance. What is left of an Allowance at the end of its Allowance period does not carry over. Settings shows the Allowance before you subscribe, and how much of it is left.
 
-If you use up your Allowance before its Allowance period ends, you can buy a Top-up: a one-off purchase of extra Generations and X posts, of which only a few may contain a link. Settings shows what a Top-up holds and its price before checkout. You pay for it once, through Stripe Checkout, and it never renews. You can buy a Top-up only while your paid Subscription is paid up: not during the Trial, and not while a payment is overdue.
+If you need more than your Allowance, you can buy a Top-up: a one-off purchase of extra Generations and X posts, of which only a few may contain a link. Pumpkit shows what a Top-up holds and its price before checkout. You pay for it once, through Stripe Checkout, and it never renews. You can buy a Top-up only while your paid Subscription is paid up: not during the Trial, and not while a payment is overdue.
 
 A Top-up:
 
