@@ -9,7 +9,14 @@ import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import { FEEDBACK_MAX_CHARS, type Format } from '@/services/postService';
 import { Composer } from '../Composer';
 import { Dock } from './Dock';
-import type { FeedbackSending } from './feedback';
+
+/** What the Feedback bar needs from `usePost`, for the Draft and Failed panels. */
+export interface FeedbackSending {
+  isWriting: boolean;
+  error: string | null;
+  notice: string | null;
+  onSend: (feedback: string, format: Format) => Promise<boolean>;
+}
 
 /**
  * The dock of a Draft or a Failed Post: Feedback on the Text. A failed send keeps the Feedback,

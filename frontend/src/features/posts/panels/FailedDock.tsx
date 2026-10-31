@@ -4,8 +4,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import { PostToButton } from '../postTo/PostToButton';
 import { useRetryFailed } from '../postTo/senders';
 import type { ShownPart } from '../shownText';
-import type { FeedbackSending } from './feedback';
-import { FeedbackDock } from './FeedbackDock';
+import { FeedbackDock, type FeedbackSending } from './FeedbackDock';
 import { formatWhen } from './panelFacts';
 
 /** Feedback on a Failed Post, with why it didn't go out under it. */
