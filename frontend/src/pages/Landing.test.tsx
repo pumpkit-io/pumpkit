@@ -1,5 +1,5 @@
 import type { InternalAxiosRequestConfig } from 'axios';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -39,6 +39,32 @@ function fakePlansEndpoint(status: number, data: unknown) {
     }
     return response;
   };
+}
+
+const GITHUB_REPO_API = 'https://api.github.com/repos/pumpkit-io/pumpkit';
+
+/** Fakes the browser's fetch of the repository from GitHub's public API. */
+function fakeGitHubRepo(response: Promise<Response>) {
+  const fetchFake = vi.fn((input: RequestInfo | URL) =>
+    String(input) === GITHUB_REPO_API ? response : Promise.reject(new Error('Unexpected fetch')),
+  );
+  vi.stubGlobal('fetch', fetchFake);
+  return fetchFake;
+}
+
+function gitHubRepoWithStars(stars: number) {
+  return Promise.resolve(
+    new Response(JSON.stringify({ stargazers_count: stars }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+}
+
+/** Clicks an external link without jsdom attempting the navigation it can't do. */
+function clickExternalLink(link: HTMLElement) {
+  link.addEventListener('click', (event) => event.preventDefault(), { once: true });
+  fireEvent.click(link);
 }
 
 const MONTHLY_PLAN = {
@@ -90,10 +116,12 @@ function renderLanding(instance: Instance = SELLS_PLANS) {
 beforeEach(() => {
   vi.mocked(track).mockClear();
   fakePlansEndpoint(200, { ...OFFER, data: [MONTHLY_PLAN, QUARTERLY_PLAN] });
+  fakeGitHubRepo(new Promise<Response>(() => {}));
 });
 
 afterEach(() => {
   api.defaults.adapter = originalAdapter;
+  vi.unstubAllGlobals();
 });
 
 describe('Landing on an Instance that sells no Plans', () => {
@@ -463,5 +491,100 @@ describe('Landing pricing', () => {
       ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_monthly' }],
       ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_quarterly' }],
     ]);
+  });
+});
+
+describe('Landing GitHub button', () => {
+  it('shows the star count compactly once GitHub answers, fetched once', async () => {
+    const fetchFake = fakeGitHubRepo(gitHubRepoWithStars(1234));
+    renderLanding();
+    const header = screen.getByRole('banner');
+    const button = await within(header).findByRole('link', { name: 'GitHub, 1.2k stars' });
+    expect(button).toHaveAttribute('href', 'https://github.com/pumpkit-io/pumpkit');
+    expect(fetchFake).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows without a count when GitHub fails', async () => {
+    const fetchFake = fakeGitHubRepo(Promise.resolve(new Response('', { status: 403 })));
+    renderLanding();
+    await waitFor(() => expect(fetchFake).toHaveBeenCalled());
+    await act(async () => {});
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/pumpkit-io/pumpkit',
+    );
+    expect(within(header).queryByText(/stars/)).not.toBeInTheDocument();
+  });
+
+  it('shows without a count while GitHub has not answered', () => {
+    renderLanding();
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('link', { name: 'GitHub' })).toBeInTheDocument();
+  });
+
+  it('tracks a desktop click with its surface', () => {
+    renderLanding();
+    clickExternalLink(within(screen.getByRole('banner')).getByRole('link', { name: 'GitHub' }));
+    expect(track).toHaveBeenCalledWith('landing_nav_github_clicked', { surface: 'desktop' });
+  });
+
+  it('sits in the mobile menu with the count, and tracks a tap as mobile', async () => {
+    fakeGitHubRepo(gitHubRepoWithStars(87));
+    renderLanding();
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const menu = screen.getByRole('navigation', { name: 'Menu' });
+    const button = await within(menu).findByRole('link', { name: 'GitHub, 87 stars' });
+    expect(button).toHaveAttribute('href', 'https://github.com/pumpkit-io/pumpkit');
+
+    clickExternalLink(button);
+    expect(track).toHaveBeenCalledWith('landing_nav_github_clicked', { surface: 'mobile' });
+    expect(screen.queryByRole('navigation', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Landing open source', () => {
+  const heading = 'Read every line. Run it yourself.';
+
+  it.each([
+    ['an Instance that sells Plans', SELLS_PLANS],
+    ['an Instance that sells no Plans', { ...SELLS_PLANS, sells_plans: false }],
+  ])('says Pumpkit is open source on %s, last in the main landmark', (_, instance) => {
+    renderLanding(instance);
+    const section = within(screen.getByRole('main')).getByRole('region', { name: heading });
+    expect(within(section).getByRole('heading', { level: 2 })).toHaveTextContent(heading);
+    expect(
+      within(section).getByText(
+        'Pumpkit is open source under AGPL-3.0. Self-host it on your own server, or use pumpkit.io and skip the setup.',
+      ),
+    ).toBeInTheDocument();
+    const authors = screen.getByRole('region', { name: 'Pick the authors whose style you want.' });
+    expect(authors.compareDocumentPosition(section)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByRole('main').lastElementChild).toBe(section);
+  });
+
+  it('links to the repository and the self-hosting guide, tracking each', () => {
+    renderLanding();
+    const section = screen.getByRole('region', { name: heading });
+    const github = within(section).getByRole('link', { name: 'View on GitHub' });
+    const guide = within(section).getByRole('link', { name: 'Self-hosting guide' });
+    expect(github).toHaveAttribute('href', 'https://github.com/pumpkit-io/pumpkit');
+    expect(guide).toHaveAttribute(
+      'href',
+      'https://github.com/pumpkit-io/pumpkit/blob/main/docs/self-hosting.md',
+    );
+
+    clickExternalLink(github);
+    expect(track).toHaveBeenCalledWith('landing_open_source_github_clicked');
+    clickExternalLink(guide);
+    expect(track).toHaveBeenCalledWith('landing_open_source_self_hosting_clicked');
+  });
+
+  it('tracks the section coming into view once', () => {
+    renderLanding();
+    const calls = vi
+      .mocked(track)
+      .mock.calls.filter(([event]) => event === 'landing_open_source_section_viewed');
+    expect(calls).toEqual([['landing_open_source_section_viewed']]);
   });
 });

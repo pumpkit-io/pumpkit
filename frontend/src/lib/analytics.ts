@@ -32,6 +32,18 @@ export const EVENTS = {
   landing_pricing_cta_clicked: {
     description: 'Landing: clicked the "Get started" button at the end of the pricing section.',
   },
+  landing_nav_github_clicked: {
+    description: 'Landing: clicked the GitHub header button. Props: surface (desktop | mobile).',
+  },
+  landing_open_source_section_viewed: {
+    description: 'Landing: the open-source section first scrolled into view.',
+  },
+  landing_open_source_github_clicked: {
+    description: 'Landing: clicked "View on GitHub" in the open-source section.',
+  },
+  landing_open_source_self_hosting_clicked: {
+    description: 'Landing: clicked "Self-hosting guide" in the open-source section.',
+  },
 
   // Login (/login) + auth callbacks
   login_google_clicked: { description: 'Login: clicked "Continue with Google".' },
