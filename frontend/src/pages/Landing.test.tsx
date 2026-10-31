@@ -765,7 +765,9 @@ describe('Landing open source', () => {
         'Pumpkit is open source under AGPL-3.0. Self-host it on your own server, or use pumpkit.io and skip the setup.',
       ),
     ).toBeInTheDocument();
-    const authors = screen.getByRole('region', { name: 'Pick the authors whose style you want.' });
+    const authors = screen.getByRole('region', {
+      name: 'Write in the style of accounts like these.',
+    });
     expect(authors.compareDocumentPosition(section)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByRole('main').lastElementChild).toBe(section);
   });
