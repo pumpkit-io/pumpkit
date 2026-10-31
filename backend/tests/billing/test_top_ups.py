@@ -177,6 +177,17 @@ async def test_the_plans_offer_the_top_up_with_its_price_and_half_of_each_cap(
     }
 
 
+async def test_a_small_cap_still_gives_a_top_up_at_least_one(
+    client, fake_billing, sells_top_ups, monkeypatch
+):
+    monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", 1)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 0)
+
+    top_up = (await client.get(PLANS)).json()["top_up"]
+
+    assert (top_up["x_posts"], top_up["link_x_posts"]) == (0, 1)
+
+
 async def test_a_completed_top_up_checkout_adds_the_top_up_for_12_months(
     client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock
 ):

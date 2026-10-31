@@ -663,7 +663,7 @@ describe('Settings', () => {
       const usageCard = await card('Usage');
       expect(await usageCard.findByText(reading('382 generations left'))).toBeInTheDocument();
       expect(usageCard.getByText(reading('61 X posts left, 8 of them with a link'))).toBeVisible();
-      expect(usageCard.getByText('Resets on 14 November')).toBeInTheDocument();
+      expect(usageCard.getByText('Resets on the 14th of each month')).toBeInTheDocument();
       expect(
         usageCard.getByText("Unused generations and X posts don't carry over."),
       ).toBeInTheDocument();
@@ -675,6 +675,20 @@ describe('Settings', () => {
         'aria-valuemax',
         '100',
       );
+    });
+
+    it.each([
+      [1, 'Resets on the 1st of each month'],
+      [22, 'Resets on the 22nd of each month'],
+      [23, 'Resets on the 23rd of each month'],
+      [11, 'Resets on the 11th of each month'],
+      [29, 'Resets on the 29th of each month, or the last day of shorter months'],
+      [31, 'Resets on the 31st of each month, or the last day of shorter months'],
+    ])('says a period from day %i resets: "%s"', async (resetsOnDay, line) => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWith({ resetsOnDay }));
+      renderSettings();
+
+      expect(await (await card('Usage')).findByText(line)).toBeInTheDocument();
     });
 
     it('turns a bar to warning under 10% left and to destructive at 0', async () => {
@@ -721,6 +735,7 @@ describe('Settings', () => {
         usageWith({
           trial: true,
           resetsAt: new Date('2026-11-07T09:00:00Z'),
+          resetsOnDay: null,
           generations: { limit: 125, used: 27, left: 98 },
           xPosts: { limit: 25, used: 5, left: 20 },
           linkXPosts: { limit: 2, used: 0, left: 2 },
@@ -810,7 +825,7 @@ describe('Settings', () => {
         vi.mocked(billingService.subscribeNow).mockRejectedValue(
           apiError(
             402,
-            "Your trial has ended, but the first payment didn't go through. Update your payment method to keep writing.",
+            "Your trial has ended, but the first payment didn't go through. Open billing to complete or update your payment.",
           ),
         );
         const dialog = await openDialog();
@@ -819,7 +834,7 @@ describe('Settings', () => {
 
         expect(
           await dialog.findByText(
-            "Your trial has ended, but the first payment didn't go through. Update your payment method to keep writing.",
+            "Your trial has ended, but the first payment didn't go through. Open billing to complete or update your payment.",
           ),
         ).toBeInTheDocument();
         expect(track).not.toHaveBeenCalledWith('billing_subscribe_now_confirmed');

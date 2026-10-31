@@ -118,6 +118,7 @@ export function usageWith(changes: Partial<AllowanceUsage> = {}): Usage {
     allowance: {
       trial: false,
       resetsAt: new Date('2026-11-14T09:00:00Z'),
+      resetsOnDay: 14,
       generations: { limit: 500, used: 118, left: 382 },
       xPosts: { limit: 100, used: 39, left: 61 },
       linkXPosts: { limit: 10, used: 2, left: 8 },

@@ -114,11 +114,11 @@ def check_month_has_room(
     if count + adding <= cap:
         return
     start, end = month_bounds(moment)
-    resets = f"The cap resets on {end:%B} {end.day}, {end.year}."
+    resets = f"The limit resets on {end:%B} {end.day}, {end.year}."
     if count >= cap:
         raise MonthFull(f"You have {cap} {noun} in {start:%B %Y}, the most for one month. {resets}")
     raise MonthFull(
-        f"These {adding} Parts would take you over the cap of {cap} {noun} in {start:%B %Y}: "
+        f"These {adding} parts would take you over the limit of {cap} {noun} in {start:%B %Y}: "
         f"you have {count} already. {resets}"
     )
 

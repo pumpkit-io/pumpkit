@@ -655,7 +655,7 @@ def cap_of_two(monkeypatch, sells_no_plans):
 
 OCTOBER_FULL = (
     "You have 2 X posts in October 2026, the most for one month. "
-    "The cap resets on November 1, 2026."
+    "The limit resets on November 1, 2026."
 )
 
 
@@ -679,7 +679,7 @@ async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
     assert refused.status_code == 409
     assert refused.json()["detail"] == (
         "You have 3 X posts in October 2026, the most for one month. "
-        "The cap resets on November 1, 2026."
+        "The limit resets on November 1, 2026."
     )
 
 
@@ -697,8 +697,8 @@ async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is
 
         assert response.status_code == 409
         assert response.json()["detail"] == (
-            "These 3 Parts would take you over the cap of 3 X posts in October 2026: you have "
-            "1 already. The cap resets on November 1, 2026."
+            "These 3 parts would take you over the limit of 3 X posts in October 2026: you have "
+            "1 already. The limit resets on November 1, 2026."
         )
     assert [p["id"] for p in (await scheduled_posts(client))] == [first.json()["id"]]
     assert fake_x_publisher.published == []

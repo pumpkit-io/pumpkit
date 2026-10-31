@@ -131,7 +131,7 @@ async def test_a_failed_first_charge_leaves_the_subscription_past_due_and_says_s
     assert response.status_code == 402
     assert response.json()["detail"] == (
         "Your trial has ended, but the first payment didn't go through. "
-        "Update your payment method to keep writing."
+        "Open billing to complete or update your payment."
     )
     me = (await client.get("/api/v1/billing/me")).json()
     assert me["subscription"]["status"] == "past_due"

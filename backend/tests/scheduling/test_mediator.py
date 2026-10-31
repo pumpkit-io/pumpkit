@@ -31,7 +31,7 @@ COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
 OCTOBER_FULL = (
     "You have 2 X posts in October 2026, the most for one month. "
-    "The cap resets on November 1, 2026."
+    "The limit resets on November 1, 2026."
 )
 
 
@@ -360,7 +360,7 @@ async def test_a_full_december_resets_on_january_1(create, connect_x, cap_of_two
 
     assert refused.value.detail == (
         "You have 2 X posts in December 2026, the most for one month. "
-        "The cap resets on January 1, 2027."
+        "The limit resets on January 1, 2027."
     )
 
 

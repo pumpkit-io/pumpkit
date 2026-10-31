@@ -266,6 +266,9 @@ class AllowanceUsageResponse(BaseModel):
     trial: bool
     # When the period ends: the next reset, or the Trial's end.
     resets_at: datetime
+    # The day of the month each paid period resets on, also in months too short to have it;
+    # None in a Trial.
+    resets_on_day: Optional[int]
     generations: UsageCountResponse
     x_posts: UsageCountResponse
     # Of the X posts, those containing a link.

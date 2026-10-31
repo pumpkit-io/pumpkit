@@ -462,6 +462,26 @@ async def x_posts_used_between(
     )
 
 
+async def changeable_between(
+    db: AsyncSession, *, user_id: str, start: datetime, end: datetime
+) -> list[ScheduledPost]:
+    """
+    The User's waiting and Failed Scheduled posts with `start <= publish_at < end`, the ones
+    whose Parts may still change, in publish-time order.
+    """
+    result = await db.execute(
+        select(ScheduledPost)
+        .where(
+            ScheduledPost.user_id == user_id,
+            ScheduledPost.publish_at >= start,
+            ScheduledPost.publish_at < end,
+            ScheduledPost.state.in_([SCHEDULED, FAILED]),
+        )
+        .order_by(ScheduledPost.publish_at, ScheduledPost.created_at, ScheduledPost.id)
+    )
+    return list(result.scalars())
+
+
 async def counted_parts(db: AsyncSession, *, scheduled_post_id: str) -> list[str]:
     """
     The Parts of the Scheduled post that count as X posts: every one, or of a Failed one only

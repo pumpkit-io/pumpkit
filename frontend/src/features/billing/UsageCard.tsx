@@ -1,17 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
-import { track } from '@/lib/analytics';
-import { redirectTo } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
-import { errorMessage } from '@/services/apiErrors';
-import { billingService } from '@/services/billingService';
 import type { AllowanceUsage, TopUpUsage, UsageCount } from '@/services/usageService';
 import { AllowanceInfo, type AllowanceTopic } from './AllowanceInfo';
 import { BuyTopUpButton } from './BuyTopUp';
 import { SubscribeNowButton } from './SubscribeNow';
-import { allowanceDay, isLow } from './usage';
+import { allowanceDay, isLow, resetsLine } from './usage';
 import { useUsage } from './useUsage';
+import { useOpenPortal } from './useOpenPortal';
 
 /** The count left, then what it counts: "382 generations left", or out of the Trial's limit. */
 function leftLine(count: UsageCount, noun: string, trial: boolean): ReactNode {
@@ -76,16 +73,6 @@ function CountLeft({
   );
 }
 
-/** A Top-up's expiry, with its year: it lasts 12 months. */
-function topUpDay(moment: Date): string {
-  return moment.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
-
 /** What each Top-up has left, first to expire first; nothing while none has anything left. */
 function TopUpsLeft({ topUps }: { topUps: TopUpUsage[] }) {
   if (topUps.length === 0) return null;
@@ -94,7 +81,7 @@ function TopUpsLeft({ topUps }: { topUps: TopUpUsage[] }) {
       {topUps.map((topUp) => (
         <li key={topUp.expiresAt.toISOString()}>
           Top-up: {topUp.generationsLeft} generations and {topUp.xPostsLeft} X posts left, until{' '}
-          {topUpDay(topUp.expiresAt)}
+          {allowanceDay(topUp.expiresAt, { withYear: true })}
         </li>
       ))}
     </ul>
@@ -108,20 +95,18 @@ function UsageDetails({
   allowance: AllowanceUsage;
   onSubscribed: () => void;
 }) {
-  const [error, setError] = useState<string | null>(null);
-  const { trial, generations, xPosts, linkXPosts, resetsAt, wayOut, topUps, mayBuyTopUp } =
-    allowance;
-
-  const openPortal = async () => {
-    setError(null);
-    try {
-      const url = await billingService.openBillingPortal();
-      track('billing_portal_opened');
-      redirectTo(url);
-    } catch (e) {
-      setError(errorMessage(e, "Couldn't open the billing portal. Try again."));
-    }
-  };
+  const { openPortal, error } = useOpenPortal();
+  const {
+    trial,
+    generations,
+    xPosts,
+    linkXPosts,
+    resetsAt,
+    resetsOnDay,
+    wayOut,
+    topUps,
+    mayBuyTopUp,
+  } = allowance;
 
   const withLinks = linkXPosts.limit === null ? null : `, ${linkXPosts.left} of them with a link`;
 
@@ -147,9 +132,9 @@ function UsageDetails({
       />
       <div className="space-y-0.5 font-sans text-xs text-muted-foreground">
         <p>
-          {trial
+          {trial || resetsOnDay === null
             ? `Your trial ends on ${allowanceDay(resetsAt)}`
-            : `Resets on ${allowanceDay(resetsAt)}`}
+            : resetsLine(resetsOnDay)}
         </p>
         <p>Unused generations and X posts don&apos;t carry over.</p>
       </div>

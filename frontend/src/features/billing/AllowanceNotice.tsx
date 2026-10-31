@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { track } from '@/lib/analytics';
-import { redirectTo } from '@/lib/navigation';
-import { billingService } from '@/services/billingService';
-import { errorMessage, type AllowanceUsedUp } from '@/services/apiErrors';
+import type { AllowanceUsedUp } from '@/services/apiErrors';
 import { BuyTopUpButton } from './BuyTopUp';
 import { SubscribeNowButton } from './SubscribeNow';
+import { useOpenPortal } from './useOpenPortal';
 
 /**
  * The Allowance refusal where the User acted, in place of the action's error banner, with the
@@ -13,19 +11,8 @@ import { SubscribeNowButton } from './SubscribeNow';
  * notice goes.
  */
 export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
-  const [error, setError] = useState<string | null>(null);
+  const { openPortal, error } = useOpenPortal();
   const [subscribed, setSubscribed] = useState(false);
-
-  const openPortal = async () => {
-    setError(null);
-    try {
-      const url = await billingService.openBillingPortal();
-      track('billing_portal_opened');
-      redirectTo(url);
-    } catch (e) {
-      setError(errorMessage(e, "Couldn't open the billing portal. Try again."));
-    }
-  };
 
   if (subscribed) return null;
   return (

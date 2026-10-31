@@ -436,7 +436,7 @@ def cap_of_two(monkeypatch, sells_no_plans):
 
 OCTOBER_FULL = (
     "You have 2 X posts in October 2026, the most for one month. "
-    "The cap resets on November 1, 2026."
+    "The limit resets on November 1, 2026."
 )
 
 
@@ -454,8 +454,8 @@ async def test_adding_parts_that_would_cross_the_monthly_cap_is_refused(
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "These 2 Parts would take you over the cap of 2 X posts in October 2026: you have "
-        "1 already. The cap resets on November 1, 2026."
+        "These 2 parts would take you over the limit of 2 X posts in October 2026: you have "
+        "1 already. The limit resets on November 1, 2026."
     )
     assert rewritten.status_code == 200, rewritten.text
 

@@ -307,13 +307,14 @@ async def restore_version(call: ToolCall[User], post_id: str, version_number: in
 
 async def get_usage(call: ToolCall[User]) -> UsageResponse:
     """
-    What the user has left of their allowance this period: generations (each post started and
-    each feedback uses one), X posts (each part of a thread is one) and, of those, X posts with
-    a link, each with its limit, how many are used and how many are left (a limit of null is no
-    cap), `resets_at`, when the period ends: the next reset, or the trial's end, and `way_out`,
-    what the user can do at a limit before then. `top_ups` lists the user's top-ups with
-    something left and when each expires: they are spent only once the allowance is used up.
-    `allowance` is null where there are no allowances, or the user isn't subscribed.
+    What the user has left of their allowance this period. It counts generations: each post
+    started and each feedback uses one. It counts X posts, where each part of a thread is one,
+    and, of those, X posts with a link. Each count has its limit, how many are used and how many
+    are left; a null limit means no limit. `resets_at` is when the period ends: the next reset,
+    or the trial's end. `resets_on_day` is the day of the month a paid period resets on, null in
+    a trial. `way_out` is what the user can do at a limit before then. `top_ups` lists the user's
+    top-ups with something left and when each expires; they are spent only once the allowance is
+    used up. `allowance` is null where there are no allowances, or the user isn't subscribed.
     """
     return await mediator.get_usage(db=call.db, user=call.user, now=call.now)
 

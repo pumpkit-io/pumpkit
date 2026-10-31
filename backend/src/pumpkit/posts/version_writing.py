@@ -9,6 +9,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
@@ -86,6 +87,8 @@ async def charge_generation(
     db: AsyncSession, *, user_id: str, version: VersionAttempt, now: datetime
 ) -> None:
     """Charge a just-recorded Version to a Top-up when the Allowance had no Generation left."""
+    # Concurrent Versions then count each other before charging.
+    await users_service.lock_user_id(db, user_id=user_id)
     allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
     if allowance is None or allowance.generations is None:
         return

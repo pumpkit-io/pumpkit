@@ -488,9 +488,8 @@ class StripeBillingGateway:
         return CheckoutSession(id=session.id, url=session.url)
 
     async def list_top_ups(self, *, customer_id: str) -> list[TopUpPurchase]:
-        # One listing of completed Checkouts, each expanded down to its charge, reads the refund
-        # and dispute state too: one call per 100 Checkouts, where listing charges would need
-        # another call per charge to find its Checkout.
+        # Checkouts expanded to their charge carry refunds and disputes: one call per 100,
+        # where listing charges would take another call per charge to find its Checkout.
         def list_all() -> list[dict[str, Any]]:
             sessions = self._client.v1.checkout.sessions.list(
                 {

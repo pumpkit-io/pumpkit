@@ -95,7 +95,8 @@ async def test_an_action_the_allowance_and_top_ups_cant_cover_together_is_refuse
     assert response.status_code == 409
     body = response.json()
     assert body["detail"] == (
-        "This thread needs 6 X posts and you have 5 left. They reset on 14 October."
+        "This thread needs 6 X posts and you have 5 left. "
+        "Buy a top-up or schedule it after 14 October."
     )
     assert (body["ran_out"], body["needed"], body["left"]) == ("x_posts", 6, 5)
     assert await _x_posts_left(client) == (3, [2])
@@ -269,3 +270,58 @@ async def test_link_posts_beyond_the_allowance_are_charged_to_a_top_up(
     usage = (await client.get(USAGE)).json()["allowance"]
     assert usage["link_x_posts"]["left"] == 0
     assert [top_up["link_x_posts_left"] for top_up in usage["top_ups"]] == [0]
+
+
+@pytest.fixture
+async def later_post_on_a_top_up(client, ready, post_with, fake_billing):
+    """A Thread using the whole Allowance from 11 October, then a post on 12 October on a Top-up."""
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    thread = (await _schedule(client, post_with, "2026-10-11T09:00:00Z", *["Part"] * 4)).json()
+    await _schedule(client, post_with, "2026-10-12T09:00:00Z", "Later")
+    assert await _x_posts_left(client) == (0, [1])
+    return thread
+
+
+async def test_deleting_a_post_moves_a_later_one_off_the_top_up_onto_the_allowance(
+    client, later_post_on_a_top_up
+):
+    await client.delete(f"{SCHEDULED_POSTS}/{later_post_on_a_top_up['id']}")
+
+    assert await _x_posts_left(client) == (3, [2])
+
+
+async def test_moving_a_post_to_another_period_moves_a_later_one_onto_the_allowance(
+    client, later_post_on_a_top_up
+):
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{later_post_on_a_top_up['id']}",
+        json={"publish_at": "2026-10-20T09:00:00Z"},
+    )
+
+    assert response.status_code == 200
+    assert await _x_posts_left(client) == (3, [2])
+
+
+async def test_an_edit_dropping_parts_moves_a_later_post_onto_the_allowance(
+    client, later_post_on_a_top_up
+):
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{later_post_on_a_top_up['id']}", json={"parts": ["One", "Two"]}
+    )
+
+    assert response.status_code == 200
+    assert await _x_posts_left(client) == (1, [2])
+
+
+async def test_a_post_failing_at_the_publisher_moves_a_later_one_onto_the_allowance(
+    client, ready, post_with, fake_billing, fake_x_publisher, db_session_maker, fixed_clock
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _schedule(client, post_with, "2026-10-10T12:02:00Z", *["Part"] * 4)
+    await _schedule(client, post_with, "2026-10-12T09:00:00Z", "Later")
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    fixed_clock.advance(timedelta(minutes=3))
+
+    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+
+    assert await _x_posts_left(client) == (3, [2])

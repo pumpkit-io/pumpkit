@@ -28,6 +28,9 @@ class AllowancePeriod:
     start: datetime
     end: datetime
     trial: bool
+    # The anchor's day of the month, on which each paid period starts (or the last day of a
+    # shorter month); None for a Trial.
+    reset_day: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -45,25 +48,23 @@ class Allowance:
     way_out: Optional[WayOut]
 
 
-def trial_share(cap: Optional[int]) -> Optional[int]:
-    """A Trial gets a quarter of each cap, so changing a cap keeps the Trial in proportion."""
-    return None if cap is None else cap // 4
-
-
 @dataclass(frozen=True)
 class Limits:
-    """What one Allowance period allows: None is no cap."""
+    """What one Allowance period, or one Top-up, allows: None is no cap."""
 
     generations: Optional[int]
     x_posts: Optional[int]
     link_x_posts: Optional[int]
 
 
-def limits(*, trial: bool) -> Limits:
-    """The Instance's limits for a paid period, or for a Trial."""
+def _caps_divided_by(divisor: int) -> Limits:
+    """
+    Each of the Instance's caps over `divisor`, rounded down, so changing a cap keeps the share in
+    proportion; a cap of 1 or more never gives less than 1.
+    """
 
     def share(cap: Optional[int]) -> Optional[int]:
-        return trial_share(cap) if trial else cap
+        return None if cap is None else max(min(cap, 1), cap // divisor)
 
     return Limits(
         generations=share(settings.GENERATIONS_MONTHLY_CAP),
@@ -72,17 +73,14 @@ def limits(*, trial: bool) -> Limits:
     )
 
 
+def limits(*, trial: bool) -> Limits:
+    """The Instance's limits for a paid period, or for a Trial, which gets a quarter of each cap."""
+    return _caps_divided_by(4 if trial else 1)
+
+
 def top_up_pack() -> Limits:
-    """A Top-up is half of each cap, so changing a cap keeps it in proportion (ADR 0017)."""
-
-    def half(cap: Optional[int]) -> Optional[int]:
-        return None if cap is None else cap // 2
-
-    return Limits(
-        generations=half(settings.GENERATIONS_MONTHLY_CAP),
-        x_posts=half(settings.X_POSTS_MONTHLY_CAP),
-        link_x_posts=half(settings.X_LINK_POSTS_MONTHLY_CAP),
-    )
+    """A Top-up is half of each cap (ADR 0017)."""
+    return _caps_divided_by(2)
 
 
 def sells_top_ups() -> bool:
@@ -110,7 +108,10 @@ def paid_period(anchor: datetime, moment: datetime) -> AllowancePeriod:
     if months_after(anchor, months) > moment:
         months -= 1
     return AllowancePeriod(
-        start=months_after(anchor, months), end=months_after(anchor, months + 1), trial=False
+        start=months_after(anchor, months),
+        end=months_after(anchor, months + 1),
+        trial=False,
+        reset_day=anchor.day,
     )
 
 
@@ -152,7 +153,8 @@ def allowance_at(subscription: Subscription, moment: datetime) -> Allowance:
     )
 
 
-_NOUNS: dict[AllowanceCount, str] = {
+# What each count is called in text the User reads.
+COUNT_NOUNS: dict[AllowanceCount, str] = {
     "generations": "generations",
     "x_posts": "X posts",
     "link_x_posts": "X posts with a link",
@@ -161,6 +163,21 @@ _NOUNS: dict[AllowanceCount, str] = {
 
 def _day(moment: datetime) -> str:
     return f"{moment.day} {moment:%B}"
+
+
+def _thread_way_out(allowance: Allowance) -> str:
+    """What a User can do with a Thread that doesn't fit: the way out, or wait for the reset."""
+    period = allowance.period
+    after = (
+        f"after your trial ends on {_day(period.end)}"
+        if period.trial
+        else f"after {_day(period.end)}"
+    )
+    if allowance.way_out == "top_up":
+        return f"Buy a top-up or schedule it {after}."
+    if allowance.way_out == "subscribe_now":
+        return f"Subscribe now or schedule it {after}."
+    return f"Schedule it {after}."
 
 
 class AllowanceUsedUp(ConflictError):
@@ -173,19 +190,20 @@ class AllowanceUsedUp(ConflictError):
         self, *, ran_out: AllowanceCount, needed: int, left: int, limit: int, allowance: Allowance
     ) -> None:
         period = allowance.period
-        noun = _NOUNS[ran_out]
+        noun = COUNT_NOUNS[ran_out]
         if needed > 1 and left > 0:
             # Only a Thread needs several at once, and it is refused whole.
             in_trial = " in your trial" if period.trial else ""
-            used = f"This thread needs {needed} {noun} and you have {left} left{in_trial}."
+            used = (
+                f"This thread needs {needed} {noun} and you have {left} left{in_trial}. "
+                f"{_thread_way_out(allowance)}"
+            )
         elif period.trial:
-            used = f"You've used your trial's {limit} {noun}."
+            used = (
+                f"You've used your trial's {limit} {noun}. Your trial ends on {_day(period.end)}."
+            )
         else:
-            used = f"You've used this period's {limit} {noun}."
-        if period.trial:
-            used = f"{used} Your trial ends on {_day(period.end)}."
-        else:
-            used = f"{used} They reset on {_day(period.end)}."
+            used = f"You've used this period's {limit} {noun}. They reset on {_day(period.end)}."
         if ran_out == "generations":
             used = f"{used} Failed attempts don't count."
         super().__init__(used, fix_page=SETTINGS_PAGE)

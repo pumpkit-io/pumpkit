@@ -1,9 +1,11 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
 import pumpkit.posts.service as posts_service
 import pumpkit.posts.version_writing as version_writing
@@ -15,7 +17,8 @@ from pumpkit.authors.x_reader import (
     XReaderError,
     XReaderNotConfiguredError,
 )
-from pumpkit.billing.allowance import AllowanceCount
+from pumpkit.billing.allowance import COUNT_NOUNS
+from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
@@ -63,7 +66,7 @@ from pumpkit.scheduling.schemas import (
     UsageResponse,
     XConnectionResponse,
 )
-from pumpkit.scheduling.top_up_charges import charge_top_ups
+from pumpkit.scheduling.top_up_charges import rebalance_top_ups
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
@@ -157,6 +160,18 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     return connection
 
 
+@dataclass(frozen=True)
+class _CountCheck:
+    """One count `check_x_posts_room` checks: its limit, the period's use, and what is added."""
+
+    count: AllowanceCount
+    limit: Optional[int]
+    used: int
+    adding: int
+    # What the Scheduled post being changed already used of it, when it stays in place.
+    had: Optional[int]
+
+
 async def check_x_posts_room(
     db: AsyncSession,
     *,
@@ -167,11 +182,10 @@ async def check_x_posts_room(
     before: Optional[rules.XPosts] = None,
 ) -> None:
     """
-    Room for `parts` as X posts and link posts publishing at `publish_at`: in its Allowance
-    period, then the Top-ups unexpired at `publish_at`, where Plans are sold, else in its UTC
-    calendar month. Pass `excluding_id` when
-    changing an existing one, so it doesn't count itself, and `before`, what it used, when it
-    stays in place, so only what grows is checked.
+    Room for `parts` as X posts and link posts publishing at `publish_at`: where Plans are sold,
+    in its Allowance period, then the Top-ups unexpired at `publish_at`; else in its UTC calendar
+    month. Pass `excluding_id` when changing an existing one, so it doesn't count itself, and
+    `before`, what it used, when it stays in place, so only what grows is checked.
     """
     needed = rules.x_posts_in(parts)
     if billing_service.sells_plans():
@@ -179,45 +193,48 @@ async def check_x_posts_room(
         if allowance is None:
             return
         start, end = allowance.period.start, allowance.period.end
-        limits = (allowance.x_posts, allowance.link_x_posts)
+        caps = {"x_posts": allowance.x_posts, "link_x_posts": allowance.link_x_posts}
     else:
         allowance = None
         start, end = rules.month_bounds(publish_at)
-        limits = (settings.X_POSTS_MONTHLY_CAP, settings.X_LINK_POSTS_MONTHLY_CAP)
+        caps = {
+            "x_posts": settings.X_POSTS_MONTHLY_CAP,
+            "link_x_posts": settings.X_LINK_POSTS_MONTHLY_CAP,
+        }
     used = await service.x_posts_used_between(
         db, user_id=user_id, start=start, end=end, excluding_id=excluding_id
     )
-    counts: list[tuple[AllowanceCount, Optional[int], int, int, int]] = [
-        ("x_posts", limits[0], used.x_posts, needed.x_posts, before.x_posts if before else 0),
-        (
-            "link_x_posts",
-            limits[1],
-            used.link_x_posts,
-            needed.link_x_posts,
-            before.link_x_posts if before else 0,
-        ),
+    checks = [
+        _CountCheck(
+            count=count,
+            limit=caps[count],
+            used=getattr(used, count),
+            adding=getattr(needed, count),
+            had=getattr(before, count) if before is not None else None,
+        )
+        for count in ("x_posts", "link_x_posts")
     ]
-    for ran_out, limit, count, adding, had in counts:
-        if limit is None or (before is not None and adding <= had):
+    for check in checks:
+        if check.limit is None or (check.had is not None and check.adding <= check.had):
             continue
         if allowance is not None:
             await billing_service.check_room_with_top_ups(
                 db,
                 user_id=user_id,
                 allowance=allowance,
-                count=ran_out,
-                used=count,
-                needed=adding,
+                count=check.count,
+                used=check.used,
+                needed=check.adding,
                 moment=publish_at,
                 giving_back=excluding_id,
             )
         else:
             rules.check_month_has_room(
-                count,
-                adding=adding,
-                cap=limit,
+                check.used,
+                adding=check.adding,
+                cap=check.limit,
                 moment=publish_at,
-                noun="X posts" if ran_out == "x_posts" else "X posts with a link",
+                noun=COUNT_NOUNS[check.count],
             )
 
 
@@ -242,6 +259,7 @@ async def get_usage(db: AsyncSession, user: User, now: datetime) -> UsageRespons
         allowance=AllowanceUsageResponse(
             trial=period.trial,
             resets_at=period.end,
+            resets_on_day=period.reset_day,
             generations=_usage_count(allowance.generations, generations),
             x_posts=_usage_count(allowance.x_posts, used.x_posts),
             link_x_posts=_usage_count(allowance.link_x_posts, used.link_x_posts),
@@ -274,6 +292,8 @@ async def create_scheduled_post(
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     connection = await connection_to_publish_on(db, user_id=user.id)
+    # Serializes the User's checks and charges of X posts until the commit.
+    await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=new.post_id)
     if await service.get_for_post(db, post_id=post.id) is not None:
         raise _already_scheduled()
@@ -300,7 +320,7 @@ async def create_scheduled_post(
     except IntegrityError:
         # Another request scheduled the same Post between the check and the insert.
         raise _already_scheduled()
-    await charge_top_ups(db, scheduled_post_id=scheduled_post.id)
+    await rebalance_top_ups(db, user_id=user.id, moments=[as_utc(scheduled_post.publish_at)])
     if new.publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
     await db.commit()
@@ -358,9 +378,11 @@ async def edit_scheduled_post(
     Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
     so a Failed one gets another try. With publish now it answers like Post now.
     """
+    await users_service.lock_user_id(db, user_id=user.id)
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
         raise _publishing_started()
+    publish_at_before = as_utc(scheduled_post.publish_at)
     live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
     parts = edit.parts
     if edit.copy_text:
@@ -413,7 +435,8 @@ async def edit_scheduled_post(
         now=now,
     ):
         raise _publishing_started()
-    await charge_top_ups(db, scheduled_post_id=scheduled_post_id)
+    moments = [publish_at_before, reschedule.publish_at] if reschedule else [publish_at_before]
+    await rebalance_top_ups(db, user_id=user.id, moments=moments)
     if edit.publish_now:
         return await _post_now(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
     await db.commit()
@@ -450,12 +473,15 @@ async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id:
     Delete a scheduled or Failed Scheduled post, which makes its Post a Draft again. Returns the
     Post's id.
     """
+    await users_service.lock_user_id(db, user_id=user.id)
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     post_id = scheduled_post.post_id
+    publish_at = as_utc(scheduled_post.publish_at)
     # Postgres cascades this from the delete; SQLite skips foreign keys without a pragma.
     await billing_service.give_back_charges(db, scheduled_post_id=scheduled_post_id)
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
+    await rebalance_top_ups(db, user_id=user.id, moments=[publish_at])
     await db.commit()
     return post_id
 

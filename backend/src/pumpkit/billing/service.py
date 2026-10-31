@@ -341,17 +341,18 @@ async def charge_shortfall(
     moment: datetime,
     version_attempt_id: Optional[str] = None,
     scheduled_post_id: Optional[str] = None,
-) -> None:
+) -> int:
     """
     Charge what the Allowance, with `used` gone, can't cover of `needed` to the Top-ups unexpired
-    at `moment`, first to expire first. What they can't cover either stays on the Allowance, over
-    its limit. Flushes.
+    at `moment`, first to expire first, and return how many were charged. What they can't cover
+    either stays on the Allowance, over its limit. Flushes.
     """
     short = shortfall(limit=getattr(allowance, count), used=used, needed=needed)
     if short == 0:
-        return
+        return 0
     balances = await top_up_balances(db, user_id=user_id, moment=moment)
-    for top_up_id, quantity in allocate(balances, count=count, quantity=short):
+    charges = allocate(balances, count=count, quantity=short)
+    for top_up_id, quantity in charges:
         db.add(
             TopUpCharge(
                 top_up_id=top_up_id,
@@ -362,6 +363,7 @@ async def charge_shortfall(
             )
         )
     await db.flush()
+    return sum(quantity for _, quantity in charges)
 
 
 async def give_back_charges(db: AsyncSession, *, scheduled_post_id: str) -> None:

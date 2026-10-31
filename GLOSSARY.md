@@ -4,6 +4,8 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 
 ## Language
 
+The _Avoid_ lists don't bind the Pro offer's marketing copy or its info popovers, wherever they appear (the Usage card included): there, "prompt" and "X creators" may stand for a Generation and Inspiration authors.
+
 ### Instances
 
 **Instance**:
@@ -80,7 +82,7 @@ _Avoid_: free tier, cardless trial
 
 **Allowance**:
 How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may contain a link. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans give the same Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
-_Avoid_: quota, usage limit, cap, credits
+_Avoid_: quota, usage limit, credits, cap (in text users read; setting names and code may say cap)
 
 **Generation**:
 One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: starting a Post is one, and so is each Feedback. A writing attempt that fails is not a Generation.

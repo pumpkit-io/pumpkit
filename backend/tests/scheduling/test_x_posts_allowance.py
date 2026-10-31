@@ -129,7 +129,7 @@ async def test_a_thread_that_doesnt_fit_is_refused_whole_with_what_it_needs_and_
     assert response.status_code == 409
     body = response.json()
     assert body["detail"] == (
-        "This thread needs 3 X posts and you have 2 left. They reset on 14 October."
+        "This thread needs 3 X posts and you have 2 left. Schedule it after 14 October."
     )
     assert (body["needed"], body["left"]) == (3, 2)
     assert len(await scheduled_posts(client)) == 1
@@ -162,7 +162,7 @@ async def test_each_part_with_a_link_is_one_link_post(client, ready, post_with, 
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "This thread needs 3 X posts with a link and you have 2 left. They reset on 14 October."
+        "This thread needs 3 X posts with a link and you have 2 left. Schedule it after 14 October."
     )
 
 
@@ -193,7 +193,7 @@ async def test_a_trial_gets_a_quarter_of_the_x_posts_and_link_posts(
     assert thread.status_code == 409
     assert thread.json()["detail"] == (
         "This thread needs 24 X posts and you have 23 left in your trial. "
-        "Your trial ends on 14 October."
+        "Subscribe now or schedule it after your trial ends on 14 October."
     )
 
 
@@ -243,7 +243,7 @@ async def test_an_edit_adding_parts_that_dont_fit_is_refused(client, ready, post
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "This thread needs 3 X posts and you have 2 left. They reset on 14 October."
+        "This thread needs 3 X posts and you have 2 left. Schedule it after 14 October."
     )
 
 
@@ -300,7 +300,7 @@ async def test_without_plans_link_posts_count_per_calendar_month(
     assert refused.json() == {
         "detail": (
             "You have 1 X posts with a link in October 2026, the most for one month. "
-            "The cap resets on November 1, 2026."
+            "The limit resets on November 1, 2026."
         )
     }
 
@@ -329,6 +329,7 @@ async def test_usage_says_how_many_x_posts_and_link_posts_are_left(client, ready
         "allowance": {
             "trial": False,
             "resets_at": _iso(_utc(2026, 10, 14, 9)),
+            "resets_on_day": 14,
             "generations": {"limit": 500, "used": 0, "left": 500},
             "x_posts": {"limit": 5, "used": 2, "left": 3},
             "link_x_posts": {"limit": 2, "used": 1, "left": 1},

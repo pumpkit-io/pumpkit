@@ -1,18 +1,11 @@
-import { useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { track } from '@/lib/analytics';
-import { redirectTo } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
-import { errorMessage } from '@/services/apiErrors';
-import {
-  billingService,
-  type Subscription,
-  type SubscriptionStatus,
-} from '@/services/billingService';
+import type { Subscription, SubscriptionStatus } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
+import { useOpenPortal } from './useOpenPortal';
 
 // How each Subscription status reads to the User. Ended ones are never shown.
 const STATUS_LABELS: Record<SubscriptionStatus, string> = {
@@ -55,18 +48,7 @@ export function SubscriptionCard({
   isLoading: boolean;
   loadError: string | null;
 }) {
-  const [error, setError] = useState<string | null>(null);
-
-  const openPortal = async () => {
-    setError(null);
-    try {
-      const url = await billingService.openBillingPortal();
-      track('billing_portal_opened');
-      redirectTo(url);
-    } catch (e) {
-      setError(errorMessage(e, "Couldn't open the billing portal. Try again."));
-    }
-  };
+  const { openPortal, error } = useOpenPortal();
 
   // An `incomplete` Subscription is a checkout still open: the User may subscribe again.
   const subscription = data && !data.me.maySubscribe ? data.me.subscription : null;

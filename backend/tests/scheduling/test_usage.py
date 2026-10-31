@@ -70,6 +70,7 @@ async def test_usage_counts_the_generations_written_this_period(
         "allowance": {
             "trial": False,
             "resets_at": "2026-10-14T09:00:00Z",
+            "resets_on_day": 14,
             "generations": {"limit": 500, "used": 4, "left": 496},
             "x_posts": {"limit": 100, "used": 0, "left": 100},
             "link_x_posts": {"limit": 10, "used": 0, "left": 10},
@@ -78,6 +79,16 @@ async def test_usage_counts_the_generations_written_this_period(
             "may_buy_top_up": False,
         }
     }
+
+
+async def test_periods_from_the_31st_reset_on_the_31st_even_in_a_shorter_month(
+    client, db, subscribed, fixed_clock, caps
+):
+    await _subscription(db, subscribed, billing_cycle_anchor=_utc(2026, 8, 31, 9))
+
+    allowance = (await client.get(USAGE)).json()["allowance"]
+
+    assert (allowance["resets_at"], allowance["resets_on_day"]) == ("2026-10-31T09:00:00Z", 31)
 
 
 async def test_a_trial_s_usage_counts_against_its_quarter_until_the_trial_ends(
@@ -97,6 +108,7 @@ async def test_a_trial_s_usage_counts_against_its_quarter_until_the_trial_ends(
 
     assert allowance["trial"] is True
     assert allowance["resets_at"] == "2026-10-14T09:00:00Z"
+    assert allowance["resets_on_day"] is None
     assert allowance["generations"] == {"limit": 125, "used": 27, "left": 98}
     assert allowance["x_posts"] == {"limit": 25, "used": 0, "left": 25}
     assert allowance["link_x_posts"] == {"limit": 2, "used": 0, "left": 2}

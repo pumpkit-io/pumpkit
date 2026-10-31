@@ -196,7 +196,7 @@ async def test_the_monthly_cap_counts_scheduled_posts_from_the_web_app_too(
 
     assert error_text(result) == (
         "You have 2 X posts in October 2026, the most for one month. "
-        "The cap resets on November 1, 2026."
+        "The limit resets on November 1, 2026."
     )
 
 

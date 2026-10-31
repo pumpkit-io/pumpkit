@@ -114,8 +114,8 @@ async def list_plans(gateway: BillingGateway) -> PlansListResponse:
 
 async def _top_up_price(gateway: BillingGateway) -> Optional[OneOffPrice]:
     """The Top-up's price, or None where the Instance sells no Top-ups."""
-    key = settings.BILLING_TOP_UP_KEY
-    if not key or not sells_top_ups():
+    key = settings.BILLING_TOP_UP_KEY if sells_top_ups() else None
+    if key is None:
         return None
     price = await gateway.get_one_off_price(key)
     if price is None:
@@ -308,7 +308,8 @@ async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -
 
     The sync from Stripe runs first (ADR 0004), so a Trial that already ended there is a 409, as is
     a User with no trialing Subscription. The User's row stays locked across both provider calls.
-    A failed charge leaves the Subscription as Stripe reports it (past due keeps access) and is a 402.
+    A charge that failed, or that waits for the User to authenticate it, leaves the Subscription
+    as Stripe reports it (past due keeps access) and is a 402 that covers both.
     """
     if not user.stripe_customer_id:
         raise _not_trialing()
@@ -327,7 +328,7 @@ async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -
     if subscription.status != "active":
         raise FirstChargeFailed(
             "Your trial has ended, but the first payment didn't go through. "
-            "Update your payment method to keep writing.",
+            "Open billing to complete or update your payment.",
             fix_page=BILLING_PAGE,
         )
     return await get_billing_me(db, user)

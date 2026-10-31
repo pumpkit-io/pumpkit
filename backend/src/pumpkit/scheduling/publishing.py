@@ -7,10 +7,12 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.auth.service.users as users_service
 import pumpkit.x_connection.service as x_connections_service
+from pumpkit.core.time import as_utc
 from pumpkit.scheduling import publish, service
 from pumpkit.scheduling.models import ScheduledPost
-from pumpkit.scheduling.top_up_charges import charge_top_ups
+from pumpkit.scheduling.top_up_charges import rebalance_top_ups
 from pumpkit.x_connection.x_publisher import XPublisher
 
 
@@ -41,7 +43,10 @@ async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: date
 async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
     recovered = await publish.recover_stuck(db, now=now)
     for scheduled_post in recovered.failed:
-        await charge_top_ups(db, scheduled_post_id=scheduled_post.id)
+        await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
+        await rebalance_top_ups(
+            db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)]
+        )
     await db.commit()
     for scheduled_post in recovered.published:
         publish.capture_published(scheduled_post)
@@ -58,9 +63,13 @@ async def _publish_claimed(
     try:
         await _publish(db, publisher, scheduled_post, now=now)
     except publish.Failed as failed:
+        # Locked before the Scheduled post's row, in the order the User's own requests take them.
+        await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
         failed_for_good = await publish.record_failure(db, scheduled_post, failed, now=now)
         if failed_for_good:
-            await charge_top_ups(db, scheduled_post_id=scheduled_post_id)
+            await rebalance_top_ups(
+                db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)]
+            )
         await db.commit()
         if failed_for_good:
             publish.capture_failed(scheduled_post, failed.category)
