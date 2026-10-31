@@ -288,7 +288,7 @@ async def test_a_top_up_refunded_before_its_first_sync_is_never_spendable(
 
 
 async def test_a_paid_top_up_first_synced_sends_top_up_added(
-    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, analytics
+    client, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, analytics
 ):
     fake_billing.set_top_up(stripe_customer, _purchase())
 
@@ -298,7 +298,7 @@ async def test_a_paid_top_up_first_synced_sends_top_up_added(
 
 
 async def test_a_top_up_refunded_before_its_first_sync_sends_no_top_up_added(
-    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, analytics
+    client, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, analytics
 ):
     fake_billing.set_top_up(stripe_customer, _purchase(reversed=True))
 
