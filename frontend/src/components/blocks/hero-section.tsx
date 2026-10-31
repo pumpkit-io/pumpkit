@@ -1,12 +1,11 @@
-import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { Variants } from 'framer-motion';
 import { CtaFrame } from '@/components/blocks/cta-frame';
 import { HeroFrame } from '@/components/blocks/hero-frame';
+import { LaunchVideo } from '@/components/blocks/launch-video';
 import { Button } from '@/components/ui/button';
 import { AnimatedGroup } from '@/components/ui/animated-group';
 import { track } from '@/lib/analytics';
-import { useOnceVisible } from '@/lib/useOnceVisible';
 
 const transitionVariants: { item: Variants } = {
   item: {
@@ -20,7 +19,7 @@ const transitionVariants: { item: Variants } = {
   },
 };
 
-// The button and screenshot wait for the text above them to settle first.
+// The button and video wait for the text above them to settle first.
 const staggeredVariants: { container: Variants; item: Variants } = {
   container: {
     visible: { transition: { staggerChildren: 0.05, delayChildren: 0.75 } },
@@ -29,9 +28,6 @@ const staggeredVariants: { container: Variants; item: Variants } = {
 };
 
 export function HeroSection() {
-  const screenshotRef = useRef<HTMLDivElement | null>(null);
-  useOnceVisible(screenshotRef, () => track('landing_hero_screenshot_viewed'));
-
   return (
     <div className="overflow-hidden">
       <div
@@ -73,12 +69,7 @@ export function HeroSection() {
 
             <AnimatedGroup variants={staggeredVariants} className="min-w-0 lg:col-span-7">
               <HeroFrame>
-                <div
-                  ref={screenshotRef}
-                  className="flex size-full items-center justify-center font-mono text-sm text-muted-foreground"
-                >
-                  [Product screenshot]
-                </div>
+                <LaunchVideo />
               </HeroFrame>
             </AnimatedGroup>
           </div>
