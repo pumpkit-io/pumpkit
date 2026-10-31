@@ -12,8 +12,9 @@ import {
 import { track } from '@/lib/analytics';
 import { formatAmount } from '@/lib/money';
 import { errorMessage } from '@/services/apiErrors';
-import { billingService, type OfferedAllowance, type Plan } from '@/services/billingService';
+import { billingService, type Plan } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
+import { generationsAndXPosts } from './counts';
 import { useLoadedBilling } from './useBilling';
 
 /** "month", "3 months", "year": how long the first charge pays for. */
@@ -22,22 +23,13 @@ function firstPeriod({ interval, intervalCount }: Plan): string {
 }
 
 /** "500 generations and 100 X posts", leaving out a count with no cap. */
-function allowanceCounts({ generations, xPosts }: OfferedAllowance): string {
-  return [
-    generations !== null && `${generations} generations`,
-    xPosts !== null && `${xPosts} X posts`,
-  ]
-    .filter(Boolean)
-    .join(' and ');
-}
-
 function explanation(data: BillingData): string {
   const planKey = data.me.subscription?.planKey;
   const plan = data.plans.find((p) => p.key === planKey);
   const charge = plan
     ? `you're charged ${formatAmount(plan.amount, plan.currency)} today for your first ${firstPeriod(plan)}`
     : "you're charged for your plan today";
-  const counts = allowanceCounts(data.allowance);
+  const counts = generationsAndXPosts(data.allowance.generations, data.allowance.xPosts);
   const allowance = counts
     ? `Your monthly allowance of ${counts} starts at once.`
     : 'Your monthly allowance starts at once.';

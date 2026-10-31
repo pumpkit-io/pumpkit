@@ -678,16 +678,16 @@ describe('New post', () => {
       const fetchPlans = vi.mocked(billingService.fetchPlans);
       const before = fetchPlans.getMockImplementation();
       onTestFinished(() => void fetchPlans.mockImplementation(before!));
-      fetchPlans.mockClear().mockRejectedValue(new Error('down'));
+      // Billing answers only on a second ask, which the dialog must not make.
+      fetchPlans.mockRejectedValueOnce(new Error('down'));
 
       fireEvent.click(subscribeNow);
 
       const dialog = within(await screen.findByRole('dialog'));
-      expect(
-        await dialog.findByText("Couldn't load billing information. Reload the page to try again."),
-      ).toBeInTheDocument();
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(billingService.fetchPlans).toHaveBeenCalledTimes(1);
+      const failed = "Couldn't load billing information. Reload the page to try again.";
+      expect(await dialog.findByText(failed)).toBeInTheDocument();
+      for (let i = 0; i < 5; i++) await act(() => Promise.resolve());
+      expect(dialog.getByText(failed)).toBeInTheDocument();
     });
 
     it.each([

@@ -1,13 +1,10 @@
 import type { OfferedAllowance, OfferedTrial } from '@/services/billingService';
 import type { AllowanceTopic } from './AllowanceInfo';
+import { count, generationsAndXPosts } from './counts';
 
 export interface OfferLine {
   text: string;
   info?: AllowanceTopic;
-}
-
-function count(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
 }
 
 function withLinks(links: number, phrase: (n: number) => string): string {
@@ -16,11 +13,7 @@ function withLinks(links: number, phrase: (n: number) => string): string {
 
 /** The trial's limits after its length, e.g. "7-day free trial: 125 generations and 25 X posts, up to 2 with a link." */
 export function trialLine(trial: OfferedTrial): string {
-  const parts = [
-    trial.generations !== null && count(trial.generations, 'generation', 'generations'),
-    trial.xPosts !== null && count(trial.xPosts, 'X post', 'X posts'),
-  ].filter((part): part is string => part !== false);
-  let limits = parts.join(' and ');
+  let limits = generationsAndXPosts(trial.generations, trial.xPosts);
   if (trial.xPosts !== null && trial.linkXPosts !== null) {
     limits += `, ${withLinks(trial.linkXPosts, (n) => `up to ${n} with a link`)}`;
   }

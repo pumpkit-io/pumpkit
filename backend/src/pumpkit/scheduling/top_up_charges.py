@@ -1,8 +1,8 @@
 """
 What Scheduled posts take from Top-ups (ADR 0017): the X posts and link posts their Allowance
-period can't cover, charged to the Top-ups still unexpired at each one's publish time. Every
-waiting and Failed one in a period is charged afresh, in publish-time order, whenever one there
-changes, and a change is checked against that same charging before it is made.
+period can't cover, charged to the Top-ups bought by and still unexpired at each one's publish
+time. Every waiting and Failed one in a period is charged afresh, in publish-time order, whenever
+one there changes, and a change is checked against that same charging before it is made.
 """
 
 from bisect import bisect_right
@@ -98,7 +98,6 @@ async def _planned(
     *,
     user_id: str,
     allowance: Allowance,
-    leaving_out: Optional[str] = None,
     trimming: bool = False,
 ) -> list[_Planned]:
     """
@@ -110,8 +109,6 @@ async def _planned(
     for scheduled_post in await service.changeable_between(
         db, user_id=user_id, start=period.start, end=period.end
     ):
-        if scheduled_post.id == leaving_out:
-            continue
         needed = x_posts_in(await service.counted_parts(db, scheduled_post_id=scheduled_post.id))
         paid = await _paid_on_removed(
             db, scheduled_post_id=scheduled_post.id, needed=needed, trimming=trimming
@@ -175,6 +172,42 @@ async def rebalance_top_ups(db: AsyncSession, *, user_id: str, moments: Iterable
                     )
 
 
+async def keep_live_parts_counted(
+    db: AsyncSession, *, user_id: str, scheduled_post_id: str, publish_at: datetime, now: datetime
+) -> bool:
+    """
+    Before a Scheduled post with live Parts is deleted, record those Parts as X posts that keep
+    counting, keeping what they take from Top-ups. False when publishing has started. Call it with
+    the User locked. Flushes.
+    """
+    # Failed counts only the live Parts, so the charging below pays for them alone.
+    if not await service.stop(db, scheduled_post_id=scheduled_post_id, now=now):
+        return False
+    await rebalance_top_ups(db, user_id=user_id, moments=[publish_at])
+    paid = await billing_service.keep_charges_after_delete(db, scheduled_post_id=scheduled_post_id)
+    live = x_posts_in(await service.counted_parts(db, scheduled_post_id=scheduled_post_id))
+    await service.keep_unscheduled_live_parts(
+        db,
+        user_id=user_id,
+        publish_at=publish_at,
+        x_posts=_less(live, XPosts(**{count: paid.get(count, 0) for count in _COUNTS})),
+        now=now,
+    )
+    return True
+
+
+def _uncovered(
+    periods: list[_Period], balances: list[TopUpBalance], *, count: AllowanceCount
+) -> dict[Optional[str], int]:
+    """What nothing covers of each planned post, by Scheduled post (None for one not yet made)."""
+    uncovered: dict[Optional[str], int] = {}
+    ordered = sorted(periods, key=lambda p: p.allowance.period.start)
+    for period, covered in zip(ordered, _cover(ordered, balances, count=count)):
+        for post, paid in zip(period.planned, covered):
+            uncovered[post.scheduled_post_id] = paid.uncovered
+    return uncovered
+
+
 async def check_room(
     db: AsyncSession,
     *,
@@ -186,11 +219,12 @@ async def check_room(
     changing_id: Optional[str] = None,
 ) -> None:
     """
-    Raise `AllowanceUsedUp` unless charging the period afresh with a Scheduled post needing
-    `needed` at `publish_at` leaves every post there covered, by the Allowance or by Top-ups
-    unexpired at its own publish time, for each of `counts`. A post earlier in the period can push
-    a later one onto a Top-up that has expired by then. Pass `changing_id` when changing an
-    existing one, which leaves its old place and keeps what a removed Top-up paid for. Call it
+    Raise `AllowanceUsedUp` when charging the periods afresh with a Scheduled post needing
+    `needed` at `publish_at` leaves some post there less covered than it is now, by the Allowance
+    or by Top-ups unexpired at its own publish time, for any of `counts`. A post already over a
+    lowered limit doesn't block a change that takes no room from it. A post earlier in the period
+    can push a later one onto a Top-up that has expired by then. Pass `changing_id` when changing
+    an existing one, which leaves its old place and keeps what a removed Top-up paid for. Call it
     with the User locked.
     """
     moments = [publish_at]
@@ -203,10 +237,7 @@ async def check_room(
             db, scheduled_post_id=changing_id, needed=needed, trimming=False
         )
     allowances = await _allowances(db, user_id=user_id, moments=moments)
-    planned = [
-        await _planned(db, user_id=user_id, allowance=a, leaving_out=changing_id)
-        for a in allowances
-    ]
+    planned = [await _planned(db, user_id=user_id, allowance=a) for a in allowances]
     ids = {p.scheduled_post_id for posts in planned for p in posts if p.scheduled_post_id}
     if changing_id is not None:
         ids.add(changing_id)
@@ -215,26 +246,31 @@ async def check_room(
     balances = await billing_service.top_up_balances(
         db, user_id=user_id, moment=allowances[0].period.start, giving_back=ids
     )
+    current = [
+        _Period(allowance=a, fixed=f, planned=p) for a, f, p in zip(allowances, fixed, planned)
+    ]
 
-    def uncovered(count: AllowanceCount, quantity: int) -> bool:
-        new = _Planned(
-            scheduled_post_id=None,
+    def worse(count: AllowanceCount, quantity: int) -> bool:
+        changed = _Planned(
+            scheduled_post_id=changing_id,
             publish_at=publish_at,
             needed=replace(needed, **{count: max(0, quantity - getattr(paid, count))}),
         )
-        posts = list(planned[target])
-        posts.insert(bisect_right([p.publish_at for p in posts], publish_at), new)
-        periods = [
-            _Period(allowance=a, fixed=f, planned=posts if i == target else planned[i])
-            for i, (a, f) in enumerate(zip(allowances, fixed))
-        ]
-        return any(paid.uncovered for paid in _cover(periods, balances, count=count)[target])
+        periods = []
+        for i, period in enumerate(current):
+            posts = [p for p in period.planned if p.scheduled_post_id != changing_id]
+            if i == target:
+                posts.insert(bisect_right([p.publish_at for p in posts], publish_at), changed)
+            periods.append(replace(period, planned=posts))
+        before = _uncovered(current, balances, count=count)
+        after = _uncovered(periods, balances, count=count)
+        return any(left > before.get(post, 0) for post, left in after.items())
 
     for count in counts:
         quantity: int = getattr(needed, count)
-        if not uncovered(count, quantity):
+        if not worse(count, quantity):
             continue
-        left = next((k for k in range(quantity - 1, -1, -1) if not uncovered(count, k)), 0)
+        left = next((k for k in range(quantity - 1, -1, -1) if not worse(count, k)), 0)
         limit = getattr(allowance, count)
         assert limit is not None
         raise AllowanceUsedUp(

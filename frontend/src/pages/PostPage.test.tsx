@@ -1959,12 +1959,12 @@ describe('Post page', () => {
       return usageWith({ linkXPosts: { limit: 10, used: 10 - left, left } });
     }
 
-    it('says when the text contains a link and how many X posts with a link are left', async () => {
+    it('says when the text contains a link and how many link posts are left', async () => {
       vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
       const dialog = await openPostTo(postWith('Read pumpkit.io today'));
 
       expect(
-        await dialog.findByText('Contains a link: uses 1 of your 8 X posts with a link'),
+        await dialog.findByText('Contains a link: uses 1 of your 8 link posts'),
       ).toBeInTheDocument();
     });
 
@@ -1974,13 +1974,13 @@ describe('Post page', () => {
       );
       const dialog = await openPostTo(postWith('Read pumpkit.io today'));
       expect(
-        await dialog.findByText('Contains a link: uses 1 of your 8 X posts with a link'),
+        await dialog.findByText('Contains a link: uses 1 of your 8 link posts'),
       ).toBeInTheDocument();
 
       scheduleAt(dialog, '2026-10-20', '09:00');
 
       expect(
-        await dialog.findByText('Contains a link: uses 1 of your 2 X posts with a link'),
+        await dialog.findByText('Contains a link: uses 1 of your 2 link posts'),
       ).toBeInTheDocument();
       expect(usageService.get).toHaveBeenLastCalledWith('2026-10-20T07:00:00.000Z');
     });
@@ -1992,7 +1992,7 @@ describe('Post page', () => {
       );
 
       expect(
-        await dialog.findByText('Contains links: uses 2 of your 8 X posts with a link'),
+        await dialog.findByText('Contains links: uses 2 of your 8 link posts'),
       ).toBeInTheDocument();
     });
 
@@ -2013,7 +2013,7 @@ describe('Post page', () => {
       const dialog = await openPostTo(postWith('Read pumpkit.io today'));
 
       expect(
-        await dialog.findByText('Contains a link: uses 1 of your 3 X posts with a link'),
+        await dialog.findByText('Contains a link: uses 1 of your 3 link posts'),
       ).toBeInTheDocument();
     });
 

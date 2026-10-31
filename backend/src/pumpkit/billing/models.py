@@ -120,7 +120,8 @@ class TopUp(Base):
 class TopUpCharge(Base):
     """
     What one Version attempt or Scheduled post took from a Top-up. Their tables belong to areas
-    above billing, so only the foreign keys name them; deleting either gives the charge back.
+    above billing, so only the foreign keys name them; deleting either gives the charge back,
+    except a deleted Scheduled post's live Parts, whose charges stay with neither named.
     """
 
     __tablename__ = "top_up_charges"

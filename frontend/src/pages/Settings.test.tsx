@@ -950,22 +950,51 @@ describe('Settings', () => {
       expect(usageCard.queryByRole('button', { name: /Buy top-up/ })).not.toBeInTheDocument();
     });
 
-    it('greets a bought top-up and loads usage once more after a short wait', async () => {
+    it('greets a bought top-up and shows it once usage loads again after a short wait', async () => {
       vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
+      // Stripe tells Pumpkit about the top-up only after Settings first loads usage.
+      vi.mocked(usageService.get)
+        .mockResolvedValueOnce(usageWith({ mayBuyTopUp: true }))
+        .mockResolvedValue(
+          usageWith({
+            topUps: [
+              {
+                generationsLeft: 250,
+                xPostsLeft: 50,
+                linkXPostsLeft: 5,
+                expiresAt: new Date('2027-10-03T08:00:00Z'),
+              },
+            ],
+            mayBuyTopUp: true,
+          }),
+        );
       vi.useFakeTimers({ shouldAdvanceTime: true });
       onTestFinished(() => {
         vi.useRealTimers();
       });
       renderSettings({ state: { checkoutStatus: 'top_up_bought' } });
 
-      await card('Usage');
-      await waitFor(() => expect(usageService.get).toHaveBeenCalledTimes(1));
+      const usageCard = await card('Usage');
+      expect(await usageCard.findByRole('button', { name: 'Buy top-up, €10' })).toBeVisible();
+      expect(usageCard.queryByText(/^Top-up:/)).not.toBeInTheDocument();
       expect(track).toHaveBeenCalledWith('top_up_bought');
       expect(
         await screen.findByText('Top-up added: 250 generations and 50 X posts.'),
       ).toBeInTheDocument();
       await act(() => vi.advanceTimersByTimeAsync(5000));
-      expect(usageService.get).toHaveBeenCalledTimes(2);
+      expect(
+        await usageCard.findByText(/^Top-up: 250 generations and 50 X posts left/),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves a count with no limit out of the greeting for a bought top-up', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({
+        ...CATALOG,
+        topUp: { ...TOP_UP, generations: null },
+      });
+      renderSettings({ state: { checkoutStatus: 'top_up_bought' } });
+
+      expect(await screen.findByText('Top-up added: 50 X posts.')).toBeInTheDocument();
     });
 
     it('says nothing about a limit set to no cap', async () => {

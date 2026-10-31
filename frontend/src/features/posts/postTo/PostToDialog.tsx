@@ -86,15 +86,15 @@ function overLimit(
 }
 
 /**
- * What the Parts about to go out with a link use of the X posts with a link left, in the period
- * and in Top-ups; null without a link, or without a cap on them.
+ * What the Parts about to go out with a link use of the link posts left, in the period and in
+ * Top-ups; null without a link, or without a cap on them.
  */
 function linkNote(linkCount: number, allowance: AllowanceUsage | null | undefined): string | null {
   const inPeriod = allowance?.linkXPosts.left;
   if (linkCount === 0 || !allowance || inPeriod === null || inPeriod === undefined) return null;
   const left = inPeriod + leftInTopUps(allowance, 'linkXPosts');
   const links = linkCount === 1 ? 'Contains a link' : 'Contains links';
-  return `${links}: uses ${linkCount} of your ${left} ${left === 1 ? 'X post' : 'X posts'} with a link`;
+  return `${links}: uses ${linkCount} of your ${left} link ${left === 1 ? 'post' : 'posts'}`;
 }
 
 const PART_TEXT = 'whitespace-pre-wrap break-words font-sans text-sm text-foreground';

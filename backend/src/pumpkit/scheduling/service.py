@@ -35,6 +35,7 @@ from pumpkit.scheduling.models import (
     SCHEDULED,
     ScheduledPost,
     ScheduledPostPart,
+    UnscheduledLiveParts,
 )
 from pumpkit.scheduling.post_status import (
     DRAFT,
@@ -285,6 +286,38 @@ async def cancel(db: AsyncSession, *, scheduled_post_id: str) -> bool:
     return cast(CursorResult, result).rowcount == 1
 
 
+async def stop(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> bool:
+    """
+    Move a scheduled or Failed Scheduled post to Failed, so only its live Parts count; False if
+    it was in neither, like a claim's check.
+    """
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(
+            ScheduledPost.id == scheduled_post_id,
+            ScheduledPost.state.in_([SCHEDULED, FAILED]),
+        )
+        .values(state=FAILED, updated_at=now)
+    )
+    return cast(CursorResult, result).rowcount == 1
+
+
+async def keep_unscheduled_live_parts(
+    db: AsyncSession, *, user_id: str, publish_at: datetime, x_posts: XPosts, now: datetime
+) -> None:
+    """Flushes."""
+    db.add(
+        UnscheduledLiveParts(
+            user_id=user_id,
+            publish_at=publish_at,
+            x_posts=x_posts.x_posts,
+            link_x_posts=x_posts.link_x_posts,
+            created_at=now,
+        )
+    )
+    await db.flush()
+
+
 async def claim(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> bool:
     """
     Move the Scheduled post from scheduled to publishing; False if it wasn't scheduled. The
@@ -444,7 +477,8 @@ async def x_posts_used_between(
     """
     The X posts and link posts of the User's Scheduled posts with `start <= publish_at < end`:
     every Part, except those of a Failed one that X never accepted, which cost nothing, less
-    those charged to a Top-up, refunded or disputed since or not.
+    those charged to a Top-up, refunded or disputed since or not, plus the live Parts of deleted
+    ones.
     """
     in_window = [
         ScheduledPost.user_id == user_id,
@@ -472,10 +506,22 @@ async def x_posts_used_between(
             )
         ).tuples()
     }
+    unscheduled = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(UnscheduledLiveParts.x_posts), 0),
+                func.coalesce(func.sum(UnscheduledLiveParts.link_x_posts), 0),
+            ).where(
+                UnscheduledLiveParts.user_id == user_id,
+                UnscheduledLiveParts.publish_at >= start,
+                UnscheduledLiveParts.publish_at < end,
+            )
+        )
+    ).one()
     counted = x_posts_in(list(parts.scalars()))
     return XPosts(
-        x_posts=counted.x_posts - charged.get("x_posts", 0),
-        link_x_posts=counted.link_x_posts - charged.get("link_x_posts", 0),
+        x_posts=counted.x_posts - charged.get("x_posts", 0) + unscheduled[0],
+        link_x_posts=counted.link_x_posts - charged.get("link_x_posts", 0) + unscheduled[1],
     )
 
 

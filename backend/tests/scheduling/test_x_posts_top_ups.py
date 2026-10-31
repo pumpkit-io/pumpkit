@@ -13,7 +13,7 @@ import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.billing.gateway import OneOffPrice, TopUpPurchase
 from pumpkit.core.config import settings
 from pumpkit.scheduling.publisher import run_pass
-from pumpkit.x_connection.x_publisher import XPostRejectedError
+from pumpkit.x_connection.x_publisher import XPostRejectedError, XRateLimitedError
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 USAGE = "/api/v1/usage"
@@ -168,6 +168,37 @@ async def test_parts_that_fail_without_x_accepting_them_give_their_x_posts_back(
     assert await _x_posts_left(client) == (0, [1])
 
 
+async def test_deleting_a_failed_thread_keeps_the_x_posts_x_accepted_counted_and_charged(
+    client, ready, post_with, fake_billing, fake_x_publisher
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _schedule(client, post_with, "2026-10-11T09:00:00Z", "Earlier")
+    post_id = await post_with(*["Part"] * 5)
+    await _post_now_failing(client, fake_x_publisher, post_id, on_part=5)
+    failed = (await client.get(f"/api/v1/posts/{post_id}")).json()["scheduled_post"]
+
+    response = await client.delete(f"{SCHEDULED_POSTS}/{failed['id']}")
+
+    assert response.status_code == 204
+    assert await _x_posts_left(client) == (0, [1])
+
+
+async def test_deleting_a_thread_waiting_to_retry_keeps_its_live_parts_counted(
+    client, ready, post_with, fake_billing, fake_x_publisher
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    fake_x_publisher.fail_publish = XRateLimitedError()
+    fake_x_publisher.fail_publish_on = 4
+    response = await client.post(
+        SCHEDULED_POSTS, json={"post_id": await post_with(*["Part"] * 5), "publish_now": True}
+    )
+    assert response.json()["state"] == "scheduled", response.text
+
+    await client.delete(f"{SCHEDULED_POSTS}/{response.json()['id']}")
+
+    assert await _x_posts_left(client) == (1, [2])
+
+
 async def test_a_post_that_fails_before_x_accepts_anything_gives_back_every_x_post(
     client, ready, post_with, fake_billing, fake_x_publisher
 ):
@@ -272,6 +303,20 @@ async def test_link_posts_beyond_the_allowance_are_charged_to_a_top_up(
     assert [top_up["link_x_posts_left"] for top_up in usage["top_ups"]] == [0]
 
 
+async def test_a_top_up_bought_after_a_post_published_pays_nothing_for_it(
+    client, ready, post_with, fake_billing, fake_x_publisher, monkeypatch
+):
+    await _post_now_failing(client, fake_x_publisher, await post_with(*["Part"] * 4), on_part=4)
+    later = (await _schedule(client, post_with, "2026-10-12T09:00:00Z", "Waiting")).json()
+    # An Operator lowers the cap, so the Failed thread's 3 live Parts are over the Allowance.
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 10, 13))
+
+    await client.delete(f"{SCHEDULED_POSTS}/{later['id']}")
+
+    assert await _x_posts_left(client) == (0, [1])
+
+
 @pytest.fixture
 async def later_post_on_a_top_up(client, ready, post_with, fake_billing):
     """A Thread using the whole Allowance from 11 October, then a post on 12 October on a Top-up."""
@@ -355,6 +400,38 @@ async def test_an_edit_that_would_push_a_later_post_onto_an_expired_top_up_is_re
 
     assert response.status_code == 409
     assert await _x_posts_left(client) == (0, [2])
+
+
+async def test_a_period_already_over_its_allowance_accepts_a_move_needing_no_more_room(
+    client, ready, post_with, monkeypatch
+):
+    thread = (await _schedule(client, post_with, "2026-10-11T09:00:00Z", *["Part"] * 4)).json()
+    # An Operator lowers the cap, so the period is over its Allowance.
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{thread['id']}", json={"publish_at": "2026-10-12T09:00:00Z"}
+    )
+
+    assert response.status_code == 200
+
+
+async def test_moving_a_post_into_an_earlier_period_may_not_starve_the_later_one_of_top_ups(
+    client, ready, post_with, fake_billing
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _buy_top_up(client, fake_billing, "cs_2", _utc(2026, 10, 4))
+    await _schedule(client, post_with, "2026-10-11T09:00:00Z", *["Part"] * 4)
+    mover = (await _schedule(client, post_with, "2026-10-15T09:00:00Z", "Mover")).json()
+    await _schedule(client, post_with, "2026-10-16T09:00:00Z", *["Part"] * 5)
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{mover['id']}",
+        json={"publish_at": "2026-10-12T09:00:00Z", "parts": ["Mover"] * 4},
+    )
+
+    assert response.status_code == 409
+    assert (response.json()["needed"], response.json()["left"]) == (4, 3)
 
 
 async def _refund(client, fake_billing, session_id: str, paid_at: datetime) -> None:

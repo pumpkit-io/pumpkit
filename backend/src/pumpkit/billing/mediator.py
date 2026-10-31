@@ -162,17 +162,17 @@ async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, use
 
 
 def _require_terms_acceptance(
-    checkout_request: TermsAcceptanceRequest, refusal: str = "Accept the Terms to subscribe."
+    acceptance: TermsAcceptanceRequest, refusal: str = "Accept the Terms to subscribe."
 ) -> None:
     """Raise unless the request ticks every box for the current Terms version."""
     if not (
-        checkout_request.accepted_terms
-        and checkout_request.requested_immediate_start
-        and checkout_request.approved_specific_clauses
-        and checkout_request.terms_version
+        acceptance.accepted_terms
+        and acceptance.requested_immediate_start
+        and acceptance.approved_specific_clauses
+        and acceptance.terms_version
     ):
         raise RefusedError(refusal)
-    if checkout_request.terms_version != TERMS_VERSION:
+    if acceptance.terms_version != TERMS_VERSION:
         raise ConflictError(
             "The Terms have changed. Please review the current Terms and accept them again."
         )

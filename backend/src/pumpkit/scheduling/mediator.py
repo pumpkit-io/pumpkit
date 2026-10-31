@@ -464,15 +464,22 @@ async def _destination_after_edit(
     return Destination(community=community, share_with_followers=share_with_followers)
 
 
-async def cancel_scheduled_post(db: AsyncSession, user: User, scheduled_post_id: str) -> str:
+async def cancel_scheduled_post(
+    db: AsyncSession, user: User, scheduled_post_id: str, now: datetime
+) -> str:
     """
-    Delete a scheduled or Failed Scheduled post, which makes its Post a Draft again. Returns the
-    Post's id.
+    Delete a scheduled or Failed Scheduled post, which makes its Post a Draft again. Its live
+    Parts keep counting as X posts, with what they took from Top-ups. Returns the Post's id.
     """
     await users_service.lock_user_id(db, user_id=user.id)
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     post_id = scheduled_post.post_id
     publish_at = as_utc(scheduled_post.publish_at)
+    if any(part.x_post_id for part in scheduled_post.parts):
+        if not await top_up_charges.keep_live_parts_counted(
+            db, user_id=user.id, scheduled_post_id=scheduled_post_id, publish_at=publish_at, now=now
+        ):
+            raise _publishing_started()
     # Postgres cascades this from the delete; SQLite skips foreign keys without a pragma.
     await billing_service.give_back_charges(db, scheduled_post_id=scheduled_post_id)
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):

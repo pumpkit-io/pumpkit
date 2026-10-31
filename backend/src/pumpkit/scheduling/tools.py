@@ -227,7 +227,7 @@ async def delete_scheduled_post(
     again: it takes feedback and can be scheduled anew. It can't be undone.
     """
     post_id = await mediator.cancel_scheduled_post(
-        db=call.db, user=call.user, scheduled_post_id=scheduled_post_id
+        db=call.db, user=call.user, scheduled_post_id=scheduled_post_id, now=call.now
     )
     return PostMessageToolResponse(
         message="The scheduled post is deleted.", post_url=post_url(post_id)

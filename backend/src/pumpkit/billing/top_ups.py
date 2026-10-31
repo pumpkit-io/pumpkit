@@ -18,6 +18,7 @@ class TopUpBalance:
     """
 
     id: str
+    purchased_at: datetime
     expires_at: datetime
     generations: Optional[int]
     x_posts: Optional[int]
@@ -85,7 +86,7 @@ def cover_in_order(
 ) -> tuple[list[Covered], list[TopUpBalance]]:
     """
     Pay for `needs`, in order, from the Allowance with `used` of `limit` gone, then each from the
-    Top-ups unexpired at its moment, and return how each is paid and what the Top-ups have left.
+    Top-ups already bought and unexpired at its moment, and return how each is paid and what the Top-ups have left.
     What nothing covers stays on the Allowance, over its limit.
     """
     left = list(balances)
@@ -93,7 +94,9 @@ def cover_in_order(
     for need in needs:
         short = shortfall(limit=limit, used=used, needed=need.quantity)
         charges = allocate(
-            [b for b in left if b.expires_at > need.moment], count=count, quantity=short
+            [b for b in left if b.purchased_at <= need.moment < b.expires_at],
+            count=count,
+            quantity=short,
         )
         taken = dict(charges)
         left = [

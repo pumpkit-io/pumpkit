@@ -42,7 +42,7 @@ Ask Claude Code to write a Post from an idea, then ask for changes in plain word
 
 `restore_version` allows 10 calls a minute. Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code show up on the web app's Posts page like any other.
 
-On an Instance that sells Plans, each Post started and each Feedback uses one generation of your allowance, wherever you write it, and a failed attempt none. Pumpkit's instructions tell Claude Code so, and that `get_usage` says what is left, so it writes a new Version only when you ask for one.
+On an Instance that sells Plans, each post you start and each round of feedback uses one generation of your allowance, wherever you write it, and a failed attempt none. Pumpkit's instructions tell Claude Code so, and that `get_usage` says what is left, so it writes a new version only when you ask for one.
 
 ## Scheduled post and link tools
 

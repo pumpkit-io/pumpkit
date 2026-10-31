@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import delete, exists, func, or_, select
+from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -287,6 +287,7 @@ async def top_up_balances(
     return [
         TopUpBalance(
             id=t.id,
+            purchased_at=as_utc(t.purchased_at),
             expires_at=as_utc(t.expires_at),
             generations=_pack_left(t.generations, charged.get((t.id, "generations"), 0)),
             x_posts=_pack_left(t.x_posts, charged.get((t.id, "x_posts"), 0)),
@@ -397,6 +398,29 @@ async def give_back_charges(
         )
     await db.execute(query.execution_options(synchronize_session=False))
     await db.flush()
+
+
+async def keep_charges_after_delete(
+    db: AsyncSession, *, scheduled_post_id: str
+) -> dict[AllowanceCount, int]:
+    """
+    Detach the Scheduled post's charges from it, by count, so they stay spent once it is deleted.
+    Flushes.
+    """
+    charged = await db.execute(
+        select(TopUpCharge.count, func.sum(TopUpCharge.quantity))
+        .where(TopUpCharge.scheduled_post_id == scheduled_post_id)
+        .group_by(TopUpCharge.count)
+    )
+    paid: dict[AllowanceCount, int] = {count: quantity for count, quantity in charged.tuples()}
+    await db.execute(
+        update(TopUpCharge)
+        .where(TopUpCharge.scheduled_post_id == scheduled_post_id)
+        .values(scheduled_post_id=None)
+        .execution_options(synchronize_session=False)
+    )
+    await db.flush()
+    return paid
 
 
 async def charges_on_removed(

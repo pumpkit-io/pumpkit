@@ -13,18 +13,14 @@ import { formatPrice } from '@/lib/money';
 import { redirectTo } from '@/lib/navigation';
 import { errorMessage } from '@/services/apiErrors';
 import { billingService, type TermsAcceptance, type TopUpOffer } from '@/services/billingService';
+import { generationsAndXPosts } from './counts';
 import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
 import { TermsAcceptanceFields } from './TermsAcceptanceFields';
 import { useLoadedBilling } from './useBilling';
 
 /** What a Top-up adds: "250 generations and 50 X posts, up to 5 with a link", leaving out a count with no cap. */
 function packLine({ generations, xPosts, linkXPosts }: TopUpOffer): string {
-  const counts = [
-    generations !== null && `${generations} generations`,
-    xPosts !== null && `${xPosts} X posts`,
-  ]
-    .filter(Boolean)
-    .join(' and ');
+  const counts = generationsAndXPosts(generations, xPosts);
   const links = xPosts === null || linkXPosts === null ? '' : `, up to ${linkXPosts} with a link`;
   return `${counts}${links}`;
 }

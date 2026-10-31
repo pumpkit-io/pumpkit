@@ -205,9 +205,10 @@ async def cancel_scheduled_post(
     scheduled_post_id: str,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
 ) -> None:
     await mediator.cancel_scheduled_post(
-        db=db, user=current_user, scheduled_post_id=scheduled_post_id
+        db=db, user=current_user, scheduled_post_id=scheduled_post_id, now=clock()
     )
 
 

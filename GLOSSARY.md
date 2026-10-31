@@ -81,8 +81,12 @@ The free, card-backed opening period of a User's first Subscription. Each User g
 _Avoid_: free tier, cardless trial
 
 **Allowance**:
-How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may contain a link. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans give the same Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
+How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may be Link posts. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans give the same Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
 _Avoid_: quota, usage limit, credits, cap (in text users read; setting names and code may say cap)
+
+**Link post**:
+An X post whose text contains a link, by the rule X uses to spot links when it counts a post's length. It counts against both the X posts and the Link posts of an Allowance or a Top-up.
+_Avoid_: URL post, linked tweet, link X post
 
 **Generation**:
 One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: starting a Post is one, and so is each Feedback. A writing attempt that fails is not a Generation.

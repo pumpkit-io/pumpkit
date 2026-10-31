@@ -7,6 +7,7 @@ import { ProfileCard } from '@/features/account/ProfileCard';
 import { ApiKeysSection } from '@/features/apiKeys/ApiKeysSection';
 import { ChoosePlanCard } from '@/features/billing/ChoosePlanCard';
 import { CHOOSE_PLAN_ID } from '@/features/billing/choosePlan';
+import { generationsAndXPosts } from '@/features/billing/counts';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
 import { UsageCard } from '@/features/billing/UsageCard';
 import { useBilling } from '@/features/billing/useBilling';
@@ -78,7 +79,8 @@ function useTopUpAddedToast(topUpBought: boolean, offer: TopUpOffer | null | und
   useEffect(() => {
     if (!topUpBought || !offer || toasted.current) return;
     toasted.current = true;
-    showToast(`Top-up added: ${offer.generations} generations and ${offer.xPosts} X posts.`);
+    const counts = generationsAndXPosts(offer.generations, offer.xPosts);
+    showToast(counts ? `Top-up added: ${counts}.` : 'Top-up added.');
   }, [topUpBought, offer]);
 }
 

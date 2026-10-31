@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { AllowanceUsage, TopUpUsage, UsageCount } from '@/services/usageService';
 import { AllowanceInfo, type AllowanceTopic } from './AllowanceInfo';
 import { BuyTopUpButton } from './BuyTopUp';
+import { generationsAndXPosts } from './counts';
 import { SubscribeNowButton } from './SubscribeNow';
 import { allowanceDay, isLow, resetsLine } from './usage';
 import { useUsage } from './useUsage';
@@ -73,16 +74,6 @@ function CountLeft({
   );
 }
 
-/** "250 generations and 50 X posts", leaving out a count with no cap. */
-function countsLeft({ generationsLeft, xPostsLeft }: TopUpUsage): string {
-  return [
-    generationsLeft !== null && `${generationsLeft} generations`,
-    xPostsLeft !== null && `${xPostsLeft} X posts`,
-  ]
-    .filter(Boolean)
-    .join(' and ');
-}
-
 /** What each Top-up has left, first to expire first; nothing while none has anything left. */
 function TopUpsLeft({ topUps }: { topUps: TopUpUsage[] }) {
   if (topUps.length === 0) return null;
@@ -90,7 +81,7 @@ function TopUpsLeft({ topUps }: { topUps: TopUpUsage[] }) {
     <ul aria-label="Top-ups" className="space-y-1 font-sans text-sm text-foreground">
       {topUps.map((topUp) => (
         <li key={topUp.expiresAt.toISOString()}>
-          Top-up: {countsLeft(topUp)} left, until{' '}
+          Top-up: {generationsAndXPosts(topUp.generationsLeft, topUp.xPostsLeft)} left, until{' '}
           {allowanceDay(topUp.expiresAt, { withYear: true })}
         </li>
       ))}
