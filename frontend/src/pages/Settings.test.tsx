@@ -595,6 +595,16 @@ describe('Settings', () => {
     });
   });
 
+  describe('On an Instance without X', () => {
+    it('shows no X account card and no way to connect X', async () => {
+      renderSettings({ instance: { ...SELLS_PLANS, x_connection: false } });
+
+      await card('Profile');
+      expect(screen.queryByRole('region', { name: 'X account' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('API keys', () => {
     it('creates a key, shows its secret once, and revokes it', async () => {
       vi.mocked(apiKeyService.create).mockResolvedValue({

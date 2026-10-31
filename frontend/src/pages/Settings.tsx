@@ -53,7 +53,7 @@ function useBillingOnArrival() {
 /** Rendered inside AppLayout: the User's account as one column of cards. */
 export function Settings() {
   const { logout } = useAuth();
-  const { sells_plans } = useInstance();
+  const { sells_plans, x_connection } = useInstance();
   const billing = useBilling();
   const arrival = useArrivalState();
   useBillingOnArrival();
@@ -79,8 +79,12 @@ export function Settings() {
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-8 sm:px-6">
           <ProfileCard />
-          <XAccountCard notice={arrival.xConnectionNotice ?? null} />
-          <XPhotoOfferDialog />
+          {x_connection && (
+            <>
+              <XAccountCard notice={arrival.xConnectionNotice ?? null} />
+              <XPhotoOfferDialog />
+            </>
+          )}
           {sells_plans && (
             <SubscriptionCard
               data={billing.data}

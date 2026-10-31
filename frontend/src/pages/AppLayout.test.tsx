@@ -301,6 +301,16 @@ describe('The signed-in shell', () => {
       );
     });
 
+    it('stays away on an Instance without X, where reconnecting cannot work', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(NEEDS_RECONNECT);
+      renderSignedIn('/new', { instance: { ...SELLS_PLANS, x_connection: false } });
+
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: /^Your account/ })).toHaveAccessibleName(/@ada/),
+      );
+      expect(screen.queryByRole('region', { name: 'Reconnect X' })).not.toBeInTheDocument();
+    });
+
     it('stays away while X accepts the X connection', async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({
         ...NEEDS_RECONNECT,

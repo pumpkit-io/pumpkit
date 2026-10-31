@@ -1,33 +1,36 @@
 import { Check } from 'lucide-react';
 import { useInstance } from '@/features/instance/useInstance';
+import type { Instance } from '@/lib/instance';
 import { cn } from '@/lib/utils';
-
-type StepKey = 'paywall' | 'x_connection' | 'persona';
+import type { NextStep } from '@/services/onboardingService';
 
 interface Step {
-  key: StepKey;
+  key: NextStep;
   label: string;
 }
 
-/** The steps before Pumpkit opens, leaving out the Paywall where the Instance sells no Plans. */
-function stepsFor(sellsPlans: boolean): Step[] {
+/** The steps before Pumpkit opens, leaving out each one the Instance has no provider for. */
+function stepsFor(instance: Instance): Step[] {
   const steps: Step[] = [
     { key: 'paywall', label: 'Plan' },
     { key: 'x_connection', label: 'Connect X' },
     { key: 'persona', label: 'Persona' },
   ];
-  return sellsPlans ? steps : steps.filter((step) => step.key !== 'paywall');
+  return steps.filter(
+    (step) =>
+      (step.key !== 'paywall' || instance.sells_plans) &&
+      (step.key !== 'x_connection' || instance.x_connection),
+  );
 }
 
 /** Numbered, since the steps are a sequence: done ones show a check, the current one the accent. */
-export function StepIndicator({ current }: { current: StepKey }) {
-  const { sells_plans } = useInstance();
-  const steps = stepsFor(sells_plans);
+export function StepIndicator({ current }: { current: NextStep }) {
+  const steps = stepsFor(useInstance());
   const at = steps.findIndex((step) => step.key === current);
 
   return (
     <nav aria-label="Steps" className="min-w-0">
-      <p className="font-sans text-xs text-muted-foreground sm:hidden">
+      <p className="whitespace-nowrap font-sans text-xs text-muted-foreground sm:hidden">
         Step {at + 1} of {steps.length}
         <span className="text-foreground"> {steps[at]?.label}</span>
       </p>

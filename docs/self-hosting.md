@@ -235,8 +235,8 @@ Lets Users connect their X account, then schedule their Posts or post them now (
 - Get credentials: in the [X developer portal](https://developer.x.com/en/portal/dashboard), create an app and set up its user authentication: OAuth 2.0, app type **Web App, Automated App or Bot** (a confidential client), permissions **Read and write**. Register this callback URL: `PUBLIC_URL/oauth/x/callback` (for example `https://pumpkit.example.org/oauth/x/callback`), and use `PUBLIC_URL` as the website URL. Copy the OAuth 2.0 client ID and client secret.
 - Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `X_POSTS_MONTHLY_CAP` (default 100 X posts per User per month, each Part of a Thread counting as one) bounds what each User can cost you; set it empty for no cap.
 - Settings: `X_CLIENT_ID` and `X_CLIENT_SECRET`.
-- Without it: connecting an X account fails, so nobody can schedule or publish to X. Writing Posts still works; Users copy a Version's text instead.
-- **Check:** on the **Posts** page, connecting X sends you to X to authorise the app and back to the Posts page, connected.
+- Without it: Onboarding skips its Connect X step and the web app offers no way to connect X, so nobody can schedule or publish to X. Writing Posts still works; Users copy a Version's text instead.
+- **Check:** `curl -s PUBLIC_URL/api/v1/instance` shows `"x_connection":true`, and Onboarding's **Connect X** sends you to X to authorise the app and back to Pumpkit, connected.
 
 ### Stripe billing
 

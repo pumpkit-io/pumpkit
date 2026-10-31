@@ -344,6 +344,13 @@ def sells_no_plans(monkeypatch) -> None:
 
 
 @pytest.fixture
+def x_configured(monkeypatch) -> None:
+    """Set X's app keys, which the test environment leaves unset, so Users can connect X."""
+    monkeypatch.setattr(settings, "X_CLIENT_ID", "x-client-id")
+    monkeypatch.setattr(settings, "X_CLIENT_SECRET", "x-client-secret")
+
+
+@pytest.fixture
 def no_operator_details(monkeypatch) -> None:
     """Unset the Operator details group, so the Instance has no legal pages or Terms."""
     monkeypatch.setattr(settings, "OPERATOR_NAME", None)

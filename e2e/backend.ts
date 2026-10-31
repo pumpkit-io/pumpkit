@@ -22,8 +22,8 @@ function sameOrigin(url: string | undefined, other: string): boolean {
   }
 }
 
-/** Runs one of `seed/`'s Python scripts inside the dev stack's backend container. */
-export function runSeedScript(name: string): string {
+/** Runs one of `seed/`'s Python scripts inside the dev stack's backend container, with `args`. */
+export function runSeedScript(name: string, args: string[] = []): string {
   return execFileSync(
     'docker',
     [
@@ -36,6 +36,7 @@ export function runSeedScript(name: string): string {
       'backend',
       'python',
       '-',
+      ...args,
     ],
     {
       cwd: REPO_ROOT,

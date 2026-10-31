@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import { runSeedScript } from '../backend';
 
 test('Settings offers to connect X', async ({ page }) => {
+  const instance = await (await page.request.get('/api/v1/instance')).json();
+  test.skip(!instance.x_connection, 'The stack has no X keys, so Settings has no X account card.');
   await page.goto('/settings');
 
   const xAccount = page.getByRole('region', { name: 'X account' });
