@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { track } from '@/lib/analytics';
 import { formatAmount } from '@/lib/money';
-import { errorMessage } from '@/services/apiErrors';
+import { errorMessage, errorPaymentAuthenticationUrl } from '@/services/apiErrors';
 import { billingService, type Plan } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
 import { generationsAndXPosts } from './counts';
@@ -49,10 +49,12 @@ function SubscribeNowDialog({
   const { data, loadError, load } = useLoadedBilling(open);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authenticationUrl, setAuthenticationUrl] = useState<string | null>(null);
 
   const confirm = async () => {
     setBusy(true);
     setError(null);
+    setAuthenticationUrl(null);
     try {
       await billingService.subscribeNow();
       track('billing_subscribe_now_confirmed');
@@ -61,6 +63,7 @@ function SubscribeNowDialog({
       onSubscribed?.();
     } catch (e) {
       setError(errorMessage(e, "Couldn't subscribe. Try again."));
+      setAuthenticationUrl(errorPaymentAuthenticationUrl(e));
     } finally {
       setBusy(false);
       // A failed charge still ends the Trial, so the Subscription changed either way.
@@ -72,7 +75,10 @@ function SubscribeNowDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setError(null);
+        if (!next) {
+          setError(null);
+          setAuthenticationUrl(null);
+        }
         onOpenChange(next);
       }}
     >
@@ -92,11 +98,19 @@ function SubscribeNowDialog({
         )}
         <DialogFooter className="justify-end gap-2">
           <Button variant="outline" className="h-10" onClick={() => onOpenChange(false)}>
-            Cancel
+            {authenticationUrl ? 'Close' : 'Cancel'}
           </Button>
-          <Button className="h-10" disabled={!data || busy} onClick={() => void confirm()}>
-            Subscribe now
-          </Button>
+          {authenticationUrl ? (
+            <Button asChild className="h-10">
+              <a href={authenticationUrl} target="_blank" rel="noreferrer">
+                Confirm payment
+              </a>
+            </Button>
+          ) : (
+            <Button className="h-10" disabled={!data || busy} onClick={() => void confirm()}>
+              Subscribe now
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

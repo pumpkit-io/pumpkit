@@ -840,6 +840,43 @@ describe('Settings', () => {
         expect(track).not.toHaveBeenCalledWith('billing_subscribe_now_confirmed');
       });
 
+      it('links the invoice page when the first charge waits on the bank', async () => {
+        vi.mocked(billingService.subscribeNow).mockRejectedValue(
+          apiError(
+            402,
+            'Your trial has ended, but your bank needs you to confirm the first payment. Confirm it on the invoice page.',
+            { code: 'PAYMENT_NEEDS_AUTHENTICATION', url: 'https://invoice.stripe.test/i/in_1' },
+          ),
+        );
+        const dialog = await openDialog();
+
+        fireEvent.click(await dialog.findByRole('button', { name: 'Subscribe now' }));
+
+        const confirm = await dialog.findByRole('link', { name: 'Confirm payment' });
+        expect(confirm).toHaveAttribute('href', 'https://invoice.stripe.test/i/in_1');
+        expect(confirm).toHaveAttribute('target', '_blank');
+        expect(
+          dialog.getByText(
+            'Your trial has ended, but your bank needs you to confirm the first payment. Confirm it on the invoice page.',
+          ),
+        ).toBeInTheDocument();
+        expect(dialog.queryByRole('button', { name: 'Subscribe now' })).not.toBeInTheDocument();
+      });
+
+      it('links no invoice page when the first charge is declined', async () => {
+        vi.mocked(billingService.subscribeNow).mockRejectedValue(
+          apiError(402, "Your trial has ended, but the first payment didn't go through.", {
+            url: 'http://localhost:5173/billing',
+          }),
+        );
+        const dialog = await openDialog();
+
+        fireEvent.click(await dialog.findByRole('button', { name: 'Subscribe now' }));
+
+        await dialog.findByText("Your trial has ended, but the first payment didn't go through.");
+        expect(dialog.queryByRole('link', { name: 'Confirm payment' })).not.toBeInTheDocument();
+      });
+
       it('closes on Cancel without subscribing', async () => {
         const dialog = await openDialog();
 

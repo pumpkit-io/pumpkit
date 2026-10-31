@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -301,15 +301,27 @@ class FirstChargeFailed(RefusalError):
     status_code = 402
 
 
+class FirstChargeNeedsAuthentication(FirstChargeFailed):
+    """The first charge waits for the User to authenticate it on the provider's `url`."""
+
+    def __init__(self, detail: str, *, url: str) -> None:
+        super().__init__(detail)
+        self.url = url
+
+    def response_body(self) -> dict[str, Any]:
+        return {"detail": self.detail, "code": "PAYMENT_NEEDS_AUTHENTICATION", "url": self.url}
+
+
 async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -> BillingMeResponse:
     """
     End the User's Trial now, so the provider charges the first period and the paid Allowance
     starts at once. The Terms accepted at Checkout already cover it (ADR 0010).
 
     The sync from Stripe runs first (ADR 0004), so a Trial that already ended there is a 409, as is
-    a User with no trialing Subscription. The User's row stays locked across both provider calls.
-    A charge that failed, or that waits for the User to authenticate it, leaves the Subscription
-    as Stripe reports it (past due keeps access) and is a 402 that covers both.
+    a User with no trialing Subscription. Each sync holds the User's row lock, but ending the Trial
+    doesn't: the gateway ends a Trial once however often two requests ask. A charge that failed, or
+    that waits for the User to authenticate it, leaves the Subscription as Stripe reports it (past
+    due keeps access) and is a 402, which links the page to authenticate on when that is the cause.
     """
     if not user.stripe_customer_id:
         raise _not_trialing()
@@ -317,21 +329,30 @@ async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -
     await users_service.lock_user(db, user)
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     subscription = await service.get_user_subscription(db, user_id=user.id)
+    # Committing ends the lock before the provider call, and keeps the sync when a 409 follows.
+    await db.commit()
     if subscription is None or subscription.status != "trialing":
-        # Commit before raising, or the 409 rolls back the sync of what Stripe just said.
-        await db.commit()
         raise _not_trialing()
 
-    await gateway.end_trial(subscription_id=subscription.stripe_subscription_id)
+    authentication_url = await gateway.end_trial(
+        subscription_id=subscription.stripe_subscription_id
+    )
+    await users_service.lock_user(db, user)
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     await db.commit()
-    if subscription.status != "active":
-        raise FirstChargeFailed(
-            "Your trial has ended, but the first payment didn't go through. "
-            "Open billing to complete or update your payment.",
-            fix_page=BILLING_PAGE,
+    if subscription.status == "active":
+        return await get_billing_me(db, user)
+    if authentication_url is not None:
+        raise FirstChargeNeedsAuthentication(
+            "Your trial has ended, but your bank needs you to confirm the first payment. "
+            "Confirm it on the invoice page.",
+            url=authentication_url,
         )
-    return await get_billing_me(db, user)
+    raise FirstChargeFailed(
+        "Your trial has ended, but the first payment didn't go through. "
+        "Open billing to complete or update your payment.",
+        fix_page=BILLING_PAGE,
+    )
 
 
 def _not_trialing() -> ConflictError:
