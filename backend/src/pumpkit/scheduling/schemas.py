@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format, part_name
 from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
@@ -256,9 +257,12 @@ class AllowanceUsageResponse(BaseModel):
     trial: bool
     # When the period ends: the next reset, or the Trial's end.
     resets_at: datetime
+    generations: UsageCountResponse
     x_posts: UsageCountResponse
     # Of the X posts, those containing a link.
     link_x_posts: UsageCountResponse
+    # What the User can do at a limit before the period resets; None when nothing.
+    way_out: Optional[WayOut]
 
 
 class UsageResponse(BaseModel):

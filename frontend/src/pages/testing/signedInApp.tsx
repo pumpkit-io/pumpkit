@@ -8,6 +8,7 @@ import type { Instance } from '@/lib/instance';
 import type { BillingMe } from '@/services/billingService';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import type { PostsPage } from '@/services/postService';
+import type { AllowanceUsage, Usage } from '@/services/usageService';
 import { AppLayout } from '../AppLayout';
 import { signedInRoutes } from '../signedInRoutes';
 
@@ -109,6 +110,21 @@ export function allowanceUsedUp(
     way_out: null,
     ...fields,
   });
+}
+
+/** `usageService.get`'s answer for a paid-up User well within their Allowance, with `changes`. */
+export function usageWith(changes: Partial<AllowanceUsage> = {}): Usage {
+  return {
+    allowance: {
+      trial: false,
+      resetsAt: new Date('2026-11-14T09:00:00Z'),
+      generations: { limit: 500, used: 118, left: 382 },
+      xPosts: { limit: 100, used: 39, left: 61 },
+      linkXPosts: { limit: 10, used: 2, left: 8 },
+      wayOut: null,
+      ...changes,
+    },
+  };
 }
 
 /** `postService.list`'s answer for a User with no Posts. */

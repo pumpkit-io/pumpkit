@@ -112,6 +112,7 @@ import {
   allowanceUsedUp,
   apiError,
   renderSignedIn,
+  usageWith,
 } from './testing/signedInApp';
 
 const CONNECTED: XConnection = {
@@ -1290,6 +1291,34 @@ describe('Post page', () => {
       expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'generations' });
     });
 
+    it('says how many generations are left under Send feedback once less than 10% is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ generations: { limit: 500, used: 457, left: 43 } }),
+      );
+      renderPost(postWith('the first final'));
+      await textCard();
+
+      expect(
+        await panel('Draft').findByText('43 generations left until 14 November'),
+      ).toBeInTheDocument();
+    });
+
+    it('counts the generation a Feedback used in the low warning', async () => {
+      vi.mocked(usageService.get)
+        .mockResolvedValueOnce(usageWith({ generations: { limit: 500, used: 457, left: 43 } }))
+        .mockResolvedValue(usageWith({ generations: { limit: 500, used: 458, left: 42 } }));
+      vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['shorter']));
+      renderPost(postWith('the first final'));
+      await textCard();
+      await panel('Draft').findByText('43 generations left until 14 November');
+
+      await sendFeedback('make it shorter');
+
+      expect(
+        await panel('Draft').findByText('42 generations left until 14 November'),
+      ).toBeInTheDocument();
+    });
+
     it('shows a length counter only near the Feedback limit, and refuses Feedback over it', async () => {
       renderPost(postWith('the first final'));
       await textCard();
@@ -1922,14 +1951,7 @@ describe('Post page', () => {
     });
 
     function usageWithLinkPostsLeft(left: number): Usage {
-      return {
-        allowance: {
-          trial: false,
-          resetsAt: new Date('2026-11-14T09:00:00Z'),
-          xPosts: { limit: 100, used: 39, left: 61 },
-          linkXPosts: { limit: 10, used: 10 - left, left },
-        },
-      };
+      return usageWith({ linkXPosts: { limit: 10, used: 10 - left, left } });
     }
 
     it('says when the text contains a link and how many link posts are left', async () => {
@@ -1958,6 +1980,15 @@ describe('Post page', () => {
       await vi.waitFor(() => expect(usageService.get).toHaveBeenCalled());
 
       expect(plain.queryByText(/Contains a link/)).not.toBeInTheDocument();
+    });
+
+    it('says how many X posts are left once less than 10% is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ xPosts: { limit: 100, used: 95, left: 5 } }),
+      );
+      const dialog = await openPostTo(postWith('No link in this one.'));
+
+      expect(await dialog.findByText('5 X posts left until 14 November')).toBeInTheDocument();
     });
 
     it('says nothing about links on an Instance without allowances', async () => {

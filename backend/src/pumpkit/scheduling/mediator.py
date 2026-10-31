@@ -223,12 +223,17 @@ async def get_usage(db: AsyncSession, user: User, now: datetime) -> UsageRespons
     used = await service.x_posts_used_between(
         db, user_id=user.id, start=period.start, end=period.end
     )
+    generations = await posts_service.count_versions_between(
+        db, user_id=user.id, start=period.start, end=period.end
+    )
     return UsageResponse(
         allowance=AllowanceUsageResponse(
             trial=period.trial,
             resets_at=period.end,
+            generations=_usage_count(allowance.generations, generations),
             x_posts=_usage_count(allowance.x_posts, used.x_posts),
             link_x_posts=_usage_count(allowance.link_x_posts, used.link_x_posts),
+            way_out=allowance.way_out,
         )
     )
 

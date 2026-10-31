@@ -58,6 +58,7 @@ vi.mock('@/services/scheduledPostService', () => ({
     lookUpCommunity: vi.fn(),
   },
 }));
+vi.mock('@/services/usageService', () => ({ usageService: { get: vi.fn() } }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
@@ -72,6 +73,7 @@ import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { postService, type PostDetail } from '@/services/postService';
+import { usageService } from '@/services/usageService';
 import { xConnectionService } from '@/services/xConnectionService';
 import {
   LEVELSIO,
@@ -82,6 +84,7 @@ import {
   allowanceUsedUp,
   apiError,
   renderSignedIn,
+  usageWith,
 } from './testing/signedInApp';
 
 function currentPath() {
@@ -160,6 +163,7 @@ describe('New post', () => {
     vi.mocked(postService.get).mockReset().mockResolvedValue(postWith('the final text'));
     vi.mocked(postService.addVersion).mockReset();
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
     vi.mocked(track).mockClear();
   });
 
@@ -502,6 +506,25 @@ describe('New post', () => {
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
       expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'generations' });
       expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
+    it('says how many generations are left once less than 10% is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ generations: { limit: 500, used: 457, left: 43 } }),
+      );
+      const area = await readyToWrite();
+
+      expect(await area.findByText('43 generations left until 14 November')).toBeInTheDocument();
+    });
+
+    it('says nothing about generations while 10% or more is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ generations: { limit: 500, used: 450, left: 50 } }),
+      );
+      const area = await readyToWrite();
+      await waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(area.queryByText(/generations left/)).not.toBeInTheDocument();
     });
 
     it('offers to update the payment method to a User behind on payment at the limit', async () => {

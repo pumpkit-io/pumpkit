@@ -43,6 +43,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     }),
   },
 }));
+vi.mock('@/services/usageService', () => ({ usageService: { get: vi.fn() } }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
@@ -60,12 +61,19 @@ import type { Instance } from '@/lib/instance';
 import { redirectTo } from '@/lib/navigation';
 import { apiKeyService } from '@/services/apiKeyService';
 import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
+import { usageService } from '@/services/usageService';
 import { userService, type UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { AppLayout } from './AppLayout';
 import { BillingSuccessRedirect } from './BillingRedirect';
 import { signedInRoutes } from './signedInRoutes';
-import { NOT_SUBSCRIBED, SUBSCRIBED, apiError, renderSignedIn } from './testing/signedInApp';
+import {
+  NOT_SUBSCRIBED,
+  SUBSCRIBED,
+  apiError,
+  renderSignedIn,
+  usageWith,
+} from './testing/signedInApp';
 
 const ADA: UserProfile = {
   id: 'user_01HZX',
@@ -141,6 +149,13 @@ const ACCEPTANCE_BOXES = [
 
 const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
 
+/** The element whose own text, across its children, reads `text`. */
+function reading(text: string) {
+  return (_: string, element: Element | null) =>
+    element?.textContent === text &&
+    Array.from(element.children).every((child) => child.textContent !== text);
+}
+
 function renderSettings(options: { state?: unknown; instance?: Instance } = {}) {
   return renderSignedIn('/settings', options);
 }
@@ -174,20 +189,22 @@ describe('Settings', () => {
     vi.mocked(xConnectionService.acceptPhoto).mockReset();
     vi.mocked(xConnectionService.declinePhoto).mockReset().mockResolvedValue();
     vi.mocked(apiKeyService.list).mockReset().mockResolvedValue([]);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue(usageWith());
     vi.mocked(redirectTo).mockReset();
     vi.mocked(fireSuccessConfetti).mockReset();
     vi.mocked(track).mockClear();
   });
 
-  it('shows Profile, X account, Plan, API keys and Appearance to a Subscribed User', async () => {
+  it('shows Profile, X account, Plan, Usage, API keys and Appearance to a Subscribed User', async () => {
     renderSettings();
 
-    await card('Plan');
+    await card('Usage');
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Profile',
       'X account',
       'Plan',
+      'Usage',
       'API keys',
       'Appearance',
     ]);
@@ -631,6 +648,150 @@ describe('Settings', () => {
     });
   });
 
+  describe('Usage', () => {
+    it('counts the generations, X posts and link posts left, and when they reset', async () => {
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      expect(await usageCard.findByText(reading('382 generations left'))).toBeInTheDocument();
+      expect(usageCard.getByText(reading('61 X posts left, 8 of them with a link'))).toBeVisible();
+      expect(usageCard.getByText('Resets on 14 November')).toBeInTheDocument();
+      expect(
+        usageCard.getByText("Unused generations and X posts don't carry over."),
+      ).toBeInTheDocument();
+      expect(usageCard.getByRole('meter', { name: 'Generations left' })).toHaveAttribute(
+        'aria-valuenow',
+        '382',
+      );
+      expect(usageCard.getByRole('meter', { name: 'X posts left' })).toHaveAttribute(
+        'aria-valuemax',
+        '100',
+      );
+    });
+
+    it('turns a bar to warning under 10% left and to destructive at 0', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          generations: { limit: 500, used: 457, left: 43 },
+          xPosts: { limit: 100, used: 100, left: 0 },
+          linkXPosts: { limit: 10, used: 10, left: 0 },
+        }),
+      );
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      const generations = await usageCard.findByRole('meter', { name: 'Generations left' });
+      const xPosts = usageCard.getByRole('meter', { name: 'X posts left' });
+      expect(generations.firstElementChild).toHaveClass('bg-warning');
+      expect(xPosts.firstElementChild).toHaveClass('bg-destructive');
+    });
+
+    it('fills a bar in the primary color while 10% or more is left', async () => {
+      renderSettings();
+
+      const meter = await (await card('Usage')).findByRole('meter', { name: 'Generations left' });
+      expect(meter.firstElementChild).toHaveClass('bg-primary');
+    });
+
+    it.each([
+      [
+        'What counts as a generation',
+        'Every prompt to generate or refine a post counts as one generation.',
+      ],
+      [
+        'What counts as an X post',
+        'Scheduled posts and posts you post now both count. For threads, each post in the thread counts.',
+      ],
+    ])('opens "%s" from its info button', async (button, explanation) => {
+      renderSettings();
+
+      fireEvent.click(await (await card('Usage')).findByRole('button', { name: button }));
+
+      expect(await screen.findByText(explanation)).toBeInTheDocument();
+    });
+
+    it("counts a trial's allowance and says when the trial ends", async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('trialing', true));
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          trial: true,
+          resetsAt: new Date('2026-11-07T09:00:00Z'),
+          generations: { limit: 125, used: 27, left: 98 },
+          xPosts: { limit: 25, used: 5, left: 20 },
+          linkXPosts: { limit: 2, used: 0, left: 2 },
+          wayOut: 'subscribe_now',
+        }),
+      );
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      expect(
+        await usageCard.findByText(reading('98 of 125 generations left in your trial')),
+      ).toBeInTheDocument();
+      expect(
+        usageCard.getByText(reading('20 of 25 X posts left in your trial, 2 of them with a link')),
+      ).toBeInTheDocument();
+      expect(usageCard.getByText('Your trial ends on 7 November')).toBeInTheDocument();
+      expect(usageCard.queryByText(/Resets on/)).not.toBeInTheDocument();
+    });
+
+    it('sends a User behind on payment to the billing portal to update their payment method', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('past_due', true));
+      vi.mocked(usageService.get).mockResolvedValue(usageWith({ wayOut: 'update_payment' }));
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      fireEvent.click(
+        await usageCard.findByRole('button', {
+          name: 'Update your payment method to buy a top-up',
+        }),
+      );
+
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://portal.stripe.test/x'));
+    });
+
+    it('says nothing about a limit set to no cap', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          generations: { limit: null, used: 7, left: null },
+          linkXPosts: { limit: null, used: 1, left: null },
+        }),
+      );
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      expect(await usageCard.findByText(reading('61 X posts left'))).toBeInTheDocument();
+      expect(usageCard.queryByText(/generations left/)).not.toBeInTheDocument();
+      expect(usageCard.queryByRole('meter', { name: 'Generations left' })).not.toBeInTheDocument();
+    });
+
+    it('shows a placeholder while usage loads', async () => {
+      vi.mocked(usageService.get).mockReturnValue(new Promise(() => undefined));
+      renderSettings();
+
+      expect(await (await card('Usage')).findByRole('status')).toHaveTextContent(
+        'Loading your usage…',
+      );
+    });
+
+    it('says when usage could not be loaded', async () => {
+      vi.mocked(usageService.get).mockRejectedValue(apiError(500, 'boom'));
+      renderSettings();
+
+      expect(await (await card('Usage')).findByRole('alert')).toHaveTextContent(
+        "Couldn't load your usage. Reload the page to try again.",
+      );
+    });
+
+    it('is not shown to a User who is not Subscribed', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+      renderSettings();
+
+      await card('Plan');
+      expect(screen.queryByRole('region', { name: 'Usage' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('Choose a plan', () => {
     beforeEach(() => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(WITH_TRIAL);
@@ -805,6 +966,7 @@ describe('Settings', () => {
         await (await card('X account')).findByRole('button', { name: 'Connect X' }),
       ).toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
+      expect(usageService.get).not.toHaveBeenCalled();
     });
 
     it('ignores a return from checkout', async () => {

@@ -7,6 +7,7 @@ import { ApiKeysSection } from '@/features/apiKeys/ApiKeysSection';
 import { ChoosePlanCard } from '@/features/billing/ChoosePlanCard';
 import { CHOOSE_PLAN_ID } from '@/features/billing/choosePlan';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
+import { UsageCard } from '@/features/billing/UsageCard';
 import { useBilling } from '@/features/billing/useBilling';
 import { useInstance } from '@/features/instance/useInstance';
 import { LegalLinks } from '@/features/legal/LegalLinks';
@@ -127,6 +128,7 @@ export function Settings() {
               loadError={billing.loadError}
             />
           )}
+          {sells_plans && data?.me.subscribed && <UsageCard />}
           <ApiKeysSection />
           <AppearanceCard />
           <footer className="pt-4">

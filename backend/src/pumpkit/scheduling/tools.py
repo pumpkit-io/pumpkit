@@ -44,6 +44,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostResponse,
     ScheduledPostToolResponse,
     ScheduledPostUpdateRequest,
+    UsageResponse,
 )
 from pumpkit.x_connection.x_publisher import get_x_publisher
 
@@ -304,6 +305,18 @@ async def restore_version(call: ToolCall[User], post_id: str, version_number: in
     )
 
 
+async def get_usage(call: ToolCall[User]) -> UsageResponse:
+    """
+    What the user has left of their allowance this period: generations (each post started and
+    each feedback uses one), X posts (each part of a thread is one) and, of those, X posts with
+    a link, each with its limit, how many are used and how many are left (a limit of null is no
+    cap), `resets_at`, when the period ends: the next reset, or the trial's end, and `way_out`,
+    what the user can do at a limit before then. `allowance` is null where there are no
+    allowances, or the user isn't subscribed.
+    """
+    return await mediator.get_usage(db=call.db, user=call.user, now=call.now)
+
+
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
     Where the user connects, reconnects or disconnects their X account: the Settings page of
@@ -331,5 +344,7 @@ TOOLS = [
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    # Open to Users who aren't Subscribed, as `GET /usage` is: they have no Allowance.
+    McpTool(get_usage, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
     McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
 ]

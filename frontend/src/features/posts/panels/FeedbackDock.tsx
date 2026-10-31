@@ -4,6 +4,8 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
+import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
+import { useUsage } from '@/features/billing/useUsage';
 import { CHOOSE_PLAN_PATH, trackChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
@@ -52,11 +54,18 @@ export function FeedbackDock({
     setFormat(textFormat);
   }
   const { isWriting, error, notice, allowanceUsedUp, onSend } = sending;
+  const { usage, reload: reloadUsage } = useUsage();
   const typed = feedback.trim();
 
   const send = async () => {
-    if (await onSend(typed, format)) setFeedback('');
+    const sent = await onSend(typed, format);
+    if (sent) setFeedback('');
+    reloadUsage();
   };
+
+  const low = !allowanceUsedUp && (
+    <LowUsageWarning allowance={usage?.allowance} count="generations" />
+  );
 
   const gate =
     subscribed === false ? (
@@ -71,8 +80,9 @@ export function FeedbackDock({
     <Dock
       name={name}
       notes={
-        (reason || error || notice || allowanceUsedUp || restoreError) && (
+        (reason || error || notice || allowanceUsedUp || restoreError || low) && (
           <div className="space-y-2">
+            {low}
             {reason}
             {restoreError && <ErrorBanner message={restoreError} />}
             {error && (

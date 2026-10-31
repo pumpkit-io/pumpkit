@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { useGoToChoosePlan } from '@/features/billing/choosePlan';
+import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
 import { useUsage } from '@/features/billing/useUsage';
 import {
   destinationFrom,
@@ -175,7 +176,7 @@ export function PostToDialog({
   const goToChoosePlan = useGoToChoosePlan();
   const { connection } = useXConnectionContext();
   const { sending, error, allowanceUsedUp, send } = sender;
-  const usage = useUsage();
+  const { usage } = useUsage();
   const [step, setStep] = useState<Step>({ kind: 'choose' });
   const [where, setWhere] = useState<DestinationDraft>(initialWhere);
   const [when, setWhen] = useState<WhenDraft>(initialWhen);
@@ -321,6 +322,7 @@ export function PostToDialog({
           </p>
         ))}
         {links && <p className="font-sans text-xs text-muted-foreground">{links}</p>}
+        {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="xPosts" />}
         {refusal}
       </>
     );
