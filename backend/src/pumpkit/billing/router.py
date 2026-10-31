@@ -18,6 +18,7 @@ from pumpkit.billing.schemas import (
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.providers import require_provider
 from pumpkit.core.rate_limit import limiter
+from pumpkit.core.time import Clock, get_clock
 
 router = APIRouter(tags=["billing"], dependencies=[Depends(require_provider(service.sells_plans))])
 
@@ -118,6 +119,7 @@ async def create_billing_portal(
 @router.post("/stripe/webhook", status_code=status.HTTP_200_OK)
 async def stripe_webhook(
     request: Request,
+    clock: Clock = Depends(get_clock),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> JSONResponse:
@@ -127,6 +129,8 @@ async def stripe_webhook(
 
     # handle_webhook owns the transaction and rolls back before re-raising, so errors reach
     # the global handlers (502 if Stripe failed during the sync, else 500) and Stripe retries.
-    await mediator.handle_webhook(db=db, gateway=gateway, payload=payload, signature=signature)
+    await mediator.handle_webhook(
+        db=db, gateway=gateway, payload=payload, signature=signature, now=clock()
+    )
 
     return JSONResponse(content={"received": True}, status_code=status.HTTP_200_OK)

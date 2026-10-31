@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +42,7 @@ from pumpkit.core.config import BILLING_PAGE, settings
 from pumpkit.core.errors import BadRequestError, ConflictError, RefusalError, RefusedError
 from pumpkit.core.logging import logger
 from pumpkit.core.schemas import LinkToolResponse
+from pumpkit.core.time import as_utc
 
 
 async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
@@ -374,6 +376,7 @@ async def handle_webhook(
     gateway: BillingGateway,
     payload: bytes,
     signature: Optional[str],
+    now: datetime,
 ) -> None:
     """
     Verify the webhook, deduplicate by event ID, and sync the customer it nudges about (ADR 0004).
@@ -403,7 +406,8 @@ async def handle_webhook(
         await db.rollback()
         raise
     for top_up in added:
-        posthog_client.capture("top_up_added", distinct_id=top_up.user_id)
+        if as_utc(top_up.expires_at) > now:
+            posthog_client.capture("top_up_added", distinct_id=top_up.user_id)
 
 
 # The events that say a customer's Top-ups may have changed: one paid, refunded or disputed.
