@@ -36,7 +36,7 @@ CI runs these same targets, so a branch that passes them locally passes CI.
 
 Each package also has its own targets: `check-backend`, `check-frontend`, `check-e2e`, `test-backend` and `test-frontend`. Run `make check test` before you push.
 
-The e2e suite opens the Plan card in Settings, so `make e2e` needs the Stripe billing group in `.env`. Dummy values work: `STRIPE_SECRET_KEY=sk_test_dummy`, `STRIPE_PUBLISHABLE_KEY=pk_test_dummy`, `STRIPE_WEBHOOK_SECRET=whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`.
+The e2e suite checks Plan and Usage in Settings, so `make e2e` needs the Stripe billing group in `.env`. Dummy values work: `STRIPE_SECRET_KEY=sk_test_dummy`, `STRIPE_PUBLISHABLE_KEY=pk_test_dummy`, `STRIPE_WEBHOOK_SECRET=whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`, plus `BILLING_TOP_UP_KEY=pumpkit_top_up`. Set `GENERATIONS_MONTHLY_CAP=500`, `X_POSTS_MONTHLY_CAP=100` and `X_LINK_POSTS_MONTHLY_CAP=10`. The usage tests seed a separate User before each test and stub the Stripe-backed catalog response; usage and generation refusals come from the backend. Purchase dialogs are cancelled before payment. Use only dummy billing credentials.
 
 ### Stripe webhooks
 
