@@ -91,10 +91,10 @@ function TopUpsLeft({ topUps }: { topUps: TopUpUsage[] }) {
 
 function UsageDetails({
   allowance,
-  onSubscribed,
+  onSubscriptionSettled,
 }: {
   allowance: AllowanceUsage;
-  onSubscribed: () => void;
+  onSubscriptionSettled: () => void;
 }) {
   const { openPortal, error } = useOpenPortal();
   const {
@@ -139,9 +139,11 @@ function UsageDetails({
         </p>
         <p>Unused generations and X posts don&apos;t carry over.</p>
       </div>
-      {wayOut === 'subscribe_now' && (
-        <SubscribeNowButton className="h-10" onSubscribed={onSubscribed} />
-      )}
+      <SubscribeNowButton
+        className="h-10"
+        available={wayOut === 'subscribe_now'}
+        onSettled={onSubscriptionSettled}
+      />
       {(topUps.length > 0 || mayBuyTopUp) && (
         <div className="space-y-3">
           <TopUpsLeft topUps={topUps} />
@@ -205,7 +207,7 @@ export function UsageCard({ topUpBought = false }: { topUpBought?: boolean }) {
   return (
     <SettingsCard title="Usage">
       {usage?.allowance ? (
-        <UsageDetails allowance={usage.allowance} onSubscribed={reload} />
+        <UsageDetails allowance={usage.allowance} onSubscriptionSettled={reload} />
       ) : failed ? (
         <ErrorBanner message="Couldn't load your usage. Reload the page to try again." />
       ) : (

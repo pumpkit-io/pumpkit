@@ -785,6 +785,40 @@ describe('Settings', () => {
         expect(track).not.toHaveBeenCalledWith('billing_subscribe_now_confirmed');
       });
 
+      it('refreshes usage after a declined charge and keeps the payment error open', async () => {
+        vi.mocked(billingService.subscribeNow).mockRejectedValue(
+          apiError(402, "Your trial has ended, but the first payment didn't go through."),
+        );
+        renderSettings();
+        const usageCard = await card('Usage');
+        fireEvent.click(await usageCard.findByRole('button', { name: 'Subscribe now' }));
+        const dialog = within(await screen.findByRole('dialog'));
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('past_due', true));
+        vi.mocked(usageService.get).mockResolvedValue(
+          usageWith({ wayOut: 'update_payment', mayBuyTopUp: false }),
+        );
+
+        fireEvent.click(await dialog.findByRole('button', { name: 'Subscribe now' }));
+
+        expect(await usageCard.findByText(reading('382 generations left'))).toBeInTheDocument();
+        expect(
+          usageCard.getByRole('button', {
+            name: 'Update your payment method to buy a top-up',
+            hidden: true,
+          }),
+        ).toBeInTheDocument();
+        expect(usageCard.queryByText(/Your trial ends/)).not.toBeInTheDocument();
+        expect(
+          usageCard.queryByRole('button', { name: 'Subscribe now', hidden: true }),
+        ).not.toBeInTheDocument();
+        expect(
+          dialog.getByText("Your trial has ended, but the first payment didn't go through."),
+        ).toBeInTheDocument();
+        expect(track).not.toHaveBeenCalledWith('billing_subscribe_now_confirmed');
+        fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      });
+
       it('links the invoice page when the first charge waits on the bank', async () => {
         vi.mocked(billingService.subscribeNow).mockRejectedValue(
           apiError(
@@ -794,10 +828,15 @@ describe('Settings', () => {
           ),
         );
         const dialog = await openDialog();
+        vi.mocked(usageService.get).mockResolvedValue(
+          usageWith({ wayOut: 'update_payment', mayBuyTopUp: false }),
+        );
 
         fireEvent.click(await dialog.findByRole('button', { name: 'Subscribe now' }));
 
         const confirm = await dialog.findByRole('link', { name: 'Confirm payment' });
+        await screen.findByText(reading('382 generations left'));
+        expect(confirm).toBeInTheDocument();
         expect(confirm).toHaveAttribute('href', 'https://invoice.stripe.test/i/in_1');
         expect(confirm).toHaveAttribute('target', '_blank');
         expect(
