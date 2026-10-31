@@ -66,6 +66,12 @@ test('the Persona step resumes after a reload, and Continue opens New post for g
   await expect(continueButton).toBeDisabled();
 
   const search = step.getByRole('combobox', { name: 'Find an author' });
+  // A remembered miss, not the not-configured error: the stack may hold a real twitterapi.io
+  // key, and the remembered miss answers without spending a call on it either way.
+  await search.fill('@e2e_not_on_x');
+  await step.getByRole('option', { name: 'Look up @e2e_not_on_x on X' }).click();
+  await expect(step.getByText("@e2e_not_on_x isn't on X.")).toBeVisible();
+
   await search.fill('E2E Author');
   await search.press('Enter');
   const slots = step.getByRole('list', { name: /places taken/ });

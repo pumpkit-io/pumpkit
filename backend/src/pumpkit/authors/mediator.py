@@ -22,7 +22,6 @@ from pumpkit.authors.schemas import (
     InspirationAuthorsListResponse,
 )
 from pumpkit.authors.x_reader import (
-    FetchedProfile,
     HandleNotFoundError,
     HandleSuspendedError,
     RecentPosts,
@@ -122,14 +121,15 @@ async def add_author(
     last_fetched_at = await service.last_fetched_at(db, handle=handle)
     reuse_window = timedelta(days=settings.AUTHOR_POSTS_REUSE_DAYS)
     if last_fetched_at is None or now >= last_fetched_at + reuse_window:
+        # Early commit: ends the read transaction, so no connection is held across the fetch and
+        # what a concurrent fetch of the same handle stores meanwhile is seen afterwards.
+        await db.commit()
         recent = await _fetch(reader, handle)
-        has_posts = bool(recent.posts)
-        if has_posts:
-            await service.store_new_posts(db, handle=handle, posts=recent.posts, now=now)
-            await _record_fetch(db, handle=handle, recent=recent, now=now)
-    else:
-        has_posts = await service.count_posts(db, handle=handle) > 0
-    if not has_posts:
+        await service.store_new_posts(db, handle=handle, posts=recent.posts, now=now)
+        await _record_fetch(db, handle=handle, recent=recent, now=now)
+        # Early commit: a fetch that found no posts still answers later adds within the window.
+        await db.commit()
+    if await service.count_posts(db, handle=handle) == 0:
         raise RefusedError(
             f"@{handle} has no posts of its own to learn from.", code="HANDLE_HAS_NO_POSTS"
         )
@@ -171,14 +171,18 @@ async def _look_up(
     # what a concurrent lookup of the same handle stores meanwhile is seen afterwards.
     await db.commit()
 
-    profile: Optional[FetchedProfile] = None
     try:
         profile = await reader.look_up_profile(handle)
-        reason = MISS_PRIVATE if profile.protected else None
     except HandleSuspendedError:
         reason = MISS_SUSPENDED
     except HandleNotFoundError:
         reason = MISS_MISSING
+    else:
+        reason = MISS_PRIVATE if profile.protected else None
+        if reason is None:
+            await service.add_directory_entry(
+                db, handle=handle, name=profile.name, photo_url=profile.photo_url, now=now
+            )
     await service.log_lookup(
         db, user_id=user_id, handle=handle, now=now, result=reason or LOOKUP_FOUND
     )
@@ -190,10 +194,6 @@ async def _look_up(
         )
         await service.remember_miss(
             db, handle=handle, reason=reason, remembered_until=now + timedelta(days=miss_days)
-        )
-    elif profile is not None:
-        await service.add_directory_entry(
-            db, handle=handle, name=profile.name, photo_url=profile.photo_url, now=now
         )
     # Early commit: the lookup was paid for, so its answer outlives a failed posts fetch.
     await db.commit()

@@ -60,7 +60,7 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 
 ### Author lookups
 
-Adding an Inspiration author whose handle isn't in the Author directory first looks its profile up on twitterapi.io (ADR 0019). An account found and public joins the directory for good; a missing, suspended or private one is remembered for every User. Picking from the directory and answering from a remembered miss never count towards a limit, and nor does refreshing an author's posts, which keeps its one-hour cooldown. Over a User's limit, adding answers 429 with the minutes until the oldest counted lookup leaves the hour or the day; over the Instance's cap, it answers that lookups are paused for today.
+Adding an Inspiration author whose handle isn't in the Author directory first looks its profile up on twitterapi.io (ADR 0019). An account found and public joins the directory for good; a missing, suspended or private one is remembered for every User. Picking from the directory and answering from a remembered miss never count towards a limit, and nor does refreshing an author's posts, which keeps its cooldown of a day per handle. Over a User's limit, adding answers 429 with the minutes until the oldest counted lookup leaves the hour or the day; over the Instance's cap, it answers that lookups are paused for today.
 
 | Variable | Meaning |
 | --- | --- |
@@ -68,7 +68,7 @@ Adding an Inspiration author whose handle isn't in the Author directory first lo
 | `AUTHOR_LOOKUP_INSTANCE_DAILY_LIMIT` | Lookups the whole Instance may run in any 24 hours, a ceiling on twitterapi.io spend. Defaults to 500. |
 | `AUTHOR_MISS_DAYS` | Days a handle that isn't on X, or is suspended, answers "@handle isn't on X" without a lookup. Defaults to 7. |
 | `AUTHOR_PRIVATE_MISS_DAYS` | Days a private account answers that it's private without a lookup. Defaults to 1, so it can be added soon after it goes public. |
-| `AUTHOR_POSTS_REUSE_DAYS` | Adding an author reuses posts any User fetched within this many days instead of fetching them again. Defaults to 7. |
+| `AUTHOR_POSTS_REUSE_DAYS` | Adding an author reuses posts any User fetched within this many days instead of fetching them again, and a fetch that found no posts answers that the account has none for as long. Defaults to 7. |
 
 Each fetch of an author's posts updates its directory entry's photo, and its name too, except for a seeded account, which keeps the name it was seeded with.
 

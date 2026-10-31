@@ -3,7 +3,8 @@
 The user has no X connection, no Inspiration authors and hasn't finished Onboarding, so it starts
 at the X step where the Instance has X, and `connect_x.py` with its email moves it to the Persona
 step. The Author directory gets `e2e_author`, whose posts were just fetched, so picking it reuses
-them and never calls twitterapi.io. Run it like `seed_user.py`.
+them and never calls twitterapi.io, and `e2e_not_on_x` is a remembered miss, so looking
+it up answers "isn't on X" without calling twitterapi.io either. Run it like `seed_user.py`.
 """
 
 import asyncio
@@ -14,9 +15,11 @@ from sqlalchemy import delete, select
 from pumpkit.auth.models import User
 from pumpkit.auth.tokens import create_access_token
 from pumpkit.authors.models import (
+    MISS_MISSING,
     SOURCE_LOOKUP,
     AuthorDirectoryEntry,
     AuthorFetch,
+    AuthorHandleMiss,
     AuthorPost,
     InspirationAuthor,
 )
@@ -27,6 +30,7 @@ from pumpkit.x_connection.models import XConnection
 
 E2E_EMAIL = "e2e-onboarding@e2e-user.dev"
 AUTHOR = "e2e_author"
+MISSING_HANDLE = "e2e_not_on_x"
 
 
 async def main() -> None:
@@ -75,6 +79,11 @@ async def main() -> None:
                         fetched_at=now,
                     )
                 )
+        miss = await db.get(AuthorHandleMiss, MISSING_HANDLE)
+        if miss is None:
+            miss = AuthorHandleMiss(handle=MISSING_HANDLE, reason=MISS_MISSING)
+            db.add(miss)
+        miss.remembered_until = now + timedelta(days=7)
         await db.commit()
         await db.refresh(user)
 

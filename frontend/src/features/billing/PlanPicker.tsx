@@ -35,8 +35,9 @@ function savingOver(plan: Plan, monthly: Plan | undefined): string | undefined {
 }
 
 /**
- * What a Plan includes, the Plans side by side, then the Terms boxes (ADR 0010), and checkout on a pick. Remount with a
- * new `key` per Terms version. `actionLabel` names the button: a Trial or a plain Subscription.
+ * The Plans side by side with what each includes, the Terms boxes (ADR 0010) below, and checkout
+ * on a pick. Remount with a new `key` per Terms version. `actionLabel` names the button: a Trial
+ * or a plain Subscription.
  */
 export function PlanPicker({
   data,

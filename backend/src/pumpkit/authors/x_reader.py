@@ -313,8 +313,8 @@ class FakeXReader:
     """
     X in memory: answers a handle's posts with `posts[handle]`, `photos.get(handle)` and
     `names.get(handle)`; its profile with `profiles[handle]`, a suspension for a handle in
-    `suspended`, or a public profile for a handle with `posts`; and a Community ID with `communities[id]` (its name). Anything else is a
-    not-found error. Records each handle read in `calls`, each profile looked up in
+    `suspended`, or a public profile for a handle with `posts`; and a Community ID with
+    `communities[id]`, its name. Anything else is a not-found error. Records each handle read in `calls`, each profile looked up in
     `profile_calls` and each Community ID in `community_calls`. Set `fail` or `not_configured`
     to raise.
     """

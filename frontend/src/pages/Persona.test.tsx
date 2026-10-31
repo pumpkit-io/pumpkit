@@ -535,14 +535,18 @@ describe('Persona', () => {
       },
     );
 
-    it('says "Couldn\'t load suggestions." when the directory fails, and still looks handles up', async () => {
+    it("says it couldn't load suggestions when the directory fails, and still looks handles up", async () => {
       vi.mocked(authorDirectoryService.list).mockRejectedValue(apiError(500, 'boom'));
       vi.mocked(inspirationAuthorService.add).mockResolvedValue(LEVELSIO);
       renderPersona();
 
       const field = await searchField();
       fireEvent.focus(field);
-      expect(await screen.findByText("Couldn't load suggestions.")).toBeInTheDocument();
+      expect(
+        await screen.findByText(
+          "Couldn't load suggestions. You can still look up an @handle on X.",
+        ),
+      ).toBeInTheDocument();
 
       fireEvent.change(field, { target: { value: '@levelsio' } });
       await waitFor(() => expect(rows()).toEqual(['Look up @levelsio on X']));

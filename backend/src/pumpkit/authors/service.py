@@ -145,8 +145,8 @@ async def store_new_posts(
     """
     Store the posts not already stored, under `handle`; return how many were new. Flushes.
 
-    Select-then-insert rather than ON CONFLICT so it runs on SQLite too, which leaves two
-    concurrent fetches of one handle able to collide on the primary key.
+    The select keeps the common path to one insert. Its savepoint catches a concurrent fetch of
+    the same handle storing some of the posts in between, and then each post is inserted alone.
     """
     unique = {post.post_id: post for post in posts}
     if not unique:
@@ -155,18 +155,28 @@ async def store_new_posts(
         (await db.execute(select(AuthorPost.id).where(AuthorPost.id.in_(unique)))).scalars()
     )
     new = [post for post_id, post in unique.items() if post_id not in existing]
-    db.add_all(
-        AuthorPost(
-            id=post.post_id,
-            handle=handle,
-            text=post.text,
-            posted_at=post.posted_at,
-            fetched_at=now,
-        )
-        for post in new
+    try:
+        async with db.begin_nested():
+            db.add_all(_author_post(post, handle=handle, now=now) for post in new)
+        return len(new)
+    except IntegrityError:
+        pass
+    stored = 0
+    for post in new:
+        try:
+            async with db.begin_nested():
+                db.add(_author_post(post, handle=handle, now=now))
+            stored += 1
+        except IntegrityError:
+            # A concurrent fetch of the same handle stored this post first.
+            pass
+    return stored
+
+
+def _author_post(post: FetchedPost, *, handle: str, now: datetime) -> AuthorPost:
+    return AuthorPost(
+        id=post.post_id, handle=handle, text=post.text, posted_at=post.posted_at, fetched_at=now
     )
-    await db.flush()
-    return len(new)
 
 
 async def count_posts(db: AsyncSession, *, handle: str) -> int:
@@ -197,13 +207,19 @@ async def record_fetch(
     """
     fetch = await db.get(AuthorFetch, handle)
     if fetch is None:
-        db.add(AuthorFetch(handle=handle, last_fetched_at=now))
-    else:
+        try:
+            async with db.begin_nested():
+                db.add(AuthorFetch(handle=handle, last_fetched_at=now))
+        except IntegrityError:
+            # A concurrent fetch of the same handle recorded itself first; this one replaces it.
+            fetch = await db.get(AuthorFetch, handle)
+            assert fetch is not None
+    if fetch is not None:
         fetch.last_fetched_at = now
+    if not await in_directory(db, handle=handle):
+        await add_directory_entry(db, handle=handle, name=None, photo_url=None, now=now)
     entry = await db.get(AuthorDirectoryEntry, handle)
-    if entry is None:
-        entry = AuthorDirectoryEntry(handle=handle, added_at=now, source=SOURCE_LOOKUP)
-        db.add(entry)
+    assert entry is not None
     if name is not None and entry.source != SOURCE_SEED:
         entry.name = name
     if photo_url is not None:

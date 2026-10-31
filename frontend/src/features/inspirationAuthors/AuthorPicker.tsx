@@ -134,7 +134,11 @@ export const AuthorPicker = forwardRef<HTMLInputElement, AuthorPickerProps>(func
             <RowsSkeleton />
           ) : (
             <>
-              {directory.failed && <ListNote>Couldn't load suggestions.</ListNote>}
+              {directory.failed && (
+                <ListNote>
+                  Couldn't load suggestions. You can still look up an @handle on X.
+                </ListNote>
+              )}
               {rows.length === 0 && !directory.failed && (
                 <ListNote>
                   {query.trim()

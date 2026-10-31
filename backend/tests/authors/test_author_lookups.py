@@ -10,9 +10,17 @@ from pumpkit.authors.models import (
     MISS_MISSING,
     SOURCE_SEED,
     AuthorDirectoryEntry,
+    AuthorFetch,
     AuthorHandleMiss,
+    AuthorPost,
 )
-from pumpkit.authors.x_reader import FakeXReader, FetchedPost, FetchedProfile, get_x_reader
+from pumpkit.authors.x_reader import (
+    FakeXReader,
+    FetchedPost,
+    FetchedProfile,
+    RecentPosts,
+    get_x_reader,
+)
 from pumpkit.core.config import settings
 from pumpkit.main import app
 
@@ -104,9 +112,28 @@ async def test_a_found_account_without_posts_of_its_own_stays_in_the_directory(
     assert response.status_code == 422
     assert response.json()["detail"] == "@replyguy has no posts of its own to learn from."
     assert "replyguy" in await _directory(client)
-    readded = await client.post(AUTHORS, json={"handle": "replyguy"})
-    assert readded.status_code == 422
+
+
+async def test_a_found_account_without_posts_is_answered_from_its_fetch_within_the_reuse_window(
+    client, subscribed, fake_x_reader, clock
+):
+    fake_x_reader.posts["replyguy"] = []
+
+    first = await client.post(AUTHORS, json={"handle": "replyguy"})
+    clock.advance(timedelta(days=settings.AUTHOR_POSTS_REUSE_DAYS) - timedelta(seconds=1))
+    again = await client.post(AUTHORS, json={"handle": "replyguy"})
+
+    assert first.status_code == again.status_code == 422
+    assert (
+        first.json()
+        == again.json()
+        == {
+            "detail": "@replyguy has no posts of its own to learn from.",
+            "code": "HANDLE_HAS_NO_POSTS",
+        }
+    )
     assert fake_x_reader.profile_calls == ["replyguy"]
+    assert fake_x_reader.calls == ["replyguy"]
 
 
 async def test_a_found_account_s_profile_name_stays_when_its_posts_carry_none(
@@ -396,3 +423,48 @@ async def test_a_miss_another_user_s_lookup_remembered_meanwhile_is_still_refuse
 
     assert first.status_code == again.status_code == 404
     assert reader.profile_calls == ["gone"]
+
+
+@dataclass
+class _FetchedFirstElsewhere(FakeXReader):
+    """X, where a concurrent add of the same handle stores its posts during this fetch."""
+
+    elsewhere: Optional[Callable[[], Awaitable[Any]]] = None
+
+    async def fetch_recent_posts(self, handle: str) -> RecentPosts:
+        if self.elsewhere is not None:
+            elsewhere, self.elsewhere = self.elsewhere, None
+            await elsewhere()
+        return await super().fetch_recent_posts(handle)
+
+
+@pytest.mark.parametrize("in_directory", [True, False])
+async def test_a_handle_whose_posts_another_user_s_add_stored_meanwhile_is_still_added(
+    client, db, subscribed, clock, in_directory
+):
+    posts = _posts("1", "2")
+
+    async def store_elsewhere() -> None:
+        db.add_all(
+            AuthorPost(
+                id=post.post_id,
+                handle="levelsio",
+                text=post.text,
+                posted_at=post.posted_at,
+                fetched_at=clock(),
+            )
+            for post in posts
+        )
+        db.add(AuthorFetch(handle="levelsio", last_fetched_at=clock()))
+        await db.commit()
+
+    if in_directory:
+        await _seed(db, "levelsio")
+    reader = _FetchedFirstElsewhere(posts={"levelsio": posts})
+    reader.elsewhere = store_elsewhere
+    app.dependency_overrides[get_x_reader] = lambda: reader
+
+    response = await client.post(AUTHORS, json={"handle": "levelsio"})
+
+    assert response.status_code == 201
+    assert response.json()["post_count"] == 2
