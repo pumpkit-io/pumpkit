@@ -8,6 +8,8 @@ import { billingService, type TermsAcceptance } from '@/services/billingService'
 import type { BillingData } from './BillingProvider';
 import { CHOOSE_PLAN_ID } from './choosePlan';
 import { PlanCard, recurringLabel } from './PlanCard';
+import { OfferLineContent } from './OfferLineContent';
+import { offerLines } from './planOffer';
 import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
 import { TermsAcceptanceFields } from './TermsAcceptanceFields';
 
@@ -22,6 +24,7 @@ export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: st
   const hasTerms = data.termsVersion !== null;
   const accepted = !hasTerms || acceptsAll(acceptance);
   const trialDays = data.me.trialDays;
+  const offer = offerLines(data.allowance, trialDays === null ? null : data.trial);
 
   const subscribe = async (planKey: string) => {
     track('billing_subscription_checkout_started', { plan_key: planKey });
@@ -51,6 +54,13 @@ export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: st
         <p className="font-sans text-sm text-muted-foreground">No plans are available yet.</p>
       ) : (
         <>
+          <ul aria-label="Included" className="space-y-1.5 font-sans text-sm text-foreground">
+            {offer.map((line) => (
+              <li key={line.text}>
+                <OfferLineContent line={line} />
+              </li>
+            ))}
+          </ul>
           {hasTerms && (
             <div className="space-y-2">
               <p className="font-sans text-xs text-muted-foreground">
@@ -72,7 +82,6 @@ export function ChoosePlanCard({ data, notice }: { data: BillingData; notice: st
                     plan.interval,
                     plan.intervalCount,
                   )}
-                  note={trialDays === null ? undefined : `${trialDays}-day free trial`}
                   actionLabel={pendingKey === plan.key ? 'Redirecting…' : action}
                   ariaLabel={`${trialDays === null ? 'Subscribe to' : 'Start free trial of'} ${plan.productName}`}
                   disabled={!accepted || pendingKey !== null}

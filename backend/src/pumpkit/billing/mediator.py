@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
 from pumpkit.billing import service
+from pumpkit.billing.allowance import limits
 from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
@@ -17,6 +19,8 @@ from pumpkit.billing.schemas import (
     BillingSubscriptionResponse,
     CheckoutRequest,
     CheckoutResponse,
+    OfferedAllowanceResponse,
+    OfferedTrialResponse,
     PlanResponse,
     PlansListResponse,
 )
@@ -90,7 +94,16 @@ async def list_plans(gateway: BillingGateway) -> PlansListResponse:
             if (plan := resolved.get(key))
         ],
         terms_version=TERMS_VERSION if service.requires_terms_acceptance() else None,
+        allowance=OfferedAllowanceResponse(**asdict(limits(trial=False))),
+        trial=_offered_trial(),
     )
+
+
+def _offered_trial() -> Optional[OfferedTrialResponse]:
+    days = settings.BILLING_TRIAL_PERIOD_DAYS
+    if days == 0:
+        return None
+    return OfferedTrialResponse(days=days, **asdict(limits(trial=True)))
 
 
 async def _ensure_stripe_customer(db: AsyncSession, gateway: BillingGateway, user: User) -> str:

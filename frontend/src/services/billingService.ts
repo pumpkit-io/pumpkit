@@ -45,11 +45,26 @@ export interface TermsAcceptance {
   approvedSpecificClauses: boolean;
 }
 
-/** The Plans on sale and the Terms version a checkout must accept. */
+/** What each Allowance period allows; a null cap is no cap. */
+export interface OfferedAllowance {
+  generations: number | null;
+  xPosts: number | null;
+  linkXPosts: number | null;
+}
+
+/** The Trial a first Subscription starts with, and its own Allowance. */
+export interface OfferedTrial extends OfferedAllowance {
+  days: number;
+}
+
+/** The Plans on sale, what they allow, and the Terms version a checkout must accept. */
 export interface PlanCatalog {
   plans: Plan[];
   /** The current Terms' "Last updated" date, in ISO form; null where the Instance has no Terms (ADR 0011). */
   termsVersion: string | null;
+  allowance: OfferedAllowance;
+  /** Null where the Instance offers no Trial; whether this User gets one is `BillingMe.trialDays`. */
+  trial: OfferedTrial | null;
 }
 
 interface BillingMeApi {
@@ -73,6 +88,23 @@ interface PlanApi {
   interval_count: number;
 }
 
+interface OfferedAllowanceApi {
+  generations: number | null;
+  x_posts: number | null;
+  link_x_posts: number | null;
+}
+
+interface PlansApi {
+  data: PlanApi[];
+  terms_version: string | null;
+  allowance: OfferedAllowanceApi;
+  trial: (OfferedAllowanceApi & { days: number }) | null;
+}
+
+function offeredAllowance(a: OfferedAllowanceApi): OfferedAllowance {
+  return { generations: a.generations, xPosts: a.x_posts, linkXPosts: a.link_x_posts };
+}
+
 export const billingService = {
   fetchBillingMe: async (): Promise<BillingMe> => {
     const { data } = await apiService.get<BillingMeApi>('/billing/me');
@@ -91,9 +123,7 @@ export const billingService = {
   },
 
   fetchPlans: async (): Promise<PlanCatalog> => {
-    const { data } = await apiService.get<{ data: PlanApi[]; terms_version: string | null }>(
-      '/billing/plans',
-    );
+    const { data } = await apiService.get<PlansApi>('/billing/plans');
     return {
       plans: data.data.map((p) => ({
         key: p.key,
@@ -104,6 +134,8 @@ export const billingService = {
         intervalCount: p.interval_count,
       })),
       termsVersion: data.terms_version,
+      allowance: offeredAllowance(data.allowance),
+      trial: data.trial && { days: data.trial.days, ...offeredAllowance(data.trial) },
     };
   },
 

@@ -111,9 +111,11 @@ const CATALOG: PlanCatalog = {
     },
   ],
   termsVersion: '2026-10-11',
+  allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+  trial: { days: 7, generations: 125, xPosts: 25, linkXPosts: 2 },
 };
 
-const WITH_TRIAL: BillingMe = { ...NOT_SUBSCRIBED, trialDays: 14 };
+const WITH_TRIAL: BillingMe = { ...NOT_SUBSCRIBED, trialDays: 7 };
 
 function holding(
   status: NonNullable<BillingMe['subscription']>['status'],
@@ -643,7 +645,56 @@ describe('Settings', () => {
       expect(await choose.findByText('Pro')).toBeInTheDocument();
       expect(choose.getByText('Pro yearly')).toBeInTheDocument();
       expect(choose.getByText(/€9\.00 \/ month/)).toBeInTheDocument();
-      expect(choose.getAllByText('14-day free trial')).toHaveLength(2);
+      expect(
+        choose.getByText('7-day free trial: 125 generations and 25 X posts, up to 2 with a link.'),
+      ).toBeInTheDocument();
+    });
+
+    it("lists what the Plan allows, with the Instance's caps", async () => {
+      renderSettings();
+
+      const offer = within(
+        await (await card('Choose a plan')).findByRole('list', { name: 'Included' }),
+      );
+      expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        '500 post generations a month.',
+        'Publish 100 X posts a month, up to 10 of them with a link.',
+        'Write in the voice of your favorite X creators.',
+        '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
+      ]);
+    });
+
+    it.each([
+      ['About generations', 'Every prompt to generate or refine a post counts as one generation.'],
+      [
+        'About X posts',
+        'Scheduled posts and posts you post now both count. For threads, each post in the thread counts.',
+      ],
+    ])('explains what counts behind %s', async (button, text) => {
+      renderSettings();
+      const choose = await card('Choose a plan');
+
+      fireEvent.click(await choose.findByRole('button', { name: button }));
+
+      expect(await screen.findByRole('dialog', { name: button })).toHaveTextContent(text);
+    });
+
+    it('drops the line of a cap the Instance leaves empty', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({
+        ...CATALOG,
+        allowance: { generations: null, xPosts: 100, linkXPosts: null },
+        trial: { days: 7, generations: null, xPosts: 25, linkXPosts: null },
+      });
+      renderSettings();
+
+      const choose = await card('Choose a plan');
+      const offer = within(await choose.findByRole('list', { name: 'Included' }));
+      expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'Publish 100 X posts a month.',
+        'Write in the voice of your favorite X creators.',
+        '7-day free trial: 25 X posts.',
+      ]);
+      expect(choose.queryByRole('button', { name: 'About generations' })).not.toBeInTheDocument();
     });
 
     it('offers the Plans to a User whose Subscription is still incomplete', async () => {
@@ -704,6 +755,7 @@ describe('Settings', () => {
       const choose = await card('Choose a plan');
       expect(await choose.findByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
       expect(choose.queryByText(/free trial/)).not.toBeInTheDocument();
+      expect(choose.getByText('500 post generations a month.')).toBeInTheDocument();
     });
 
     it('starts checkout with only the Plan key where the Instance has no Terms', async () => {

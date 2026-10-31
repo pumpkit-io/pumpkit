@@ -502,7 +502,39 @@ async def test_the_plans_endpoint_returns_only_the_configured_plans_and_the_term
             },
         ],
         "terms_version": TERMS_VERSION,
+        "allowance": {"generations": 500, "x_posts": 100, "link_x_posts": 10},
+        "trial": {"days": 14, "generations": 125, "x_posts": 25, "link_x_posts": 2},
     }
+
+
+async def test_the_plans_follow_the_instances_caps_and_trial_length(
+    client, fake_billing, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
+    monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 200)
+    monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", None)
+
+    response = await client.get(PLANS)
+
+    assert response.json()["allowance"] == {
+        "generations": 200,
+        "x_posts": 100,
+        "link_x_posts": None,
+    }
+    assert response.json()["trial"] == {
+        "days": 7,
+        "generations": 50,
+        "x_posts": 25,
+        "link_x_posts": None,
+    }
+
+
+async def test_the_plans_offer_no_trial_where_trials_are_off(client, fake_billing, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 0)
+
+    response = await client.get(PLANS)
+
+    assert response.json()["trial"] is None
 
 
 async def test_a_configured_plan_the_provider_does_not_know_is_left_out(
