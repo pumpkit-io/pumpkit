@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,12 +15,18 @@ import { errorMessage } from '@/services/apiErrors';
 import { billingService, type TermsAcceptance, type TopUpOffer } from '@/services/billingService';
 import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
 import { TermsAcceptanceFields } from './TermsAcceptanceFields';
-import { useBilling } from './useBilling';
+import { useLoadedBilling } from './useBilling';
 
-/** What a Top-up adds: "250 generations and 50 X posts, up to 5 with a link". */
-function packLine(offer: TopUpOffer): string {
-  const links = offer.linkXPosts === null ? '' : `, up to ${offer.linkXPosts} with a link`;
-  return `${offer.generations} generations and ${offer.xPosts} X posts${links}`;
+/** What a Top-up adds: "250 generations and 50 X posts, up to 5 with a link", leaving out a count with no cap. */
+function packLine({ generations, xPosts, linkXPosts }: TopUpOffer): string {
+  const counts = [
+    generations !== null && `${generations} generations`,
+    xPosts !== null && `${xPosts} X posts`,
+  ]
+    .filter(Boolean)
+    .join(' and ');
+  const links = xPosts === null || linkXPosts === null ? '' : `, up to ${linkXPosts} with a link`;
+  return `${counts}${links}`;
 }
 
 function BuyTopUpDialog({
@@ -68,7 +74,7 @@ function BuyTopUpDialog({
           <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} />
         )}
         {error && (
-          <p role="alert" className="font-sans text-sm text-destructive">
+          <p role="alert" className="px-6 font-sans text-sm text-destructive">
             {error}
           </p>
         )}
@@ -90,12 +96,8 @@ function BuyTopUpDialog({
  * offer is known, and nothing where it sells none. Loads billing where Settings hasn't.
  */
 export function BuyTopUpButton({ className }: { className?: string }) {
-  const { data, isLoading, loadError, load } = useBilling();
+  const { data } = useLoadedBilling();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!data && !isLoading && !loadError) void load();
-  }, [data, isLoading, loadError, load]);
 
   const offer = data?.topUp;
   if (!data || !offer) return null;

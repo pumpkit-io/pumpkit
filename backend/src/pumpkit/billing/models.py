@@ -106,10 +106,11 @@ class TopUp(Base):
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     stripe_checkout_session_id: Mapped[str] = mapped_column(String, unique=True)
-    # The pack, half of each cap when it was bought; 0 for a count with no cap.
-    generations: Mapped[int] = mapped_column(Integer)
-    x_posts: Mapped[int] = mapped_column(Integer)
-    link_x_posts: Mapped[int] = mapped_column(Integer)
+    # The pack, half of each cap when it was bought; None for a count that had no cap, which it
+    # never adds to, unlike a 0 from a small cap rounded down.
+    generations: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    x_posts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    link_x_posts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     removed: Mapped[bool] = mapped_column(Boolean, default=False)

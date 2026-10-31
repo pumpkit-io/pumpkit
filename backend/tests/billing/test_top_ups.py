@@ -177,7 +177,7 @@ async def test_the_plans_offer_the_top_up_with_its_price_and_half_of_each_cap(
     }
 
 
-async def test_a_small_cap_still_gives_a_top_up_at_least_one(
+async def test_a_top_up_of_a_small_cap_rounds_down_to_zero(
     client, fake_billing, sells_top_ups, monkeypatch
 ):
     monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", 1)
@@ -185,7 +185,7 @@ async def test_a_small_cap_still_gives_a_top_up_at_least_one(
 
     top_up = (await client.get(PLANS)).json()["top_up"]
 
-    assert (top_up["x_posts"], top_up["link_x_posts"]) == (0, 1)
+    assert (top_up["x_posts"], top_up["link_x_posts"]) == (0, 0)
 
 
 async def test_a_completed_top_up_checkout_adds_the_top_up_for_12_months(
@@ -206,6 +206,23 @@ async def test_a_completed_top_up_checkout_adds_the_top_up_for_12_months(
             "expires_at": "2027-10-03T08:00:00Z",
         }
     ]
+
+
+async def test_a_top_up_adds_none_of_a_small_cap_and_no_number_for_a_count_with_no_cap(
+    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock, monkeypatch
+):
+    monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", None)
+    monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", 1)
+    fake_billing.set_top_up(stripe_customer, _purchase())
+
+    await _send(client, fake_billing, "evt_1", "checkout.session.completed", {"customer": "cus_1"})
+
+    [top_up] = await _top_ups(client)
+    assert (top_up["generations_left"], top_up["x_posts_left"], top_up["link_x_posts_left"]) == (
+        None,
+        50,
+        0,
+    )
 
 
 async def test_a_replayed_sync_adds_each_top_up_once(

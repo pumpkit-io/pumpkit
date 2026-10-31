@@ -197,6 +197,32 @@ async def test_a_trial_gets_a_quarter_of_the_x_posts_and_link_posts(
     )
 
 
+async def test_a_trial_whose_link_share_rounds_down_to_zero_refuses_links_clearly(
+    client, db, subscribed, connect_x, fixed_clock, post_with, caps
+):
+    caps(x_posts=100, link_x_posts=3)
+    await _subscription(
+        db,
+        subscribed,
+        status="trialing",
+        trial_start=_utc(2026, 10, 7, 9),
+        trial_end=_utc(2026, 10, 14, 9),
+        billing_cycle_anchor=_utc(2026, 10, 14, 9),
+    )
+    await connect_x()
+
+    plain = await _schedule(client, post_with, "2026-10-11T09:00:00Z", "No link")
+    refused = await _schedule(client, post_with, "2026-10-11T10:00:00Z", "Read a.com")
+
+    assert plain.status_code == 201
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "Your trial doesn't include X posts with a link. Subscribe now or schedule it after "
+        "your trial ends on 14 October."
+    )
+    assert (refused.json()["ran_out"], refused.json()["left"]) == ("link_x_posts", 0)
+
+
 async def test_parts_of_a_failed_post_that_x_never_accepted_dont_count(
     client, ready, post_with, caps, fake_x_publisher
 ):

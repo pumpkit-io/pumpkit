@@ -3,6 +3,7 @@ Scheduled posts and their moves between states.
 Flushes and never commits: the caller (the mediator or `publishing`) owns the transaction.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, cast
@@ -24,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Subquery
 
-from pumpkit.billing.models import TopUpCharge
+from pumpkit.billing.models import TopUp, TopUpCharge
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -325,16 +326,27 @@ async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
     return result.scalar_one_or_none()
 
 
+async def stuck_user_ids(db: AsyncSession, *, publishing_since: datetime) -> list[str]:
+    """The Users with a Scheduled post in publishing since before `publishing_since`, in id order."""
+    result = await db.execute(
+        select(ScheduledPost.user_id)
+        .where(_stuck(publishing_since))
+        .distinct()
+        .order_by(ScheduledPost.user_id)
+    )
+    return list(result.scalars())
+
+
 async def publish_stuck(
-    db: AsyncSession, *, publishing_since: datetime, now: datetime
+    db: AsyncSession, *, publishing_since: datetime, user_ids: list[str], now: datetime
 ) -> list[str]:
     """
-    Move every Scheduled post in publishing since before `publishing_since` whose Parts are all
-    live to Published, at its claim time, and return their ids.
+    Move every Scheduled post of `user_ids` in publishing since before `publishing_since` whose
+    Parts are all live to Published, at its claim time, and return their ids.
     """
     result = await db.execute(
         update(ScheduledPost)
-        .where(_stuck(publishing_since), ~_has_part_not_live())
+        .where(_stuck(publishing_since), ScheduledPost.user_id.in_(user_ids), ~_has_part_not_live())
         .values(
             state=PUBLISHED,
             published_at=ScheduledPost.publishing_started_at,
@@ -347,15 +359,20 @@ async def publish_stuck(
 
 
 async def fail_stuck(
-    db: AsyncSession, *, publishing_since: datetime, reason: str, now: datetime
+    db: AsyncSession,
+    *,
+    publishing_since: datetime,
+    user_ids: list[str],
+    reason: str,
+    now: datetime,
 ) -> list[str]:
     """
-    Move every Scheduled post in publishing since before `publishing_since` with a Part not
-    live to Failed, and return their ids. Parts already live stay live.
+    Move every Scheduled post of `user_ids` in publishing since before `publishing_since` with a
+    Part not live to Failed, and return their ids. Parts already live stay live.
     """
     result = await db.execute(
         update(ScheduledPost)
-        .where(_stuck(publishing_since), _has_part_not_live())
+        .where(_stuck(publishing_since), ScheduledPost.user_id.in_(user_ids), _has_part_not_live())
         .values(state=FAILED, failed_reason=reason, updated_at=now)
         .returning(ScheduledPost.id)
         .execution_options(synchronize_session=False)
@@ -422,20 +439,20 @@ async def x_posts_used_between(
     user_id: str,
     start: datetime,
     end: datetime,
-    excluding_id: Optional[str] = None,
+    excluding: Collection[str] = (),
 ) -> XPosts:
     """
     The X posts and link posts of the User's Scheduled posts with `start <= publish_at < end`:
     every Part, except those of a Failed one that X never accepted, which cost nothing, less
-    those charged to a Top-up.
+    those charged to a Top-up not since refunded or disputed.
     """
     in_window = [
         ScheduledPost.user_id == user_id,
         ScheduledPost.publish_at >= start,
         ScheduledPost.publish_at < end,
     ]
-    if excluding_id is not None:
-        in_window.append(ScheduledPost.id != excluding_id)
+    if excluding:
+        in_window.append(ScheduledPost.id.not_in(excluding))
     parts = await db.execute(
         select(ScheduledPostPart.text)
         .join(ScheduledPost)
@@ -450,7 +467,8 @@ async def x_posts_used_between(
             await db.execute(
                 select(TopUpCharge.count, func.sum(TopUpCharge.quantity))
                 .join(ScheduledPost, TopUpCharge.scheduled_post_id == ScheduledPost.id)
-                .where(*in_window)
+                .join(TopUp, TopUpCharge.top_up_id == TopUp.id)
+                .where(*in_window, TopUp.removed.is_(False))
                 .group_by(TopUpCharge.count)
             )
         ).tuples()

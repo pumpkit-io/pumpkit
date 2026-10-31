@@ -225,3 +225,23 @@ async def test_a_user_who_isnt_subscribed_spends_no_top_up(
 
     assert response.status_code == 403
     assert (await client.get(USAGE)).json() == {"allowance": None}
+
+
+async def test_a_refunded_top_up_moves_the_versions_it_paid_for_back_onto_the_allowance(
+    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _use_allowance(db, user.id)
+    await _start_post(client, fake_llm)
+    fake_billing.set_top_up(
+        CUSTOMER,
+        TopUpPurchase(checkout_session_id="cs_1", paid_at=_utc(2026, 10, 3), reversed=True),
+    )
+    payload, signature = fake_billing.signed_event(
+        event_id="evt_refund", event_type="charge.refunded", data_object={"customer": CUSTOMER}
+    )
+    await client.post(WEBHOOK, content=payload, headers={"stripe-signature": signature})
+
+    generations = (await client.get(USAGE)).json()["allowance"]["generations"]
+
+    assert (generations["used"], generations["left"]) == (5, 0)

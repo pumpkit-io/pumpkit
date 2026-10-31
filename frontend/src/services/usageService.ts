@@ -8,15 +8,18 @@ export interface UsageCount {
   left: number | null;
 }
 
-/** What one unexpired Top-up has left, spent only once the Allowance is used up. */
+/**
+ * What one unexpired Top-up has left, spent only once the Allowance is used up; null for a count
+ * that had no cap when it was bought.
+ */
 export interface TopUpUsage {
-  generationsLeft: number;
-  xPostsLeft: number;
-  linkXPostsLeft: number;
+  generationsLeft: number | null;
+  xPostsLeft: number | null;
+  linkXPostsLeft: number | null;
   expiresAt: Date;
 }
 
-/** What the User has used and has left of the Allowance period holding now. */
+/** What the User has used and has left of the Allowance period holding a moment, now by default. */
 export interface AllowanceUsage {
   trial: boolean;
   /** When the period ends: the next reset, or the Trial's end. */
@@ -49,9 +52,9 @@ interface UsageApi {
     link_x_posts: UsageCount;
     way_out: AllowanceWayOut | null;
     top_ups: {
-      generations_left: number;
-      x_posts_left: number;
-      link_x_posts_left: number;
+      generations_left: number | null;
+      x_posts_left: number | null;
+      link_x_posts_left: number | null;
       expires_at: string;
     }[];
     may_buy_top_up: boolean;
@@ -59,8 +62,9 @@ interface UsageApi {
 }
 
 export const usageService = {
-  get: async (): Promise<Usage> => {
-    const { data } = await apiService.get<UsageApi>('/usage');
+  /** The Allowance period holding `at`, an ISO instant such as a publish time, or now. */
+  get: async (at?: string): Promise<Usage> => {
+    const { data } = await apiService.get<UsageApi>('/usage', at ? { params: { at } } : undefined);
     const { allowance } = data;
     return {
       allowance: allowance && {

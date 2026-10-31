@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,8 +60,12 @@ async def get_usage(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
+    at: Annotated[
+        Optional[datetime],
+        Query(description="A moment whose Allowance period to report, such as a publish time."),
+    ] = None,
 ) -> UsageResponse:
-    return await mediator.get_usage(db=db, user=current_user, now=clock())
+    return await mediator.get_usage(db=db, user=current_user, at=at or clock())
 
 
 @x_connection_router.get(

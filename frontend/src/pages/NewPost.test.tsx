@@ -666,6 +666,30 @@ describe('New post', () => {
       );
     });
 
+    it('asks for billing once when the subscribe now dialog fails to load it', async () => {
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp("You've used your trial's 125 generations.", {
+          way_out: 'subscribe_now',
+        }),
+      );
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship small things');
+      const subscribeNow = await area.findByRole('button', { name: 'Subscribe now' });
+      const fetchPlans = vi.mocked(billingService.fetchPlans);
+      const before = fetchPlans.getMockImplementation();
+      onTestFinished(() => void fetchPlans.mockImplementation(before!));
+      fetchPlans.mockClear().mockRejectedValue(new Error('down'));
+
+      fireEvent.click(subscribeNow);
+
+      const dialog = within(await screen.findByRole('dialog'));
+      expect(
+        await dialog.findByText("Couldn't load billing information. Reload the page to try again."),
+      ).toBeInTheDocument();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(billingService.fetchPlans).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
       [403, 'This needs a subscription. Subscribe to continue.'],
       [422, 'The Brief is too long.'],

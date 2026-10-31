@@ -3,6 +3,7 @@ Pumpkit's copy of each Subscription and Top-up, synced from the billing provider
 the Stripe event log that makes webhooks idempotent, and Users' acceptances of the Terms.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -246,11 +247,11 @@ async def top_up_balances(
     *,
     user_id: str,
     moment: datetime,
-    giving_back: Optional[str] = None,
+    giving_back: Collection[str] = (),
 ) -> list[TopUpBalance]:
     """
     What each of the User's Top-ups unexpired at `moment` has left, first to expire first, with
-    the charges of the Scheduled post `giving_back` given back.
+    the charges of the Scheduled posts `giving_back` given back.
     """
     top_ups = list(
         (
@@ -276,7 +277,7 @@ async def top_up_balances(
                     TopUpCharge.top_up_id.in_([t.id for t in top_ups]),
                     or_(
                         TopUpCharge.scheduled_post_id.is_(None),
-                        TopUpCharge.scheduled_post_id != giving_back,
+                        TopUpCharge.scheduled_post_id.not_in(giving_back),
                     ),
                 )
                 .group_by(TopUpCharge.top_up_id, TopUpCharge.count)
@@ -287,12 +288,16 @@ async def top_up_balances(
         TopUpBalance(
             id=t.id,
             expires_at=as_utc(t.expires_at),
-            generations=t.generations - charged.get((t.id, "generations"), 0),
-            x_posts=t.x_posts - charged.get((t.id, "x_posts"), 0),
-            link_x_posts=t.link_x_posts - charged.get((t.id, "link_x_posts"), 0),
+            generations=_pack_left(t.generations, charged.get((t.id, "generations"), 0)),
+            x_posts=_pack_left(t.x_posts, charged.get((t.id, "x_posts"), 0)),
+            link_x_posts=_pack_left(t.link_x_posts, charged.get((t.id, "link_x_posts"), 0)),
         )
         for t in top_ups
     ]
+
+
+def _pack_left(pack: Optional[int], charged: int) -> Optional[int]:
+    return None if pack is None else pack - charged
 
 
 async def check_room_with_top_ups(
@@ -304,20 +309,17 @@ async def check_room_with_top_ups(
     used: int,
     needed: int,
     moment: datetime,
-    giving_back: Optional[str] = None,
 ) -> None:
     """
     Raise `AllowanceUsedUp` unless the Allowance, with `used` gone, and the User's Top-ups
-    unexpired at `moment` together have room for `needed` more of `count`. Pass `giving_back`
-    when changing a Scheduled post, so what it took from the Top-ups counts as theirs again.
+    unexpired at `moment` together have room for `needed` more of `count`.
     """
     limit: Optional[int] = getattr(allowance, count)
     short = shortfall(limit=limit, used=used, needed=needed)
     if limit is None or short == 0:
         return
     in_top_ups = sum(
-        b.left(count)
-        for b in await top_up_balances(db, user_id=user_id, moment=moment, giving_back=giving_back)
+        b.left(count) for b in await top_up_balances(db, user_id=user_id, moment=moment)
     )
     if in_top_ups >= short:
         return
@@ -339,8 +341,7 @@ async def charge_shortfall(
     used: int,
     needed: int,
     moment: datetime,
-    version_attempt_id: Optional[str] = None,
-    scheduled_post_id: Optional[str] = None,
+    version_attempt_id: str,
 ) -> int:
     """
     Charge what the Allowance, with `used` gone, can't cover of `needed` to the Top-ups unexpired
@@ -359,11 +360,27 @@ async def charge_shortfall(
                 count=count,
                 quantity=quantity,
                 version_attempt_id=version_attempt_id,
-                scheduled_post_id=scheduled_post_id,
             )
         )
     await db.flush()
     return sum(quantity for _, quantity in charges)
+
+
+async def record_charges(
+    db: AsyncSession,
+    *,
+    scheduled_post_id: str,
+    count: AllowanceCount,
+    charges: list[tuple[str, int]],
+) -> None:
+    """Record what the Scheduled post takes from each Top-up, as (Top-up, quantity). Flushes."""
+    db.add_all(
+        TopUpCharge(
+            top_up_id=top_up_id, count=count, quantity=quantity, scheduled_post_id=scheduled_post_id
+        )
+        for top_up_id, quantity in charges
+    )
+    await db.flush()
 
 
 async def give_back_charges(db: AsyncSession, *, scheduled_post_id: str) -> None:
@@ -395,9 +412,9 @@ async def sync_top_ups(
         top_up = TopUp(
             user_id=user_id,
             stripe_checkout_session_id=purchase.checkout_session_id,
-            generations=pack.generations or 0,
-            x_posts=pack.x_posts or 0,
-            link_x_posts=pack.link_x_posts or 0,
+            generations=pack.generations,
+            x_posts=pack.x_posts,
+            link_x_posts=pack.link_x_posts,
             purchased_at=purchase.paid_at,
             expires_at=months_after(purchase.paid_at, TOP_UP_MONTHS),
             removed=purchase.reversed,

@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
@@ -28,7 +27,7 @@ from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import Post
 from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
-from pumpkit.scheduling import communities, rules, service
+from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
@@ -160,16 +159,16 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
     return connection
 
 
-@dataclass(frozen=True)
-class _CountCheck:
-    """One count `check_x_posts_room` checks: its limit, the period's use, and what is added."""
-
-    count: AllowanceCount
-    limit: Optional[int]
-    used: int
-    adding: int
-    # What the Scheduled post being changed already used of it, when it stays in place.
-    had: Optional[int]
+def _growing(
+    needed: rules.XPosts, before: Optional[rules.XPosts], caps: dict[AllowanceCount, Optional[int]]
+) -> list[AllowanceCount]:
+    """The capped counts the change adds to: all it needs when new or moving, else what grows."""
+    return [
+        count
+        for count in caps
+        if caps[count] is not None
+        and (before is None or getattr(needed, count) > getattr(before, count))
+    ]
 
 
 async def check_x_posts_room(
@@ -183,59 +182,54 @@ async def check_x_posts_room(
 ) -> None:
     """
     Room for `parts` as X posts and link posts publishing at `publish_at`: where Plans are sold,
-    in its Allowance period, then the Top-ups unexpired at `publish_at`; else in its UTC calendar
-    month. Pass `excluding_id` when changing an existing one, so it doesn't count itself, and
-    `before`, what it used, when it stays in place, so only what grows is checked.
+    in its Allowance period, then the Top-ups, with every post in the period charged afresh; else
+    in its UTC calendar month. Pass `excluding_id` when changing an existing one, so it doesn't
+    count itself, and `before`, what it used, when it stays in place, so only what grows is
+    checked.
     """
     needed = rules.x_posts_in(parts)
     if billing_service.sells_plans():
         allowance = await billing_service.get_allowance(db, user_id=user_id, moment=publish_at)
         if allowance is None:
             return
-        start, end = allowance.period.start, allowance.period.end
-        caps = {"x_posts": allowance.x_posts, "link_x_posts": allowance.link_x_posts}
-    else:
-        allowance = None
-        start, end = rules.month_bounds(publish_at)
-        caps = {
-            "x_posts": settings.X_POSTS_MONTHLY_CAP,
-            "link_x_posts": settings.X_LINK_POSTS_MONTHLY_CAP,
-        }
-    used = await service.x_posts_used_between(
-        db, user_id=user_id, start=start, end=end, excluding_id=excluding_id
-    )
-    checks = [
-        _CountCheck(
-            count=count,
-            limit=caps[count],
-            used=getattr(used, count),
-            adding=getattr(needed, count),
-            had=getattr(before, count) if before is not None else None,
+        counts = _growing(
+            needed,
+            before,
+            {"x_posts": allowance.x_posts, "link_x_posts": allowance.link_x_posts},
         )
-        for count in ("x_posts", "link_x_posts")
-    ]
-    for check in checks:
-        if check.limit is None or (check.had is not None and check.adding <= check.had):
-            continue
-        if allowance is not None:
-            await billing_service.check_room_with_top_ups(
+        if counts:
+            await top_up_charges.check_room(
                 db,
                 user_id=user_id,
                 allowance=allowance,
-                count=check.count,
-                used=check.used,
-                needed=check.adding,
-                moment=publish_at,
-                giving_back=excluding_id,
+                publish_at=publish_at,
+                needed=needed,
+                counts=counts,
+                changing_id=excluding_id,
             )
-        else:
-            rules.check_month_has_room(
-                check.used,
-                adding=check.adding,
-                cap=check.limit,
-                moment=publish_at,
-                noun=COUNT_NOUNS[check.count],
-            )
+        return
+    caps: dict[AllowanceCount, Optional[int]] = {
+        "x_posts": settings.X_POSTS_MONTHLY_CAP,
+        "link_x_posts": settings.X_LINK_POSTS_MONTHLY_CAP,
+    }
+    start, end = rules.month_bounds(publish_at)
+    used = await service.x_posts_used_between(
+        db,
+        user_id=user_id,
+        start=start,
+        end=end,
+        excluding=[excluding_id] if excluding_id is not None else (),
+    )
+    for count in _growing(needed, before, caps):
+        cap = caps[count]
+        assert cap is not None
+        rules.check_month_has_room(
+            getattr(used, count),
+            adding=getattr(needed, count),
+            cap=cap,
+            moment=publish_at,
+            noun=COUNT_NOUNS[count],
+        )
 
 
 def _usage_count(limit: Optional[int], used: int) -> UsageCountResponse:
@@ -244,8 +238,10 @@ def _usage_count(limit: Optional[int], used: int) -> UsageCountResponse:
     )
 
 
-async def get_usage(db: AsyncSession, user: User, now: datetime) -> UsageResponse:
-    allowance = await billing_service.get_allowance(db, user_id=user.id, moment=now)
+async def get_usage(db: AsyncSession, user: User, at: datetime) -> UsageResponse:
+    """The User's usage in the Allowance period holding `at`, with the Top-ups unexpired then."""
+    at = as_utc(at)
+    allowance = await billing_service.get_allowance(db, user_id=user.id, moment=at)
     if allowance is None:
         return UsageResponse(allowance=None)
     period = allowance.period
@@ -266,12 +262,12 @@ async def get_usage(db: AsyncSession, user: User, now: datetime) -> UsageRespons
             way_out=allowance.way_out,
             top_ups=[
                 TopUpUsageResponse(
-                    generations_left=top_up.left("generations"),
-                    x_posts_left=top_up.left("x_posts"),
-                    link_x_posts_left=top_up.left("link_x_posts"),
+                    generations_left=top_up.left_or_none("generations"),
+                    x_posts_left=top_up.left_or_none("x_posts"),
+                    link_x_posts_left=top_up.left_or_none("link_x_posts"),
                     expires_at=top_up.expires_at,
                 )
-                for top_up in await billing_service.top_up_balances(db, user_id=user.id, moment=now)
+                for top_up in await billing_service.top_up_balances(db, user_id=user.id, moment=at)
                 if top_up.has_left()
             ],
             may_buy_top_up=allowance.way_out == "top_up",

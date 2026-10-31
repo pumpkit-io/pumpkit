@@ -325,3 +325,74 @@ async def test_a_post_failing_at_the_publisher_moves_a_later_one_onto_the_allowa
     await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
 
     assert await _x_posts_left(client) == (3, [2])
+
+
+async def test_a_post_that_would_push_a_later_one_onto_an_expired_top_up_is_refused(
+    client, ready, post_with, fake_billing
+):
+    # Lasts until 12 October 2026, between the new post and the Thread after it.
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2025, 10, 12))
+    await _schedule(client, post_with, "2026-10-13T09:00:00Z", *["Part"] * 4)
+
+    response = await _schedule(client, post_with, "2026-10-11T09:00:00Z", "One", "Two")
+
+    assert response.status_code == 409
+    assert (response.json()["ran_out"], response.json()["left"]) == ("x_posts", 0)
+    assert await _x_posts_left(client) == (0, [2])
+
+
+async def test_an_edit_that_would_push_a_later_post_onto_an_expired_top_up_is_refused(
+    client, ready, post_with, fake_billing
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2025, 10, 12))
+    await _schedule(client, post_with, "2026-10-13T09:00:00Z", *["Part"] * 3)
+    single = (await _schedule(client, post_with, "2026-10-14T08:00:00Z", "One")).json()
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{single['id']}",
+        json={"publish_at": "2026-10-11T09:00:00Z", "parts": ["One", "Two"]},
+    )
+
+    assert response.status_code == 409
+    assert await _x_posts_left(client) == (0, [2])
+
+
+async def test_a_refunded_top_up_moves_what_it_paid_for_back_onto_the_allowance(
+    client, ready, post_with, fake_billing
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _schedule(client, post_with, "2026-10-11T09:00:00Z", *["Part"] * 5)
+    fake_billing.set_top_up(
+        CUSTOMER,
+        TopUpPurchase(checkout_session_id="cs_1", paid_at=_utc(2026, 10, 3), reversed=True),
+    )
+    payload, signature = fake_billing.signed_event(
+        event_id="evt_refund", event_type="charge.refunded", data_object={"customer": CUSTOMER}
+    )
+    await client.post(WEBHOOK, content=payload, headers={"stripe-signature": signature})
+
+    x_posts = (await client.get(USAGE)).json()["allowance"]["x_posts"]
+
+    assert (x_posts["used"], x_posts["left"]) == (5, 0)
+
+
+async def test_usage_at_a_later_moment_reports_its_period_and_the_top_ups_unexpired_then(
+    client, ready, post_with, fake_billing
+):
+    # Lasts until 20 October 2026, inside the period from 14 October.
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2025, 10, 20))
+    await _schedule(client, post_with, "2026-10-15T09:00:00Z", "Next period")
+
+    now = (await client.get(USAGE)).json()["allowance"]
+    later = (await client.get(USAGE, params={"at": "2026-10-21T09:00:00Z"})).json()["allowance"]
+
+    assert (now["resets_at"], now["x_posts"]["used"], len(now["top_ups"])) == (
+        "2026-10-14T09:00:00Z",
+        0,
+        1,
+    )
+    assert (later["resets_at"], later["x_posts"]["used"], later["top_ups"]) == (
+        "2026-11-14T09:00:00Z",
+        1,
+        [],
+    )

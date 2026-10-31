@@ -902,6 +902,35 @@ describe('Settings', () => {
       expect(await screen.findByRole('dialog', { name: 'Buy a top-up' })).toBeInTheDocument();
     });
 
+    it('leaves a count with no limit out of a top-up and its offer', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({
+        ...CATALOG,
+        topUp: { ...TOP_UP, generations: null },
+      });
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          topUps: [
+            {
+              generationsLeft: null,
+              xPostsLeft: 50,
+              linkXPostsLeft: 5,
+              expiresAt: new Date('2027-10-03T08:00:00Z'),
+            },
+          ],
+          mayBuyTopUp: true,
+        }),
+      );
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      expect(
+        await usageCard.findByText('Top-up: 50 X posts left, until 3 October 2027'),
+      ).toBeInTheDocument();
+      fireEvent.click(await usageCard.findByRole('button', { name: 'Buy top-up, €10' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Buy a top-up' });
+      expect(within(dialog).getByText(/^50 X posts, up to 5 with a link, for €10\./)).toBeVisible();
+    });
+
     it('offers only Buy top-up while no top-up has anything left', async () => {
       vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
       vi.mocked(usageService.get).mockResolvedValue(usageWith({ mayBuyTopUp: true }));

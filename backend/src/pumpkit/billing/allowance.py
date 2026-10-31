@@ -60,11 +60,11 @@ class Limits:
 def _caps_divided_by(divisor: int) -> Limits:
     """
     Each of the Instance's caps over `divisor`, rounded down, so changing a cap keeps the share in
-    proportion; a cap of 1 or more never gives less than 1.
+    proportion; a small cap may give 0.
     """
 
     def share(cap: Optional[int]) -> Optional[int]:
-        return None if cap is None else max(min(cap, 1), cap // divisor)
+        return None if cap is None else cap // divisor
 
     return Limits(
         generations=share(settings.GENERATIONS_MONTHLY_CAP),
@@ -191,7 +191,15 @@ class AllowanceUsedUp(ConflictError):
     ) -> None:
         period = allowance.period
         noun = COUNT_NOUNS[ran_out]
-        if needed > 1 and left > 0:
+        if limit == 0:
+            # A small cap's Trial share rounds down to 0; a Top-up of it adds none either.
+            if not period.trial:
+                used = f"Your plan doesn't include {noun}."
+            elif ran_out == "generations":
+                used = f"Your trial doesn't include {noun}. Your trial ends on {_day(period.end)}."
+            else:
+                used = f"Your trial doesn't include {noun}. {_thread_way_out(allowance)}"
+        elif needed > 1 and left > 0:
             # Only a Thread needs several at once, and it is refused whole.
             in_trial = " in your trial" if period.trial else ""
             used = (
@@ -204,7 +212,7 @@ class AllowanceUsedUp(ConflictError):
             )
         else:
             used = f"You've used this period's {limit} {noun}. They reset on {_day(period.end)}."
-        if ran_out == "generations":
+        if ran_out == "generations" and limit > 0:
             used = f"{used} Failed attempts don't count."
         super().__init__(used, fix_page=SETTINGS_PAGE)
         self.ran_out = ran_out
@@ -223,18 +231,3 @@ class AllowanceUsedUp(ConflictError):
             "resets_at": self.resets_at.isoformat().replace("+00:00", "Z"),
             "way_out": self.way_out,
         }
-
-
-def check_room(
-    *, ran_out: AllowanceCount, limit: Optional[int], used: int, needed: int, allowance: Allowance
-) -> None:
-    """Raise `AllowanceUsedUp` when `needed` more would take `used` past `limit`."""
-    if limit is None or used + needed <= limit:
-        return
-    raise AllowanceUsedUp(
-        ran_out=ran_out,
-        needed=needed,
-        left=max(0, limit - used),
-        limit=limit,
-        allowance=allowance,
-    )

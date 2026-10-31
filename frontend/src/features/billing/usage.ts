@@ -48,5 +48,5 @@ const TOP_UP_LEFT = {
 
 /** What the User's Top-ups have left together of a count, spent once the Allowance is used up. */
 export function leftInTopUps(allowance: AllowanceUsage, count: keyof typeof TOP_UP_LEFT): number {
-  return allowance.topUps.reduce((sum, topUp) => sum + topUp[TOP_UP_LEFT[count]], 0);
+  return allowance.topUps.reduce((sum, topUp) => sum + (topUp[TOP_UP_LEFT[count]] ?? 0), 0);
 }

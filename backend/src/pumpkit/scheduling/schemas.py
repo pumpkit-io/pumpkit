@@ -252,11 +252,14 @@ class UsageCountResponse(BaseModel):
 
 
 class TopUpUsageResponse(BaseModel):
-    """What one unexpired Top-up has left, spent only once the Allowance is used up."""
+    """
+    What one unexpired Top-up has left, spent only once the Allowance is used up; None for a count
+    that had no cap when it was bought.
+    """
 
-    generations_left: int
-    x_posts_left: int
-    link_x_posts_left: int
+    generations_left: Optional[int]
+    x_posts_left: Optional[int]
+    link_x_posts_left: Optional[int]
     expires_at: datetime
 
 

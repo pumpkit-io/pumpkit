@@ -86,15 +86,15 @@ function overLimit(
 }
 
 /**
- * What the Parts about to go out with a link use of the link posts left, in the period and in
- * Top-ups; null without a link, or without a cap on them.
+ * What the Parts about to go out with a link use of the X posts with a link left, in the period
+ * and in Top-ups; null without a link, or without a cap on them.
  */
 function linkNote(linkCount: number, allowance: AllowanceUsage | null | undefined): string | null {
   const inPeriod = allowance?.linkXPosts.left;
   if (linkCount === 0 || !allowance || inPeriod === null || inPeriod === undefined) return null;
   const left = inPeriod + leftInTopUps(allowance, 'linkXPosts');
   const links = linkCount === 1 ? 'Contains a link' : 'Contains links';
-  return `${links}: uses ${linkCount} of your ${left} link ${left === 1 ? 'post' : 'posts'}`;
+  return `${links}: uses ${linkCount} of your ${left} ${left === 1 ? 'X post' : 'X posts'} with a link`;
 }
 
 const PART_TEXT = 'whitespace-pre-wrap break-words font-sans text-sm text-foreground';
@@ -180,17 +180,18 @@ export function PostToDialog({
   const goToChoosePlan = useGoToChoosePlan();
   const { connection } = useXConnectionContext();
   const { sending, error, allowanceUsedUp, send } = sender;
-  const { usage } = useUsage();
   const [step, setStep] = useState<Step>({ kind: 'choose' });
   const [where, setWhere] = useState<DestinationDraft>(initialWhere);
   const [when, setWhen] = useState<WhenDraft>(initialWhen);
+  const publishAt = publishAtFrom(when);
+  // The period the post would count against: the chosen time's, or now's for Post now.
+  const { usage } = useUsage(publishAt);
 
   const liveCount = parts.filter((part) => part.live).length;
   const thread = format === FORMAT_THREAD || liveCount > 0;
   const live = liveNote(liveCount, parts.length);
   const toSend = parts.length - liveCount;
   const destination = destinationFrom(where);
-  const publishAt = publishAtFrom(when);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
   const tooLong = ready ? overLimit(parts, lengths, connection.charLimit, thread) : [];

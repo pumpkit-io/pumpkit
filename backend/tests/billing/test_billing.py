@@ -530,9 +530,7 @@ async def test_the_plans_follow_the_instances_caps_and_trial_length(
     }
 
 
-async def test_a_small_cap_still_gives_a_trial_at_least_one_and_zero_stays_zero(
-    client, fake_billing, monkeypatch
-):
+async def test_a_trial_share_of_a_small_cap_rounds_down_to_zero(client, fake_billing, monkeypatch):
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 3)
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 0)
     monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", 1)
@@ -540,7 +538,7 @@ async def test_a_small_cap_still_gives_a_trial_at_least_one_and_zero_stays_zero(
     response = await client.get(PLANS)
 
     trial = response.json()["trial"]
-    assert (trial["generations"], trial["x_posts"], trial["link_x_posts"]) == (1, 0, 1)
+    assert (trial["generations"], trial["x_posts"], trial["link_x_posts"]) == (0, 0, 0)
 
 
 async def test_the_plans_offer_no_trial_where_trials_are_off(client, fake_billing, monkeypatch):

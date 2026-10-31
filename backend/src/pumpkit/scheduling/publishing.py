@@ -41,9 +41,18 @@ async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: date
 
 
 async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
-    recovered = await publish.recover_stuck(db, now=now)
+    publishing_since = now - publish.STUCK_AFTER
+    user_ids = await service.stuck_user_ids(db, publishing_since=publishing_since)
+    if not user_ids:
+        await db.commit()
+        return
+    # Users before Scheduled post rows, as requests lock them, in id order so two passes agree.
+    for user_id in user_ids:
+        await users_service.lock_user_id(db, user_id=user_id)
+    recovered = await publish.recover_stuck(
+        db, publishing_since=publishing_since, user_ids=user_ids, now=now
+    )
     for scheduled_post in recovered.failed:
-        await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
         await rebalance_top_ups(
             db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)]
         )

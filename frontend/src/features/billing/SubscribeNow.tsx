@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { showToast } from '@/components/Toaster';
 import { Button, type ButtonProps } from '@/components/ui/button';
 import {
@@ -14,7 +14,7 @@ import { formatAmount } from '@/lib/money';
 import { errorMessage } from '@/services/apiErrors';
 import { billingService, type OfferedAllowance, type Plan } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
-import { useBilling } from './useBilling';
+import { useLoadedBilling } from './useBilling';
 
 /** "month", "3 months", "year": how long the first charge pays for. */
 function firstPeriod({ interval, intervalCount }: Plan): string {
@@ -54,14 +54,9 @@ function SubscribeNowDialog({
   onOpenChange: (open: boolean) => void;
   onSubscribed?: () => void;
 }) {
-  const { data, isLoading, load } = useBilling();
+  const { data, loadError, load } = useLoadedBilling(open);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Away from Settings, billing hasn't been loaded yet.
-  useEffect(() => {
-    if (open && !data && !isLoading) void load();
-  }, [open, data, isLoading, load]);
 
   const confirm = async () => {
     setBusy(true);
@@ -95,7 +90,7 @@ function SubscribeNowDialog({
             Subscribe now
           </DialogTitle>
           <DialogDescription className="font-sans">
-            {data ? explanation(data) : 'Loading the price…'}
+            {data ? explanation(data) : (loadError ?? 'Loading the price…')}
           </DialogDescription>
         </DialogHeader>
         {error && (
