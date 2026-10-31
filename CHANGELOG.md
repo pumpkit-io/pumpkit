@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-31
+
 ### Added
 
 - Recently opened on the Drafts tab: the three Drafts you opened last, most recently opened first, above All drafts. A Draft drops off after 48 hours unopened, and the list is kept in your browser and cleared when you sign out.
