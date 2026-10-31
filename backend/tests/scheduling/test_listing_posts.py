@@ -30,6 +30,8 @@ SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 T0 = datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc)
 NO_POSTS = {"draft": 0, "scheduled": 0, "published": 0, "failed": 0}
 
+pytestmark = pytest.mark.usefixtures("subscribed")
+
 
 @pytest.fixture
 def seed_post(db, user):
@@ -352,12 +354,6 @@ async def test_unscheduling_moves_the_post_back_to_drafts(client, with_author_an
     listed = await _listed(client, "draft")
     assert [item["id"] for item in listed["data"]] == [post["id"]]
     assert listed["counts"] == {**NO_POSTS, "draft": 1}
-
-
-async def test_a_user_who_is_not_subscribed_still_lists_their_posts(client, seed_post):
-    draft = await seed_post(["Draft."])
-
-    assert await _ids(client, "draft") == [draft]
 
 
 @pytest.fixture

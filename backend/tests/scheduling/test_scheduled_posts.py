@@ -312,20 +312,6 @@ async def test_reconnecting_clears_the_reconnect_flag(
     assert (await _post_now(client, post_with)).json()["state"] == "published"
 
 
-async def test_a_user_whose_subscription_ended_still_sees_their_scheduled_posts(
-    client, db, subscribed, fake_x_publisher, clock, connect_x, post_with
-):
-    await connect_x()
-    published = (await _post_now(client, post_with, "Went out")).json()
-    clock.advance(timedelta(minutes=1))
-    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
-    failed = (await _post_now(client, post_with, "Refused")).json()
-    subscribed.status = "canceled"
-    await db.commit()
-
-    assert await scheduled_posts(client) == [published, failed]
-
-
 async def test_published_and_failed_are_tracked_for_analytics(
     client, subscribed, fake_x_publisher, clock, monkeypatch, connect_x, post_with
 ):

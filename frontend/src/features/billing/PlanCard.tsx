@@ -28,7 +28,14 @@ export function PlanCard({
       </div>
       <div className="font-sans text-lg font-semibold text-foreground">{priceLabel}</div>
       {note && <div className="font-sans text-xs text-muted-foreground">{note}</div>}
-      <Button type="button" size="sm" onClick={onAction} disabled={disabled} aria-label={ariaLabel}>
+      <Button
+        type="button"
+        size="sm"
+        className="mt-auto"
+        onClick={onAction}
+        disabled={disabled}
+        aria-label={ariaLabel}
+      >
         {actionLabel}
       </Button>
     </div>

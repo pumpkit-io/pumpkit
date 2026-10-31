@@ -102,7 +102,7 @@ name = "Areas import only the areas below them"
 type = "layers"
 layers = [
     "pumpkit.scheduling",
-    "pumpkit.posts",
+    "pumpkit.posts | pumpkit.onboarding",
     "pumpkit.authors | pumpkit.x_connection | pumpkit.support",
     "pumpkit.billing",
     "pumpkit.auth",
@@ -120,6 +120,7 @@ forbidden_modules = [
     "pumpkit.x_connection",
     "pumpkit.support",
     "pumpkit.posts",
+    "pumpkit.onboarding",
     "pumpkit.scheduling",
 ]
 
@@ -167,6 +168,12 @@ protected_modules = ["pumpkit.scheduling.router", "pumpkit.scheduling.mediator"]
 allowed_importers = ["pumpkit.scheduling", "pumpkit.main"]
 
 [[tool.importlinter.contracts]]
+name = "Only onboarding and pumpkit.main import onboarding.router"
+type = "protected"
+protected_modules = ["pumpkit.onboarding.router"]
+allowed_importers = ["pumpkit.onboarding", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
 name = "Only pumpkit.mcp_server imports a tools module"
 type = "protected"
 protected_modules = [
@@ -193,6 +200,7 @@ containers = [
     "pumpkit.x_connection",
     "pumpkit.support",
     "pumpkit.posts",
+    "pumpkit.onboarding",
     "pumpkit.scheduling",
 ]
 # MCP tools sit beside the router; scheduling's publisher sits beside the mediator.

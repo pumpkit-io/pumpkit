@@ -46,6 +46,9 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     }),
   },
 }));
+vi.mock('@/services/onboardingService', () => ({
+  onboardingService: { fetchNextStep: vi.fn().mockResolvedValue('paywall') },
+}));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
@@ -65,6 +68,7 @@ import {
   SUBSCRIBED,
   apiError,
   renderSignedIn,
+  currentPath,
 } from './testing/signedInApp';
 
 function renderPersona(instance = SELLS_PLANS) {
@@ -247,22 +251,7 @@ describe('Persona', () => {
     expect(track).toHaveBeenCalledWith('inspiration_author_removed');
   });
 
-  it('shows a User who is not Subscribed their authors and a prompt that leads to Choose a plan', async () => {
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-    renderPersona();
-
-    const panel = await persona();
-    expect(await panel.findByText('@levelsio')).toBeInTheDocument();
-    expect(await panel.findByText(/needs a subscription/i)).toBeInTheDocument();
-    expect(panel.queryByLabelText('X handle')).not.toBeInTheDocument();
-    expect(panel.queryByRole('button', { name: 'Remove @levelsio' })).not.toBeInTheDocument();
-    expect(panel.queryByRole('button', { name: 'Refresh @levelsio' })).not.toBeInTheDocument();
-
-    fireEvent.click(panel.getByRole('link', { name: 'Subscribe' }));
-    expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
-  });
-
-  it('shows the prompt to subscribe when adding is refused with a 403', async () => {
+  it('sends the User to the Paywall when adding is refused with a 403', async () => {
     vi.mocked(billingService.fetchBillingMe)
       .mockResolvedValueOnce(SUBSCRIBED)
       .mockResolvedValue(NOT_SUBSCRIBED);
@@ -275,7 +264,7 @@ describe('Persona', () => {
     fireEvent.change(await panel.findByLabelText('X handle'), { target: { value: 'levelsio' } });
     fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
 
-    expect(await panel.findByRole('link', { name: 'Subscribe' })).toBeInTheDocument();
+    await waitFor(() => expect(currentPath()).toBe('/subscribe'));
   });
 
   it('refreshes an author and shows its new fetch time and post count', async () => {

@@ -331,5 +331,5 @@ TOOLS = [
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
-    McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
+    McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY),
 ]
