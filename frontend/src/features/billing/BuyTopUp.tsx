@@ -67,7 +67,7 @@ function BuyTopUpDialog({
           </DialogDescription>
         </DialogHeader>
         {termsVersion !== null && (
-          <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} />
+          <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} purchase="topUp" />
         )}
         {error && (
           <p role="alert" className="px-6 font-sans text-sm text-destructive">

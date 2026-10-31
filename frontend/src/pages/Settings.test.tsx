@@ -1150,8 +1150,8 @@ describe('Settings', () => {
       expect(href(/^Terms$/)).toBe('/terms');
       expect(href(/^Privacy Policy$/)).toBe('/privacy');
       expect(href(/withdrawal/i)).toBe('/terms#withdrawal');
-      expect(href(/13\. No refunds/)).toBe('/terms#refunds');
-      expect(href(/20\. Competent court/)).toBe('/terms#courts');
+      expect(href(/14\. No refunds/)).toBe('/terms#refunds');
+      expect(href(/21\. Competent court/)).toBe('/terms#courts');
     });
 
     it('says Subscribe for a User who gets no Trial', async () => {

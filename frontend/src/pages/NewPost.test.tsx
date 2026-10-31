@@ -586,6 +586,11 @@ describe('New post', () => {
           '250 generations and 50 X posts, up to 5 with a link, for €10. Lasts 12 months, used after your monthly allowance.',
         ),
       ).toBeInTheDocument();
+      expect(
+        within(dialog).getByRole('checkbox', {
+          name: 'I ask for the top-up to be available immediately, and acknowledge I lose the 14-day right of withdrawal once I use any of it.',
+        }),
+      ).toBeInTheDocument();
       const pay = within(dialog).getByRole('button', { name: 'Pay €10' });
       expect(pay).toBeDisabled();
       for (const box of within(dialog).getAllByRole('checkbox')) fireEvent.click(box);
