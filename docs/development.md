@@ -10,7 +10,7 @@ backend/src/pumpkit/
   core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
-  authors/         Inspiration authors and their posts; the X reader (twitterapi.io)
+  authors/         Inspiration authors, their posts and the Author directory; the X reader (twitterapi.io)
   x_connection/    X connections; the X publisher port (X's API) and X's weighted length count
   support/         the support contact redirect (a router only)
   posts/           Posts and Versions; the LLM port and OpenAI-compatible client

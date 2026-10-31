@@ -9,10 +9,13 @@ import respx
 from pumpkit.authors.x_reader import (
     TWITTERAPI_IO_COMMUNITY_INFO_URL,
     TWITTERAPI_IO_LAST_TWEETS_URL,
+    TWITTERAPI_IO_USER_INFO_URL,
     CommunityNotFoundError,
     FetchedCommunity,
     FetchedPost,
+    FetchedProfile,
     HandleNotFoundError,
+    HandleSuspendedError,
     TwitterApiIoReader,
     XReaderError,
     XReaderNotConfiguredError,
@@ -237,3 +240,128 @@ async def test_a_community_lookup_without_the_key_does_not_call_twitterapi_io(mo
         await TwitterApiIoReader().fetch_community(COMMUNITY_ID)
 
     assert not route.called
+
+
+def _user_info() -> dict:
+    return json.loads((FIXTURES / "twitterapi_io_user_info.json").read_text())
+
+
+@respx.mock
+async def test_looks_a_handle_s_profile_up():
+    route = respx.get(TWITTERAPI_IO_USER_INFO_URL).mock(
+        return_value=httpx.Response(200, json=_user_info())
+    )
+
+    profile = await TwitterApiIoReader().look_up_profile("levelsio")
+
+    assert profile == FetchedProfile(
+        handle="levelsio",
+        name="@levelsio",
+        photo_url="https://pbs.twimg.com/profile_images/2077111020305162240/PwddgOau_normal.jpg",
+        protected=False,
+    )
+    request = route.calls.last.request
+    assert request.headers["x-api-key"] == "twitterapi-test-key"
+    assert dict(request.url.params) == {"userName": "levelsio"}
+
+
+@respx.mock
+async def test_a_protected_account_s_profile_says_so():
+    body = _user_info()
+    body["data"]["protected"] = True
+    respx.get(TWITTERAPI_IO_USER_INFO_URL).mock(return_value=httpx.Response(200, json=body))
+
+    profile = await TwitterApiIoReader().look_up_profile("levelsio")
+
+    assert profile.protected is True
+
+
+@respx.mock
+async def test_a_profile_without_a_usable_name_or_photo_reads_them_as_none():
+    body = _user_info()
+    body["data"]["name"] = "  "
+    body["data"]["profilePicture"] = "http://pbs.twimg.com/a_normal.jpg"
+    respx.get(TWITTERAPI_IO_USER_INFO_URL).mock(return_value=httpx.Response(200, json=body))
+
+    profile = await TwitterApiIoReader().look_up_profile("levelsio")
+
+    assert (profile.name, profile.photo_url) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, json={"status": "error", "msg": "user not found", "data": None}),
+        httpx.Response(404, text="Not Found"),
+    ],
+)
+@respx.mock
+async def test_an_unknown_handle_s_profile_is_handle_not_found(response):
+    respx.get(TWITTERAPI_IO_USER_INFO_URL).mock(return_value=response)
+
+    with pytest.raises(HandleNotFoundError) as raised:
+        await TwitterApiIoReader().look_up_profile("nobody_here")
+
+    assert not isinstance(raised.value, HandleSuspendedError)
+
+
+@respx.mock
+async def test_a_suspended_account_s_profile_is_handle_suspended():
+    respx.get(TWITTERAPI_IO_USER_INFO_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "msg": "success",
+                "data": {
+                    "unavailable": True,
+                    "message": "User is suspended",
+                    "unavailableReason": "Suspended",
+                },
+            },
+        )
+    )
+
+    with pytest.raises(HandleSuspendedError):
+        await TwitterApiIoReader().look_up_profile("suspended_one")
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(500, text="Internal Server Error"),
+        httpx.Response(200, json={"status": "error", "msg": "Insufficient credits"}),
+        httpx.Response(200, json={"status": "success", "msg": "success", "data": None}),
+        httpx.Response(200, text="<html>not json</html>"),
+    ],
+)
+@respx.mock
+async def test_any_other_profile_failure_is_a_reader_error(response):
+    respx.get(TWITTERAPI_IO_USER_INFO_URL).mock(return_value=response)
+
+    with pytest.raises(XReaderError) as raised:
+        await TwitterApiIoReader().look_up_profile("levelsio")
+
+    assert not isinstance(raised.value, HandleNotFoundError)
+
+
+@respx.mock
+async def test_a_profile_lookup_without_the_key_fails_without_calling_twitterapi_io(monkeypatch):
+    monkeypatch.setattr(settings, "TWITTERAPI_IO_API_KEY", None)
+    route = respx.get(TWITTERAPI_IO_USER_INFO_URL)
+
+    with pytest.raises(XReaderNotConfiguredError):
+        await TwitterApiIoReader().look_up_profile("levelsio")
+
+    assert not route.called
+
+
+@respx.mock
+async def test_reads_the_author_s_name_from_their_posts():
+    respx.get(TWITTERAPI_IO_LAST_TWEETS_URL).mock(
+        return_value=httpx.Response(200, json=_last_tweets())
+    )
+
+    recent = await TwitterApiIoReader().fetch_recent_posts("levelsio")
+
+    assert recent.name == "@levelsio"

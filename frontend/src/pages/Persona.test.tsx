@@ -138,23 +138,42 @@ describe('Persona', () => {
     expect(within(items[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
   });
 
-  it("shows each author's X photo left of their handle, or their initial when there is none", async () => {
-    const photo = 'https://pbs.twimg.com/profile_images/1/levelsio_normal.jpg';
+  it("shows each author's X photo left of their handle, at the size it needs, or their initial when there is none", async () => {
     vi.mocked(inspirationAuthorService.list).mockResolvedValue([
-      { ...LEVELSIO, photoUrl: photo },
+      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/profile_images/1/levelsio_normal.jpg' },
       PAULG,
     ]);
     renderPersona();
 
     const [withPhoto, withoutPhoto] = await (await persona()).findAllByRole('listitem');
-    expect(withPhoto.querySelector('img')).toHaveAttribute('src', photo);
+    expect(withPhoto.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://pbs.twimg.com/profile_images/1/levelsio_bigger.jpg',
+    );
     expect(withoutPhoto.querySelector('img')).toBeNull();
     expect(within(withoutPhoto).getByText('P')).toBeInTheDocument();
   });
 
-  it("shows an author's initial when their photo fails to load", async () => {
+  it("shows each author's name from the Author directory beside their handle", async () => {
     vi.mocked(inspirationAuthorService.list).mockResolvedValue([
-      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/profile_images/1/gone_normal.jpg' },
+      { ...LEVELSIO, name: 'Pieter Levels' },
+      PAULG,
+    ]);
+    renderPersona();
+
+    const [named, unnamed] = await (await persona()).findAllByRole('listitem');
+    expect(within(named).getByText('Pieter Levels')).toBeInTheDocument();
+    expect(within(named).getByText('@levelsio')).toBeInTheDocument();
+    expect(within(unnamed).getByText('@paulg')).toBeInTheDocument();
+  });
+
+  it("shows an author's initials when their photo fails to load", async () => {
+    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+      {
+        ...LEVELSIO,
+        name: 'Pieter Levels',
+        photoUrl: 'https://pbs.twimg.com/profile_images/1/gone_normal.jpg',
+      },
     ]);
     renderPersona();
 
@@ -162,7 +181,7 @@ describe('Persona', () => {
     fireEvent.error(row.querySelector('img')!);
 
     expect(row.querySelector('img')).toBeNull();
-    expect(within(row).getByText('L')).toBeInTheDocument();
+    expect(within(row).getByText('PL')).toBeInTheDocument();
   });
 
   it('says how to start when the User has no authors', async () => {
@@ -249,6 +268,7 @@ describe('Persona', () => {
       handle: 'levelsio',
       lastFetchedAt: new Date().toISOString(),
       postCount: 21,
+      name: null,
       photoUrl: null,
     });
     renderPersona();

@@ -1,0 +1,967 @@
+[
+  {
+    "handle": "levelsio",
+    "name": "Pieter Levels",
+    "photo_url": "https://pbs.twimg.com/profile_images/2077111020305162240/PwddgOau_normal.jpg"
+  },
+  {
+    "handle": "tdinh_me",
+    "name": "Tony Dinh",
+    "photo_url": "https://pbs.twimg.com/profile_images/1995658612677771266/TPla_3lg_normal.jpg"
+  },
+  {
+    "handle": "arvidkahl",
+    "name": "Arvid Kahl",
+    "photo_url": "https://pbs.twimg.com/profile_images/1201525049766883328/QPimCC9z_normal.jpg"
+  },
+  {
+    "handle": "robwalling",
+    "name": "Rob Walling",
+    "photo_url": "https://pbs.twimg.com/profile_images/1569693428249673728/Js1zLQJU_normal.jpg"
+  },
+  {
+    "handle": "csallen",
+    "name": "Courtland Allen",
+    "photo_url": "https://pbs.twimg.com/profile_images/1644234114189660160/3Z2k5Q7v_normal.jpg"
+  },
+  {
+    "handle": "thepatwalls",
+    "name": "Pat Walls",
+    "photo_url": "https://pbs.twimg.com/profile_images/1442604184725901312/tbbsFD4-_normal.jpg"
+  },
+  {
+    "handle": "yongfook",
+    "name": "Jon Yongfook",
+    "photo_url": "https://pbs.twimg.com/profile_images/691543635779649536/TbHKbCCc_normal.jpg"
+  },
+  {
+    "handle": "dvassallo",
+    "name": "Daniel Vassallo",
+    "photo_url": "https://pbs.twimg.com/profile_images/2008284492210085888/-aEKwo9U_normal.jpg"
+  },
+  {
+    "handle": "agazdecki",
+    "name": "Andrew Gazdecki",
+    "photo_url": "https://pbs.twimg.com/profile_images/1813425974228496384/2cZEIEzj_normal.jpg"
+  },
+  {
+    "handle": "iannuttall",
+    "name": "Ian Nuttall",
+    "photo_url": "https://pbs.twimg.com/profile_images/2111877526200963072/yYxWQoGM_normal.png"
+  },
+  {
+    "handle": "tibo_maker",
+    "name": "Tibo",
+    "photo_url": "https://pbs.twimg.com/profile_images/1631931185180934144/59z_ZFKm_normal.jpg"
+  },
+  {
+    "handle": "heyeaslo",
+    "name": "Easlo",
+    "photo_url": "https://pbs.twimg.com/profile_images/1484538965109907461/VaQu5_PI_normal.jpg"
+  },
+  {
+    "handle": "jackfriks",
+    "name": "Jack Friks",
+    "photo_url": "https://pbs.twimg.com/profile_images/2082106215421628416/tl6Jhf1k_normal.jpg"
+  },
+  {
+    "handle": "ajlkn",
+    "name": "AJ (Carrd)",
+    "photo_url": "https://pbs.twimg.com/profile_images/738608465212366849/etPIzWeg_normal.jpg"
+  },
+  {
+    "handle": "mubashariqbal",
+    "name": "Mubashar Iqbal",
+    "photo_url": "https://pbs.twimg.com/profile_images/1602090873650614274/bi4hXtOJ_normal.jpg"
+  },
+  {
+    "handle": "bentossell",
+    "name": "Ben Tossell",
+    "photo_url": "https://pbs.twimg.com/profile_images/1878086921726943233/vOx1kjeP_normal.jpg"
+  },
+  {
+    "handle": "dagorenouf",
+    "name": "Dagobert Renouf",
+    "photo_url": "https://pbs.twimg.com/profile_images/2084271445400592385/9YrqLPKu_normal.jpg"
+  },
+  {
+    "handle": "marckohlbrugge",
+    "name": "Marc Köhlbrugge",
+    "photo_url": "https://pbs.twimg.com/profile_images/1857124042433572864/iMivVaYP_normal.jpg"
+  },
+  {
+    "handle": "shpigford",
+    "name": "Josh Pigford",
+    "photo_url": "https://pbs.twimg.com/profile_images/2010446308608290816/w6Bt7Vgc_normal.jpg"
+  },
+  {
+    "handle": "thekitze",
+    "name": "Kitze",
+    "photo_url": "https://pbs.twimg.com/profile_images/2086828789896519680/roL3Zqe2_normal.jpg"
+  },
+  {
+    "handle": "tylertringas",
+    "name": "Tyler Tringas",
+    "photo_url": "https://pbs.twimg.com/profile_images/1441250428717387776/XBVpLgf-_normal.jpg"
+  },
+  {
+    "handle": "aarondfrancis",
+    "name": "Aaron Francis",
+    "photo_url": "https://pbs.twimg.com/profile_images/1503487031330197518/J4i7ofgt_normal.jpg"
+  },
+  {
+    "handle": "shl",
+    "name": "Sahil Lavingia",
+    "photo_url": "https://pbs.twimg.com/profile_images/1885323625542127616/-8EVOv3W_normal.jpg"
+  },
+  {
+    "handle": "dhh",
+    "name": "David Heinemeier Hansson",
+    "photo_url": "https://pbs.twimg.com/profile_images/2093715898204884992/goERjC9G_normal.jpg"
+  },
+  {
+    "handle": "nathanbarry",
+    "name": "Nathan Barry",
+    "photo_url": "https://pbs.twimg.com/profile_images/1842301175179431936/K2461XvR_normal.jpg"
+  },
+  {
+    "handle": "noahkagan",
+    "name": "Noah Kagan",
+    "photo_url": "https://pbs.twimg.com/profile_images/1511713653103464450/6E7UXq8J_normal.jpg"
+  },
+  {
+    "handle": "dharmesh",
+    "name": "Dharmesh Shah",
+    "photo_url": "https://pbs.twimg.com/profile_images/1323776407521185793/He3iubHL_normal.jpg"
+  },
+  {
+    "handle": "hnshah",
+    "name": "Hiten Shah",
+    "photo_url": "https://pbs.twimg.com/profile_images/1498191257218076672/rvtMDI8Q_normal.jpg"
+  },
+  {
+    "handle": "rrhoover",
+    "name": "Ryan Hoover",
+    "photo_url": "https://pbs.twimg.com/profile_images/1289046130366406656/-s-fxoLn_normal.jpg"
+  },
+  {
+    "handle": "tobi",
+    "name": "Tobi Lütke",
+    "photo_url": "https://pbs.twimg.com/profile_images/1999293930936909824/_HWYanot_normal.jpg"
+  },
+  {
+    "handle": "patrickc",
+    "name": "Patrick Collison",
+    "photo_url": "https://pbs.twimg.com/profile_images/825622525342199809/_iAaSUQf_normal.jpg"
+  },
+  {
+    "handle": "levie",
+    "name": "Aaron Levie",
+    "photo_url": "https://pbs.twimg.com/profile_images/885529357904510976/tM0vLiYS_normal.jpg"
+  },
+  {
+    "handle": "bchesky",
+    "name": "Brian Chesky",
+    "photo_url": "https://pbs.twimg.com/profile_images/1926780226098331648/NmAxoKxo_normal.jpg"
+  },
+  {
+    "handle": "amasad",
+    "name": "Amjad Masad",
+    "photo_url": "https://pbs.twimg.com/profile_images/1897858917507776512/TRVTyKFk_normal.jpg"
+  },
+  {
+    "handle": "suhail",
+    "name": "Suhail Doshi",
+    "photo_url": "https://pbs.twimg.com/profile_images/1898611158330077184/oCfpUSm-_normal.jpg"
+  },
+  {
+    "handle": "typesfast",
+    "name": "Ryan Petersen",
+    "photo_url": "https://pbs.twimg.com/profile_images/1905038055935037440/3QXcfuSu_normal.jpg"
+  },
+  {
+    "handle": "austen",
+    "name": "Austen Allred",
+    "photo_url": "https://pbs.twimg.com/profile_images/2074335689458450432/uWXcowh-_normal.jpg"
+  },
+  {
+    "handle": "awilkinson",
+    "name": "Andrew Wilkinson",
+    "photo_url": "https://pbs.twimg.com/profile_images/1850577967904395264/CU6rpC8N_normal.jpg"
+  },
+  {
+    "handle": "alexisohanian",
+    "name": "Alexis Ohanian",
+    "photo_url": "https://pbs.twimg.com/profile_images/2085198792618549250/7vjW-Hf7_normal.jpg"
+  },
+  {
+    "handle": "kevinrose",
+    "name": "Kevin Rose",
+    "photo_url": "https://pbs.twimg.com/profile_images/1943511529237680130/cy-Te05B_normal.jpg"
+  },
+  {
+    "handle": "rahulvohra",
+    "name": "Rahul Vohra",
+    "photo_url": "https://pbs.twimg.com/profile_images/1294349561108942848/-QncKIvb_normal.jpg"
+  },
+  {
+    "handle": "blader",
+    "name": "Siqi Chen",
+    "photo_url": "https://pbs.twimg.com/profile_images/1600585199800111106/zIdLh9UL_normal.jpg"
+  },
+  {
+    "handle": "zebulgar",
+    "name": "Delian Asparouhov",
+    "photo_url": "https://pbs.twimg.com/profile_images/1144717059042861056/IrsMNQB7_normal.png"
+  },
+  {
+    "handle": "nikitabier",
+    "name": "Nikita Bier",
+    "photo_url": "https://pbs.twimg.com/profile_images/1755448801957945344/Fh2HNw5Y_normal.jpg"
+  },
+  {
+    "handle": "ryancarson",
+    "name": "Ryan Carson",
+    "photo_url": "https://pbs.twimg.com/profile_images/2111981537365196800/k2HE9uOo_normal.jpg"
+  },
+  {
+    "handle": "kunalb11",
+    "name": "Kunal Shah",
+    "photo_url": "https://pbs.twimg.com/profile_images/1190747917998546944/D3U5FNa7_normal.jpg"
+  },
+  {
+    "handle": "warikoo",
+    "name": "Ankur Warikoo",
+    "photo_url": "https://pbs.twimg.com/profile_images/1658700048715366400/sWhKTETK_normal.jpg"
+  },
+  {
+    "handle": "stevenbartlett",
+    "name": "Steven Bartlett",
+    "photo_url": "https://pbs.twimg.com/profile_images/1979133750467305472/d7WuSn42_normal.jpg"
+  },
+  {
+    "handle": "danmartell",
+    "name": "Dan Martell",
+    "photo_url": "https://pbs.twimg.com/profile_images/1851375473026113536/inEIq0Tn_normal.jpg"
+  },
+  {
+    "handle": "alexhormozi",
+    "name": "Alex Hormozi",
+    "photo_url": "https://pbs.twimg.com/profile_images/1617408747080667136/C88UDPNZ_normal.jpg"
+  },
+  {
+    "handle": "leilahormozi",
+    "name": "Leila Hormozi",
+    "photo_url": "https://pbs.twimg.com/profile_images/1905604048709189633/y8jPdzy5_normal.jpg"
+  },
+  {
+    "handle": "codie_sanchez",
+    "name": "Codie Sanchez",
+    "photo_url": "https://pbs.twimg.com/profile_images/1648315397022572544/2fCMWlPw_normal.jpg"
+  },
+  {
+    "handle": "sweatystartup",
+    "name": "Nick Huber",
+    "photo_url": "https://pbs.twimg.com/profile_images/1956684093116035073/3n_lwIoX_normal.jpg"
+  },
+  {
+    "handle": "thesamparr",
+    "name": "Sam Parr",
+    "photo_url": "https://pbs.twimg.com/profile_images/1474048180908175363/b6PCpGwj_normal.jpg"
+  },
+  {
+    "handle": "shaanvp",
+    "name": "Shaan Puri",
+    "photo_url": "https://pbs.twimg.com/profile_images/1433108361839472642/3d54PCqW_normal.jpg"
+  },
+  {
+    "handle": "gregisenberg",
+    "name": "Greg Isenberg",
+    "photo_url": "https://pbs.twimg.com/profile_images/1577116785656139776/5mi0qgTz_normal.jpg"
+  },
+  {
+    "handle": "thejustinwelsh",
+    "name": "Justin Welsh",
+    "photo_url": "https://pbs.twimg.com/profile_images/2059297321695793152/EA6xt7NP_normal.jpg"
+  },
+  {
+    "handle": "thedankoe",
+    "name": "Dan Koe",
+    "photo_url": "https://pbs.twimg.com/profile_images/1845856303174037504/Q7ZZqVFa_normal.jpg"
+  },
+  {
+    "handle": "sahilbloom",
+    "name": "Sahil Bloom",
+    "photo_url": "https://pbs.twimg.com/profile_images/1586859332104343552/V1HRpbP1_normal.jpg"
+  },
+  {
+    "handle": "girdley",
+    "name": "Michael Girdley",
+    "photo_url": "https://pbs.twimg.com/profile_images/1828063188299984896/b_E_e4xT_normal.jpg"
+  },
+  {
+    "handle": "businessbarista",
+    "name": "Alex Lieberman",
+    "photo_url": "https://pbs.twimg.com/profile_images/1972685728669634560/iQ0AD43Y_normal.png"
+  },
+  {
+    "handle": "garyvee",
+    "name": "Gary Vaynerchuk",
+    "photo_url": "https://pbs.twimg.com/profile_images/2104354219377516544/oSNAfvnO_normal.jpg"
+  },
+  {
+    "handle": "mrbeast",
+    "name": "MrBeast",
+    "photo_url": "https://pbs.twimg.com/profile_images/2109534182598733824/lxdYUUP5_normal.jpg"
+  },
+  {
+    "handle": "ankurnagpal",
+    "name": "Ankur Nagpal",
+    "photo_url": "https://pbs.twimg.com/profile_images/1501577359228559367/_EXo3LFF_normal.jpg"
+  },
+  {
+    "handle": "blakeaburge",
+    "name": "Blake Burge",
+    "photo_url": "https://pbs.twimg.com/profile_images/1613615173507420199/UuYkLgPK_normal.jpg"
+  },
+  {
+    "handle": "alexgarcia_atx",
+    "name": "Alex Garcia",
+    "photo_url": "https://pbs.twimg.com/profile_images/1531635596007022593/YRnP1PHM_normal.jpg"
+  },
+  {
+    "handle": "matt_gray_",
+    "name": "Matt Gray",
+    "photo_url": "https://pbs.twimg.com/profile_images/1669158896227737601/2y1eIG_L_normal.jpg"
+  },
+  {
+    "handle": "coachdango",
+    "name": "Dan Go",
+    "photo_url": "https://pbs.twimg.com/profile_images/1279092409587163137/eN82f_KT_normal.jpg"
+  },
+  {
+    "handle": "jack_raines",
+    "name": "Jack Raines",
+    "photo_url": "https://pbs.twimg.com/profile_images/2020253173034954752/l7B6KGok_normal.jpg"
+  },
+  {
+    "handle": "joepompliano",
+    "name": "Joe Pompliano",
+    "photo_url": "https://pbs.twimg.com/profile_images/1744840724380549120/Ix0EvDVT_normal.jpg"
+  },
+  {
+    "handle": "dickiebush",
+    "name": "Dickie Bush",
+    "photo_url": "https://pbs.twimg.com/profile_images/1645163605166379011/Wu8UcUGU_normal.jpg"
+  },
+  {
+    "handle": "nicolascole77",
+    "name": "Nicolas Cole",
+    "photo_url": "https://pbs.twimg.com/profile_images/1972011236943630336/cb1NvKBK_normal.jpg"
+  },
+  {
+    "handle": "david_perell",
+    "name": "David Perell",
+    "photo_url": "https://pbs.twimg.com/profile_images/1759062533078495232/-79hY8EP_normal.jpg"
+  },
+  {
+    "handle": "harrydry",
+    "name": "Harry Dry",
+    "photo_url": "https://pbs.twimg.com/profile_images/1870934312935165953/A4yIgYLN_normal.jpg"
+  },
+  {
+    "handle": "nathanbaugh27",
+    "name": "Nathan Baugh",
+    "photo_url": "https://pbs.twimg.com/profile_images/1753249055734448129/97vmF9r8_normal.jpg"
+  },
+  {
+    "handle": "itskierandrew",
+    "name": "Kieran Drew",
+    "photo_url": "https://pbs.twimg.com/profile_images/1545408852522319877/thaU5WUu_normal.jpg"
+  },
+  {
+    "handle": "amandanat",
+    "name": "Amanda Natividad",
+    "photo_url": "https://pbs.twimg.com/profile_images/2082321776093339648/ymK5QZjW_normal.jpg"
+  },
+  {
+    "handle": "katebour",
+    "name": "Katelyn Bourgoin",
+    "photo_url": "https://pbs.twimg.com/profile_images/1609020430999764992/vJIJ3g9I_normal.jpg"
+  },
+  {
+    "handle": "wes_kao",
+    "name": "Wes Kao",
+    "photo_url": "https://pbs.twimg.com/profile_images/1743843672582504448/QYyNqLs__normal.jpg"
+  },
+  {
+    "handle": "julian",
+    "name": "Julian Shapiro",
+    "photo_url": "https://pbs.twimg.com/profile_images/2115625833947914240/oilpuFrm_normal.jpg"
+  },
+  {
+    "handle": "thisissethsblog",
+    "name": "Seth Godin",
+    "photo_url": "https://pbs.twimg.com/profile_images/935270007331749888/xZNXud5R_normal.jpg"
+  },
+  {
+    "handle": "waitbutwhy",
+    "name": "Tim Urban",
+    "photo_url": "https://pbs.twimg.com/profile_images/378800000096549990/2b5b8a614e16b1527ebb75e1a7266d85_normal.jpeg"
+  },
+  {
+    "handle": "sivers",
+    "name": "Derek Sivers",
+    "photo_url": "https://pbs.twimg.com/profile_images/699505323812388864/K3V1j5Wq_normal.jpg"
+  },
+  {
+    "handle": "tim_denning",
+    "name": "Tim Denning",
+    "photo_url": "https://pbs.twimg.com/profile_images/1760794427331948545/XXYtQTw4_normal.jpg"
+  },
+  {
+    "handle": "heyfeifer",
+    "name": "Jason Feifer",
+    "photo_url": "https://pbs.twimg.com/profile_images/1354939197560250384/gl4qpAjr_normal.jpg"
+  },
+  {
+    "handle": "naval",
+    "name": "Naval Ravikant",
+    "photo_url": "https://pbs.twimg.com/profile_images/1256841238298292232/ycqwaMI2_normal.jpg"
+  },
+  {
+    "handle": "paulg",
+    "name": "Paul Graham",
+    "photo_url": "https://pbs.twimg.com/profile_images/1824002576/pg-railsconf_normal.jpg"
+  },
+  {
+    "handle": "george__mack",
+    "name": "George Mack",
+    "photo_url": "https://pbs.twimg.com/profile_images/1304132718029139969/4ki_Rww2_normal.jpg"
+  },
+  {
+    "handle": "jackbutcher",
+    "name": "Jack Butcher",
+    "photo_url": "https://pbs.twimg.com/profile_images/2094875295740243968/XWoHVEOq_normal.png"
+  },
+  {
+    "handle": "kpaxs",
+    "name": "Kp",
+    "photo_url": "https://pbs.twimg.com/profile_images/1289428895/eightbit-ce6d25c8-fbf2-468d-a8d4-43f7d5502b19_normal.png"
+  },
+  {
+    "handle": "visakanv",
+    "name": "Visakan Veerasamy",
+    "photo_url": "https://pbs.twimg.com/profile_images/1873013046534389766/s0bLkrmP_normal.jpg"
+  },
+  {
+    "handle": "nntaleb",
+    "name": "Nassim Taleb",
+    "photo_url": "https://pbs.twimg.com/profile_images/1835982938879508480/q4-Esddn_normal.jpg"
+  },
+  {
+    "handle": "robertgreene",
+    "name": "Robert Greene",
+    "photo_url": "https://pbs.twimg.com/profile_images/1424080335650758656/hT-EqNke_normal.jpg"
+  },
+  {
+    "handle": "ryanholiday",
+    "name": "Ryan Holiday",
+    "photo_url": "https://pbs.twimg.com/profile_images/1762537744348094464/1v7rnVz1_normal.jpg"
+  },
+  {
+    "handle": "jamesclear",
+    "name": "James Clear",
+    "photo_url": "https://pbs.twimg.com/profile_images/958932211973152769/FUpkmn4u_normal.jpg"
+  },
+  {
+    "handle": "kevin2kelly",
+    "name": "Kevin Kelly",
+    "photo_url": "https://pbs.twimg.com/profile_images/65000713/KKlaughsm_normal.jpg"
+  },
+  {
+    "handle": "annieduke",
+    "name": "Annie Duke",
+    "photo_url": "https://pbs.twimg.com/profile_images/954773878785519616/bLFfaufT_normal.jpg"
+  },
+  {
+    "handle": "jposhaughnessy",
+    "name": "Jim O'Shaughnessy",
+    "photo_url": "https://pbs.twimg.com/profile_images/1609335826395152385/yIJbw2Q9_normal.jpg"
+  },
+  {
+    "handle": "balajis",
+    "name": "Balaji Srinivasan",
+    "photo_url": "https://pbs.twimg.com/profile_images/2049168417710915585/egYgw1FA_normal.jpg"
+  },
+  {
+    "handle": "tferriss",
+    "name": "Tim Ferriss",
+    "photo_url": "https://pbs.twimg.com/profile_images/1870217053808013316/n4PstHDj_normal.jpg"
+  },
+  {
+    "handle": "aliabdaal",
+    "name": "Ali Abdaal",
+    "photo_url": "https://pbs.twimg.com/profile_images/1496857274165436420/yjDjLCDh_normal.jpg"
+  },
+  {
+    "handle": "fortelabs",
+    "name": "Tiago Forte",
+    "photo_url": "https://pbs.twimg.com/profile_images/1527701676521672707/YXvJP3ac_normal.jpg"
+  },
+  {
+    "handle": "nateliason",
+    "name": "Nat Eliason",
+    "photo_url": "https://pbs.twimg.com/profile_images/1909974237617467392/NFY9iiN3_normal.jpg"
+  },
+  {
+    "handle": "chriswillx",
+    "name": "Chris Williamson",
+    "photo_url": "https://pbs.twimg.com/profile_images/2101704203521441792/mk5eDNlM_normal.jpg"
+  },
+  {
+    "handle": "hubermanlab",
+    "name": "Andrew Huberman",
+    "photo_url": "https://pbs.twimg.com/profile_images/1339713932085346306/jDTi4HKH_normal.jpg"
+  },
+  {
+    "handle": "bryan_johnson",
+    "name": "Bryan Johnson",
+    "photo_url": "https://pbs.twimg.com/profile_images/1888004001872101378/jVNJQ-iu_normal.jpg"
+  },
+  {
+    "handle": "jockowillink",
+    "name": "Jocko Willink",
+    "photo_url": "https://pbs.twimg.com/profile_images/647606396452646912/WKgBcrEL_normal.jpg"
+  },
+  {
+    "handle": "simonsinek",
+    "name": "Simon Sinek",
+    "photo_url": "https://pbs.twimg.com/profile_images/1295112038096629760/3eCOaKDb_normal.jpg"
+  },
+  {
+    "handle": "adammgrant",
+    "name": "Adam Grant",
+    "photo_url": "https://pbs.twimg.com/profile_images/1427272847643316232/9CeNBJAr_normal.jpg"
+  },
+  {
+    "handle": "melrobbins",
+    "name": "Mel Robbins",
+    "photo_url": "https://pbs.twimg.com/profile_images/1564282056938602500/MWYnC3nG_normal.jpg"
+  },
+  {
+    "handle": "patrick_oshag",
+    "name": "Patrick O'Shaughnessy",
+    "photo_url": "https://pbs.twimg.com/profile_images/1964115465065664512/ZFQbGjIU_normal.jpg"
+  },
+  {
+    "handle": "garrytan",
+    "name": "Garry Tan",
+    "photo_url": "https://pbs.twimg.com/profile_images/2102142455281811456/-kNX65wI_normal.jpg"
+  },
+  {
+    "handle": "pmarca",
+    "name": "Marc Andreessen",
+    "photo_url": "https://pbs.twimg.com/profile_images/1820716712234303489/9GpKDZjq_normal.jpg"
+  },
+  {
+    "handle": "eladgil",
+    "name": "Elad Gil",
+    "photo_url": "https://pbs.twimg.com/profile_images/1151122652/dragonball-tenkaichi-daibouken_normal.jpg"
+  },
+  {
+    "handle": "sriramk",
+    "name": "Sriram Krishnan",
+    "photo_url": "https://pbs.twimg.com/profile_images/1873344970104492033/l7dRtM08_normal.jpg"
+  },
+  {
+    "handle": "andrewchen",
+    "name": "Andrew Chen",
+    "photo_url": "https://pbs.twimg.com/profile_images/1610236905643249664/OdYs6aWP_normal.jpg"
+  },
+  {
+    "handle": "mwseibel",
+    "name": "Michael Seibel",
+    "photo_url": "https://pbs.twimg.com/profile_images/1922321881790558208/oarV1uhh_normal.jpg"
+  },
+  {
+    "handle": "eriktorenberg",
+    "name": "Erik Torenberg",
+    "photo_url": "https://pbs.twimg.com/profile_images/1449117890955788292/x3DIqECG_normal.jpg"
+  },
+  {
+    "handle": "pitdesi",
+    "name": "Sheel Mohnot",
+    "photo_url": "https://pbs.twimg.com/profile_images/1998468623392788480/dS-ftLeP_normal.jpg"
+  },
+  {
+    "handle": "turnernovak",
+    "name": "Turner Novak",
+    "photo_url": "https://pbs.twimg.com/profile_images/1484379336857640960/Sis6_GKv_normal.png"
+  },
+  {
+    "handle": "jmj",
+    "name": "Jeff Morris Jr.",
+    "photo_url": "https://pbs.twimg.com/profile_images/1912400039567118336/D2zW0Tub_normal.jpg"
+  },
+  {
+    "handle": "gokulr",
+    "name": "Gokul Rajaram",
+    "photo_url": "https://pbs.twimg.com/profile_images/967146848082321408/6IHD3HIa_normal.jpg"
+  },
+  {
+    "handle": "lessin",
+    "name": "Sam Lessin",
+    "photo_url": "https://pbs.twimg.com/profile_images/1484753905456062467/17Q-Nv6N_normal.png"
+  },
+  {
+    "handle": "briannorgard",
+    "name": "Brian Norgard",
+    "photo_url": "https://pbs.twimg.com/profile_images/3610854526/1fae6073057ae5725bebbc0815c0123d_normal.jpeg"
+  },
+  {
+    "handle": "jasonlk",
+    "name": "Jason Lemkin",
+    "photo_url": "https://pbs.twimg.com/profile_images/1981936022049972224/xvLI9bNx_normal.jpg"
+  },
+  {
+    "handle": "davidsenra",
+    "name": "David Senra",
+    "photo_url": "https://pbs.twimg.com/profile_images/1970530587510231040/wbVXBu_Q_normal.jpg"
+  },
+  {
+    "handle": "morganhousel",
+    "name": "Morgan Housel",
+    "photo_url": "https://pbs.twimg.com/profile_images/1801821925414735875/O1lzFjAw_normal.jpg"
+  },
+  {
+    "handle": "awealthofcs",
+    "name": "Ben Carlson",
+    "photo_url": "https://pbs.twimg.com/profile_images/1355736088409726978/gp2HirZc_normal.jpg"
+  },
+  {
+    "handle": "thestalwart",
+    "name": "Joe Weisenthal",
+    "photo_url": "https://pbs.twimg.com/profile_images/2066048089908199424/0iHOXOcE_normal.jpg"
+  },
+  {
+    "handle": "kylascan",
+    "name": "Kyla Scanlon",
+    "photo_url": "https://pbs.twimg.com/profile_images/2094061463862415360/4_imY9sU_normal.jpg"
+  },
+  {
+    "handle": "litcapital",
+    "name": "Litquidity",
+    "photo_url": "https://pbs.twimg.com/profile_images/1611406816130338816/KWJfnndd_normal.jpg"
+  },
+  {
+    "handle": "cobie",
+    "name": "Cobie",
+    "photo_url": "https://pbs.twimg.com/profile_images/1955773696565719040/zVpm_8at_normal.jpg"
+  },
+  {
+    "handle": "byrnehobart",
+    "name": "Byrne Hobart",
+    "photo_url": "https://pbs.twimg.com/profile_images/1991171394936229888/B9tFO8PP_normal.jpg"
+  },
+  {
+    "handle": "packym",
+    "name": "Packy McCormick",
+    "photo_url": "https://pbs.twimg.com/profile_images/1674112444535324674/k6dYglK9_normal.jpg"
+  },
+  {
+    "handle": "benthompson",
+    "name": "Ben Thompson",
+    "photo_url": "https://pbs.twimg.com/profile_images/457016792259391488/lNWACUK8_normal.jpeg"
+  },
+  {
+    "handle": "trungtphan",
+    "name": "Trung Phan",
+    "photo_url": "https://pbs.twimg.com/profile_images/1506362585448296448/LJg8kVSD_normal.jpg"
+  },
+  {
+    "handle": "stephsmithio",
+    "name": "Steph Smith",
+    "photo_url": "https://pbs.twimg.com/profile_images/2114751426656419840/feq1-bJY_normal.jpg"
+  },
+  {
+    "handle": "danshipper",
+    "name": "Dan Shipper",
+    "photo_url": "https://pbs.twimg.com/profile_images/1946219091305340928/_Ef-eDlc_normal.jpg"
+  },
+  {
+    "handle": "patio11",
+    "name": "Patrick McKenzie",
+    "photo_url": "https://pbs.twimg.com/profile_images/1346314816827232256/zCQCJW6N_normal.jpg"
+  },
+  {
+    "handle": "dkthomp",
+    "name": "Derek Thompson",
+    "photo_url": "https://pbs.twimg.com/profile_images/2093501497673674753/OrmD5Wp3_normal.jpg"
+  },
+  {
+    "handle": "dwarkesh_sp",
+    "name": "Dwarkesh Patel",
+    "photo_url": "https://pbs.twimg.com/profile_images/1925260306684813315/NjNQZmhZ_normal.jpg"
+  },
+  {
+    "handle": "micsolana",
+    "name": "Mike Solana",
+    "photo_url": "https://pbs.twimg.com/profile_images/1134194710573010944/1R6h8Nai_normal.png"
+  },
+  {
+    "handle": "lulumeservey",
+    "name": "Lulu Cheng Meservey",
+    "photo_url": "https://pbs.twimg.com/profile_images/1971007341697912832/5H-zAzVN_normal.jpg"
+  },
+  {
+    "handle": "lennysan",
+    "name": "Lenny Rachitsky",
+    "photo_url": "https://pbs.twimg.com/profile_images/1592990461517389824/iln8hi1f_normal.jpg"
+  },
+  {
+    "handle": "shreyas",
+    "name": "Shreyas Doshi",
+    "photo_url": "https://pbs.twimg.com/profile_images/1268224036418408449/TFTKnr___normal.jpg"
+  },
+  {
+    "handle": "petergyang",
+    "name": "Peter Yang",
+    "photo_url": "https://pbs.twimg.com/profile_images/1454103621516206083/_klMwpkk_normal.jpg"
+  },
+  {
+    "handle": "aakashgupta",
+    "name": "Aakash Gupta",
+    "photo_url": "https://pbs.twimg.com/profile_images/2021355466216062976/8MDXp7vR_normal.jpg"
+  },
+  {
+    "handle": "joulee",
+    "name": "Julie Zhuo",
+    "photo_url": "https://pbs.twimg.com/profile_images/1378926301382279169/SA7mJnsA_normal.jpg"
+  },
+  {
+    "handle": "elenaverna",
+    "name": "Elena Verna",
+    "photo_url": "https://pbs.twimg.com/profile_images/2099940232233627648/Xr47gEX6_normal.jpg"
+  },
+  {
+    "handle": "asmartbear",
+    "name": "Jason Cohen",
+    "photo_url": "https://pbs.twimg.com/profile_images/378800000614606612/0ab75c5a2506c93ec1b6c393511ec79c_normal.png"
+  },
+  {
+    "handle": "destraynor",
+    "name": "Des Traynor",
+    "photo_url": "https://pbs.twimg.com/profile_images/1080456670684332032/7-4OAu7I_normal.jpg"
+  },
+  {
+    "handle": "davegerhardt",
+    "name": "Dave Gerhardt",
+    "photo_url": "https://pbs.twimg.com/profile_images/2105348471712542720/UVLZOHsq_normal.jpg"
+  },
+  {
+    "handle": "thecoolestcool",
+    "name": "Ross Simmonds",
+    "photo_url": "https://pbs.twimg.com/profile_images/1901456296760520704/VNW4xQkG_normal.jpg"
+  },
+  {
+    "handle": "steli",
+    "name": "Steli Efti",
+    "photo_url": "https://pbs.twimg.com/profile_images/1584579878485217281/8ImN_u4X_normal.jpg"
+  },
+  {
+    "handle": "karpathy",
+    "name": "Andrej Karpathy",
+    "photo_url": "https://pbs.twimg.com/profile_images/1296667294148382721/9Pr6XrPB_normal.jpg"
+  },
+  {
+    "handle": "sama",
+    "name": "Sam Altman",
+    "photo_url": "https://pbs.twimg.com/profile_images/2046764873200394240/r7BxVezs_normal.jpg"
+  },
+  {
+    "handle": "emollick",
+    "name": "Ethan Mollick",
+    "photo_url": "https://pbs.twimg.com/profile_images/1601382188712398850/3AAOlqrX_normal.jpg"
+  },
+  {
+    "handle": "simonw",
+    "name": "Simon Willison",
+    "photo_url": "https://pbs.twimg.com/profile_images/378800000261649705/be9cc55e64014e6d7663c50d7cb9fc75_normal.jpeg"
+  },
+  {
+    "handle": "swyx",
+    "name": "swyx",
+    "photo_url": "https://pbs.twimg.com/profile_images/2073162797354217472/hNny55eF_normal.jpg"
+  },
+  {
+    "handle": "andrewyng",
+    "name": "Andrew Ng",
+    "photo_url": "https://pbs.twimg.com/profile_images/733174243714682880/oyG30NEH_normal.jpg"
+  },
+  {
+    "handle": "drjimfan",
+    "name": "Jim Fan",
+    "photo_url": "https://pbs.twimg.com/profile_images/1554922493101559808/SYSZhbcd_normal.jpg"
+  },
+  {
+    "handle": "alexalbert__",
+    "name": "Alex Albert",
+    "photo_url": "https://pbs.twimg.com/profile_images/1856486626072915968/JEQpB9CW_normal.jpg"
+  },
+  {
+    "handle": "mckaywrigley",
+    "name": "McKay Wrigley",
+    "photo_url": "https://pbs.twimg.com/profile_images/1552979440547704832/WX5crG9I_normal.jpg"
+  },
+  {
+    "handle": "mattshumer_",
+    "name": "Matt Shumer",
+    "photo_url": "https://pbs.twimg.com/profile_images/1490950574090571778/BtgOaqUP_normal.jpg"
+  },
+  {
+    "handle": "skirano",
+    "name": "Pietro Schirano",
+    "photo_url": "https://pbs.twimg.com/profile_images/1620194266533199874/rCtE0hYR_normal.jpg"
+  },
+  {
+    "handle": "rowancheung",
+    "name": "Rowan Cheung",
+    "photo_url": "https://pbs.twimg.com/profile_images/2074937954930163712/OhHIBRV7_normal.jpg"
+  },
+  {
+    "handle": "alliekmiller",
+    "name": "Allie K. Miller",
+    "photo_url": "https://pbs.twimg.com/profile_images/1221821474790494208/ALX9y7KT_normal.jpg"
+  },
+  {
+    "handle": "linusekenstam",
+    "name": "Linus Ekenstam",
+    "photo_url": "https://pbs.twimg.com/profile_images/2000865949298176002/0GW70YnP_normal.jpg"
+  },
+  {
+    "handle": "thealexbanks",
+    "name": "Alex Banks",
+    "photo_url": "https://pbs.twimg.com/profile_images/2102370843737153536/x5S5U1PI_normal.jpg"
+  },
+  {
+    "handle": "itsolelehmann",
+    "name": "Ole Lehmann",
+    "photo_url": "https://pbs.twimg.com/profile_images/1633697720291704832/GBmxTCa6_normal.jpg"
+  },
+  {
+    "handle": "svpino",
+    "name": "Santiago",
+    "photo_url": "https://pbs.twimg.com/profile_images/1581385027757264898/j5GjtUiq_normal.jpg"
+  },
+  {
+    "handle": "theo",
+    "name": "Theo Browne",
+    "photo_url": "https://pbs.twimg.com/profile_images/2106484435382333440/vXOVE8EX_normal.jpg"
+  },
+  {
+    "handle": "theprimeagen",
+    "name": "ThePrimeagen",
+    "photo_url": "https://pbs.twimg.com/profile_images/1924503772094517249/DfKkH0ph_normal.jpg"
+  },
+  {
+    "handle": "rauchg",
+    "name": "Guillermo Rauch",
+    "photo_url": "https://pbs.twimg.com/profile_images/1783856060249595904/8TfcCN0r_normal.jpg"
+  },
+  {
+    "handle": "shadcn",
+    "name": "shadcn",
+    "photo_url": "https://pbs.twimg.com/profile_images/1593304942210478080/TUYae5z7_normal.jpg"
+  },
+  {
+    "handle": "leerob",
+    "name": "Lee Robinson",
+    "photo_url": "https://pbs.twimg.com/profile_images/1862717563311968256/xfgt1L9l_normal.jpg"
+  },
+  {
+    "handle": "kentcdodds",
+    "name": "Kent C. Dodds",
+    "photo_url": "https://pbs.twimg.com/profile_images/2091962950315905025/8DdkIcGz_normal.png"
+  },
+  {
+    "handle": "wesbos",
+    "name": "Wes Bos",
+    "photo_url": "https://pbs.twimg.com/profile_images/877525007185858562/7G9vGTca_normal.jpg"
+  },
+  {
+    "handle": "mitchellh",
+    "name": "Mitchell Hashimoto",
+    "photo_url": "https://pbs.twimg.com/profile_images/2082830624415698944/bRo7PB2S_normal.jpg"
+  },
+  {
+    "handle": "addyosmani",
+    "name": "Addy Osmani",
+    "photo_url": "https://pbs.twimg.com/profile_images/2090232066021769216/IwGLjoSy_normal.jpg"
+  },
+  {
+    "handle": "cassidoo",
+    "name": "Cassidy Williams",
+    "photo_url": "https://pbs.twimg.com/profile_images/2083035129157500929/l84D9Nhz_normal.jpg"
+  },
+  {
+    "handle": "gergelyorosz",
+    "name": "Gergely Orosz",
+    "photo_url": "https://pbs.twimg.com/profile_images/673095429748350976/ei5eeouV_normal.png"
+  },
+  {
+    "handle": "fireship_dev",
+    "name": "Fireship",
+    "photo_url": "https://pbs.twimg.com/profile_images/1436819851566219267/HEffZjvP_normal.jpg"
+  },
+  {
+    "handle": "taylorotwell",
+    "name": "Taylor Otwell",
+    "photo_url": "https://pbs.twimg.com/profile_images/1993680002110398464/2FUg3v5m_normal.jpg"
+  },
+  {
+    "handle": "adamwathan",
+    "name": "Adam Wathan",
+    "photo_url": "https://pbs.twimg.com/profile_images/1677042510839857154/Kq4tpySA_normal.jpg"
+  },
+  {
+    "handle": "steveschoger",
+    "name": "Steve Schoger",
+    "photo_url": "https://pbs.twimg.com/profile_images/1012717264108318722/9lP-d2yM_normal.jpg"
+  },
+  {
+    "handle": "thechrisdo",
+    "name": "Chris Do",
+    "photo_url": "https://pbs.twimg.com/profile_images/1364268291485622275/w2axzhBT_normal.jpg"
+  },
+  {
+    "handle": "mds",
+    "name": "Matt D. Smith",
+    "photo_url": "https://pbs.twimg.com/profile_images/2021618984328851456/OS1KXJNS_normal.jpg"
+  },
+  {
+    "handle": "brian_lovin",
+    "name": "Brian Lovin",
+    "photo_url": "https://pbs.twimg.com/profile_images/1217652661962661888/WfiUNjzP_normal.jpg"
+  },
+  {
+    "handle": "jsngr",
+    "name": "Jordan Singer",
+    "photo_url": "https://pbs.twimg.com/profile_images/1858989296855793664/9cRAEnIi_normal.jpg"
+  },
+  {
+    "handle": "raunofreiberg",
+    "name": "Rauno Freiberg",
+    "photo_url": "https://pbs.twimg.com/profile_images/1939625043522146304/3z3zSWLx_normal.jpg"
+  },
+  {
+    "handle": "chrisjbakke",
+    "name": "Chris Bakke",
+    "photo_url": "https://pbs.twimg.com/profile_images/1491961095136763905/Sd8XRL5__normal.jpg"
+  },
+  {
+    "handle": "dril",
+    "name": "dril",
+    "photo_url": "https://pbs.twimg.com/profile_images/1510917391533830145/XW-zSFDJ_normal.jpg"
+  }
+]

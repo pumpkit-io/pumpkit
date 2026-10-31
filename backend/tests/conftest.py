@@ -185,9 +185,9 @@ def fake_billing():
 @pytest.fixture(autouse=True)
 def fake_x_reader():
     """
-    Every test reads X through a fake instead of twitterapi.io. Request it by name to
-    set `posts[handle]` or `communities[id]`, read `calls` or `community_calls`, or set `fail`
-    or `not_configured`.
+    Every test reads X through a fake instead of twitterapi.io. Request it by name to set
+    `posts[handle]`, `names[handle]`, `profiles[handle]`, `suspended` or `communities[id]`, read
+    `calls`, `profile_calls` or `community_calls`, or set `fail` or `not_configured`.
     """
     fake = FakeXReader()
     app.dependency_overrides[get_x_reader] = lambda: fake
@@ -299,6 +299,40 @@ async def subscribed(db, user) -> Subscription:
     db.add(subscription)
     await db.commit()
     return subscription
+
+
+@pytest.fixture
+def sign_in_as_another_subscribed_user(db) -> Callable[..., Awaitable[User]]:
+    """
+    Make the `client` fixture's requests come from a new Subscribed User, by this email, until the
+    next call. Returns the User.
+    """
+
+    async def _sign_in(email: str = "bob@example.com") -> User:
+        other = User(email=email, display_name=email.split("@")[0])
+        db.add(other)
+        await db.flush()
+        db.add(
+            Subscription(
+                user_id=other.id,
+                stripe_subscription_id=f"sub_{other.id}",
+                stripe_customer_id=f"cus_{other.id}",
+                status="active",
+                stripe_created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+            )
+        )
+        await db.commit()
+        other_id = other.id
+
+        async def _other(request_db: AsyncSession = Depends(get_async_db)) -> User:
+            loaded = await request_db.get(User, other_id)
+            assert loaded is not None
+            return loaded
+
+        app.dependency_overrides[get_current_user] = _other
+        return other
+
+    return _sign_in
 
 
 @pytest.fixture

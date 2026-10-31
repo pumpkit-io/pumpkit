@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UserAvatar } from '@/components/UserAvatar';
 import { timeAgo } from '@/lib/relativeTime';
+import { xPhotoAt } from '@/lib/xPhoto';
 import { cn } from '@/lib/utils';
 import {
   MAX_INSPIRATION_AUTHORS,
@@ -90,13 +91,18 @@ function AuthorList({
       {authors.map((author) => (
         <li key={author.handle} className="flex items-center gap-3 py-2 pl-4 pr-2">
           <UserAvatar
-            name={author.handle}
-            avatarUrl={author.photoUrl}
+            name={author.name ?? author.handle}
+            avatarUrl={xPhotoAt(author.photoUrl, 32)}
             className="h-8 w-8 text-xs"
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate font-sans text-sm font-medium text-foreground">
-              @{author.handle}
+            <p className="truncate font-sans text-sm">
+              {author.name && <span className="font-medium text-foreground">{author.name} </span>}
+              <span
+                className={author.name ? 'text-muted-foreground' : 'font-medium text-foreground'}
+              >
+                @{author.handle}
+              </span>
             </p>
             <p className="font-sans text-xs text-muted-foreground">{fetchedLabel(author)}</p>
           </div>
