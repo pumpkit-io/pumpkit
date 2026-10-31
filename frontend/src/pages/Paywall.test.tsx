@@ -282,6 +282,8 @@ describe('Paywall', () => {
         '500 post generations a month.',
         'Publish 100 X posts a month, up to 10 of them with a link.',
         'Write in the voice of your favorite X creators.',
+        'Schedule posts and threads to X.',
+        'Use it from Claude Code, Codex, Cursor or Gemini CLI.',
         '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
       ]);
     });
@@ -293,6 +295,16 @@ describe('Paywall', () => {
 
       expect(await screen.findByRole('dialog', { name: 'About generations' })).toHaveTextContent(
         'Every prompt to generate or refine a post counts as one generation.',
+      );
+    });
+
+    it('explains which AI tools can use Pumpkit', async () => {
+      renderPaywall();
+
+      fireEvent.click(await (await paywall()).findByRole('button', { name: 'About AI tools' }));
+
+      expect(await screen.findByRole('dialog', { name: 'About AI tools' })).toHaveTextContent(
+        'Pumpkit is an MCP server: any AI tool that supports MCP can use it to write, revise and schedule posts.',
       );
     });
 
@@ -309,6 +321,8 @@ describe('Paywall', () => {
       expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
         'Publish 100 X posts a month.',
         'Write in the voice of your favorite X creators.',
+        'Schedule posts and threads to X.',
+        'Use it from Claude Code, Codex, Cursor or Gemini CLI.',
         '7-day free trial: 25 X posts.',
       ]);
       expect(area.queryByRole('button', { name: 'About generations' })).not.toBeInTheDocument();
