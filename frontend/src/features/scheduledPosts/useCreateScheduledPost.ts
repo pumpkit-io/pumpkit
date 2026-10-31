@@ -1,13 +1,9 @@
 import { useCallback, useState } from 'react';
+import { useAllowanceUsedUp } from '@/features/billing/useAllowanceUsedUp';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { track } from '@/lib/analytics';
-import {
-  errorAllowanceUsedUp,
-  errorMessage,
-  errorStatus,
-  type AllowanceUsedUp,
-} from '@/services/apiErrors';
+import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { formatOf } from '@/services/postService';
 import {
   scheduledPostService,
@@ -41,7 +37,7 @@ export function useCreateScheduledPost() {
   const { reload: reloadXConnection } = useXConnectionContext();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [allowanceUsedUp, setAllowanceUsedUp] = useState<AllowanceUsedUp | null>(null);
+  const { allowanceUsedUp, caught, clear: clearUsedUp } = useAllowanceUsedUp();
 
   const create = useCallback(
     async (request: NewScheduledPost): Promise<CreateOutcome> => {
@@ -49,7 +45,7 @@ export function useCreateScheduledPost() {
       const post: ScheduledPostSource = { postId: request.postId };
       setSending(true);
       setError(null);
-      setAllowanceUsedUp(null);
+      clearUsedUp();
       try {
         const created = request.postNow
           ? await scheduledPostService.postNow(post, destination)
@@ -73,12 +69,7 @@ export function useCreateScheduledPost() {
           refreshSubscribed();
           return { kind: 'notSubscribed' };
         }
-        const usedUp = errorAllowanceUsedUp(e);
-        if (usedUp) {
-          track('allowance_used_up', { ran_out: usedUp.ranOut });
-          setAllowanceUsedUp(usedUp);
-          return { kind: 'refused' };
-        }
+        if (caught(e)) return { kind: 'refused' };
         setError(
           errorMessage(
             e,
@@ -94,7 +85,7 @@ export function useCreateScheduledPost() {
         setSending(false);
       }
     },
-    [refreshSubscribed, reloadXConnection],
+    [refreshSubscribed, reloadXConnection, caught, clearUsedUp],
   );
 
   return { sending, error, allowanceUsedUp, create };

@@ -15,13 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.billing.service as billing_service
 from pumpkit.billing.allowance import Allowance, AllowanceUsedUp
-from pumpkit.billing.models import AllowanceCount
+from pumpkit.billing.models import ALLOWANCE_COUNTS, AllowanceCount
 from pumpkit.billing.top_ups import Covered, Need, TopUpBalance, cover_in_order
 from pumpkit.core.time import as_utc
 from pumpkit.scheduling import service
 from pumpkit.scheduling.rules import XPosts, x_posts_in
 
-_COUNTS: tuple[AllowanceCount, ...] = ("x_posts", "link_x_posts")
+# Scheduled posts use X posts and link posts, never Generations.
+_COUNTS: tuple[AllowanceCount, ...] = tuple(
+    count for count in ALLOWANCE_COUNTS if count != "generations"
+)
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,7 @@ def _cover(
         in_period, balances = cover_in_order(
             balances,
             count=count,
-            limit=getattr(period.allowance, count),
+            limit=period.allowance.limits.of(count),
             used=getattr(period.fixed, count),
             needs=[Need(p.publish_at, getattr(p.needed, count)) for p in period.planned],
         )
@@ -190,7 +193,7 @@ async def keep_live_parts_counted(
         db,
         user_id=user_id,
         publish_at=publish_at,
-        x_posts=_less(live, XPosts(**{count: paid.get(count, 0) for count in _COUNTS})),
+        counted=_less(live, XPosts(**{count: paid.get(count, 0) for count in _COUNTS})),
         now=now,
     )
     return True
