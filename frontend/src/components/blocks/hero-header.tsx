@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, Star, X } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
+import {
+  formatStars,
+  GITHUB_REPO_URL,
+  GitHubMark,
+  useGitHubStars,
+} from '@/components/blocks/github';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { useInstance } from '@/features/instance/useInstance';
@@ -21,6 +27,7 @@ export function HeroHeader() {
   const links = sells_plans ? NAV_LINKS : NAV_LINKS.filter(({ href }) => href !== '#pricing');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const stars = useGitHubStars();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -81,6 +88,33 @@ export function HeroHeader() {
     </Button>
   );
 
+  const gitHub = (surface: Surface) => (
+    <Button
+      asChild
+      variant="outline"
+      size="sm"
+      className={cn('gap-2', surface === 'mobile' && 'w-full')}
+    >
+      <a
+        href={GITHUB_REPO_URL}
+        aria-label={stars === null ? undefined : `GitHub, ${formatStars(stars)} stars`}
+        onClick={() => {
+          track('landing_nav_github_clicked', { surface });
+          if (surface === 'mobile') closeMenu();
+        }}
+      >
+        <GitHubMark className="size-4" />
+        GitHub
+        {stars !== null && (
+          <span className="-mr-1 flex items-center gap-1 border-l border-border pl-2 tabular-nums text-muted-foreground">
+            <Star aria-hidden className="size-3.5" />
+            {formatStars(stars)}
+          </span>
+        )}
+      </a>
+    </Button>
+  );
+
   return (
     <header
       data-state={menuOpen ? 'active' : undefined}
@@ -106,7 +140,10 @@ export function HeroHeader() {
             <ul className="flex gap-8 text-sm">{navLinks('desktop')}</ul>
           </nav>
 
-          <div className="hidden lg:block">{getStarted('desktop')}</div>
+          <div className="hidden items-center gap-2 lg:flex">
+            {gitHub('desktop')}
+            {getStarted('desktop')}
+          </div>
 
           <button
             type="button"
@@ -128,7 +165,10 @@ export function HeroHeader() {
             className="mb-4 space-y-8 rounded-3xl border bg-background p-6 shadow-2xl shadow-zinc-300/20 dark:shadow-none lg:hidden"
           >
             <ul className="space-y-6 text-base">{navLinks('mobile')}</ul>
-            {getStarted('mobile')}
+            <div className="space-y-3">
+              {gitHub('mobile')}
+              {getStarted('mobile')}
+            </div>
           </nav>
         )}
       </div>
