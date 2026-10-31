@@ -8,7 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
-- Subscribe now tells a first payment your bank asks you to confirm (3D Secure) from a declined card: the dialog says to confirm it and links Stripe's invoice page with Confirm payment, instead of sending you to update your card in billing. The API's `402` has code `PAYMENT_NEEDS_AUTHENTICATION` and the invoice page as its `url`.
+- When your bank asks you to confirm the first payment of Subscribe now (3D Secure), the dialog says so and shows a Confirm payment button that opens Stripe's invoice page, instead of sending you to billing to update your card. A declined card still sends you to billing. The API's `402` has code `PAYMENT_NEEDS_AUTHENTICATION` and the invoice page as its `url`.
 
 ## [0.4.0] - 2026-10-31
 

@@ -844,7 +844,7 @@ describe('Settings', () => {
         vi.mocked(billingService.subscribeNow).mockRejectedValue(
           apiError(
             402,
-            'Your trial has ended, but your bank needs you to confirm the first payment. Confirm it on the invoice page.',
+            "Your trial has ended, but your bank needs you to confirm the first payment. Confirm it on Stripe's invoice page.",
             { code: 'PAYMENT_NEEDS_AUTHENTICATION', url: 'https://invoice.stripe.test/i/in_1' },
           ),
         );
@@ -857,7 +857,7 @@ describe('Settings', () => {
         expect(confirm).toHaveAttribute('target', '_blank');
         expect(
           dialog.getByText(
-            'Your trial has ended, but your bank needs you to confirm the first payment. Confirm it on the invoice page.',
+            "Your trial has ended, but your bank needs you to confirm the first payment. Confirm it on Stripe's invoice page.",
           ),
         ).toBeInTheDocument();
         expect(dialog.queryByRole('button', { name: 'Subscribe now' })).not.toBeInTheDocument();

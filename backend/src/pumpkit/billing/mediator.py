@@ -302,14 +302,14 @@ class FirstChargeFailed(RefusalError):
 
 
 class FirstChargeNeedsAuthentication(FirstChargeFailed):
-    """The first charge waits for the User to authenticate it on the provider's `url`."""
+    """The first charge waits for the User to authenticate it on the provider's page, `url`."""
 
     def __init__(self, detail: str, *, url: str) -> None:
         super().__init__(detail)
         self.url = url
 
     def response_body(self) -> dict[str, Any]:
-        return {"detail": self.detail, "code": "PAYMENT_NEEDS_AUTHENTICATION", "url": self.url}
+        return {**super().response_body(), "code": "PAYMENT_NEEDS_AUTHENTICATION", "url": self.url}
 
 
 async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -> BillingMeResponse:
@@ -319,7 +319,7 @@ async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -
 
     The sync from Stripe runs first (ADR 0004), so a Trial that already ended there is a 409, as is
     a User with no trialing Subscription. Each sync holds the User's row lock, but ending the Trial
-    doesn't: the gateway ends a Trial once however often two requests ask. A charge that failed, or
+    doesn't: the gateway ends a Trial once, and a second request racing the first gets a 502. A charge that failed, or
     that waits for the User to authenticate it, leaves the Subscription as Stripe reports it (past
     due keeps access) and is a 402, which links the page to authenticate on when that is the cause.
     """
@@ -345,7 +345,7 @@ async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -
     if authentication_url is not None:
         raise FirstChargeNeedsAuthentication(
             "Your trial has ended, but your bank needs you to confirm the first payment. "
-            "Confirm it on the invoice page.",
+            "Confirm it on Stripe's invoice page.",
             url=authentication_url,
         )
     raise FirstChargeFailed(

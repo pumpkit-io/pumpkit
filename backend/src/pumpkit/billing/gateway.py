@@ -28,6 +28,7 @@ from pumpkit.billing.allowance import months_after
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError
+from pumpkit.core.logging import logger
 from pumpkit.core.time import Clock, system_clock
 
 
@@ -170,7 +171,8 @@ class BillingGateway(Protocol):
         moves the billing cycle anchor to now. A failed charge leaves it past due, not an error.
 
         Returns the provider's page where the User authenticates the first charge when it waits
-        for that (3D Secure), else None. Ending the same Trial again within 24 hours ends nothing.
+        for that (3D Secure), else None. Ending the same Trial again within 24 hours ends nothing,
+        and fails with `BillingProviderError` while the first call is still running.
         """
         ...
 
@@ -440,8 +442,9 @@ class StripeBillingGateway:
         )
 
     async def end_trial(self, *, subscription_id: str) -> Optional[str]:
-        def end_and_find_authentication() -> Optional[str]:
-            subscription = self._client.v1.subscriptions.update(
+        subscription = await self._call(
+            "end a Trial",
+            lambda: self._client.v1.subscriptions.update(
                 subscription_id,
                 # `allow_incomplete` keeps the update when the charge fails: Stripe makes the
                 # Subscription past due instead of refusing the change.
@@ -452,24 +455,31 @@ class StripeBillingGateway:
                 },
                 # Stripe replays the first answer to a repeated key (for 24 hours).
                 {"idempotency_key": f"pumpkit-{subscription_id}-end-trial"},
-            ).to_dict()
-            invoice = subscription.get("latest_invoice")
-            if not isinstance(invoice, dict) or invoice.get("status") != "open":
-                return None
-            payments = self._client.v1.invoice_payments.list(
-                {
-                    "invoice": invoice["id"],
-                    "status": "open",
-                    "expand": ["data.payment.payment_intent"],
-                }
-            )
-            for payment in payments.data:
-                intent = payment.to_dict().get("payment", {}).get("payment_intent")
-                if isinstance(intent, dict) and intent.get("status") == "requires_action":
-                    return invoice.get("hosted_invoice_url")
+            ),
+        )
+        invoice = subscription.to_dict().get("latest_invoice")
+        if not isinstance(invoice, dict) or invoice.get("status") != "open":
             return None
-
-        return await self._call("end a Trial", end_and_find_authentication)
+        try:
+            payments = await self._call(
+                "list a first charge's payments",
+                lambda: self._client.v1.invoice_payments.list(
+                    {
+                        "invoice": invoice["id"],
+                        "status": "open",
+                        "expand": ["data.payment.payment_intent"],
+                    }
+                ),
+            )
+        except BillingProviderError:
+            # The Trial has ended either way, so the caller still syncs; it only loses the link.
+            logger.warning("Couldn't tell why invoice %s is unpaid", invoice["id"], exc_info=True)
+            return None
+        for payment in payments.data:
+            intent = payment.to_dict().get("payment", {}).get("payment_intent")
+            if isinstance(intent, dict) and intent.get("status") == "requires_action":
+                return invoice.get("hosted_invoice_url")
+        return None
 
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         # Pure HMAC work, no network: no need to leave the event loop.

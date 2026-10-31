@@ -150,7 +150,7 @@ async def test_a_first_charge_waiting_on_authentication_links_the_invoice_to_aut
     assert response.json() == {
         "detail": (
             "Your trial has ended, but your bank needs you to confirm the first payment. "
-            "Confirm it on the invoice page."
+            "Confirm it on Stripe's invoice page."
         ),
         "code": "PAYMENT_NEEDS_AUTHENTICATION",
         "url": "https://invoice.stripe.test/i/in_1",
