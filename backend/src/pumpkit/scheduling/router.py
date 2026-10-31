@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostResponse,
     ScheduledPostUpdateRequest,
     TextEditRequest,
+    UsageResponse,
     XConnectionResponse,
 )
 from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
@@ -47,6 +49,21 @@ posts_router = APIRouter(tags=["posts"])
 # can mount them around x_connection's router and keep the OpenAPI document's order.
 x_connection_router = APIRouter(tags=["x-connection"])
 x_authorization_router = APIRouter(tags=["x-connection"])
+# Served here, not from billing: scheduling and posts count the usage, and billing sits below them.
+usage_router = APIRouter(tags=["usage"])
+
+
+@usage_router.get("/usage", response_model=UsageResponse, status_code=status.HTTP_200_OK)
+async def get_usage(
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+    at: Annotated[
+        Optional[datetime],
+        Query(description="A moment whose Allowance period to report, such as a publish time."),
+    ] = None,
+) -> UsageResponse:
+    return await mediator.get_usage(db=db, user=current_user, at=at or clock())
 
 
 @x_connection_router.get(
@@ -186,9 +203,10 @@ async def cancel_scheduled_post(
     scheduled_post_id: str,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
 ) -> None:
     await mediator.cancel_scheduled_post(
-        db=db, user=current_user, scheduled_post_id=scheduled_post_id
+        db=db, user=current_user, scheduled_post_id=scheduled_post_id, now=clock()
     )
 
 

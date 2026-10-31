@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
-import { timeOfDay } from '@/lib/relativeTime';
+import { dayAndTime } from '@/lib/relativeTime';
 import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
 import {
   inspirationAuthorService,
@@ -98,8 +98,8 @@ export function useInspirationAuthors() {
         const retryAt = errorRetryAt(e);
         if (retryAt) {
           setNotice(
-            `${errorMessage(e, `@${handle} was fetched less than an hour ago.`)} ` +
-              `You can refresh it again at ${timeOfDay(retryAt)}.`,
+            `${errorMessage(e, `@${handle} was fetched less than a day ago.`)} ` +
+              `You can refresh it again ${dayAndTime(retryAt)}.`,
           );
         } else {
           fail(e, `Couldn't refresh @${handle}. Try again.`);

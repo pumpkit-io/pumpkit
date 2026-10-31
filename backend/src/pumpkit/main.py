@@ -60,6 +60,7 @@ app.include_router(scheduling_router.x_connection_router, prefix="/api/v1")
 app.include_router(x_connection_router, prefix="/api/v1")
 app.include_router(scheduling_router.x_authorization_router, prefix="/api/v1")
 app.include_router(scheduling_router.router, prefix="/api/v1")
+app.include_router(scheduling_router.usage_router, prefix="/api/v1")
 app.include_router(onboarding_router, prefix="/api/v1")
 # A Route, not a Mount, so the URL has no trailing slash. POST only: a stateless server has
 # no stream for GET to open, and the request would hang.

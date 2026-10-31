@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { showToast } from '@/components/Toaster';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileCard } from '@/features/account/ProfileCard';
 import { ApiKeysSection } from '@/features/apiKeys/ApiKeysSection';
+import { generationsAndXPosts } from '@/features/billing/counts';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
+import { UsageCard } from '@/features/billing/UsageCard';
 import { useBilling } from '@/features/billing/useBilling';
 import { useInstance } from '@/features/instance/useInstance';
 import { LegalLinks } from '@/features/legal/LegalLinks';
@@ -13,10 +16,13 @@ import { Topbar } from '@/features/topbar/Topbar';
 import { XAccountCard } from '@/features/xConnection/XAccountCard';
 import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
 import { track } from '@/lib/analytics';
+import type { TopUpOffer } from '@/services/billingService';
 
-/** What the X callback leaves in the location state for Settings. */
+/** What the X callback and the Top-up return route leave in the location state for Settings. */
 export interface SettingsLocationState {
   xConnectionNotice?: string;
+  /** Set by the Top-up return route. */
+  checkoutStatus?: 'top_up_bought';
 }
 
 const LEGAL_LINK_CLASS =
@@ -32,7 +38,7 @@ function useArrivalState(): SettingsLocationState {
   }));
 
   useEffect(() => {
-    if (arrival.state.xConnectionNotice) {
+    if (arrival.state.xConnectionNotice || arrival.state.checkoutStatus) {
       navigate({ hash: arrival.hash }, { replace: true, state: null });
     }
   }, [arrival, navigate]);
@@ -40,14 +46,31 @@ function useArrivalState(): SettingsLocationState {
   return arrival.state;
 }
 
-/** Loads billing on every visit, since Stripe changes it outside the app. */
-function useBillingOnArrival() {
+/** Loads billing on every visit, since Stripe changes it outside the app, and greets a Top-up. */
+function useBillingOnArrival(topUpBought: boolean) {
   const { sells_plans } = useInstance();
   const { load } = useBilling();
+  // StrictMode runs effects twice in development, and a Top-up is greeted once.
+  const greeted = useRef(false);
 
   useEffect(() => {
-    if (sells_plans) void load();
-  }, [sells_plans, load]);
+    if (!sells_plans) return;
+    void load();
+    if (!topUpBought || greeted.current) return;
+    greeted.current = true;
+    track('top_up_bought');
+  }, [sells_plans, load, topUpBought]);
+}
+
+/** Back from buying a Top-up, says what it added once billing has loaded the pack, once. */
+function useTopUpAddedToast(topUpBought: boolean, offer: TopUpOffer | null | undefined) {
+  const toasted = useRef(false);
+  useEffect(() => {
+    if (!topUpBought || !offer || toasted.current) return;
+    toasted.current = true;
+    const counts = generationsAndXPosts(offer.generations, offer.xPosts);
+    showToast(counts ? `Top-up added: ${counts}.` : 'Top-up added.');
+  }, [topUpBought, offer]);
 }
 
 /** Rendered inside AppLayout: the User's account as one column of cards. */
@@ -56,7 +79,10 @@ export function Settings() {
   const { sells_plans, x_connection } = useInstance();
   const billing = useBilling();
   const arrival = useArrivalState();
-  useBillingOnArrival();
+  const data = billing.data;
+  const topUpBought = arrival.checkoutStatus === 'top_up_bought';
+  useBillingOnArrival(topUpBought);
+  useTopUpAddedToast(topUpBought, data?.topUp);
 
   return (
     <>
@@ -87,11 +113,12 @@ export function Settings() {
           )}
           {sells_plans && (
             <SubscriptionCard
-              data={billing.data}
+              data={data}
               isLoading={billing.isLoading}
               loadError={billing.loadError}
             />
           )}
+          {sells_plans && data?.me.subscribed && <UsageCard topUpBought={topUpBought} />}
           <ApiKeysSection />
           <AppearanceCard />
           <footer className="pt-4">

@@ -4,8 +4,8 @@ The seeds come from `alembic/data/author_seeds.json`, written once from the Oper
 `scripts/write_author_seeds.py`, so migrating needs no twitterapi.io key. A handle already in the
 directory keeps its entry.
 
-Revision ID: 0030
-Revises: 0029
+Revision ID: 0033
+Revises: 0032
 Create Date: 2026-10-31 18:10:00.000000
 
 """
@@ -19,8 +19,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0030"
-down_revision: Union[str, None] = "0029"
+revision: str = "0033"
+down_revision: Union[str, None] = "0032"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

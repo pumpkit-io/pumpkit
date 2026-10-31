@@ -4,21 +4,17 @@ import { CtaFrame } from '@/components/blocks/cta-frame';
 import { Eyebrow } from '@/components/blocks/eyebrow';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { billingService, type Plan } from '@/services/billingService';
+import { billingService, type Plan, type PlanCatalog } from '@/services/billingService';
 import { recurringLabel } from '@/features/billing/PlanCard';
+import { OfferLineContent } from '@/features/billing/OfferLineContent';
+import { offerLines, type OfferLine } from '@/features/billing/planOffer';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
 
-type State = { status: 'loading' } | { status: 'ready'; plans: Plan[] } | { status: 'error' };
+type State =
+  { status: 'loading' } | { status: 'ready'; catalog: PlanCatalog } | { status: 'error' };
 
-// Placeholder contents, the same for every Plan until real copy exists.
-const PLAN_INCLUDES = [
-  '[What this plan includes]',
-  '[What this plan includes]',
-  '[What this plan includes]',
-];
-
-function PlanTable({ plan }: { plan: Plan }) {
+function PlanTable({ plan, offer }: { plan: Plan; offer: OfferLine[] }) {
   const planRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
   useOnceVisible(planRef, () => track('landing_pricing_plan_viewed', { plan_key: plan.key }));
@@ -33,9 +29,11 @@ function PlanTable({ plan }: { plan: Plan }) {
       </h3>
       <Table aria-labelledby={headingId}>
         <TableBody>
-          {PLAN_INCLUDES.map((item, i) => (
-            <TableRow key={i} index={i}>
-              <TableCell className="py-5 text-base md:text-lg">{item}</TableCell>
+          {offer.map((line, i) => (
+            <TableRow key={line.text} index={i}>
+              <TableCell className="py-5 text-base md:text-lg">
+                <OfferLineContent line={line} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -54,14 +52,16 @@ export function PricingSection() {
     let cancelled = false;
     billingService
       .fetchPlans()
-      .then(({ plans }) => !cancelled && setState({ status: 'ready', plans }))
+      .then((catalog) => !cancelled && setState({ status: 'ready', catalog }))
       .catch(() => !cancelled && setState({ status: 'error' }));
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const plans = state.status === 'ready' ? state.plans : [];
+  const plans = state.status === 'ready' ? state.catalog.plans : [];
+  const offer =
+    state.status === 'ready' ? offerLines(state.catalog.allowance, state.catalog.trial) : [];
 
   return (
     <section
@@ -105,7 +105,7 @@ export function PricingSection() {
         {plans.length > 0 && (
           <div className="mt-14 flex flex-col gap-12">
             {plans.map((plan) => (
-              <PlanTable key={plan.key} plan={plan} />
+              <PlanTable key={plan.key} plan={plan} offer={offer} />
             ))}
           </div>
         )}

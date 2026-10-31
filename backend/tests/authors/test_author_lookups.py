@@ -125,7 +125,7 @@ async def test_a_fetch_updates_a_seeded_entry_s_photo_but_keeps_its_curated_name
     added = await client.post(AUTHORS, json={"handle": "levelsio"})
 
     assert (added.json()["name"], added.json()["photo_url"]) == ("Pieter Levels", NEW_PHOTO)
-    clock.advance(timedelta(hours=1))
+    clock.advance(timedelta(days=1))
     fake_x_reader.photos["levelsio"] = PHOTO
     refreshed = await client.post(f"{AUTHORS}/levelsio/refresh")
     assert (refreshed.json()["name"], refreshed.json()["photo_url"]) == ("Pieter Levels", PHOTO)
@@ -304,13 +304,13 @@ async def test_an_add_reuses_posts_any_user_fetched_within_a_week(
     assert fake_x_reader.calls == ["levelsio", "levelsio"]
 
 
-async def test_a_refresh_keeps_its_hour_cooldown_and_is_not_a_lookup(
+async def test_a_refresh_keeps_its_daily_cooldown_and_is_not_a_lookup(
     client, subscribed, fake_x_reader, clock, monkeypatch
 ):
-    monkeypatch.setattr(settings, "AUTHOR_LOOKUP_DAILY_LIMIT", 1)
+    monkeypatch.setattr(settings, "AUTHOR_LOOKUP_HOURLY_LIMIT", 1)
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=1))
+    clock.advance(timedelta(days=1))
 
     refreshed = await client.post(f"{AUTHORS}/levelsio/refresh")
 

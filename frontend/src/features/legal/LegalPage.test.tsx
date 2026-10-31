@@ -75,19 +75,25 @@ describe('Terms at /terms', () => {
     renderLegalRoute('/terms');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Terms');
-    expect(within(main).getByText('Last updated: 31 October 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Last updated: 1 November 2026')).toBeInTheDocument();
   });
 
   it.each([
     ['9. Suspension and termination by the Operator', 'suspension'],
-    ['11. Automatic renewal and cancellation', 'renewal'],
-    ['13. No refunds', 'refunds'],
-    ['15. Limitation of liability', 'liability'],
-    ['18. Changes to these Terms', 'changes'],
-    ['20. Competent court', 'courts'],
+    ['12. Automatic renewal and cancellation', 'renewal'],
+    ['14. No refunds', 'refunds'],
+    ['16. Limitation of liability', 'liability'],
+    ['19. Changes to these Terms', 'changes'],
+    ['21. Competent court', 'courts'],
   ])('gives the onerous clause "%s" the anchor #%s', (name, id) => {
     renderLegalRoute('/terms');
     expect(screen.getByRole('heading', { level: 2, name })).toHaveAttribute('id', id);
+  });
+
+  it('gives Top-ups their own clause, #top-ups', () => {
+    renderLegalRoute('/terms');
+    const heading = screen.getByRole('heading', { level: 2, name: '11. Allowance and Top-ups' });
+    expect(heading).toHaveAttribute('id', 'top-ups');
   });
 });
 
@@ -124,7 +130,7 @@ describe('Termini at /it/terms', () => {
     renderLegalRoute('/it/terms');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Termini');
-    expect(within(main).getByText('Ultimo aggiornamento: 31 ottobre 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Ultimo aggiornamento: 1 novembre 2026')).toBeInTheDocument();
   });
 
   it('sets Italian as the page language', () => {
@@ -134,12 +140,13 @@ describe('Termini at /it/terms', () => {
 
   it.each([
     ['9. Sospensione e risoluzione da parte del Gestore', 'suspension'],
-    ['11. Rinnovo automatico e disdetta', 'renewal'],
-    ['12. Diritto di recesso per i consumatori', 'withdrawal'],
-    ['13. Esclusione dei rimborsi', 'refunds'],
-    ['15. Limitazione di responsabilità', 'liability'],
-    ['18. Modifiche ai presenti Termini', 'changes'],
-    ['20. Foro competente', 'courts'],
+    ['11. Allowance e Top-up', 'top-ups'],
+    ['12. Rinnovo automatico e disdetta', 'renewal'],
+    ['13. Diritto di recesso per i consumatori', 'withdrawal'],
+    ['14. Esclusione dei rimborsi', 'refunds'],
+    ['16. Limitazione di responsabilità', 'liability'],
+    ['19. Modifiche ai presenti Termini', 'changes'],
+    ['21. Foro competente', 'courts'],
   ])('gives clause "%s" the same anchor as the English Terms, #%s', (name, id) => {
     renderLegalRoute('/it/terms');
     expect(screen.getByRole('heading', { level: 2, name })).toHaveAttribute('id', id);
@@ -155,7 +162,7 @@ describe('Termini at /it/terms', () => {
       return found;
     };
     const english = clauses('/terms');
-    expect(english).toHaveLength(22);
+    expect(english).toHaveLength(23);
     expect(clauses('/it/terms')).toEqual(english);
   });
 });

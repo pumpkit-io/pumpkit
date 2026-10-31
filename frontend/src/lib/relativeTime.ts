@@ -16,6 +16,19 @@ export function timeOfDay(date: Date): string {
   return timeFormat.format(date);
 }
 
+const dayFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** The local day and time of `date`: "today at 3:42 PM", "tomorrow at 3:42 PM", "Oct 9 at 3:42 PM". */
+export function dayAndTime(date: Date, now: Date = new Date()): string {
+  const days = Math.round((startOfDay(date) - startOfDay(now)) / (24 * 60 * 60 * 1000));
+  const day = days === 0 ? 'today' : days === 1 ? 'tomorrow' : dayFormat.format(date);
+  return `${day} at ${timeOfDay(date)}`;
+}
+
 function secondsSince(iso: string, now: Date): number {
   // A clock running slightly behind the server's reads as "just now", not "in 10 seconds".
   return Math.max(0, (now.getTime() - new Date(iso).getTime()) / 1000);

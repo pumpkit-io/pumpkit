@@ -47,7 +47,7 @@ async def test_a_refresh_updates_the_entry_s_name_and_photo(
     fake_x_reader.names["levelsio"] = "Pieter Levels"
     fake_x_reader.photos["levelsio"] = PHOTO
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     fake_x_reader.names["levelsio"] = "@levelsio"
     fake_x_reader.photos["levelsio"] = NEW_PHOTO
 
@@ -65,7 +65,7 @@ async def test_a_refresh_that_finds_no_name_or_photo_keeps_the_stored_ones(
     fake_x_reader.names["levelsio"] = "Pieter Levels"
     fake_x_reader.photos["levelsio"] = PHOTO
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     fake_x_reader.names.clear()
     fake_x_reader.photos.clear()
 

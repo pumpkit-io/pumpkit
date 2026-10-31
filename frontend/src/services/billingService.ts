@@ -45,11 +45,34 @@ export interface TermsAcceptance {
   approvedSpecificClauses: boolean;
 }
 
-/** The Plans on sale and the Terms version a checkout must accept. */
+/** What each Allowance period allows; a null cap is no cap. */
+export interface OfferedAllowance {
+  generations: number | null;
+  xPosts: number | null;
+  linkXPosts: number | null;
+}
+
+/** The Trial a first Subscription starts with, and its own Allowance. */
+export interface OfferedTrial extends OfferedAllowance {
+  days: number;
+}
+
+/** The Top-up a paid-up User may buy: its price in minor units and what it adds. */
+export interface TopUpOffer extends OfferedAllowance {
+  amount: number;
+  currency: string;
+}
+
+/** The Plans on sale, what they allow, and the Terms version a checkout must accept. */
 export interface PlanCatalog {
   plans: Plan[];
   /** The current Terms' "Last updated" date, in ISO form; null where the Instance has no Terms (ADR 0011). */
   termsVersion: string | null;
+  allowance: OfferedAllowance;
+  /** Null where the Instance offers no Trial; whether this User gets one is `BillingMe.trialDays`. */
+  trial: OfferedTrial | null;
+  /** Null where the Instance sells no Top-ups; whether this User may buy one is in usage. */
+  topUp: TopUpOffer | null;
 }
 
 interface BillingMeApi {
@@ -73,27 +96,58 @@ interface PlanApi {
   interval_count: number;
 }
 
+interface OfferedAllowanceApi {
+  generations: number | null;
+  x_posts: number | null;
+  link_x_posts: number | null;
+}
+
+interface PlansApi {
+  data: PlanApi[];
+  terms_version: string | null;
+  allowance: OfferedAllowanceApi;
+  trial: (OfferedAllowanceApi & { days: number }) | null;
+  top_up: (OfferedAllowanceApi & { amount: number; currency: string }) | null;
+}
+
+function offeredAllowance(a: OfferedAllowanceApi): OfferedAllowance {
+  return { generations: a.generations, xPosts: a.x_posts, linkXPosts: a.link_x_posts };
+}
+
+function termsFields(termsVersion: string | null, acceptance: TermsAcceptance) {
+  return termsVersion
+    ? {
+        terms_version: termsVersion,
+        accepted_terms: acceptance.acceptedTerms,
+        requested_immediate_start: acceptance.requestedImmediateStart,
+        approved_specific_clauses: acceptance.approvedSpecificClauses,
+      }
+    : {};
+}
+
+function billingMe(data: BillingMeApi): BillingMe {
+  const s = data.subscription;
+  return {
+    subscription: s && {
+      status: s.status,
+      planKey: s.plan_key,
+      currentPeriodEnd: s.current_period_end,
+      cancelAtPeriodEnd: s.cancel_at_period_end,
+    },
+    subscribed: data.subscribed,
+    maySubscribe: data.may_subscribe,
+    trialDays: data.trial_days,
+  };
+}
+
 export const billingService = {
   fetchBillingMe: async (): Promise<BillingMe> => {
     const { data } = await apiService.get<BillingMeApi>('/billing/me');
-    const s = data.subscription;
-    return {
-      subscription: s && {
-        status: s.status,
-        planKey: s.plan_key,
-        currentPeriodEnd: s.current_period_end,
-        cancelAtPeriodEnd: s.cancel_at_period_end,
-      },
-      subscribed: data.subscribed,
-      maySubscribe: data.may_subscribe,
-      trialDays: data.trial_days,
-    };
+    return billingMe(data);
   },
 
   fetchPlans: async (): Promise<PlanCatalog> => {
-    const { data } = await apiService.get<{ data: PlanApi[]; terms_version: string | null }>(
-      '/billing/plans',
-    );
+    const { data } = await apiService.get<PlansApi>('/billing/plans');
     return {
       plans: data.data.map((p) => ({
         key: p.key,
@@ -104,6 +158,15 @@ export const billingService = {
         intervalCount: p.interval_count,
       })),
       termsVersion: data.terms_version,
+      allowance: offeredAllowance(data.allowance),
+      trial: data.trial && { days: data.trial.days, ...offeredAllowance(data.trial) },
+      topUp: data.top_up
+        ? {
+            amount: data.top_up.amount,
+            currency: data.top_up.currency,
+            ...offeredAllowance(data.top_up),
+          }
+        : null,
     };
   },
 
@@ -118,17 +181,35 @@ export const billingService = {
     termsVersion: string | null,
     acceptance: TermsAcceptance,
   ): Promise<string> => {
-    const terms = termsVersion && {
-      terms_version: termsVersion,
-      accepted_terms: acceptance.acceptedTerms,
-      requested_immediate_start: acceptance.requestedImmediateStart,
-      approved_specific_clauses: acceptance.approvedSpecificClauses,
-    };
     const { data } = await apiService.post<{ url: string }>('/billing/checkout', {
       plan_key: planKey,
-      ...terms,
+      ...termsFields(termsVersion, acceptance),
     });
     return data.url;
+  },
+
+  /**
+   * Starts Stripe Checkout for one Top-up, with the same acceptance of the Terms as a
+   * Subscription's (ADR 0010). The server refuses with a 409 unless the User is paid up.
+   */
+  startTopUpCheckout: async (
+    termsVersion: string | null,
+    acceptance: TermsAcceptance,
+  ): Promise<string> => {
+    const { data } = await apiService.post<{ url: string }>(
+      '/billing/top-ups/checkout',
+      termsFields(termsVersion, acceptance),
+    );
+    return data.url;
+  },
+
+  /**
+   * Ends the User's Trial now, so the first period is charged today and the monthly Allowance
+   * starts at once. A failed charge rejects with the backend's message (a 402).
+   */
+  subscribeNow: async (): Promise<BillingMe> => {
+    const { data } = await apiService.post<BillingMeApi>('/billing/subscribe-now');
+    return billingMe(data);
   },
 
   openBillingPortal: async (): Promise<string> => {

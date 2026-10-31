@@ -94,6 +94,16 @@ export const EVENTS = {
     description: 'Billing: returned from Stripe via the cancel URL.',
   },
   billing_portal_opened: { description: 'Billing: opened the Stripe billing portal.' },
+  top_up_checkout_started: {
+    description: 'Billing: paid for a Top-up in the Buy top-up dialog, starting its checkout.',
+  },
+  top_up_bought: {
+    description: 'Billing: returned from Stripe via the Top-up success URL.',
+  },
+  billing_subscribe_now_confirmed: {
+    description:
+      'Billing: a Trial User confirmed Subscribe now and the Trial ended, from the Usage card or a limit notice.',
+  },
 
   // Onboarding (/onboarding)
   onboarding_step_viewed: {
@@ -123,6 +133,10 @@ export const EVENTS = {
   post_version_failed: {
     description:
       'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
+  },
+  allowance_used_up: {
+    description:
+      'New post or the Post page: an action was refused for want of Allowance. Props: ran_out (generations | x_posts | link_x_posts).',
   },
   post_text_edited: {
     description:

@@ -10,6 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
+import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
+import { leftInTopUps } from '@/features/billing/usage';
+import { useUsage } from '@/features/billing/useUsage';
 import {
   destinationFrom,
   PROFILE_DRAFT,
@@ -21,9 +25,10 @@ import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { ConnectXPrompt } from '@/features/xConnection/ConnectXPrompt';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { formatCount } from '@/lib/characters';
-import { xWeightedLength } from '@/lib/xLength';
+import { hasLink, xWeightedLength } from '@/lib/xLength';
 import { FORMAT_THREAD, type Format } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
+import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
@@ -77,6 +82,18 @@ function overLimit(
     const characters = `${formatCount(over)} ${over === 1 ? 'character' : 'characters'}`;
     return [`${what} is ${characters} over X's ${formatCount(limit)}-character limit.`];
   });
+}
+
+/**
+ * What the Parts about to go out with a link use of the link posts left, in the period and in
+ * Top-ups; null without a link, or without a cap on them.
+ */
+function linkNote(linkCount: number, allowance: AllowanceUsage | null | undefined): string | null {
+  const inPeriod = allowance?.linkXPosts.left;
+  if (linkCount === 0 || !allowance || inPeriod === null || inPeriod === undefined) return null;
+  const left = inPeriod + leftInTopUps(allowance, 'linkXPosts');
+  const links = linkCount === 1 ? 'Contains a link' : 'Contains links';
+  return `${links}: uses ${linkCount} of your ${left} link ${left === 1 ? 'post' : 'posts'}`;
 }
 
 const PART_TEXT = 'whitespace-pre-wrap break-words font-sans text-sm text-foreground';
@@ -160,20 +177,31 @@ export function PostToDialog({
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
   const { connection } = useXConnectionContext();
-  const { sending, error, send } = sender;
+  const { sending, error, allowanceUsedUp, send } = sender;
   const [step, setStep] = useState<Step>({ kind: 'choose' });
   const [where, setWhere] = useState<DestinationDraft>(initialWhere);
   const [when, setWhen] = useState<WhenDraft>(initialWhen);
+  const publishAt = publishAtFrom(when);
+  // The period the post would count against: the chosen time's, or now's for Post now.
+  const { usage } = useUsage(publishAt);
 
   const liveCount = parts.filter((part) => part.live).length;
   const thread = format === FORMAT_THREAD || liveCount > 0;
   const live = liveNote(liveCount, parts.length);
   const toSend = parts.length - liveCount;
   const destination = destinationFrom(where);
-  const publishAt = publishAtFrom(when);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
   const tooLong = ready ? overLimit(parts, lengths, connection.charLimit, thread) : [];
+  const links = linkNote(
+    parts.filter((part) => !part.live && hasLink(part.text)).length,
+    usage?.allowance,
+  );
+  const refusal = allowanceUsedUp ? (
+    <AllowanceNotice refusal={allowanceUsedUp} />
+  ) : (
+    error && <ErrorBanner message={error} />
+  );
   const liveLine = live && (
     <p
       className={
@@ -260,7 +288,7 @@ export function PostToDialog({
         </p>
         {liveLine}
         <PartsToPost parts={parts} lengths={lengths} limit={connection.charLimit} thread={thread} />
-        {error && <ErrorBanner message={error} />}
+        {refusal}
       </>
     );
     footer = (
@@ -296,7 +324,9 @@ export function PostToDialog({
             {problem}
           </p>
         ))}
-        {error && <ErrorBanner message={error} />}
+        {links && <p className="font-sans text-xs text-muted-foreground">{links}</p>}
+        {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="xPosts" />}
+        {refusal}
       </>
     );
     footer = (

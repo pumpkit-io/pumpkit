@@ -59,6 +59,12 @@ const QUARTERLY_PLAN = {
   interval_count: 3,
 };
 
+const OFFER = {
+  terms_version: '2026-10-11',
+  allowance: { generations: 500, x_posts: 100, link_x_posts: 10 },
+  trial: { days: 7, generations: 125, x_posts: 25, link_x_posts: 2 },
+};
+
 /** Renders the landing page as a signed-out visitor sees it at `/`. */
 const WITH_ANALYTICS: Instance = {
   ...SELLS_PLANS,
@@ -83,7 +89,7 @@ function renderLanding(instance: Instance = SELLS_PLANS) {
 
 beforeEach(() => {
   vi.mocked(track).mockClear();
-  fakePlansEndpoint(200, { data: [MONTHLY_PLAN, QUARTERLY_PLAN] });
+  fakePlansEndpoint(200, { ...OFFER, data: [MONTHLY_PLAN, QUARTERLY_PLAN] });
 });
 
 afterEach(() => {
@@ -360,7 +366,7 @@ describe('Landing pricing', () => {
     );
   });
 
-  it('fills every table with the same placeholder rows', async () => {
+  it('fills every table with what the Plan allows and the free trial', async () => {
     renderLanding();
     const tables = await screen.findAllByRole('table');
     const rowTexts = tables.map((table) =>
@@ -369,11 +375,39 @@ describe('Landing pricing', () => {
         .map((row) => row.textContent),
     );
     expect(rowTexts[0]).toEqual([
-      '[What this plan includes]',
-      '[What this plan includes]',
-      '[What this plan includes]',
+      '500 post generations a month.',
+      'Publish 100 X posts a month, up to 10 of them with a link.',
+      'Write in the voice of your favorite X creators.',
+      '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
     ]);
     expect(rowTexts[1]).toEqual(rowTexts[0]);
+  });
+
+  it('leaves out the trial and the lines of empty caps', async () => {
+    fakePlansEndpoint(200, {
+      ...OFFER,
+      data: [MONTHLY_PLAN],
+      allowance: { generations: 500, x_posts: null, link_x_posts: null },
+      trial: null,
+    });
+    renderLanding();
+    const table = await screen.findByRole('table');
+    expect(
+      within(table)
+        .getAllByRole('row')
+        .map((row) => row.textContent),
+    ).toEqual(['500 post generations a month.', 'Write in the voice of your favorite X creators.']);
+  });
+
+  it('explains generations behind an info button', async () => {
+    fakePlansEndpoint(200, { ...OFFER, data: [MONTHLY_PLAN] });
+    renderLanding();
+    fireEvent.click(await screen.findByRole('button', { name: 'About generations' }));
+    expect(
+      await screen.findByText(
+        'Every prompt to generate or refine a post counts as one generation.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('opens with the eyebrow, heading and subline placeholder', () => {
@@ -395,7 +429,7 @@ describe('Landing pricing', () => {
   });
 
   it('shows a fallback when there are no Plans', async () => {
-    fakePlansEndpoint(200, { data: [] });
+    fakePlansEndpoint(200, { ...OFFER, data: [] });
     renderLanding();
     expect(await screen.findByText('Pricing is coming soon.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();

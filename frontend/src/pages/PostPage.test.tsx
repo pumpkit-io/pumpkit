@@ -24,7 +24,12 @@ vi.mock('@/services/userService', () => ({
 vi.mock('@/services/billingService', () => ({
   billingService: {
     fetchBillingMe: vi.fn(),
-    fetchPlans: vi.fn().mockResolvedValue({ plans: [], termsVersion: '2026-10-11' }),
+    fetchPlans: vi.fn().mockResolvedValue({
+      plans: [],
+      termsVersion: '2026-10-11',
+      allowance: { generations: null, xPosts: null, linkXPosts: null },
+      trial: null,
+    }),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
@@ -69,6 +74,9 @@ vi.mock('@/services/scheduledPostService', () => ({
     lookUpCommunity: vi.fn(),
   },
 }));
+vi.mock('@/services/usageService', () => ({
+  usageService: { get: vi.fn() },
+}));
 vi.mock('@/services/onboardingService', () => ({
   onboardingService: { fetchNextStep: vi.fn().mockResolvedValue('paywall') },
 }));
@@ -97,6 +105,7 @@ import {
   type Community,
   type ScheduledPost,
 } from '@/services/scheduledPostService';
+import { usageService, type Usage } from '@/services/usageService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import {
   LEVELSIO,
@@ -104,9 +113,11 @@ import {
   NO_POSTS,
   PAULG,
   SUBSCRIBED,
+  allowanceUsedUp,
   apiError,
   renderSignedIn,
   currentPath,
+  usageWith,
 } from './testing/signedInApp';
 
 const CONNECTED: XConnection = {
@@ -235,6 +246,7 @@ describe('Post page', () => {
     vi.mocked(postService.restoreVersion).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
     vi.mocked(track).mockClear();
   });
 
@@ -1254,6 +1266,55 @@ describe('Post page', () => {
       expect(feedbackBox()).toHaveValue('make it shorter');
     });
 
+    it('shows the Allowance refusal in place of the error banner', async () => {
+      vi.mocked(postService.addVersion).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      );
+      renderPost(postWith('the first final'));
+      await textCard();
+
+      await sendFeedback('make it shorter');
+
+      expect(
+        await panel('Draft').findByText(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      ).toBeInTheDocument();
+      expect(panel('Draft').queryByRole('alert')).not.toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('make it shorter');
+      expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'generations' });
+    });
+
+    it('says how many generations are left under Send feedback once less than 10% is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ generations: { limit: 500, used: 457, left: 43 } }),
+      );
+      renderPost(postWith('the first final'));
+      await textCard();
+
+      expect(
+        await panel('Draft').findByText('43 generations left until 14 November'),
+      ).toBeInTheDocument();
+    });
+
+    it('counts the generation a Feedback used in the low warning', async () => {
+      vi.mocked(usageService.get)
+        .mockResolvedValueOnce(usageWith({ generations: { limit: 500, used: 457, left: 43 } }))
+        .mockResolvedValue(usageWith({ generations: { limit: 500, used: 458, left: 42 } }));
+      vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['shorter']));
+      renderPost(postWith('the first final'));
+      await textCard();
+      await panel('Draft').findByText('43 generations left until 14 November');
+
+      await sendFeedback('make it shorter');
+
+      expect(
+        await panel('Draft').findByText('42 generations left until 14 November'),
+      ).toBeInTheDocument();
+    });
+
     it('shows a length counter only near the Feedback limit, and refuses Feedback over it', async () => {
       renderPost(postWith('the first final'));
       await textCard();
@@ -1856,6 +1917,128 @@ describe('Post page', () => {
         await dialog.findByText('Pick a time at least a minute from now.'),
       ).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: /^Schedule for/ })).toBeEnabled();
+    });
+
+    function usageWithLinkPostsLeft(left: number): Usage {
+      return usageWith({ linkXPosts: { limit: 10, used: 10 - left, left } });
+    }
+
+    it('says when the text contains a link and how many link posts are left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
+      const dialog = await openPostTo(postWith('Read pumpkit.io today'));
+
+      expect(
+        await dialog.findByText('Contains a link: uses 1 of your 8 link posts'),
+      ).toBeInTheDocument();
+    });
+
+    it('counts what is left in the period holding the chosen time', async () => {
+      vi.mocked(usageService.get).mockImplementation(async (at?: string) =>
+        usageWithLinkPostsLeft(at ? 2 : 8),
+      );
+      const dialog = await openPostTo(postWith('Read pumpkit.io today'));
+      expect(
+        await dialog.findByText('Contains a link: uses 1 of your 8 link posts'),
+      ).toBeInTheDocument();
+
+      scheduleAt(dialog, '2026-10-20', '09:00');
+
+      expect(
+        await dialog.findByText('Contains a link: uses 1 of your 2 link posts'),
+      ).toBeInTheDocument();
+      expect(usageService.get).toHaveBeenLastCalledWith('2026-10-20T07:00:00.000Z');
+    });
+
+    it('counts each part of a thread that contains a link', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
+      const dialog = await openPostTo(
+        threadWith([part('See https://example.com'), part('No link'), part('x.com too')]),
+      );
+
+      expect(
+        await dialog.findByText('Contains links: uses 2 of your 8 link posts'),
+      ).toBeInTheDocument();
+    });
+
+    it('counts the link posts left in top-ups with those left this period', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          linkXPosts: { limit: 10, used: 10, left: 0 },
+          topUps: [
+            {
+              generationsLeft: 250,
+              xPostsLeft: 20,
+              linkXPostsLeft: 3,
+              expiresAt: new Date('2027-10-03T00:00:00Z'),
+            },
+          ],
+        }),
+      );
+      const dialog = await openPostTo(postWith('Read pumpkit.io today'));
+
+      expect(
+        await dialog.findByText('Contains a link: uses 1 of your 3 link posts'),
+      ).toBeInTheDocument();
+    });
+
+    it('says nothing about links for a text without one', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWithLinkPostsLeft(8));
+      const plain = await openPostTo(postWith('No link in this one.'));
+      await vi.waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(plain.queryByText(/Contains a link/)).not.toBeInTheDocument();
+    });
+
+    it('says how many X posts are left once less than 10% is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ xPosts: { limit: 100, used: 95, left: 5 } }),
+      );
+      const dialog = await openPostTo(postWith('No link in this one.'));
+
+      expect(await dialog.findByText('5 X posts left until 14 November')).toBeInTheDocument();
+    });
+
+    it('gives no low warning while a top-up has X posts left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          xPosts: { limit: 100, used: 95, left: 5 },
+          topUps: [
+            {
+              generationsLeft: 250,
+              xPostsLeft: 20,
+              linkXPostsLeft: 3,
+              expiresAt: new Date('2027-10-03T00:00:00Z'),
+            },
+          ],
+        }),
+      );
+      const dialog = await openPostTo(postWith('No link in this one.'));
+      await vi.waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(dialog.queryByText(/X posts left until/)).not.toBeInTheDocument();
+    });
+
+    it('says nothing about links on an Instance without allowances', async () => {
+      const dialog = await openPostTo(postWith('Read pumpkit.io today'));
+      await vi.waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(dialog.queryByText(/Contains a link/)).not.toBeInTheDocument();
+    });
+
+    it('shows the Allowance refusal in place of the error banner', async () => {
+      const refusal =
+        "You've used this period's 100 X posts. They reset on 14 November. Failed posts don't count.";
+      vi.mocked(scheduledPostService.schedule).mockRejectedValue(
+        allowanceUsedUp(refusal, { ran_out: 'x_posts' }),
+      );
+      const dialog = await openPostTo();
+
+      scheduleAt(dialog, '2026-10-12', '09:00');
+      fireEvent.click(dialog.getByRole('button', { name: /^Schedule for/ }));
+
+      expect(await dialog.findByText(refusal)).toBeInTheDocument();
+      expect(dialog.queryByRole('alert')).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'x_posts' });
     });
 
     it('schedules into a pasted Community, shared with followers unless unticked', async () => {

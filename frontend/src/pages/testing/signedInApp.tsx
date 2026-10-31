@@ -10,6 +10,7 @@ import type { BillingMe } from '@/services/billingService';
 import type { NextStep } from '@/services/onboardingService';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import type { PostsPage } from '@/services/postService';
+import type { AllowanceUsage, Usage } from '@/services/usageService';
 import { SignedInHome } from '../SignedInHome';
 import { signedInRoutes } from '../signedInRoutes';
 
@@ -112,6 +113,41 @@ export function apiError(status: number, detail: string, extra: Record<string, u
     isAxiosError: true,
     response: { status, data: { detail, ...extra } },
   });
+}
+
+/** The 409 the backend answers when an action needs more of the User's Allowance than is left. */
+export function allowanceUsedUp(
+  detail: string,
+  fields: { ran_out?: string; way_out?: string | null; left?: number; needed?: number } = {},
+) {
+  return apiError(409, detail, {
+    url: 'http://localhost:5173/settings',
+    code: 'ALLOWANCE_USED_UP',
+    ran_out: 'generations',
+    needed: 1,
+    left: 0,
+    resets_at: '2026-11-14T09:00:00Z',
+    way_out: null,
+    ...fields,
+  });
+}
+
+/** `usageService.get`'s answer for a paid-up User well within their Allowance, with `changes`. */
+export function usageWith(changes: Partial<AllowanceUsage> = {}): Usage {
+  return {
+    allowance: {
+      trial: false,
+      resetsAt: new Date('2026-11-14T09:00:00Z'),
+      resetsOnDay: 14,
+      generations: { limit: 500, used: 118, left: 382 },
+      xPosts: { limit: 100, used: 39, left: 61 },
+      linkXPosts: { limit: 10, used: 2, left: 8 },
+      wayOut: null,
+      topUps: [],
+      mayBuyTopUp: false,
+      ...changes,
+    },
+  };
 }
 
 /** `postService.list`'s answer for a User with no Posts. */

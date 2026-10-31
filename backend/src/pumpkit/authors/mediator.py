@@ -38,7 +38,7 @@ from pumpkit.core.errors import (
 )
 
 MAX_INSPIRATION_AUTHORS = 3
-REFRESH_COOLDOWN = timedelta(hours=1)
+REFRESH_COOLDOWN = timedelta(hours=24)
 LOOKUP_HOUR = timedelta(hours=1)
 LOOKUP_DAY = timedelta(days=1)
 
@@ -248,7 +248,7 @@ async def refresh_author(
     """
     Fetch the latest posts of one of the User's Inspiration authors and store the new ones.
 
-    Fetched posts are shared across Users, so the hour between fetches is per handle.
+    Fetched posts are shared across Users, so the day between fetches is per handle.
     """
     user_id = user.id
     handle = (await _listed_author(db, user_id=user_id, handle=handle)).handle
@@ -256,7 +256,7 @@ async def refresh_author(
     retry_at = next_refresh_at(await service.last_fetched_at(db, handle=handle), now=now)
     if retry_at is not None:
         raise RetryLaterError(
-            f"@{handle} was fetched less than an hour ago.", retry_at=retry_at, now=now
+            f"@{handle} was fetched less than a day ago.", retry_at=retry_at, now=now
         )
 
     recent = await _fetch(reader, handle)

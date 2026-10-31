@@ -32,7 +32,7 @@ export const LEGAL_LINKS = [
 // Bump with every change to a document's text; both languages share the date.
 // TERMS_LAST_UPDATED must equal the backend's TERMS_VERSION.
 const PRIVACY_LAST_UPDATED = '2026-10-30';
-const TERMS_LAST_UPDATED = '2026-10-31';
+const TERMS_LAST_UPDATED = '2026-11-01';
 
 /** Every legal document, served at its own public route: a new document is a Markdown file plus an entry here. */
 export const LEGAL_DOCUMENTS: LegalDocument[] = [

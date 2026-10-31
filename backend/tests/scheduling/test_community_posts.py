@@ -128,7 +128,7 @@ async def test_other_refusals_fail_without_the_membership_hint(
 
 
 async def test_community_posts_count_towards_the_monthly_cap(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
+    client, sells_no_plans, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
     await connect_x()

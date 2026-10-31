@@ -1,10 +1,8 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
-import { billingService, type BillingMe, type Plan } from '@/services/billingService';
+import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
 
-export interface BillingData {
+export interface BillingData extends PlanCatalog {
   me: BillingMe;
-  plans: Plan[];
-  termsVersion: string | null;
 }
 
 interface BillingContextValue {
@@ -27,11 +25,11 @@ export function BillingProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [me, { plans, termsVersion }] = await Promise.all([
+      const [me, catalog] = await Promise.all([
         billingService.fetchBillingMe(),
         billingService.fetchPlans(),
       ]);
-      setData({ me, plans, termsVersion });
+      setData({ me, ...catalog });
     } catch {
       setLoadError("Couldn't load billing information. Reload the page to try again.");
     } finally {

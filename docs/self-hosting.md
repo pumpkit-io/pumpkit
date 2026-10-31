@@ -233,7 +233,7 @@ curl -s http://localhost:8080/api/v1/instance | grep -o '"sign_in_methods":[^]]*
 Lets Users connect their X account, then schedule their Posts or post them now (ADR 0006). Your X app pays for every publish.
 
 - Get credentials: in the [X developer portal](https://developer.x.com/en/portal/dashboard), create an app and set up its user authentication: OAuth 2.0, app type **Web App, Automated App or Bot** (a confidential client), permissions **Read and write**. Register this callback URL: `PUBLIC_URL/oauth/x/callback` (for example `https://pumpkit.example.org/oauth/x/callback`), and use `PUBLIC_URL` as the website URL. Copy the OAuth 2.0 client ID and client secret.
-- Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `X_POSTS_MONTHLY_CAP` (default 100 X posts per User per month, each Part of a Thread counting as one) bounds what each User can cost you; set it empty for no cap.
+- Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `X_POSTS_MONTHLY_CAP` (default 100 X posts per User per month, each Part of a Thread counting as one) and `X_LINK_POSTS_MONTHLY_CAP` (default 10 of them with a link, which X charges far more for) bound what each User can cost you; set either empty for no cap. With Plans they count per Allowance period, a quarter for the Trial; without, per UTC calendar month.
 - Settings: `X_CLIENT_ID` and `X_CLIENT_SECRET`.
 - Without it: Onboarding skips its Connect X step and the web app offers no way to connect X, so nobody can schedule or publish to X. Writing Posts still works; Users copy a Version's text instead.
 - **Check:** `curl -s PUBLIC_URL/api/v1/instance` shows `"x_connection":true`, and Onboarding's **Connect X** sends you to X to authorise the app and back to Pumpkit, connected.
@@ -244,7 +244,7 @@ Sells Plans. Without it the Instance sells no Plans and every signed-in User may
 
 - Get keys: [dashboard.stripe.com/apikeys](https://dashboard.stripe.com/apikeys) (the secret and publishable keys).
 - Pricing: [Stripe pricing](https://stripe.com/pricing) and, since Checkout charges tax, [Stripe Tax pricing](https://stripe.com/tax/pricing).
-- Settings: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` and `BILLING_PLAN_KEYS`, set together. `BILLING_TRIAL_PERIOD_DAYS` (default 14, `0` for none) sets the Trial.
+- Settings: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` and `BILLING_PLAN_KEYS`, set together. `BILLING_TRIAL_PERIOD_DAYS` (default 14, `0` for none) sets the Trial. `GENERATIONS_MONTHLY_CAP` (default 500 per month, a quarter for the Trial, empty for no cap) sets how many Versions each Subscribed User may have written. `BILLING_TOP_UP_KEY` (optional) sells Top-ups.
 
 ### Support address and Operator details
 
@@ -292,7 +292,7 @@ Turn this on only if you charge Users. You are then the seller: your own Terms, 
 
 1. **Create the Plans.** In Stripe, create a product with one recurring price per Plan, give each price a lookup key (for example `pro_monthly`), and set each price's tax behaviour to inclusive. Only the lookup keys in `BILLING_PLAN_KEYS` are on sale, in that order.
 2. **Set up Stripe Tax.** Checkout charges tax and collects tax IDs, and Stripe refuses to open a Checkout until Stripe Tax is set up. Under Settings, then Tax, set the origin address and the default product category (for example "Software as a service (SaaS) - business use"), set "Include tax in prices" to Yes, and add a registration for each place you collect tax in. Without a registration, Checkout charges no tax. Pumpkit turns off Stripe's Managed Payments (Stripe as merchant of record, on by default for new accounts) for its Checkouts, so you stay the seller whatever that setting says.
-3. **Add the webhook endpoint.** In Stripe's Developers section, add an endpoint at `PUBLIC_URL/api/v1/stripe/webhook` (for example `https://pumpkit.example.org/api/v1/stripe/webhook`) subscribed to `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted` and `checkout.session.completed`. Copy its signing secret.
+3. **Add the webhook endpoint.** In Stripe's Developers section, add an endpoint at `PUBLIC_URL/api/v1/stripe/webhook` (for example `https://pumpkit.example.org/api/v1/stripe/webhook`) subscribed to `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded` and `charge.dispute.created`. Copy its signing secret.
 4. **Write the settings.**
 
    ```sh
@@ -303,7 +303,10 @@ Turn this on only if you charge Users. You are then the seller: your own Terms, 
    ```
 
    **Check:** it prints `"sells_plans":true`, and `curl -s PUBLIC_URL/api/v1/billing/plans` lists each Plan with its price.
-5. **Set the Operator details and replace the legal documents**, below, so Users accept your Terms at checkout.
+5. **Sell Top-ups, if you want to.** A Top-up is a one-off pack, half of each monthly cap (250 generations and 50 X posts, up to 5 with a link, at the defaults), that a paid-up User buys once they run low; it lasts 12 months and is spent only after the Allowance. In Stripe, add a one-off price (not recurring) to a product, give it a lookup key such as `top_up`, set its tax behaviour to inclusive, and set `BILLING_TOP_UP_KEY=top_up` in `.env`. Leave the setting out and no Top-ups are sold. A refund or a dispute of a Top-up's payment in Stripe removes whatever is left of it; what it already paid for, waiting Scheduled posts included, stays paid for and doesn't move onto the Allowance. Your Terms should say that a Top-up is not refunded once any of it is spent.
+
+   **Check:** `curl -s PUBLIC_URL/api/v1/billing/plans` shows `top_up` with its price.
+6. **Set the Operator details and replace the legal documents**, below, so Users accept your Terms at checkout.
 
 Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.stripe.com/testing), and check that the Plan card in Settings shows the Subscription.
 

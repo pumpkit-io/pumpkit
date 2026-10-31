@@ -110,3 +110,26 @@ class ScheduledPostPart(Base):
 
     # The unique index also serves the lookup of a Scheduled post's Parts.
     __table_args__ = (UniqueConstraint("scheduled_post_id", "position"),)
+
+
+class UnscheduledLiveParts(Base):
+    """
+    The live Parts of a Scheduled post deleted since: X accepted them, so they keep counting as X
+    posts and link posts in the Allowance period of its publish time, less what Top-ups paid.
+    """
+
+    __tablename__ = "unscheduled_live_parts"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("unscheduled_live_parts")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    publish_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    x_posts: Mapped[int] = mapped_column(Integer)
+    link_x_posts: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    # Usage sums them by User and publish time.
+    __table_args__ = (
+        Index("ix_unscheduled_live_parts_user_id_publish_at", "user_id", "publish_at"),
+    )

@@ -96,6 +96,9 @@ const CATALOG: PlanCatalog = {
     },
   ],
   termsVersion: '2026-10-11',
+  allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+  trial: { days: 14, generations: 125, xPosts: 25, linkXPosts: 2 },
+  topUp: null,
 };
 
 const WITH_TRIAL: BillingMe = { ...NOT_SUBSCRIBED, trialDays: 14 };
@@ -273,6 +276,46 @@ describe('Paywall', () => {
       expect(track).toHaveBeenCalledWith('paywall_viewed');
     });
 
+    it("lists what the Plan allows and the Trial's limits, with the Instance's caps", async () => {
+      renderPaywall();
+
+      const offer = within(await (await paywall()).findByRole('list', { name: 'Included' }));
+      expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        '500 post generations a month.',
+        'Publish 100 X posts a month, up to 10 of them with a link.',
+        'Write in the voice of your favorite X creators.',
+        '14-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
+      ]);
+    });
+
+    it('explains what counts as a generation', async () => {
+      renderPaywall();
+
+      fireEvent.click(await (await paywall()).findByRole('button', { name: 'About generations' }));
+
+      expect(await screen.findByRole('dialog', { name: 'About generations' })).toHaveTextContent(
+        'Every prompt to generate or refine a post counts as one generation.',
+      );
+    });
+
+    it('drops the line of a cap the Instance leaves empty', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({
+        ...CATALOG,
+        allowance: { generations: null, xPosts: 100, linkXPosts: null },
+        trial: { days: 14, generations: null, xPosts: 25, linkXPosts: null },
+      });
+      renderPaywall();
+
+      const area = await paywall();
+      const offer = within(await area.findByRole('list', { name: 'Included' }));
+      expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'Publish 100 X posts a month.',
+        'Write in the voice of your favorite X creators.',
+        '14-day free trial: 25 X posts.',
+      ]);
+      expect(area.queryByRole('button', { name: 'About generations' })).not.toBeInTheDocument();
+    });
+
     it('keeps "Start trial" disabled until the three boxes are ticked, then starts checkout', async () => {
       renderPaywall();
 
@@ -307,7 +350,7 @@ describe('Paywall', () => {
       expect(href(/^Terms$/)).toBe('/terms');
       expect(href(/^Privacy Policy$/)).toBe('/privacy');
       expect(href(/withdrawal/i)).toBe('/terms#withdrawal');
-      expect(href(/13\. No refunds/)).toBe('/terms#refunds');
+      expect(href(/14\. No refunds/)).toBe('/terms#refunds');
     });
 
     it('starts checkout with only the Plan key where the Instance has no Terms', async () => {
@@ -356,6 +399,7 @@ describe('Paywall', () => {
       expect(area.getByRole('button', { name: 'Subscribe: Monthly' })).toBeInTheDocument();
       expect(area.queryByText(/free/)).not.toBeInTheDocument();
       expect(area.queryByText(/won.t be charged/)).not.toBeInTheDocument();
+      expect(area.getByRole('list', { name: 'Included' })).not.toHaveTextContent(/trial/);
     });
   });
 

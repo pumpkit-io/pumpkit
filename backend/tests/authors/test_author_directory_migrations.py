@@ -1,6 +1,6 @@
 """
-Migration 0029 makes the Author directory from what Pumpkit already stored: an entry for every
-listed or fetched handle, carrying the photo its fetch record held. Migration 0030 then seeds it.
+Migration 0032 makes the Author directory from what Pumpkit already stored: an entry for every
+listed or fetched handle, carrying the photo its fetch record held. Migration 0033 then seeds it.
 """
 
 import json
@@ -37,7 +37,7 @@ def _entries(connection: Connection) -> dict[str, tuple]:
 async def test_every_listed_or_fetched_handle_gets_an_entry_with_its_stored_photo(
     db_engine, user, client, subscribed
 ):
-    await _down_to(db_engine, "0028")
+    await _down_to(db_engine, "0031")
 
     def store_before_the_directory(connection: Connection) -> None:
         insert(connection, "author_fetches", handle="levelsio", last_fetched_at=FETCHED_AT)
@@ -60,7 +60,7 @@ async def test_every_listed_or_fetched_handle_gets_an_entry_with_its_stored_phot
     async with db_engine.begin() as connection:
         await connection.run_sync(store_before_the_directory)
 
-    await migrate(db_engine, lambda config: command.upgrade(config, "0029"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0032"))
 
     async with db_engine.connect() as connection:
         assert await connection.run_sync(_entries) == {
@@ -76,7 +76,7 @@ async def test_every_listed_or_fetched_handle_gets_an_entry_with_its_stored_phot
 
 
 async def test_going_back_down_returns_the_photo_to_the_fetch_record(db_engine):
-    await _down_to(db_engine, "0029")
+    await _down_to(db_engine, "0032")
 
     def store(connection: Connection) -> None:
         insert(connection, "author_fetches", handle="levelsio", last_fetched_at=FETCHED_AT)
@@ -93,7 +93,7 @@ async def test_going_back_down_returns_the_photo_to_the_fetch_record(db_engine):
     async with db_engine.begin() as connection:
         await connection.run_sync(store)
 
-    await migrate(db_engine, lambda config: command.downgrade(config, "0028"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0031"))
 
     def photos(connection: Connection) -> list:
         return list(connection.execute(sa.text("SELECT photo_url FROM author_fetches")).scalars())
@@ -107,9 +107,9 @@ async def test_the_seed_migration_inserts_every_seed_without_a_twitterapi_io_key
 ):
     monkeypatch.delenv("TWITTERAPI_IO_API_KEY", raising=False)
     fake_x_reader.not_configured = True
-    await _down_to(db_engine, "0029")
+    await _down_to(db_engine, "0032")
 
-    await migrate(db_engine, lambda config: command.upgrade(config, "0030"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0033"))
 
     directory = (await client.get(DIRECTORY)).json()["data"]
     assert len(SEEDS) >= 150
@@ -122,7 +122,7 @@ async def test_the_seed_migration_inserts_every_seed_without_a_twitterapi_io_key
 
 async def test_the_seed_migration_skips_handles_already_in_the_directory(db_engine):
     seeded = SEEDS[0]["handle"]
-    await _down_to(db_engine, "0029")
+    await _down_to(db_engine, "0032")
 
     def look_one_up(connection: Connection) -> None:
         insert(
@@ -138,7 +138,7 @@ async def test_the_seed_migration_skips_handles_already_in_the_directory(db_engi
     async with db_engine.begin() as connection:
         await connection.run_sync(look_one_up)
 
-    await migrate(db_engine, lambda config: command.upgrade(config, "0030"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0033"))
 
     async with db_engine.connect() as connection:
         entries = await connection.run_sync(_entries)

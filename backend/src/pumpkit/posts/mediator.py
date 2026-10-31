@@ -10,7 +10,9 @@ from pumpkit.posts.llm import LLM
 from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
+    charge_generation,
     check_attempt_limit,
+    check_generation_left,
     record_failed_attempt,
     version_response,
 )
@@ -36,6 +38,7 @@ async def start_post(
             "Add an inspiration author with posts before writing a post.", fix_page=PERSONA_PAGE
         )
     await check_attempt_limit(db, user_id=user_id, now=now)
+    await check_generation_left(db, user_id=user_id, now=now)
     char_limit = await char_limit_for(db, user_id=user_id)
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
@@ -55,6 +58,7 @@ async def start_post(
     version = await service.record_version(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now
     )
+    await charge_generation(db, user_id=user_id, version=version, now=now)
     await db.commit()
     return PostResponse(
         id=post.id, brief=post.brief, versions=[version_response(version, char_limit)]

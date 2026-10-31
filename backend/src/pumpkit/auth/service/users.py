@@ -77,9 +77,14 @@ async def lock_user(db: AsyncSession, user: User) -> None:
     Lock and reload the User's row until the transaction ends, serializing billing steps per User.
     SQLite has no row locks: there it only reloads.
     """
+    await lock_user_id(db, user_id=user.id)
+
+
+async def lock_user_id(db: AsyncSession, *, user_id: str) -> None:
+    """`lock_user` by the User's id: also serializes each User's checks and charges of usage."""
     query = (
         select(User)
-        .where(User.id == user.id)
+        .where(User.id == user_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )

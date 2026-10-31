@@ -1,4 +1,4 @@
-"""Migration 0032 counts every User who already has an X connection and an author as finished."""
+"""Migration 0035 counts every User who already has an X connection and an author as finished."""
 
 from datetime import datetime, timezone
 
@@ -56,7 +56,7 @@ async def test_only_users_with_both_an_x_connection_and_an_author_count_as_finis
     x_only = await _new_user(db, "x-only@example.com")
     author_only = await _new_user(db, "author-only@example.com")
     await migrate(db_engine, lambda config: command.stamp(config, "head"))
-    await migrate(db_engine, lambda config: command.downgrade(config, "0031"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0034"))
 
     def store_before_onboarding(connection: Connection) -> None:
         _connect_x(connection, user.id)
@@ -67,7 +67,7 @@ async def test_only_users_with_both_an_x_connection_and_an_author_count_as_finis
     async with db_engine.begin() as connection:
         await connection.run_sync(store_before_onboarding)
 
-    await migrate(db_engine, lambda config: command.upgrade(config, "0032"))
+    await migrate(db_engine, lambda config: command.upgrade(config, "0035"))
 
     def finished(connection: Connection) -> set[str]:
         return set(connection.execute(sa.text("SELECT user_id FROM onboarding_finishes")).scalars())

@@ -7,16 +7,16 @@ import type { TermsAcceptance } from '@/services/billingService';
 // Number, title and anchor must match the headings in the English Terms.
 const ONEROUS_CLAUSES = [
   { number: 9, title: 'Suspension and termination by the Operator', anchor: 'suspension' },
-  { number: 11, title: 'Automatic renewal and cancellation', anchor: 'renewal' },
-  { number: 13, title: 'No refunds', anchor: 'refunds' },
-  { number: 15, title: 'Limitation of liability', anchor: 'liability' },
-  { number: 18, title: 'Changes to these Terms', anchor: 'changes' },
-  { number: 20, title: 'Competent court (Court of Pesaro for businesses)', anchor: 'courts' },
+  { number: 12, title: 'Automatic renewal and cancellation', anchor: 'renewal' },
+  { number: 14, title: 'No refunds', anchor: 'refunds' },
+  { number: 16, title: 'Limitation of liability', anchor: 'liability' },
+  { number: 19, title: 'Changes to these Terms', anchor: 'changes' },
+  { number: 21, title: 'Competent court (Court of Pesaro for businesses)', anchor: 'courts' },
 ];
 
 const CLAUSES_ID = 'terms-acceptance-onerous-clauses';
 
-// A new tab keeps the Choose a Plan card and the boxes already ticked.
+// A new tab keeps the page and the boxes already ticked.
 function DocumentLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={TEXT_LINK_CLASS}>
@@ -53,10 +53,16 @@ function AcceptanceCheckbox({
 export function TermsAcceptanceFields({
   value,
   onChange,
+  purchase = 'subscription',
 }: {
   value: TermsAcceptance;
   onChange: (value: TermsAcceptance) => void;
+  /** A Top-up's right of withdrawal ends when any of it is spent, a Subscription's when its paid period starts. */
+  purchase?: 'subscription' | 'topUp';
 }) {
+  const withdrawalLink = (
+    <DocumentLink href={`${TERMS_PATH}#withdrawal`}>right of withdrawal</DocumentLink>
+  );
   return (
     <div
       role="group"
@@ -74,9 +80,17 @@ export function TermsAcceptanceFields({
         checked={value.requestedImmediateStart}
         onChange={(requestedImmediateStart) => onChange({ ...value, requestedImmediateStart })}
       >
-        I ask for the service to start immediately, and acknowledge I lose the 14-day{' '}
-        <DocumentLink href={`${TERMS_PATH}#withdrawal`}>right of withdrawal</DocumentLink> once the
-        paid period starts.
+        {purchase === 'topUp' ? (
+          <>
+            I ask for the top-up to be available immediately, and acknowledge I lose the 14-day{' '}
+            {withdrawalLink} once I use any of it.
+          </>
+        ) : (
+          <>
+            I ask for the service to start immediately, and acknowledge I lose the 14-day{' '}
+            {withdrawalLink} once the paid period starts.
+          </>
+        )}
       </AcceptanceCheckbox>
       <div>
         <AcceptanceCheckbox

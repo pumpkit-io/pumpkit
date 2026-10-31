@@ -123,5 +123,6 @@ export function usePost(postId: string) {
     rewritesDropped: dropped !== null && dropped !== dismissedDrop,
     error: writing.error,
     notice: writing.notice,
+    allowanceUsedUp: writing.allowanceUsedUp,
   };
 }

@@ -24,6 +24,7 @@ GATED_READS = [
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/posts/post_unknown"),
     ("GET", "/api/v1/scheduled-posts/communities"),
+    ("GET", "/api/v1/usage"),
 ]
 
 OPEN_ROUTES = [

@@ -502,7 +502,51 @@ async def test_the_plans_endpoint_returns_only_the_configured_plans_and_the_term
             },
         ],
         "terms_version": TERMS_VERSION,
+        "allowance": {"generations": 500, "x_posts": 100, "link_x_posts": 10},
+        "trial": {"days": 14, "generations": 125, "x_posts": 25, "link_x_posts": 2},
+        "top_up": None,
     }
+
+
+async def test_the_plans_follow_the_instances_caps_and_trial_length(
+    client, fake_billing, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
+    monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 200)
+    monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", None)
+
+    response = await client.get(PLANS)
+
+    assert response.json()["allowance"] == {
+        "generations": 200,
+        "x_posts": 100,
+        "link_x_posts": None,
+    }
+    assert response.json()["trial"] == {
+        "days": 7,
+        "generations": 50,
+        "x_posts": 25,
+        "link_x_posts": None,
+    }
+
+
+async def test_a_trial_share_of_a_small_cap_rounds_down_to_zero(client, fake_billing, monkeypatch):
+    monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 3)
+    monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 0)
+    monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", 1)
+
+    response = await client.get(PLANS)
+
+    trial = response.json()["trial"]
+    assert (trial["generations"], trial["x_posts"], trial["link_x_posts"]) == (0, 0, 0)
+
+
+async def test_the_plans_offer_no_trial_where_trials_are_off(client, fake_billing, monkeypatch):
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 0)
+
+    response = await client.get(PLANS)
+
+    assert response.json()["trial"] is None
 
 
 async def test_a_configured_plan_the_provider_does_not_know_is_left_out(
@@ -647,8 +691,8 @@ async def test_the_cardless_trial_route_no_longer_exists(client, fake_billing):
     assert fake_billing.customers_created == []
 
 
-async def test_billing_api_serves_only_subscription_routes(client):
-    """Pumpkit bills only by Subscription (ADR 0003): no other billing routes exist."""
+async def test_billing_api_serves_only_subscription_and_top_up_routes(client):
+    """Pumpkit bills by Subscription (ADR 0003) and sells Top-ups (ADR 0017), nothing else."""
     response = await client.get("/openapi.json")
 
     assert response.status_code == 200
@@ -661,7 +705,9 @@ async def test_billing_api_serves_only_subscription_routes(client):
         "/api/v1/billing/me",
         "/api/v1/billing/plans",
         "/api/v1/billing/checkout",
+        "/api/v1/billing/top-ups/checkout",
         "/api/v1/billing/portal",
+        "/api/v1/billing/subscribe-now",
         "/api/v1/stripe/webhook",
     }
 

@@ -1,5 +1,5 @@
 import { act, createEvent, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -16,7 +16,15 @@ vi.mock('@/services/userService', () => ({
 vi.mock('@/services/billingService', () => ({
   billingService: {
     fetchBillingMe: vi.fn(),
-    fetchPlans: vi.fn().mockResolvedValue({ plans: [], termsVersion: '2026-10-11' }),
+    fetchPlans: vi.fn().mockResolvedValue({
+      plans: [],
+      termsVersion: '2026-10-11',
+      allowance: { generations: null, xPosts: null, linkXPosts: null },
+      trial: null,
+    }),
+    openBillingPortal: vi.fn(),
+    startTopUpCheckout: vi.fn(),
+    subscribeNow: vi.fn(),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
@@ -57,6 +65,7 @@ vi.mock('@/services/scheduledPostService', () => ({
     lookUpCommunity: vi.fn(),
   },
 }));
+vi.mock('@/services/usageService', () => ({ usageService: { get: vi.fn() } }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
@@ -67,9 +76,11 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
+import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { postService, type PostDetail } from '@/services/postService';
+import { usageService } from '@/services/usageService';
 import { xConnectionService } from '@/services/xConnectionService';
 import {
   LEVELSIO,
@@ -77,8 +88,10 @@ import {
   NOT_SUBSCRIBED,
   PAULG,
   SUBSCRIBED,
+  allowanceUsedUp,
   apiError,
   renderSignedIn,
+  usageWith,
 } from './testing/signedInApp';
 
 function currentPath() {
@@ -145,6 +158,22 @@ async function writeBrief(area: Awaited<ReturnType<typeof writer>>, brief: strin
   fireEvent.click(area.getByRole('button', { name: 'Write the post' }));
 }
 
+/** Make billing offer a €10 Top-up, behind Terms of `termsVersion`, for this test only. */
+function sellingTopUps(termsVersion: string | null) {
+  const fetchPlans = vi.mocked(billingService.fetchPlans);
+  const before = fetchPlans.getMockImplementation();
+  fetchPlans.mockResolvedValue({
+    plans: [],
+    termsVersion,
+    allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+    trial: null,
+    topUp: { amount: 1000, currency: 'eur', generations: 250, xPosts: 50, linkXPosts: 5 },
+  });
+  onTestFinished(() => {
+    fetchPlans.mockImplementation(before ?? (() => Promise.reject(new Error('unmocked'))));
+  });
+}
+
 describe('New post', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -157,6 +186,7 @@ describe('New post', () => {
     vi.mocked(postService.get).mockReset().mockResolvedValue(postWith('the final text'));
     vi.mocked(postService.addVersion).mockReset();
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
     vi.mocked(track).mockClear();
   });
 
@@ -450,6 +480,192 @@ describe('New post', () => {
       expect(area.queryByRole('alert')).not.toBeInTheDocument();
       expect(area.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
+    });
+
+    it('shows the Allowance refusal in place of the error banner', async () => {
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      expect(
+        await area.findByText(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      ).toBeInTheDocument();
+      expect(area.queryByRole('alert')).not.toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+      expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
+      expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'generations' });
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
+    it('says how many generations are left once less than 10% is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ generations: { limit: 500, used: 457, left: 43 } }),
+      );
+      const area = await readyToWrite();
+
+      expect(await area.findByText('43 generations left until 14 November')).toBeInTheDocument();
+    });
+
+    it('says nothing about generations while 10% or more is left', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ generations: { limit: 500, used: 450, left: 50 } }),
+      );
+      const area = await readyToWrite();
+      await waitFor(() => expect(usageService.get).toHaveBeenCalled());
+
+      expect(area.queryByText(/generations left/)).not.toBeInTheDocument();
+    });
+
+    it('offers to update the payment method to a User behind on payment at the limit', async () => {
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+          { way_out: 'update_payment' },
+        ),
+      );
+      vi.mocked(billingService.openBillingPortal).mockResolvedValue('https://billing.test/portal');
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Update your payment method' }));
+
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://billing.test/portal'));
+    });
+
+    it('offers a paid-up User at the limit to buy a top-up, behind the Terms', async () => {
+      sellingTopUps('2026-10-11');
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+          { way_out: 'top_up' },
+        ),
+      );
+      vi.mocked(billingService.startTopUpCheckout).mockResolvedValue('https://checkout.test/t');
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Buy top-up, €10' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Buy a top-up' });
+      expect(
+        within(dialog).getByText(
+          '250 generations and 50 X posts, up to 5 with a link, for €10. Lasts 12 months, used after your monthly allowance.',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByRole('checkbox', {
+          name: 'I ask for the top-up to be available immediately, and acknowledge I lose the 14-day right of withdrawal once I use any of it.',
+        }),
+      ).toBeInTheDocument();
+      const pay = within(dialog).getByRole('button', { name: 'Pay €10' });
+      expect(pay).toBeDisabled();
+      for (const box of within(dialog).getAllByRole('checkbox')) fireEvent.click(box);
+      fireEvent.click(pay);
+
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://checkout.test/t'));
+      expect(billingService.startTopUpCheckout).toHaveBeenCalledWith('2026-10-11', {
+        acceptedTerms: true,
+        requestedImmediateStart: true,
+        approvedSpecificClauses: true,
+      });
+      expect(track).toHaveBeenCalledWith('top_up_checkout_started');
+    });
+
+    it("shows the API's refusal of a top-up checkout in the dialog", async () => {
+      sellingTopUps(null);
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp("You've used this period's 500 generations.", { way_out: 'top_up' }),
+      );
+      vi.mocked(billingService.startTopUpCheckout).mockRejectedValue(
+        apiError(409, 'Update your payment method to buy a top-up.'),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Buy top-up, €10' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Buy a top-up' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Pay €10' }));
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+        'Update your payment method to buy a top-up.',
+      );
+    });
+
+    it('offers a trial User at the limit to subscribe now, and subscribes', async () => {
+      const noPlans = await billingService.fetchPlans();
+      onTestFinished(() => void vi.mocked(billingService.fetchPlans).mockResolvedValue(noPlans));
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({
+        plans: [
+          {
+            key: 'pumpkit_pro_monthly',
+            productName: 'Pro',
+            amount: 1900,
+            currency: 'eur',
+            interval: 'month',
+            intervalCount: 1,
+          },
+        ],
+        termsVersion: '2026-10-11',
+        allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+        trial: null,
+        topUp: null,
+      });
+      vi.mocked(billingService.subscribeNow).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used your trial's 125 generations. Your trial ends on 14 November. Failed attempts don't count.",
+          { way_out: 'subscribe_now' },
+        ),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Subscribe now' }));
+      const dialog = within(await screen.findByRole('dialog'));
+      expect(
+        await dialog.findByText(
+          "Your trial ends now and you're charged €19.00 today for your first month. Your monthly allowance of 500 generations and 100 X posts starts at once.",
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Subscribe now' }));
+
+      expect(
+        await screen.findByText('Subscribed. Your monthly allowance has started.'),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.queryByText(/You've used your trial's/)).not.toBeInTheDocument(),
+      );
+    });
+
+    it('asks for billing once when the subscribe now dialog fails to load it', async () => {
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp("You've used your trial's 125 generations.", {
+          way_out: 'subscribe_now',
+        }),
+      );
+      const area = await readyToWrite();
+      await writeBrief(area, 'ship small things');
+      const subscribeNow = await area.findByRole('button', { name: 'Subscribe now' });
+      const fetchPlans = vi.mocked(billingService.fetchPlans);
+      const before = fetchPlans.getMockImplementation();
+      onTestFinished(() => void fetchPlans.mockImplementation(before!));
+      // Billing answers only on a second ask, which the dialog must not make.
+      fetchPlans.mockRejectedValueOnce(new Error('down'));
+
+      fireEvent.click(subscribeNow);
+
+      const dialog = within(await screen.findByRole('dialog'));
+      const failed = "Couldn't load billing information. Reload the page to try again.";
+      expect(await dialog.findByText(failed)).toBeInTheDocument();
+      for (let i = 0; i < 5; i++) await act(() => Promise.resolve());
+      expect(dialog.getByText(failed)).toBeInTheDocument();
     });
 
     it.each([

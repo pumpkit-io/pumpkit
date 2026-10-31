@@ -6,7 +6,7 @@ from typing import Optional, Union
 
 from pumpkit.core.errors import ConflictError, RefusedError
 from pumpkit.posts.formats import part_name
-from pumpkit.x_connection.x_length import x_weighted_length
+from pumpkit.x_connection.x_length import has_link, x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
 MIN_LEAD_TIME = timedelta(minutes=1)
@@ -23,6 +23,18 @@ class MonthFull(ConflictError):
 
 class LivePartLocked(ConflictError):
     pass
+
+
+@dataclass(frozen=True)
+class XPosts:
+    """Parts as X posts: each is one, and one containing a link is also a link post."""
+
+    x_posts: int
+    link_x_posts: int
+
+
+def x_posts_in(parts: list[str]) -> XPosts:
+    return XPosts(x_posts=len(parts), link_x_posts=sum(1 for part in parts if has_link(part)))
 
 
 def check_parts_written(parts: list[str]) -> None:
@@ -92,21 +104,21 @@ def month_bounds(moment: datetime) -> tuple[datetime, datetime]:
     return start, start.replace(month=start.month + 1)
 
 
-def check_month_has_room(count: int, *, adding: int, cap: int, moment: datetime) -> None:
+def check_month_has_room(
+    count: int, *, adding: int, cap: int, moment: datetime, noun: str = "X posts"
+) -> None:
     """
-    `count` is the User's X posts already in the UTC month of `moment`, and `adding` the Parts
-    that would join them.
+    `count` is the User's X posts (or link posts, by `noun`) already in the UTC month of
+    `moment`, and `adding` the Parts that would join them.
     """
     if count + adding <= cap:
         return
     start, end = month_bounds(moment)
-    resets = f"The cap resets on {end:%B} {end.day}, {end.year}."
+    resets = f"The limit resets on {end:%B} {end.day}, {end.year}."
     if count >= cap:
-        raise MonthFull(
-            f"You have {cap} X posts in {start:%B %Y}, the most for one month. {resets}"
-        )
+        raise MonthFull(f"You have {cap} {noun} in {start:%B %Y}, the most for one month. {resets}")
     raise MonthFull(
-        f"These {adding} Parts would take you over the cap of {cap} X posts in {start:%B %Y}: "
+        f"These {adding} parts would take you over the limit of {cap} {noun} in {start:%B %Y}: "
         f"you have {count} already. {resets}"
     )
 

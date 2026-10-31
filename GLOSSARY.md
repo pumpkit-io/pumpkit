@@ -4,6 +4,8 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 
 ## Language
 
+The _Avoid_ lists don't bind the Pro offer's marketing copy or its info popovers, wherever they appear (the Usage card included): there, "prompt" and "X creators" may stand for a Generation and Inspiration authors.
+
 ### Instances
 
 **Instance**:
@@ -59,7 +61,7 @@ _Avoid_: token, access token, personal access token, credential
 ### Billing
 
 **Plan**:
-A recurring offer a User can subscribe to. Each Instance decides which Plans exist; nothing else is purchasable. An Instance may sell no Plans, and then every User may use all of Pumpkit without a Subscription.
+A recurring offer a User can subscribe to. Each Instance decides which Plans exist; besides them, only Top-ups are purchasable. An Instance may sell no Plans, and then every User may use all of Pumpkit without a Subscription.
 _Avoid_: price, tier, product
 
 **Subscription**:
@@ -85,6 +87,26 @@ _Avoid_: free tier, cardless trial
 **Paywall**:
 The page a signed-in User who is not Subscribed sees in place of the rest of Pumpkit, where they start their Trial or subscribe to a Plan. It is checked on every visit, not only the first. An Instance that sells no Plans has no Paywall.
 _Avoid_: subscription gate, upgrade screen, hard wall
+
+**Allowance**:
+How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may be Link posts. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans give the same Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
+_Avoid_: quota, usage limit, credits, cap (in text users read; setting names and code may say cap)
+
+**Link post**:
+An X post whose text contains a link, by the rule X uses to spot links when it counts a post's length. It counts against both the X posts and the Link posts of an Allowance or a Top-up.
+_Avoid_: URL post, linked tweet, link X post
+
+**Generation**:
+One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: starting a Post is one, and so is each Feedback. A writing attempt that fails is not a Generation.
+_Avoid_: prompt, post prompt, credit, request
+
+**Allowance period**:
+The stretch of time one Allowance covers. For a paid Subscription it is a month, starting each month on the day the Subscription started, also on an annual Plan. A Trial is one Allowance period on its own, and paying before it ends starts the first monthly one at once.
+_Avoid_: billing cycle, billing period, month (alone)
+
+**Top-up**:
+A one-off purchase of extra Generations and X posts for a User who has used up their Allowance. It is spent only after the Allowance, lasts 12 months from purchase, and only a Subscribed User can spend it. Only a User whose paid Subscription is paid up can buy one. It is never part of a Plan.
+_Avoid_: credits, credit pack, add-on, extra usage
 
 ### Writing
 

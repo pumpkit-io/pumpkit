@@ -5,7 +5,9 @@ import { redirectTo } from '@/lib/navigation';
 import { errorMessage } from '@/services/apiErrors';
 import { billingService, type Plan, type TermsAcceptance } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
+import { OfferLineContent } from './OfferLineContent';
 import { PlanCard, recurringLabel } from './PlanCard';
+import { offerLines } from './planOffer';
 import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
 import { TermsAcceptanceFields } from './TermsAcceptanceFields';
 
@@ -33,7 +35,7 @@ function savingOver(plan: Plan, monthly: Plan | undefined): string | undefined {
 }
 
 /**
- * The Plans side by side, then the Terms boxes (ADR 0010), and checkout on a pick. Remount with a
+ * What a Plan includes, the Plans side by side, then the Terms boxes (ADR 0010), and checkout on a pick. Remount with a
  * new `key` per Terms version. `actionLabel` names the button: a Trial or a plain Subscription.
  */
 export function PlanPicker({
@@ -49,6 +51,7 @@ export function PlanPicker({
   const hasTerms = data.termsVersion !== null;
   const accepted = !hasTerms || acceptsAll(acceptance);
   const monthly = data.plans.find((plan) => plan.interval === 'month' && plan.intervalCount === 1);
+  const offer = offerLines(data.allowance, data.me.trialDays === null ? null : data.trial);
 
   const subscribe = async (planKey: string) => {
     track('billing_subscription_checkout_started', { plan_key: planKey });
@@ -73,6 +76,13 @@ export function PlanPicker({
   return (
     <div className="space-y-5">
       {error && <ErrorBanner message={error} />}
+      <ul aria-label="Included" className="space-y-1.5 font-sans text-sm text-foreground">
+        {offer.map((line) => (
+          <li key={line.text}>
+            <OfferLineContent line={line} />
+          </li>
+        ))}
+      </ul>
       <div className="grid gap-3 sm:grid-cols-2">
         {data.plans.map((plan) => (
           <PlanCard
