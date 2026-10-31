@@ -383,9 +383,58 @@ async def record_charges(
     await db.flush()
 
 
-async def give_back_charges(db: AsyncSession, *, scheduled_post_id: str) -> None:
-    """Delete what the Scheduled post took from Top-ups, so they have it again. Flushes."""
-    await db.execute(delete(TopUpCharge).where(TopUpCharge.scheduled_post_id == scheduled_post_id))
+async def give_back_charges(
+    db: AsyncSession, *, scheduled_post_id: str, keeping_removed: bool = False
+) -> None:
+    """
+    Delete what the Scheduled post took from Top-ups, so they have it again. With
+    `keeping_removed`, what it took from a removed Top-up stays: it was paid for. Flushes.
+    """
+    query = delete(TopUpCharge).where(TopUpCharge.scheduled_post_id == scheduled_post_id)
+    if keeping_removed:
+        query = query.where(
+            TopUpCharge.top_up_id.in_(select(TopUp.id).where(TopUp.removed.is_(False)))
+        )
+    await db.execute(query.execution_options(synchronize_session=False))
+    await db.flush()
+
+
+async def charges_on_removed(
+    db: AsyncSession, *, scheduled_post_id: str
+) -> dict[AllowanceCount, int]:
+    """What the Scheduled post took from Top-ups since removed, by count."""
+    result = await db.execute(
+        select(TopUpCharge.count, func.sum(TopUpCharge.quantity))
+        .join(TopUp, TopUpCharge.top_up_id == TopUp.id)
+        .where(TopUpCharge.scheduled_post_id == scheduled_post_id, TopUp.removed.is_(True))
+        .group_by(TopUpCharge.count)
+    )
+    return {count: quantity for count, quantity in result.tuples()}
+
+
+async def trim_charges_on_removed(
+    db: AsyncSession, *, scheduled_post_id: str, count: AllowanceCount, keep: int
+) -> None:
+    """Cut what the Scheduled post took of `count` from removed Top-ups down to `keep`. Flushes."""
+    charges = (
+        await db.execute(
+            select(TopUpCharge)
+            .join(TopUp, TopUpCharge.top_up_id == TopUp.id)
+            .where(
+                TopUpCharge.scheduled_post_id == scheduled_post_id,
+                TopUpCharge.count == count,
+                TopUp.removed.is_(True),
+            )
+            .order_by(TopUpCharge.id)
+        )
+    ).scalars()
+    for charge in charges:
+        kept = min(charge.quantity, keep)
+        keep -= kept
+        if kept == 0:
+            await db.delete(charge)
+        else:
+            charge.quantity = kept
     await db.flush()
 
 

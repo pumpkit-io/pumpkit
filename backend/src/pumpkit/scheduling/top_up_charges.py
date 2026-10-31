@@ -71,21 +71,59 @@ async def _allowances(
     return [allowances[start] for start in sorted(allowances)]
 
 
+async def _paid_on_removed(
+    db: AsyncSession, *, scheduled_post_id: str, needed: XPosts, trimming: bool
+) -> XPosts:
+    """
+    What the Scheduled post keeps from Top-ups since removed, at most what it needs now. With
+    `trimming`, charges over that are cut, as when an edit or a failure shrinks it.
+    """
+    charged = await billing_service.charges_on_removed(db, scheduled_post_id=scheduled_post_id)
+    kept: dict[AllowanceCount, int] = {}
+    for count in _COUNTS:
+        kept[count] = min(charged.get(count, 0), getattr(needed, count))
+        if trimming and charged.get(count, 0) > kept[count]:
+            await billing_service.trim_charges_on_removed(
+                db, scheduled_post_id=scheduled_post_id, count=count, keep=kept[count]
+            )
+    return XPosts(**kept)
+
+
+def _less(needed: XPosts, paid: XPosts) -> XPosts:
+    return XPosts(**{count: getattr(needed, count) - getattr(paid, count) for count in _COUNTS})
+
+
 async def _planned(
-    db: AsyncSession, *, user_id: str, allowance: Allowance, leaving_out: Optional[str] = None
+    db: AsyncSession,
+    *,
+    user_id: str,
+    allowance: Allowance,
+    leaving_out: Optional[str] = None,
+    trimming: bool = False,
 ) -> list[_Planned]:
+    """
+    The period's waiting and Failed Scheduled posts, each needing what it doesn't already keep
+    from a removed Top-up.
+    """
     period = allowance.period
-    return [
-        _Planned(
-            scheduled_post_id=scheduled_post.id,
-            publish_at=as_utc(scheduled_post.publish_at),
-            needed=x_posts_in(await service.counted_parts(db, scheduled_post_id=scheduled_post.id)),
+    planned: list[_Planned] = []
+    for scheduled_post in await service.changeable_between(
+        db, user_id=user_id, start=period.start, end=period.end
+    ):
+        if scheduled_post.id == leaving_out:
+            continue
+        needed = x_posts_in(await service.counted_parts(db, scheduled_post_id=scheduled_post.id))
+        paid = await _paid_on_removed(
+            db, scheduled_post_id=scheduled_post.id, needed=needed, trimming=trimming
         )
-        for scheduled_post in await service.changeable_between(
-            db, user_id=user_id, start=period.start, end=period.end
+        planned.append(
+            _Planned(
+                scheduled_post_id=scheduled_post.id,
+                publish_at=as_utc(scheduled_post.publish_at),
+                needed=_less(needed, paid),
+            )
         )
-        if scheduled_post.id != leaving_out
-    ]
+    return planned
 
 
 async def _fixed(
@@ -107,11 +145,13 @@ async def rebalance_top_ups(db: AsyncSession, *, user_id: str, moments: Iterable
     allowances = await _allowances(db, user_id=user_id, moments=moments)
     if not allowances:
         return
-    planned = [await _planned(db, user_id=user_id, allowance=a) for a in allowances]
+    planned = [await _planned(db, user_id=user_id, allowance=a, trimming=True) for a in allowances]
     ids = [p.scheduled_post_id for posts in planned for p in posts if p.scheduled_post_id]
     # Every charge goes back before any is made, so a post leaving a period frees its Top-ups.
     for scheduled_post_id in ids:
-        await billing_service.give_back_charges(db, scheduled_post_id=scheduled_post_id)
+        await billing_service.give_back_charges(
+            db, scheduled_post_id=scheduled_post_id, keeping_removed=True
+        )
     periods = [
         _Period(
             allowance=allowance,
@@ -150,13 +190,18 @@ async def check_room(
     `needed` at `publish_at` leaves every post there covered, by the Allowance or by Top-ups
     unexpired at its own publish time, for each of `counts`. A post earlier in the period can push
     a later one onto a Top-up that has expired by then. Pass `changing_id` when changing an
-    existing one, which leaves its old place. Call it with the User locked.
+    existing one, which leaves its old place and keeps what a removed Top-up paid for. Call it
+    with the User locked.
     """
     moments = [publish_at]
+    paid = XPosts(x_posts=0, link_x_posts=0)
     if changing_id is not None:
         changing = await service.get(db, scheduled_post_id=changing_id)
         assert changing is not None
         moments.append(as_utc(changing.publish_at))
+        paid = await _paid_on_removed(
+            db, scheduled_post_id=changing_id, needed=needed, trimming=False
+        )
     allowances = await _allowances(db, user_id=user_id, moments=moments)
     planned = [
         await _planned(db, user_id=user_id, allowance=a, leaving_out=changing_id)
@@ -175,7 +220,7 @@ async def check_room(
         new = _Planned(
             scheduled_post_id=None,
             publish_at=publish_at,
-            needed=replace(needed, **{count: quantity}),
+            needed=replace(needed, **{count: max(0, quantity - getattr(paid, count))}),
         )
         posts = list(planned[target])
         posts.insert(bisect_right([p.publish_at for p in posts], publish_at), new)

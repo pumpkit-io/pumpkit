@@ -2062,7 +2062,8 @@ describe('Post page', () => {
     });
 
     it('shows the Allowance refusal in place of the error banner', async () => {
-      const refusal = "You've used this period's 100 X posts. They reset on 14 November.";
+      const refusal =
+        "You've used this period's 100 X posts. They reset on 14 November. Failed posts don't count.";
       vi.mocked(scheduledPostService.schedule).mockRejectedValue(
         allowanceUsedUp(refusal, { ran_out: 'x_posts' }),
       );

@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Subquery
 
-from pumpkit.billing.models import TopUp, TopUpCharge
+from pumpkit.billing.models import TopUpCharge
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -444,7 +444,7 @@ async def x_posts_used_between(
     """
     The X posts and link posts of the User's Scheduled posts with `start <= publish_at < end`:
     every Part, except those of a Failed one that X never accepted, which cost nothing, less
-    those charged to a Top-up not since refunded or disputed.
+    those charged to a Top-up, refunded or disputed since or not.
     """
     in_window = [
         ScheduledPost.user_id == user_id,
@@ -467,8 +467,7 @@ async def x_posts_used_between(
             await db.execute(
                 select(TopUpCharge.count, func.sum(TopUpCharge.quantity))
                 .join(ScheduledPost, TopUpCharge.scheduled_post_id == ScheduledPost.id)
-                .join(TopUp, TopUpCharge.top_up_id == TopUp.id)
-                .where(*in_window, TopUp.removed.is_(False))
+                .where(*in_window)
                 .group_by(TopUpCharge.count)
             )
         ).tuples()

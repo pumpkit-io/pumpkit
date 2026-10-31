@@ -77,7 +77,10 @@ async def test_scheduling_with_no_x_posts_left_is_refused_with_the_reset_date(
 
     assert response.status_code == 409
     assert response.json() == {
-        "detail": "You've used this period's 2 X posts. They reset on 14 October.",
+        "detail": (
+            "You've used this period's 2 X posts. They reset on 14 October. "
+            "Failed posts don't count."
+        ),
         "url": SETTINGS_URL,
         "code": "ALLOWANCE_USED_UP",
         "ran_out": "x_posts",
@@ -129,7 +132,8 @@ async def test_a_thread_that_doesnt_fit_is_refused_whole_with_what_it_needs_and_
     assert response.status_code == 409
     body = response.json()
     assert body["detail"] == (
-        "This thread needs 3 X posts and you have 2 left. Schedule it after 14 October."
+        "This thread needs 3 X posts and you have 2 left. Schedule it after 14 October. "
+        "Failed posts don't count."
     )
     assert (body["needed"], body["left"]) == (3, 2)
     assert len(await scheduled_posts(client)) == 1
@@ -148,7 +152,8 @@ async def test_an_x_post_with_a_link_also_uses_a_link_post(client, ready, post_w
     assert refused.status_code == 409
     body = refused.json()
     assert body["detail"] == (
-        "You've used this period's 1 X posts with a link. They reset on 14 October."
+        "You've used this period's 1 X posts with a link. They reset on 14 October. "
+        "Failed posts don't count."
     )
     assert (body["ran_out"], body["needed"], body["left"]) == ("link_x_posts", 1, 0)
 
@@ -162,7 +167,8 @@ async def test_each_part_with_a_link_is_one_link_post(client, ready, post_with, 
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "This thread needs 3 X posts with a link and you have 2 left. Schedule it after 14 October."
+        "This thread needs 3 X posts with a link and you have 2 left. "
+        "Schedule it after 14 October. Failed posts don't count."
     )
 
 
@@ -187,13 +193,15 @@ async def test_a_trial_gets_a_quarter_of_the_x_posts_and_link_posts(
 
     assert refused.status_code == 409
     assert refused.json()["detail"] == (
-        "You've used your trial's 2 X posts with a link. Your trial ends on 14 October."
+        "You've used your trial's 2 X posts with a link. Your trial ends on 14 October. "
+        "Failed posts don't count."
     )
     assert refused.json()["way_out"] == "subscribe_now"
     assert thread.status_code == 409
     assert thread.json()["detail"] == (
         "This thread needs 24 X posts and you have 23 left in your trial. "
-        "Subscribe now or schedule it after your trial ends on 14 October."
+        "Subscribe now or schedule it after your trial ends on 14 October. "
+        "Failed posts don't count."
     )
 
 
@@ -269,7 +277,8 @@ async def test_an_edit_adding_parts_that_dont_fit_is_refused(client, ready, post
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "This thread needs 3 X posts and you have 2 left. Schedule it after 14 October."
+        "This thread needs 3 X posts and you have 2 left. Schedule it after 14 October. "
+        "Failed posts don't count."
     )
 
 

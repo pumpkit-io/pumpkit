@@ -96,7 +96,7 @@ async def test_an_action_the_allowance_and_top_ups_cant_cover_together_is_refuse
     body = response.json()
     assert body["detail"] == (
         "This thread needs 6 X posts and you have 5 left. "
-        "Buy a top-up or schedule it after 14 October."
+        "Buy a top-up or schedule it after 14 October. Failed posts don't count."
     )
     assert (body["ran_out"], body["needed"], body["left"]) == ("x_posts", 6, 5)
     assert await _x_posts_left(client) == (3, [2])
@@ -357,23 +357,57 @@ async def test_an_edit_that_would_push_a_later_post_onto_an_expired_top_up_is_re
     assert await _x_posts_left(client) == (0, [2])
 
 
-async def test_a_refunded_top_up_moves_what_it_paid_for_back_onto_the_allowance(
+async def _refund(client, fake_billing, session_id: str, paid_at: datetime) -> None:
+    fake_billing.set_top_up(
+        CUSTOMER, TopUpPurchase(checkout_session_id=session_id, paid_at=paid_at, reversed=True)
+    )
+    payload, signature = fake_billing.signed_event(
+        event_id=f"evt_refund_{session_id}",
+        event_type="charge.refunded",
+        data_object={"customer": CUSTOMER},
+    )
+    response = await client.post(WEBHOOK, content=payload, headers={"stripe-signature": signature})
+    assert response.status_code == 200
+
+
+async def test_a_refunded_top_up_keeps_what_it_paid_for_off_the_allowance(
     client, ready, post_with, fake_billing
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _schedule(client, post_with, "2026-10-11T09:00:00Z", *["Part"] * 5)
-    fake_billing.set_top_up(
-        CUSTOMER,
-        TopUpPurchase(checkout_session_id="cs_1", paid_at=_utc(2026, 10, 3), reversed=True),
-    )
-    payload, signature = fake_billing.signed_event(
-        event_id="evt_refund", event_type="charge.refunded", data_object={"customer": CUSTOMER}
-    )
-    await client.post(WEBHOOK, content=payload, headers={"stripe-signature": signature})
+
+    await _refund(client, fake_billing, "cs_1", _utc(2026, 10, 3))
 
     x_posts = (await client.get(USAGE)).json()["allowance"]["x_posts"]
+    assert (x_posts["used"], x_posts["left"]) == (4, 0)
+    assert await _x_posts_left(client) == (0, [])
 
-    assert (x_posts["used"], x_posts["left"]) == (5, 0)
+
+async def test_a_waiting_post_keeps_its_charge_on_a_refunded_top_up_when_its_period_changes(
+    client, ready, post_with, fake_billing
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    earlier = (await _schedule(client, post_with, "2026-10-11T09:00:00Z", "Earlier")).json()
+    await _schedule(client, post_with, "2026-10-12T09:00:00Z", *["Part"] * 4)
+    await _refund(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+
+    await client.delete(f"{SCHEDULED_POSTS}/{earlier['id']}")
+
+    assert await _x_posts_left(client) == (1, [])
+
+
+async def test_a_post_shrunk_after_a_refund_keeps_only_what_it_still_uses_off_the_allowance(
+    client, ready, post_with, fake_billing
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _schedule(client, post_with, "2026-10-11T09:00:00Z", "One", "Two")
+    thread = (await _schedule(client, post_with, "2026-10-12T09:00:00Z", *["Part"] * 4)).json()
+    await _refund(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+
+    response = await client.patch(f"{SCHEDULED_POSTS}/{thread['id']}", json={"parts": ["Part"]})
+
+    assert response.status_code == 200
+    assert await _x_posts_left(client) == (2, [])
 
 
 async def test_usage_at_a_later_moment_reports_its_period_and_the_top_ups_unexpired_then(

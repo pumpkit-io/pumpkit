@@ -212,8 +212,10 @@ class AllowanceUsedUp(ConflictError):
             )
         else:
             used = f"You've used this period's {limit} {noun}. They reset on {_day(period.end)}."
-        if ran_out == "generations" and limit > 0:
-            used = f"{used} Failed attempts don't count."
+        if limit > 0:
+            # A Failed Scheduled post gives back the X posts X never accepted.
+            failed = "attempts" if ran_out == "generations" else "posts"
+            used = f"{used} Failed {failed} don't count."
         super().__init__(used, fix_page=SETTINGS_PAGE)
         self.ran_out = ran_out
         self.needed = needed

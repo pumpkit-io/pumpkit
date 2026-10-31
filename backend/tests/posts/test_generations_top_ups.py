@@ -227,7 +227,7 @@ async def test_a_user_who_isnt_subscribed_spends_no_top_up(
     assert (await client.get(USAGE)).json() == {"allowance": None}
 
 
-async def test_a_refunded_top_up_moves_the_versions_it_paid_for_back_onto_the_allowance(
+async def test_a_refunded_top_up_keeps_the_versions_it_paid_for_off_the_allowance(
     client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
@@ -244,4 +244,5 @@ async def test_a_refunded_top_up_moves_the_versions_it_paid_for_back_onto_the_al
 
     generations = (await client.get(USAGE)).json()["allowance"]["generations"]
 
-    assert (generations["used"], generations["left"]) == (5, 0)
+    assert (generations["used"], generations["left"]) == (4, 0)
+    assert await _generations_left(client) == (0, [])

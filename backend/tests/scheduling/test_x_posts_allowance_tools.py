@@ -6,7 +6,8 @@ from pumpkit.core.config import settings
 from tests.mcp_client import error_text
 
 REFUSAL = (
-    "You've used this period's 1 X posts. They reset on 1 November. http://localhost:5173/settings"
+    "You've used this period's 1 X posts. They reset on 1 November. Failed posts don't count. "
+    "http://localhost:5173/settings"
 )
 
 
@@ -60,5 +61,5 @@ async def test_edit_scheduled_post_refuses_parts_that_dont_fit(one_x_post_used, 
     assert result["isError"] is True
     assert error_text(result) == (
         "This thread needs 2 X posts and you have 1 left. Schedule it after 1 November. "
-        "http://localhost:5173/settings"
+        "Failed posts don't count. http://localhost:5173/settings"
     )
