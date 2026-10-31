@@ -94,6 +94,23 @@ export function apiError(status: number, detail: string, extra: Record<string, u
   });
 }
 
+/** The 409 the backend answers when an action needs more of the User's Allowance than is left. */
+export function allowanceUsedUp(
+  detail: string,
+  fields: { ran_out?: string; way_out?: string | null; left?: number; needed?: number } = {},
+) {
+  return apiError(409, detail, {
+    url: 'http://localhost:5173/settings',
+    code: 'ALLOWANCE_USED_UP',
+    ran_out: 'generations',
+    needed: 1,
+    left: 0,
+    resets_at: '2026-11-14T09:00:00Z',
+    way_out: null,
+    ...fields,
+  });
+}
+
 /** `postService.list`'s answer for a User with no Posts. */
 export const NO_POSTS: PostsPage = {
   posts: [],

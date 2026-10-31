@@ -105,6 +105,7 @@ import {
   NO_POSTS,
   PAULG,
   SUBSCRIBED,
+  allowanceUsedUp,
   apiError,
   renderSignedIn,
 } from './testing/signedInApp';
@@ -1261,6 +1262,27 @@ describe('Post page', () => {
         ),
       ).toHaveAttribute('role', 'status');
       expect(feedbackBox()).toHaveValue('make it shorter');
+    });
+
+    it('shows the Allowance refusal in place of the error banner', async () => {
+      vi.mocked(postService.addVersion).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      );
+      renderPost(postWith('the first final'));
+      await textCard();
+
+      await sendFeedback('make it shorter');
+
+      expect(
+        await panel('Draft').findByText(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      ).toBeInTheDocument();
+      expect(panel('Draft').queryByRole('alert')).not.toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('make it shorter');
+      expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'generations' });
     });
 
     it('shows a length counter only near the Feedback limit, and refuses Feedback over it', async () => {

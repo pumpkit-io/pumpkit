@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
+import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { CHOOSE_PLAN_PATH, trackChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
+import type { AllowanceUsedUp } from '@/services/apiErrors';
 import { FEEDBACK_MAX_CHARS, type Format } from '@/services/postService';
 import { Composer } from '../Composer';
 import { Dock } from './Dock';
@@ -15,6 +17,7 @@ export interface FeedbackSending {
   isWriting: boolean;
   error: string | null;
   notice: string | null;
+  allowanceUsedUp: AllowanceUsedUp | null;
   onSend: (feedback: string, format: Format) => Promise<boolean>;
 }
 
@@ -48,7 +51,7 @@ export function FeedbackDock({
     setFormatFollowed(textFormat);
     setFormat(textFormat);
   }
-  const { isWriting, error, notice, onSend } = sending;
+  const { isWriting, error, notice, allowanceUsedUp, onSend } = sending;
   const typed = feedback.trim();
 
   const send = async () => {
@@ -68,7 +71,7 @@ export function FeedbackDock({
     <Dock
       name={name}
       notes={
-        (reason || error || notice || restoreError) && (
+        (reason || error || notice || allowanceUsedUp || restoreError) && (
           <div className="space-y-2">
             {reason}
             {restoreError && <ErrorBanner message={restoreError} />}
@@ -76,6 +79,7 @@ export function FeedbackDock({
               <ErrorBanner message={error} onRetry={typed ? () => void send() : undefined} />
             )}
             {notice && <LimitNotice message={notice} />}
+            {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
           </div>
         )
       }

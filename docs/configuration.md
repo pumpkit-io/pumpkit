@@ -105,6 +105,7 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 | `STRIPE_WEBHOOK_SECRET` | Signing secret of the webhook endpoint at `PUBLIC_URL/api/v1/stripe/webhook`. Part of the Stripe billing group. |
 | `BILLING_PLAN_KEYS` | Part of the Stripe billing group; an empty list counts as unset. The Plans Pumpkit sells: Stripe price lookup keys as a single-quoted JSON list (`'["pumpkit_pro_monthly"]'`), in display order. Only these are listed and purchasable; each must be an active recurring price. `docker compose` `env_file` accepts the quoted form; a plain `docker run --env-file` would keep the quotes as part of the value. |
 | `BILLING_TRIAL_PERIOD_DAYS` | Length in days of the Trial a User's first Subscription starts with. Checkout adds it only for a User who has never had a Subscription; the card is collected up front. Defaults to 14. `0` turns Trials off. |
+| `GENERATIONS_MONTHLY_CAP` | Generations in a Subscribed User's Allowance: how many Versions Pumpkit may write for them per Allowance period, starting a Post and each Feedback counting one and failed attempts none. An Allowance period starts each month on the day and time the Subscription's paid periods started (the last day of a shorter month when that day is missing), on annual Plans too; a Trial is one period with a quarter of the cap, rounded down. Starting a Post or giving Feedback with none left is refused with the date they reset. Defaults to 500. Applies only on an Instance that sells Plans; set it empty for no cap. |
 
 ### Support address and Operator details
 

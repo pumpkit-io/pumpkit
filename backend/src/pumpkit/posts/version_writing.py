@@ -9,8 +9,10 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.billing.service as billing_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
+from pumpkit.billing.allowance import check_room
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
@@ -56,6 +58,26 @@ async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) 
             retry_at=retry_at,
             now=now,
         )
+
+
+async def check_generation_left(db: AsyncSession, *, user_id: str, now: datetime) -> None:
+    """
+    Room in the User's Allowance for one more Generation, checked before the model calls. A
+    Version recorded after concurrent requests filled it is kept, over the limit.
+    """
+    allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
+    if allowance is None or allowance.generations is None:
+        return
+    used = await service.count_versions_between(
+        db, user_id=user_id, start=allowance.period.start, end=allowance.period.end
+    )
+    check_room(
+        ran_out="generations",
+        limit=allowance.generations,
+        used=used,
+        needed=1,
+        allowance=allowance,
+    )
 
 
 async def record_failed_attempt(
@@ -199,7 +221,7 @@ async def prepare_next_version(
     For Feedback on `post`'s Text, in `format` or else the Text's, with the corpus the Post
     started with, and holds the Text until the Version is recorded. Raises when the Post has no
     Text yet, when another Version is being written, when `sent_text` isn't the saved Text, or
-    when the User is over the attempt limit.
+    when the User is over the attempt limit or has no Generation left.
     """
     versions = versions_of(post)
     text = post_text(post)
@@ -209,6 +231,7 @@ async def prepare_next_version(
     if sent_text is not None and sent_text != text.parts:
         raise ConflictError("Your last edit to the text isn't saved yet. Save it, then try again.")
     await check_attempt_limit(db, user_id=user.id, now=now)
+    await check_generation_left(db, user_id=user.id, now=now)
     latest = versions[-1]
     service.start_writing(post, now=now)
     return NextVersion(

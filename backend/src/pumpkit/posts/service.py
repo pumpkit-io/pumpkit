@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -82,6 +82,24 @@ async def attempt_times_since(db: AsyncSession, *, user_id: str, since: datetime
         .where(Post.user_id == user_id, VersionAttempt.created_at > since)
     )
     return [as_utc(created_at) for created_at in rows.scalars()]
+
+
+async def count_versions_between(
+    db: AsyncSession, *, user_id: str, start: datetime, end: datetime
+) -> int:
+    """The User's Versions written in `[start, end)`: succeeded attempts only."""
+    result = await db.execute(
+        select(func.count())
+        .select_from(VersionAttempt)
+        .join(Post, VersionAttempt.post_id == Post.id)
+        .where(
+            Post.user_id == user_id,
+            VersionAttempt.status == ATTEMPT_SUCCEEDED,
+            VersionAttempt.created_at >= start,
+            VersionAttempt.created_at < end,
+        )
+    )
+    return result.scalar_one()
 
 
 async def create_post(

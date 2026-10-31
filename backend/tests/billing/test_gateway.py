@@ -5,6 +5,7 @@ secret. No network: verification is local HMAC work. The Stripe adapter's
 translation of Stripe's answers is checked against recorded Stripe responses.
 """
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -120,6 +121,7 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
             current_period_end=datetime(2025, 11, 6, tzinfo=timezone.utc),
             cancel_at_period_end=True,
             created_at=datetime(2025, 10, 6, tzinfo=timezone.utc),
+            billing_cycle_anchor=datetime(2025, 10, 6, tzinfo=timezone.utc),
         ),
         SubscriptionState(
             id="sub_1QaEnded",
@@ -129,6 +131,7 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
             current_period_end=datetime(2025, 9, 1, tzinfo=timezone.utc),
             cancel_at_period_end=False,
             created_at=datetime(2025, 8, 1, tzinfo=timezone.utc),
+            billing_cycle_anchor=datetime(2025, 8, 1, tzinfo=timezone.utc),
         ),
     ]
     [url] = http.urls
@@ -136,6 +139,22 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
     # Stripe leaves cancelled Subscriptions out unless asked for all of them.
     assert query["status"] == ["all"]
     assert query["customer"] == ["cus_Contract"]
+
+
+async def test_the_stripe_adapter_reads_a_trials_start_and_end():
+    listing = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
+    trialing = listing["data"][0]
+    trialing.update(status="trialing", trial_start=1759708800, trial_end=1760313600)
+    trialing["billing_cycle_anchor"] = 1760313600
+    listing["data"] = [trialing]
+    http = _RecordedStripe(json.dumps(listing))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    [subscription] = await gateway.list_subscriptions(customer_id="cus_Contract")
+
+    assert subscription.trial_start == datetime(2025, 10, 6, tzinfo=timezone.utc)
+    assert subscription.trial_end == datetime(2025, 10, 13, tzinfo=timezone.utc)
+    assert subscription.billing_cycle_anchor == datetime(2025, 10, 13, tzinfo=timezone.utc)
 
 
 async def test_the_stripe_adapter_cancels_a_subscription_now():

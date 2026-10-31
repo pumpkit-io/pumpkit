@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     BILLING_PLAN_KEYS: Annotated[list[str], NoDecode] = []
     # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
     BILLING_TRIAL_PERIOD_DAYS: int = Field(default=14, ge=0)
+    # Generations per Allowance period, only where Plans are sold; a Trial gets a quarter. None is no cap.
+    GENERATIONS_MONTHLY_CAP: Optional[int] = Field(default=500, ge=0)
 
     # Any OpenAI-compatible chat completions endpoint; OpenRouter by default.
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
@@ -253,7 +255,7 @@ class Settings(BaseSettings):
             return json.loads(value) if value.strip() else []
         return value
 
-    @field_validator("X_POSTS_MONTHLY_CAP", "SMTP_PORT", mode="before")
+    @field_validator("X_POSTS_MONTHLY_CAP", "GENERATIONS_MONTHLY_CAP", "SMTP_PORT", mode="before")
     @classmethod
     def _empty_int_is_none(cls, value: object) -> object:
         # Pydantic would reject the empty string an `.env` line leaves for an int.

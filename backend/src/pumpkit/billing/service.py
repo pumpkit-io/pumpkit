@@ -4,12 +4,14 @@ the Stripe event log that makes webhooks idempotent, and Users' acceptances of t
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import exists, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.billing.allowance import Allowance, allowance_at
 from pumpkit.billing.gateway import BillingGateway
 from pumpkit.billing.models import StripeEvent, Subscription, TermsAcceptance
 from pumpkit.billing.subscription_status import SubscriptionStatus
@@ -115,6 +117,19 @@ async def has_access(db: AsyncSession, *, user_id: str) -> bool:
     return is_subscribed(await get_user_subscription(db, user_id=user_id))
 
 
+async def get_allowance(db: AsyncSession, *, user_id: str, moment: datetime) -> Optional[Allowance]:
+    """
+    The limits that apply to the User at `moment`: None where the Instance sells no Plans or the
+    User isn't Subscribed, who may then do nothing an Allowance counts.
+    """
+    if not sells_plans():
+        return None
+    subscription = await get_user_subscription(db, user_id=user_id)
+    if subscription is None or not is_subscribed(subscription):
+        return None
+    return allowance_at(subscription, moment)
+
+
 def is_subscribed(subscription: Optional[Subscription]) -> bool:
     """
     Whether a User holding `subscription` is Subscribed: it is in its Trial,
@@ -155,6 +170,9 @@ async def sync_customer(
         subscription.current_period_end = state.current_period_end
         subscription.cancel_at_period_end = state.cancel_at_period_end
         subscription.stripe_created_at = state.created_at
+        subscription.trial_start = state.trial_start
+        subscription.trial_end = state.trial_end
+        subscription.billing_cycle_anchor = state.billing_cycle_anchor
     await db.flush()
 
 

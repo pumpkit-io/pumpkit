@@ -17,6 +17,7 @@ vi.mock('@/services/billingService', () => ({
   billingService: {
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn().mockResolvedValue({ plans: [], termsVersion: '2026-10-11' }),
+    openBillingPortal: vi.fn(),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
@@ -67,6 +68,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
+import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { postService, type PostDetail } from '@/services/postService';
@@ -77,6 +79,7 @@ import {
   NOT_SUBSCRIBED,
   PAULG,
   SUBSCRIBED,
+  allowanceUsedUp,
   apiError,
   renderSignedIn,
 } from './testing/signedInApp';
@@ -477,6 +480,44 @@ describe('New post', () => {
       expect(area.queryByRole('alert')).not.toBeInTheDocument();
       expect(area.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
+    });
+
+    it('shows the Allowance refusal in place of the error banner', async () => {
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+
+      expect(
+        await area.findByText(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+        ),
+      ).toBeInTheDocument();
+      expect(area.queryByRole('alert')).not.toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+      expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
+      expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'generations' });
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
+    it('offers to update the payment method to a User behind on payment at the limit', async () => {
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
+          { way_out: 'update_payment' },
+        ),
+      );
+      vi.mocked(billingService.openBillingPortal).mockResolvedValue('https://billing.test/portal');
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Update your payment method' }));
+
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://billing.test/portal'));
     });
 
     it.each([

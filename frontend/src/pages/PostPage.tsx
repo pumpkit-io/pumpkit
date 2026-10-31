@@ -279,8 +279,17 @@ function LoadedPost({
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */
 export function PostPage() {
   const { id = '' } = useParams();
-  const { load, reload, setScheduledPost, text, sendFeedback, rewritesDropped, error, notice } =
-    usePost(id);
+  const {
+    load,
+    reload,
+    setScheduledPost,
+    text,
+    sendFeedback,
+    rewritesDropped,
+    error,
+    notice,
+    allowanceUsedUp,
+  } = usePost(id);
 
   if (load.kind === 'loaded' && text) {
     return (
@@ -289,7 +298,7 @@ export function PostPage() {
         post={load.post}
         text={text}
         controller={load.controller}
-        feedback={{ isWriting: text.writing, error, notice, onSend: sendFeedback }}
+        feedback={{ isWriting: text.writing, error, notice, allowanceUsedUp, onSend: sendFeedback }}
         rewritesDropped={rewritesDropped}
         onScheduledPost={setScheduledPost}
       />

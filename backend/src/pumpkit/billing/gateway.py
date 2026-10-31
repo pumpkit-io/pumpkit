@@ -69,7 +69,8 @@ class Plan:
 class SubscriptionState:
     """
     A Subscription as the provider holds it now. `plan_key` is the price's
-    lookup key, None when the price has none.
+    lookup key, None when the price has none. `billing_cycle_anchor` is when its
+    paid periods start: the Trial's end after a Trial, else its start.
     """
 
     id: str
@@ -79,6 +80,9 @@ class SubscriptionState:
     current_period_end: Optional[datetime]
     cancel_at_period_end: bool
     created_at: datetime
+    trial_start: Optional[datetime] = None
+    trial_end: Optional[datetime] = None
+    billing_cycle_anchor: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,10 @@ def _timestamp(seconds: int) -> datetime:
     return datetime.fromtimestamp(seconds, tz=timezone.utc)
 
 
+def _optional_timestamp(seconds: Optional[int]) -> Optional[datetime]:
+    return _timestamp(seconds) if seconds else None
+
+
 def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
     """A Stripe subscription as plain data, or `BillingProviderError` when it can't be one."""
     status = subscription.get("status")
@@ -185,9 +193,12 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         status=cast(SubscriptionStatus, status),
         price_id=price.get("id"),
         plan_key=price.get("lookup_key"),
-        current_period_end=_timestamp(period_end) if period_end else None,
+        current_period_end=_optional_timestamp(period_end),
         cancel_at_period_end=bool(subscription.get("cancel_at_period_end")),
         created_at=_timestamp(subscription["created"]),
+        trial_start=_optional_timestamp(subscription.get("trial_start")),
+        trial_end=_optional_timestamp(subscription.get("trial_end")),
+        billing_cycle_anchor=_optional_timestamp(subscription.get("billing_cycle_anchor")),
     )
 
 

@@ -113,6 +113,10 @@ export const EVENTS = {
     description:
       'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
   },
+  allowance_used_up: {
+    description:
+      'New post or the Post page: an action was refused for want of Allowance. Props: ran_out (generations | x_posts | link_x_posts).',
+  },
   post_text_edited: {
     description:
       "Post page: saved a burst of the User's edits to the Post's Text, once however many retries it took. Props: format (post | thread), part_count (number).",

@@ -41,6 +41,11 @@ class Subscription(Base):
     # When Stripe created the Subscription: the order between a User's
     # Subscriptions, since rows synced in one transaction share `created_at`.
     stripe_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # What Allowance periods hang on; None on a row not synced since they were added.
+    trial_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    trial_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # When paid periods start: the Trial's end after a Trial, else the start.
+    billing_cycle_anchor: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
