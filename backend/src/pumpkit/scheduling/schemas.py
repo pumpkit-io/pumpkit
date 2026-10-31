@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format, part_name
 from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
@@ -240,3 +241,48 @@ class XConnectionResponse(BaseModel):
     photo_url: Optional[str]
     # Whether to ask the User, who has no Photo, to use the X account's photo as theirs.
     offer_photo: bool
+
+
+class UsageCountResponse(BaseModel):
+    """One count of an Allowance in the current period. A limit of None is no cap."""
+
+    limit: Optional[int]
+    used: int
+    left: Optional[int]
+
+
+class TopUpUsageResponse(BaseModel):
+    """
+    What one unexpired Top-up has left, spent only once the Allowance is used up; None for a count
+    that had no cap when it was bought.
+    """
+
+    generations_left: Optional[int]
+    x_posts_left: Optional[int]
+    link_x_posts_left: Optional[int]
+    expires_at: datetime
+
+
+class AllowanceUsageResponse(BaseModel):
+    """What the User has used and has left of the Allowance period holding now."""
+
+    trial: bool
+    # When the period ends: the next reset, or the Trial's end.
+    resets_at: datetime
+    # The day of the month each paid period resets on, also in months too short to have it;
+    # None in a Trial.
+    resets_on_day: Optional[int]
+    generations: UsageCountResponse
+    x_posts: UsageCountResponse
+    # Of the X posts, those containing a link.
+    link_x_posts: UsageCountResponse
+    # What the User can do at a limit before the period resets; None when nothing.
+    way_out: Optional[WayOut]
+    # The User's Top-ups with something left, first to expire first.
+    top_ups: list[TopUpUsageResponse]
+    may_buy_top_up: bool
+
+
+class UsageResponse(BaseModel):
+    # None where the Instance sells no Plans or the User isn't Subscribed.
+    allowance: Optional[AllowanceUsageResponse]

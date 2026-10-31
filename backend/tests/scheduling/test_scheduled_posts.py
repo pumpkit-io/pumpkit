@@ -648,18 +648,19 @@ async def test_a_source_version_is_no_longer_taken(
 
 
 @pytest.fixture
-def cap_of_two(monkeypatch):
+def cap_of_two(monkeypatch, sells_no_plans):
+    """The calendar-month cap of an Instance that sells no Plans, at 2 X posts."""
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
 OCTOBER_FULL = (
     "You have 2 X posts in October 2026, the most for one month. "
-    "The cap resets on November 1, 2026."
+    "The limit resets on November 1, 2026."
 )
 
 
 async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
+    client, sells_no_plans, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
     await connect_x()
@@ -678,12 +679,12 @@ async def test_the_monthly_cap_counts_each_part_of_a_thread_as_an_x_post(
     assert refused.status_code == 409
     assert refused.json()["detail"] == (
         "You have 3 X posts in October 2026, the most for one month. "
-        "The cap resets on November 1, 2026."
+        "The limit resets on November 1, 2026."
     )
 
 
 async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is_scheduled(
-    client, subscribed, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
+    client, sells_no_plans, fake_x_publisher, fixed_clock, monkeypatch, connect_x, post_with
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 3)
     await connect_x()
@@ -696,8 +697,8 @@ async def test_a_thread_that_would_cross_the_monthly_cap_is_refused_before_it_is
 
         assert response.status_code == 409
         assert response.json()["detail"] == (
-            "These 3 Parts would take you over the cap of 3 X posts in October 2026: you have "
-            "1 already. The cap resets on November 1, 2026."
+            "These 3 parts would take you over the limit of 3 X posts in October 2026: you have "
+            "1 already. The limit resets on November 1, 2026."
         )
     assert [p["id"] for p in (await scheduled_posts(client))] == [first.json()["id"]]
     assert fake_x_publisher.published == []

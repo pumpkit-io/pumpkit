@@ -45,7 +45,7 @@ async def test_the_backfill_leaves_the_refresh_cooldown_where_it_was(
     client, db_session_maker, subscribed, fake_x_reader, clock
 ):
     await _add_authors_listed_before_photos(client, fake_x_reader, "levelsio")
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     fake_x_reader.photos["levelsio"] = LEVELSIO_PHOTO
     await backfill_author_photos(db_session_maker, fake_x_reader)
 

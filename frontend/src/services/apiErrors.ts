@@ -22,3 +22,33 @@ export function errorStatus(e: unknown): number | null {
   const status = (e as { response?: { status?: unknown } })?.response?.status;
   return typeof status === 'number' ? status : null;
 }
+
+/** What an Allowance counts. */
+export type AllowanceCount = 'generations' | 'x_posts' | 'link_x_posts';
+/** What a User at a limit can do before the Allowance period resets. */
+export type AllowanceWayOut = 'top_up' | 'subscribe_now' | 'update_payment';
+
+/** The backend's refusal of an action that needs more of the User's Allowance than is left. */
+export interface AllowanceUsedUp {
+  message: string;
+  ranOut: AllowanceCount;
+  needed: number;
+  left: number;
+  resetsAt: Date;
+  wayOut: AllowanceWayOut | null;
+}
+
+/** The Allowance refusal a request failed with (a 409 with code `ALLOWANCE_USED_UP`), else null. */
+export function errorAllowanceUsedUp(e: unknown): AllowanceUsedUp | null {
+  if (errorStatus(e) !== 409) return null;
+  const data = (e as { response?: { data?: Record<string, unknown> } }).response?.data;
+  if (!data || data.code !== 'ALLOWANCE_USED_UP' || typeof data.detail !== 'string') return null;
+  return {
+    message: data.detail,
+    ranOut: data.ran_out as AllowanceCount,
+    needed: Number(data.needed),
+    left: Number(data.left),
+    resetsAt: new Date(String(data.resets_at)),
+    wayOut: (data.way_out as AllowanceWayOut | null | undefined) ?? null,
+  };
+}

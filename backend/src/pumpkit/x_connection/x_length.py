@@ -126,6 +126,11 @@ def x_weighted_length(text: str) -> int:
     return units // _SCALE
 
 
+def has_link(text: str) -> bool:
+    """Whether X would turn something in `text` into a link, a bare domain such as pumpkit.io too."""
+    return bool(_url_spans(unicodedata.normalize("NFC", text)))
+
+
 def _weight(code_point: int) -> int:
     for start, end in _LIGHT_RANGES:
         if start <= code_point <= end:

@@ -1,0 +1,189 @@
+{
+  "object": "list",
+  "url": "/v1/checkout/sessions",
+  "has_more": false,
+  "data": [
+    {
+      "id": "cs_1Paid",
+      "object": "checkout.session",
+      "amount_subtotal": 1000,
+      "amount_total": 1000,
+      "client_reference_id": "user_1",
+      "created": 1759708000,
+      "currency": "eur",
+      "customer": "cus_Contract",
+      "livemode": false,
+      "metadata": {
+        "pumpkit_purchase": "top_up"
+      },
+      "mode": "payment",
+      "payment_intent": {
+        "id": "pi_1Paid",
+        "object": "payment_intent",
+        "amount": 1000,
+        "currency": "eur",
+        "customer": "cus_Contract",
+        "latest_charge": {
+          "id": "ch_1Paid",
+          "object": "charge",
+          "amount": 1000,
+          "amount_captured": 1000,
+          "amount_refunded": 0,
+          "captured": true,
+          "created": 1759708800,
+          "currency": "eur",
+          "customer": "cus_Contract",
+          "disputed": false,
+          "livemode": false,
+          "paid": true,
+          "payment_intent": "pi_1Paid",
+          "refunded": false,
+          "status": "succeeded"
+        },
+        "status": "succeeded",
+        "livemode": false
+      },
+      "payment_status": "paid",
+      "status": "complete",
+      "subscription": null,
+      "url": null
+    },
+    {
+      "id": "cs_1Refunded",
+      "object": "checkout.session",
+      "amount_subtotal": 1000,
+      "amount_total": 1000,
+      "client_reference_id": "user_1",
+      "created": 1759000000,
+      "currency": "eur",
+      "customer": "cus_Contract",
+      "livemode": false,
+      "metadata": {
+        "pumpkit_purchase": "top_up"
+      },
+      "mode": "payment",
+      "payment_intent": {
+        "id": "pi_1Refunded",
+        "object": "payment_intent",
+        "amount": 1000,
+        "currency": "eur",
+        "customer": "cus_Contract",
+        "latest_charge": {
+          "id": "ch_1Refunded",
+          "object": "charge",
+          "amount": 1000,
+          "amount_captured": 1000,
+          "amount_refunded": 500,
+          "captured": true,
+          "created": 1759000100,
+          "currency": "eur",
+          "customer": "cus_Contract",
+          "disputed": false,
+          "livemode": false,
+          "paid": true,
+          "payment_intent": "pi_1Refunded",
+          "refunded": false,
+          "status": "succeeded"
+        },
+        "status": "succeeded",
+        "livemode": false
+      },
+      "payment_status": "paid",
+      "status": "complete",
+      "subscription": null,
+      "url": null
+    },
+    {
+      "id": "cs_1Disputed",
+      "object": "checkout.session",
+      "amount_subtotal": 1000,
+      "amount_total": 1000,
+      "client_reference_id": "user_1",
+      "created": 1758000000,
+      "currency": "eur",
+      "customer": "cus_Contract",
+      "livemode": false,
+      "metadata": {
+        "pumpkit_purchase": "top_up"
+      },
+      "mode": "payment",
+      "payment_intent": {
+        "id": "pi_1Disputed",
+        "object": "payment_intent",
+        "amount": 1000,
+        "currency": "eur",
+        "customer": "cus_Contract",
+        "latest_charge": {
+          "id": "ch_1Disputed",
+          "object": "charge",
+          "amount": 1000,
+          "amount_captured": 1000,
+          "amount_refunded": 0,
+          "captured": true,
+          "created": 1758000100,
+          "currency": "eur",
+          "customer": "cus_Contract",
+          "disputed": true,
+          "livemode": false,
+          "paid": true,
+          "payment_intent": "pi_1Disputed",
+          "refunded": false,
+          "status": "succeeded"
+        },
+        "status": "succeeded",
+        "livemode": false
+      },
+      "payment_status": "paid",
+      "status": "complete",
+      "subscription": null,
+      "url": null
+    },
+    {
+      "id": "cs_1Pending",
+      "object": "checkout.session",
+      "amount_subtotal": 1000,
+      "amount_total": 1000,
+      "client_reference_id": "user_1",
+      "created": 1757000000,
+      "currency": "eur",
+      "customer": "cus_Contract",
+      "livemode": false,
+      "metadata": {
+        "pumpkit_purchase": "top_up"
+      },
+      "mode": "payment",
+      "payment_intent": {
+        "id": "pi_1Pending",
+        "object": "payment_intent",
+        "amount": 1000,
+        "currency": "eur",
+        "customer": "cus_Contract",
+        "latest_charge": null,
+        "status": "succeeded",
+        "livemode": false
+      },
+      "payment_status": "unpaid",
+      "status": "complete",
+      "subscription": null,
+      "url": null
+    },
+    {
+      "id": "cs_1Subscription",
+      "object": "checkout.session",
+      "amount_subtotal": 1000,
+      "amount_total": 1000,
+      "client_reference_id": "user_1",
+      "created": 1756000000,
+      "currency": "eur",
+      "customer": "cus_Contract",
+      "livemode": false,
+      "metadata": {},
+      "mode": "subscription",
+      "payment_intent": null,
+      "payment_status": "paid",
+      "status": "complete",
+      "subscription": "sub_1",
+      "url": null
+    }
+  ]
+}

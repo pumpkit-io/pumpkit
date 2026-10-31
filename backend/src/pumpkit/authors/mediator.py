@@ -16,7 +16,7 @@ from pumpkit.authors.x_reader import HandleNotFoundError, RecentPosts, XReader
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError, RetryLaterError
 
 MAX_INSPIRATION_AUTHORS = 3
-REFRESH_COOLDOWN = timedelta(hours=1)
+REFRESH_COOLDOWN = timedelta(hours=24)
 
 
 def next_refresh_at(last_fetched_at: Optional[datetime], *, now: datetime) -> Optional[datetime]:
@@ -65,7 +65,7 @@ async def add_author(
     Fetch `handle`'s recent posts, store the new ones and add the handle to the User's list.
 
     The list checks run first so a duplicate or a fourth author costs no twitterapi.io call,
-    and a handle fetched less than an hour ago is added from its stored posts without one.
+    and a handle fetched less than a day ago is added from its stored posts without one.
     A 404 for a handle X doesn't know and a 422 for one without original posts store nothing.
     """
     user_id = user.id
@@ -105,7 +105,7 @@ async def refresh_author(
     """
     Fetch the latest posts of one of the User's Inspiration authors and store the new ones.
 
-    Fetched posts are shared across Users, so the hour between fetches is per handle.
+    Fetched posts are shared across Users, so the day between fetches is per handle.
     """
     user_id = user.id
     handle = (await _listed_author(db, user_id=user_id, handle=handle)).handle
@@ -113,7 +113,7 @@ async def refresh_author(
     retry_at = next_refresh_at(await service.last_fetched_at(db, handle=handle), now=now)
     if retry_at is not None:
         raise RetryLaterError(
-            f"@{handle} was fetched less than an hour ago.", retry_at=retry_at, now=now
+            f"@{handle} was fetched less than a day ago.", retry_at=retry_at, now=now
         )
 
     recent = await _fetch(reader, handle)

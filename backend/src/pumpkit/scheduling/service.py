@@ -3,6 +3,7 @@ Scheduled posts and their moves between states.
 Flushes and never commits: the caller (the mediator or `publishing`) owns the transaction.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, cast
@@ -24,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Subquery
 
+from pumpkit.billing.models import TopUpCharge
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -33,6 +35,7 @@ from pumpkit.scheduling.models import (
     SCHEDULED,
     ScheduledPost,
     ScheduledPostPart,
+    UnscheduledLiveParts,
 )
 from pumpkit.scheduling.post_status import (
     DRAFT,
@@ -42,6 +45,7 @@ from pumpkit.scheduling.post_status import (
     STATUS_OF_STATE,
     PostStatus,
 )
+from pumpkit.scheduling.rules import XPosts, x_posts_in
 
 
 async def create(
@@ -282,6 +286,38 @@ async def cancel(db: AsyncSession, *, scheduled_post_id: str) -> bool:
     return cast(CursorResult, result).rowcount == 1
 
 
+async def stop(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> bool:
+    """
+    Move a scheduled or Failed Scheduled post to Failed, so only its live Parts count; False if
+    it was in neither, like a claim's check.
+    """
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(
+            ScheduledPost.id == scheduled_post_id,
+            ScheduledPost.state.in_([SCHEDULED, FAILED]),
+        )
+        .values(state=FAILED, updated_at=now)
+    )
+    return cast(CursorResult, result).rowcount == 1
+
+
+async def keep_unscheduled_live_parts(
+    db: AsyncSession, *, user_id: str, publish_at: datetime, x_posts: XPosts, now: datetime
+) -> None:
+    """Flushes."""
+    db.add(
+        UnscheduledLiveParts(
+            user_id=user_id,
+            publish_at=publish_at,
+            x_posts=x_posts.x_posts,
+            link_x_posts=x_posts.link_x_posts,
+            created_at=now,
+        )
+    )
+    await db.flush()
+
+
 async def claim(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> bool:
     """
     Move the Scheduled post from scheduled to publishing; False if it wasn't scheduled. The
@@ -323,16 +359,27 @@ async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
     return result.scalar_one_or_none()
 
 
+async def stuck_user_ids(db: AsyncSession, *, publishing_since: datetime) -> list[str]:
+    """The Users with a Scheduled post in publishing since before `publishing_since`, in id order."""
+    result = await db.execute(
+        select(ScheduledPost.user_id)
+        .where(_stuck(publishing_since))
+        .distinct()
+        .order_by(ScheduledPost.user_id)
+    )
+    return list(result.scalars())
+
+
 async def publish_stuck(
-    db: AsyncSession, *, publishing_since: datetime, now: datetime
+    db: AsyncSession, *, publishing_since: datetime, user_ids: list[str], now: datetime
 ) -> list[str]:
     """
-    Move every Scheduled post in publishing since before `publishing_since` whose Parts are all
-    live to Published, at its claim time, and return their ids.
+    Move every Scheduled post of `user_ids` in publishing since before `publishing_since` whose
+    Parts are all live to Published, at its claim time, and return their ids.
     """
     result = await db.execute(
         update(ScheduledPost)
-        .where(_stuck(publishing_since), ~_has_part_not_live())
+        .where(_stuck(publishing_since), ScheduledPost.user_id.in_(user_ids), ~_has_part_not_live())
         .values(
             state=PUBLISHED,
             published_at=ScheduledPost.publishing_started_at,
@@ -345,15 +392,20 @@ async def publish_stuck(
 
 
 async def fail_stuck(
-    db: AsyncSession, *, publishing_since: datetime, reason: str, now: datetime
+    db: AsyncSession,
+    *,
+    publishing_since: datetime,
+    user_ids: list[str],
+    reason: str,
+    now: datetime,
 ) -> list[str]:
     """
-    Move every Scheduled post in publishing since before `publishing_since` with a Part not
-    live to Failed, and return their ids. Parts already live stay live.
+    Move every Scheduled post of `user_ids` in publishing since before `publishing_since` with a
+    Part not live to Failed, and return their ids. Parts already live stay live.
     """
     result = await db.execute(
         update(ScheduledPost)
-        .where(_stuck(publishing_since), _has_part_not_live())
+        .where(_stuck(publishing_since), ScheduledPost.user_id.in_(user_ids), _has_part_not_live())
         .values(state=FAILED, failed_reason=reason, updated_at=now)
         .returning(ScheduledPost.id)
         .execution_options(synchronize_session=False)
@@ -414,29 +466,100 @@ async def past_communities(db: AsyncSession, *, user_id: str, x_user_id: str) ->
     return [Community(id=community_id, name=name) for community_id, name in names.items()]
 
 
-async def count_x_posts_between(
+async def x_posts_used_between(
     db: AsyncSession,
     *,
     user_id: str,
     start: datetime,
     end: datetime,
-    excluding_id: Optional[str] = None,
-) -> int:
-    """The Parts of the User's Scheduled posts in any state with `start <= publish_at < end`."""
-    query = (
-        select(func.count())
-        .select_from(ScheduledPostPart)
+    excluding: Collection[str] = (),
+) -> XPosts:
+    """
+    The X posts and link posts of the User's Scheduled posts with `start <= publish_at < end`:
+    every Part, except those of a Failed one that X never accepted, which cost nothing, less
+    those charged to a Top-up, refunded or disputed since or not, plus the live Parts of deleted
+    ones.
+    """
+    in_window = [
+        ScheduledPost.user_id == user_id,
+        ScheduledPost.publish_at >= start,
+        ScheduledPost.publish_at < end,
+    ]
+    if excluding:
+        in_window.append(ScheduledPost.id.not_in(excluding))
+    parts = await db.execute(
+        select(ScheduledPostPart.text)
         .join(ScheduledPost)
+        .where(
+            *in_window,
+            or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None)),
+        )
+    )
+    charged: dict[str, int] = {
+        count: quantity
+        for count, quantity in (
+            await db.execute(
+                select(TopUpCharge.count, func.sum(TopUpCharge.quantity))
+                .join(ScheduledPost, TopUpCharge.scheduled_post_id == ScheduledPost.id)
+                .where(*in_window)
+                .group_by(TopUpCharge.count)
+            )
+        ).tuples()
+    }
+    unscheduled = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(UnscheduledLiveParts.x_posts), 0),
+                func.coalesce(func.sum(UnscheduledLiveParts.link_x_posts), 0),
+            ).where(
+                UnscheduledLiveParts.user_id == user_id,
+                UnscheduledLiveParts.publish_at >= start,
+                UnscheduledLiveParts.publish_at < end,
+            )
+        )
+    ).one()
+    counted = x_posts_in(list(parts.scalars()))
+    return XPosts(
+        x_posts=counted.x_posts - charged.get("x_posts", 0) + unscheduled[0],
+        link_x_posts=counted.link_x_posts - charged.get("link_x_posts", 0) + unscheduled[1],
+    )
+
+
+async def changeable_between(
+    db: AsyncSession, *, user_id: str, start: datetime, end: datetime
+) -> list[ScheduledPost]:
+    """
+    The User's waiting and Failed Scheduled posts with `start <= publish_at < end`, the ones
+    whose Parts may still change, in publish-time order.
+    """
+    result = await db.execute(
+        select(ScheduledPost)
         .where(
             ScheduledPost.user_id == user_id,
             ScheduledPost.publish_at >= start,
             ScheduledPost.publish_at < end,
+            ScheduledPost.state.in_([SCHEDULED, FAILED]),
         )
+        .order_by(ScheduledPost.publish_at, ScheduledPost.created_at, ScheduledPost.id)
     )
-    if excluding_id is not None:
-        query = query.where(ScheduledPost.id != excluding_id)
-    result = await db.execute(query)
-    return result.scalar_one()
+    return list(result.scalars())
+
+
+async def counted_parts(db: AsyncSession, *, scheduled_post_id: str) -> list[str]:
+    """
+    The Parts of the Scheduled post that count as X posts: every one, or of a Failed one only
+    those X accepted.
+    """
+    result = await db.execute(
+        select(ScheduledPostPart.text)
+        .join(ScheduledPost)
+        .where(
+            ScheduledPost.id == scheduled_post_id,
+            or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None)),
+        )
+        .order_by(ScheduledPostPart.position)
+    )
+    return list(result.scalars())
 
 
 async def release_for_retry(

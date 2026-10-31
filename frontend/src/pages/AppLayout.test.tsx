@@ -124,13 +124,19 @@ async function withPostOnScreen() {
   await screen.findByRole('article', { name: 'Text' });
 }
 
+const NO_CAPS = {
+  allowance: { generations: null, xPosts: null, linkXPosts: null },
+  trial: null,
+  topUp: null,
+};
+
 describe('The signed-in shell', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
     vi.mocked(billingService.fetchPlans)
       .mockReset()
-      .mockResolvedValue({ plans: [], termsVersion: '2026-10-11' });
+      .mockResolvedValue({ plans: [], termsVersion: '2026-10-11', ...NO_CAPS });
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(postService.start).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
@@ -202,6 +208,7 @@ describe('The signed-in shell', () => {
           },
         ],
         termsVersion: '2026-10-11',
+        ...NO_CAPS,
       });
       vi.mocked(xConnectionService.get).mockResolvedValue({
         handle: 'ada',

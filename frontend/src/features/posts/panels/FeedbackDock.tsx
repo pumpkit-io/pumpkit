@@ -3,9 +3,13 @@ import { Link } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
+import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
+import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
+import { useUsage } from '@/features/billing/useUsage';
 import { CHOOSE_PLAN_PATH, trackChoosePlan } from '@/features/billing/choosePlan';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
+import type { AllowanceUsedUp } from '@/services/apiErrors';
 import { FEEDBACK_MAX_CHARS, type Format } from '@/services/postService';
 import { Composer } from '../Composer';
 import { Dock } from './Dock';
@@ -15,6 +19,7 @@ export interface FeedbackSending {
   isWriting: boolean;
   error: string | null;
   notice: string | null;
+  allowanceUsedUp: AllowanceUsedUp | null;
   onSend: (feedback: string, format: Format) => Promise<boolean>;
 }
 
@@ -48,12 +53,19 @@ export function FeedbackDock({
     setFormatFollowed(textFormat);
     setFormat(textFormat);
   }
-  const { isWriting, error, notice, onSend } = sending;
+  const { isWriting, error, notice, allowanceUsedUp, onSend } = sending;
+  const { usage, reload: reloadUsage } = useUsage();
   const typed = feedback.trim();
 
   const send = async () => {
-    if (await onSend(typed, format)) setFeedback('');
+    const sent = await onSend(typed, format);
+    if (sent) setFeedback('');
+    reloadUsage();
   };
+
+  const low = !allowanceUsedUp && (
+    <LowUsageWarning allowance={usage?.allowance} count="generations" />
+  );
 
   const gate =
     subscribed === false ? (
@@ -68,14 +80,16 @@ export function FeedbackDock({
     <Dock
       name={name}
       notes={
-        (reason || error || notice || restoreError) && (
+        (reason || error || notice || allowanceUsedUp || restoreError || low) && (
           <div className="space-y-2">
+            {low}
             {reason}
             {restoreError && <ErrorBanner message={restoreError} />}
             {error && (
               <ErrorBanner message={error} onRetry={typed ? () => void send() : undefined} />
             )}
             {notice && <LimitNotice message={notice} />}
+            {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
           </div>
         )
       }

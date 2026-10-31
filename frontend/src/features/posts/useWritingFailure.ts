@@ -1,7 +1,14 @@
 import { useCallback, useState } from 'react';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { timeOfDay } from '@/lib/relativeTime';
-import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
+import { track } from '@/lib/analytics';
+import {
+  errorAllowanceUsedUp,
+  errorMessage,
+  errorRetryAt,
+  errorStatus,
+  type AllowanceUsedUp,
+} from '@/services/apiErrors';
 
 /** A 4xx: the backend turned the request down before writing anything, so no Version failed. */
 export function isRefusal(e: unknown): boolean {
@@ -15,12 +22,17 @@ export function useWritingFailure() {
   const [error, setError] = useState<string | null>(null);
   // The hourly limit on attempts: not an error, since trying again before `retry_at` won't help.
   const [notice, setNotice] = useState<string | null>(null);
+  // No Generation left until the Allowance period resets: shown with its way out, not as an error.
+  const [allowanceUsedUp, setAllowanceUsedUp] = useState<AllowanceUsedUp | null>(null);
 
   const fail = useCallback(
     (e: unknown, fallback: string) => {
       const retryAt = errorRetryAt(e);
+      const usedUp = errorAllowanceUsedUp(e);
+      if (usedUp) track('allowance_used_up', { ran_out: usedUp.ranOut });
       // A refusal for want of a Subscription shows the prompt to subscribe, not an error.
       if (errorStatus(e) === 403) refreshSubscribed();
+      else if (usedUp) setAllowanceUsedUp(usedUp);
       else if (retryAt)
         setNotice(`${errorMessage(e, fallback)} You can write again at ${timeOfDay(retryAt)}.`);
       else setError(errorMessage(e, fallback));
@@ -31,7 +43,8 @@ export function useWritingFailure() {
   const clear = useCallback(() => {
     setError(null);
     setNotice(null);
+    setAllowanceUsedUp(null);
   }, []);
 
-  return { error, notice, fail, clear };
+  return { error, notice, allowanceUsedUp, fail, clear };
 }

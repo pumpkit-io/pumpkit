@@ -42,6 +42,8 @@ Ask Claude Code to write a Post from an idea, then ask for changes in plain word
 
 `restore_version` allows 10 calls a minute. Writing a Version takes up to a minute. `start_post` and `give_feedback` allow 20 calls a minute, and share the web app's limit of 30 attempts at a Version an hour, so attempts in either count toward it. Posts you start from Claude Code show up on the web app's Posts page like any other.
 
+On an Instance that sells Plans, each post you start and each round of feedback uses one generation of your allowance, wherever you write it, and a failed attempt none. Pumpkit's instructions tell Claude Code so, and that `get_usage` says what is left, so it writes a new version only when you ask for one.
+
 ## Scheduled post and link tools
 
 Every Scheduled post is copied from its Post's Text, the text set from each new Version, and a Post goes out once, so it has at most one Scheduled post. That Scheduled post gives the Post its status: Draft without one, then Scheduled, Published or Failed.
@@ -54,6 +56,7 @@ Every Scheduled post is copied from its Post's Text, the text set from each new 
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post, which unschedules it: its Post is a Draft again, so it takes Feedback and can be scheduled anew. Claude Code asks before calling it. |
 | `list_past_communities` | Lists the Communities you posted to before from your connected X account. |
 | `connect_x` | Answers with the link to the Settings page, where you connect, reconnect or disconnect X. |
+| `get_usage` | Says what you have left of your allowance this period: generations, X posts and, of those, X posts with a link, each with its limit, how many you used and how many are left, and when the period resets (or your trial ends), plus what each of your top-ups has left and until when. On an Instance that sells no Plans it says there is no allowance. It works without a Subscription. |
 | `manage_subscription` | Answers with the link to the Settings page, where you subscribe or manage your Subscription. On an Instance that sells no Plans, it says so instead. |
 
-Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and the monthly cap counts X posts, one per Part, including those you scheduled in the web app. The X connection refusals link to the Settings page, and every Scheduled post answer to its Post's page in the web app. `connect_x` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.
+Scheduling and Post now follow the web app's rules: it needs an X connection that X still accepts, the text must fit your X account's limit, a scheduled time must be at least a minute away, a Community must be one X knows, and your X posts are counted, one per Part, and one link post per Part containing a link, including those you scheduled in the web app. At your allowance's limit the refusal says when it resets and links to the Settings page. The X connection refusals link to the Settings page, and every Scheduled post answer to its Post's page in the web app. `connect_x`, `get_usage` and `manage_subscription` work without a Subscription. `schedule_post`, `post_now`, `edit_scheduled_post` and `delete_scheduled_post` allow 10 calls a minute, and the others 60.

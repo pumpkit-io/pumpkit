@@ -31,7 +31,7 @@ COMMUNITY_ID = "1493446837214187523"
 COMMUNITY_URL = f"https://x.com/i/communities/{COMMUNITY_ID}"
 OCTOBER_FULL = (
     "You have 2 X posts in October 2026, the most for one month. "
-    "The cap resets on November 1, 2026."
+    "The limit resets on November 1, 2026."
 )
 
 
@@ -84,7 +84,8 @@ async def _listed(db, user) -> list[ScheduledPostResponse]:
 
 
 @pytest.fixture
-def cap_of_two(monkeypatch):
+def cap_of_two(monkeypatch, sells_no_plans):
+    """The calendar-month cap of an Instance that sells no Plans, at 2 X posts."""
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 2)
 
 
@@ -306,13 +307,15 @@ async def test_a_full_month_is_refused_with_the_date_the_cap_resets(
     assert fake_x_publisher.published == []
 
 
-async def test_published_and_failed_scheduled_posts_count_towards_the_cap(
+async def test_published_posts_count_towards_the_cap_and_failed_ones_x_refused_dont(
     create, connect_x, fake_x_publisher, cap_of_two
 ):
     await connect_x()
     published = await create(parts=["Out"], publish_now=True)
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Duplicate content.")
     failed = await create(parts=["Refused"], publish_now=True)
+    fake_x_publisher.fail_publish = None
+    await create()
 
     with pytest.raises(MonthFull):
         await create()
@@ -357,7 +360,7 @@ async def test_a_full_december_resets_on_january_1(create, connect_x, cap_of_two
 
     assert refused.value.detail == (
         "You have 2 X posts in December 2026, the most for one month. "
-        "The cap resets on January 1, 2027."
+        "The limit resets on January 1, 2027."
     )
 
 
@@ -410,7 +413,7 @@ async def test_with_no_cap_a_month_takes_more_than_100(create, connect_x, monkey
 
 
 async def test_with_a_cap_of_0_nothing_can_be_scheduled_or_posted_now(
-    create, connect_x, fake_x_publisher, monkeypatch
+    create, connect_x, fake_x_publisher, monkeypatch, sells_no_plans
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 0)
     await connect_x()
@@ -511,7 +514,7 @@ async def test_without_an_x_connection_the_community_is_not_looked_up(create, fa
 
 
 async def test_a_full_month_is_refused_before_the_community_lookup(
-    create, connect_x, fake_x_reader, monkeypatch
+    create, connect_x, fake_x_reader, monkeypatch, sells_no_plans
 ):
     monkeypatch.setattr(settings, "X_POSTS_MONTHLY_CAP", 0)
     await connect_x()

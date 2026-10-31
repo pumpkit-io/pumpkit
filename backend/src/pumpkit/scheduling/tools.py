@@ -44,6 +44,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostResponse,
     ScheduledPostToolResponse,
     ScheduledPostUpdateRequest,
+    UsageResponse,
 )
 from pumpkit.x_connection.x_publisher import get_x_publisher
 
@@ -226,7 +227,7 @@ async def delete_scheduled_post(
     again: it takes feedback and can be scheduled anew. It can't be undone.
     """
     post_id = await mediator.cancel_scheduled_post(
-        db=call.db, user=call.user, scheduled_post_id=scheduled_post_id
+        db=call.db, user=call.user, scheduled_post_id=scheduled_post_id, now=call.now
     )
     return PostMessageToolResponse(
         message="The scheduled post is deleted.", post_url=post_url(post_id)
@@ -304,6 +305,20 @@ async def restore_version(call: ToolCall[User], post_id: str, version_number: in
     )
 
 
+async def get_usage(call: ToolCall[User]) -> UsageResponse:
+    """
+    What the user has left of their allowance this period. It counts generations: each post
+    started and each feedback uses one. It counts X posts, where each part of a thread is one,
+    and, of those, X posts with a link. Each count has its limit, how many are used and how many
+    are left; a null limit means no limit. `resets_at` is when the period ends: the next reset,
+    or the trial's end. `resets_on_day` is the day of the month a paid period resets on, null in
+    a trial. `way_out` is what the user can do at a limit before then. `top_ups` lists the user's
+    top-ups with something left and when each expires; they are spent only once the allowance is
+    used up. `allowance` is null where there are no allowances, or the user isn't subscribed.
+    """
+    return await mediator.get_usage(db=call.db, user=call.user, at=call.now)
+
+
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
     Where the user connects, reconnects or disconnects their X account: the Settings page of
@@ -331,5 +346,7 @@ TOOLS = [
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    # Open to Users who aren't Subscribed, as `GET /usage` is: they have no Allowance.
+    McpTool(get_usage, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
     McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
 ]

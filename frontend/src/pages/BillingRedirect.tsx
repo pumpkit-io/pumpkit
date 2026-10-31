@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { SettingsLocationState } from './Settings';
 
-type BillingRedirectStatus = 'success' | 'cancelled';
+type BillingRedirectStatus = NonNullable<SettingsLocationState['checkoutStatus']>;
 
 /** Stripe return URLs: hand the outcome to Settings via router state, then go there. */
 function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
@@ -19,7 +19,11 @@ function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background text-foreground">
       <div role="status" className="font-sans text-sm text-muted-foreground">
-        {status === 'success' ? 'Confirming your subscription…' : 'Returning to Settings…'}
+        {status === 'success'
+          ? 'Confirming your subscription…'
+          : status === 'top_up_bought'
+            ? 'Confirming your top-up…'
+            : 'Returning to Settings…'}
       </div>
     </div>
   );
@@ -27,6 +31,10 @@ function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
 
 export function BillingSuccessRedirect() {
   return <BillingRedirect status="success" />;
+}
+
+export function TopUpBoughtRedirect() {
+  return <BillingRedirect status="top_up_bought" />;
 }
 
 export function BillingCancelledRedirect() {

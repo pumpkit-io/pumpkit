@@ -68,6 +68,9 @@ by hand.
 - A post goes out once, so it has at most one scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.
+- Each post started and each feedback uses one generation of the user's allowance, \
+and each X post published uses one X post, each part of a thread counting as one. Write a new \
+version only when the user asks for one. `get_usage` says what is left and when it resets.
 - Connecting X and subscribing happen in the Pumpkit web app. The tools for them answer with \
 a link to open.
 - Before Post now, show the user the exact text of every part that will be published, in \

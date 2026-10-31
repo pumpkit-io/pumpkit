@@ -9,6 +9,9 @@ import { BRIEF_MAX_CHARS, FORMAT_POST, postService, type Format } from '@/servic
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Composer } from './Composer';
 import { LimitNotice } from '@/components/LimitNotice';
+import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
+import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
+import { useUsage } from '@/features/billing/useUsage';
 import { isRefusal, useWritingFailure } from './useWritingFailure';
 
 /**
@@ -18,7 +21,7 @@ import { isRefusal, useWritingFailure } from './useWritingFailure';
 function useStartPost() {
   const navigate = useNavigate();
   const [isWriting, setIsWriting] = useState(false);
-  const { error, notice, fail, clear } = useWritingFailure();
+  const { error, notice, allowanceUsedUp, fail, clear } = useWritingFailure();
   // A User who leaves New post while it writes is not pulled back: the Post is kept under Posts.
   const mounted = useRef(true);
   useEffect(() => {
@@ -47,14 +50,15 @@ function useStartPost() {
     [clear, fail, navigate],
   );
 
-  return { start, isWriting, error, notice, clear };
+  return { start, isWriting, error, notice, allowanceUsedUp, clear };
 }
 
 /** The line and the composer: a Brief and its Format, sent with the arrow or ⌘Enter. */
 export function PostWriter() {
   const { subscribed } = useSubscribed();
   const { authors } = useInspirationAuthorsContext();
-  const { start, isWriting, error, notice, clear } = useStartPost();
+  const { start, isWriting, error, notice, allowanceUsedUp, clear } = useStartPost();
+  const { usage } = useUsage();
   const [brief, setBrief] = useState('');
   const [format, setFormat] = useState<Format>(FORMAT_POST);
   const briefRef = useRef<HTMLTextAreaElement>(null);
@@ -114,6 +118,7 @@ export function PostWriter() {
         sendDisabled={subscribed !== true || authors === null}
         gate={gate}
       />
+      {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}
       {isWriting && (
         <p role="status" className="font-sans text-[13px] text-muted-foreground">
           Writing your post. This takes a minute or two.
@@ -121,6 +126,7 @@ export function PostWriter() {
       )}
       {error && <ErrorBanner message={error} onRetry={typed ? send : undefined} />}
       {notice && <LimitNotice message={notice} />}
+      {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
     </section>
   );
 }

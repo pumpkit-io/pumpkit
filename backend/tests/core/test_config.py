@@ -323,6 +323,13 @@ def test_an_unset_x_posts_cap_defaults_to_100(monkeypatch):
     assert s.X_POSTS_MONTHLY_CAP == 100
 
 
+def test_an_empty_link_posts_cap_means_no_cap_and_unset_defaults_to_10(monkeypatch):
+    monkeypatch.setenv("X_LINK_POSTS_MONTHLY_CAP", "")
+    assert Settings().X_LINK_POSTS_MONTHLY_CAP is None  # pyright: ignore[reportCallIssue]
+    monkeypatch.delenv("X_LINK_POSTS_MONTHLY_CAP")
+    assert Settings().X_LINK_POSTS_MONTHLY_CAP == 10  # pyright: ignore[reportCallIssue]
+
+
 def test_jev_is_off_without_a_typesafe_key_and_pins_its_model(instance_env):
     s = instance_env()
 

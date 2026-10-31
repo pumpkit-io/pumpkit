@@ -79,16 +79,23 @@ class Recovered:
     failed: list[ScheduledPost]
 
 
-async def recover_stuck(db: AsyncSession, *, now: datetime) -> Recovered:
+async def recover_stuck(
+    db: AsyncSession, *, publishing_since: datetime, user_ids: list[str], now: datetime
+) -> Recovered:
     """
-    Settle Scheduled posts a crashed publisher left in publishing. One with every Part live is
-    Published; any other is Failed, since X may have taken the Part in flight, and a Thread's
-    reason names its first Part not live.
+    Settle the Scheduled posts of `user_ids` a crashed publisher left in publishing since before
+    `publishing_since`. One with every Part live is Published; any other is Failed, since X may
+    have taken the Part in flight, and a Thread's reason names its first Part not live.
     """
-    publishing_since = now - STUCK_AFTER
-    published_ids = await service.publish_stuck(db, publishing_since=publishing_since, now=now)
+    published_ids = await service.publish_stuck(
+        db, publishing_since=publishing_since, user_ids=user_ids, now=now
+    )
     failed_ids = await service.fail_stuck(
-        db, publishing_since=publishing_since, reason=OUTCOME_UNKNOWN_REASON, now=now
+        db,
+        publishing_since=publishing_since,
+        user_ids=user_ids,
+        reason=OUTCOME_UNKNOWN_REASON,
+        now=now,
     )
     published = [await _reloaded(db, scheduled_post_id) for scheduled_post_id in published_ids]
     failed = [await _reloaded(db, scheduled_post_id) for scheduled_post_id in failed_ids]
