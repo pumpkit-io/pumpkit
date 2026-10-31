@@ -586,14 +586,8 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link(
     result = await mcp.call_tool(name, **arguments)
 
     assert error_text(result) == (
-        "This needs a subscription. Subscribe to continue. http://localhost:5173/billing"
+        "This needs a subscription. Subscribe to continue. http://localhost:5173/subscribe"
     )
-
-
-async def test_connect_x_works_for_a_user_whose_subscription_ended(subscription_ended, mcp):
-    result = await mcp.call_tool("connect_x")
-
-    assert result["structuredContent"]["url"] == SETTINGS_PAGE
 
 
 async def test_every_user_schedules_on_an_instance_that_sells_no_plans(

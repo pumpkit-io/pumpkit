@@ -17,6 +17,12 @@ export function errorRetryAt(e: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/** The `code` naming the backend's refusal, for refusals that share a status, else null. */
+export function errorCode(e: unknown): string | null {
+  const code = (e as { response?: { data?: { code?: unknown } } })?.response?.data?.code;
+  return typeof code === 'string' ? code : null;
+}
+
 /** The HTTP status of a failed request, or null when it never got a response. */
 export function errorStatus(e: unknown): number | null {
   const status = (e as { response?: { status?: unknown } })?.response?.status;
@@ -55,7 +61,7 @@ export function errorAllowanceUsedUp(e: unknown): AllowanceUsedUp | null {
 
 /** The provider's page to authenticate a payment on, when a request failed waiting for that. */
 export function errorPaymentAuthenticationUrl(e: unknown): string | null {
-  const data = (e as { response?: { data?: Record<string, unknown> } })?.response?.data;
-  if (data?.code !== 'PAYMENT_NEEDS_AUTHENTICATION' || typeof data.url !== 'string') return null;
-  return data.url;
+  if (errorCode(e) !== 'PAYMENT_NEEDS_AUTHENTICATION') return null;
+  const url = (e as { response?: { data?: { url?: unknown } } }).response?.data?.url;
+  return typeof url === 'string' ? url : null;
 }

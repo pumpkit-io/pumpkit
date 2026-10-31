@@ -1,10 +1,11 @@
-"""The billing MCP tool, which only links to the web app: subscribing needs a browser."""
+"""The billing MCP tool, which only links to the web app: managing a subscription needs a browser."""
 
 from sqlalchemy import delete
 
 from pumpkit.billing.models import Subscription
 
 BILLING_PAGE = "http://localhost:5173/billing"
+PAYWALL = "http://localhost:5173/subscribe"
 
 
 async def test_manage_subscription_links_to_settings_through_the_billing_route(subscribed, mcp):
@@ -13,7 +14,7 @@ async def test_manage_subscription_links_to_settings_through_the_billing_route(s
     assert result["isError"] is False, result
     assert result["structuredContent"]["url"] == BILLING_PAGE
     assert result["structuredContent"]["message"] == (
-        f"Subscribe or manage your subscription on the Settings page: {BILLING_PAGE}"
+        f"Manage your subscription on the Settings page: {BILLING_PAGE}"
     )
 
 
@@ -25,8 +26,8 @@ async def test_a_user_whose_subscription_ended_gets_the_link_to_subscribe_again(
 
     result = await mcp.call_tool("manage_subscription")
 
-    assert result["isError"] is False, result
-    assert result["structuredContent"]["url"] == BILLING_PAGE
+    assert result["isError"] is True, result
+    assert result["structuredContent"]["subscribe_url"] == PAYWALL
 
 
 async def test_an_instance_that_sells_no_plans_says_so_instead_of_linking(sells_no_plans, mcp):

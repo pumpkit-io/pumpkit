@@ -50,8 +50,7 @@ export function SubscriptionCard({
 }) {
   const { openPortal, error } = useOpenPortal();
 
-  // An `incomplete` Subscription is a checkout still open: the User may subscribe again.
-  const subscription = data && !data.me.maySubscribe ? data.me.subscription : null;
+  const subscription = data?.me.subscription ?? null;
   const plan = subscription ? data?.plans.find((p) => p.key === subscription.planKey) : undefined;
   const paymentFailed = subscription ? PAYMENT_FAILED_STATUSES.has(subscription.status) : false;
 
@@ -101,23 +100,7 @@ export function SubscriptionCard({
             </Button>
           </div>
         </div>
-      ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-0.5">
-            <p className="font-sans text-sm font-semibold text-foreground">No subscription</p>
-            <p className="font-sans text-sm text-muted-foreground">
-              Choose a plan above to start writing.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void openPortal()}
-            className="self-start font-sans text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:self-auto"
-          >
-            Past payments and invoices
-          </button>
-        </div>
-      )}
+      ) : null}
     </SettingsCard>
   );
 }

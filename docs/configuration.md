@@ -15,7 +15,7 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `JWT_SECRET_KEY` | Random string of at least 32 characters used to sign tokens (`openssl rand -hex 32`). |
 | `FERNET_ENCRYPTION_KEY` | 32 url-safe base64-encoded bytes that encrypt stored X tokens (`openssl rand -base64 32 \| tr '+/' '-_'`). Changing it makes the stored tokens unreadable. |
 | `LLM_API_KEY` | Key for the LLM endpoint, which writes every Post. The backend boots without it, but writing a Post then fails with a 503 naming the variable. |
-| `TWITTERAPI_IO_API_KEY` | Reads Inspiration authors' posts from twitterapi.io (ADR 0005), and the names of Communities Users paste. The backend boots without it, but adding an author then fails with a 503 naming the variable, and a pasted Community shows its ID instead of its name. |
+| `TWITTERAPI_IO_API_KEY` | Looks up X accounts and reads Inspiration authors' posts from twitterapi.io (ADR 0005), and the names of Communities Users paste. The backend boots without it, but adding an author then fails with a 503 naming the variable, and a pasted Community shows its ID instead of its name. |
 
 ## URLs derived from `PUBLIC_URL`
 
@@ -58,6 +58,20 @@ An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one 
 | `LLM_BASE_URL` | Any OpenAI-compatible chat completions endpoint, such as `https://api.openai.com/v1` or a local Ollama at `http://localhost:11434/v1`. Defaults to OpenRouter (`https://openrouter.ai/api/v1`). Prompt cache hints are sent only to OpenRouter. |
 | `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` | The model for each writing call: the sketch call, the humanizer call, and the revision call after Feedback. Each defaults to `openai/gpt-5.6-luna`, the OpenRouter model the prompts were tuned against; on another endpoint, set all three to models it serves. |
 
+### Author lookups
+
+Adding an Inspiration author whose handle isn't in the Author directory first looks its profile up on twitterapi.io (ADR 0019). An account found and public joins the directory for good; a missing, suspended or private one is remembered for every User. Picking from the directory and answering from a remembered miss never count towards a limit, and nor does refreshing an author's posts, which keeps its cooldown of a day per handle. Over a User's limit, adding answers 429 with the minutes until the oldest counted lookup leaves the hour or the day; over the Instance's cap, it answers that lookups are paused for today.
+
+| Variable | Meaning |
+| --- | --- |
+| `AUTHOR_LOOKUP_HOURLY_LIMIT`, `AUTHOR_LOOKUP_DAILY_LIMIT` | Lookups each User may run in any hour and in any 24 hours. Default to 10 and 30. |
+| `AUTHOR_LOOKUP_INSTANCE_DAILY_LIMIT` | Lookups the whole Instance may run in any 24 hours, a ceiling on twitterapi.io spend. Defaults to 500. |
+| `AUTHOR_MISS_DAYS` | Days a handle that isn't on X, or is suspended, answers "@handle isn't on X" without a lookup. Defaults to 7. |
+| `AUTHOR_PRIVATE_MISS_DAYS` | Days a private account answers that it's private without a lookup. Defaults to 1, so it can be added soon after it goes public. |
+| `AUTHOR_POSTS_REUSE_DAYS` | Adding an author reuses posts any User fetched within this many days instead of fetching them again, and a fetch that found no posts answers that the account has none for as long. Defaults to 7. |
+
+Each fetch of an author's posts updates its directory entry's photo, and its name too, except for a seeded account, which keeps the name it was seeded with.
+
 ### SMTP
 
 | Variable | Meaning |
@@ -91,7 +105,7 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 
 | Variable | Meaning |
 | --- | --- |
-| `X_CLIENT_ID` | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the X settings; connecting an X account then fails with a 503 naming them. Register `PUBLIC_URL/oauth/x/callback` as a callback URL on the X app. |
+| `X_CLIENT_ID` | OAuth 2.0 client id of the X developer app that publishes Scheduled posts (ADR 0006). The app boots without the X settings; Onboarding then skips its X step, the web app offers no way to connect X, and the API's authorization route answers a 503 naming them. Register `PUBLIC_URL/oauth/x/callback` as a callback URL on the X app. |
 | `X_CLIENT_SECRET` | That X app's client secret. Pumpkit calls X as a confidential client. |
 | `PUBLISHER_ENABLED` | `false` keeps the publisher process running without publishing anything, so Scheduled posts wait until it is `true` again. Defaults to `true`. `scripts/dev-stack` sets it to `false` for each development copy of the app, which may share an `.env` holding real X credentials. |
 | `PUBLISHER_POLL_INTERVAL_SECONDS` | How often the publisher process looks for due Scheduled posts. Defaults to 30, so a Scheduled post goes out within about 30 seconds of its time. |

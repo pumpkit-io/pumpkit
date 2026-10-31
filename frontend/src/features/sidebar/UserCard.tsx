@@ -15,18 +15,13 @@ function initials(name: string): string {
 export function UserCard() {
   const profile = useProfile();
   const { connection } = useXConnectionContext();
-  const { subscribed, planName } = useSubscribed();
+  const { planName } = useSubscribed();
   const { sells_plans } = useInstance();
   const display = profile
     ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email
     : 'Guest';
   const avatarUrl = profile?.avatarUrl ?? null;
-  const plan =
-    !sells_plans || subscribed === null
-      ? null
-      : subscribed
-        ? (planName ?? 'Subscribed')
-        : 'No subscription';
+  const plan = sells_plans ? (planName ?? 'Subscribed') : null;
   const details = [connection ? `@${connection.handle}` : null, plan].filter(
     (detail): detail is string => detail !== null,
   );

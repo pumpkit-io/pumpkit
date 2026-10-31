@@ -32,7 +32,8 @@ class InspirationAuthorToolResponse(BaseModel):
 
 
 class InspirationAuthorResponse(InspirationAuthorToolResponse):
-    # X's URL for the author's photo, None until a fetch finds one.
+    # The author's name and X's URL for their photo, from the Author directory.
+    name: Optional[str]
     photo_url: Optional[str]
 
 
@@ -46,3 +47,17 @@ class InspirationAuthorsListResponse(BaseModel):
     """The User's Inspiration authors in the order they were added."""
 
     data: list[InspirationAuthorResponse]
+
+
+class AuthorDirectoryEntryResponse(BaseModel):
+    handle: str
+    name: Optional[str]
+    photo_url: Optional[str]
+    # How many Users of the Instance have it in their Persona, never which ones.
+    persona_count: int
+
+
+class AuthorDirectoryResponse(BaseModel):
+    """Every account in the Author directory, by handle."""
+
+    data: list[AuthorDirectoryEntryResponse]

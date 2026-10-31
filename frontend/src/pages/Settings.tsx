@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileCard } from '@/features/account/ProfileCard';
 import { ApiKeysSection } from '@/features/apiKeys/ApiKeysSection';
-import { ChoosePlanCard } from '@/features/billing/ChoosePlanCard';
-import { CHOOSE_PLAN_ID } from '@/features/billing/choosePlan';
 import { generationsAndXPosts } from '@/features/billing/counts';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
 import { UsageCard } from '@/features/billing/UsageCard';
@@ -19,15 +17,13 @@ import { XAccountCard } from '@/features/xConnection/XAccountCard';
 import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
 import { track } from '@/lib/analytics';
 import type { TopUpOffer } from '@/services/billingService';
-import { fireSuccessConfetti } from '@/lib/confetti';
 
-/** What the X callback and the Stripe return routes leave in the location state for Settings. */
+/** What the X callback and the Top-up return route leave in the location state for Settings. */
 export interface SettingsLocationState {
   xConnectionNotice?: string;
-  checkoutStatus?: 'success' | 'cancelled' | 'top_up_bought';
+  /** Set by the Top-up return route. */
+  checkoutStatus?: 'top_up_bought';
 }
-
-const CHECKOUT_CANCELLED = 'Checkout was cancelled. You have not been charged.';
 
 const LEGAL_LINK_CLASS =
   'rounded-sm underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -50,27 +46,20 @@ function useArrivalState(): SettingsLocationState {
   return arrival.state;
 }
 
-/** Loads billing on every visit, since Stripe changes it outside the app, and greets a checkout. */
-function useBillingOnArrival(checkoutStatus: SettingsLocationState['checkoutStatus']) {
+/** Loads billing on every visit, since Stripe changes it outside the app, and greets a Top-up. */
+function useBillingOnArrival(topUpBought: boolean) {
   const { sells_plans } = useInstance();
   const { load } = useBilling();
-  // StrictMode runs effects twice in development, and a checkout is greeted once.
+  // StrictMode runs effects twice in development, and a Top-up is greeted once.
   const greeted = useRef(false);
 
   useEffect(() => {
     if (!sells_plans) return;
     void load();
-    if (greeted.current) return;
+    if (!topUpBought || greeted.current) return;
     greeted.current = true;
-    if (checkoutStatus === 'success') {
-      track('billing_checkout_succeeded');
-      fireSuccessConfetti(null);
-    } else if (checkoutStatus === 'cancelled') {
-      track('billing_checkout_cancelled');
-    } else if (checkoutStatus === 'top_up_bought') {
-      track('top_up_bought');
-    }
-  }, [sells_plans, load, checkoutStatus]);
+    track('top_up_bought');
+  }, [sells_plans, load, topUpBought]);
 }
 
 /** Back from buying a Top-up, says what it added once billing has loaded the pack, once. */
@@ -84,29 +73,16 @@ function useTopUpAddedToast(topUpBought: boolean, offer: TopUpOffer | null | und
   }, [topUpBought, offer]);
 }
 
-/** Scrolls to Choose a Plan once it is on screen, for the prompts that link to it. */
-function useScrollToChoosePlan(shown: boolean) {
-  const { hash } = useLocation();
-  useEffect(() => {
-    if (shown && hash === `#${CHOOSE_PLAN_ID}`) {
-      document.getElementById(CHOOSE_PLAN_ID)?.scrollIntoView?.({ block: 'start' });
-    }
-  }, [shown, hash]);
-}
-
 /** Rendered inside AppLayout: the User's account as one column of cards. */
 export function Settings() {
   const { logout } = useAuth();
-  const { sells_plans } = useInstance();
+  const { sells_plans, x_connection } = useInstance();
   const billing = useBilling();
   const arrival = useArrivalState();
-  useBillingOnArrival(arrival.checkoutStatus);
-
   const data = billing.data;
   const topUpBought = arrival.checkoutStatus === 'top_up_bought';
+  useBillingOnArrival(topUpBought);
   useTopUpAddedToast(topUpBought, data?.topUp);
-  const choosesPlan = sells_plans && data !== null && data.me.maySubscribe;
-  useScrollToChoosePlan(choosesPlan);
 
   return (
     <>
@@ -128,17 +104,13 @@ export function Settings() {
       />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-8 sm:px-6">
-          {choosesPlan && (
-            <ChoosePlanCard
-              // A new Terms version must be accepted afresh.
-              key={data.termsVersion}
-              data={data}
-              notice={arrival.checkoutStatus === 'cancelled' ? CHECKOUT_CANCELLED : null}
-            />
-          )}
           <ProfileCard />
-          <XAccountCard notice={arrival.xConnectionNotice ?? null} />
-          <XPhotoOfferDialog />
+          {x_connection && (
+            <>
+              <XAccountCard notice={arrival.xConnectionNotice ?? null} />
+              <XPhotoOfferDialog />
+            </>
+          )}
           {sells_plans && (
             <SubscriptionCard
               data={data}

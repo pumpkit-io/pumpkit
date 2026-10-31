@@ -15,6 +15,7 @@ SmtpSecurity = Literal["starttls", "tls", "none"]
 _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "none": 25}
 
 BILLING_PAGE = "/billing"
+PAYWALL_PAGE = "/subscribe"
 
 
 class ProviderGroup(StrEnum):
@@ -114,6 +115,15 @@ class Settings(BaseSettings):
 
     # Optional: when unset, pumpkit.authors.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None
+    # Lookups on X of handles not in the Author directory, per User and per Instance (ADR 0019).
+    AUTHOR_LOOKUP_HOURLY_LIMIT: int = Field(default=10, ge=0)
+    AUTHOR_LOOKUP_DAILY_LIMIT: int = Field(default=30, ge=0)
+    AUTHOR_LOOKUP_INSTANCE_DAILY_LIMIT: int = Field(default=500, ge=0)
+    # How long a lookup that found nothing answers for every User without asking X again.
+    AUTHOR_MISS_DAYS: int = Field(default=7, ge=0)
+    AUTHOR_PRIVATE_MISS_DAYS: int = Field(default=1, ge=0)
+    # Adding an author reuses posts any User fetched this recently instead of fetching them again.
+    AUTHOR_POSTS_REUSE_DAYS: int = Field(default=7, ge=0)
 
     # Optional: when unset, pumpkit.core.classifier raises ClassifierNotConfiguredError on use.
     TYPESAFE_API_KEY: Optional[str] = None
@@ -207,6 +217,10 @@ class Settings(BaseSettings):
     def is_operator_configured(self) -> bool:
         return self._is_configured(ProviderGroup.OPERATOR_DETAILS)
 
+    def is_x_configured(self) -> bool:
+        """Whether Users can connect X accounts, which publishing on X needs (ADR 0006)."""
+        return bool(self.X_CLIENT_ID and self.X_CLIENT_SECRET)
+
     def has_support_email(self) -> bool:
         return bool(self.SUPPORT_EMAIL)
 
@@ -244,8 +258,12 @@ class Settings(BaseSettings):
         return f"{self.frontend_url()}/billing/cancelled"
 
     def billing_page_url(self) -> str:
-        """The web app page where a User subscribes or manages their Subscription."""
+        """The web app page where a Subscribed User manages their Subscription."""
         return f"{self.frontend_url()}{BILLING_PAGE}"
+
+    def paywall_url(self) -> str:
+        """The web app page where a User who isn't Subscribed subscribes (ADR 0018)."""
+        return f"{self.frontend_url()}{PAYWALL_PAGE}"
 
     def stripe_billing_portal_return_url(self) -> str:
         return self.billing_page_url()

@@ -133,13 +133,6 @@ async def test_an_empty_cap_is_no_limit(client, subscribed, fixed_clock, caps, m
     assert allowance["generations"] == {"limit": None, "used": 0, "left": None}
 
 
-async def test_a_user_who_isn_t_subscribed_has_no_allowance(client, fixed_clock):
-    response = await client.get(USAGE)
-
-    assert response.status_code == 200
-    assert response.json() == {"allowance": None}
-
-
 async def test_get_usage_answers_as_the_usage_route_does(
     client, db, user, subscribed, fixed_clock, caps, mcp
 ):

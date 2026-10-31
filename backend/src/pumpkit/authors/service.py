@@ -3,9 +3,19 @@ from datetime import datetime
 from typing import Optional, Sequence
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.authors.models import AuthorFetch, AuthorPost, InspirationAuthor
+from pumpkit.authors.models import (
+    SOURCE_LOOKUP,
+    SOURCE_SEED,
+    AuthorDirectoryEntry,
+    AuthorFetch,
+    AuthorHandleMiss,
+    AuthorLookup,
+    AuthorPost,
+    InspirationAuthor,
+)
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.time import as_utc
 
@@ -15,7 +25,16 @@ class AuthorSummary:
     handle: str
     last_fetched_at: Optional[datetime]
     post_count: int
+    name: Optional[str]
     photo_url: Optional[str]
+
+
+@dataclass(frozen=True)
+class DirectoryEntrySummary:
+    handle: str
+    name: Optional[str]
+    photo_url: Optional[str]
+    persona_count: int
 
 
 async def list_authors(db: AsyncSession, *, user_id: str) -> list[AuthorSummary]:
@@ -30,10 +49,12 @@ async def list_authors(db: AsyncSession, *, user_id: str) -> list[AuthorSummary]
             InspirationAuthor.handle,
             AuthorFetch.last_fetched_at,
             func.coalesce(post_counts.c.post_count, 0),
-            AuthorFetch.photo_url,
+            AuthorDirectoryEntry.name,
+            AuthorDirectoryEntry.photo_url,
         )
         .outerjoin(AuthorFetch, AuthorFetch.handle == InspirationAuthor.handle)
         .outerjoin(post_counts, post_counts.c.handle == InspirationAuthor.handle)
+        .outerjoin(AuthorDirectoryEntry, AuthorDirectoryEntry.handle == InspirationAuthor.handle)
         .where(InspirationAuthor.user_id == user_id)
         .order_by(InspirationAuthor.position)
     )
@@ -42,9 +63,35 @@ async def list_authors(db: AsyncSession, *, user_id: str) -> list[AuthorSummary]
             handle=handle,
             last_fetched_at=None if last_fetched_at is None else as_utc(last_fetched_at),
             post_count=post_count,
+            name=name,
             photo_url=photo_url,
         )
-        for handle, last_fetched_at, post_count, photo_url in result.all()
+        for handle, last_fetched_at, post_count, name, photo_url in result.all()
+    ]
+
+
+async def list_directory(db: AsyncSession) -> list[DirectoryEntrySummary]:
+    """Every Author directory entry by handle, with how many Users have it in their Persona."""
+    persona_counts = (
+        select(InspirationAuthor.handle, func.count().label("persona_count"))
+        .group_by(InspirationAuthor.handle)
+        .subquery()
+    )
+    result = await db.execute(
+        select(
+            AuthorDirectoryEntry.handle,
+            AuthorDirectoryEntry.name,
+            AuthorDirectoryEntry.photo_url,
+            func.coalesce(persona_counts.c.persona_count, 0),
+        )
+        .outerjoin(persona_counts, persona_counts.c.handle == AuthorDirectoryEntry.handle)
+        .order_by(AuthorDirectoryEntry.handle)
+    )
+    return [
+        DirectoryEntrySummary(
+            handle=handle, name=name, photo_url=photo_url, persona_count=persona_count
+        )
+        for handle, name, photo_url, persona_count in result.all()
     ]
 
 
@@ -98,8 +145,8 @@ async def store_new_posts(
     """
     Store the posts not already stored, under `handle`; return how many were new. Flushes.
 
-    Select-then-insert rather than ON CONFLICT so it runs on SQLite too, which leaves two
-    concurrent fetches of one handle able to collide on the primary key.
+    The select keeps the common path to one insert. Its savepoint catches a concurrent fetch of
+    the same handle storing some of the posts in between, and then each post is inserted alone.
     """
     unique = {post.post_id: post for post in posts}
     if not unique:
@@ -108,18 +155,28 @@ async def store_new_posts(
         (await db.execute(select(AuthorPost.id).where(AuthorPost.id.in_(unique)))).scalars()
     )
     new = [post for post_id, post in unique.items() if post_id not in existing]
-    db.add_all(
-        AuthorPost(
-            id=post.post_id,
-            handle=handle,
-            text=post.text,
-            posted_at=post.posted_at,
-            fetched_at=now,
-        )
-        for post in new
+    try:
+        async with db.begin_nested():
+            db.add_all(_author_post(post, handle=handle, now=now) for post in new)
+        return len(new)
+    except IntegrityError:
+        pass
+    stored = 0
+    for post in new:
+        try:
+            async with db.begin_nested():
+                db.add(_author_post(post, handle=handle, now=now))
+            stored += 1
+        except IntegrityError:
+            # A concurrent fetch of the same handle stored this post first.
+            pass
+    return stored
+
+
+def _author_post(post: FetchedPost, *, handle: str, now: datetime) -> AuthorPost:
+    return AuthorPost(
+        id=post.post_id, handle=handle, text=post.text, posted_at=post.posted_at, fetched_at=now
     )
-    await db.flush()
-    return len(new)
 
 
 async def count_posts(db: AsyncSession, *, handle: str) -> int:
@@ -136,36 +193,123 @@ async def last_fetched_at(db: AsyncSession, *, handle: str) -> Optional[datetime
 
 
 async def record_fetch(
-    db: AsyncSession, *, handle: str, now: datetime, photo_url: Optional[str]
+    db: AsyncSession,
+    *,
+    handle: str,
+    now: datetime,
+    name: Optional[str],
+    photo_url: Optional[str],
 ) -> None:
     """
-    Set when `handle` was last fetched, and its photo when the fetch found one: a fetch
-    without one keeps the stored photo. Flushes.
+    Set when `handle` was last fetched, and its directory entry's name and photo from what the
+    fetch found, adding the entry if it has none. What the fetch didn't find stays, and so does
+    a seeded entry's name, which was curated. Flushes.
     """
     fetch = await db.get(AuthorFetch, handle)
     if fetch is None:
-        db.add(AuthorFetch(handle=handle, last_fetched_at=now, photo_url=photo_url))
-    else:
+        try:
+            async with db.begin_nested():
+                db.add(AuthorFetch(handle=handle, last_fetched_at=now))
+        except IntegrityError:
+            # A concurrent fetch of the same handle recorded itself first; this one replaces it.
+            fetch = await db.get(AuthorFetch, handle)
+            assert fetch is not None
+    if fetch is not None:
         fetch.last_fetched_at = now
-        if photo_url is not None:
-            fetch.photo_url = photo_url
+    if not await in_directory(db, handle=handle):
+        await add_directory_entry(db, handle=handle, name=None, photo_url=None, now=now)
+    entry = await db.get(AuthorDirectoryEntry, handle)
+    assert entry is not None
+    if name is not None and entry.source != SOURCE_SEED:
+        entry.name = name
+    if photo_url is not None:
+        entry.photo_url = photo_url
     await db.flush()
 
 
-async def listed_handles_without_photo(db: AsyncSession) -> list[str]:
-    """Each handle on some User's list whose fetch stored no photo, alphabetically."""
-    result = await db.execute(
-        select(InspirationAuthor.handle)
-        .join(AuthorFetch, AuthorFetch.handle == InspirationAuthor.handle)
-        .where(AuthorFetch.photo_url.is_(None))
-        .distinct()
-        .order_by(InspirationAuthor.handle)
+async def in_directory(db: AsyncSession, *, handle: str) -> bool:
+    return await db.get(AuthorDirectoryEntry, handle) is not None
+
+
+async def add_directory_entry(
+    db: AsyncSession,
+    *,
+    handle: str,
+    name: Optional[str],
+    photo_url: Optional[str],
+    now: datetime,
+) -> None:
+    """Add `handle` to the Author directory as found by a lookup on X. Flushes."""
+    try:
+        async with db.begin_nested():
+            db.add(
+                AuthorDirectoryEntry(
+                    handle=handle,
+                    name=name,
+                    photo_url=photo_url,
+                    added_at=now,
+                    source=SOURCE_LOOKUP,
+                )
+            )
+    except IntegrityError:
+        # A concurrent lookup of the same handle added it first.
+        pass
+
+
+async def remembered_miss(db: AsyncSession, *, handle: str, now: datetime) -> Optional[str]:
+    """Why a lookup of `handle` found it unusable, while that is still remembered."""
+    miss = await db.get(AuthorHandleMiss, handle)
+    if miss is None or now >= as_utc(miss.remembered_until):
+        return None
+    return miss.reason
+
+
+async def remember_miss(
+    db: AsyncSession, *, handle: str, reason: str, remembered_until: datetime
+) -> None:
+    """Remember why `handle` is unusable until `remembered_until`, replacing an older miss. Flushes."""
+    miss = await db.get(AuthorHandleMiss, handle)
+    if miss is None:
+        try:
+            async with db.begin_nested():
+                db.add(
+                    AuthorHandleMiss(
+                        handle=handle, reason=reason, remembered_until=remembered_until
+                    )
+                )
+            return
+        except IntegrityError:
+            # A concurrent lookup remembered a miss first; this one replaces it.
+            miss = await db.get(AuthorHandleMiss, handle)
+            assert miss is not None
+    miss.reason = reason
+    miss.remembered_until = remembered_until
+    await db.flush()
+
+
+async def log_lookup(
+    db: AsyncSession, *, user_id: str, handle: str, now: datetime, result: str
+) -> None:
+    """Record one profile lookup on twitterapi.io. Flushes."""
+    db.add(AuthorLookup(user_id=user_id, handle=handle, looked_up_at=now, result=result))
+    await db.flush()
+
+
+@dataclass(frozen=True)
+class LookupCount:
+    count: int
+    # When the oldest counted lookup was made; None when none was.
+    oldest: Optional[datetime]
+
+
+async def count_lookups(
+    db: AsyncSession, *, since: datetime, user_id: Optional[str] = None
+) -> LookupCount:
+    """The lookups made after `since`, by one User or, without `user_id`, by the whole Instance."""
+    query = select(func.count(), func.min(AuthorLookup.looked_up_at)).where(
+        AuthorLookup.looked_up_at > since
     )
-    return list(result.scalars())
-
-
-async def store_photo(db: AsyncSession, *, handle: str, photo_url: str) -> None:
-    """Set the fetched `handle`'s photo, leaving when it was last fetched alone. Flushes."""
-    fetch = await db.get_one(AuthorFetch, handle)
-    fetch.photo_url = photo_url
-    await db.flush()
+    if user_id is not None:
+        query = query.where(AuthorLookup.user_id == user_id)
+    count, oldest = (await db.execute(query)).one()
+    return LookupCount(count=count, oldest=None if oldest is None else as_utc(oldest))

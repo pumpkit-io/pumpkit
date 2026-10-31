@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
 from pumpkit.authors import mediator
 from pumpkit.authors.schemas import (
     WRITE_RATE,
+    AuthorDirectoryResponse,
     InspirationAuthorAddRequest,
     InspirationAuthorResponse,
     InspirationAuthorsListResponse,
@@ -20,12 +20,24 @@ router = APIRouter(tags=["inspiration-authors"])
 
 
 @router.get(
+    "/author-directory",
+    response_model=AuthorDirectoryResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def list_author_directory(
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> AuthorDirectoryResponse:
+    return await mediator.list_directory(db=db)
+
+
+@router.get(
     "/inspiration-authors",
     response_model=InspirationAuthorsListResponse,
     status_code=status.HTTP_200_OK,
 )
 async def list_inspiration_authors(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> InspirationAuthorsListResponse:
     return await mediator.list_authors(db=db, user=current_user)

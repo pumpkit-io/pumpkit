@@ -1,5 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AppLayout } from './pages/AppLayout';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { XConnectionCallback } from './pages/XConnectionCallback';
 import { Login } from './pages/Login';
 import { Landing } from './pages/Landing';
@@ -14,6 +13,8 @@ import {
 import { AuthProvider, BYPASS_AUTH, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { signedInRoutes } from './pages/signedInRoutes';
+import { SignedInHome } from './pages/SignedInHome';
+import { OnboardingProvider } from './features/onboarding/OnboardingProvider';
 import { ThemeProvider } from './features/theme/ThemeProvider';
 import { ConsentBanner } from './features/analyticsConsent/ConsentBanner';
 import { useInstance } from './features/instance/useInstance';
@@ -38,7 +39,7 @@ function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading) return <FullPageLoading />;
   if (BYPASS_AUTH) return <Landing />;
-  return isAuthenticated ? <Navigate to="/new" replace /> : <Landing />;
+  return isAuthenticated ? <SignedInHome /> : <Landing />;
 }
 
 function AppRoutes() {
@@ -52,7 +53,7 @@ function AppRoutes() {
       <Route
         element={
           <ProtectedRoute>
-            <AppLayout />
+            <Outlet />
           </ProtectedRoute>
         }
       >
@@ -113,12 +114,14 @@ function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <Router>
-          <PostHogPageviewTracker />
-          <RobotsMetaController indexablePaths={INDEXABLE_PATHS} />
-          <AppRoutes />
-          <ConsentBanner />
-        </Router>
+        <OnboardingProvider>
+          <Router>
+            <PostHogPageviewTracker />
+            <RobotsMetaController indexablePaths={INDEXABLE_PATHS} />
+            <AppRoutes />
+            <ConsentBanner />
+          </Router>
+        </OnboardingProvider>
       </ThemeProvider>
     </AuthProvider>
   );

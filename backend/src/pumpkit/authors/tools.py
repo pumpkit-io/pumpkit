@@ -43,8 +43,9 @@ async def add_inspiration_author(
     call: ToolCall[User], handle: str
 ) -> InspirationAuthorToolResponse:
     """
-    Add an X account as an inspiration author, by its handle with or without the @. Pumpkit
-    reads its recent original posts at once. A user has up to three inspiration authors.
+    Add an X account as an inspiration author, by its handle with or without the @. An account
+    Pumpkit doesn't know yet is looked up on X first, and those lookups are limited per user.
+    Pumpkit reads its recent original posts at once. A user has up to three inspiration authors.
     """
     add_request = InspirationAuthorAddRequest(handle=handle)
     reader = await call.provide(get_x_reader)

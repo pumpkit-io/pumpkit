@@ -222,9 +222,12 @@ async def test_a_user_who_isnt_subscribed_spends_no_top_up(
     await db.commit()
 
     response = await _start_post(client, fake_llm)
+    subscribed.status = "active"
+    db.add(subscribed)
+    await db.commit()
 
     assert response.status_code == 403
-    assert (await client.get(USAGE)).json() == {"allowance": None}
+    assert (await _generations_left(client))[1] == [2]
 
 
 async def test_a_refunded_top_up_keeps_the_versions_it_paid_for_off_the_allowance(

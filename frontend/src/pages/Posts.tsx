@@ -8,6 +8,7 @@ import { TAB_ORDER_LINE } from '@/features/posts/postStatus';
 import { usePostsTab } from '@/features/posts/list/usePostsTab';
 import { useRecentDrafts } from '@/features/posts/list/useRecentDrafts';
 import { usePostCounts } from '@/features/posts/usePostCounts';
+import { useInstance } from '@/features/instance/useInstance';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
@@ -18,6 +19,10 @@ const LINK = 'font-medium text-foreground underline underline-offset-2';
 /** Which X account and clock the times on the page belong to. */
 function PostingAs() {
   const { connection } = useXConnectionContext();
+  const { x_connection } = useInstance();
+  if (!connection && !x_connection) {
+    return <p className="min-w-0 truncate font-sans text-xs text-muted-foreground">{TIME_ZONE}</p>;
+  }
   return (
     <p className="min-w-0 truncate font-sans text-xs text-muted-foreground">
       {connection ? (

@@ -27,6 +27,7 @@ class InstanceResponse(BaseModel):
     operator: Optional[OperatorDetails]
     support_email: Optional[str]
     analytics: Optional[AnalyticsSettings]
+    x_connection: bool
 
 
 class HealthResponse(BaseModel):

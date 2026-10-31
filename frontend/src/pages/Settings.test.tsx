@@ -1,5 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -53,10 +52,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
   track: vi.fn(),
 }));
 
-import { AuthProvider } from '@/contexts/AuthContext';
-import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
-import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import type { Instance } from '@/lib/instance';
@@ -66,9 +62,6 @@ import { billingService, type BillingMe, type PlanCatalog } from '@/services/bil
 import { usageService } from '@/services/usageService';
 import { userService, type UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
-import { AppLayout } from './AppLayout';
-import { BillingSuccessRedirect } from './BillingRedirect';
-import { signedInRoutes } from './signedInRoutes';
 import {
   NOT_SUBSCRIBED,
   SUBSCRIBED,
@@ -128,8 +121,6 @@ const CATALOG: PlanCatalog = {
 
 const TOP_UP = { amount: 1000, currency: 'eur', generations: 250, xPosts: 50, linkXPosts: 5 };
 
-const WITH_TRIAL: BillingMe = { ...NOT_SUBSCRIBED, trialDays: 7 };
-
 function holding(
   status: NonNullable<BillingMe['subscription']>['status'],
   subscribed: boolean,
@@ -147,12 +138,6 @@ function holding(
     trialDays: null,
   };
 }
-
-const ACCEPTANCE_BOXES = [
-  /I accept the Terms/,
-  /I ask for the service to start immediately/,
-  /I specifically approve these clauses/,
-];
 
 const NO_PLANS: Instance = { ...SELLS_PLANS, sells_plans: false };
 
@@ -217,22 +202,6 @@ describe('Settings', () => {
       'Appearance',
     ]);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
-  });
-
-  it('puts Choose a plan first for a User who is not Subscribed', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-    renderSettings();
-
-    await card('Choose a plan');
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Choose a plan',
-      'Profile',
-      'X account',
-      'Plan',
-      'API keys',
-      'Appearance',
-    ]);
-    expect((await card('Plan')).getByText('No subscription')).toBeInTheDocument();
   });
 
   describe('Profile', () => {
@@ -510,16 +479,6 @@ describe('Settings', () => {
       expect(redirectTo).not.toHaveBeenCalled();
     });
 
-    it('lets a User who is not Subscribed still see and disconnect their X connection', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      renderSettings();
-
-      const x = await card('X account');
-      expect(await x.findByText('@ada')).toBeInTheDocument();
-      expect(x.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
-    });
-
     it("shows the X account's photo beside its handle", async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({
         ...CONNECTED,
@@ -564,19 +523,6 @@ describe('Settings', () => {
         /couldn't load your x connection/i,
       );
     });
-
-    it('sends a User who is not Subscribed to Choose a plan instead of connecting', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      renderSettings();
-
-      const x = await card('X account');
-      expect(await x.findByText('Connecting X needs a subscription.')).toBeInTheDocument();
-      expect(x.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
-      expect(x.getByRole('link', { name: 'Subscribe' })).toHaveAttribute(
-        'href',
-        '/settings#choose-a-plan',
-      );
-    });
   });
 
   describe('Plan', () => {
@@ -598,7 +544,6 @@ describe('Settings', () => {
         await waitFor(() =>
           expect(redirectTo).toHaveBeenCalledWith('https://portal.stripe.test/x'),
         );
-        expect(screen.queryByRole('region', { name: 'Choose a plan' })).not.toBeInTheDocument();
       },
     );
 
@@ -1076,216 +1021,8 @@ describe('Settings', () => {
     });
   });
 
-  describe('Choose a plan', () => {
-    beforeEach(() => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(WITH_TRIAL);
-    });
-
-    it('offers each Plan with its price and the free trial', async () => {
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      expect(await choose.findByText('Pro')).toBeInTheDocument();
-      expect(choose.getByText('Pro yearly')).toBeInTheDocument();
-      expect(choose.getByText(/€9\.00 \/ month/)).toBeInTheDocument();
-      expect(
-        choose.getByText('7-day free trial: 125 generations and 25 X posts, up to 2 with a link.'),
-      ).toBeInTheDocument();
-    });
-
-    it("lists what the Plan allows, with the Instance's caps", async () => {
-      renderSettings();
-
-      const offer = within(
-        await (await card('Choose a plan')).findByRole('list', { name: 'Included' }),
-      );
-      expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-        '500 post generations a month.',
-        'Publish 100 X posts a month, up to 10 of them with a link.',
-        'Write in the voice of your favorite X creators.',
-        '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
-      ]);
-    });
-
-    it.each([
-      ['About generations', 'Every prompt to generate or refine a post counts as one generation.'],
-      [
-        'About X posts',
-        'Scheduled posts and posts you post now both count. For threads, each post in the thread counts.',
-      ],
-    ])('explains what counts behind %s', async (button, text) => {
-      renderSettings();
-      const choose = await card('Choose a plan');
-
-      fireEvent.click(await choose.findByRole('button', { name: button }));
-
-      expect(await screen.findByRole('dialog', { name: button })).toHaveTextContent(text);
-    });
-
-    it('drops the line of a cap the Instance leaves empty', async () => {
-      vi.mocked(billingService.fetchPlans).mockResolvedValue({
-        ...CATALOG,
-        allowance: { generations: null, xPosts: 100, linkXPosts: null },
-        trial: { days: 7, generations: null, xPosts: 25, linkXPosts: null },
-      });
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      const offer = within(await choose.findByRole('list', { name: 'Included' }));
-      expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-        'Publish 100 X posts a month.',
-        'Write in the voice of your favorite X creators.',
-        '7-day free trial: 25 X posts.',
-      ]);
-      expect(choose.queryByRole('button', { name: 'About generations' })).not.toBeInTheDocument();
-    });
-
-    it('offers the Plans to a User whose Subscription is still incomplete', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
-        ...holding('incomplete', false),
-        maySubscribe: true,
-      });
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      expect(await choose.findByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
-      expect(
-        (await card('Plan')).queryByRole('button', { name: /manage/i }),
-      ).not.toBeInTheDocument();
-    });
-
-    it('keeps "Start free trial" disabled until the three boxes are ticked, then starts checkout', async () => {
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      const start = await choose.findByRole('button', { name: 'Start free trial of Pro yearly' });
-      for (const box of ACCEPTANCE_BOXES) {
-        expect(start).toBeDisabled();
-        fireEvent.click(choose.getByRole('checkbox', { name: box }));
-      }
-      fireEvent.click(start);
-
-      await waitFor(() =>
-        expect(redirectTo).toHaveBeenCalledWith('https://checkout.stripe.test/s'),
-      );
-      expect(billingService.startSubscriptionCheckout).toHaveBeenCalledWith(
-        'pumpkit_pro_yearly',
-        '2026-10-11',
-        { acceptedTerms: true, requestedImmediateStart: true, approvedSpecificClauses: true },
-      );
-      expect(track).toHaveBeenCalledWith('billing_subscription_checkout_started', {
-        plan_key: 'pumpkit_pro_yearly',
-      });
-    });
-
-    it('links each acceptance box to what it refers to in the Terms', async () => {
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      await choose.findByRole('button', { name: 'Start free trial of Pro' });
-      const href = (name: RegExp) => choose.getByRole('link', { name }).getAttribute('href');
-      expect(href(/^Terms$/)).toBe('/terms');
-      expect(href(/^Privacy Policy$/)).toBe('/privacy');
-      expect(href(/withdrawal/i)).toBe('/terms#withdrawal');
-      expect(href(/14\. No refunds/)).toBe('/terms#refunds');
-      expect(href(/21\. Competent court/)).toBe('/terms#courts');
-    });
-
-    it('says Subscribe for a User who gets no Trial', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      expect(await choose.findByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
-      expect(choose.queryByText(/free trial/)).not.toBeInTheDocument();
-      expect(choose.getByText('500 post generations a month.')).toBeInTheDocument();
-    });
-
-    it('starts checkout with only the Plan key where the Instance has no Terms', async () => {
-      vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, termsVersion: null });
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      const start = await choose.findByRole('button', { name: 'Start free trial of Pro' });
-      expect(choose.queryByRole('checkbox')).not.toBeInTheDocument();
-      fireEvent.click(start);
-
-      await waitFor(() =>
-        expect(billingService.startSubscriptionCheckout).toHaveBeenCalledWith(
-          'pumpkit_pro_monthly',
-          null,
-          expect.anything(),
-        ),
-      );
-    });
-
-    it('asks the User to review the Terms when checkout says they have changed', async () => {
-      const changed =
-        'The Terms have changed. Please review the current Terms and accept them again.';
-      vi.mocked(billingService.startSubscriptionCheckout).mockRejectedValue(apiError(409, changed));
-      renderSettings();
-
-      const choose = await card('Choose a plan');
-      const start = await choose.findByRole('button', { name: 'Start free trial of Pro' });
-      for (const box of ACCEPTANCE_BOXES)
-        fireEvent.click(choose.getByRole('checkbox', { name: box }));
-      fireEvent.click(start);
-
-      expect(await choose.findByRole('alert')).toHaveTextContent(changed);
-      expect(redirectTo).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Return from checkout', () => {
-    it('plays the celebration and shows the new Subscription', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('trialing', true));
-      renderSettings({ state: { checkoutStatus: 'success' } });
-
-      expect(await (await card('Plan')).findByText('Trial')).toBeInTheDocument();
-      expect(fireSuccessConfetti).toHaveBeenCalledTimes(1);
-      expect(track).toHaveBeenCalledWith('billing_checkout_succeeded');
-    });
-
-    it('says a cancelled checkout charged nothing, beside the Plans', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      renderSettings({ state: { checkoutStatus: 'cancelled' } });
-
-      const choose = await card('Choose a plan');
-      expect(
-        await choose.findByText('Checkout was cancelled. You have not been charged.'),
-      ).toBeInTheDocument();
-      expect(fireSuccessConfetti).not.toHaveBeenCalled();
-      expect(track).toHaveBeenCalledWith('billing_checkout_cancelled');
-    });
-
-    it('lands on Settings from the success URL', async () => {
-      render(
-        <InstanceProvider instance={SELLS_PLANS}>
-          <AuthProvider>
-            <ThemeProvider>
-              <MemoryRouter
-                initialEntries={['/billing/success']}
-                future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-              >
-                <Routes>
-                  <Route path="/billing/success" element={<BillingSuccessRedirect />} />
-                  <Route element={<AppLayout />}>{signedInRoutes()}</Route>
-                </Routes>
-              </MemoryRouter>
-            </ThemeProvider>
-          </AuthProvider>
-        </InstanceProvider>,
-      );
-
-      expect(
-        await screen.findByRole('heading', { level: 1, name: 'Settings' }),
-      ).toBeInTheDocument();
-      await waitFor(() => expect(fireSuccessConfetti).toHaveBeenCalledTimes(1));
-    });
-  });
-
   describe('On an Instance that sells no Plans', () => {
-    it('shows neither Choose a plan nor Plan, and asks nothing about billing', async () => {
+    it('shows no Plan card and asks nothing about billing', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderSettings({ instance: NO_PLANS });
 
@@ -1302,12 +1039,15 @@ describe('Settings', () => {
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
       expect(usageService.get).not.toHaveBeenCalled();
     });
+  });
 
-    it('ignores a return from checkout', async () => {
-      renderSettings({ instance: NO_PLANS, state: { checkoutStatus: 'success' } });
+  describe('On an Instance without X', () => {
+    it('shows no X account card and no way to connect X', async () => {
+      renderSettings({ instance: { ...SELLS_PLANS, x_connection: false } });
 
       await card('Profile');
-      expect(fireSuccessConfetti).not.toHaveBeenCalled();
+      expect(screen.queryByRole('region', { name: 'X account' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
     });
   });
 

@@ -1,13 +1,9 @@
 import { useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { LimitNotice } from '@/components/LimitNotice';
-import { Button } from '@/components/ui/button';
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
 import { useUsage } from '@/features/billing/useUsage';
-import { CHOOSE_PLAN_PATH, trackChoosePlan } from '@/features/billing/choosePlan';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import type { AllowanceUsedUp } from '@/services/apiErrors';
 import { FEEDBACK_MAX_CHARS, type Format } from '@/services/postService';
@@ -43,7 +39,6 @@ export function FeedbackDock({
   /** Why the last restore from History didn't happen. */
   restoreError?: string | null;
 }) {
-  const { subscribed } = useSubscribed();
   const phone = useMediaQuery(PHONE);
   const [feedback, setFeedback] = useState('');
   const [format, setFormat] = useState<Format>(textFormat);
@@ -66,15 +61,6 @@ export function FeedbackDock({
   const low = !allowanceUsedUp && (
     <LowUsageWarning allowance={usage?.allowance} count="generations" />
   );
-
-  const gate =
-    subscribed === false ? (
-      <Button asChild variant="solid" className="h-10 shrink-0">
-        <Link to={CHOOSE_PLAN_PATH} onClick={() => trackChoosePlan('post_feedback')}>
-          Subscribe to write
-        </Link>
-      </Button>
-    ) : undefined;
 
   return (
     <Dock
@@ -106,8 +92,6 @@ export function FeedbackDock({
         sendOnEnter
         onSend={() => void send()}
         isWriting={isWriting}
-        sendDisabled={subscribed !== true}
-        gate={gate}
         maxRows={phone ? 5 : 8}
       />
     </Dock>
