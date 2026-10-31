@@ -2,7 +2,7 @@ import { Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-/** What counts against each Allowance count a User can ask about. */
+/** What counts against each Allowance count, and which AI tools can use Pumpkit, a User can ask about. */
 const WHAT_COUNTS = {
   generations: {
     label: 'About generations',
@@ -12,11 +12,15 @@ const WHAT_COUNTS = {
     label: 'About X posts',
     text: 'Scheduled posts and posts you post now both count. For threads, each post in the thread counts.',
   },
+  aiTools: {
+    label: 'About AI tools',
+    text: 'Pumpkit is an MCP server: any AI tool that supports MCP can use it to write, revise and schedule posts.',
+  },
 } as const;
 
 export type AllowanceTopic = keyof typeof WHAT_COUNTS;
 
-/** An info button that opens what counts as one generation or one X post. */
+/** An info button that opens the explanation of one offer topic. */
 export function AllowanceInfo({ topic, className }: { topic: AllowanceTopic; className?: string }) {
   const { label, text } = WHAT_COUNTS[topic];
   return (

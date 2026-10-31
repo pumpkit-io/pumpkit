@@ -19,6 +19,12 @@ import { Landing } from './Landing';
 
 const originalAdapter = api.defaults.adapter;
 
+const PRICING = 'One plan. Everything in it.';
+
+/** Matches the paragraph whose whole text is `text`, however its words are styled. */
+const paragraph = (text: string) => (_: string, element: Element | null) =>
+  element?.tagName === 'P' && element.textContent === text;
+
 /** Fakes `GET /billing/plans` at the axios adapter. */
 function fakePlansEndpoint(status: number, data: unknown) {
   api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
@@ -44,9 +50,18 @@ function fakePlansEndpoint(status: number, data: unknown) {
 const MONTHLY_PLAN = {
   key: 'pumpkit_pro_monthly',
   product_name: 'Pro',
-  amount: 900,
+  amount: 1900,
   currency: 'eur',
   interval: 'month',
+  interval_count: 1,
+};
+
+const ANNUAL_PLAN = {
+  key: 'pumpkit_pro_yearly',
+  product_name: 'Pro',
+  amount: 19000,
+  currency: 'eur',
+  interval: 'year',
   interval_count: 1,
 };
 
@@ -89,7 +104,7 @@ function renderLanding(instance: Instance = SELLS_PLANS) {
 
 beforeEach(() => {
   vi.mocked(track).mockClear();
-  fakePlansEndpoint(200, { ...OFFER, data: [MONTHLY_PLAN, QUARTERLY_PLAN] });
+  fakePlansEndpoint(200, { ...OFFER, data: [MONTHLY_PLAN, ANNUAL_PLAN] });
 });
 
 afterEach(() => {
@@ -102,7 +117,7 @@ describe('Landing on an Instance that sells no Plans', () => {
     onTestFinished(() => fetchPlans.mockRestore());
     renderLanding({ ...SELLS_PLANS, sells_plans: false });
 
-    expect(screen.queryByRole('region', { name: 'Simple pricing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: PRICING })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
     expect(fetchPlans).not.toHaveBeenCalled();
   });
@@ -149,7 +164,7 @@ describe('Landing landmarks', () => {
     expect(
       within(main).getByRole('region', { name: 'Pick the authors whose style you want.' }),
     ).toBeInTheDocument();
-    expect(within(main).getByRole('region', { name: 'Simple pricing' })).toBeInTheDocument();
+    expect(within(main).getByRole('region', { name: PRICING })).toBeInTheDocument();
   });
 });
 
@@ -360,68 +375,151 @@ describe('Landing footer', () => {
 });
 
 describe('Landing pricing', () => {
-  it('shows one table per Plan in the endpoint order, headed by its price per interval', async () => {
+  it('opens with its heading and no label or subline around it', () => {
     renderLanding();
-    const pricing = screen.getByRole('region', { name: 'Simple pricing' });
-    const tables = await within(pricing).findAllByRole('table');
-    expect(tables).toHaveLength(2);
-    expect(tables[0]).toBe(within(pricing).getByRole('table', { name: '€9.00 / month gets you:' }));
-    expect(tables[1]).toBe(
-      within(pricing).getByRole('table', { name: '€24.00 / 3 months gets you:' }),
-    );
+    const pricing = screen.getByRole('region', { name: PRICING });
+    expect(pricing).toHaveAttribute('id', 'pricing');
+    expect(within(pricing).getByRole('heading', { level: 2 })).toHaveTextContent(PRICING);
+    expect(within(pricing).queryByText('Pricing')).not.toBeInTheDocument();
+    expect(within(pricing).queryByText('[Pricing subline]')).not.toBeInTheDocument();
   });
 
-  it('fills every table with what the Plan allows and the free trial', async () => {
+  it('says Loading… until the Plans arrive', async () => {
     renderLanding();
-    const tables = await screen.findAllByRole('table');
-    const rowTexts = tables.map((table) =>
-      within(table)
-        .getAllByRole('row')
-        .map((row) => row.textContent),
+    const pricing = screen.getByRole('region', { name: PRICING });
+    expect(within(pricing).getByText('Loading…')).toBeInTheDocument();
+    await within(pricing).findByRole('radiogroup', { name: 'Billing interval' });
+    expect(within(pricing).queryByText('Loading…')).not.toBeInTheDocument();
+  });
+
+  it('starts on Monthly with the monthly price', async () => {
+    renderLanding();
+    const pricing = screen.getByRole('region', { name: PRICING });
+    const toggle = await within(pricing).findByRole('radiogroup', { name: 'Billing interval' });
+    expect(within(toggle).getByRole('radio', { name: 'Monthly' })).toBeChecked();
+    expect(within(toggle).getByRole('radio', { name: 'Annual Save 17%' })).not.toBeChecked();
+    expect(within(pricing).getByText(paragraph('€19 a month'))).toBeInTheDocument();
+    expect(within(pricing).queryByText(/a year/)).not.toBeInTheDocument();
+  });
+
+  it('switches to the yearly charge with its monthly equivalent under it, and back', async () => {
+    renderLanding();
+    const pricing = screen.getByRole('region', { name: PRICING });
+    fireEvent.click(await within(pricing).findByRole('radio', { name: 'Annual Save 17%' }));
+
+    const yearly = within(pricing).getByText(paragraph('€190 a year'));
+    const perMonth = within(pricing).getByText('€15.83 a month, billed yearly');
+    expect(yearly.compareDocumentPosition(perMonth)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(pricing).queryByText(paragraph('€19 a month'))).not.toBeInTheDocument();
+    expect(track).toHaveBeenCalledWith('landing_pricing_toggle_switched', { interval: 'annual' });
+
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Monthly' }));
+    expect(within(pricing).getByText(paragraph('€19 a month'))).toBeInTheDocument();
+    expect(within(pricing).queryByText(/billed yearly/)).not.toBeInTheDocument();
+    expect(track).toHaveBeenCalledWith('landing_pricing_toggle_switched', { interval: 'monthly' });
+  });
+
+  it('works the saving out from the two prices', async () => {
+    fakePlansEndpoint(200, {
+      ...OFFER,
+      data: [
+        { ...ANNUAL_PLAN, amount: 9000 },
+        { ...MONTHLY_PLAN, amount: 1000 },
+      ],
+    });
+    renderLanding();
+    expect(await screen.findByRole('radio', { name: 'Annual Save 25%' })).toBeInTheDocument();
+  });
+
+  it('puts the Trial line under the price, outside the offer list', async () => {
+    renderLanding();
+    const pricing = screen.getByRole('region', { name: PRICING });
+    const list = await within(pricing).findByRole('list', { name: 'Included' });
+    const price = within(pricing).getByText(paragraph('€19 a month'));
+    const trial = within(pricing).getByText(
+      '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
     );
-    expect(rowTexts[0]).toEqual([
+    expect(price.compareDocumentPosition(trial)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(trial.compareDocumentPosition(list)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(list).not.toHaveTextContent(/trial/);
+  });
+
+  it('lists what the Plan gives, including scheduling and the AI tools', async () => {
+    renderLanding();
+    const list = await screen.findByRole('list', { name: 'Included' });
+    expect(
+      within(list)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
       '500 post generations a month.',
       'Publish 100 X posts a month, up to 10 of them with a link.',
       'Write in the voice of your favorite X creators.',
-      '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
+      'Schedule posts and threads to X.',
+      'Use it from Claude Code, Codex, Cursor or Gemini CLI.',
     ]);
-    expect(rowTexts[1]).toEqual(rowTexts[0]);
   });
 
-  it('leaves out the trial and the lines of empty caps', async () => {
+  it.each([
+    ['About generations', 'Every prompt to generate or refine a post counts as one generation.'],
+    [
+      'About X posts',
+      'Scheduled posts and posts you post now both count. For threads, each post in the thread counts.',
+    ],
+    [
+      'About AI tools',
+      'Pumpkit is an MCP server: any AI tool that supports MCP can use it to write, revise and schedule posts.',
+    ],
+  ])('explains %s behind an info button', async (name, text) => {
+    renderLanding();
+    fireEvent.click(await screen.findByRole('button', { name }));
+    expect(await screen.findByRole('dialog', { name })).toHaveTextContent(text);
+  });
+
+  it('leaves out the Trial and the lines of empty caps', async () => {
     fakePlansEndpoint(200, {
       ...OFFER,
-      data: [MONTHLY_PLAN],
+      data: [MONTHLY_PLAN, ANNUAL_PLAN],
       allowance: { generations: 500, x_posts: null, link_x_posts: null },
       trial: null,
     });
     renderLanding();
-    const table = await screen.findByRole('table');
+    const list = await screen.findByRole('list', { name: 'Included' });
     expect(
-      within(table)
-        .getAllByRole('row')
-        .map((row) => row.textContent),
-    ).toEqual(['500 post generations a month.', 'Write in the voice of your favorite X creators.']);
+      within(list)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      '500 post generations a month.',
+      'Write in the voice of your favorite X creators.',
+      'Schedule posts and threads to X.',
+      'Use it from Claude Code, Codex, Cursor or Gemini CLI.',
+    ]);
+    expect(screen.queryByText(/free trial/)).not.toBeInTheDocument();
   });
 
-  it('explains generations behind an info button', async () => {
-    fakePlansEndpoint(200, { ...OFFER, data: [MONTHLY_PLAN] });
+  it("lists each Plan's price with no toggle without one monthly and one annual Plan", async () => {
+    fakePlansEndpoint(200, { ...OFFER, data: [MONTHLY_PLAN, QUARTERLY_PLAN] });
     renderLanding();
-    fireEvent.click(await screen.findByRole('button', { name: 'About generations' }));
+    const pricing = screen.getByRole('region', { name: PRICING });
+    await within(pricing).findByRole('list', { name: 'Included' });
+    expect(within(pricing).queryByRole('radiogroup')).not.toBeInTheDocument();
+    const monthly = within(pricing).getByText(paragraph('€19 a month'));
+    const quarterly = within(pricing).getByText(paragraph('€24 every 3 months'));
+    expect(monthly.compareDocumentPosition(quarterly)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(
-      await screen.findByText(
-        'Every prompt to generate or refine a post counts as one generation.',
+      within(pricing).getByText(
+        '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
       ),
     ).toBeInTheDocument();
   });
 
-  it('opens with the eyebrow, heading and subline placeholder', () => {
+  it('shows the single price of a lone Plan with no toggle', async () => {
+    fakePlansEndpoint(200, { ...OFFER, data: [ANNUAL_PLAN] });
     renderLanding();
-    const pricing = screen.getByRole('region', { name: 'Simple pricing' });
-    expect(pricing).toHaveAttribute('id', 'pricing');
-    expect(within(pricing).getByText('Pricing')).toBeInTheDocument();
-    expect(within(pricing).getByRole('heading', { level: 2 })).toHaveTextContent('Simple pricing');
-    expect(within(pricing).getByText('[Pricing subline]')).toBeInTheDocument();
+    const pricing = screen.getByRole('region', { name: PRICING });
+    expect(await within(pricing).findByText(paragraph('€190 a year'))).toBeInTheDocument();
+    expect(within(pricing).queryByRole('radiogroup')).not.toBeInTheDocument();
   });
 
   it('says so when the Plans cannot load', async () => {
@@ -430,20 +528,21 @@ describe('Landing pricing', () => {
     expect(
       await screen.findByText("Pricing couldn't load. Refresh the page to try again."),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Included' })).not.toBeInTheDocument();
   });
 
   it('shows a fallback when there are no Plans', async () => {
     fakePlansEndpoint(200, { ...OFFER, data: [] });
     renderLanding();
     expect(await screen.findByText('Pricing is coming soon.')).toBeInTheDocument();
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Included' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
   });
 
   it('ends with a Get started button to the sign-in page and no note under it', async () => {
     renderLanding();
-    const pricing = screen.getByRole('region', { name: 'Simple pricing' });
-    await within(pricing).findAllByRole('table');
+    const pricing = screen.getByRole('region', { name: PRICING });
+    await within(pricing).findByRole('list', { name: 'Included' });
     const cta = within(pricing).getByRole('link', { name: 'Get started' });
     expect(cta).toHaveAttribute('href', '/login');
     expect(pricing.textContent?.trimEnd().endsWith('Get started')).toBe(true);
@@ -452,16 +551,15 @@ describe('Landing pricing', () => {
     expect(track).toHaveBeenCalledWith('landing_pricing_cta_clicked');
   });
 
-  it('tracks the section once and each Plan table once', async () => {
+  it('tracks the section once and the Plan shown on the card once', async () => {
     renderLanding();
-    await screen.findAllByRole('table');
+    await screen.findByRole('list', { name: 'Included' });
     const calls = vi.mocked(track).mock.calls;
     expect(calls.filter(([event]) => event === 'landing_pricing_section_viewed')).toEqual([
       ['landing_pricing_section_viewed'],
     ]);
     expect(calls.filter(([event]) => event === 'landing_pricing_plan_viewed')).toEqual([
       ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_monthly' }],
-      ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_quarterly' }],
     ]);
   });
 });

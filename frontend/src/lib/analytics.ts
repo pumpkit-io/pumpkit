@@ -27,7 +27,12 @@ export const EVENTS = {
     description: 'Landing: the pricing section scrolled into view.',
   },
   landing_pricing_plan_viewed: {
-    description: "Landing: a Plan's pricing table first scrolled into view. Props: plan_key.",
+    description:
+      'Landing: the pricing card first scrolled into view, once per Plan it showed. Props: plan_key.',
+  },
+  landing_pricing_toggle_switched: {
+    description:
+      'Landing: switched the pricing card between Monthly and Annual. Props: interval (monthly | annual).',
   },
   landing_pricing_cta_clicked: {
     description: 'Landing: clicked the "Get started" button at the end of the pricing section.',
