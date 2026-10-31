@@ -5,8 +5,6 @@ import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UserAvatar } from '@/components/UserAvatar';
-import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import { timeAgo } from '@/lib/relativeTime';
 import { cn } from '@/lib/utils';
 import {
@@ -159,7 +157,6 @@ function PlacesTaken({ taken }: { taken: number }) {
 }
 
 export function InspirationAuthorsPanel() {
-  const { subscribed } = useSubscribed();
   const { authors, loadFailed, isAdding, refreshing, error, notice, add, refresh, remove } =
     useInspirationAuthorsContext();
 
@@ -181,19 +178,11 @@ export function InspirationAuthorsPanel() {
         {authors !== null && <PlacesTaken taken={authors.length} />}
       </div>
 
-      {subscribed === false && (
-        <SubscribePrompt
-          message="Adding inspiration authors needs a subscription."
-          source="persona_inspiration_authors"
-        />
-      )}
-      {subscribed === true && (
-        <AddAuthorForm
-          isAdding={isAdding}
-          full={(authors?.length ?? 0) >= MAX_INSPIRATION_AUTHORS}
-          onAdd={add}
-        />
-      )}
+      <AddAuthorForm
+        isAdding={isAdding}
+        full={(authors?.length ?? 0) >= MAX_INSPIRATION_AUTHORS}
+        onAdd={add}
+      />
       {error && <ErrorBanner message={error} />}
       {notice && <LimitNotice message={notice} />}
 
@@ -205,21 +194,16 @@ export function InspirationAuthorsPanel() {
         </p>
       ) : authors.length === 0 ? (
         <p className="font-sans text-sm text-muted-foreground">
-          No inspiration authors yet.
-          {subscribed === true && ' Add an X handle to set the style of your posts.'}
+          No inspiration authors yet. Add an X handle to set the style of your posts.
         </p>
       ) : (
         <AuthorList
           authors={authors}
-          actions={
-            subscribed === true
-              ? {
-                  refreshing,
-                  onRefresh: (handle) => void refresh(handle),
-                  onRemove: (handle) => void remove(handle),
-                }
-              : undefined
-          }
+          actions={{
+            refreshing,
+            onRefresh: (handle) => void refresh(handle),
+            onRemove: (handle) => void remove(handle),
+          }}
         />
       )}
     </section>

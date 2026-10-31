@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
 from pumpkit.auth.schemas import UserProfileResponse
 from pumpkit.billing.dependencies import require_subscribed_user
@@ -36,10 +35,9 @@ async def start_x_authorization(
     )
 
 
-# Open to Users who aren't Subscribed: ending Pumpkit's access to X never needs a Subscription.
 @router.delete("/x-connection", status_code=status.HTTP_204_NO_CONTENT)
 async def disconnect_x(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
 ) -> None:
@@ -54,7 +52,7 @@ async def disconnect_x(
 @limiter.limit("10/minute")
 async def use_x_photo(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
     clock: Clock = Depends(get_clock),
@@ -66,7 +64,7 @@ async def use_x_photo(
 
 @router.post("/x-connection/photo/decline", status_code=status.HTTP_204_NO_CONTENT)
 async def decline_x_photo(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> None:

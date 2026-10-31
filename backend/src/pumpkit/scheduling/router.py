@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import XReader, get_x_reader
 from pumpkit.billing.dependencies import require_subscribed_user
@@ -54,7 +53,7 @@ x_authorization_router = APIRouter(tags=["x-connection"])
     "/x-connection", response_model=XConnectionResponse, status_code=status.HTTP_200_OK
 )
 async def get_x_connection(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> XConnectionResponse:
     return await mediator.get_x_connection(db=db, user=current_user)
@@ -102,7 +101,7 @@ async def look_up_community(
     status_code=status.HTTP_200_OK,
 )
 async def list_past_communities(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> PastCommunitiesResponse:
     return await mediator.list_past_communities(db=db, user=current_user)
@@ -193,11 +192,10 @@ async def cancel_scheduled_post(
     )
 
 
-# Open to Users who aren't Subscribed, so their history stays visible.
 @posts_router.get("/posts", response_model=PostsPageResponse, status_code=status.HTTP_200_OK)
 async def list_posts(
     page: Annotated[PostsPageRequest, Query()],
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> PostsPageResponse:
     return await mediator.list_posts(
@@ -205,13 +203,12 @@ async def list_posts(
     )
 
 
-# Open to Users who aren't Subscribed, like the list.
 @posts_router.get(
     "/posts/{post_id}", response_model=PostDetailResponse, status_code=status.HTTP_200_OK
 )
 async def get_post(
     post_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> PostDetailResponse:
     return await mediator.get_post(db=db, user=current_user, post_id=post_id)

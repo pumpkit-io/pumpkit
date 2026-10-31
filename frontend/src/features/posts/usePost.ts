@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { postService, type Format, type PostDetail } from '@/services/postService';
@@ -44,7 +43,6 @@ export function usePost(postId: string) {
   const writing = useWritingFailure();
   const { fail, clear } = writing;
   const { refresh: refreshCounts } = usePostCounts();
-  const { subscribed } = useSubscribed();
   const controller = load.kind === 'loaded' ? load.controller : null;
   const status = load.kind === 'loaded' ? load.post.status : null;
 
@@ -72,8 +70,8 @@ export function usePost(postId: string) {
 
   // Before paint, so the Text's tools never show a gate a step behind the page.
   useLayoutEffect(() => {
-    if (controller && status) controller.setGate({ status, subscribed });
-  }, [controller, status, subscribed]);
+    if (controller && status) controller.setGate({ status });
+  }, [controller, status]);
 
   // Compared by identity: each controller counts its keys from 1, so a key repeats across Posts.
   const dropped = text?.droppedRewrites ?? null;

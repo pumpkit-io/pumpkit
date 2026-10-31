@@ -313,33 +313,6 @@ describe('New post', () => {
       expect(await screen.findByRole('heading', { level: 1, name: 'Persona' })).toBeInTheDocument();
     });
 
-    it('replaces the write button with "Subscribe to write" for a User who is not Subscribed', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-      renderNewPost();
-
-      const area = await writer();
-      const subscribe = await area.findByRole('link', { name: 'Subscribe to write' });
-      expect(subscribe).not.toHaveClass('bg-primary-gradient');
-      expect(area.getByLabelText('Brief')).toBeEnabled();
-      expect(area.queryByRole('button', { name: 'Write the post' })).not.toBeInTheDocument();
-
-      fireEvent.click(subscribe);
-
-      expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
-      expect(currentPath()).toBe('/settings');
-      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
-        source: 'new_post_write',
-      });
-    });
-
-    it('asks a User who is neither Subscribed nor set up to subscribe first', async () => {
-      renderNewPost();
-
-      const area = await writer();
-      expect(await area.findByRole('link', { name: 'Subscribe to write' })).toBeInTheDocument();
-      expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
-    });
-
     it('greys out the send arrow until something is typed', async () => {
       const area = await readyToWrite();
       expect(area.getByRole('button', { name: 'Write the post' })).toBeDisabled();

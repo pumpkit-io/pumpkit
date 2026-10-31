@@ -27,9 +27,9 @@ from pumpkit.core.time import Clock, get_clock
 # Tags are set per route: the Sign-in method and Session routes are "auth", the profile "users".
 router = APIRouter()
 
-# Creating an API key needs the web app's access rule, which billing owns and auth may not
-# import (ADR 0008), so `main` mounts this router behind billing's subscribed-User dependency.
-api_key_creation_router = APIRouter(tags=["api-keys"])
+# API keys need the web app's access rule, which billing owns and auth may not import
+# (ADR 0008), so `main` mounts this router behind billing's subscribed-User dependency.
+api_keys_router = APIRouter(tags=["api-keys"])
 
 
 @router.get(
@@ -167,12 +167,10 @@ async def update_current_user_profile(
     return UserProfileResponse.model_validate(current_user)
 
 
-# Listing and revoking need only the Session, so a User whose Subscription ended can revoke a key.
-@router.get(
+@api_keys_router.get(
     "/api-keys",
     response_model=ApiKeysListResponse,
     status_code=status.HTTP_200_OK,
-    tags=["api-keys"],
 )
 async def list_api_keys(
     current_user: User = Depends(get_current_user),
@@ -181,7 +179,7 @@ async def list_api_keys(
     return await mediator.list_api_keys(db=db, user=current_user)
 
 
-@router.delete("/api-keys/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["api-keys"])
+@api_keys_router.delete("/api-keys/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_api_key(
     api_key_id: str,
     current_user: User = Depends(get_current_user),
@@ -191,7 +189,7 @@ async def revoke_api_key(
     await mediator.revoke_api_key(db=db, user=current_user, api_key_id=api_key_id, now=clock())
 
 
-@api_key_creation_router.post(
+@api_keys_router.post(
     "/api-keys",
     response_model=ApiKeyCreatedResponse,
     status_code=status.HTTP_201_CREATED,

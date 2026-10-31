@@ -80,9 +80,7 @@ export const EVENTS = {
     description: 'Account: made the X account\'s photo the Photo with "Use photo from X".',
   },
 
-  billing_choose_plan_opened: {
-    description: 'Billing: a prompt to subscribe sent the User to Choose a Plan. Props: source.',
-  },
+  paywall_viewed: { description: 'Paywall (/subscribe): shown to a User who is not Subscribed.' },
   billing_subscription_checkout_started: {
     description: 'Billing: started a Subscription checkout. Props: plan_key.',
   },

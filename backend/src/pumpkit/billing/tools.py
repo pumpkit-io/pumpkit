@@ -15,5 +15,5 @@ async def manage_subscription(call: ToolCall[User]) -> LinkToolResponse:
 
 
 TOOLS = [
-    McpTool(manage_subscription, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
+    McpTool(manage_subscription, rate=READ_ONLY_RATE, annotations=READ_ONLY),
 ]

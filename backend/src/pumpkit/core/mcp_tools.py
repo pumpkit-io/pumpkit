@@ -40,8 +40,6 @@ class McpTool:
     # Per User, in slowapi's notation; the web route's rate where the route has one.
     rate: str
     annotations: ToolAnnotations
-    # Browser-only tools only answer with a link, so they skip the access gate.
-    needs_access: bool = True
 
 
 @dataclass(frozen=True)

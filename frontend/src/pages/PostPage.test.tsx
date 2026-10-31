@@ -69,9 +69,8 @@ vi.mock('@/services/scheduledPostService', () => ({
     lookUpCommunity: vi.fn(),
   },
 }));
-// Choose a plan lands on Settings, which lists the API keys.
-vi.mock('@/services/apiKeyService', () => ({
-  apiKeyService: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), revoke: vi.fn() },
+vi.mock('@/services/onboardingService', () => ({
+  onboardingService: { fetchNextStep: vi.fn().mockResolvedValue('paywall') },
 }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
@@ -107,6 +106,7 @@ import {
   SUBSCRIBED,
   apiError,
   renderSignedIn,
+  currentPath,
 } from './testing/signedInApp';
 
 const CONNECTED: XConnection = {
@@ -912,15 +912,6 @@ describe('Post page', () => {
       );
       expect((await textCard()).queryByRole('textbox')).not.toBeInTheDocument();
     });
-
-    it('shows the Text read-only to a User who is not Subscribed', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      renderPost(postWith('the final text'));
-
-      const card = await textCard();
-      expect(card.getByText('the final text')).toBeInTheDocument();
-      expect(card.queryByRole('textbox')).not.toBeInTheDocument();
-    });
   });
 
   describe('Undo and redo', () => {
@@ -1282,23 +1273,6 @@ describe('Post page', () => {
       expect(dock.getByRole('button', { name: 'Send feedback' })).toBeDisabled();
     });
 
-    it('asks a User who is not Subscribed to subscribe in place of the send arrow', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      renderPost(postWith('the first final'));
-      await textCard();
-
-      const dock = panel('Draft');
-      const subscribe = await dock.findByRole('link', { name: 'Subscribe to write' });
-      expect(dock.queryByRole('button', { name: 'Send feedback' })).not.toBeInTheDocument();
-      expect(card().getByRole('button', { name: 'Post to…' })).toBeInTheDocument();
-      fireEvent.change(feedbackBox(), { target: { value: 'shorter' } });
-      fireEvent.keyDown(feedbackBox(), { key: 'Enter' });
-      expect(postService.addVersion).not.toHaveBeenCalled();
-
-      fireEvent.click(subscribe);
-      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_feedback' });
-    });
-
     it.each([
       ['Enter', {}],
       ['⌘Enter', { metaKey: true }],
@@ -1632,19 +1606,6 @@ describe('Post page', () => {
       await textCard();
 
       expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
-    });
-
-    it('sends a User who is not Subscribed to Choose a plan instead of editing', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      renderPost(withScheduledPost(SCHEDULED));
-      await textCard();
-
-      fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
-
-      expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', {
-        source: 'scheduled_post_edit',
-      });
     });
 
     it('opens on the editor when it comes from Edit on the Posts page', async () => {
@@ -2143,18 +2104,7 @@ describe('Post page', () => {
       expect(dialog.getByRole('button', { name: 'Reconnect X' })).toBeInTheDocument();
     });
 
-    it('sends a User who is not Subscribed to Choose a plan', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
-      renderPost(postWith('the final text'));
-      await textCard();
-
-      fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
-
-      expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
-    });
-
-    it('sends a User who is no longer Subscribed to Choose a plan', async () => {
+    it('sends a User who is no longer Subscribed to the Paywall', async () => {
       vi.mocked(scheduledPostService.postNow).mockRejectedValue(apiError(403, 'Subscribe first.'));
       const dialog = await openPostTo();
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
@@ -2162,9 +2112,8 @@ describe('Post page', () => {
       fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
       fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
 
-      expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
+      await waitFor(() => expect(currentPath()).toBe('/subscribe'));
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
     });
 
     it('opens "Post to…" on an Instance that sells no Plans', async () => {
@@ -2406,7 +2355,7 @@ describe('Post page', () => {
       ).toBeInTheDocument();
     });
 
-    it('sends a User who is no longer Subscribed to Choose a plan', async () => {
+    it('sends a User who is no longer Subscribed to the Paywall', async () => {
       vi.mocked(scheduledPostService.edit).mockRejectedValue(apiError(403, 'Subscribe first.'));
       const dialog = await openRetry();
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
@@ -2414,8 +2363,7 @@ describe('Post page', () => {
       fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
       fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
 
-      expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('billing_choose_plan_opened', { source: 'post_to' });
+      await waitFor(() => expect(currentPath()).toBe('/subscribe'));
     });
   });
 

@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useGoToChoosePlan } from '@/features/billing/choosePlan';
 import {
   destinationFrom,
   PROFILE_DRAFT,
@@ -27,7 +26,7 @@ import { FORMAT_THREAD, type Format } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { formatWhen } from '../panels/panelFacts';
 import type { ShownPart } from '../shownText';
-import { POST_TO_BILLING_SOURCE, type PostToSender } from './postTo';
+import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
 import { WhereField } from './WhereField';
 
@@ -160,7 +159,6 @@ export function PostToDialog({
   onClose: () => void;
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
-  const goToChoosePlan = useGoToChoosePlan();
   const { connection } = useXConnectionContext();
   const { sending, error, send } = sender;
   const [step, setStep] = useState<Step>({ kind: 'choose' });
@@ -200,9 +198,9 @@ export function PostToDialog({
         ? { destination, when: { postNow: true } }
         : { destination, when: { postNow: false, publishAt: publishAt ?? '' } },
     );
+    // A User who isn't Subscribed any more is on their way to the Paywall.
     if (outcome.kind === 'notSubscribed') {
       onClose();
-      goToChoosePlan(POST_TO_BILLING_SOURCE);
     } else if (outcome.kind === 'created') {
       const { scheduledPost } = outcome;
       // Posted now but still waiting: X was busy, and the publisher retries.
