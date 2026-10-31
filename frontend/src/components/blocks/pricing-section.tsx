@@ -79,7 +79,7 @@ export function PricingSection() {
           <Eyebrow>Pricing</Eyebrow>
           <h2
             id={headingId}
-            className="mt-3 text-balance text-4xl font-semibold tracking-tight md:text-5xl"
+            className="mt-3 text-balance font-display text-4xl font-semibold tracking-tight md:text-5xl"
           >
             Simple pricing
           </h2>

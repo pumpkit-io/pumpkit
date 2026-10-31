@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { Variants } from 'framer-motion';
 import { CtaFrame } from '@/components/blocks/cta-frame';
+import { HeroFrame } from '@/components/blocks/hero-frame';
 import { Button } from '@/components/ui/button';
 import { AnimatedGroup } from '@/components/ui/animated-group';
 import { track } from '@/lib/analytics';
@@ -42,52 +43,45 @@ export function HeroSection() {
         <div className="absolute left-0 top-0 h-[80rem] w-56 -translate-y-[350px] -rotate-45 bg-[radial-gradient(50%_50%_at_50%_50%,hsl(var(--foreground)/.04)_0,hsl(var(--foreground)/.02)_80%,transparent_100%)]" />
       </div>
       <section>
-        <div className="relative pt-28 md:pt-36">
+        <div className="relative pb-8 pt-28 md:pt-36">
           <div
             aria-hidden
             className="absolute inset-0 -z-10 size-full [background:radial-gradient(125%_125%_at_50%_100%,transparent_0%,hsl(var(--background))_75%)]"
           />
-          <div className="mx-auto max-w-7xl px-6 text-center">
-            <AnimatedGroup variants={transitionVariants}>
-              <div className="mx-auto flex w-fit items-center rounded-full border bg-muted px-4 py-1.5 shadow-md shadow-black/5 dark:border-t-white/5 dark:shadow-zinc-950">
-                <span className="text-sm text-foreground">Open source · built for X</span>
-              </div>
-              <h1 className="mx-auto mt-8 max-w-4xl text-balance text-5xl font-semibold tracking-tight text-foreground sm:text-6xl md:text-7xl lg:mt-16 xl:text-[5.25rem]">
-                <span className="text-primary">Your ideas</span>, in the style of the authors you{' '}
-                <span className="text-primary">admire</span>.
-              </h1>
-              <p className="mx-auto mt-8 max-w-3xl text-balance text-lg text-muted-foreground">
-                Write a brief, pick up to three X authors to learn style from, and get a post ready
-                to paste. Not quite right? Say what to change and get a new version.
-              </p>
-            </AnimatedGroup>
+          <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
+            <div className="lg:col-span-5">
+              <AnimatedGroup variants={transitionVariants}>
+                <h1 className="max-w-2xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.5rem] lg:leading-[1.05] xl:text-[4rem]">
+                  Your ideas, in the style of the authors you admire.
+                </h1>
+                <p className="mt-6 max-w-xl text-pretty text-lg text-muted-foreground">
+                  Write a brief, pick up to three X authors to learn style from, and get a post
+                  ready to paste. Not quite right? Say what to change and get a new version.
+                </p>
+              </AnimatedGroup>
 
-            <AnimatedGroup
-              variants={staggeredVariants}
-              className="mt-12 flex flex-col items-center justify-center gap-2 md:flex-row"
-            >
-              <CtaFrame>
-                <Button asChild size="lg" className="rounded-xl px-5 text-base">
-                  <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
-                    Start writing
-                  </Link>
-                </Button>
-              </CtaFrame>
-            </AnimatedGroup>
-          </div>
+              <AnimatedGroup variants={staggeredVariants} className="mt-10 flex">
+                <CtaFrame>
+                  <Button asChild size="lg" className="rounded-xl px-5 text-base">
+                    <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
+                      Start writing
+                    </Link>
+                  </Button>
+                </CtaFrame>
+              </AnimatedGroup>
+            </div>
 
-          <AnimatedGroup variants={staggeredVariants}>
-            <div className="relative -mr-56 mt-8 overflow-hidden px-2 sm:mr-0 sm:mt-12 md:mt-20">
-              <div className="relative mx-auto max-w-6xl overflow-hidden rounded-2xl border bg-background p-4 shadow-lg shadow-zinc-950/15 ring-1 ring-background">
+            <AnimatedGroup variants={staggeredVariants} className="min-w-0 lg:col-span-7">
+              <HeroFrame>
                 <div
                   ref={screenshotRef}
-                  className="flex aspect-[16/10] w-full items-center justify-center rounded-2xl border border-border/25 bg-muted font-mono text-sm text-muted-foreground"
+                  className="flex size-full items-center justify-center font-mono text-sm text-muted-foreground"
                 >
                   [Product screenshot]
                 </div>
-              </div>
-            </div>
-          </AnimatedGroup>
+              </HeroFrame>
+            </AnimatedGroup>
+          </div>
         </div>
       </section>
     </div>

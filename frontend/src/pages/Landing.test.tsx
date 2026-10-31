@@ -109,9 +109,9 @@ describe('Landing on an Instance that sells no Plans', () => {
 });
 
 describe('Landing hero', () => {
-  it('shows the badge, headline and subline', () => {
+  it('shows the headline and subline with no pill above them', () => {
     renderLanding();
-    expect(screen.getByText('Open source · built for X')).toBeInTheDocument();
+    expect(screen.queryByText('Open source · built for X')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
       /^Your ideas, in the style of the authors you admire\.$/,
     );
@@ -125,6 +125,11 @@ describe('Landing hero', () => {
   it('holds a visible placeholder in the screenshot slot', () => {
     renderLanding();
     expect(screen.getByText('[Product screenshot]')).toBeInTheDocument();
+  });
+
+  it('sets no headline word apart from the rest', () => {
+    renderLanding();
+    expect(screen.getByRole('heading', { level: 1 }).children).toHaveLength(0);
   });
 
   it('tracks the hero button and the screenshot coming into view', () => {
