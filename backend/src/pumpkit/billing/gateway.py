@@ -171,8 +171,8 @@ class BillingGateway(Protocol):
         moves the billing cycle anchor to now. A failed charge leaves it past due, not an error.
 
         Returns the provider's page where the User authenticates the first charge when it waits
-        for that (3D Secure), else None. Ending the same Trial again within 24 hours ends nothing,
-        and fails with `BillingProviderError` while the first call is still running.
+        for that (3D Secure), else None. Repeating the update after the Trial leaves its dates
+        and invoice unchanged. An error can follow a successful update; the caller must sync.
         """
         ...
 
@@ -453,8 +453,6 @@ class StripeBillingGateway:
                     "payment_behavior": "allow_incomplete",
                     "expand": ["latest_invoice"],
                 },
-                # Stripe replays the first answer to a repeated key (for 24 hours).
-                {"idempotency_key": f"pumpkit-{subscription_id}-end-trial"},
             ),
         )
         invoice = subscription.to_dict().get("latest_invoice")
@@ -680,10 +678,12 @@ class FakeBillingGateway:
     async def end_trial(self, *, subscription_id: str) -> Optional[str]:
         self._maybe_fail("end_trial")
         charged = not self.first_charge_fails and self.first_charge_authentication_url is None
-        self.ended_trials.append(subscription_id)
         now = self.clock()
         for subscriptions in self._subscriptions.values():
             if subscription := subscriptions.get(subscription_id):
+                if subscription.status != "trialing":
+                    return self.first_charge_authentication_url
+                self.ended_trials.append(subscription_id)
                 subscriptions[subscription_id] = replace(
                     subscription,
                     status="active" if charged else "past_due",
@@ -691,6 +691,7 @@ class FakeBillingGateway:
                     billing_cycle_anchor=now,
                     current_period_end=months_after(now, 1),
                 )
+        self._maybe_fail("after_end_trial")
         return self.first_charge_authentication_url
 
     def signed_event(

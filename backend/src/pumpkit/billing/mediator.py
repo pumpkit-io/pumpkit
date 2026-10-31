@@ -316,14 +316,13 @@ class FirstChargeNeedsAuthentication(FirstChargeFailed):
 
 async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -> BillingMeResponse:
     """
-    End the User's Trial now, so the provider charges the first period and the paid Allowance
-    starts at once. The Terms accepted at Checkout already cover it (ADR 0010).
+    End the Trial without holding the User's row lock across the update. Stripe ignores
+    `trial_end=now` after the Trial, so concurrent calls cannot restart the paid period.
 
-    The sync from Stripe runs first (ADR 0004), so a Trial that already ended there is a 409, as is
-    a User with no trialing Subscription. Each sync holds the User's row lock, but ending the Trial
-    doesn't: the gateway ends a Trial once, and a second request racing the first gets a 502. A charge that failed, or
-    that waits for the User to authenticate it, leaves the Subscription as Stripe reports it (past
-    due keeps access) and is a 402, which links the page to authenticate on when that is the cause.
+    Use a fresh SDK key per call: a permanent key also replays Stripe's cached 500s.
+    Sync even after an error; active means success, past due means the first charge failed.
+    If Stripe still reports a Trial, preserve the error and let the User retry.
+    The Terms accepted at Checkout cover the first charge (ADR 0010).
     """
     if not user.stripe_customer_id:
         raise _not_trialing()
@@ -336,14 +335,21 @@ async def subscribe_now(db: AsyncSession, gateway: BillingGateway, user: User) -
     if subscription is None or subscription.status != "trialing":
         raise _not_trialing()
 
-    authentication_url = await gateway.end_trial(
-        subscription_id=subscription.stripe_subscription_id
-    )
+    authentication_url = None
+    provider_error = None
+    try:
+        authentication_url = await gateway.end_trial(
+            subscription_id=subscription.stripe_subscription_id
+        )
+    except BillingProviderError as error:
+        provider_error = error
     await users_service.lock_user(db, user)
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     await db.commit()
     if subscription.status == "active":
         return await get_billing_me(db, user)
+    if provider_error is not None and subscription.status != "past_due":
+        raise provider_error
     if authentication_url is not None:
         raise FirstChargeNeedsAuthentication(
             "Your trial has ended, but your bank needs you to confirm the first payment. "
