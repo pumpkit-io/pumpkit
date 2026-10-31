@@ -161,7 +161,7 @@ async def test_a_first_charge_waiting_on_authentication_links_the_invoice_to_aut
 
 @pytest.mark.parametrize("status", ["active", "past_due", "canceled"])
 async def test_a_user_who_isnt_trialing_cant_subscribe_now(client, fake_billing, holds, status):
-    holds(status)
+    await holds(status)
 
     response = await client.post(SUBSCRIBE_NOW)
 
@@ -207,3 +207,49 @@ async def test_subscribe_now_answers_404_where_no_plans_are_sold(
     response = await client.post(SUBSCRIBE_NOW)
 
     assert response.status_code == 404
+
+
+async def test_a_trial_ended_despite_a_provider_error_is_synced_and_answers_success(
+    client, fake_billing, holds
+):
+    await holds("trialing")
+    fake_billing.fail_on = {"after_end_trial"}
+
+    response = await client.post(SUBSCRIBE_NOW)
+
+    assert response.status_code == 200
+    assert response.json()["subscription"]["status"] == "active"
+    assert fake_billing.ended_trials == ["sub_1"]
+    assert (await client.post(SUBSCRIBE_NOW)).status_code == 409
+    assert fake_billing.ended_trials == ["sub_1"]
+
+
+async def test_a_transient_failure_leaves_the_trial_available_to_retry(
+    client, fake_billing, holds, assert_reported_502
+):
+    await holds("trialing")
+    fake_billing.fail_on = {"end_trial"}
+
+    assert_reported_502(await client.post(SUBSCRIBE_NOW))
+    assert (await client.get("/api/v1/billing/me")).json()["subscription"]["status"] == "trialing"
+    fake_billing.fail_on.clear()
+
+    response = await client.post(SUBSCRIBE_NOW)
+
+    assert response.status_code == 200
+    assert response.json()["subscription"]["status"] == "active"
+    assert fake_billing.ended_trials == ["sub_1"]
+
+
+async def test_a_declined_charge_despite_a_provider_error_is_synced_and_answers_402(
+    client, fake_billing, holds
+):
+    await holds("trialing")
+    fake_billing.first_charge_fails = True
+    fake_billing.fail_on = {"after_end_trial"}
+
+    response = await client.post(SUBSCRIBE_NOW)
+
+    assert response.status_code == 402
+    assert (await client.get("/api/v1/billing/me")).json()["subscription"]["status"] == "past_due"
+    assert fake_billing.ended_trials == ["sub_1"]

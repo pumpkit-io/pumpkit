@@ -16,6 +16,7 @@ import stripe
 
 from pumpkit.billing.gateway import (
     BillingGateway,
+    BillingProviderError,
     FakeBillingGateway,
     OneOffPrice,
     StripeBillingGateway,
@@ -244,16 +245,26 @@ async def test_the_stripe_adapter_ends_a_trial_now_and_keeps_the_update_if_the_c
     assert form["payment_behavior"] == ["allow_incomplete"]
 
 
-async def test_the_stripe_adapter_sends_the_same_idempotency_key_to_end_a_trial_again():
-    """Stripe replays the first answer to a repeated idempotency key, so a second call ends nothing."""
-    http = _RecordedStripe(_ended_trial(_invoice("paid")))
-    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+async def test_a_cached_stripe_500_does_not_block_the_next_attempt_to_end_a_trial():
+    class _CachesFirstFailure(_RecordedStripe):
+        failed_key = None
 
-    await gateway.end_trial(subscription_id="sub_1QaRunning")
-    await gateway.end_trial(subscription_id="sub_1QaRunning")
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            key = headers["Idempotency-Key"]
+            if self.failed_key is None:
+                self.failed_key = key
+            if key == self.failed_key:
+                return '{"error": {"message": "boom", "type": "api_error"}}', 500, {}
+            return super().request(method, url, headers, post_data, _usage=_usage)
 
-    first, second = (headers["Idempotency-Key"] for headers in http.headers)
-    assert first == second
+    http = _CachesFirstFailure(_ended_trial(_invoice("paid")))
+    client = stripe.StripeClient("sk_test_contract", http_client=http, max_network_retries=0)
+    gateway = StripeBillingGateway(client)
+
+    with pytest.raises(BillingProviderError):
+        await gateway.end_trial(subscription_id="sub_1QaRunning")
+
+    assert await gateway.end_trial(subscription_id="sub_1QaRunning") is None
 
 
 async def test_the_stripe_adapter_links_a_first_charge_that_needs_authentication():
@@ -322,6 +333,12 @@ async def test_the_fake_ends_a_trial_at_its_clock_and_starts_the_paid_period():
         now,
         datetime(2026, 11, 10, 12, tzinfo=timezone.utc),
     )
+    assert gateway.ended_trials == ["sub_1"]
+
+    gateway.clock = lambda: datetime(2026, 10, 11, 12, tzinfo=timezone.utc)
+    await gateway.end_trial(subscription_id="sub_1")
+
+    assert await gateway.list_subscriptions(customer_id="cus_1") == [ended]
     assert gateway.ended_trials == ["sub_1"]
 
 

@@ -16,6 +16,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Fixed
 
+- Subscribe now can retry after a transient Stripe failure without replaying the same error for a day, and recognizes a trial that Stripe ended despite returning an error.
+
 - Settings refreshes your usage after a failed Subscribe now payment, showing your paid allowance and the link to update your payment method without a reload.
 
 ### Changed
