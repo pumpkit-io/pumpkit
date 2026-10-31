@@ -19,10 +19,6 @@ export const WITH_OPERATOR: Instance = {
   support_email: 'help@example.org',
   operator: {
     name: 'Example S.R.L.',
-    address: 'Via Roma 1, Milano, Italy',
     vat_id: 'IT01234567890',
-    rea: 'MI-123456',
-    share_capital: '€10,000 fully paid in',
-    pec: 'example@pec.it',
   },
 };

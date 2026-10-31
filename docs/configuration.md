@@ -4,7 +4,7 @@ Every setting comes from one `.env` file at the repo root, copied from `.env.exa
 
 Only the settings under [Required](#required) must be set. Everything else is optional: leave it unset or empty and the app boots with the default shown, or with that provider off.
 
-Each optional provider is a group of settings (ADR 0011). With all of a group's required settings set, the provider is on; with none set, it is off; with only some set, the backend refuses to start and names the missing ones. The groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), Google sign-in (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), SMTP (`SMTP_HOST`, `EMAIL_FROM`), Operator details (`OPERATOR_NAME`, `OPERATOR_ADDRESS`) and PostHog (`POSTHOG_PROJECT_API_KEY`). `SUPPORT_EMAIL` stands alone, except that Operator details need it: the company footer they turn on gives it as the contact address, so the backend refuses to start with Operator details and no `SUPPORT_EMAIL`.
+Each optional provider is a group of settings (ADR 0011). With all of a group's required settings set, the provider is on; with none set, it is off; with only some set, the backend refuses to start and names the missing ones. The groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), Google sign-in (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), SMTP (`SMTP_HOST`, `EMAIL_FROM`), Operator details (`OPERATOR_NAME`) and PostHog (`POSTHOG_PROJECT_API_KEY`). `SUPPORT_EMAIL` stands alone, except that Operator details need it: the company footer they turn on gives it as the contact address, so the backend refuses to start with Operator details and no `SUPPORT_EMAIL`.
 
 ## Required
 
@@ -111,8 +111,8 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 | Variable | Meaning |
 | --- | --- |
 | `SUPPORT_EMAIL` | The address the support link opens a new email to. With it, the Magic link sent page offers "Contact support" and the footer shows the address. Without it, both are hidden and `/support/contact` answers 404. Required when the Operator details are set. |
-| `OPERATOR_NAME`, `OPERATOR_ADDRESS` | The Operator details group: the company running the Instance. Set both or neither, and set `SUPPORT_EMAIL` with them. With them, the frontend shows the company details in the footer, the Terms and Privacy Policy pages and the sign-in Terms notice, and checkout requires accepting the Terms when the Instance sells Plans (ADR 0011). Without them, none of that appears. |
-| `OPERATOR_VAT_ID`, `OPERATOR_REA`, `OPERATOR_SHARE_CAPITAL`, `OPERATOR_PEC` | Company identifiers shown in the footer when the Operator details are set. |
+| `OPERATOR_NAME` | The Operator details group: the company running the Instance. Set `SUPPORT_EMAIL` with it. With it, the frontend shows the company line and the Company details link in the footer, the Terms and Privacy Policy pages and the sign-in Terms notice, and checkout requires accepting the Terms when the Instance sells Plans (ADR 0011). Without it, none of that appears. |
+| `OPERATOR_VAT_ID` | The VAT ID shown after the company name in the footer when the Operator details are set. |
 
 ### PostHog
 

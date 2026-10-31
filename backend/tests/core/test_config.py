@@ -30,7 +30,6 @@ _SMTP_ENV = {
 
 _OPERATOR_ENV = {
     "OPERATOR_NAME": "Example S.R.L.",
-    "OPERATOR_ADDRESS": "Via Roma 1, Milano, Italy",
 }
 
 
@@ -222,8 +221,6 @@ def test_smtp_defaults_to_starttls_and_an_explicit_port_wins(instance_env):
         (_GOOGLE_ENV, ["GOOGLE_CLIENT_ID"]),
         (_SMTP_ENV, ["SMTP_HOST"]),
         (_SMTP_ENV, ["EMAIL_FROM"]),
-        (_OPERATOR_ENV, ["OPERATOR_ADDRESS"]),
-        (_OPERATOR_ENV, ["OPERATOR_NAME"]),
     ],
 )
 def test_partly_configured_provider_fails_naming_each_missing_setting(instance_env, group, unset):
@@ -268,6 +265,20 @@ def test_operator_details_with_support_email_turn_both_on(instance_env):
     s = instance_env(**_OPERATOR_ENV, SUPPORT_EMAIL="support@example.org")
 
     assert s.has_support_email()
+    assert s.is_operator_configured()
+
+
+def test_removed_operator_settings_left_in_the_env_still_boot(instance_env):
+    # Instances upgraded from before the footer shrank may still set these.
+    s = instance_env(
+        **_OPERATOR_ENV,
+        SUPPORT_EMAIL="support@example.org",
+        OPERATOR_ADDRESS="Via Roma 1, Milano, Italy",
+        OPERATOR_REA="MI-123456",
+        OPERATOR_SHARE_CAPITAL="€10,000",
+        OPERATOR_PEC="example@pec.it",
+    )
+
     assert s.is_operator_configured()
 
 

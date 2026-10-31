@@ -33,7 +33,6 @@ _TEST_ENV = {
     "GOOGLE_COOKIE_MAX_AGE_SECONDS": "600",
     "GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS": "30",
     "OPERATOR_NAME": "Example S.R.L.",
-    "OPERATOR_ADDRESS": "Via Roma 1, Milano, Italy",
     "SUPPORT_EMAIL": "support@example.com",
     "STRIPE_SECRET_KEY": "sk_test_dummy",
     "STRIPE_PUBLISHABLE_KEY": "pk_test_dummy",
@@ -313,8 +312,7 @@ def sells_no_plans(monkeypatch) -> None:
 @pytest.fixture
 def no_operator_details(monkeypatch) -> None:
     """Unset the Operator details group, so the Instance has no legal pages or Terms."""
-    for key in ("OPERATOR_NAME", "OPERATOR_ADDRESS"):
-        monkeypatch.setattr(settings, key, None)
+    monkeypatch.setattr(settings, "OPERATOR_NAME", None)
 
 
 @pytest.fixture

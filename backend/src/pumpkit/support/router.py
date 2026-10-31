@@ -27,11 +27,7 @@ def _operator_details() -> Optional[OperatorDetails]:
         return None
     return OperatorDetails(
         name=settings.OPERATOR_NAME or "",
-        address=settings.OPERATOR_ADDRESS or "",
         vat_id=settings.OPERATOR_VAT_ID or None,
-        rea=settings.OPERATOR_REA or None,
-        share_capital=settings.OPERATOR_SHARE_CAPITAL or None,
-        pec=settings.OPERATOR_PEC or None,
     )
 
 

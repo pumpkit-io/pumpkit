@@ -2,10 +2,11 @@ These Terms are the contract between you and the Operator, INCEPTIONAL S.R.L., f
 
 ## 1. The Operator and these Terms {#operator}
 
-Pumpkit is run by INCEPTIONAL S.R.L., called the Operator in these Terms:
+Pumpkit is run by INCEPTIONAL S.R.L., a single-member limited liability company (società a responsabilità limitata a socio unico), called the Operator in these Terms:
 
 - registered office: Via Eugenio Curiel, 34, Fano (PU), Italy
-- VAT ID: IT02853580419
+- Companies Register (Registro delle Imprese) of Marche no. 02853580419
+- VAT ID and tax code: IT02853580419 / 02853580419
 - REA: PS-307481
 - share capital: €1, fully paid in
 - certified email (PEC): inceptional@pec.it

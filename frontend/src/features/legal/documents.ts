@@ -24,6 +24,7 @@ const TERMS_IT_PATH = '/it/terms';
 
 /** The English legal documents the footers link to, in display order. */
 export const LEGAL_LINKS = [
+  { path: `${TERMS_PATH}#operator`, label: 'Company details' },
   { path: PRIVACY_PATH, label: 'Privacy Policy' },
   { path: TERMS_PATH, label: 'Terms' },
 ];
@@ -31,7 +32,7 @@ export const LEGAL_LINKS = [
 // Bump with every change to a document's text; both languages share the date.
 // TERMS_LAST_UPDATED must equal the backend's TERMS_VERSION.
 const PRIVACY_LAST_UPDATED = '2026-10-30';
-const TERMS_LAST_UPDATED = '2026-10-29';
+const TERMS_LAST_UPDATED = '2026-10-31';
 
 /** Every legal document, served at its own public route: a new document is a Markdown file plus an entry here. */
 export const LEGAL_DOCUMENTS: LegalDocument[] = [
