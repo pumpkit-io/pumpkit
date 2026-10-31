@@ -221,11 +221,11 @@ async def check_room(
     """
     Raise `AllowanceUsedUp` when charging the periods afresh with a Scheduled post needing
     `needed` at `publish_at` leaves some post there less covered than it is now, by the Allowance
-    or by Top-ups unexpired at its own publish time, for any count in `limits`, the Allowance's
-    limits. A post already over a lowered limit doesn't block a change that takes no room from it.
-    A post earlier in the period can push a later one onto a Top-up that has expired by then. Pass
-    `changing_id` when changing an existing one, which leaves its old place and keeps what a
-    removed Top-up paid for. Call it with the User locked.
+    or by Top-ups unexpired at its own publish time, for any of `limits`. A post already over a
+    lowered limit doesn't block a change that takes no room from it. A post earlier in the period
+    can push a later one onto a Top-up that has expired by then. Pass `changing_id` when changing
+    an existing one, which leaves its old place and keeps what a removed Top-up paid for. Call it
+    with the User locked.
     """
     moments = [publish_at]
     paid = XPosts(x_posts=0, link_x_posts=0)

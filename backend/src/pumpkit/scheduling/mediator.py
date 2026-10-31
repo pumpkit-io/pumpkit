@@ -162,10 +162,7 @@ async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnec
 def _growing(
     needed: rules.XPosts, before: Optional[rules.XPosts], caps: dict[AllowanceCount, Optional[int]]
 ) -> dict[AllowanceCount, int]:
-    """
-    The capped counts the change adds to, with their caps: all it needs when new or moving, else
-    what grows.
-    """
+    """The capped counts the change adds to: all it needs when new or moving, else what grows."""
     return {
         count: cap
         for count, cap in caps.items()
@@ -194,19 +191,19 @@ async def check_x_posts_room(
         allowance = await billing_service.get_allowance(db, user_id=user_id, moment=publish_at)
         if allowance is None:
             return
-        limits = _growing(
+        growing = _growing(
             needed,
             before,
             {"x_posts": allowance.x_posts, "link_x_posts": allowance.link_x_posts},
         )
-        if limits:
+        if growing:
             await top_up_charges.check_room(
                 db,
                 user_id=user_id,
                 allowance=allowance,
                 publish_at=publish_at,
                 needed=needed,
-                limits=limits,
+                limits=growing,
                 changing_id=excluding_id,
             )
         return
@@ -670,11 +667,12 @@ async def _post_whose_text_changes(
 
 
 async def _commit_text(db: AsyncSession, *, user: User, post: Post) -> TextResponse:
-    await db.commit()
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     text = version_writing.text_response(post, char_limit)
+    # Only a Post with a Version has a Text to change.
     if text is None:
-        raise ConflictError("This post has no text to edit. Start a new post.")
+        raise RuntimeError(f"Post {post.id} has a changed Text but no Version.")
+    await db.commit()
     return text
 
 
