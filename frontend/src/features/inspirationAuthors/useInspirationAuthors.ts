@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSubscribed } from '@/features/billing/useSubscribed';
+import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { timeOfDay } from '@/lib/relativeTime';
 import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
@@ -22,7 +22,7 @@ function lookupResult(e: unknown): LookupResult | null {
 
 /** The User's Inspiration authors, loaded on mount, with add, refresh and remove. */
 export function useInspirationAuthors() {
-  const { refresh: refreshSubscribed } = useSubscribed();
+  const { refresh: refreshOnboarding } = useOnboarding();
   const [authors, setAuthors] = useState<InspirationAuthor[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   /** The handle being added, whose posts are being read. */
@@ -43,17 +43,17 @@ export function useInspirationAuthors() {
     };
   }, []);
 
-  /** A refusal for want of a Subscription shows the prompt to subscribe, not an error. */
+  /** A refusal for want of a Subscription sends the User to the Paywall, not to an error. */
   const fail = useCallback(
     (e: unknown, fallback: string) => {
       if (errorStatus(e) === 403) {
         setError(null);
-        refreshSubscribed();
+        void refreshOnboarding();
       } else {
         setError(errorMessage(e, fallback));
       }
     },
-    [refreshSubscribed],
+    [refreshOnboarding],
   );
 
   /**
