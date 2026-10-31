@@ -19,6 +19,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 - On an Instance that sells plans, a signed-in User who isn't subscribed now sees only the Paywall at `/subscribe`, wherever they open Pumpkit, and comes back to it whenever their subscription ends. It offers the free trial on each plan with the date of the first charge, or Subscribe once the trial is used, shows the yearly plan's saving over paying monthly, and keeps the Terms boxes; signing out and the legal links are there too. The per-page Subscribe prompts and Settings' Choose a plan card are gone. A return from checkout lands in the app. The API and the MCP tools refuse such a User too, reads included (the Inspiration authors, the X connection, API keys, Posts, Scheduled posts and `GET /api/v1/usage`), with a 403 or the subscribe link; `connect_x`, `get_usage` and `manage_subscription` now need a subscription as well. `GET /api/v1/onboarding` says where the web app sends the User next. An Instance that sells no plans is unchanged.
 - When your bank asks you to confirm the first payment of Subscribe now (3D Secure), the dialog says so and shows a Confirm payment button that opens Stripe's invoice page, instead of sending you to billing to update your card. A declined card still sends you to billing. The API's `402` has code `PAYMENT_NEEDS_AUTHENTICATION` and the invoice page as its `url`.
 
+### Fixed
+
+- Instances with analytics enabled no longer send `top_up_added` for a top-up first synced at or after its expiry.
+
 ## [0.4.0] - 2026-10-31
 
 ### Changed
@@ -27,7 +31,6 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Fixed
 
-- Instances with analytics enabled no longer send `top_up_added` for a top-up first synced at or after its expiry.
 - A top-up refunded or disputed before Pumpkit first synced it no longer sends the `top_up_added` analytics event.
 
 ## [0.3.0] - 2026-10-31
