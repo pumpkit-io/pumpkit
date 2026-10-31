@@ -9,6 +9,7 @@ import { billingService } from '@/services/billingService';
 import type { AllowanceUsage, TopUpUsage, UsageCount } from '@/services/usageService';
 import { AllowanceInfo, type AllowanceTopic } from './AllowanceInfo';
 import { BuyTopUpButton } from './BuyTopUp';
+import { SubscribeNowButton } from './SubscribeNow';
 import { allowanceDay, isLow } from './usage';
 import { useUsage } from './useUsage';
 
@@ -100,7 +101,13 @@ function TopUpsLeft({ topUps }: { topUps: TopUpUsage[] }) {
   );
 }
 
-function UsageDetails({ allowance }: { allowance: AllowanceUsage }) {
+function UsageDetails({
+  allowance,
+  onSubscribed,
+}: {
+  allowance: AllowanceUsage;
+  onSubscribed: () => void;
+}) {
   const [error, setError] = useState<string | null>(null);
   const { trial, generations, xPosts, linkXPosts, resetsAt, wayOut, topUps, mayBuyTopUp } =
     allowance;
@@ -146,7 +153,9 @@ function UsageDetails({ allowance }: { allowance: AllowanceUsage }) {
         </p>
         <p>Unused generations and X posts don&apos;t carry over.</p>
       </div>
-      {/* Subscribe now during a Trial (#235) goes here. */}
+      {wayOut === 'subscribe_now' && (
+        <SubscribeNowButton className="h-10" onSubscribed={onSubscribed} />
+      )}
       {(topUps.length > 0 || mayBuyTopUp) && (
         <div className="space-y-3">
           <TopUpsLeft topUps={topUps} />
@@ -210,7 +219,7 @@ export function UsageCard({ topUpBought = false }: { topUpBought?: boolean }) {
   return (
     <SettingsCard title="Usage">
       {usage?.allowance ? (
-        <UsageDetails allowance={usage.allowance} />
+        <UsageDetails allowance={usage.allowance} onSubscribed={reload} />
       ) : failed ? (
         <ErrorBanner message="Couldn't load your usage. Reload the page to try again." />
       ) : (

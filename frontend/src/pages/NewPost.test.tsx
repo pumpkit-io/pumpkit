@@ -24,6 +24,7 @@ vi.mock('@/services/billingService', () => ({
     }),
     openBillingPortal: vi.fn(),
     startTopUpCheckout: vi.fn(),
+    subscribeNow: vi.fn(),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
@@ -616,6 +617,52 @@ describe('New post', () => {
 
       expect(await within(dialog).findByRole('alert')).toHaveTextContent(
         'Update your payment method to buy a top-up.',
+      );
+    });
+
+    it('offers a trial User at the limit to subscribe now, and subscribes', async () => {
+      const noPlans = await billingService.fetchPlans();
+      onTestFinished(() => void vi.mocked(billingService.fetchPlans).mockResolvedValue(noPlans));
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({
+        plans: [
+          {
+            key: 'pumpkit_pro_monthly',
+            productName: 'Pro',
+            amount: 1900,
+            currency: 'eur',
+            interval: 'month',
+            intervalCount: 1,
+          },
+        ],
+        termsVersion: '2026-10-11',
+        allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+        trial: null,
+        topUp: null,
+      });
+      vi.mocked(billingService.subscribeNow).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(postService.start).mockRejectedValue(
+        allowanceUsedUp(
+          "You've used your trial's 125 generations. Your trial ends on 14 November. Failed attempts don't count.",
+          { way_out: 'subscribe_now' },
+        ),
+      );
+      const area = await readyToWrite();
+
+      await writeBrief(area, 'ship small things');
+      fireEvent.click(await area.findByRole('button', { name: 'Subscribe now' }));
+      const dialog = within(await screen.findByRole('dialog'));
+      expect(
+        await dialog.findByText(
+          "Your trial ends now and you're charged €19.00 today for your first month. Your monthly allowance of 500 generations and 100 X posts starts at once.",
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole('button', { name: 'Subscribe now' }));
+
+      expect(
+        await screen.findByText('Subscribed. Your monthly allowance has started.'),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.queryByText(/You've used your trial's/)).not.toBeInTheDocument(),
       );
     });
 

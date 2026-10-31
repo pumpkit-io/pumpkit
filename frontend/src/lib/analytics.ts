@@ -102,6 +102,10 @@ export const EVENTS = {
   top_up_bought: {
     description: 'Billing: returned from Stripe via the Top-up success URL.',
   },
+  billing_subscribe_now_confirmed: {
+    description:
+      'Billing: a Trial User confirmed Subscribe now and the Trial ended, from the Usage card or a limit notice.',
+  },
 
   // Writing: Persona, New post and the Post page
   inspiration_author_added: {

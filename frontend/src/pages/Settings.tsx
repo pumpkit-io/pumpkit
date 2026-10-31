@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { showToast } from '@/components/Toaster';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileCard } from '@/features/account/ProfileCard';
@@ -16,6 +17,7 @@ import { Topbar } from '@/features/topbar/Topbar';
 import { XAccountCard } from '@/features/xConnection/XAccountCard';
 import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
 import { track } from '@/lib/analytics';
+import type { TopUpOffer } from '@/services/billingService';
 import { fireSuccessConfetti } from '@/lib/confetti';
 
 /** What the X callback and the Stripe return routes leave in the location state for Settings. */
@@ -70,6 +72,16 @@ function useBillingOnArrival(checkoutStatus: SettingsLocationState['checkoutStat
   }, [sells_plans, load, checkoutStatus]);
 }
 
+/** Back from buying a Top-up, says what it added once billing has loaded the pack, once. */
+function useTopUpAddedToast(topUpBought: boolean, offer: TopUpOffer | null | undefined) {
+  const toasted = useRef(false);
+  useEffect(() => {
+    if (!topUpBought || !offer || toasted.current) return;
+    toasted.current = true;
+    showToast(`Top-up added: ${offer.generations} generations and ${offer.xPosts} X posts.`);
+  }, [topUpBought, offer]);
+}
+
 /** Scrolls to Choose a Plan once it is on screen, for the prompts that link to it. */
 function useScrollToChoosePlan(shown: boolean) {
   const { hash } = useLocation();
@@ -89,6 +101,8 @@ export function Settings() {
   useBillingOnArrival(arrival.checkoutStatus);
 
   const data = billing.data;
+  const topUpBought = arrival.checkoutStatus === 'top_up_bought';
+  useTopUpAddedToast(topUpBought, data?.topUp);
   const choosesPlan = sells_plans && data !== null && data.me.maySubscribe;
   useScrollToChoosePlan(choosesPlan);
 
@@ -130,9 +144,7 @@ export function Settings() {
               loadError={billing.loadError}
             />
           )}
-          {sells_plans && data?.me.subscribed && (
-            <UsageCard topUpBought={arrival.checkoutStatus === 'top_up_bought'} />
-          )}
+          {sells_plans && data?.me.subscribed && <UsageCard topUpBought={topUpBought} />}
           <ApiKeysSection />
           <AppearanceCard />
           <footer className="pt-4">

@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom';
+import { Toaster } from '@/components/Toaster';
 import { BillingProvider } from '@/features/billing/BillingProvider';
 import { SubscribedProvider } from '@/features/billing/SubscribedProvider';
 import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
@@ -26,6 +27,7 @@ function AppLayoutInner() {
               sidebarDrawer={<SidebarMobileDrawer />}
               main={<Outlet />}
             />
+            <Toaster />
           </PostCountsProvider>
         </InspirationAuthorsProvider>
       </XConnectionProvider>

@@ -5,13 +5,16 @@ import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { errorMessage, type AllowanceUsedUp } from '@/services/apiErrors';
 import { BuyTopUpButton } from './BuyTopUp';
+import { SubscribeNowButton } from './SubscribeNow';
 
 /**
  * The Allowance refusal where the User acted, in place of the action's error banner, with the
- * way out the backend offers. Way outs without a flow yet (subscribe now) show nothing.
+ * way out the backend offers. Once the User subscribes now the refusal no longer holds, so the
+ * notice goes.
  */
 export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
   const [error, setError] = useState<string | null>(null);
+  const [subscribed, setSubscribed] = useState(false);
 
   const openPortal = async () => {
     setError(null);
@@ -24,6 +27,7 @@ export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
     }
   };
 
+  if (subscribed) return null;
   return (
     <div
       role="status"
@@ -42,6 +46,9 @@ export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
         </Button>
       )}
       {refusal.wayOut === 'top_up' && <BuyTopUpButton />}
+      {refusal.wayOut === 'subscribe_now' && (
+        <SubscribeNowButton size="sm" className="h-8" onSubscribed={() => setSubscribed(true)} />
+      )}
       {error && <p className="text-destructive">{error}</p>}
     </div>
   );

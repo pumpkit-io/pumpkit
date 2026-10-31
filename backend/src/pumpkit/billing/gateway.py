@@ -24,9 +24,11 @@ import stripe
 from starlette.concurrency import run_in_threadpool
 from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateParams
 
+from pumpkit.billing.allowance import months_after
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError
+from pumpkit.core.time import Clock, system_clock
 
 
 class BillingProviderError(AppError):
@@ -160,6 +162,13 @@ class BillingGateway(Protocol):
 
     async def cancel_subscription(self, *, subscription_id: str) -> None:
         """Cancel a Subscription now, so it Ends and can never run."""
+        ...
+
+    async def end_trial(self, *, subscription_id: str) -> None:
+        """
+        End a trialing Subscription's Trial now: the provider charges the first period at once and
+        moves the billing cycle anchor to now. A failed charge leaves it past due, not an error.
+        """
         ...
 
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
@@ -427,6 +436,17 @@ class StripeBillingGateway:
             lambda: self._client.v1.subscriptions.cancel(subscription_id),
         )
 
+    async def end_trial(self, *, subscription_id: str) -> None:
+        await self._call(
+            "end a Trial",
+            lambda: self._client.v1.subscriptions.update(
+                subscription_id,
+                # `allow_incomplete` keeps the update when the charge fails: Stripe makes the
+                # Subscription past due instead of refusing the change.
+                {"trial_end": "now", "payment_behavior": "allow_incomplete"},
+            ),
+        )
+
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         # Pure HMAC work, no network: no need to leave the event loop.
         try:
@@ -528,6 +548,10 @@ class FakeBillingGateway:
     checkout_url: str = "https://checkout.test/session"
     portal_url: str = "https://billing.test/portal"
     plans: list[Plan] = field(default_factory=list)
+    # The provider's "now", for what ending a Trial stamps on the Subscription.
+    clock: Clock = system_clock
+    # Whether the charge that ends a Trial fails, leaving the Subscription past due.
+    first_charge_fails: bool = False
 
     customers_created: list[CustomerCall] = field(default_factory=list)
     checkouts: list[CheckoutCall] = field(default_factory=list)
@@ -537,6 +561,7 @@ class FakeBillingGateway:
     cancelled_subscriptions: list[str] = field(default_factory=list)
     prices: list[OneOffPrice] = field(default_factory=list)
     top_up_checkouts: list[TopUpCheckoutCall] = field(default_factory=list)
+    ended_trials: list[str] = field(default_factory=list)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
     _subscriptions: dict[str, dict[str, SubscriptionState]] = field(
@@ -616,6 +641,20 @@ class FakeBillingGateway:
         for subscriptions in self._subscriptions.values():
             if subscription := subscriptions.get(subscription_id):
                 subscriptions[subscription_id] = replace(subscription, status="canceled")
+
+    async def end_trial(self, *, subscription_id: str) -> None:
+        self._maybe_fail("end_trial")
+        self.ended_trials.append(subscription_id)
+        now = self.clock()
+        for subscriptions in self._subscriptions.values():
+            if subscription := subscriptions.get(subscription_id):
+                subscriptions[subscription_id] = replace(
+                    subscription,
+                    status="past_due" if self.first_charge_fails else "active",
+                    trial_end=now,
+                    billing_cycle_anchor=now,
+                    current_period_end=months_after(now, 1),
+                )
 
     def signed_event(
         self, *, event_id: str, event_type: str, data_object: dict[str, Any]
