@@ -199,7 +199,7 @@ async def test_a_refetch_stores_only_the_posts_not_already_stored(
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
@@ -208,14 +208,14 @@ async def test_a_refetch_stores_only_the_posts_not_already_stored(
     assert response.json()["post_count"] == 3
 
 
-async def test_adding_a_handle_fetched_less_than_an_hour_ago_uses_its_stored_posts(
+async def test_adding_a_handle_fetched_less_than_a_day_ago_uses_its_stored_posts(
     client, subscribed, fake_x_reader, clock
 ):
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     fetched_at = clock()
     await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(minutes=59))
+    clock.advance(timedelta(hours=23, minutes=59, seconds=59))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
@@ -230,13 +230,13 @@ async def test_adding_a_handle_fetched_less_than_an_hour_ago_uses_its_stored_pos
     assert fake_x_reader.calls == ["levelsio"]
 
 
-async def test_adding_a_handle_fetched_over_an_hour_ago_fetches_it_again(
+async def test_adding_a_handle_fetched_a_day_ago_fetches_it_again(
     client, subscribed, fake_x_reader, clock
 ):
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(hours=1, seconds=1))
+    clock.advance(timedelta(hours=24))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
@@ -278,7 +278,7 @@ async def test_refreshing_an_author_stores_its_new_posts_and_updates_its_fetch_t
 ):
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(f"{AUTHORS}/LevelsIO/refresh")
@@ -319,7 +319,7 @@ async def test_a_refetch_replaces_the_stored_photo(client, subscribed, fake_x_re
     fake_x_reader.posts["levelsio"] = _posts("1")
     fake_x_reader.photos["levelsio"] = PHOTO
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     fake_x_reader.photos["levelsio"] = NEW_PHOTO
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
@@ -334,7 +334,7 @@ async def test_a_refetch_that_finds_no_photo_keeps_the_stored_one(
     fake_x_reader.posts["levelsio"] = _posts("1")
     fake_x_reader.photos["levelsio"] = PHOTO
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     del fake_x_reader.photos["levelsio"]
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
@@ -342,20 +342,20 @@ async def test_a_refetch_that_finds_no_photo_keeps_the_stored_one(
     assert response.json()["photo_url"] == PHOTO
 
 
-async def test_refreshing_a_handle_fetched_less_than_an_hour_ago_returns_429_with_when_to_retry(
+async def test_refreshing_a_handle_fetched_less_than_a_day_ago_returns_429_with_when_to_retry(
     client, subscribed, fake_x_reader, clock
 ):
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     fetched_at = clock()
-    clock.advance(timedelta(minutes=45))
+    clock.advance(timedelta(hours=23, minutes=45))
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
 
     assert response.status_code == 429
     assert response.json() == {
-        "detail": "@levelsio was fetched less than an hour ago.",
-        "retry_at": _iso(fetched_at + timedelta(hours=1)),
+        "detail": "@levelsio was fetched less than a day ago.",
+        "retry_at": _iso(fetched_at + timedelta(hours=24)),
     }
     assert response.headers["Retry-After"] == str(15 * 60)
     assert fake_x_reader.calls == ["levelsio"]
@@ -390,10 +390,10 @@ async def test_the_cooldown_is_per_handle_so_another_users_fetch_holds_it(
 ):
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(minutes=90))
+    clock.advance(timedelta(hours=30))
     await _sign_in_as_another_subscribed_user(db)
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(minutes=59, seconds=59))
+    clock.advance(timedelta(hours=23, minutes=59, seconds=59))
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
 
@@ -402,12 +402,12 @@ async def test_the_cooldown_is_per_handle_so_another_users_fetch_holds_it(
     assert fake_x_reader.calls == ["levelsio", "levelsio"]
 
 
-async def test_a_handle_can_be_refreshed_again_exactly_an_hour_after_its_last_fetch(
+async def test_a_handle_can_be_refreshed_again_exactly_a_day_after_its_last_fetch(
     client, subscribed, fake_x_reader, clock
 ):
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=1))
+    clock.advance(timedelta(hours=24))
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
 
@@ -433,7 +433,7 @@ async def test_a_user_whose_subscription_ended_gets_403_when_refreshing(
     await client.post(AUTHORS, json={"handle": "levelsio"})
     subscribed.status = "canceled"
     await db.commit()
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
 
@@ -446,7 +446,7 @@ async def test_refreshing_without_the_twitterapi_io_key_fails_clearly(
 ):
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     fake_x_reader.not_configured = True
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
@@ -460,7 +460,7 @@ async def test_refreshing_a_handle_x_no_longer_knows_returns_404(
 ):
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=2))
     del fake_x_reader.posts["levelsio"]
 
     response = await client.post(f"{AUTHORS}/levelsio/refresh")

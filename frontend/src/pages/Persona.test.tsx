@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -76,6 +76,10 @@ async function persona() {
 }
 
 describe('Persona', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
@@ -272,12 +276,14 @@ describe('Persona', () => {
     expect(track).toHaveBeenCalledWith('inspiration_authors_refreshed');
   });
 
-  it('says when an author can be refreshed again after a refresh within the hour', async () => {
+  it('says when an author can be refreshed again after a refresh within the day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 5, 16, 0));
     vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
     vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
     const retryAt = new Date(2026, 9, 6, 15, 42);
     vi.mocked(inspirationAuthorService.refresh).mockRejectedValue(
-      apiError(429, '@levelsio was fetched less than an hour ago.', {
+      apiError(429, '@levelsio was fetched less than a day ago.', {
         retry_at: retryAt.toISOString(),
       }),
     );
@@ -288,7 +294,7 @@ describe('Persona', () => {
 
     expect(
       await panel.findByText(
-        '@levelsio was fetched less than an hour ago. You can refresh it again at 3:42 PM.',
+        '@levelsio was fetched less than a day ago. You can refresh it again tomorrow at 3:42 PM.',
       ),
     ).toBeInTheDocument();
     expect(panel.queryByRole('alert')).not.toBeInTheDocument();
