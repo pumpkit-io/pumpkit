@@ -41,10 +41,12 @@ function SubscribeNowDialog({
   open,
   onOpenChange,
   onSubscribed,
+  onSettled,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubscribed?: () => void;
+  onSettled?: () => void;
 }) {
   const { data, loadError, load } = useLoadedBilling(open);
   const [busy, setBusy] = useState(false);
@@ -68,6 +70,7 @@ function SubscribeNowDialog({
       setBusy(false);
       // A failed charge still ends the Trial, so the Subscription changed either way.
       void load();
+      onSettled?.();
     }
   };
 
@@ -120,15 +123,27 @@ function SubscribeNowDialog({
 /** Subscribe now during a Trial: the button and the dialog it opens. */
 export function SubscribeNowButton({
   onSubscribed,
+  onSettled,
+  available = true,
   ...button
-}: { onSubscribed?: () => void } & Pick<ButtonProps, 'size' | 'variant' | 'className'>) {
+}: { onSubscribed?: () => void; onSettled?: () => void; available?: boolean } & Pick<
+  ButtonProps,
+  'size' | 'variant' | 'className'
+>) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button type="button" {...button} onClick={() => setOpen(true)}>
-        Subscribe now
-      </Button>
-      <SubscribeNowDialog open={open} onOpenChange={setOpen} onSubscribed={onSubscribed} />
+      {available && (
+        <Button type="button" {...button} onClick={() => setOpen(true)}>
+          Subscribe now
+        </Button>
+      )}
+      <SubscribeNowDialog
+        open={open}
+        onOpenChange={setOpen}
+        onSubscribed={onSubscribed}
+        onSettled={onSettled}
+      />
     </>
   );
 }
