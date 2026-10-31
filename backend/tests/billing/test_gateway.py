@@ -100,22 +100,27 @@ def test_an_unverifiable_event_is_rejected(verifier, tamper):
 
 
 class _RecordedStripe(stripe.HTTPClient):
-    """Stripe's HTTP layer, answering every request with one recorded response body."""
+    """Stripe's HTTP layer, answering with the recorded response bodies in turn, repeating the last."""
 
     name = "recorded"
 
-    def __init__(self, body: str) -> None:
+    def __init__(self, *bodies: str) -> None:
         super().__init__()
-        self._body = body
+        self._bodies = list(bodies)
         self.urls: list[str] = []
         self.methods: list[str] = []
         self.forms: list[dict[str, list[str]]] = []
+        self.headers: list[dict[str, str]] = []
 
-    def request(self, method, url, headers, post_data=None, *, _usage=None):
+    def request(
+        self, method, url, headers, post_data=None, *, _usage=None
+    ) -> tuple[str, int, dict]:
         self.urls.append(url)
         self.methods.append(method)
         self.forms.append(parse_qs(post_data or ""))
-        return self._body, 200, {}
+        self.headers.append(dict(headers or {}))
+        body = self._bodies.pop(0) if len(self._bodies) > 1 else self._bodies[0]
+        return body, 200, {}
 
     def close(self) -> None:
         pass
@@ -185,18 +190,105 @@ async def test_the_stripe_adapter_cancels_a_subscription_now():
     assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1Incomplete"
 
 
-async def test_the_stripe_adapter_ends_a_trial_now_and_keeps_the_update_if_the_charge_fails():
+def _ended_trial(invoice: Optional[dict[str, Any]]) -> str:
     listing = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
-    http = _RecordedStripe(json.dumps(listing["data"][0]))
+    return json.dumps({**listing["data"][0], "latest_invoice": invoice})
+
+
+def _invoice(status: str) -> dict[str, Any]:
+    return {
+        "id": "in_1First",
+        "object": "invoice",
+        "status": status,
+        "hosted_invoice_url": "https://invoice.stripe.com/i/in_1First",
+    }
+
+
+def _payments(intent_status: str) -> str:
+    return json.dumps(
+        {
+            "object": "list",
+            "url": "/v1/invoice_payments",
+            "has_more": False,
+            "data": [
+                {
+                    "id": "inpay_1",
+                    "object": "invoice_payment",
+                    "invoice": "in_1First",
+                    "status": "open",
+                    "payment": {
+                        "type": "payment_intent",
+                        "payment_intent": {
+                            "id": "pi_1",
+                            "object": "payment_intent",
+                            "status": intent_status,
+                        },
+                    },
+                }
+            ],
+        }
+    )
+
+
+async def test_the_stripe_adapter_ends_a_trial_now_and_keeps_the_update_if_the_charge_fails():
+    http = _RecordedStripe(_ended_trial(_invoice("open")), _payments("requires_payment_method"))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    authentication_url = await gateway.end_trial(subscription_id="sub_1QaRunning")
+
+    assert authentication_url is None
+    assert http.methods[0] == "post"
+    assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1QaRunning"
+    form = http.forms[0]
+    assert form["trial_end"] == ["now"]
+    assert form["payment_behavior"] == ["allow_incomplete"]
+
+
+async def test_the_stripe_adapter_sends_the_same_idempotency_key_to_end_a_trial_again():
+    """Stripe replays the first answer to a repeated idempotency key, so a second call ends nothing."""
+    http = _RecordedStripe(_ended_trial(_invoice("paid")))
     gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
 
     await gateway.end_trial(subscription_id="sub_1QaRunning")
+    await gateway.end_trial(subscription_id="sub_1QaRunning")
 
-    assert http.methods == ["post"]
-    assert urlsplit(http.urls[0]).path == "/v1/subscriptions/sub_1QaRunning"
-    [form] = http.forms
-    assert form["trial_end"] == ["now"]
-    assert form["payment_behavior"] == ["allow_incomplete"]
+    first, second = (headers["Idempotency-Key"] for headers in http.headers)
+    assert first == second
+
+
+async def test_the_stripe_adapter_links_a_first_charge_that_needs_authentication():
+    http = _RecordedStripe(_ended_trial(_invoice("open")), _payments("requires_action"))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    authentication_url = await gateway.end_trial(subscription_id="sub_1QaRunning")
+
+    assert authentication_url == "https://invoice.stripe.com/i/in_1First"
+    query = parse_qs(urlsplit(http.urls[1]).query)
+    assert urlsplit(http.urls[1]).path == "/v1/invoice_payments"
+    assert query["invoice"] == ["in_1First"]
+
+
+async def test_the_stripe_adapter_links_nothing_for_a_declined_first_charge():
+    http = _RecordedStripe(_ended_trial(_invoice("open")), _payments("requires_payment_method"))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    assert await gateway.end_trial(subscription_id="sub_1QaRunning") is None
+
+
+async def test_the_stripe_adapter_links_nothing_when_it_cant_list_the_first_charges_payments():
+    """The Trial has ended by then, so the caller must still hear back and sync."""
+
+    class _FailsToList(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            if "/v1/invoice_payments" in url:
+                return '{"error": {"message": "boom", "type": "api_error"}}', 500, {}
+            return super().request(method, url, headers, post_data, _usage=_usage)
+
+    http = _FailsToList(_ended_trial(_invoice("open")))
+    client = stripe.StripeClient("sk_test_contract", http_client=http, max_network_retries=0)
+    gateway = StripeBillingGateway(client)
+
+    assert await gateway.end_trial(subscription_id="sub_1QaRunning") is None
 
 
 async def test_the_fake_ends_a_trial_at_its_clock_and_starts_the_paid_period():

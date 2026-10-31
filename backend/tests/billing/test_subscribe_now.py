@@ -138,6 +138,27 @@ async def test_a_failed_first_charge_leaves_the_subscription_past_due_and_says_s
     assert me["subscribed"] is True
 
 
+async def test_a_first_charge_waiting_on_authentication_links_the_invoice_to_authenticate_on(
+    client, fake_billing, holds
+):
+    await holds("trialing")
+    fake_billing.first_charge_authentication_url = "https://invoice.stripe.test/i/in_1"
+
+    response = await client.post(SUBSCRIBE_NOW)
+
+    assert response.status_code == 402
+    assert response.json() == {
+        "detail": (
+            "Your trial has ended, but your bank needs you to confirm the first payment. "
+            "Confirm it on Stripe's invoice page."
+        ),
+        "code": "PAYMENT_NEEDS_AUTHENTICATION",
+        "url": "https://invoice.stripe.test/i/in_1",
+    }
+    me = (await client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["status"] == "past_due"
+
+
 @pytest.mark.parametrize("status", ["active", "past_due", "canceled"])
 async def test_a_user_who_isnt_trialing_cant_subscribe_now(client, fake_billing, holds, status):
     holds(status)

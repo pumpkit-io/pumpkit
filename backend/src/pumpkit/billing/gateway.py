@@ -28,6 +28,7 @@ from pumpkit.billing.allowance import months_after
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError
+from pumpkit.core.logging import logger
 from pumpkit.core.time import Clock, system_clock
 
 
@@ -164,10 +165,14 @@ class BillingGateway(Protocol):
         """Cancel a Subscription now, so it Ends and can never run."""
         ...
 
-    async def end_trial(self, *, subscription_id: str) -> None:
+    async def end_trial(self, *, subscription_id: str) -> Optional[str]:
         """
         End a trialing Subscription's Trial now: the provider charges the first period at once and
         moves the billing cycle anchor to now. A failed charge leaves it past due, not an error.
+
+        Returns the provider's page where the User authenticates the first charge when it waits
+        for that (3D Secure), else None. Ending the same Trial again within 24 hours ends nothing,
+        and fails with `BillingProviderError` while the first call is still running.
         """
         ...
 
@@ -436,16 +441,45 @@ class StripeBillingGateway:
             lambda: self._client.v1.subscriptions.cancel(subscription_id),
         )
 
-    async def end_trial(self, *, subscription_id: str) -> None:
-        await self._call(
+    async def end_trial(self, *, subscription_id: str) -> Optional[str]:
+        subscription = await self._call(
             "end a Trial",
             lambda: self._client.v1.subscriptions.update(
                 subscription_id,
                 # `allow_incomplete` keeps the update when the charge fails: Stripe makes the
                 # Subscription past due instead of refusing the change.
-                {"trial_end": "now", "payment_behavior": "allow_incomplete"},
+                {
+                    "trial_end": "now",
+                    "payment_behavior": "allow_incomplete",
+                    "expand": ["latest_invoice"],
+                },
+                # Stripe replays the first answer to a repeated key (for 24 hours).
+                {"idempotency_key": f"pumpkit-{subscription_id}-end-trial"},
             ),
         )
+        invoice = subscription.to_dict().get("latest_invoice")
+        if not isinstance(invoice, dict) or invoice.get("status") != "open":
+            return None
+        try:
+            payments = await self._call(
+                "list a first charge's payments",
+                lambda: self._client.v1.invoice_payments.list(
+                    {
+                        "invoice": invoice["id"],
+                        "status": "open",
+                        "expand": ["data.payment.payment_intent"],
+                    }
+                ),
+            )
+        except BillingProviderError:
+            # The Trial has ended either way, so the caller still syncs; it only loses the link.
+            logger.warning("Couldn't tell why invoice %s is unpaid", invoice["id"], exc_info=True)
+            return None
+        for payment in payments.data:
+            intent = payment.to_dict().get("payment", {}).get("payment_intent")
+            if isinstance(intent, dict) and intent.get("status") == "requires_action":
+                return invoice.get("hosted_invoice_url")
+        return None
 
     def verify_webhook(self, *, payload: bytes, signature: str) -> WebhookEvent:
         # Pure HMAC work, no network: no need to leave the event loop.
@@ -551,6 +585,8 @@ class FakeBillingGateway:
     clock: Clock = system_clock
     # Whether the charge that ends a Trial fails, leaving the Subscription past due.
     first_charge_fails: bool = False
+    # Where the charge that ends a Trial waits for the User to authenticate it, past due till then.
+    first_charge_authentication_url: Optional[str] = None
 
     customers_created: list[CustomerCall] = field(default_factory=list)
     checkouts: list[CheckoutCall] = field(default_factory=list)
@@ -641,19 +677,21 @@ class FakeBillingGateway:
             if subscription := subscriptions.get(subscription_id):
                 subscriptions[subscription_id] = replace(subscription, status="canceled")
 
-    async def end_trial(self, *, subscription_id: str) -> None:
+    async def end_trial(self, *, subscription_id: str) -> Optional[str]:
         self._maybe_fail("end_trial")
+        charged = not self.first_charge_fails and self.first_charge_authentication_url is None
         self.ended_trials.append(subscription_id)
         now = self.clock()
         for subscriptions in self._subscriptions.values():
             if subscription := subscriptions.get(subscription_id):
                 subscriptions[subscription_id] = replace(
                     subscription,
-                    status="past_due" if self.first_charge_fails else "active",
+                    status="active" if charged else "past_due",
                     trial_end=now,
                     billing_cycle_anchor=now,
                     current_period_end=months_after(now, 1),
                 )
+        return self.first_charge_authentication_url
 
     def signed_event(
         self, *, event_id: str, event_type: str, data_object: dict[str, Any]

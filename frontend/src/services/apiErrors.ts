@@ -58,3 +58,10 @@ export function errorAllowanceUsedUp(e: unknown): AllowanceUsedUp | null {
     wayOut: (data.way_out as AllowanceWayOut | null | undefined) ?? null,
   };
 }
+
+/** The provider's page to authenticate a payment on, when a request failed waiting for that. */
+export function errorPaymentAuthenticationUrl(e: unknown): string | null {
+  if (errorCode(e) !== 'PAYMENT_NEEDS_AUTHENTICATION') return null;
+  const url = (e as { response?: { data?: { url?: unknown } } }).response?.data?.url;
+  return typeof url === 'string' ? url : null;
+}
