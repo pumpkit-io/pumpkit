@@ -72,7 +72,7 @@ async def test_adding_a_handle_x_does_not_know_returns_404(client, subscribed):
     response = await client.post(AUTHORS, json={"handle": "nobody_here"})
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "@nobody_here doesn't exist on X."
+    assert response.json()["detail"] == "@nobody_here isn't on X"
     assert (await client.get(AUTHORS)).json() == {"data": []}
 
 
@@ -84,7 +84,7 @@ async def test_adding_a_handle_with_no_original_posts_returns_422(
     response = await client.post(AUTHORS, json={"handle": "replyguy"})
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "@replyguy has no original posts to learn from."
+    assert response.json()["detail"] == "@replyguy has no posts of its own to learn from"
     assert (await client.get(AUTHORS)).json() == {"data": []}
 
 
@@ -194,7 +194,7 @@ async def test_a_refetch_stores_only_the_posts_not_already_stored(
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(hours=2))
+    clock.advance(timedelta(days=7))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
@@ -203,36 +203,13 @@ async def test_a_refetch_stores_only_the_posts_not_already_stored(
     assert response.json()["post_count"] == 3
 
 
-async def test_adding_a_handle_fetched_less_than_an_hour_ago_uses_its_stored_posts(
-    client, subscribed, fake_x_reader, clock
-):
-    fake_x_reader.posts["levelsio"] = _posts("1", "2")
-    await client.post(AUTHORS, json={"handle": "levelsio"})
-    fetched_at = clock()
-    await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(minutes=59))
-    fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
-
-    response = await client.post(AUTHORS, json={"handle": "levelsio"})
-
-    assert response.status_code == 201
-    assert response.json() == {
-        "handle": "levelsio",
-        "last_fetched_at": _iso(fetched_at),
-        "post_count": 2,
-        "name": None,
-        "photo_url": None,
-    }
-    assert fake_x_reader.calls == ["levelsio"]
-
-
-async def test_adding_a_handle_fetched_over_an_hour_ago_fetches_it_again(
+async def test_adding_a_handle_fetched_a_week_ago_fetches_it_again(
     client, subscribed, fake_x_reader, clock
 ):
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(hours=1, seconds=1))
+    clock.advance(timedelta(days=7))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
@@ -365,6 +342,7 @@ async def test_the_cooldown_is_per_handle_so_another_users_fetch_holds_it(
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     clock.advance(timedelta(minutes=90))
+    await client.post(f"{AUTHORS}/levelsio/refresh")
     await sign_in_as_another_subscribed_user()
     await client.post(AUTHORS, json={"handle": "levelsio"})
     clock.advance(timedelta(minutes=59, seconds=59))
@@ -440,4 +418,4 @@ async def test_refreshing_a_handle_x_no_longer_knows_returns_404(
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "@levelsio doesn't exist on X."
+    assert response.json()["detail"] == "@levelsio isn't on X"

@@ -110,6 +110,15 @@ class Settings(BaseSettings):
 
     # Optional: when unset, pumpkit.authors.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None
+    # Lookups on X of handles not in the Author directory, per User and per Instance (ADR 0019).
+    AUTHOR_LOOKUP_HOURLY_LIMIT: int = Field(default=10, ge=0)
+    AUTHOR_LOOKUP_DAILY_LIMIT: int = Field(default=30, ge=0)
+    AUTHOR_LOOKUP_INSTANCE_DAILY_LIMIT: int = Field(default=500, ge=0)
+    # How long a lookup that found nothing answers for every User without asking X again.
+    AUTHOR_MISS_DAYS: int = Field(default=7, ge=0)
+    AUTHOR_PRIVATE_MISS_DAYS: int = Field(default=1, ge=0)
+    # Adding an author reuses posts any User fetched this recently instead of fetching them again.
+    AUTHOR_POSTS_REUSE_DAYS: int = Field(default=7, ge=0)
 
     # Optional: when unset, pumpkit.core.classifier raises ClassifierNotConfiguredError on use.
     TYPESAFE_API_KEY: Optional[str] = None

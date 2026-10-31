@@ -312,8 +312,8 @@ def _kept_post(tweet: Any) -> Optional[FetchedPost]:
 class FakeXReader:
     """
     X in memory: answers a handle's posts with `posts[handle]`, `photos.get(handle)` and
-    `names.get(handle)`; its profile with `profiles[handle]`, or a suspension for a handle in
-    `suspended`; and a Community ID with `communities[id]` (its name). Anything else is a
+    `names.get(handle)`; its profile with `profiles[handle]`, a suspension for a handle in
+    `suspended`, or a public profile for a handle with `posts`; and a Community ID with `communities[id]` (its name). Anything else is a
     not-found error. Records each handle read in `calls`, each profile looked up in
     `profile_calls` and each Community ID in `community_calls`. Set `fail` or `not_configured`
     to raise.
@@ -339,9 +339,16 @@ class FakeXReader:
             raise XReaderError("Fake X reader is set to fail")
         if handle in self.suspended:
             raise HandleSuspendedError(f"Fake X reader has {handle} suspended")
-        if handle not in self.profiles:
-            raise HandleNotFoundError(f"Fake X reader has no {handle}")
-        return self.profiles[handle]
+        if handle in self.profiles:
+            return self.profiles[handle]
+        if handle in self.posts:
+            return FetchedProfile(
+                handle=handle,
+                name=self.names.get(handle),
+                photo_url=self.photos.get(handle),
+                protected=False,
+            )
+        raise HandleNotFoundError(f"Fake X reader has no {handle}")
 
     async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         self.calls.append(handle)

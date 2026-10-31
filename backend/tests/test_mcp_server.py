@@ -228,7 +228,7 @@ async def test_an_unexpected_error_is_reported_and_answered_without_its_details(
     async def broken(handle: str):
         raise RuntimeError("secret internals")
 
-    monkeypatch.setattr(fake_x_reader, "fetch_recent_posts", broken)
+    monkeypatch.setattr(fake_x_reader, "look_up_profile", broken)
 
     result = await mcp.call_tool("add_inspiration_author", handle="levelsio")
 

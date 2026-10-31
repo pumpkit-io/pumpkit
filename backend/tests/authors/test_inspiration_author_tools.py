@@ -4,7 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.authors.x_reader import FetchedPost, FetchedProfile
+from pumpkit.core.config import settings
 from tests.mcp_client import error_text
 
 
@@ -80,7 +81,55 @@ async def test_a_handle_that_isnt_valid_is_refused_without_reading_x(
 async def test_a_handle_x_doesnt_know_is_refused(subscribed, mcp):
     result = await mcp.call_tool("add_inspiration_author", handle="nobody")
 
-    assert error_text(result) == "@nobody doesn't exist on X."
+    assert error_text(result) == "@nobody isn't on X"
+
+
+async def test_a_handle_x_doesnt_know_is_remembered_without_asking_x_again(
+    subscribed, mcp, fake_x_reader
+):
+    await mcp.call_tool("add_inspiration_author", handle="nobody")
+
+    result = await mcp.call_tool("add_inspiration_author", handle="nobody")
+
+    assert error_text(result) == "@nobody isn't on X"
+    assert fake_x_reader.profile_calls == ["nobody"]
+
+
+async def test_a_private_account_is_refused(subscribed, mcp, fake_x_reader):
+    fake_x_reader.profiles["shy"] = FetchedProfile(
+        handle="shy", name="Shy", photo_url=None, protected=True
+    )
+
+    result = await mcp.call_tool("add_inspiration_author", handle="shy")
+
+    assert error_text(result) == "@shy is private, so Pumpkit can't read its posts"
+
+
+async def test_a_lookup_over_the_user_s_limit_is_refused_with_when_to_try_again(
+    subscribed, mcp, fake_x_reader, fixed_clock, monkeypatch
+):
+    monkeypatch.setattr(settings, "AUTHOR_LOOKUP_HOURLY_LIMIT", 1)
+    await mcp.call_tool("add_inspiration_author", handle="nobody")
+
+    result = await mcp.call_tool("add_inspiration_author", handle="levelsio")
+
+    assert error_text(result) == "You've looked up a lot of handles. Try again in 60 minutes."
+    assert result["structuredContent"]["retry_at"] == "2026-10-10T13:00:30Z"
+    assert fake_x_reader.profile_calls == ["nobody"]
+
+
+async def test_a_lookup_over_the_instance_s_cap_is_refused(
+    subscribed, mcp, fake_x_reader, monkeypatch
+):
+    monkeypatch.setattr(settings, "AUTHOR_LOOKUP_INSTANCE_DAILY_LIMIT", 1)
+    await mcp.call_tool("add_inspiration_author", handle="nobody")
+
+    result = await mcp.call_tool("add_inspiration_author", handle="levelsio")
+
+    assert error_text(result) == (
+        "Looking up new handles is paused for today. "
+        "Pick from the suggestions or try again tomorrow."
+    )
 
 
 async def test_a_handle_without_original_posts_is_refused(subscribed, mcp, fake_x_reader):
@@ -88,7 +137,7 @@ async def test_a_handle_without_original_posts_is_refused(subscribed, mcp, fake_
 
     result = await mcp.call_tool("add_inspiration_author", handle="quiet")
 
-    assert error_text(result) == "@quiet has no original posts to learn from."
+    assert error_text(result) == "@quiet has no posts of its own to learn from"
 
 
 async def test_x_unreadable_is_refused_and_reported(subscribed, mcp, fake_x_reader, fake_posthog):

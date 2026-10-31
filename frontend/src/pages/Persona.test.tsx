@@ -209,9 +209,15 @@ describe('Persona', () => {
   });
 
   it.each([
-    [404, "@nobody doesn't exist on X."],
-    [422, '@nobody has no original posts to learn from.'],
+    [404, "@nobody isn't on X"],
+    [422, "@nobody is private, so Pumpkit can't read its posts"],
+    [422, '@nobody has no posts of its own to learn from'],
     [409, 'You can have up to 3 Inspiration authors. Remove one to add another.'],
+    [429, "You've looked up a lot of handles. Try again in 40 minutes."],
+    [
+      429,
+      'Looking up new handles is paused for today. Pick from the suggestions or try again tomorrow.',
+    ],
   ])(
     'says why a handle was refused with a %i and keeps it in the field',
     async (status, detail) => {
