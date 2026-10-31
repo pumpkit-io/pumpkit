@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import type { InternalAxiosRequestConfig } from 'axios';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -16,6 +18,39 @@ import { track } from '@/lib/analytics';
 import { api } from '@/services/apiService';
 import { billingService } from '@/services/billingService';
 import { Landing } from './Landing';
+
+const LANDING_AUTHOR_NAMES = [
+  'Pieter Levels',
+  'Marc Lou',
+  'Danny Postma',
+  'Tony Dinh',
+  'Arvid Kahl',
+  'Rob Walling',
+  'Sahil Lavingia',
+  'David Heinemeier Hansson',
+  'Noah Kagan',
+  'Alex Hormozi',
+  'Codie Sanchez',
+  'Nick Huber',
+  'Sam Parr',
+  'Shaan Puri',
+  'Greg Isenberg',
+  'Justin Welsh',
+  'Dan Koe',
+  'Sahil Bloom',
+  'Dickie Bush',
+  'Nicolas Cole',
+  'Harry Dry',
+  'Naval Ravikant',
+  'Paul Graham',
+  'George Mack',
+  'Jack Butcher',
+  'James Clear',
+  'Morgan Housel',
+  'Lenny Rachitsky',
+  'Garry Tan',
+  'Andrej Karpathy',
+];
 
 const originalAdapter = api.defaults.adapter;
 
@@ -328,7 +363,7 @@ describe('Landing landmarks', () => {
     expect(within(main).queryByRole('banner')).not.toBeInTheDocument();
     expect(within(main).getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(
-      within(main).getByRole('region', { name: 'Pick the authors whose style you want.' }),
+      within(main).getByRole('region', { name: 'Write in the style of accounts like these.' }),
     ).toBeInTheDocument();
     expect(within(main).getByRole('region', { name: 'Simple pricing' })).toBeInTheDocument();
   });
@@ -427,21 +462,40 @@ describe('Landing mobile menu', () => {
 describe('Landing authors', () => {
   it('sits between the hero and pricing under the #authors anchor', () => {
     renderLanding();
-    const section = screen.getByRole('region', { name: 'Pick the authors whose style you want.' });
+    const section = screen.getByRole('region', {
+      name: 'Write in the style of accounts like these.',
+    });
     expect(section).toHaveAttribute('id', 'authors');
-    expect(within(section).getByText('Learn from the best on X')).toBeInTheDocument();
     const hero = screen.getByRole('heading', { level: 1 });
     const pricing = document.getElementById('pricing');
     expect(hero.compareDocumentPosition(section)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(section.compareDocumentPosition(pricing!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it('lists the placeholder author chips once, in order', () => {
+  it('has no small label above the heading', () => {
     renderLanding();
-    const list = screen.getByRole('list', { name: 'Authors' });
-    const chips = within(list).getAllByRole('listitem');
-    expect(chips.length).toBeGreaterThan(0);
-    chips.forEach((chip, index) => expect(chip).toHaveTextContent(`[Author ${index + 1}]`));
+    const section = screen.getByRole('region', {
+      name: 'Write in the style of accounts like these.',
+    });
+    expect(within(section).queryByText('Learn from the best on X')).not.toBeInTheDocument();
+  });
+
+  it('shows the 30 accounts once each, named and unlinked, without handles', () => {
+    renderLanding();
+    const section = screen.getByRole('region', {
+      name: 'Write in the style of accounts like these.',
+    });
+    const photos = within(section).getAllByRole('img');
+    expect(photos).toHaveLength(30);
+    expect(photos.map((photo) => photo.getAttribute('alt'))).toEqual(LANDING_AUTHOR_NAMES);
+    photos.forEach((photo) => {
+      const src = photo.getAttribute('src')!;
+      expect(src).toMatch(/^\/assets\/authors\/\w+\.webp$/);
+      expect(existsSync(path.join(__dirname, '../../public', src))).toBe(true);
+    });
+    expect(within(section).queryByRole('link')).not.toBeInTheDocument();
+    expect(section).not.toHaveTextContent('@');
+    expect(section).not.toHaveTextContent('levelsio');
   });
 
   it('tracks the section coming into view once', () => {
