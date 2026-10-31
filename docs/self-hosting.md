@@ -244,7 +244,7 @@ Sells Plans. Without it the Instance sells no Plans and every signed-in User may
 
 - Get keys: [dashboard.stripe.com/apikeys](https://dashboard.stripe.com/apikeys) (the secret and publishable keys).
 - Pricing: [Stripe pricing](https://stripe.com/pricing) and, since Checkout charges tax, [Stripe Tax pricing](https://stripe.com/tax/pricing).
-- Settings: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` and `BILLING_PLAN_KEYS`, set together. `BILLING_TRIAL_PERIOD_DAYS` (default 14, `0` for none) sets the Trial. `GENERATIONS_MONTHLY_CAP` (default 500 per month, a quarter for the Trial, empty for no cap) sets how many Versions each Subscribed User may have written. `BILLING_TOP_UP_KEY` (optional) sells Top-ups.
+- Settings: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` and `BILLING_PLAN_KEYS`, set together. `BILLING_TRIAL_PERIOD_DAYS` (default 7, `0` for none) sets the Trial. `GENERATIONS_MONTHLY_CAP` (default 500 per month, a quarter for the Trial, empty for no cap) sets how many Versions each Subscribed User may have written. `BILLING_TOP_UP_KEY` (optional) sells Top-ups.
 
 ### Support address and Operator details
 

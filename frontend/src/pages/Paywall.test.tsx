@@ -97,11 +97,11 @@ const CATALOG: PlanCatalog = {
   ],
   termsVersion: '2026-10-11',
   allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
-  trial: { days: 14, generations: 125, xPosts: 25, linkXPosts: 2 },
+  trial: { days: 7, generations: 125, xPosts: 25, linkXPosts: 2 },
   topUp: null,
 };
 
-const WITH_TRIAL: BillingMe = { ...NOT_SUBSCRIBED, trialDays: 14 };
+const WITH_TRIAL: BillingMe = { ...NOT_SUBSCRIBED, trialDays: 7 };
 
 const ACCEPTANCE_BOXES = [
   /I accept the Terms/,
@@ -265,13 +265,11 @@ describe('Paywall', () => {
       renderPaywall();
 
       const area = await paywall();
-      expect(
-        await area.findByText('14 days free, then billed by the plan you pick.'),
-      ).toBeVisible();
+      expect(await area.findByText('7 days free, then billed by the plan you pick.')).toBeVisible();
       expect(area.getByText('€9.00 / month')).toBeInTheDocument();
       expect(area.getByText('€90.00 / year')).toBeInTheDocument();
       expect(area.getByText('Saves 17% vs monthly')).toBeInTheDocument();
-      expect(area.getByText(/You won.t be charged until Nov 14, 2026\./)).toBeInTheDocument();
+      expect(area.getByText(/You won.t be charged until Nov 7, 2026\./)).toBeInTheDocument();
       expect(area.getAllByRole('button', { name: /^Start trial: / })).toHaveLength(2);
       expect(track).toHaveBeenCalledWith('paywall_viewed');
     });
@@ -284,7 +282,7 @@ describe('Paywall', () => {
         '500 post generations a month.',
         'Publish 100 X posts a month, up to 10 of them with a link.',
         'Write in the voice of your favorite X creators.',
-        '14-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
+        '7-day free trial: 125 generations and 25 X posts, up to 2 with a link.',
       ]);
     });
 
@@ -302,7 +300,7 @@ describe('Paywall', () => {
       vi.mocked(billingService.fetchPlans).mockResolvedValue({
         ...CATALOG,
         allowance: { generations: null, xPosts: 100, linkXPosts: null },
-        trial: { days: 14, generations: null, xPosts: 25, linkXPosts: null },
+        trial: { days: 7, generations: null, xPosts: 25, linkXPosts: null },
       });
       renderPaywall();
 
@@ -311,7 +309,7 @@ describe('Paywall', () => {
       expect(offer.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
         'Publish 100 X posts a month.',
         'Write in the voice of your favorite X creators.',
-        '14-day free trial: 25 X posts.',
+        '7-day free trial: 25 X posts.',
       ]);
       expect(area.queryByRole('button', { name: 'About generations' })).not.toBeInTheDocument();
     });
