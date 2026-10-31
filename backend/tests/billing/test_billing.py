@@ -85,7 +85,7 @@ async def test_checkout_by_plan_key_creates_a_checkout_for_one_unit_of_that_plan
             price_id="price_monthly",
             quantity=1,
             user_id=user.id,
-            trial_period_days=14,
+            trial_period_days=7,
         )
     ]
     await db.refresh(user)
@@ -95,11 +95,11 @@ async def test_checkout_by_plan_key_creates_a_checkout_for_one_unit_of_that_plan
 async def test_checkout_for_a_user_who_never_had_a_subscription_includes_the_trial(
     client, fake_billing
 ):
-    """The test settings configure a 14-day Trial."""
+    """The test settings configure a 7-day Trial."""
     response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
 
     assert response.status_code == 200
-    assert [c.trial_period_days for c in fake_billing.checkouts] == [14]
+    assert [c.trial_period_days for c in fake_billing.checkouts] == [7]
 
 
 async def _with_customer(db, user, customer_id: str = CUSTOMER) -> None:
@@ -503,7 +503,7 @@ async def test_the_plans_endpoint_returns_only_the_configured_plans_and_the_term
         ],
         "terms_version": TERMS_VERSION,
         "allowance": {"generations": 500, "x_posts": 100, "link_x_posts": 10},
-        "trial": {"days": 14, "generations": 125, "x_posts": 25, "link_x_posts": 2},
+        "trial": {"days": 7, "generations": 125, "x_posts": 25, "link_x_posts": 2},
         "top_up": None,
     }
 
@@ -511,7 +511,7 @@ async def test_the_plans_endpoint_returns_only_the_configured_plans_and_the_term
 async def test_the_plans_follow_the_instances_caps_and_trial_length(
     client, fake_billing, monkeypatch
 ):
-    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 200)
     monkeypatch.setattr(settings, "X_LINK_POSTS_MONTHLY_CAP", None)
 
@@ -523,7 +523,7 @@ async def test_the_plans_follow_the_instances_caps_and_trial_length(
         "link_x_posts": None,
     }
     assert response.json()["trial"] == {
-        "days": 7,
+        "days": 14,
         "generations": 50,
         "x_posts": 25,
         "link_x_posts": None,
@@ -593,7 +593,7 @@ def _billing_subscription(status: str) -> dict:
 async def test_billing_me_for_a_user_with_no_subscription_offers_the_trial(
     client, fake_billing, monkeypatch
 ):
-    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
 
     response = await client.get(BILLING_ME)
 
@@ -602,7 +602,7 @@ async def test_billing_me_for_a_user_with_no_subscription_offers_the_trial(
         "subscription": None,
         "subscribed": False,
         "may_subscribe": True,
-        "trial_days": 14,
+        "trial_days": 7,
     }
 
 
@@ -635,7 +635,7 @@ async def test_billing_me_reports_the_running_subscription_and_offers_nothing(
 async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_one(
     client, db, fake_billing, user, monkeypatch
 ):
-    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
     await _hold(db, user, _subscription("sub_1", "incomplete"))
 
     response = await client.get(BILLING_ME)
@@ -652,7 +652,7 @@ async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_on
 async def test_billing_me_never_reports_an_ended_subscription(
     client, db, fake_billing, user, monkeypatch
 ):
-    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
     await _hold(
         db, user, _subscription("sub_1", "canceled"), _subscription("sub_2", "incomplete_expired")
     )

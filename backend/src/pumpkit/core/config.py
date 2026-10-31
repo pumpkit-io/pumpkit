@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     # Nothing else can be listed or bought.
     BILLING_PLAN_KEYS: Annotated[list[str], NoDecode] = []
     # Days of Trial a User's first Subscription starts with; 0 turns Trials off.
-    BILLING_TRIAL_PERIOD_DAYS: int = Field(default=14, ge=0)
+    BILLING_TRIAL_PERIOD_DAYS: int = Field(default=7, ge=0)
     # Generations per Allowance period, only where Plans are sold; a Trial gets a quarter. None is no cap.
     GENERATIONS_MONTHLY_CAP: Optional[int] = Field(default=500, ge=0)
     # The Top-up's one-off price, as a Stripe price lookup key; unset or empty sells no Top-ups.
