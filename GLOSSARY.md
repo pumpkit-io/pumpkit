@@ -50,6 +50,10 @@ _Avoid_: auth session, token family, login
 A User who may not sign in or keep any Session until the suspension ends; a permanent suspension has no practical end.
 _Avoid_: banned, inactive, deactivated
 
+**Onboarding**:
+The steps a User goes through once, after the Paywall and before the rest of Pumpkit opens: connecting X, then choosing a Persona. Each step counts as done when what it asks for exists. Once a User finishes Onboarding they never see it again, even if they later disconnect X or empty their Persona.
+_Avoid_: setup wizard, first run, welcome flow
+
 **API key**:
 A secret a User creates so a program, such as Claude Code, can use Pumpkit on their behalf. It is never a Sign-in method and never opens a Session. A User may hold several, each with a name, and can revoke any of them at any time.
 _Avoid_: token, access token, personal access token, credential
@@ -80,6 +84,10 @@ _Avoid_: active, paying, premium
 The free, card-backed opening period of a User's first Subscription. Each User gets at most one.
 _Avoid_: free tier, cardless trial
 
+**Paywall**:
+The page a signed-in User who is not Subscribed sees in place of the rest of Pumpkit, where they start their Trial or subscribe to a Plan. It is checked on every visit, not only the first. An Instance that sells no Plans has no Paywall.
+_Avoid_: subscription gate, upgrade screen, hard wall
+
 **Allowance**:
 How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may be Link posts. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans give the same Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
 _Avoid_: quota, usage limit, credits, cap (in text users read; setting names and code may say cap)
@@ -105,6 +113,10 @@ _Avoid_: credits, credit pack, add-on, extra usage
 **Inspiration author**:
 An X account whose recent posts set the writing style of a User's posts, and never their content. Each User picks their own, up to three.
 _Avoid_: creator, voice, style source
+
+**Author directory**:
+The X accounts an Instance knows, each with its handle, name and photo, shared by all its Users. A User picks Inspiration authors from it, or looks a handle up on X, which adds the account to it. Once an account is in it, it stays, even when no User has it as an Inspiration author.
+_Avoid_: catalog, pool, library, collection
 
 **Persona**:
 A User's Inspiration authors taken together, up to three. It sets how the User's Posts sound, and never what they say. A User with no Inspiration authors has an empty Persona and cannot start a Post.

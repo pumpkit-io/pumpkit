@@ -2,16 +2,12 @@ import { useId, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronDown, History, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useGoToChoosePlan } from '@/features/billing/choosePlan';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import { shortTimeAgo } from '@/lib/relativeTime';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import { cn } from '@/lib/utils';
 import type { Version } from '@/services/postService';
 import { HoverLabel } from '@/features/posts/HoverLabel';
 import { ICON_BUTTON } from './iconButton';
-
-const HISTORY_BILLING_SOURCE = 'post_history_restore';
 
 interface HistoryProps {
   brief: string;
@@ -148,14 +144,11 @@ export function HistoryButton({ onRestore, ...list }: HistoryProps) {
     setOpen(next);
     if (!next) setLabelQuiet(true);
   };
-  const { subscribed } = useSubscribed();
-  const goToChoosePlan = useGoToChoosePlan();
 
   const pick = (version: Version) => {
     openChange(false);
     if (version.number === list.textVersionNumber && !list.edited) return;
-    if (subscribed === false) goToChoosePlan(HISTORY_BILLING_SOURCE);
-    else onRestore?.(version.number);
+    onRestore?.(version.number);
   };
   const historyList = <HistoryList {...list} onPick={onRestore && pick} />;
   const trigger = (

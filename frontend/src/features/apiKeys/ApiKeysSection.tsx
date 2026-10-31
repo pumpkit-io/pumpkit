@@ -3,7 +3,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
+import { useSubscribed } from '@/features/billing/useSubscribed';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { apiKeyService, type ApiKey, type CreatedApiKey } from '@/services/apiKeyService';
 
@@ -159,7 +159,7 @@ export function ApiKeysSection() {
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [needsSubscription, setNeedsSubscription] = useState(false);
+  const { refresh: refreshSubscribed } = useSubscribed();
 
   useEffect(() => {
     let cancelled = false;
@@ -178,14 +178,13 @@ export function ApiKeysSection() {
     if (!typed) return;
     setCreating(true);
     setError(null);
-    setNeedsSubscription(false);
     try {
       const next = await apiKeyService.create(typed);
       setCreated(next);
       setKeys((current) => [...(current ?? []), next.apiKey]);
       setName('');
     } catch (err) {
-      if (errorStatus(err) === 403) setNeedsSubscription(true);
+      if (errorStatus(err) === 403) refreshSubscribed();
       else setError(errorMessage(err, "Couldn't create the key. Try again."));
     } finally {
       setCreating(false);
@@ -232,12 +231,6 @@ export function ApiKeysSection() {
         </Button>
       </form>
 
-      {needsSubscription && (
-        <SubscribePrompt
-          message="Creating API keys needs a subscription."
-          source="settings_api_keys"
-        />
-      )}
       {error && <ErrorBanner message={error} />}
 
       {loadFailed ? (

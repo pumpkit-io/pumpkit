@@ -1,17 +1,26 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { CheckoutArrival, CheckoutStatus } from '@/features/billing/checkoutArrival';
 import type { SettingsLocationState } from './Settings';
 
-type BillingRedirectStatus = NonNullable<SettingsLocationState['checkoutStatus']>;
+type BillingRedirectStatus = CheckoutStatus | NonNullable<SettingsLocationState['checkoutStatus']>;
 
-/** Stripe return URLs: hand the outcome to Settings via router state, then go there. */
+/**
+ * Stripe return URLs: hand the outcome on via router state. A Subscription checkout goes to `/`,
+ * which routes by the next step; a Top-up, bought only past the Paywall, goes back to Settings.
+ */
 function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
   const navigate = useNavigate();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      const state: SettingsLocationState = { checkoutStatus: status };
-      navigate('/settings', { replace: true, state });
+      if (status === 'top_up_bought') {
+        const state: SettingsLocationState = { checkoutStatus: status };
+        navigate('/settings', { replace: true, state });
+      } else {
+        const state: CheckoutArrival = { checkoutStatus: status };
+        navigate('/', { replace: true, state });
+      }
     }, 150);
     return () => window.clearTimeout(timeout);
   }, [navigate, status]);
@@ -23,7 +32,7 @@ function BillingRedirect({ status }: { status: BillingRedirectStatus }) {
           ? 'Confirming your subscription…'
           : status === 'top_up_bought'
             ? 'Confirming your top-up…'
-            : 'Returning to Settings…'}
+            : 'Returning to Pumpkit…'}
       </div>
     </div>
   );

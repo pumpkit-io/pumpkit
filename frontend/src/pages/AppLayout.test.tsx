@@ -234,13 +234,6 @@ describe('The signed-in shell', () => {
       expect(await card.findByText('Subscribed')).toBeInTheDocument();
     });
 
-    it('says "No subscription" in the user card of a User who is not Subscribed', async () => {
-      renderSignedIn('/new');
-
-      const card = within(await screen.findByRole('link', { name: /^Your account/ }));
-      expect(await card.findByText('No subscription')).toBeInTheDocument();
-    });
-
     it('shows no Plan in the user card on an Instance that sells no Plans', async () => {
       renderSignedIn('/new', { instance: { ...SELLS_PLANS, sells_plans: false } });
 
@@ -313,6 +306,16 @@ describe('The signed-in shell', () => {
       await waitFor(() =>
         expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
       );
+    });
+
+    it('stays away on an Instance without X, where reconnecting cannot work', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(NEEDS_RECONNECT);
+      renderSignedIn('/new', { instance: { ...SELLS_PLANS, x_connection: false } });
+
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: /^Your account/ })).toHaveAccessibleName(/@ada/),
+      );
+      expect(screen.queryByRole('region', { name: 'Reconnect X' })).not.toBeInTheDocument();
     });
 
     it('stays away while X accepts the X connection', async () => {

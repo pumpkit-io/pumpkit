@@ -1,0 +1,28 @@
+{
+  "status": "success",
+  "msg": "success",
+  "data": {
+    "id": "1577241403",
+    "name": "@levelsio",
+    "userName": "levelsio",
+    "location": "My book $4K/m",
+    "url": "https://t.co/6RM0RsUXfe",
+    "description": "levels.vc",
+    "protected": false,
+    "isVerified": false,
+    "isBlueVerified": true,
+    "verifiedType": null,
+    "followers": 984123,
+    "following": 3299,
+    "favouritesCount": 187460,
+    "statusesCount": 182273,
+    "mediaCount": 19926,
+    "createdAt": "2013-07-08T09:31:59.000000Z",
+    "coverPicture": "https://pbs.twimg.com/profile_banners/1577241403/1665964220",
+    "profilePicture": "https://pbs.twimg.com/profile_images/2077111020305162240/PwddgOau_normal.jpg",
+    "canDm": false,
+    "isAutomated": false,
+    "automatedBy": null,
+    "pinnedTweetIds": ["2116562483590615159"]
+  }
+}

@@ -196,6 +196,6 @@ async def test_an_x_account_without_a_photo_has_none_to_use(
     assert fake_photo_fetcher.fetched == []
 
 
-async def test_without_an_x_connection_there_is_no_photo_to_use_or_decline(client):
+async def test_without_an_x_connection_there_is_no_photo_to_use_or_decline(client, subscribed):
     assert (await client.post(USE_PHOTO)).status_code == 404
     assert (await client.post(DECLINE_PHOTO)).status_code == 404

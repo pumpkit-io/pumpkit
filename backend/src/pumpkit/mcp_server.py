@@ -97,7 +97,7 @@ _caller: ContextVar[_Caller] = ContextVar("mcp_caller")
 
 
 def _subscription_needed() -> CallToolResult:
-    subscribe_url = settings.billing_page_url()
+    subscribe_url = settings.paywall_url()
     return tool_error(f"{SUBSCRIPTION_NEEDED} {subscribe_url}", subscribe_url=subscribe_url)
 
 
@@ -122,7 +122,7 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
                 user = await user_service.get_user_by_id(db=db, user_id=caller.user_id)
                 if user is None:
                     return tool_error(CREDENTIALS_INVALID)
-                if tool.needs_access and not await billing_service.has_access(db, user_id=user.id):
+                if not await billing_service.has_access(db, user_id=user.id):
                     return _subscription_needed()
                 call = ToolCall(user=user, db=db, now=clock(), app=caller.app, stack=stack)
                 return await run(call, **arguments)

@@ -23,6 +23,8 @@ export interface Instance {
   /** Where the support link sends Users' email; null hides it. */
   support_email: string | null;
   analytics: AnalyticsSettings | null;
+  /** False on an Instance without X's app keys: Onboarding skips its X step, and no page offers to connect X. */
+  x_connection: boolean;
 }
 
 // Offers only what needs no provider, since without /instance nothing says which are configured.
@@ -33,6 +35,7 @@ export const DEFAULT_INSTANCE: Instance = {
   operator: null,
   support_email: null,
   analytics: null,
+  x_connection: false,
 };
 
 /**

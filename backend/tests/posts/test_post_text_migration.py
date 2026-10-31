@@ -126,7 +126,7 @@ async def test_the_migration_sets_each_posts_text_to_its_latest_version(
 
 
 async def test_the_migration_leaves_a_post_with_no_version_without_text(
-    db_engine, posts_before_the_text, client
+    db_engine, posts_before_the_text, subscribed, client
 ):
     await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
 
@@ -135,7 +135,9 @@ async def test_the_migration_leaves_a_post_with_no_version_without_text(
     assert (read["text"], read["versions"]) == (None, [])
 
 
-async def test_the_migration_runs_down_and_up_again(db_engine, posts_before_the_text, client):
+async def test_the_migration_runs_down_and_up_again(
+    db_engine, posts_before_the_text, subscribed, client
+):
     await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
     await migrate(db_engine, lambda config: command.downgrade(config, "0019"))
 

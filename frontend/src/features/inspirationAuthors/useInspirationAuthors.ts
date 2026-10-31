@@ -1,19 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSubscribed } from '@/features/billing/useSubscribed';
+import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { dayAndTime } from '@/lib/relativeTime';
-import { errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
+import { errorCode, errorMessage, errorRetryAt, errorStatus } from '@/services/apiErrors';
 import {
   inspirationAuthorService,
   type InspirationAuthor,
 } from '@/services/inspirationAuthorService';
 
+type LookupResult = 'found' | 'missing' | 'private' | 'no_posts' | 'limited';
+
+/** What a refused lookup tells the funnel, or null when the refusal came before any lookup. */
+function lookupResult(e: unknown): LookupResult | null {
+  if (errorStatus(e) === 429) return 'limited';
+  switch (errorCode(e)) {
+    case 'HANDLE_NOT_ON_X':
+      return 'missing';
+    case 'HANDLE_PRIVATE':
+      return 'private';
+    case 'HANDLE_HAS_NO_POSTS':
+      return 'no_posts';
+    default:
+      return null;
+  }
+}
+
 /** The User's Inspiration authors, loaded on mount, with add, refresh and remove. */
 export function useInspirationAuthors() {
-  const { refresh: refreshSubscribed } = useSubscribed();
+  const { refresh: refreshOnboarding } = useOnboarding();
   const [authors, setAuthors] = useState<InspirationAuthor[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
+  /** The handle being added, whose posts are being read. */
+  const [adding, setAdding] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   /** Why a refresh was held back, which is not an error. */
@@ -30,35 +48,41 @@ export function useInspirationAuthors() {
     };
   }, []);
 
-  /** A refusal for want of a Subscription shows the prompt to subscribe, not an error. */
+  /** A refusal for want of a Subscription sends the User to the Paywall, not to an error. */
   const fail = useCallback(
     (e: unknown, fallback: string) => {
       if (errorStatus(e) === 403) {
         setError(null);
-        refreshSubscribed();
+        void refreshOnboarding();
       } else {
         setError(errorMessage(e, fallback));
       }
     },
-    [refreshSubscribed],
+    [refreshOnboarding],
   );
 
-  /** Resolves true once the author is on the list. */
+  /**
+   * Resolves true once the author is on the list. `lookup` says the User asked to look the handle
+   * up on X rather than picking it from the Author directory.
+   */
   const add = useCallback(
-    async (handle: string): Promise<boolean> => {
-      setIsAdding(true);
+    async (handle: string, { lookup = false }: { lookup?: boolean } = {}): Promise<boolean> => {
+      setAdding(handle.trim().replace(/^@/, '').toLowerCase());
       setError(null);
       setNotice(null);
       try {
         const added = await inspirationAuthorService.add(handle);
         setAuthors((list) => [...(list ?? []).filter((a) => a.handle !== added.handle), added]);
         track('inspiration_author_added');
+        if (lookup) track('author_looked_up', { result: 'found' });
         return true;
       } catch (e) {
+        const result = lookup ? lookupResult(e) : null;
+        if (result) track('author_looked_up', { result });
         fail(e, "Couldn't add that handle. Try again.");
         return false;
       } finally {
-        setIsAdding(false);
+        setAdding(null);
       }
     },
     [fail],
@@ -107,5 +131,5 @@ export function useInspirationAuthors() {
     [fail],
   );
 
-  return { authors, loadFailed, isAdding, refreshing, error, notice, add, refresh, remove };
+  return { authors, loadFailed, adding, refreshing, error, notice, add, refresh, remove };
 }

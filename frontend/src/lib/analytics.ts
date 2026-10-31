@@ -80,9 +80,7 @@ export const EVENTS = {
     description: 'Account: made the X account\'s photo the Photo with "Use photo from X".',
   },
 
-  billing_choose_plan_opened: {
-    description: 'Billing: a prompt to subscribe sent the User to Choose a Plan. Props: source.',
-  },
+  paywall_viewed: { description: 'Paywall (/subscribe): shown to a User who is not Subscribed.' },
   billing_subscription_checkout_started: {
     description: 'Billing: started a Subscription checkout. Props: plan_key.',
   },
@@ -107,11 +105,24 @@ export const EVENTS = {
       'Billing: a Trial User confirmed Subscribe now and the Trial ended, from the Usage card or a limit notice.',
   },
 
+  // Onboarding (/onboarding)
+  onboarding_step_viewed: {
+    description: 'Onboarding: a step was shown. Props: step (x_connection | persona).',
+  },
+  onboarding_finished: {
+    description:
+      'Onboarding: pressed Continue on the last step and Onboarding was recorded as finished.',
+  },
+
   // Writing: Persona, New post and the Post page
   inspiration_author_added: {
     description: 'Persona: added an Inspiration author and its posts were fetched.',
   },
   inspiration_author_removed: { description: 'Persona: removed an Inspiration author.' },
+  author_looked_up: {
+    description:
+      'Author picker: chose "Look up @… on X" and the add answered. Props: result (found | missing | private | no_posts | limited).',
+  },
   inspiration_authors_refreshed: {
     description: 'Persona: refreshed an Inspiration author and its latest posts were fetched.',
   },

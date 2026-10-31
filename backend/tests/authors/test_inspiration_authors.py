@@ -1,14 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from pumpkit.auth.dependencies import get_current_user
-from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.billing.models import Subscription
-from pumpkit.core.db.session import get_async_db
-from pumpkit.main import app
 
 AUTHORS = "/api/v1/inspiration-authors"
 
@@ -38,6 +30,7 @@ async def test_a_subscribed_user_adds_a_handle_and_its_posts_are_fetched_at_once
         "handle": "levelsio",
         "last_fetched_at": clock().isoformat().replace("+00:00", "Z"),
         "post_count": 2,
+        "name": None,
         "photo_url": None,
     }
     assert fake_x_reader.calls == ["levelsio"]
@@ -61,25 +54,25 @@ async def test_the_list_shows_authors_in_the_order_they_were_added(
                 "handle": "levelsio",
                 "last_fetched_at": fetched_at,
                 "post_count": 2,
+                "name": None,
                 "photo_url": None,
             },
-            {"handle": "paulg", "last_fetched_at": fetched_at, "post_count": 1, "photo_url": None},
+            {
+                "handle": "paulg",
+                "last_fetched_at": fetched_at,
+                "post_count": 1,
+                "name": None,
+                "photo_url": None,
+            },
         ]
     }
-
-
-async def test_a_user_who_is_not_subscribed_may_list_authors(client):
-    response = await client.get(AUTHORS)
-
-    assert response.status_code == 200
-    assert response.json() == {"data": []}
 
 
 async def test_adding_a_handle_x_does_not_know_returns_404(client, subscribed):
     response = await client.post(AUTHORS, json={"handle": "nobody_here"})
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "@nobody_here doesn't exist on X."
+    assert response.json() == {"detail": "@nobody_here isn't on X.", "code": "HANDLE_NOT_ON_X"}
     assert (await client.get(AUTHORS)).json() == {"data": []}
 
 
@@ -91,7 +84,10 @@ async def test_adding_a_handle_with_no_original_posts_returns_422(
     response = await client.post(AUTHORS, json={"handle": "replyguy"})
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "@replyguy has no original posts to learn from."
+    assert response.json() == {
+        "detail": "@replyguy has no posts of its own to learn from.",
+        "code": "HANDLE_HAS_NO_POSTS",
+    }
     assert (await client.get(AUTHORS)).json() == {"data": []}
 
 
@@ -166,6 +162,8 @@ async def test_a_user_whose_subscription_ended_gets_403_when_removing(
     response = await client.delete(f"{AUTHORS}/levelsio")
 
     assert response.status_code == 403
+    subscribed.status = "active"
+    await db.commit()
     assert [a["handle"] for a in (await client.get(AUTHORS)).json()["data"]] == ["levelsio"]
 
 
@@ -199,7 +197,7 @@ async def test_a_refetch_stores_only_the_posts_not_already_stored(
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(days=2))
+    clock.advance(timedelta(days=7))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
@@ -208,35 +206,13 @@ async def test_a_refetch_stores_only_the_posts_not_already_stored(
     assert response.json()["post_count"] == 3
 
 
-async def test_adding_a_handle_fetched_less_than_a_day_ago_uses_its_stored_posts(
-    client, subscribed, fake_x_reader, clock
-):
-    fake_x_reader.posts["levelsio"] = _posts("1", "2")
-    await client.post(AUTHORS, json={"handle": "levelsio"})
-    fetched_at = clock()
-    await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(hours=23, minutes=59, seconds=59))
-    fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
-
-    response = await client.post(AUTHORS, json={"handle": "levelsio"})
-
-    assert response.status_code == 201
-    assert response.json() == {
-        "handle": "levelsio",
-        "last_fetched_at": _iso(fetched_at),
-        "post_count": 2,
-        "photo_url": None,
-    }
-    assert fake_x_reader.calls == ["levelsio"]
-
-
-async def test_adding_a_handle_fetched_a_day_ago_fetches_it_again(
+async def test_adding_a_handle_fetched_a_week_ago_fetches_it_again(
     client, subscribed, fake_x_reader, clock
 ):
     fake_x_reader.posts["levelsio"] = _posts("1", "2")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     await client.delete(f"{AUTHORS}/levelsio")
-    clock.advance(timedelta(hours=24))
+    clock.advance(timedelta(days=7))
     fake_x_reader.posts["levelsio"] = _posts("3", "1", "2")
 
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
@@ -246,6 +222,7 @@ async def test_adding_a_handle_fetched_a_day_ago_fetches_it_again(
         "handle": "levelsio",
         "last_fetched_at": _iso(clock()),
         "post_count": 3,
+        "name": None,
         "photo_url": None,
     }
     assert fake_x_reader.calls == ["levelsio", "levelsio"]
@@ -288,6 +265,7 @@ async def test_refreshing_an_author_stores_its_new_posts_and_updates_its_fetch_t
         "handle": "levelsio",
         "last_fetched_at": _iso(clock()),
         "post_count": 3,
+        "name": None,
         "photo_url": None,
     }
     assert response.json() == expected
@@ -300,7 +278,7 @@ NEW_PHOTO = "https://pbs.twimg.com/profile_images/2/levelsio_normal.jpg"
 
 
 async def test_adding_an_author_stores_their_x_photo_for_every_user_who_lists_them(
-    client, db, subscribed, fake_x_reader
+    client, subscribed, fake_x_reader, sign_in_as_another_subscribed_user
 ):
     fake_x_reader.posts["levelsio"] = _posts("1")
     fake_x_reader.photos["levelsio"] = PHOTO
@@ -308,7 +286,7 @@ async def test_adding_an_author_stores_their_x_photo_for_every_user_who_lists_th
     response = await client.post(AUTHORS, json={"handle": "levelsio"})
 
     assert response.json()["photo_url"] == PHOTO
-    await _sign_in_as_another_subscribed_user(db)
+    await sign_in_as_another_subscribed_user()
     added_without_a_fetch = await client.post(AUTHORS, json={"handle": "levelsio"})
     assert added_without_a_fetch.json()["photo_url"] == PHOTO
     assert (await client.get(AUTHORS)).json()["data"][0]["photo_url"] == PHOTO
@@ -361,37 +339,14 @@ async def test_refreshing_a_handle_fetched_less_than_a_day_ago_returns_429_with_
     assert fake_x_reader.calls == ["levelsio"]
 
 
-async def _sign_in_as_another_subscribed_user(db) -> None:
-    other = User(email="bob@example.com", display_name="Bob")
-    db.add(other)
-    await db.flush()
-    db.add(
-        Subscription(
-            user_id=other.id,
-            stripe_subscription_id="sub_bob",
-            stripe_customer_id="cus_bob",
-            status="active",
-            stripe_created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    )
-    await db.commit()
-    other_id = other.id
-
-    async def _other(request_db: AsyncSession = Depends(get_async_db)) -> User:
-        loaded = await request_db.get(User, other_id)
-        assert loaded is not None
-        return loaded
-
-    app.dependency_overrides[get_current_user] = _other
-
-
 async def test_the_cooldown_is_per_handle_so_another_users_fetch_holds_it(
-    client, db, subscribed, fake_x_reader, clock
+    client, subscribed, fake_x_reader, clock, sign_in_as_another_subscribed_user
 ):
     fake_x_reader.posts["levelsio"] = _posts("1")
     await client.post(AUTHORS, json={"handle": "levelsio"})
     clock.advance(timedelta(hours=30))
-    await _sign_in_as_another_subscribed_user(db)
+    await client.post(f"{AUTHORS}/levelsio/refresh")
+    await sign_in_as_another_subscribed_user()
     await client.post(AUTHORS, json={"handle": "levelsio"})
     clock.advance(timedelta(hours=23, minutes=59, seconds=59))
 
@@ -466,4 +421,4 @@ async def test_refreshing_a_handle_x_no_longer_knows_returns_404(
     response = await client.post(f"{AUTHORS}/levelsio/refresh")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "@levelsio doesn't exist on X."
+    assert response.json()["detail"] == "@levelsio isn't on X."

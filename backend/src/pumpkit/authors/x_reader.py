@@ -1,9 +1,10 @@
 """
-The `XReader` port: reads an Inspiration author's recent posts from X (ADR 0005), and a
-Community's name for a Scheduled post going there.
+The `XReader` port: reads an X account's profile and an Inspiration author's recent posts from X
+(ADR 0005), and a Community's name for a Scheduled post going there.
 
 It returns plain data and never touches the database: storing posts is the callers' job.
-A handle X doesn't know is a `HandleNotFoundError` and a Community a `CommunityNotFoundError`;
+A handle X doesn't know is a `HandleNotFoundError` (a `HandleSuspendedError` when X suspended
+it), and a Community a `CommunityNotFoundError`;
 any other provider failure is an `XReaderError` (a 502 with an `error_id`), and a missing API
 key an `XReaderNotConfiguredError`.
 
@@ -14,7 +15,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 import httpx
 
@@ -22,6 +23,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError, NotConfiguredError
 
 TWITTERAPI_IO_LAST_TWEETS_URL = "https://api.twitterapi.io/twitter/user/last_tweets"
+TWITTERAPI_IO_USER_INFO_URL = "https://api.twitterapi.io/twitter/user/info"
 # twitterapi.io docs say this is slow.
 TWITTERAPI_IO_COMMUNITY_INFO_URL = "https://api.twitterapi.io/twitter/community/info"
 _TIMEOUT_SECONDS = 30.0
@@ -53,6 +55,10 @@ class HandleNotFoundError(XReaderError):
     """X has no account under this handle."""
 
 
+class HandleSuspendedError(HandleNotFoundError):
+    """X suspended the account under this handle."""
+
+
 class CommunityNotFoundError(XReaderError):
     """X has no Community with this ID."""
 
@@ -67,14 +73,28 @@ class FetchedPost:
 
 
 @dataclass(frozen=True)
+class FetchedProfile:
+    """
+    An X account as its profile shows it. The photo is X's small (48px) variant; a protected
+    account's posts can't be read.
+    """
+
+    handle: str
+    name: Optional[str]
+    photo_url: Optional[str]
+    protected: bool
+
+
+@dataclass(frozen=True)
 class RecentPosts:
     """
-    One page of a handle's kept posts, and the author's photo as twitterapi.io links it: X's
-    small (48px) variant, or None when no post carried one.
+    One page of a handle's kept posts, and the author's name and photo as the page shows them:
+    the photo is X's small (48px) variant. Each is None when no post carried one.
     """
 
     posts: list[FetchedPost]
     photo_url: Optional[str] = None
+    name: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +104,13 @@ class FetchedCommunity:
 
 
 class XReader(Protocol):
+    async def look_up_profile(self, handle: str) -> FetchedProfile:
+        """
+        The handle's profile. Raises `HandleSuspendedError` for a suspended account,
+        `HandleNotFoundError` for an unknown handle, else `XReaderError`.
+        """
+        ...
+
     async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         """
         One page (about 20) of the handle's newest posts, keeping only original posts and
@@ -99,33 +126,31 @@ class XReader(Protocol):
 class TwitterApiIoReader:
     """Reads X through twitterapi.io. The key is checked on use, so the app boots without it."""
 
+    async def look_up_profile(self, handle: str) -> FetchedProfile:
+        response = await _get(TWITTERAPI_IO_USER_INFO_URL, {"userName": handle})
+        return parse_user_info(response.status_code, _json_or_none(response))
+
     async def fetch_recent_posts(self, handle: str) -> RecentPosts:
-        if not settings.TWITTERAPI_IO_API_KEY:
-            raise XReaderNotConfiguredError()
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-                response = await client.get(
-                    TWITTERAPI_IO_LAST_TWEETS_URL,
-                    headers={"x-api-key": settings.TWITTERAPI_IO_API_KEY},
-                    params={"userName": handle, "includeReplies": "false"},
-                )
-        except httpx.HTTPError as error:
-            raise XReaderError(f"twitterapi.io unreachable: {type(error).__name__}") from error
+        response = await _get(
+            TWITTERAPI_IO_LAST_TWEETS_URL, {"userName": handle, "includeReplies": "false"}
+        )
         return parse_last_tweets(response.status_code, _json_or_none(response))
 
     async def fetch_community(self, community_id: str) -> FetchedCommunity:
-        if not settings.TWITTERAPI_IO_API_KEY:
-            raise XReaderNotConfiguredError()
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-                response = await client.get(
-                    TWITTERAPI_IO_COMMUNITY_INFO_URL,
-                    headers={"x-api-key": settings.TWITTERAPI_IO_API_KEY},
-                    params={"community_id": community_id},
-                )
-        except httpx.HTTPError as error:
-            raise XReaderError(f"twitterapi.io unreachable: {type(error).__name__}") from error
+        response = await _get(TWITTERAPI_IO_COMMUNITY_INFO_URL, {"community_id": community_id})
         return parse_community_info(response.status_code, _json_or_none(response))
+
+
+async def _get(url: str, params: dict[str, str]) -> httpx.Response:
+    if not settings.TWITTERAPI_IO_API_KEY:
+        raise XReaderNotConfiguredError()
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+            return await client.get(
+                url, headers={"x-api-key": settings.TWITTERAPI_IO_API_KEY}, params=params
+            )
+    except httpx.HTTPError as error:
+        raise XReaderError(f"twitterapi.io unreachable: {type(error).__name__}") from error
 
 
 def _json_or_none(response: httpx.Response) -> Any:
@@ -154,7 +179,38 @@ def parse_last_tweets(status_code: int, payload: Any) -> RecentPosts:
         post = _kept_post(tweet)
         if post is not None:
             posts.append(post)
-    return RecentPosts(posts=posts, photo_url=_author_photo_url(tweets))
+    return RecentPosts(posts=posts, photo_url=_author_photo_url(tweets), name=_author_name(tweets))
+
+
+def parse_user_info(status_code: int, payload: Any) -> FetchedProfile:
+    """The profile out of one `user/info` answer, or the error it stands for."""
+    message = _error_message(payload)
+    if status_code == 404 or (message is not None and _NOT_FOUND_MESSAGE.search(message)):
+        raise HandleNotFoundError("twitterapi.io has no such user")
+    if status_code != 200:
+        raise XReaderError(f"twitterapi.io returned HTTP {status_code}")
+    if not isinstance(payload, dict):
+        raise XReaderError("twitterapi.io returned a body that is not a JSON object")
+    if message is not None:
+        raise XReaderError("twitterapi.io returned an error status")
+
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise XReaderError("twitterapi.io answered without a profile")
+    # A suspended account answers success, with only these flags in place of the profile.
+    if data.get("unavailable"):
+        if str(data.get("unavailableReason", "")).lower() == "suspended":
+            raise HandleSuspendedError("twitterapi.io says the user is suspended")
+        raise HandleNotFoundError("twitterapi.io says the user is unavailable")
+    handle = data.get("userName")
+    if not isinstance(handle, str) or not handle:
+        raise XReaderError("twitterapi.io returned a profile without a handle")
+    return FetchedProfile(
+        handle=handle,
+        name=_text_or_none(data.get("name")),
+        photo_url=_https_or_none(data.get("profilePicture")),
+        protected=data.get("protected") is True,
+    )
 
 
 def parse_community_info(status_code: int, payload: Any) -> FetchedCommunity:
@@ -205,12 +261,30 @@ def _author_photo_url(tweets: list) -> Optional[str]:
     The first https `author.profilePicture` on the page. Every post on a user's timeline,
     their reposts too, has them as its author.
     """
+    return _first_author_field(tweets, "profilePicture", _https_or_none)
+
+
+def _author_name(tweets: list) -> Optional[str]:
+    return _first_author_field(tweets, "name", _text_or_none)
+
+
+def _first_author_field(
+    tweets: list, key: str, read: Callable[[Any], Optional[str]]
+) -> Optional[str]:
     for tweet in tweets:
         author = tweet.get("author") if isinstance(tweet, dict) else None
-        picture = author.get("profilePicture") if isinstance(author, dict) else None
-        if isinstance(picture, str) and picture.startswith("https://"):
-            return picture
+        value = read(author.get(key)) if isinstance(author, dict) else None
+        if value is not None:
+            return value
     return None
+
+
+def _https_or_none(value: Any) -> Optional[str]:
+    return value if isinstance(value, str) and value.startswith("https://") else None
+
+
+def _text_or_none(value: Any) -> Optional[str]:
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def _kept_post(tweet: Any) -> Optional[FetchedPost]:
@@ -237,18 +311,44 @@ def _kept_post(tweet: Any) -> Optional[FetchedPost]:
 @dataclass
 class FakeXReader:
     """
-    X in memory: answers a handle with `posts[handle]` and `photos.get(handle)`, and a Community
-    ID with `communities[id]` (its name), anything else with a not-found error. Records each handle read
-    in `calls` and each Community ID in `community_calls`. Set `fail` or `not_configured` to raise.
+    X in memory: answers a handle's posts with `posts[handle]`, `photos.get(handle)` and
+    `names.get(handle)`; its profile with `profiles[handle]`, a suspension for a handle in
+    `suspended`, or a public profile for a handle with `posts`; and a Community ID with
+    `communities[id]`, its name. Anything else is a not-found error. Records each handle read in `calls`, each profile looked up in
+    `profile_calls` and each Community ID in `community_calls`. Set `fail` or `not_configured`
+    to raise.
     """
 
     posts: dict[str, list[FetchedPost]] = field(default_factory=dict)
     photos: dict[str, str] = field(default_factory=dict)
+    names: dict[str, str] = field(default_factory=dict)
+    profiles: dict[str, FetchedProfile] = field(default_factory=dict)
+    suspended: set[str] = field(default_factory=set)
     communities: dict[str, str] = field(default_factory=dict)
     calls: list[str] = field(default_factory=list)
+    profile_calls: list[str] = field(default_factory=list)
     community_calls: list[str] = field(default_factory=list)
     fail: bool = False
     not_configured: bool = False
+
+    async def look_up_profile(self, handle: str) -> FetchedProfile:
+        self.profile_calls.append(handle)
+        if self.not_configured:
+            raise XReaderNotConfiguredError()
+        if self.fail:
+            raise XReaderError("Fake X reader is set to fail")
+        if handle in self.suspended:
+            raise HandleSuspendedError(f"Fake X reader has {handle} suspended")
+        if handle in self.profiles:
+            return self.profiles[handle]
+        if handle in self.posts:
+            return FetchedProfile(
+                handle=handle,
+                name=self.names.get(handle),
+                photo_url=self.photos.get(handle),
+                protected=False,
+            )
+        raise HandleNotFoundError(f"Fake X reader has no {handle}")
 
     async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         self.calls.append(handle)
@@ -258,7 +358,11 @@ class FakeXReader:
             raise XReaderError("Fake X reader is set to fail")
         if handle not in self.posts:
             raise HandleNotFoundError(f"Fake X reader has no {handle}")
-        return RecentPosts(posts=list(self.posts[handle]), photo_url=self.photos.get(handle))
+        return RecentPosts(
+            posts=list(self.posts[handle]),
+            photo_url=self.photos.get(handle),
+            name=self.names.get(handle),
+        )
 
     async def fetch_community(self, community_id: str) -> FetchedCommunity:
         self.community_calls.append(community_id)

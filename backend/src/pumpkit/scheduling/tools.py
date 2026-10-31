@@ -314,7 +314,7 @@ async def get_usage(call: ToolCall[User]) -> UsageResponse:
     or the trial's end. `resets_on_day` is the day of the month a paid period resets on, null in
     a trial. `way_out` is what the user can do at a limit before then. `top_ups` lists the user's
     top-ups with something left and when each expires; they are spent only once the allowance is
-    used up. `allowance` is null where there are no allowances, or the user isn't subscribed.
+    used up. `allowance` is null where there are no allowances.
     """
     return await mediator.get_usage(db=call.db, user=call.user, at=call.now)
 
@@ -346,7 +346,6 @@ TOOLS = [
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
-    # Open to Users who aren't Subscribed, as `GET /usage` is: they have no Allowance.
-    McpTool(get_usage, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
-    McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
+    McpTool(get_usage, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY),
 ]

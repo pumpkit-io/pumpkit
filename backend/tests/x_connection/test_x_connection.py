@@ -41,7 +41,7 @@ async def _connect(client: AsyncClient, code: str = "the-code"):
     return await client.post(COMPLETE, json={"code": code, "state": state})
 
 
-async def test_a_user_without_an_x_connection_gets_404(client):
+async def test_a_user_without_an_x_connection_gets_404(client, subscribed):
     response = await client.get(X_CONNECTION)
 
     assert response.status_code == 404
@@ -330,7 +330,7 @@ async def test_disconnecting_succeeds_when_x_fails_to_revoke(
     assert (await client.get(X_CONNECTION)).status_code == 404
 
 
-async def test_disconnecting_without_an_x_connection_returns_404(client):
+async def test_disconnecting_without_an_x_connection_returns_404(client, subscribed):
     response = await client.delete(X_CONNECTION)
 
     assert response.status_code == 404
@@ -352,17 +352,6 @@ async def test_a_user_without_a_subscription_connects_where_no_plans_are_sold(
 
     assert completed.status_code == 200
     assert (await client.get(X_CONNECTION)).status_code == 200
-
-
-async def test_a_user_whose_subscription_ended_can_still_see_and_disconnect_x(
-    client, db, subscribed, clock
-):
-    await _connect(client)
-    subscribed.status = "canceled"
-    await db.commit()
-
-    assert (await client.get(X_CONNECTION)).status_code == 200
-    assert (await client.delete(X_CONNECTION)).status_code == 204
 
 
 async def test_tokens_are_stored_encrypted_and_never_returned(client, db, user, subscribed, clock):

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { CHOOSE_PLAN_PATH, trackChoosePlan } from '@/features/billing/choosePlan';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { track } from '@/lib/analytics';
 import { BRIEF_MAX_CHARS, FORMAT_POST, postService, type Format } from '@/services/postService';
@@ -55,7 +53,6 @@ function useStartPost() {
 
 /** The line and the composer: a Brief and its Format, sent with the arrow or ⌘Enter. */
 export function PostWriter() {
-  const { subscribed } = useSubscribed();
   const { authors } = useInspirationAuthorsContext();
   const { start, isWriting, error, notice, allowanceUsedUp, clear } = useStartPost();
   const { usage } = useUsage();
@@ -81,18 +78,11 @@ export function PostWriter() {
   const typed = brief.trim();
   const send = () => void start(typed, format);
 
-  const gate =
-    subscribed === false ? (
-      <Button asChild variant="solid" className="h-10 shrink-0">
-        <Link to={CHOOSE_PLAN_PATH} onClick={() => trackChoosePlan('new_post_write')}>
-          Subscribe to write
-        </Link>
-      </Button>
-    ) : noCorpus ? (
-      <Button asChild variant="solid" className="h-10 shrink-0">
-        <Link to="/persona">Set up your persona</Link>
-      </Button>
-    ) : undefined;
+  const gate = noCorpus ? (
+    <Button asChild variant="solid" className="h-10 shrink-0">
+      <Link to="/persona">Set up your persona</Link>
+    </Button>
+  ) : undefined;
 
   return (
     <section aria-labelledby="new-post-line" className="space-y-3">
@@ -115,7 +105,7 @@ export function PostWriter() {
         sendLabel="Write the post"
         onSend={send}
         isWriting={isWriting}
-        sendDisabled={subscribed !== true || authors === null}
+        sendDisabled={authors === null}
         gate={gate}
       />
       {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}

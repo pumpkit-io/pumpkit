@@ -15,7 +15,7 @@ def _columns(connection: Connection) -> set[str]:
     return {column["name"] for column in sa.inspect(connection).get_columns("version_attempts")}
 
 
-async def test_the_migration_runs_down_and_up_again(db_engine, post_with, client):
+async def test_the_migration_runs_down_and_up_again(db_engine, post_with, subscribed, client):
     post_id = await post_with("One.")
     await migrate(db_engine, lambda config: command.stamp(config, "0024"))
     await migrate(db_engine, lambda config: command.downgrade(config, "0023"))

@@ -41,7 +41,7 @@ beforeEach(() => {
 function open(post: PostDetail) {
   const server = new MemoryBackend(post);
   const controller = new TextController(post, { backend: server.port, clock, track });
-  controller.setGate({ status: post.status, subscribed: true });
+  controller.setGate({ status: post.status });
   const texts = () => controller.snapshot().text?.parts.map((p) => p.text);
   return { server, controller, texts };
 }
@@ -228,27 +228,11 @@ describe('TextController', () => {
       });
     });
 
-    it('takes no edit or Feedback until the User is Subscribed, keeping restore and "Post to…"', () => {
-      const { server, controller, texts } = open(draft(TWO));
-      controller.setGate({ status: 'draft', subscribed: false });
-
-      controller.edit(['edited'], 'paste');
-
-      expect(texts()).toEqual(['the second text']);
-      expect(controller.snapshot().can).toMatchObject({
-        edit: false,
-        sendFeedback: false,
-        restore: true,
-        postTo: true,
-      });
-      expect(server.calls).toEqual([]);
-    });
-
     it('offers nothing once the Post is scheduled', async () => {
       const { server, controller } = open(draft(TWO));
       controller.edit(['edited'], 'paste');
 
-      controller.setGate({ status: 'scheduled', subscribed: true });
+      controller.setGate({ status: 'scheduled' });
       controller.undo();
       controller.restore(1);
 

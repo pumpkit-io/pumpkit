@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { UserAvatar } from '@/components/UserAvatar';
 import { cn } from '@/lib/utils';
+import { xPhotoAt } from '@/lib/xPhoto';
 import type { InspirationAuthor } from '@/services/inspirationAuthorService';
 import { useInspirationAuthorsContext } from './useInspirationAuthorsContext';
 
@@ -99,8 +100,8 @@ function PhotoChip({ authors }: { authors: InspirationAuthor[] }) {
             >
               <span className="relative flex shrink-0 rounded-full bg-card ring-2 ring-card">
                 <UserAvatar
-                  name={author.handle}
-                  avatarUrl={author.photoUrl}
+                  name={author.name ?? author.handle}
+                  avatarUrl={xPhotoAt(author.photoUrl, PHOTO_PX)}
                   className="h-6 w-6 text-[10px]"
                 />
               </span>

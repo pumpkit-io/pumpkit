@@ -1,8 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { useGoToChoosePlan } from '@/features/billing/choosePlan';
-import { useSubscribed } from '@/features/billing/useSubscribed';
 import type { ScheduledPost } from '@/services/scheduledPostService';
-import { EDIT_BILLING_SOURCE } from '../edit/useScheduledPostActions';
 import { DOCK_CARD, Dock } from './Dock';
 import { formatWhen } from './panelFacts';
 import { DestinationName } from './panelParts';
@@ -18,14 +15,6 @@ export function ScheduledDock({
   scheduledPost: ScheduledPost;
   onEdit: () => void;
 }) {
-  const { subscribed } = useSubscribed();
-  const goToChoosePlan = useGoToChoosePlan();
-
-  const edit = () => {
-    if (subscribed === false) goToChoosePlan(EDIT_BILLING_SOURCE);
-    else onEdit();
-  };
-
   return (
     <Dock name="Scheduled">
       <div className={DOCK_CARD}>
@@ -38,7 +27,7 @@ export function ScheduledDock({
             </span>
           </p>
           {scheduledPost.state === 'scheduled' && (
-            <Button type="button" variant="outline" className="h-10 shrink-0" onClick={edit}>
+            <Button type="button" variant="outline" className="h-10 shrink-0" onClick={onEdit}>
               Edit
             </Button>
           )}

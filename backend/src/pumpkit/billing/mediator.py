@@ -68,7 +68,7 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
 
 
 def subscription_link() -> LinkToolResponse:
-    """Where the User subscribes or manages their Subscription, unless the Instance sells no Plans."""
+    """Where the User manages their Subscription, unless the Instance sells no Plans."""
     if not service.sells_plans():
         return LinkToolResponse(
             message="This instance sells no plans: you can use all of Pumpkit without a "
@@ -77,7 +77,7 @@ def subscription_link() -> LinkToolResponse:
         )
     url = settings.billing_page_url()
     return LinkToolResponse(
-        message=f"Subscribe or manage your subscription on the Settings page: {url}", url=url
+        message=f"Manage your subscription on the Settings page: {url}", url=url
     )
 
 

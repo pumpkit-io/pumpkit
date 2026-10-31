@@ -1,10 +1,12 @@
 import { Button } from '@/components/ui/button';
+import { useInstance } from '@/features/instance/useInstance';
 import { useXConnectionContext } from './useXConnectionContext';
 
 /** Across the top of every page while X no longer accepts the X connection. */
 export function ReconnectXBanner() {
   const { connection, busy, error, connect } = useXConnectionContext();
-  if (!connection?.needsReconnect) return null;
+  const { x_connection } = useInstance();
+  if (!x_connection || !connection?.needsReconnect) return null;
 
   return (
     <section

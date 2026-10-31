@@ -1,8 +1,8 @@
 """Seed a fixed e2e test user and print one machine-readable line, `E2E_ACCESS_TOKEN=<jwt>`.
 
-The user is Subscribed through a Subscription written straight into Pumpkit's copy, and has
-no Inspiration authors, Posts, X connection or Scheduled posts, so Home and Scheduled show their
-tools without calling any provider.
+The user is Subscribed through a Subscription written straight into Pumpkit's copy and has
+finished Onboarding, and has no Inspiration authors, Posts, X connection or Scheduled posts, so
+Home and Scheduled show their tools without calling any provider.
 
 Run inside the backend container: `docker compose -f compose.dev.yml exec -T backend python - < e2e/seed/seed_user.py`.
 """
@@ -17,6 +17,7 @@ from pumpkit.auth.tokens import create_access_token
 from pumpkit.authors.models import InspirationAuthor
 from pumpkit.billing.models import Subscription
 from pumpkit.core.db.session import _db_session_handler
+from pumpkit.onboarding.models import OnboardingFinish
 from pumpkit.posts.models import Post
 from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.models import XConnection
@@ -54,6 +55,8 @@ async def main() -> None:
                     stripe_created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
                 )
             )
+        if await db.get(OnboardingFinish, user.id) is None:
+            db.add(OnboardingFinish(user_id=user.id, finished_at=datetime.now(timezone.utc)))
         await db.commit()
         await db.refresh(user)
 

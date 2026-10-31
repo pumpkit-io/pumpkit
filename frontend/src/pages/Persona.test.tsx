@@ -33,6 +33,9 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
     refresh: vi.fn(),
   },
 }));
+vi.mock('@/services/authorDirectoryService', () => ({
+  authorDirectoryService: { list: vi.fn() },
+}));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
     get: vi.fn(),
@@ -51,6 +54,9 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     }),
   },
 }));
+vi.mock('@/services/onboardingService', () => ({
+  onboardingService: { fetchNextStep: vi.fn().mockResolvedValue('paywall') },
+}));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
@@ -59,6 +65,10 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
+import {
+  authorDirectoryService,
+  type AuthorDirectoryEntry,
+} from '@/services/authorDirectoryService';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { xConnectionService } from '@/services/xConnectionService';
@@ -70,7 +80,26 @@ import {
   SUBSCRIBED,
   apiError,
   renderSignedIn,
+  currentPath,
 } from './testing/signedInApp';
+
+function entry(handle: string, name: string, personaCount = 0): AuthorDirectoryEntry {
+  return { handle, name, photoUrl: null, personaCount };
+}
+
+// Real seed names from `backend/alembic/data/author_seeds.json`, plus Marc Lou, whom a lookup added.
+const DIRECTORY: AuthorDirectoryEntry[] = [
+  entry('marckohlbrugge', 'Marc Köhlbrugge'),
+  entry('levelsio', 'Pieter Levels', 3),
+  entry('pmarca', 'Marc Andreessen'),
+  entry('paulg', 'Paul Graham', 5),
+  entry('karpathy', 'Andrej Karpathy'),
+  entry('naval', 'Naval Ravikant', 5),
+  entry('jamesclear', 'James Clear'),
+  entry('marc_lou', 'Marc Lou', 1),
+  entry('byrnehobart', 'Byrne Hobart'),
+  entry('taylorotwell', 'Taylor Otwell'),
+];
 
 function renderPersona(instance = SELLS_PLANS) {
   return renderSignedIn('/persona', { instance });
@@ -80,6 +109,34 @@ async function persona() {
   return within(await screen.findByRole('region', { name: 'How your posts sound' }));
 }
 
+async function searchField() {
+  return (await persona()).findByRole('combobox', { name: 'Find an author' });
+}
+
+/** Each row of the open list, as a screen reader reads it. */
+function rows(): string[] {
+  return screen.queryAllByRole('option').map((option) => {
+    const read = option.cloneNode(true) as HTMLElement;
+    read.querySelectorAll('[aria-hidden]').forEach((hidden) => hidden.remove());
+    return read.textContent ?? '';
+  });
+}
+
+async function type(query: string) {
+  const field = await searchField();
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: query } });
+  return field;
+}
+
+/** The place markers holding an author, by the handle each shows. */
+async function filledSlots() {
+  const slots = await (await persona()).findByRole('list', { name: /places taken/ });
+  return within(slots)
+    .getAllByRole('listitem')
+    .filter((slot) => within(slot).queryByText(/^@/) !== null);
+}
+
 describe('Persona', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -87,11 +144,12 @@ describe('Persona', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(inspirationAuthorService.add).mockReset();
     vi.mocked(inspirationAuthorService.remove).mockReset();
     vi.mocked(inspirationAuthorService.refresh).mockReset();
+    vi.mocked(authorDirectoryService.list).mockReset().mockResolvedValue(DIRECTORY);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(track).mockClear();
   });
@@ -103,206 +161,414 @@ describe('Persona', () => {
     expect((await persona()).getByText(/never what they say/i)).toBeInTheDocument();
   });
 
-  it('marks how many of the three places are taken', async () => {
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-    renderPersona();
-
-    const panel = await persona();
-    expect(await panel.findByRole('img', { name: '2 of 3 places taken' })).toBeInTheDocument();
-  });
-
-  it('disables adding with a note to remove one once all three places are taken', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG, NAVAL]);
-    renderPersona();
-
-    const panel = await persona();
-    const field = await panel.findByLabelText('X handle');
-    expect(field).toBeDisabled();
-    expect(field).toHaveAccessibleDescription(/remove an inspiration author to add another/i);
-    expect(panel.getByRole('button', { name: 'Add author' })).toBeDisabled();
-    expect(panel.getByRole('img', { name: '3 of 3 places taken' })).toBeInTheDocument();
-
-    fireEvent.click(panel.getByRole('button', { name: 'Remove @naval' }));
-
-    await waitFor(() => expect(field).toBeEnabled());
-  });
-
-  it('lists the authors in order with when their posts were last fetched and how many are stored', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-    renderPersona();
-
-    const panel = await persona();
-    const items = await panel.findAllByRole('listitem');
-    expect(items.map((item) => within(item).getByText(/^@/).textContent)).toEqual([
-      '@levelsio',
-      '@paulg',
-    ]);
-    expect(within(items[0]).getByText('Fetched 2 hours ago · 18 posts')).toBeInTheDocument();
-    expect(within(items[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
-  });
-
-  it("shows each author's X photo left of their handle, or their initial when there is none", async () => {
-    const photo = 'https://pbs.twimg.com/profile_images/1/levelsio_normal.jpg';
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
-      { ...LEVELSIO, photoUrl: photo },
-      PAULG,
-    ]);
-    renderPersona();
-
-    const [withPhoto, withoutPhoto] = await (await persona()).findAllByRole('listitem');
-    expect(withPhoto.querySelector('img')).toHaveAttribute('src', photo);
-    expect(withoutPhoto.querySelector('img')).toBeNull();
-    expect(within(withoutPhoto).getByText('P')).toBeInTheDocument();
-  });
-
-  it("shows an author's initial when their photo fails to load", async () => {
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
-      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/profile_images/1/gone_normal.jpg' },
-    ]);
-    renderPersona();
-
-    const [row] = await (await persona()).findAllByRole('listitem');
-    fireEvent.error(row.querySelector('img')!);
-
-    expect(row.querySelector('img')).toBeNull();
-    expect(within(row).getByText('L')).toBeInTheDocument();
-  });
-
-  it('says how to start when the User has no authors', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    renderPersona();
-
-    const panel = await persona();
-    expect(await panel.findByText(/no inspiration authors yet/i)).toBeInTheDocument();
-  });
-
-  it('adds a handle, shows it in the list and clears the field', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.add).mockResolvedValue(LEVELSIO);
-    renderPersona();
-
-    const panel = await persona();
-    const field = await panel.findByLabelText('X handle');
-    fireEvent.change(field, { target: { value: '@LevelsIO' } });
-    fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-    expect(await panel.findByText('@levelsio')).toBeInTheDocument();
-    expect(inspirationAuthorService.add).toHaveBeenCalledWith('@LevelsIO');
-    expect(field).toHaveValue('');
-    expect(track).toHaveBeenCalledWith('inspiration_author_added');
-  });
-
-  it.each([
-    [404, "@nobody doesn't exist on X."],
-    [422, '@nobody has no original posts to learn from.'],
-    [409, 'You can have up to 3 Inspiration authors. Remove one to add another.'],
-  ])(
-    'says why a handle was refused with a %i and keeps it in the field',
-    async (status, detail) => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.add).mockRejectedValue(apiError(status, detail));
+  describe('the slots', () => {
+    it('shows one slot per author in order, with when its posts were last fetched, and the rest empty', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
       renderPersona();
 
       const panel = await persona();
-      const field = await panel.findByLabelText('X handle');
-      fireEvent.change(field, { target: { value: 'nobody' } });
-      fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-      expect(await panel.findByRole('alert')).toHaveTextContent(detail);
-      expect(field).toHaveValue('nobody');
-      expect(track).not.toHaveBeenCalledWith('inspiration_author_added');
-    },
-  );
-
-  it('removes an author from the list', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-    vi.mocked(inspirationAuthorService.remove).mockResolvedValue(undefined);
-    renderPersona();
-
-    const panel = await persona();
-    fireEvent.click(await panel.findByRole('button', { name: 'Remove @levelsio' }));
-
-    await waitFor(() => expect(panel.queryByText('@levelsio')).not.toBeInTheDocument());
-    expect(panel.getByText('@paulg')).toBeInTheDocument();
-    expect(inspirationAuthorService.remove).toHaveBeenCalledWith('levelsio');
-    expect(track).toHaveBeenCalledWith('inspiration_author_removed');
-  });
-
-  it('shows a User who is not Subscribed their authors and a prompt that leads to Choose a plan', async () => {
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-    renderPersona();
-
-    const panel = await persona();
-    expect(await panel.findByText('@levelsio')).toBeInTheDocument();
-    expect(await panel.findByText(/needs a subscription/i)).toBeInTheDocument();
-    expect(panel.queryByLabelText('X handle')).not.toBeInTheDocument();
-    expect(panel.queryByRole('button', { name: 'Remove @levelsio' })).not.toBeInTheDocument();
-    expect(panel.queryByRole('button', { name: 'Refresh @levelsio' })).not.toBeInTheDocument();
-
-    fireEvent.click(panel.getByRole('link', { name: 'Subscribe' }));
-    expect(await screen.findByRole('region', { name: 'Choose a plan' })).toBeInTheDocument();
-  });
-
-  it('shows the prompt to subscribe when adding is refused with a 403', async () => {
-    vi.mocked(billingService.fetchBillingMe)
-      .mockResolvedValueOnce(SUBSCRIBED)
-      .mockResolvedValue(NOT_SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.add).mockRejectedValue(
-      apiError(403, 'This needs a subscription. Subscribe to continue.'),
-    );
-    renderPersona();
-
-    const panel = await persona();
-    fireEvent.change(await panel.findByLabelText('X handle'), { target: { value: 'levelsio' } });
-    fireEvent.click(panel.getByRole('button', { name: 'Add author' }));
-
-    expect(await panel.findByRole('link', { name: 'Subscribe' })).toBeInTheDocument();
-  });
-
-  it('refreshes an author and shows its new fetch time and post count', async () => {
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
-    vi.mocked(inspirationAuthorService.refresh).mockResolvedValue({
-      handle: 'levelsio',
-      lastFetchedAt: new Date().toISOString(),
-      postCount: 21,
-      photoUrl: null,
+      expect(await panel.findByRole('list', { name: '2 of 3 places taken' })).toBeInTheDocument();
+      const slots = await filledSlots();
+      expect(slots.map((slot) => within(slot).getByText(/^@/).textContent)).toEqual([
+        '@levelsio',
+        '@paulg',
+      ]);
+      expect(within(slots[0]).getByText('Fetched 2 hours ago · 18 posts')).toBeInTheDocument();
+      expect(within(slots[1]).getByText('Fetched 5 minutes ago · 20 posts')).toBeInTheDocument();
+      expect(panel.getAllByRole('button', { name: 'Add an author' })).toHaveLength(1);
     });
-    renderPersona();
 
-    const panel = await persona();
-    fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
+    it('shows three empty slots when the User has no authors, and an empty one focuses the search', async () => {
+      renderPersona();
 
-    expect(await panel.findByText('Fetched just now · 21 posts')).toBeInTheDocument();
-    expect(inspirationAuthorService.refresh).toHaveBeenCalledWith('levelsio');
-    expect(track).toHaveBeenCalledWith('inspiration_authors_refreshed');
+      const panel = await persona();
+      const empty = await panel.findAllByRole('button', { name: 'Add an author' });
+      expect(empty).toHaveLength(3);
+
+      fireEvent.click(empty[1]);
+
+      expect(await searchField()).toHaveFocus();
+    });
+
+    it("shows each author's X photo at the size the slot needs, or their initial when there is none", async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+        { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/profile_images/1/levelsio_normal.jpg' },
+        PAULG,
+      ]);
+      renderPersona();
+
+      const [withPhoto, withoutPhoto] = await filledSlots();
+      expect(withPhoto.querySelector('img')).toHaveAttribute(
+        'src',
+        'https://pbs.twimg.com/profile_images/1/levelsio_200x200.jpg',
+      );
+      expect(withoutPhoto.querySelector('img')).toBeNull();
+      expect(within(withoutPhoto).getByText('P')).toBeInTheDocument();
+    });
+
+    it("shows each author's name from the Author directory above their handle", async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+        { ...LEVELSIO, name: 'Pieter Levels' },
+        PAULG,
+      ]);
+      renderPersona();
+
+      const [named, unnamed] = await filledSlots();
+      expect(within(named).getByText('Pieter Levels')).toBeInTheDocument();
+      expect(within(named).getByText('@levelsio')).toBeInTheDocument();
+      expect(within(unnamed).getByText('@paulg')).toBeInTheDocument();
+    });
+
+    it("shows an author's initials when their photo fails to load", async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([
+        {
+          ...LEVELSIO,
+          name: 'Pieter Levels',
+          photoUrl: 'https://pbs.twimg.com/profile_images/1/gone_normal.jpg',
+        },
+      ]);
+      renderPersona();
+
+      const [slot] = await filledSlots();
+      fireEvent.error(slot.querySelector('img')!);
+
+      expect(slot.querySelector('img')).toBeNull();
+      expect(within(slot).getByText('PL')).toBeInTheDocument();
+    });
+
+    it('shows a spinner and "Reading @handle\'s posts…" in the slot while the author\'s posts are read', async () => {
+      vi.mocked(inspirationAuthorService.add).mockReturnValue(new Promise(() => {}));
+      renderPersona();
+
+      const field = await type('marc');
+      fireEvent.keyDown(field, { key: 'Enter' });
+
+      const slots = (await persona()).getByRole('list', { name: /places taken/ });
+      expect(await within(slots).findByText("Reading @marc_lou's posts…")).toBeInTheDocument();
+      expect(within(slots).getAllByRole('button', { name: 'Add an author' })).toHaveLength(2);
+    });
+
+    it('disables the search once all three places are taken, until one is removed', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG, NAVAL]);
+      vi.mocked(inspirationAuthorService.remove).mockResolvedValue(undefined);
+      renderPersona();
+
+      const panel = await persona();
+      const field = await searchField();
+      await waitFor(() => expect(field).toBeDisabled());
+      expect(field).toHaveAccessibleDescription(
+        'All three places are taken. Remove one to pick another.',
+      );
+      expect(panel.getByRole('list', { name: '3 of 3 places taken' })).toBeInTheDocument();
+
+      fireEvent.click(panel.getByRole('button', { name: 'Remove @naval' }));
+
+      await waitFor(() => expect(field).toBeEnabled());
+      expect(inspirationAuthorService.remove).toHaveBeenCalledWith('naval');
+      expect(track).toHaveBeenCalledWith('inspiration_author_removed');
+    });
+
+    it('refreshes an author and shows its new fetch time and post count', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
+      vi.mocked(inspirationAuthorService.refresh).mockResolvedValue({
+        handle: 'levelsio',
+        lastFetchedAt: new Date().toISOString(),
+        postCount: 21,
+        name: null,
+        photoUrl: null,
+      });
+      renderPersona();
+
+      const panel = await persona();
+      fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
+
+      expect(await panel.findByText('Fetched just now · 21 posts')).toBeInTheDocument();
+      expect(inspirationAuthorService.refresh).toHaveBeenCalledWith('levelsio');
+      expect(track).toHaveBeenCalledWith('inspiration_authors_refreshed');
+    });
+
+    it('says when an author can be refreshed again after a refresh within the day', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 9, 5, 16, 0));
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      const retryAt = new Date(2026, 9, 6, 15, 42);
+      vi.mocked(inspirationAuthorService.refresh).mockRejectedValue(
+        apiError(429, '@levelsio was fetched less than a day ago.', {
+          retry_at: retryAt.toISOString(),
+        }),
+      );
+      renderPersona();
+
+      const panel = await persona();
+      fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
+
+      expect(
+        await panel.findByText(
+          '@levelsio was fetched less than a day ago. You can refresh it again tomorrow at 3:42 PM.',
+        ),
+      ).toBeInTheDocument();
+      expect(panel.queryByRole('alert')).not.toBeInTheDocument();
+      expect(track).not.toHaveBeenCalledWith('inspiration_authors_refreshed');
+    });
   });
 
-  it('says when an author can be refreshed again after a refresh within the day', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 9, 5, 16, 0));
-    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-    const retryAt = new Date(2026, 9, 6, 15, 42);
-    vi.mocked(inspirationAuthorService.refresh).mockRejectedValue(
-      apiError(429, '@levelsio was fetched less than a day ago.', {
-        retry_at: retryAt.toISOString(),
-      }),
+  describe('the author picker', () => {
+    it('lists the directory on focus, most picked first and then by name, leaving out the Persona', async () => {
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([NAVAL]);
+      renderPersona();
+
+      const field = await searchField();
+      expect(field).toHaveAttribute('placeholder', 'Search by name or @handle');
+      await waitFor(() => expect(field).toBeEnabled());
+      fireEvent.focus(field);
+
+      await waitFor(() =>
+        expect(rows()).toEqual([
+          'Paul Graham @paulg',
+          'Pieter Levels @levelsio',
+          'Marc Lou @marc_lou',
+          'Andrej Karpathy @karpathy',
+          'Byrne Hobart @byrnehobart',
+          'James Clear @jamesclear',
+          'Marc Andreessen @pmarca',
+          'Marc Köhlbrugge @marckohlbrugge',
+          'Taylor Otwell @taylorotwell',
+        ]),
+      );
+    });
+
+    it('shows a skeleton list while the directory loads', async () => {
+      vi.mocked(authorDirectoryService.list).mockReturnValue(new Promise(() => {}));
+      renderPersona();
+
+      fireEvent.focus(await searchField());
+
+      expect(
+        await screen.findByRole('status', { name: 'Loading suggestions' }),
+      ).toBeInTheDocument();
+    });
+
+    it('says how to look someone up when no directory entry is left to show', async () => {
+      vi.mocked(authorDirectoryService.list).mockResolvedValue([]);
+      renderPersona();
+
+      fireEvent.focus(await searchField());
+
+      expect(
+        await screen.findByText('Type a name or @handle to look someone up on X.'),
+      ).toBeInTheDocument();
+    });
+
+    // Fuse's threshold is 0.35: "levlsio" scores 0.31 against levelsio, while "foobar" scores 0.38
+    // against byrnehobart and "blorft" 0.52 against taylorotwell over the 193 seeds.
+    it('finds "levlsio", a typo, as Pieter Levels, with the X lookup last', async () => {
+      renderPersona();
+
+      await type('levlsio');
+
+      await waitFor(() =>
+        expect(rows()).toEqual(['Pieter Levels @levelsio', 'Look up @levlsio on X']),
+      );
+    });
+
+    it.each(['foobar', 'blorft'])(
+      'offers no directory row for "%s", which is nonsense, only the X lookup',
+      async (query) => {
+        renderPersona();
+
+        await type(query);
+
+        await waitFor(() => expect(rows()).toEqual([`Look up @${query} on X`]));
+      },
     );
-    renderPersona();
 
-    const panel = await persona();
-    fireEvent.click(await panel.findByRole('button', { name: 'Refresh @levelsio' }));
+    it('ranks an exact handle first and offers no lookup for a handle the directory has', async () => {
+      renderPersona();
 
-    expect(
-      await panel.findByText(
-        '@levelsio was fetched less than a day ago. You can refresh it again tomorrow at 3:42 PM.',
-      ),
-    ).toBeInTheDocument();
-    expect(panel.queryByRole('alert')).not.toBeInTheDocument();
-    expect(track).not.toHaveBeenCalledWith('inspiration_authors_refreshed');
+      await type('@pmarca');
+
+      await waitFor(() => expect(rows()[0]).toBe('Marc Andreessen @pmarca'));
+      expect(rows()).not.toContain('Look up @pmarca on X');
+    });
+
+    it('offers no X lookup for a query not shaped like a handle', async () => {
+      renderPersona();
+
+      await type('paul graham');
+
+      await waitFor(() => expect(rows()).toEqual(['Paul Graham @paulg']));
+    });
+
+    it('says nothing matches a query that is neither in the directory nor a handle', async () => {
+      renderPersona();
+
+      await type('zq zq');
+
+      expect(
+        await screen.findByText('No suggestion matches. Type an @handle to look it up on X.'),
+      ).toBeInTheDocument();
+      expect(rows()).toEqual([]);
+    });
+
+    it('puts directory matches for "marc" first and the X lookup last, and Enter picks Marc Lou', async () => {
+      vi.mocked(inspirationAuthorService.add).mockResolvedValue({
+        ...LEVELSIO,
+        handle: 'marc_lou',
+        name: 'Marc Lou',
+      });
+      renderPersona();
+
+      const field = await type('marc');
+      await waitFor(() =>
+        expect(rows()).toEqual([
+          'Marc Lou @marc_lou',
+          'Marc Andreessen @pmarca',
+          'Marc Köhlbrugge @marckohlbrugge',
+          'Look up @marc on X',
+        ]),
+      );
+      fireEvent.keyDown(field, { key: 'Enter' });
+
+      const [slot] = await filledSlots();
+      expect(within(slot).getByText('@marc_lou')).toBeInTheDocument();
+      expect(inspirationAuthorService.add).toHaveBeenCalledWith('marc_lou');
+      expect(field).toHaveValue('');
+      expect(track).toHaveBeenCalledWith('inspiration_author_added');
+      expect(track).not.toHaveBeenCalledWith('author_looked_up', expect.anything());
+    });
+
+    it('puts the X lookup first for "@marc", and Enter looks @marc up', async () => {
+      vi.mocked(inspirationAuthorService.add).mockResolvedValue({
+        ...LEVELSIO,
+        handle: 'marc',
+        name: 'Marc',
+      });
+      renderPersona();
+
+      const field = await type('@marc');
+      await waitFor(() => expect(rows()[0]).toBe('Look up @marc on X'));
+      expect(rows()).toContain('Marc Lou @marc_lou');
+      fireEvent.keyDown(field, { key: 'Enter' });
+
+      expect(await within((await filledSlots())[0]).findByText('@marc')).toBeInTheDocument();
+      expect(inspirationAuthorService.add).toHaveBeenCalledWith('marc');
+      expect(track).toHaveBeenCalledWith('author_looked_up', { result: 'found' });
+    });
+
+    it('highlights the first row as results change, moves it with ↑ and ↓, and closes on Escape', async () => {
+      renderPersona();
+
+      const field = await type('marc');
+      await waitFor(() => expect(rows()).toHaveLength(4));
+      const options = () => screen.getAllByRole('option');
+      expect(field).toHaveAttribute('aria-activedescendant', options()[0].id);
+      expect(options()[0]).toHaveAttribute('aria-selected', 'true');
+
+      fireEvent.keyDown(field, { key: 'ArrowDown' });
+      fireEvent.keyDown(field, { key: 'ArrowDown' });
+      expect(field).toHaveAttribute('aria-activedescendant', options()[2].id);
+      fireEvent.keyDown(field, { key: 'ArrowUp' });
+      expect(options()[1]).toHaveAttribute('aria-selected', 'true');
+
+      fireEvent.change(field, { target: { value: 'marc a' } });
+      await waitFor(() => expect(field).toHaveAttribute('aria-activedescendant', options()[0].id));
+
+      fireEvent.keyDown(field, { key: 'Escape' });
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(field).toHaveAttribute('aria-expanded', 'false');
+
+      fireEvent.keyDown(field, { key: 'ArrowDown' });
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
+
+    it('picks a row with the mouse', async () => {
+      vi.mocked(inspirationAuthorService.add).mockResolvedValue({
+        ...PAULG,
+        name: 'Paul Graham',
+      });
+      renderPersona();
+
+      fireEvent.focus(await searchField());
+      fireEvent.click(await screen.findByRole('option', { name: /Paul Graham/ }));
+
+      await waitFor(() => expect(inspirationAuthorService.add).toHaveBeenCalledWith('paulg'));
+      expect(await within((await filledSlots())[0]).findByText('@paulg')).toBeInTheDocument();
+    });
+
+    it('announces how many rows match', async () => {
+      renderPersona();
+
+      await type('marc');
+
+      expect(await screen.findByRole('status', { name: 'Results' })).toHaveTextContent('4 results');
+    });
+
+    it.each([
+      [404, "@nobody isn't on X.", 'HANDLE_NOT_ON_X', 'missing'],
+      [422, "@nobody is private, so Pumpkit can't read its posts.", 'HANDLE_PRIVATE', 'private'],
+      [422, '@nobody has no posts of its own to learn from.', 'HANDLE_HAS_NO_POSTS', 'no_posts'],
+      [429, "You've looked up a lot of handles. Try again in 40 minutes.", null, 'limited'],
+      [
+        429,
+        'Looking up new handles is paused for today. Pick from the suggestions or try again tomorrow.',
+        null,
+        'limited',
+      ],
+      [409, 'You can have up to 3 Inspiration authors. Remove one to add another.', null, null],
+    ])(
+      'says under the field why a lookup was refused with a %i, keeping the query',
+      async (status, detail, code, result) => {
+        vi.mocked(inspirationAuthorService.add).mockRejectedValue(
+          apiError(status, detail, code ? { code } : {}),
+        );
+        renderPersona();
+
+        const field = await type('@nobody');
+        await waitFor(() => expect(rows()[0]).toBe('Look up @nobody on X'));
+        fireEvent.keyDown(field, { key: 'Enter' });
+
+        await waitFor(() => expect(field).toHaveAccessibleDescription(detail));
+        expect(field).toHaveValue('@nobody');
+        expect(track).not.toHaveBeenCalledWith('inspiration_author_added');
+        if (result) expect(track).toHaveBeenCalledWith('author_looked_up', { result });
+        else expect(track).not.toHaveBeenCalledWith('author_looked_up', expect.anything());
+      },
+    );
+
+    it("says it couldn't load suggestions when the directory fails, and still looks handles up", async () => {
+      vi.mocked(authorDirectoryService.list).mockRejectedValue(apiError(500, 'boom'));
+      vi.mocked(inspirationAuthorService.add).mockResolvedValue(LEVELSIO);
+      renderPersona();
+
+      const field = await searchField();
+      fireEvent.focus(field);
+      expect(
+        await screen.findByText(
+          "Couldn't load suggestions. You can still look up an @handle on X.",
+        ),
+      ).toBeInTheDocument();
+
+      fireEvent.change(field, { target: { value: '@levelsio' } });
+      await waitFor(() => expect(rows()).toEqual(['Look up @levelsio on X']));
+      fireEvent.keyDown(field, { key: 'Enter' });
+
+      await waitFor(() => expect(inspirationAuthorService.add).toHaveBeenCalledWith('levelsio'));
+    });
+
+    it('sends the User to the Paywall when adding is refused with a 403', async () => {
+      vi.mocked(billingService.fetchBillingMe)
+        .mockResolvedValueOnce(SUBSCRIBED)
+        .mockResolvedValue(NOT_SUBSCRIBED);
+      vi.mocked(inspirationAuthorService.add).mockRejectedValue(
+        apiError(403, 'This needs a subscription. Subscribe to continue.'),
+      );
+      renderPersona();
+
+      const field = await type('paulg');
+      await waitFor(() => expect(rows()[0]).toBe('Paul Graham @paulg'));
+      fireEvent.keyDown(field, { key: 'Enter' });
+
+      await waitFor(() => expect(currentPath()).toBe('/subscribe'));
+    });
   });
 });

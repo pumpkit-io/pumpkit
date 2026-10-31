@@ -72,6 +72,7 @@ async def instance(request: Request) -> InstanceResponse:
         operator=_operator_details(),
         support_email=settings.SUPPORT_EMAIL or None,
         analytics=analytics,
+        x_connection=settings.is_x_configured(),
     )
 
 

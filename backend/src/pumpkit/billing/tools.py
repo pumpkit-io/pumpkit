@@ -1,4 +1,4 @@
-"""The billing MCP tool: subscribing and managing a Subscription happen in the web app."""
+"""The billing MCP tool: managing a Subscription happens in the web app."""
 
 from pumpkit.auth.models import User
 from pumpkit.billing import mediator
@@ -8,12 +8,12 @@ from pumpkit.core.schemas import LinkToolResponse
 
 async def manage_subscription(call: ToolCall[User]) -> LinkToolResponse:
     """
-    Where the user subscribes to a plan, changes or cancels their subscription, or updates
-    their payment details: the Settings page of the Pumpkit web app, since paying needs a browser.
+    Where the user changes or cancels their subscription, or updates their payment details: the
+    Settings page of the Pumpkit web app, since paying needs a browser.
     """
     return mediator.subscription_link()
 
 
 TOOLS = [
-    McpTool(manage_subscription, rate=READ_ONLY_RATE, annotations=READ_ONLY, needs_access=False),
+    McpTool(manage_subscription, rate=READ_ONLY_RATE, annotations=READ_ONLY),
 ]

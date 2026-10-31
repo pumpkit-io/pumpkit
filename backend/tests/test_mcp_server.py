@@ -168,13 +168,15 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_ever
         ("list_inspiration_authors", {}),
         ("add_inspiration_author", {"handle": "levelsio"}),
         ("remove_inspiration_author", {"handle": "levelsio"}),
+        ("connect_x", {}),
+        ("manage_subscription", {}),
     ]:
         result = await mcp.call_tool(name, **arguments)
 
         assert error_text(result) == (
-            "This needs a subscription. Subscribe to continue. http://localhost:5173/billing"
+            "This needs a subscription. Subscribe to continue. http://localhost:5173/subscribe"
         )
-        assert result["structuredContent"] == {"subscribe_url": "http://localhost:5173/billing"}
+        assert result["structuredContent"] == {"subscribe_url": "http://localhost:5173/subscribe"}
 
 
 async def test_every_user_uses_the_tools_on_an_instance_that_sells_no_plans(sells_no_plans, mcp):
@@ -226,7 +228,7 @@ async def test_an_unexpected_error_is_reported_and_answered_without_its_details(
     async def broken(handle: str):
         raise RuntimeError("secret internals")
 
-    monkeypatch.setattr(fake_x_reader, "fetch_recent_posts", broken)
+    monkeypatch.setattr(fake_x_reader, "look_up_profile", broken)
 
     result = await mcp.call_tool("add_inspiration_author", handle="levelsio")
 
