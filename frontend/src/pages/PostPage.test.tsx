@@ -81,7 +81,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
-import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from '@/features/posts/useTextAutosave';
+import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from '@/features/posts/text/textSaver';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';

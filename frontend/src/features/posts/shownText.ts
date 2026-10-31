@@ -38,18 +38,6 @@ export function retryParts(
 }
 
 /**
- * The Post's Text as the Version it came from, for what reads a Version's shape; the
- * latest Version for a Post with no Text.
- */
-export function versionOnScreen(post: PostDetail): Version | undefined {
-  const latest = post.versions[post.versions.length - 1];
-  const { text } = post;
-  if (!text) return latest;
-  const source = post.versions.find((v) => v.number === text.versionNumber) ?? latest;
-  return source && { ...source, format: text.format, parts: text.parts };
-}
-
-/**
  * The text the Post's card shows: what goes or went to X once it has a Scheduled post, the live
  * Parts first on a Failed one, else the Text.
  */
