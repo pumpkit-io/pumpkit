@@ -7,10 +7,12 @@ import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
-import { DraftDock, DraftPostTo } from '@/features/posts/panels/DraftDock';
 import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
-import type { FeedbackSending } from '@/features/posts/panels/feedback';
-import { LoadingDock } from '@/features/posts/panels/FeedbackDock';
+import {
+  FeedbackDock,
+  LoadingDock,
+  type FeedbackSending,
+} from '@/features/posts/panels/FeedbackDock';
 import { recordDraftOpened } from '@/features/posts/list/recentDrafts';
 import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
@@ -20,14 +22,16 @@ import { TextHeader } from '@/features/posts/panels/TextHeader';
 import { UndoRedo } from '@/features/posts/panels/UndoRedo';
 import { PostBreadcrumb } from '@/features/posts/PostBreadcrumb';
 import { postTitle } from '@/features/posts/postStatus';
-import { cardParts, copiedText } from '@/features/posts/shownText';
+import { PostToButton } from '@/features/posts/postTo/PostToButton';
+import { useCreateFromText } from '@/features/posts/postTo/senders';
+import { cardParts, copiedText, type ShownPart } from '@/features/posts/shownText';
 import type { TextController, TextSnapshot } from '@/features/posts/text/textController';
 import { TextEditor } from '@/features/posts/TextEditor';
 import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import { usePost } from '@/features/posts/usePost';
 import { Topbar } from '@/features/topbar/Topbar';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
-import type { PostDetail } from '@/services/postService';
+import type { Format, PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
 const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
@@ -79,6 +83,36 @@ function CardPlaceholder() {
         <div className="h-3 w-3/5 rounded-full bg-muted" />
       </div>
     </div>
+  );
+}
+
+/** "Post to…" on a Draft, which sends the Text on screen. */
+function DraftPostTo({
+  postId,
+  format,
+  parts,
+  disabled,
+  prepare,
+  onScheduled,
+}: {
+  postId: string;
+  format: Format;
+  parts: ShownPart[];
+  disabled: boolean;
+  /** Saves the User's last edit before "Post to…" opens. */
+  prepare: () => Promise<boolean>;
+  onScheduled: (scheduledPost: ScheduledPost) => void;
+}) {
+  const sender = useCreateFromText(postId);
+  return (
+    <PostToButton
+      format={format}
+      parts={parts}
+      sender={sender}
+      disabled={disabled}
+      prepare={prepare}
+      onDone={onScheduled}
+    />
   );
 }
 
@@ -180,12 +214,17 @@ function LoadedPost({
   let postTo: ReactNode = null;
   if (post.status === 'draft') {
     dock = (
-      <DraftDock textVersion={textVersion} feedback={feedback} restoreError={text.restoreError} />
+      <FeedbackDock
+        name="Draft"
+        format={textVersion.format}
+        feedback={feedback}
+        restoreError={text.restoreError}
+      />
     );
     postTo = (
       <DraftPostTo
         postId={post.id}
-        textVersion={textVersion}
+        format={textVersion.format}
         parts={parts}
         disabled={!can.postTo}
         prepare={settle}
