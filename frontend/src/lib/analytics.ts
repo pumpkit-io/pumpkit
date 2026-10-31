@@ -17,8 +17,14 @@ export const EVENTS = {
   landing_mobile_menu_opened: { description: 'Landing: opened the mobile header menu.' },
   landing_mobile_menu_closed: { description: 'Landing: closed the mobile header menu.' },
   landing_hero_cta_clicked: { description: 'Landing: clicked the "Start writing" hero button.' },
-  landing_hero_screenshot_viewed: {
-    description: 'Landing: the hero screenshot first scrolled into view.',
+  landing_video_played: {
+    description:
+      'Landing: the hero launch video started playing for the first time. Props: trigger (autoplay | visitor).',
+  },
+  landing_video_sound_turned_on: { description: "Landing: turned the launch video's sound on." },
+  landing_video_scrubbed: { description: "Landing: moved the launch video's scrubber." },
+  landing_video_watched_again: {
+    description: 'Landing: clicked "Watch again" at the end of the launch video.',
   },
   landing_authors_section_viewed: {
     description: 'Landing: the authors section first scrolled into view.',

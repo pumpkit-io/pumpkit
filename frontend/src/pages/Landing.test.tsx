@@ -150,21 +150,174 @@ describe('Landing hero', () => {
     ).toBeInTheDocument();
   });
 
-  it('holds a visible placeholder in the screenshot slot', () => {
-    renderLanding();
-    expect(screen.getByText('[Product screenshot]')).toBeInTheDocument();
-  });
-
   it('sets no headline word apart from the rest', () => {
     renderLanding();
     expect(screen.getByRole('heading', { level: 1 }).children).toHaveLength(0);
   });
 
-  it('tracks the hero button and the screenshot coming into view', () => {
+  it('tracks the hero button and no longer tracks a screenshot', () => {
     renderLanding();
-    expect(track).toHaveBeenCalledWith('landing_hero_screenshot_viewed');
     fireEvent.click(screen.getByRole('link', { name: 'Start writing' }));
     expect(track).toHaveBeenCalledWith('landing_hero_cta_clicked');
+    expect(vi.mocked(track).mock.calls.map(([event]) => event)).not.toContain(
+      'landing_hero_screenshot_viewed',
+    );
+  });
+});
+
+describe('Landing launch video', () => {
+  beforeEach(() => {
+    // jsdom has no media: play and pause only fire the events a browser would.
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      this.dispatchEvent(new Event('play'));
+      return Promise.resolve();
+    });
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      this.dispatchEvent(new Event('pause'));
+    });
+    onTestFinished(() => {
+      play.mockRestore();
+      pause.mockRestore();
+    });
+  });
+
+  function launchVideo() {
+    const player = screen.getByRole('group', { name: 'Launch video' });
+    const video = player.querySelector('video')!;
+    return { player, video };
+  }
+
+  function loadMetadata(video: HTMLVideoElement, duration = 66) {
+    Object.defineProperty(video, 'duration', { configurable: true, value: duration });
+    fireEvent(video, new Event('loadedmetadata'));
+  }
+
+  function matchMediaQueries(matching: string[]) {
+    const spy = vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: matching.includes(query),
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    onTestFinished(() => spy.mockRestore());
+  }
+
+  it('waits muted on its poster with a play button, loading only metadata', () => {
+    renderLanding();
+    const { player, video } = launchVideo();
+    expect(video).toHaveAttribute('preload', 'metadata');
+    expect(video.muted).toBe(true);
+    expect(video).toHaveAttribute('poster');
+    expect(video.querySelector('track')).toBeNull();
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(within(player).getByRole('button', { name: 'Play video' })).toBeInTheDocument();
+    expect(within(player).getByRole('button', { name: 'Sound on' })).toBeInTheDocument();
+  });
+
+  it('autoplays in view on a desktop-sized viewport', () => {
+    matchMediaQueries(['(min-width: 1024px)']);
+    renderLanding();
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledWith('landing_video_played', { trigger: 'autoplay' });
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+  });
+
+  it('does not autoplay when the visitor prefers reduced motion', () => {
+    matchMediaQueries(['(min-width: 1024px)', '(prefers-reduced-motion: reduce)']);
+    renderLanding();
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Play video' })).toBeInTheDocument();
+  });
+
+  it('plays and pauses from its buttons, tracking the first play', () => {
+    renderLanding();
+    const { player } = launchVideo();
+    fireEvent.click(within(player).getByRole('button', { name: 'Play video' }));
+    expect(track).toHaveBeenCalledWith('landing_video_played', { trigger: 'visitor' });
+    expect(within(player).queryByRole('button', { name: 'Play video' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(player).getByRole('button', { name: 'Pause' }));
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(player).getByRole('button', { name: 'Play' }));
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(track).mock.calls.filter(([event]) => event === 'landing_video_played'),
+    ).toHaveLength(1);
+  });
+
+  it('toggles play with Space and K while the player has focus', () => {
+    renderLanding();
+    const { player } = launchVideo();
+    fireEvent.keyDown(player, { key: ' ' });
+    expect(within(player).getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    fireEvent.keyDown(player, { key: 'k' });
+    expect(within(player).getByRole('button', { name: 'Play' })).toBeInTheDocument();
+  });
+
+  it('turns the sound on and off', () => {
+    renderLanding();
+    const { player, video } = launchVideo();
+    fireEvent.click(within(player).getByRole('button', { name: 'Sound on' }));
+    expect(video.muted).toBe(false);
+    expect(track).toHaveBeenCalledWith('landing_video_sound_turned_on');
+
+    fireEvent.click(within(player).getByRole('button', { name: 'Sound off' }));
+    expect(video.muted).toBe(true);
+    expect(
+      vi.mocked(track).mock.calls.filter(([event]) => event === 'landing_video_sound_turned_on'),
+    ).toHaveLength(1);
+  });
+
+  it('scrubs with the arrow keys and shows the current time and the total', () => {
+    renderLanding();
+    const { player, video } = launchVideo();
+    loadMetadata(video);
+    expect(within(player).getByText('0:00 / 1:06')).toBeInTheDocument();
+
+    const scrubber = within(player).getByRole('slider', { name: 'Seek' });
+    fireEvent.keyDown(scrubber, { key: 'ArrowRight' });
+    fireEvent.keyDown(scrubber, { key: 'ArrowRight' });
+    expect(scrubber).toHaveAttribute('aria-valuenow', '2');
+    expect(scrubber).toHaveAttribute('aria-valuetext', '0:02 of 1:06');
+    expect(within(player).getByText('0:02 / 1:06')).toBeInTheDocument();
+    expect(track).toHaveBeenCalledWith('landing_video_scrubbed');
+
+    fireEvent.keyDown(scrubber, { key: 'ArrowLeft' });
+    expect(scrubber).toHaveAttribute('aria-valuenow', '1');
+  });
+
+  it('ends on Watch again, which plays it from the start', () => {
+    renderLanding();
+    const { player, video } = launchVideo();
+    loadMetadata(video);
+    fireEvent.click(within(player).getByRole('button', { name: 'Play video' }));
+    fireEvent(video, new Event('ended'));
+
+    fireEvent.click(within(player).getByRole('button', { name: 'Watch again' }));
+    expect(track).toHaveBeenCalledWith('landing_video_watched_again');
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+    expect(within(player).queryByRole('button', { name: 'Watch again' })).not.toBeInTheDocument();
+  });
+
+  it('labels the fullscreen button', () => {
+    renderLanding();
+    const { player } = launchVideo();
+    expect(within(player).getByRole('button', { name: 'Full screen' })).toBeInTheDocument();
+  });
+
+  it('says so on its poster when the file fails to load', () => {
+    renderLanding();
+    const { player, video } = launchVideo();
+    fireEvent.error(video.querySelector('source[type="video/mp4"]')!);
+    expect(within(player).getByText("The video couldn't load.")).toBeInTheDocument();
+    expect(within(player).queryByRole('button', { name: 'Play video' })).not.toBeInTheDocument();
   });
 });
 
