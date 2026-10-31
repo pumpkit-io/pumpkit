@@ -22,6 +22,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
+- An Inspiration author can be refreshed once a day instead of once an hour, per handle across all Users. Refreshing too early says when you can refresh again, and the web app now says whether that's today or tomorrow. Adding a handle fetched less than a day ago uses its stored posts without a new fetch.
 - The Plan card in Settings shows your plan's name with its status as a badge, and when it next renews, starts billing after a trial or ends, beside Manage subscription. The API keys card says which MCP clients a key works with.
 - The app, its error messages and the MCP tool descriptions now write words like post, version, feedback, scheduled post, community, plan and subscription in lowercase mid-sentence. Names of pages, tabs and buttons keep their capitals.
 - The Persona chip at the top of New post and each Post's page reads "Writing in the style of" (beyond phone width), with the squarer corners of the other buttons, and shows your Inspiration authors' photos as a stack, with their initial when there is none or it fails to load. Hovering or focusing it unfolds each photo with its handle over the page title, and on a touch screen the first tap unfolds it and the second opens Persona.
