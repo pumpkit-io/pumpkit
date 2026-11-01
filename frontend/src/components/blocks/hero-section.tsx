@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Variants } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { ctaClasses, useCtaStyle } from '@/components/blocks/cta-style';
+import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { ArrowLabel } from '@/components/blocks/arrow-label';
 import { CtaFrame } from '@/components/blocks/cta-frame';
 import { HeroHeadline } from '@/components/blocks/hero-headline';
@@ -32,8 +32,6 @@ const staggeredVariants: { container: Variants; item: Variants } = {
 };
 
 export function HeroSection() {
-  const ctaStyle = useCtaStyle();
-
   return (
     <div className="overflow-hidden">
       <div
@@ -69,10 +67,7 @@ export function HeroSection() {
                     asChild
                     size="lg"
                     variant="outline"
-                    className={cn(
-                      ctaClasses(ctaStyle),
-                      'h-12 rounded-xl px-5 text-lg xl:text-[19px]',
-                    )}
+                    className={cn(CTA_CLASSES, 'h-12 rounded-xl px-5 text-lg xl:text-[19px]')}
                   >
                     <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
                       <ArrowLabel>Start a 7-day trial for $0</ArrowLabel>

@@ -9,7 +9,7 @@ import {
   useGitHubStars,
 } from '@/components/blocks/github';
 import { ArrowLabel } from '@/components/blocks/arrow-label';
-import { ctaClasses, useCtaStyle } from '@/components/blocks/cta-style';
+import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { useInstance } from '@/features/instance/useInstance';
@@ -76,14 +76,12 @@ export function HeroHeader() {
       </li>
     ));
 
-  const ctaStyle = useCtaStyle();
-
   const getStarted = (surface: Surface) => (
     <Button
       asChild
       size="sm"
       variant="outline"
-      className={cn(ctaClasses(ctaStyle), surface === 'mobile' ? 'w-full' : 'text-base')}
+      className={cn(CTA_CLASSES, surface === 'mobile' ? 'w-full' : 'text-base')}
     >
       <Link
         to="/login"
