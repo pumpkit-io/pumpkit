@@ -105,7 +105,7 @@ export function HeroHeadline() {
             <span
               key={tool.name}
               className={cn(
-                'col-start-1 row-start-1 inline-flex items-center gap-[0.3em] transition-[opacity,transform] duration-500 motion-reduce:transition-none',
+                'col-start-1 row-start-1 inline-flex justify-self-center items-center gap-[0.3em] transition-[opacity,transform] duration-500 motion-reduce:transition-none',
                 i === active ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
               )}
             >

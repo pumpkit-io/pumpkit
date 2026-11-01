@@ -46,18 +46,18 @@ export function HeroSection() {
             className="absolute inset-0 -z-10 size-full [background:radial-gradient(125%_125%_at_50%_100%,transparent_0%,hsl(var(--background))_75%)]"
           />
           <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
-            <div className="lg:col-span-5">
+            <div className="text-center lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
-                <h1 className="max-w-2xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.5rem] lg:leading-[1.05] xl:text-[4rem]">
+                <h1 className="mx-auto max-w-2xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.5rem] lg:leading-[1.05] xl:text-[4rem]">
                   <HeroHeadline />
                 </h1>
-                <p className="mt-6 max-w-xl text-pretty text-lg text-muted-foreground">
+                <p className="mx-auto mt-6 max-w-xl text-pretty text-lg text-muted-foreground">
                   Write a brief, pick up to three X authors to learn style from, and get a post
                   ready to paste. Not quite right? Say what to change and get a new version.
                 </p>
               </AnimatedGroup>
 
-              <AnimatedGroup variants={staggeredVariants} className="mt-10 flex">
+              <AnimatedGroup variants={staggeredVariants} className="mt-10 flex justify-center">
                 <CtaFrame>
                   <Button asChild size="lg" className="rounded-xl px-5 text-base">
                     <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
