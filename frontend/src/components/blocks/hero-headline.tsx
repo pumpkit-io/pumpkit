@@ -99,7 +99,7 @@ export function HeroHeadline() {
       </span>
       <span aria-hidden>
         Run your <BrandIcon path={X_PATH} className="inline-block size-[0.8em] align-[-0.06em]" />{' '}
-        on autopilot with
+        on <span className="text-primary">autopilot</span> with
         {/* Own line, so the centered name sizes itself: popLayout lifts the leaving name out of flow. */}
         <span className="relative -my-[0.1em] block overflow-hidden py-[0.1em] whitespace-nowrap">
           <AnimatePresence initial={false} mode="popLayout">
