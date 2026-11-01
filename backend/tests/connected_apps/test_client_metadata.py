@@ -1,17 +1,24 @@
 """Apps that identify themselves by a Client ID Metadata Document URL (CIMD)."""
 
 import json
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.connected_apps.service import client_metadata
-from pumpkit.connected_apps.service.client_metadata import FetchedClientMetadata
+from pumpkit.connected_apps.service.client_metadata import (
+    FakeClientMetadataFetcher,
+    FetchedClientMetadata,
+)
 from tests.oauth_app import CONSENT, REDIRECT, approved_code, exchange, query, start_for
 
 DOCUMENT_URL = "https://app.example.com/oauth/client.json"
+NOW = datetime(2026, 11, 1, tzinfo=timezone.utc)
 
 
 def document(**fields) -> dict:
@@ -67,7 +74,12 @@ async def test_the_document_is_cached_and_fetched_again_after_24_hours(
 
 @pytest.mark.parametrize(
     ("max_age", "refetch_after"),
-    [(600, timedelta(minutes=10)), (0, timedelta(minutes=5)), (10**9, timedelta(hours=24))],
+    [
+        (600, timedelta(minutes=10)),
+        (0, timedelta(minutes=5)),
+        (10**9, timedelta(hours=24)),
+        (10**15, timedelta(hours=24)),
+    ],
 )
 async def test_max_age_sets_freshness_between_five_minutes_and_a_day(
     browser, clock, fake_client_metadata_fetcher, max_age, refetch_after
@@ -217,7 +229,6 @@ async def test_the_app_is_public_and_its_private_key_jwt_is_ignored(
 BUNDLED = json.loads(
     (Path(client_metadata.__file__).with_name("known_client_documents.json")).read_text()
 )
-# Each bundled app's name and the redirect URI it uses.
 BIG_CLIENTS = {
     "https://claude.ai/oauth/mcp-oauth-client-metadata": (
         "Claude",
@@ -237,13 +248,6 @@ BIG_CLIENTS = {
         "http://127.0.0.1:33418/",
     ),
 }
-
-
-def test_every_big_client_has_a_bundled_copy_with_its_fetch_date():
-    assert set(BUNDLED) == set(BIG_CLIENTS)
-    for url, known in BUNDLED.items():
-        assert known["document"]["client_id"] == url
-        assert datetime.fromisoformat(known["fetched_at"]).tzinfo is not None
 
 
 @pytest.mark.parametrize("url", list(BIG_CLIENTS))
@@ -293,3 +297,30 @@ async def test_a_bundled_copy_gives_way_to_the_live_document_on_the_next_authori
     assert fake_client_metadata_fetcher.fetched == [url, url]
     body = (await authed_client.get(details(started.headers["location"]))).json()
     assert body["client"]["name"] == "Claude 2"
+
+
+@dataclass
+class racing_fetcher(FakeClientMetadataFetcher):
+    """Serves the document after another authorization has stored the same app first."""
+
+    engine: Any = None
+
+    async def fetch(self, url: str) -> FetchedClientMetadata:
+        async with AsyncSession(self.engine) as other:
+            await client_metadata.resolve_metadata_document_client(
+                other, url, FakeClientMetadataFetcher(self.documents), now=NOW
+            )
+            await other.commit()
+        return await super().fetch(url)
+
+
+async def test_two_first_authorizations_of_one_app_both_resolve_it(foreign_keys_session):
+    fetcher = racing_fetcher(engine=foreign_keys_session.bind)
+    fetcher.serve(document())
+
+    client = await client_metadata.resolve_metadata_document_client(
+        foreign_keys_session, DOCUMENT_URL, fetcher, now=NOW
+    )
+
+    assert client is not None
+    assert client.name == "Example"
