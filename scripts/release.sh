@@ -166,7 +166,7 @@ echo "PR #$pr"
 step "Checks"
 head=$(git -C "$dir" rev-parse HEAD)
 gh pr checks "$pr" --watch --interval "$poll" >/dev/null 2>&1 || true
-checks=$(gh pr checks "$pr" --json name,state -q '.[] | select(.name != "review") | select(.state != "SUCCESS" and .state != "SKIPPED" and .state != "NEUTRAL") | .name')
+checks=$(gh pr checks "$pr" --json name,bucket -q '.[] | select(.name != "review") | select(.bucket != "pass" and .bucket != "skipping") | .name')
 [ -z "$checks" ] ||
   stop "these checks on PR #$pr did not pass: $(echo "$checks" | tr '\n' ' ')" "Read them with gh pr checks $pr, fix the cause in the branch, and run it again."
 
