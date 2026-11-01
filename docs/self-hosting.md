@@ -59,7 +59,7 @@ Choose `PUBLIC_URL`, the address Users open:
 | Laptop | `http://localhost:8080` | nothing; with port 8080 taken, `--http-port 8081` and `--public-url http://localhost:8081` |
 | Server | `https://pumpkit.example.org`, your domain | `--http-port 80`, and optionally `--acme-email you@example.org` for certificate expiry notices |
 
-`PUBLIC_URL` must be an address the clients can reach, not only the browser: Claude Code and other MCP clients connect to `PUBLIC_URL/api/v1/mcp` (see [docs/claude-code.md](claude-code.md)), so a laptop's `http://localhost:8080` works only for clients on that laptop.
+`PUBLIC_URL` must be an address the clients can reach, not only the browser: AI apps connect to `PUBLIC_URL/api/v1/mcp` (see [docs/mcp.md](mcp.md)). claude.ai and ChatGPT connect from their own servers, so they need a `PUBLIC_URL` reachable from the internet over HTTPS. A laptop's `http://localhost:8080` works only for apps running on that laptop, such as Claude Code. Connecting apps needs no setting of its own.
 
 An `https://` `PUBLIC_URL` gets a certificate automatically; an `http://` one is served as plain HTTP on any host. The web container listens on `HTTP_PORT` (default 8080, for laptops) and `HTTPS_PORT` (default 443). A server needs `HTTP_PORT=80`: port 80 serves the redirect from HTTP to HTTPS and answers the certificate authority's HTTP-01 challenge.
 
