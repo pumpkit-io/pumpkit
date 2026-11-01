@@ -7,15 +7,16 @@ from datetime import datetime, timedelta
 from typing import Optional
 from unittest.mock import MagicMock
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
-from pumpkit.connected_apps.models import AppConnection
 from pumpkit.core.analytics import posthog_client
-from pumpkit.core.time import as_utc
 from tests.conftest import FIXED_NOW
 from tests.mcp_client import MCP, McpClient, error_text
+
+API_KEYS = "/api/v1/api-keys"
+CONNECTIONS = "/api/v1/app-connections"
 
 
 async def test_initialize_returns_the_server_instructions(subscribed, mcp):
@@ -134,14 +135,14 @@ async def test_the_endpoint_refuses_get(subscribed, mcp):
 
 
 async def test_a_call_records_when_the_connection_was_last_used_at_most_once_a_minute(
-    fixed_clock, subscribed, mcp, db_session_maker, user
+    fixed_clock, subscribed, mcp, authed_client
 ):
     async def last_used_at() -> Optional[datetime]:
-        async with db_session_maker() as db:
-            used = await db.scalar(
-                select(AppConnection.last_used_at).where(AppConnection.user_id == user.id)
-            )
-        return as_utc(used) if used is not None else None
+        response = await authed_client.get(CONNECTIONS)
+        assert response.status_code == 200, response.text
+        [connected] = response.json()["data"]
+        used = connected["last_used_at"]
+        return datetime.fromisoformat(used) if used is not None else None
 
     assert await last_used_at() is None
     await mcp.call_tool("list_inspiration_authors")
@@ -154,6 +155,23 @@ async def test_a_call_records_when_the_connection_was_last_used_at_most_once_a_m
     fixed_clock.advance(timedelta(seconds=1))
     await mcp.call_tool("list_inspiration_authors")
     assert await last_used_at() == FIXED_NOW + timedelta(minutes=1)
+
+
+# TODO(#316): remove with API key authentication at the MCP endpoint.
+async def test_an_api_key_works_at_the_endpoint_until_it_is_revoked(
+    subscribed, new_browser, authed_client
+):
+    created = await authed_client.post(API_KEYS, json={"name": "Claude Code"})
+    assert created.status_code == 201, created.text
+    client = McpClient(new_browser(), created.json()["secret"])
+    assert (await client.send("tools/list")).status_code == 200
+
+    [listed] = (await authed_client.get(API_KEYS)).json()["data"]
+    assert (await authed_client.delete(f"{API_KEYS}/{listed['id']}")).status_code == 204
+    response = await client.send("tools/list")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
 
 
 async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_every_tool(

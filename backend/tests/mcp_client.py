@@ -10,7 +10,7 @@ PROTOCOL_VERSION = "2025-11-25"
 
 class McpClient:
     """
-    Sends one JSON-RPC request per POST, with the API key as a bearer header. The endpoint is
+    Sends one JSON-RPC request per POST, with the token as a bearer header. The endpoint is
     stateless, so no `initialize` has to come first.
     """
 

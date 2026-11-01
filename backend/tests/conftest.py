@@ -92,13 +92,13 @@ from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa
 from pumpkit.posts.service import set_text_from_version  # noqa: E402
 from pumpkit.x_connection.service import save_connection  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
-from tests.connected_apps.conftest import (  # noqa: E402
+from tests.mcp_client import McpClient  # noqa: E402
+from tests.oauth_app import (  # noqa: E402
     REDIRECT,
     approved_code,
     exchange,
     register,
 )
-from tests.mcp_client import McpClient  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
