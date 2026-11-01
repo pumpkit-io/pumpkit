@@ -17,6 +17,10 @@ from pumpkit.connected_apps.schemas import (
     ProtectedResourceMetadata,
     RedirectResponseBody,
 )
+from pumpkit.connected_apps.service.client_metadata import (
+    ClientMetadataFetcher,
+    get_client_metadata_fetcher,
+)
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
@@ -57,13 +61,14 @@ async def register_client(
 async def authorize(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
+    fetcher: ClientMetadataFetcher = Depends(get_client_metadata_fetcher),
     clock: Clock = Depends(get_clock),
 ) -> RedirectResponse:
     if request.method == "POST":
         params = await _form_params(request)
     else:
         params = request.query_params.multi_items()
-    location = await mediator.start_authorization(params, db, now=clock())
+    location = await mediator.start_authorization(params, db, fetcher, now=clock())
     return RedirectResponse(location, status_code=303, headers={"Cache-Control": "no-store"})
 
 

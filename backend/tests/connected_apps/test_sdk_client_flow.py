@@ -22,6 +22,8 @@ from tests.oauth_app import ISSUER, MCP_URL, REDIRECT, query
 
 pytestmark = pytest.mark.usefixtures("subscribed")
 
+DOCUMENT_URL = "https://sdk.example.com/oauth/client.json"
+
 
 class InMemoryTokenStorage:
     def __init__(self) -> None:
@@ -77,7 +79,9 @@ def signed_in_user(new_browser, authed_client) -> SignedInUser:
     return SignedInUser(authed_client)
 
 
-def sdk_client(storage: InMemoryTokenStorage, user: SignedInUser) -> Client:
+def sdk_client(
+    storage: InMemoryTokenStorage, user: SignedInUser, client_metadata_url: Optional[str] = None
+) -> Client:
     provider = OAuthClientProvider(
         server_url=MCP_URL,
         client_metadata=OAuthClientMetadata(
@@ -90,6 +94,7 @@ def sdk_client(storage: InMemoryTokenStorage, user: SignedInUser) -> Client:
         storage=storage,
         redirect_handler=user.open,
         callback_handler=user.callback,
+        client_metadata_url=client_metadata_url,
     )
     http = httpx2.AsyncClient(
         transport=httpx2.ASGITransport(app=app), base_url=ISSUER, auth=provider
@@ -109,6 +114,32 @@ async def test_the_sdk_client_registers_signs_in_and_calls_a_tool(storage, signe
     assert storage.client_info.client_id.startswith("oauth_client_")
     assert signed_in_user.authorizations == 1
     assert [token.scope for token in storage.tokens] == ["pumpkit"]
+
+
+async def test_the_sdk_client_identifies_itself_by_its_metadata_document(
+    storage, signed_in_user, authed_client, fake_client_metadata_fetcher
+):
+    fake_client_metadata_fetcher.serve(
+        {
+            "client_id": DOCUMENT_URL,
+            "client_name": "SDK test",
+            "redirect_uris": [REDIRECT],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "token_endpoint_auth_method": "none",
+        }
+    )
+
+    async with sdk_client(storage, signed_in_user, client_metadata_url=DOCUMENT_URL) as client:
+        result = await client.call_tool("list_inspiration_authors", {})
+
+    assert result.is_error is False
+    assert storage.client_info is not None
+    assert storage.client_info.client_id == DOCUMENT_URL
+    assert fake_client_metadata_fetcher.fetched == [DOCUMENT_URL]
+    connections = (await authed_client.get("/api/v1/app-connections")).json()["data"]
+    assert [(c["app_name"], c["verified_domain"]) for c in connections] == [
+        ("SDK test", "sdk.example.com")
+    ]
 
 
 async def test_the_sdk_client_refreshes_an_expired_token_without_signing_in_again(

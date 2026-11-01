@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from pumpkit.connected_apps import mediator
 from pumpkit.connected_apps.models import OAuthClient
+from pumpkit.connected_apps.service.client_metadata import FakeClientMetadataFetcher
 from tests.oauth_app import CHALLENGE, CONSENT, REDIRECT
 
 NOW = datetime(2026, 11, 1, tzinfo=timezone.utc)
@@ -32,6 +33,7 @@ async def test_an_app_unused_for_thirty_days_is_purged_before_its_request_is_sto
             ("code_challenge_method", "S256"),
         ],
         foreign_keys_session,
+        FakeClientMetadataFetcher(),
         now=NOW,
     )
 

@@ -47,6 +47,8 @@ class AuthorizationServerMetadata(BaseModel):
     token_endpoint_auth_methods_supported: list[str]
     revocation_endpoint_auth_methods_supported: list[str]
     authorization_response_iss_parameter_supported: bool
+    # A client that sees it uses its metadata document and never falls back to DCR.
+    client_id_metadata_document_supported: bool
 
 
 ClientAuthMethod = Literal["none", "client_secret_post", "client_secret_basic"]
@@ -60,6 +62,10 @@ def _require_https(url: str) -> str:
     if not url.startswith("https://"):
         raise ValueError("must be an https URL")
     return url
+
+
+def _visible(name: str) -> str:
+    return "".join(c for c in name if unicodedata.category(c) not in _HIDDEN_CATEGORIES).strip()
 
 
 _HttpsUrl = Annotated[
@@ -91,14 +97,42 @@ class ClientRegistrationRequest(BaseModel):
     def _clean_name(cls, value: object) -> object:
         if not isinstance(value, str):
             return value
-        visible = "".join(c for c in value if unicodedata.category(c) not in _HIDDEN_CATEGORIES)
-        return visible.strip() or DEFAULT_CLIENT_NAME
+        return _visible(value) or DEFAULT_CLIENT_NAME
 
     @model_validator(mode="after")
     def _grants_include_authorization_code(self) -> "ClientRegistrationRequest":
         if "authorization_code" not in self.grant_types:
             raise ValueError("grant_types must include authorization_code")
         return self
+
+
+class ClientMetadataDocument(BaseModel):
+    """
+    A Client ID Metadata Document, read as the app's registration. Its grant and response types
+    are ignored: claude.ai's lists a JWT bearer grant and VS Code's a device code one.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    client_id: str
+    redirect_uris: Annotated[
+        list[Annotated[str, AfterValidator(validate_redirect_uri)]],
+        Field(min_length=1, max_length=10),
+    ]
+    client_name: Optional[Annotated[str, StringConstraints(max_length=100)]] = None
+    client_uri: Optional[_HttpsUrl] = None
+    logo_uri: Optional[_HttpsUrl] = None
+    # ChatGPT's declares private_key_jwt. Pumpkit doesn't advertise it, so ChatGPT sends none.
+    token_endpoint_auth_method: Literal["none", "private_key_jwt"] = "none"
+    software_id: Optional[Annotated[str, StringConstraints(max_length=200)]] = None
+    software_version: Optional[Annotated[str, StringConstraints(max_length=200)]] = None
+
+    @field_validator("client_name", mode="before")
+    @classmethod
+    def _clean_name(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return _visible(value) or None
 
 
 class ClientRegistrationResponse(BaseModel):
