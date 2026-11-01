@@ -5,15 +5,18 @@ import { cn } from '../../lib/utils';
 import { track } from '../../lib/analytics';
 
 interface GoogleAuthButtonProps {
+  /** Called on click, before the request for Google's sign-in URL. */
+  onStart?: () => void;
   onError?: (error: Error) => void;
   className?: string;
 }
 
-export function GoogleAuthButton({ onError, className }: GoogleAuthButtonProps) {
+export function GoogleAuthButton({ onStart, onError, className }: GoogleAuthButtonProps) {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleAuth = async () => {
     track('login_google_clicked');
+    onStart?.();
     try {
       setLoading(true);
       const { authorization_url } = await authService.getGoogleLoginUrl();

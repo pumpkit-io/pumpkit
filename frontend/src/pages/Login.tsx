@@ -9,6 +9,7 @@ import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
 import { authService } from '../services/authService';
 import { errorMessage, errorStatus } from '../services/apiErrors';
 import { track } from '../lib/analytics';
+import { returnTo } from '../lib/returnTo';
 import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
 
 function emailDomain(email: string): string {
@@ -29,6 +30,13 @@ function isEmailNotAllowed(err: unknown): boolean {
   return errorStatus(err) === 403 && errorMessage(err, '') === SIGN_IN_ERROR.emailNotAllowed;
 }
 
+/** The page that sent the User here to sign in, as ProtectedRoute passes it. */
+function sentFrom(state: unknown): string | null {
+  const from = (state as { from?: { pathname?: unknown; search?: unknown } } | null)?.from;
+  if (typeof from?.pathname !== 'string') return null;
+  return from.pathname + (typeof from.search === 'string' ? from.search : '');
+}
+
 export function Login() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,6 +46,12 @@ export function Login() {
   const { sign_in_methods, operator } = useInstance();
   const offersGoogle = sign_in_methods.includes('google');
   const hasTerms = operator !== null;
+
+  // A sign-in the consent page didn't send here must not land on an old request.
+  const startSignIn = () => {
+    const from = sentFrom(location.state);
+    if (from === null || !returnTo.isResumable(from)) returnTo.forget();
+  };
 
   useEffect(() => {
     const code = new URLSearchParams(location.search).get('error');
@@ -50,6 +64,7 @@ export function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    startSignIn();
     const domain = emailDomain(email);
     track('login_magic_link_submitted', { email_domain: domain });
     setLoading(true);
@@ -89,6 +104,7 @@ export function Login() {
                 {offersGoogle && (
                   <>
                     <GoogleAuthButton
+                      onStart={startSignIn}
                       onError={() => setError("We couldn't start Google sign-in. Try again.")}
                     />
                     <div className="relative">

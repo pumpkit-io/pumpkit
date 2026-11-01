@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { Laptop, ShieldAlert, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Globe, Laptop, ShieldAlert, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
+import { isSubscriptionNeeded } from '@/features/billing/subscriptionNeeded';
 import { APP_HOME } from '@/features/onboarding/paths';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { returnTo } from '@/lib/returnTo';
+import { signInPath } from '@/lib/session';
 import { cn } from '@/lib/utils';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import {
@@ -18,8 +20,6 @@ import {
 } from '@/services/oauthConsentService';
 import { useProfile } from './layout/ProfileContext';
 
-export const OAUTH_CONSENT_PATH = '/oauth/consent';
-
 /** The causes authorize names in `?error=` while the app's return address is still untrusted. */
 const INVALID_CAUSE: Record<string, string> = {
   invalid_client: "The app isn't registered with Pumpkit.",
@@ -28,6 +28,22 @@ const INVALID_CAUSE: Record<string, string> = {
 
 const REQUEST_GONE =
   'This request expired or was already used. Start connecting again from your app.';
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const UNSAFE_SCHEMES = new Set(['javascript:', 'data:', 'vbscript:', 'file:']);
+
+/** A return address the browser may open: https, plain http only to loopback, or an app's scheme. */
+function isSafeReturnUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'https:') return true;
+  if (url.protocol === 'http:') return LOOPBACK_HOSTS.has(url.hostname);
+  return !UNSAFE_SCHEMES.has(url.protocol);
+}
 
 const HEADING_CLASS = 'font-sans text-2xl/[30px] font-semibold tracking-[-0.015em] text-foreground';
 
@@ -67,6 +83,15 @@ function Notice({ title, lines }: { title: string; lines: string[] }) {
           </p>
         ))}
       </div>
+    </Column>
+  );
+}
+
+/** The spec gives an expired or used request one sentence and nothing else. */
+function RequestGone() {
+  return (
+    <Column>
+      <p className="font-sans text-base text-foreground">{REQUEST_GONE}</p>
     </Column>
   );
 }
@@ -111,16 +136,11 @@ function IdentityLine({
 function Identity({ app }: { app: ConsentApp }) {
   const unverified = app.verifiedDomain === null;
   return (
-    <div
-      className={cn(
-        'space-y-1.5 rounded-lg border px-4 py-3',
-        unverified || app.isLocal ? 'border-warning/30 bg-warning/10' : 'border-border bg-muted/40',
-      )}
-    >
+    <div className="space-y-1.5">
       <IdentityLine icon={unverified ? ShieldAlert : ShieldCheck} warning={unverified} strong>
         {unverified ? 'Unverified app' : `Verified: ${app.verifiedDomain}`}
       </IdentityLine>
-      <IdentityLine icon={Laptop} warning={app.isLocal}>
+      <IdentityLine icon={app.isLocal ? Laptop : Globe} warning={app.isLocal}>
         {app.isLocal ? 'An app on this computer' : `Sends you back to ${app.redirectHost}`}
       </IdentityLine>
     </div>
@@ -131,10 +151,14 @@ function SignedInAs() {
   const profile = useProfile();
   const { logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   if (!profile) return null;
 
+  // Sign-in sees where the User came from, so it keeps the saved return. Being on sign-in
+  // already when the Session ends turns sign-out's own redirect into a no-op.
   const switchAccount = () => {
     returnTo.remember(location.pathname + location.search);
+    navigate(signInPath(), { state: { from: location } });
     void logout();
   };
 
@@ -159,6 +183,7 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
   const [needsSubscription, setNeedsSubscription] = useState(false);
   const [decided, setDecided] = useState<Decision | null>(null);
   const [gone, setGone] = useState(false);
+  const [unsafeReturn, setUnsafeReturn] = useState(false);
 
   const decide = async (decision: Decision) => {
     if (inFlight) return;
@@ -169,17 +194,21 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
         decision === 'approve'
           ? await oauthConsentService.approve(id)
           : await oauthConsentService.deny(id);
+      returnTo.forget();
       track(
         decision === 'approve' ? 'oauth_consent_approved' : 'oauth_consent_denied',
         eventProps(app),
       );
+      if (!isSafeReturnUrl(url)) {
+        setUnsafeReturn(true);
+        return;
+      }
       redirectTo(url);
       // An app-scheme return address leaves the browser here.
       setDecided(decision);
     } catch (e) {
-      const status = errorStatus(e);
-      if (status === 404) setGone(true);
-      else if (decision === 'approve' && status === 403) setNeedsSubscription(true);
+      if (errorStatus(e) === 404) setGone(true);
+      else if (decision === 'approve' && isSubscriptionNeeded(e)) setNeedsSubscription(true);
       else {
         const fallback =
           decision === 'approve'
@@ -192,7 +221,7 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
     }
   };
 
-  if (gone) return <Notice title="This request has ended" lines={[REQUEST_GONE]} />;
+  if (gone) return <RequestGone />;
 
   return (
     <Column labelledBy={headingId}>
@@ -203,7 +232,11 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
         <SignedInAs />
       </div>
 
-      {decided ? (
+      {unsafeReturn ? (
+        <ErrorBanner
+          message={`${app.name} gave a return address Pumpkit won't open. Try connecting again from the app.`}
+        />
+      ) : decided ? (
         <div className="space-y-3">
           <p className="font-sans text-sm text-foreground">
             {decided === 'approve' ? 'Done' : 'Cancelled'}. Return to {app.name}.
@@ -306,8 +339,7 @@ export function OAuthConsent() {
     );
   }
   if (load.status === 'loading') return <LoadingRequest />;
-  if (load.status === 'gone')
-    return <Notice title="This request has ended" lines={[REQUEST_GONE]} />;
+  if (load.status === 'gone') return <RequestGone />;
   if (load.status === 'failed') {
     return (
       <Column>

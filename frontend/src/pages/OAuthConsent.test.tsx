@@ -61,11 +61,7 @@ const DENIED_URL = 'http://127.0.0.1:33418/callback?error=access_denied&state=xy
 const NETWORK_ERROR = Object.assign(new Error('Network Error'), { isAxiosError: true });
 
 function pendingWith(app: ConsentApp) {
-  vi.mocked(oauthConsentService.get).mockResolvedValue({
-    app,
-    scope: 'pumpkit',
-    expiresAt: '2099-01-01T00:00:00Z',
-  });
+  vi.mocked(oauthConsentService.get).mockResolvedValue({ app });
 }
 
 function renderConsent(query = '?request=req_1', nextStep: 'paywall' | 'persona' | null = null) {
@@ -137,16 +133,18 @@ describe('Consent page', () => {
     expect(buttons()).toEqual({ allow: null, cancel: null });
   });
 
-  it('says an expired or used request has to start again from the app', async () => {
+  it('says only that an expired or used request has to start again from the app', async () => {
     vi.mocked(oauthConsentService.get).mockRejectedValue(apiError(404, 'Not found'));
     renderConsent();
+    const main = await page();
 
     expect(
-      await screen.findByText(
+      await main.findByText(
         'This request expired or was already used. Start connecting again from your app.',
       ),
     ).toBeInTheDocument();
-    expect(buttons()).toEqual({ allow: null, cancel: null });
+    expect(main.queryByRole('heading')).not.toBeInTheDocument();
+    expect(main.queryAllByRole('button')).toEqual([]);
   });
 
   it('says when the request could not load, and tries again', async () => {
@@ -233,6 +231,7 @@ describe('Consent page', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Not you?' }));
 
       expect(end).toHaveBeenCalledWith('user');
+      await waitFor(() => expect(currentPath()).toBe('/login'));
       expect(storage.get<{ path: string } | null>('return-to', null)?.path).toBe(
         '/oauth/consent?request=req_1',
       );
@@ -291,6 +290,60 @@ describe('Consent page', () => {
       expect(redirectTo).not.toHaveBeenCalled();
     });
 
+    it('shows any other refusal as an error and keeps the buttons', async () => {
+      vi.mocked(oauthConsentService.approve).mockRejectedValue(
+        apiError(403, "Your account can't connect apps."),
+      );
+      pendingWith(CLAUDE);
+      renderConsent();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        "Your account can't connect apps.",
+      );
+      expect(screen.queryByRole('link', { name: 'Subscribe' })).not.toBeInTheDocument();
+      expect(buttons().allow).toBeEnabled();
+    });
+
+    it.each([
+      'https://claude.ai/api/mcp/auth_callback?code=abc',
+      'http://localhost:33418/callback?code=abc',
+      'http://127.0.0.1:33418/callback?code=abc',
+      'http://[::1]:33418/callback?code=abc',
+      'cursor://anysphere.cursor-mcp/oauth/callback?code=abc',
+    ])('opens the return address %s', async (url) => {
+      vi.mocked(oauthConsentService.approve).mockResolvedValue(url);
+      pendingWith(CLAUDE);
+      renderConsent();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
+
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledWith(url));
+    });
+
+    it.each([
+      'http://claude.ai/callback?code=abc',
+      'javascript:alert(1)',
+      'JavaScript:alert(1)',
+      'data:text/html,hi',
+      'vbscript:msgbox(1)',
+      'file:///etc/passwd',
+      'not a url',
+    ])('refuses to open the return address %s', async (url) => {
+      vi.mocked(oauthConsentService.approve).mockResolvedValue(url);
+      pendingWith(CLAUDE);
+      renderConsent();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        "Claude gave a return address Pumpkit won't open. Try connecting again from the app.",
+      );
+      expect(redirectTo).not.toHaveBeenCalled();
+      expect(buttons()).toEqual({ allow: null, cancel: null });
+    });
+
     it('says what failed on a network error and keeps the buttons to try again', async () => {
       vi.mocked(oauthConsentService.approve).mockRejectedValueOnce(NETWORK_ERROR);
       pendingWith(CLAUDE);
@@ -321,6 +374,7 @@ describe('Consent page', () => {
           'This request expired or was already used. Start connecting again from your app.',
         ),
       ).toBeInTheDocument();
+      expect(within(screen.getByRole('main')).queryByRole('heading')).not.toBeInTheDocument();
       expect(buttons()).toEqual({ allow: null, cancel: null });
     });
   });

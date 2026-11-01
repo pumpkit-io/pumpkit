@@ -14,8 +14,6 @@ export interface ConsentApp {
 /** A pending authorization request, as the consent page shows it. */
 export interface ConsentRequest {
   app: ConsentApp;
-  scope: string;
-  expiresAt: string;
 }
 
 interface ConsentRequestApi {
@@ -25,8 +23,6 @@ interface ConsentRequestApi {
     redirect_host: string | null;
     is_local: boolean;
   };
-  scope: string;
-  expires_at: string;
 }
 
 const path = (id: string) => `/oauth/authorizations/${encodeURIComponent(id)}`;
@@ -42,8 +38,6 @@ export const oauthConsentService = {
         redirectHost: data.client.redirect_host,
         isLocal: data.client.is_local,
       },
-      scope: data.scope,
-      expiresAt: data.expires_at,
     };
   },
 

@@ -15,8 +15,9 @@ import { SignedInHome } from '../SignedInHome';
 import { signedInRoutes } from '../signedInRoutes';
 
 /**
- * For tests: the signed-in route tree at `path` (with any query), as App mounts it behind sign-in. The User starts
- * at `nextStep`, past the Paywall by default; later checks go to the mocked onboardingService.
+ * For tests: the signed-in route tree at `path` (with any query), as App mounts it behind
+ * sign-in. The User starts at `nextStep`, past the Paywall by default; later checks go to the
+ * mocked onboardingService.
  */
 export function renderSignedIn(
   path: string,

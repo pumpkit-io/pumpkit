@@ -1,7 +1,6 @@
+import { OAUTH_CONSENT_PATH } from './oauthConsentPath';
 import { storage } from './storage';
 
-/** The pages a signed-out User may come back to after sign-in. */
-const RESUMABLE_PATHS = ['/oauth/consent'];
 // An authorization request lives 30 minutes, long enough for a Magic link.
 const MAX_AGE_MS = 30 * 60 * 1000;
 
@@ -10,10 +9,19 @@ interface SavedReturn {
   savedAt: number;
 }
 
-/** Only an internal path to an allowlisted page, so a stored value can't send the User away. */
+/** Only an internal path to a consent request, so a stored value can't send the User away. */
 function isResumable(path: string): boolean {
   if (!path.startsWith('/') || path.startsWith('//')) return false;
-  return RESUMABLE_PATHS.includes(path.split(/[?#]/, 1)[0]);
+  return path.startsWith(`${OAUTH_CONSENT_PATH}?`);
+}
+
+/** Runs a storage call; a browser that refuses storage just loses the return. */
+function tolerant<T>(call: () => T, fallback: T): T {
+  try {
+    return call();
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -23,13 +31,22 @@ function isResumable(path: string): boolean {
 export const returnTo = {
   /** Saves `path` (pathname and search) when it is a page worth coming back to. */
   remember(path: string): void {
-    if (isResumable(path)) storage.set<SavedReturn>('return-to', { path, savedAt: Date.now() });
+    if (!isResumable(path)) return;
+    tolerant(() => storage.set<SavedReturn>('return-to', { path, savedAt: Date.now() }), undefined);
+  },
+
+  /** Whether `path` is one `remember` keeps, so a sign-in started from it may return there. */
+  isResumable,
+
+  /** Drops the saved path, once the request is decided or a sign-in starts elsewhere. */
+  forget(): void {
+    tolerant(() => storage.remove('return-to'), undefined);
   },
 
   /** The saved path if it is still fresh, clearing it either way. */
   take(): string | null {
-    const saved = storage.get<Partial<SavedReturn> | null>('return-to', null);
-    storage.remove('return-to');
+    const saved = tolerant(() => storage.get<Partial<SavedReturn> | null>('return-to', null), null);
+    returnTo.forget();
     if (typeof saved?.path !== 'string' || typeof saved.savedAt !== 'number') return null;
     const age = Date.now() - saved.savedAt;
     if (age < 0 || age > MAX_AGE_MS) return null;
