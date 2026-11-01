@@ -77,7 +77,10 @@ export function HeroSection({ ctaLabel }: { ctaLabel: string }) {
               </AnimatedGroup>
             </div>
 
-            <AnimatedGroup variants={staggeredVariants} className="min-w-0 lg:col-span-7">
+            <AnimatedGroup
+              variants={staggeredVariants}
+              className="min-w-0 lg:col-span-7 xl:mt-[5px]"
+            >
               <HeroFrame>
                 <LaunchVideo />
               </HeroFrame>
