@@ -31,6 +31,9 @@ vi.mock('@/services/xConnectionService', () => ({
     declinePhoto: vi.fn(),
   },
 }));
+vi.mock('@/services/appConnectionService', () => ({
+  appConnectionService: { list: vi.fn(), disconnect: vi.fn() },
+}));
 vi.mock('@/services/apiKeyService', () => ({
   apiKeyService: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
 }));
@@ -58,6 +61,7 @@ import { fireSuccessConfetti } from '@/lib/confetti';
 import type { Instance } from '@/lib/instance';
 import { redirectTo } from '@/lib/navigation';
 import { apiKeyService } from '@/services/apiKeyService';
+import { appConnectionService } from '@/services/appConnectionService';
 import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
 import { usageService } from '@/services/usageService';
 import { userService, type UserProfile } from '@/services/userService';
@@ -182,13 +186,14 @@ describe('Settings', () => {
     vi.mocked(xConnectionService.acceptPhoto).mockReset();
     vi.mocked(xConnectionService.declinePhoto).mockReset().mockResolvedValue();
     vi.mocked(apiKeyService.list).mockReset().mockResolvedValue([]);
+    vi.mocked(appConnectionService.list).mockReset().mockResolvedValue([]);
     vi.mocked(usageService.get).mockReset().mockResolvedValue(usageWith());
     vi.mocked(redirectTo).mockReset();
     vi.mocked(fireSuccessConfetti).mockReset();
     vi.mocked(track).mockClear();
   });
 
-  it('shows Profile, X account, Plan, Usage, API keys and Appearance to a Subscribed User', async () => {
+  it('shows Profile, X account, Plan, Usage, Connect AI apps, API keys and Appearance to a Subscribed User', async () => {
     renderSettings();
 
     await card('Usage');
@@ -198,6 +203,7 @@ describe('Settings', () => {
       'X account',
       'Plan',
       'Usage',
+      'Connect AI apps',
       'API keys',
       'Appearance',
     ]);
@@ -1069,6 +1075,7 @@ describe('Settings', () => {
       expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
         'Profile',
         'X account',
+        'Connect AI apps',
         'API keys',
         'Appearance',
       ]);
