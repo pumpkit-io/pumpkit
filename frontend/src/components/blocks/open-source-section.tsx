@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { GITHUB_REPO_URL, GitHubMark, SELF_HOSTING_GUIDE_URL } from '@/components/blocks/github';
+import { Mascot } from '@/components/blocks/mascot';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
@@ -18,7 +19,7 @@ export function OpenSourceSection() {
         aria-hidden
         className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"
       />
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-10 px-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-10 px-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="max-w-2xl">
           <h2
             id="open-source-heading"
@@ -47,6 +48,7 @@ export function OpenSourceSection() {
             </Button>
           </div>
         </div>
+        <Mascot animation="detective" className="self-end sm:self-auto" />
       </div>
     </section>
   );

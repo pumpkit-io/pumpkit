@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CtaFrame } from '@/components/blocks/cta-frame';
+import { Mascot } from '@/components/blocks/mascot';
 import { Button } from '@/components/ui/button';
 import { billingService, type Plan, type PlanCatalog } from '@/services/billingService';
 import { OfferLineContent } from '@/features/billing/OfferLineContent';
@@ -135,9 +136,10 @@ function PricingCard({ catalog }: { catalog: PlanCatalog }) {
     for (const plan of shown) track('landing_pricing_plan_viewed', { plan_key: plan.key });
   });
 
-  // #279 plays the tada mascot from here, on the visitor's first switch to Annual.
+  const [celebrations, setCelebrations] = useState(0);
   const choose = (next: Interval) => {
     setInterval(next);
+    if (next === 'annual') setCelebrations((count) => (count === 0 ? 1 : count));
     track('landing_pricing_toggle_switched', { interval: next });
   };
 
@@ -177,6 +179,13 @@ function PricingCard({ catalog }: { catalog: PlanCatalog }) {
         <div className="mt-8 flex justify-center">
           <PricingCta />
         </div>
+        <Mascot
+          animation="tada"
+          playInViewAfterMs={null}
+          trigger={celebrations}
+          mdScale={2}
+          className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4"
+        />
       </div>
     </div>
   );

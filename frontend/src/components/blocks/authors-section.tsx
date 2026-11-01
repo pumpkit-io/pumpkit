@@ -1,5 +1,6 @@
 import { useRef, type CSSProperties } from 'react';
 import authors from '../../../public/assets/authors/authors.json';
+import { Mascot } from '@/components/blocks/mascot';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
 
@@ -41,6 +42,7 @@ export function AuthorsSection() {
         >
           Write in the style of accounts like these.
         </h2>
+        <Mascot animation="costume_change" />
       </div>
 
       <div className="mt-12 flex flex-col gap-4 md:mt-16 md:gap-5">

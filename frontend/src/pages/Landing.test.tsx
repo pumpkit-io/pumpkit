@@ -215,6 +215,20 @@ describe('Landing hero', () => {
   });
 });
 
+/** Makes `matchMedia` match only the given queries. */
+function matchMediaQueries(matching: string[]) {
+  const spy = vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: matching.includes(query),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList,
+  );
+  onTestFinished(() => spy.mockRestore());
+}
+
 describe('Landing launch video', () => {
   beforeEach(() => {
     // jsdom has no media: play and pause only fire the events a browser would.
@@ -244,19 +258,6 @@ describe('Landing launch video', () => {
   function loadMetadata(video: HTMLVideoElement, duration = 66) {
     Object.defineProperty(video, 'duration', { configurable: true, value: duration });
     fireEvent(video, new Event('loadedmetadata'));
-  }
-
-  function matchMediaQueries(matching: string[]) {
-    const spy = vi.spyOn(window, 'matchMedia').mockImplementation(
-      (query: string) =>
-        ({
-          matches: matching.includes(query),
-          media: query,
-          addEventListener: () => {},
-          removeEventListener: () => {},
-        }) as unknown as MediaQueryList,
-    );
-    onTestFinished(() => spy.mockRestore());
   }
 
   it('waits muted on its poster with a play button, loading only metadata', () => {
@@ -893,5 +894,59 @@ describe('Landing open source', () => {
       .mocked(track)
       .mock.calls.filter(([event]) => event === 'landing_open_source_section_viewed');
     expect(calls).toEqual([['landing_open_source_section_viewed']]);
+  });
+});
+
+describe('Landing mascots', () => {
+  const mascots = () => Array.from(document.querySelectorAll<HTMLElement>('[data-mascot]'));
+
+  async function pricingCard() {
+    const pricing = screen.getByRole('region', { name: PRICING });
+    await within(pricing).findByRole('radiogroup', { name: 'Billing interval' });
+    return pricing;
+  }
+
+  it('shows four mascots beside sections, none in the hero, all hidden from assistive technology', async () => {
+    renderLanding();
+    await pricingCard();
+    expect(mascots().map((mascot) => mascot.dataset.mascot)).toEqual([
+      'costume_change',
+      'tada',
+      'detective',
+      'doze_off',
+    ]);
+    mascots().forEach((mascot) => expect(mascot).toHaveAttribute('aria-hidden', 'true'));
+    const hero = screen.getByRole('heading', { level: 1 }).closest('section')!;
+    expect(hero.querySelector('[data-mascot]')).toBeNull();
+  });
+
+  it('celebrates only the first switch to Annual on the pricing card', async () => {
+    renderLanding();
+    const pricing = await pricingCard();
+    const tada = pricing.querySelector<HTMLElement>('[data-mascot="tada"]')!;
+    expect(tada).toHaveAttribute('data-state', 'still');
+
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Annual Save 17%' }));
+    expect(tada).toHaveAttribute('data-state', 'playing');
+
+    // Each frame's timer starts once React renders the frame before it, so time passes in steps.
+    for (let elapsed = 0; elapsed < 10_000; elapsed += 100) act(() => vi.advanceTimersByTime(100));
+    expect(tada).toHaveAttribute('data-state', 'still');
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Monthly' }));
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Annual Save 17%' }));
+    expect(tada).toHaveAttribute('data-state', 'still');
+  });
+
+  it('keeps every mascot still when the visitor prefers reduced motion', async () => {
+    matchMediaQueries(['(prefers-reduced-motion: reduce)']);
+    renderLanding();
+    const pricing = await pricingCard();
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Annual Save 17%' }));
+    expect(mascots()).toHaveLength(4);
+    mascots().forEach((mascot) => expect(mascot).toHaveAttribute('data-state', 'still'));
   });
 });
