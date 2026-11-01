@@ -1,13 +1,17 @@
 """Users' connections to apps: their Connected apps. Flushes, never commits."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.connected_apps.models import AppConnection, OAuthRefreshToken
+from pumpkit.core.time import as_utc
+
+# How fresh `last_used_at` stays: a minute, so an app calling tools doesn't write its row every call.
+_LAST_USED_RESOLUTION = timedelta(minutes=1)
 
 
 async def find_or_create(
@@ -44,6 +48,24 @@ async def _find_unrevoked(
             )
         )
     ).scalar_one_or_none()
+
+
+async def record_use(db: AsyncSession, connection: AppConnection, *, now: datetime) -> None:
+    """Set `last_used_at` to `now`, unless it was set less than a minute before."""
+    stale_before = now - _LAST_USED_RESOLUTION
+    last_used_at = connection.last_used_at
+    if last_used_at is not None and as_utc(last_used_at) > stale_before:
+        return
+    # Conditional, so concurrent calls write the row once a minute between them.
+    await db.execute(
+        update(AppConnection)
+        .where(
+            AppConnection.id == connection.id,
+            or_(AppConnection.last_used_at.is_(None), AppConnection.last_used_at <= stale_before),
+        )
+        .values(last_used_at=now)
+        .execution_options(synchronize_session="fetch")
+    )
 
 
 async def revoke(db: AsyncSession, connection_id: str, *, now: datetime) -> None:

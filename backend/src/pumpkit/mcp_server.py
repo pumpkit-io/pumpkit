@@ -1,6 +1,7 @@
 """
-The MCP server (ADR 0012): every area's tools behind API key authentication, the access gate
-and per-User limits, served at one stateless Streamable HTTP endpoint that `main` mounts.
+The MCP server (ADR 0012): every area's tools behind OAuth access token authentication (ADR
+0020), the access gate and per-User limits, served at one stateless Streamable HTTP endpoint
+that `main` mounts. API keys still authenticate until they are removed.
 """
 
 import functools
@@ -25,6 +26,7 @@ import pumpkit.auth.service.users as user_service
 import pumpkit.authors.tools as authors_tools
 import pumpkit.billing.service as billing_service
 import pumpkit.billing.tools as billing_tools
+import pumpkit.connected_apps.mediator as connected_apps_mediator
 import pumpkit.posts.tools as posts_tools
 import pumpkit.scheduling.tools as scheduling_tools
 from pumpkit.auth.dependencies import CREDENTIALS_INVALID
@@ -78,8 +80,8 @@ a link to open.
 order, and get their explicit yes. Post now publishes at once and can't be undone.
 """
 
-# A Bearer key guards the endpoint, so a rebinding attack has nothing to reach; the default
-# check would also refuse every Instance's own Host.
+# An OAuth access token in a header guards the endpoint, so a rebinding attack has nothing to
+# reach; the default check would also refuse every Instance's own Host.
 _TRANSPORT_SECURITY = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
 # Each request starts and stops its own session manager, which would log both at INFO.
@@ -137,17 +139,25 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
     return handler
 
 
+# ChatGPT reads it to know a tool needs sign-in; OpenAI's Apps SDK reference lists it in `_meta`.
+_SECURITY_SCHEMES = [{"type": "oauth2", "scopes": [SCOPE]}]
+
+
 def build_server(tools: list[McpTool]) -> MCPServer:
     server = MCPServer(name="pumpkit", instructions=INSTRUCTIONS)
     for tool in tools:
-        server.add_tool(_handler(tool), annotations=tool.annotations)
+        server.add_tool(
+            _handler(tool),
+            annotations=tool.annotations,
+            meta={"securitySchemes": _SECURITY_SCHEMES},
+        )
     return server
 
 
 class McpEndpoint:
     """
-    The ASGI app at `/api/v1/mcp`. It answers 401 with a Bearer challenge unless an API key
-    authenticates the request, then serves it with a session manager of its own: stateless
+    The ASGI app at `/api/v1/mcp`. It answers 401 with a Bearer challenge unless an access token
+    or an API key authenticates the request, then serves it with a session manager of its own: stateless
     requests share nothing, and FastAPI never runs a lifespan the manager could start in tests.
     """
 
@@ -191,11 +201,19 @@ def _bearer_secret(scope: Scope) -> Optional[str]:
 
 
 async def _authenticate(app: FastAPI, secret: str) -> Optional[str]:
-    """The id of the User the API key acts for, or None to refuse it."""
+    """
+    The id of the User the access token or API key acts for, or None to refuse it. A web
+    Session's access token is neither, so it is refused.
+    """
     async with AsyncExitStack() as stack:
         db = await resolve(app, stack, get_async_db)
         clock = await resolve(app, stack, get_clock)
-        user = await auth_mediator.authenticate_api_key(db=db, secret=secret, now=clock())
+        now = clock()
+        user_id = await connected_apps_mediator.authenticate_mcp_token(db, secret, now=now)
+        if user_id is not None:
+            return user_id
+        # TODO(#316): drop API keys once the MCP tool suite runs on OAuth tokens (ADR 0020).
+        user = await auth_mediator.authenticate_api_key(db=db, secret=secret, now=now)
         return user.id if user is not None else None
 
 

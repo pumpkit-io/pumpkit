@@ -572,6 +572,28 @@ async def revoke(
     return Response(status_code=200, headers=NO_STORE)
 
 
+async def authenticate_mcp_token(db: AsyncSession, secret: str, *, now: datetime) -> Optional[str]:
+    """
+    The id of the User an access token acts for, recording that their app used it; None for a
+    token that is unknown, expired or revoked, whose app is disconnected, that was issued for
+    another resource, or whose User is gone or Suspended.
+    """
+    found = await tokens.find_access_token(db, secret)
+    if found is None:
+        return None
+    access_token, connection = found
+    if access_token.revoked_at is not None or as_utc(access_token.expires_at) <= now:
+        return None
+    # RFC 8707: a token for another resource, such as this Instance under an old URL, is refused.
+    if connection.revoked_at is not None or connection.resource != settings.mcp_url():
+        return None
+    if not await _may_connect(db, connection.user_id):
+        return None
+    await connections.record_use(db, connection, now=now)
+    await db.commit()
+    return connection.user_id
+
+
 async def _may_connect(db: AsyncSession, user_id: str) -> bool:
     """Whether the User exists and isn't Suspended, the rule a Session follows too."""
     user = await users.get_user_by_id(db, user_id)
