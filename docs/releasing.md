@@ -46,11 +46,10 @@ The CHANGELOG is written as the work lands: every PR adds its entry under `## [U
 5. Tag the merge and wait for the Release workflow:
 
    ```sh
-   git checkout main && git pull
    sh scripts/tag-release.sh X.Y.Z
    ```
 
-   It refuses unless `main` is checked out, clean and level with `origin/main`, `.env.example` and the CHANGELOG name X.Y.Z, and the tag is new. Then it pushes only the tag, watches the workflow, and shows the release.
+   Run it from any checkout or worktree: it fetches and tags the tip of `origin/main`, so the local `main` can be behind or not checked out. It refuses unless `.env.example` and the CHANGELOG name X.Y.Z at that commit and the tag is new. Then it pushes only the tag, watches the workflow, and shows the release. If the watch drops its connection it retries, and it reports a failure only when the run's conclusion is `failure` or `cancelled`; if the conclusion stays unknown it prints the run URL instead.
 
    **Check:** it ends by printing the GitHub Release `vX.Y.Z`. If the workflow failed, see [When the Release workflow fails](#when-the-release-workflow-fails).
 
