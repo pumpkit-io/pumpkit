@@ -1,46 +1,8 @@
-import { useEffect, useState, type SVGProps } from 'react';
+import type { SVGProps } from 'react';
 
 // Where the code lives, which is the same for every Instance.
 export const GITHUB_REPO_URL = 'https://github.com/pumpkit-io/pumpkit';
 export const SELF_HOSTING_GUIDE_URL = `${GITHUB_REPO_URL}/blob/main/docs/self-hosting.md`;
-
-const GITHUB_REPO_API = 'https://api.github.com/repos/pumpkit-io/pumpkit';
-
-// A count that arrives later than this would shift the nav after the visitor has read it.
-const STARS_TIMEOUT_MS = 4000;
-
-const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
-
-/** Formats a star count the way GitHub does: 87, 1.2k, 12k. */
-export function formatStars(count: number): string {
-  return compact.format(count).toLowerCase();
-}
-
-/** The repository's stargazer count, or null while it loads or when GitHub can't answer. */
-export function useGitHubStars(): number | null {
-  const [stars, setStars] = useState<number | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), STARS_TIMEOUT_MS);
-    fetch(GITHUB_REPO_API, {
-      signal: controller.signal,
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((repo: { stargazers_count?: unknown } | null) => {
-        if (typeof repo?.stargazers_count === 'number') setStars(repo.stargazers_count);
-      })
-      .catch(() => {})
-      .finally(() => window.clearTimeout(timeout));
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, []);
-
-  return stars;
-}
 
 export function GitHubMark(props: SVGProps<SVGSVGElement>) {
   return (
