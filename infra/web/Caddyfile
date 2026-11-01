@@ -40,6 +40,11 @@
 		@html not path /assets/*
 		header @html Cache-Control "no-cache"
 
+		# No site may frame the consent page, so none can trick a click on Allow.
+		@consent path /oauth/consent*
+		header @consent X-Frame-Options DENY
+		header @consent Content-Security-Policy "frame-ancestors 'none'"
+
 		try_files {path} /index.html
 		file_server
 	}

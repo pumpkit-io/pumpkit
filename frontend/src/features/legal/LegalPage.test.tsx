@@ -34,7 +34,7 @@ describe('Privacy Policy at /privacy', () => {
     renderLegalRoute('/privacy');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Privacy Policy');
-    expect(within(main).getByText('Last updated: 30 October 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Last updated: 1 November 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and English as the page language', () => {
@@ -104,7 +104,7 @@ describe('Informativa sulla privacy at /it/privacy', () => {
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
       'Informativa sulla privacy',
     );
-    expect(within(main).getByText('Ultimo aggiornamento: 30 ottobre 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Ultimo aggiornamento: 1 novembre 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and Italian as the page language', () => {

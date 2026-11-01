@@ -166,13 +166,14 @@ Pumpkit salva alcune informazioni nel tuo browser. Alcune sono strettamente nece
 
 ### Strettamente necessari {#cookies-necessary}
 
-| Nome                                                                             | Tipo          | Finalità                                                 | Durata                                    |
-| -------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------- | ----------------------------------------- |
-| `__Host-refresh_token`                                                           | Cookie        | Mantiene il tuo accesso nella Sessione                   | 30 giorni                                 |
-| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookie        | Proteggono l'accesso con Google dalla contraffazione     | 10 minuti                                 |
-| `pumpkit:session`                                                                | Local storage | Conserva il token di accesso della Sessione corrente     | Finché non esci o la Sessione non termina |
-| `pumpkit:theme`                                                                  | Local storage | Ricorda se hai scelto il tema chiaro, scuro o di sistema | Finché non lo cancelli                    |
-| `pumpkit:analytics-consent`                                                      | Local storage | Ricorda se hai prestato il Consenso analitico            | Finché non lo cancelli                    |
+| Nome                                                                             | Tipo          | Finalità                                                                                                 | Durata                                    |
+| -------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `__Host-refresh_token`                                                           | Cookie        | Mantiene il tuo accesso nella Sessione                                                                   | 30 giorni                                 |
+| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookie        | Proteggono l'accesso con Google dalla contraffazione                                                     | 10 minuti                                 |
+| `pumpkit:session`                                                                | Local storage | Conserva il token di accesso della Sessione corrente                                                     | Finché non esci o la Sessione non termina |
+| `pumpkit:theme`                                                                  | Local storage | Ricorda se hai scelto il tema chiaro, scuro o di sistema                                                 | Finché non lo cancelli                    |
+| `pumpkit:analytics-consent`                                                      | Local storage | Ricorda se hai prestato il Consenso analitico                                                            | Finché non lo cancelli                    |
+| `pumpkit:return-to`                                                              | Local storage | Ricorda il collegamento di un'app che stavi per approvare quando hai effettuato l'accesso, così ci torni | Fino al tuo prossimo accesso              |
 
 ### Analisi, solo con il Consenso analitico {#cookies-analytics}
 

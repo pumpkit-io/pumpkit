@@ -215,6 +215,21 @@ export const EVENTS = {
     description:
       'Publisher or Post now: a Scheduled post Failed. Props: format (post | thread), part_count (number), reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown).',
   },
+
+  // Connecting AI apps: the consent page (/oauth/consent) and Settings
+  oauth_consent_viewed: {
+    description:
+      'Consent page: showed an app asking to connect. Props: verified (boolean), local (boolean).',
+  },
+  oauth_consent_approved: {
+    description:
+      'Consent page: allowed an app to connect. Props: verified (boolean), local (boolean).',
+  },
+  oauth_consent_denied: {
+    description:
+      'Consent page: cancelled an app asking to connect. Props: verified (boolean), local (boolean).',
+  },
+  app_disconnected: { description: 'Settings: disconnected a connected app.' },
 } as const satisfies Record<string, { description: string }>;
 
 export type EventName = keyof typeof EVENTS;

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement } from 'react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
@@ -10,6 +10,9 @@ vi.mock('@/lib/analyticsConsent', async (importOriginal) => ({
 }));
 
 import { session } from '@/lib/session';
+import { storage } from '@/lib/storage';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GoogleAuthCallback } from '@/components/google/GoogleAuthCallback';
 import { MagicLinkCallback } from './MagicLinkCallback';
 
@@ -30,10 +33,40 @@ function renderCallback(path: string, page: ReactElement, fragment: string) {
         <Route path={path} element={page} />
         <Route path="/new" element={<Destination />} />
         <Route path="/login" element={<Destination />} />
+        <Route path="/oauth/consent" element={<Destination />} />
       </Routes>
     </MemoryRouter>,
   );
 }
+
+/** A signed-out visit to `path` behind sign-in, as App mounts it. */
+function visitSignedOut(path: string) {
+  render(
+    <AuthProvider>
+      <MemoryRouter
+        initialEntries={[path]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/login" element={<Destination />} />
+          {['/oauth/consent', '/settings'].map((routePath) => (
+            <Route
+              key={routePath}
+              path={routePath}
+              element={
+                <ProtectedRoute>
+                  <p>signed in</p>
+                </ProtectedRoute>
+              }
+            />
+          ))}
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>,
+  );
+}
+
+const MINUTE = 60 * 1000;
 
 const EXPIRES_AT = '2099-01-01T00:00:00+00:00';
 const VALID = `#access_token=tok&token_type=Bearer&expires_at=${encodeURIComponent(EXPIRES_AT)}`;
@@ -77,5 +110,61 @@ describe.each(callbacks)('the $name callback', ({ path, page, error }) => {
 
     expect(await screen.findByText(`at /login?error=${error} via REPLACE`)).toBeInTheDocument();
     expect(session.get()).toBeNull();
+  });
+});
+
+describe.each(callbacks)('returning after the $name callback', ({ path, page }) => {
+  it('lands on the consent request the User was sent to sign in from', async () => {
+    visitSignedOut('/oauth/consent?request=req_1');
+    expect(await screen.findByText('at /login via REPLACE')).toBeInTheDocument();
+    cleanup();
+
+    renderCallback(path, page, VALID);
+
+    expect(
+      await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
+    ).toBeInTheDocument();
+  });
+
+  it('returns once: the next sign-in lands on New post', async () => {
+    storage.set('return-to', { path: '/oauth/consent?request=req_1', savedAt: Date.now() });
+    renderCallback(path, page, VALID);
+    await screen.findByText('at /oauth/consent?request=req_1 via REPLACE');
+    cleanup();
+
+    renderCallback(path, page, VALID);
+
+    expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
+  });
+
+  it('lands on New post when the request was saved over 30 minutes ago', async () => {
+    storage.set('return-to', {
+      path: '/oauth/consent?request=req_1',
+      savedAt: Date.now() - 31 * MINUTE,
+    });
+
+    renderCallback(path, page, VALID);
+
+    expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
+  });
+
+  it.each(['/settings', '//evil.example/oauth/consent?request=req_1', 'https://evil.example/'])(
+    'never returns to %s',
+    async (saved) => {
+      storage.set('return-to', { path: saved, savedAt: Date.now() });
+
+      renderCallback(path, page, VALID);
+
+      expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
+    },
+  );
+});
+
+describe('a signed-out visit', () => {
+  it('saves nothing to return to from a page other than the consent page', async () => {
+    visitSignedOut('/settings');
+
+    expect(await screen.findByText('at /login via REPLACE')).toBeInTheDocument();
+    expect(storage.get('return-to', null)).toBeNull();
   });
 });

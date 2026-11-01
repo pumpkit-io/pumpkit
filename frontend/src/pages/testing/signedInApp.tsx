@@ -15,7 +15,7 @@ import { SignedInHome } from '../SignedInHome';
 import { signedInRoutes } from '../signedInRoutes';
 
 /**
- * For tests: the signed-in route tree at `path`, as App mounts it behind sign-in. The User starts
+ * For tests: the signed-in route tree at `path` (with any query), as App mounts it behind sign-in. The User starts
  * at `nextStep`, past the Paywall by default; later checks go to the mocked onboardingService.
  */
 export function renderSignedIn(
@@ -32,7 +32,7 @@ export function renderSignedIn(
         <OnboardingProvider initialNextStep={nextStep}>
           <ThemeProvider>
             <MemoryRouter
-              initialEntries={[{ pathname: path, state }]}
+              initialEntries={[{ ...splitPath(path), state }]}
               future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
             >
               <Routes>
@@ -46,6 +46,13 @@ export function renderSignedIn(
       </AuthProvider>
     </InstanceProvider>,
   );
+}
+
+function splitPath(path: string): { pathname: string; search: string } {
+  const at = path.indexOf('?');
+  return at === -1
+    ? { pathname: path, search: '' }
+    : { pathname: path.slice(0, at), search: path.slice(at) };
 }
 
 /** Where the router is now, as `CurrentPath` shows it. */
