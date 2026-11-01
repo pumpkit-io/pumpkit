@@ -14,10 +14,12 @@ from pumpkit.auth.router import router as auth_router
 from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.billing.router import router as billing_router
+from pumpkit.connected_apps.router import discovery_router
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
 from pumpkit.core.logging import logger
+from pumpkit.core.open_cors import OpenCorsMiddleware
 from pumpkit.core.rate_limit import limiter
 from pumpkit.onboarding.router import router as onboarding_router
 from pumpkit.posts.router import router as posts_router
@@ -44,6 +46,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Added last, so outermost: it answers the open paths before the strict policy above sees them.
+app.add_middleware(OpenCorsMiddleware)
 
 # The prefix lives here so routers stay unaware of their mount point.
 app.include_router(auth_router, prefix="/api/v1")
@@ -62,9 +66,12 @@ app.include_router(scheduling_router.x_authorization_router, prefix="/api/v1")
 app.include_router(scheduling_router.router, prefix="/api/v1")
 app.include_router(scheduling_router.usage_router, prefix="/api/v1")
 app.include_router(onboarding_router, prefix="/api/v1")
-# A Route, not a Mount, so the URL has no trailing slash. POST only: a stateless server has
-# no stream for GET to open, and the request would hang.
-app.router.routes.append(Route("/api/v1/mcp", endpoint=mcp_server.endpoint, methods=["POST"]))
+app.include_router(discovery_router)
+# A Route, not a Mount, so the URL has no trailing slash. GET and DELETE reach the endpoint so
+# it can answer them after authenticating.
+app.router.routes.append(
+    Route("/api/v1/mcp", endpoint=mcp_server.endpoint, methods=["POST", "GET", "DELETE"])
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]

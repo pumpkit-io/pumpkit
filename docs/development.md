@@ -5,7 +5,7 @@
 ```
 backend/src/pumpkit/
   main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
-  mcp_server.py    the MCP server: every area's tools behind API key authentication, the access gate and per-User limits
+  mcp_server.py    the MCP server: every area's tools behind API key authentication (OAuth soon, ADR 0020), the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
   core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
