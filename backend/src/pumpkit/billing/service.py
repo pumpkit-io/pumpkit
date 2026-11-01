@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.billing.allowance import (
     Allowance,
     AllowanceUsedUp,
+    Draw,
     allowance_at,
     months_after,
     top_up_pack,
@@ -301,64 +302,47 @@ def _pack_left(pack: Optional[int], charged: int) -> Optional[int]:
     return None if pack is None else pack - charged
 
 
-async def check_room_with_top_ups(
-    db: AsyncSession,
-    *,
-    user_id: str,
-    allowance: Allowance,
-    count: AllowanceCount,
-    used: int,
-    needed: int,
-    moment: datetime,
-) -> None:
+async def check_room_with_top_ups(db: AsyncSession, *, user_id: str, draw: Draw) -> None:
     """
-    Raise `AllowanceUsedUp` unless the Allowance, with `used` gone, and the User's Top-ups
-    unexpired at `moment` together have room for `needed` more of `count`.
+    Raise `AllowanceUsedUp` unless the Allowance and the User's Top-ups unexpired at the draw's
+    moment together have room for what it needs.
     """
-    limit: Optional[int] = getattr(allowance, count)
-    short = shortfall(limit=limit, used=used, needed=needed)
+    limit = draw.limit
+    short = shortfall(limit=limit, used=draw.used, needed=draw.needed)
     if limit is None or short == 0:
         return
     in_top_ups = sum(
-        b.left(count) for b in await top_up_balances(db, user_id=user_id, moment=moment)
+        b.left(draw.count) for b in await top_up_balances(db, user_id=user_id, moment=draw.moment)
     )
     if in_top_ups >= short:
         return
     raise AllowanceUsedUp(
-        ran_out=count,
-        needed=needed,
-        left=max(0, limit - used) + in_top_ups,
+        ran_out=draw.count,
+        needed=draw.needed,
+        left=max(0, limit - draw.used) + in_top_ups,
         limit=limit,
-        allowance=allowance,
+        allowance=draw.allowance,
     )
 
 
 async def charge_shortfall(
-    db: AsyncSession,
-    *,
-    user_id: str,
-    allowance: Allowance,
-    count: AllowanceCount,
-    used: int,
-    needed: int,
-    moment: datetime,
-    version_attempt_id: str,
+    db: AsyncSession, *, user_id: str, draw: Draw, version_attempt_id: str
 ) -> int:
     """
-    Charge what the Allowance, with `used` gone, can't cover of `needed` to the Top-ups unexpired
-    at `moment`, first to expire first, and return how many were charged. What they can't cover
-    either stays on the Allowance, over its limit. Flushes.
+    Charge what the Allowance can't cover of the draw to the Top-ups unexpired at its moment,
+    first to expire first, and return how many were charged. What they can't cover either stays
+    on the Allowance, over its limit. Flushes.
     """
-    short = shortfall(limit=getattr(allowance, count), used=used, needed=needed)
+    short = shortfall(limit=draw.limit, used=draw.used, needed=draw.needed)
     if short == 0:
         return 0
-    balances = await top_up_balances(db, user_id=user_id, moment=moment)
-    charges = allocate(balances, count=count, quantity=short)
+    balances = await top_up_balances(db, user_id=user_id, moment=draw.moment)
+    charges = allocate(balances, count=draw.count, quantity=short)
     for top_up_id, quantity in charges:
         db.add(
             TopUpCharge(
                 top_up_id=top_up_id,
-                count=count,
+                count=draw.count,
                 quantity=quantity,
                 version_attempt_id=version_attempt_id,
             )

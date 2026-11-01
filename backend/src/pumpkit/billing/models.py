@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 # What an Allowance, and a Top-up, counts.
 AllowanceCount = Literal["generations", "x_posts", "link_x_posts"]
+ALLOWANCE_COUNTS: tuple[AllowanceCount, ...] = get_args(AllowanceCount)
 
 
 class Subscription(Base):
@@ -131,7 +132,7 @@ class TopUpCharge(Base):
     )
     top_up_id: Mapped[str] = mapped_column(ForeignKey("top_ups.id", ondelete="CASCADE"), index=True)
     count: Mapped[AllowanceCount] = mapped_column(
-        PgEnum(*get_args(AllowanceCount), name="allowance_count_enum")
+        PgEnum(*ALLOWANCE_COUNTS, name="allowance_count_enum")
     )
     quantity: Mapped[int] = mapped_column(Integer)
     version_attempt_id: Mapped[Optional[str]] = mapped_column(

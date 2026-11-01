@@ -1,15 +1,10 @@
 import { useCallback, useState } from 'react';
+import { useAllowanceUsedUp } from '@/features/billing/useAllowanceUsedUp';
 import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useCreateScheduledPost } from '@/features/scheduledPosts/useCreateScheduledPost';
 import { pastCommunitiesChanged } from '@/features/scheduledPosts/usePastCommunities';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
-import { track } from '@/lib/analytics';
-import {
-  errorAllowanceUsedUp,
-  errorMessage,
-  errorStatus,
-  type AllowanceUsedUp,
-} from '@/services/apiErrors';
+import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import type { PostToChoice, PostToSender } from './postTo';
 
@@ -32,14 +27,14 @@ export function useRetryFailed(scheduledPost: ScheduledPost): PostToSender {
   const { reload: reloadXConnection } = useXConnectionContext();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [allowanceUsedUp, setAllowanceUsedUp] = useState<AllowanceUsedUp | null>(null);
+  const { allowanceUsedUp, caught, clear: clearUsedUp } = useAllowanceUsedUp();
   const { id } = scheduledPost;
 
   const send = useCallback(
     async ({ destination, when }: PostToChoice) => {
       setSending(true);
       setError(null);
-      setAllowanceUsedUp(null);
+      clearUsedUp();
       try {
         const retried = await scheduledPostService.edit(id, {
           copyText: true,
@@ -56,12 +51,7 @@ export function useRetryFailed(scheduledPost: ScheduledPost): PostToSender {
           refreshSubscribed();
           return { kind: 'notSubscribed' } as const;
         }
-        const usedUp = errorAllowanceUsedUp(e);
-        if (usedUp) {
-          track('allowance_used_up', { ran_out: usedUp.ranOut });
-          setAllowanceUsedUp(usedUp);
-          return { kind: 'refused' } as const;
-        }
+        if (caught(e)) return { kind: 'refused' } as const;
         setError(
           errorMessage(
             e,
@@ -76,7 +66,7 @@ export function useRetryFailed(scheduledPost: ScheduledPost): PostToSender {
         setSending(false);
       }
     },
-    [id, refreshSubscribed, reloadXConnection],
+    [id, refreshSubscribed, reloadXConnection, caught, clearUsedUp],
   );
 
   return { sending, error, allowanceUsedUp, send };

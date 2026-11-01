@@ -34,6 +34,19 @@ class AllowancePeriod:
 
 
 @dataclass(frozen=True)
+class Limits:
+    """What one Allowance period, or one Top-up, allows: None is no cap."""
+
+    generations: Optional[int]
+    x_posts: Optional[int]
+    # Of the X posts, how many may contain a link.
+    link_x_posts: Optional[int]
+
+    def of(self, count: AllowanceCount) -> Optional[int]:
+        return getattr(self, count)
+
+
+@dataclass(frozen=True)
 class Allowance:
     """
     The limits that apply to a User at a moment, in the period holding it, and the way out they
@@ -41,20 +54,23 @@ class Allowance:
     """
 
     period: AllowancePeriod
-    generations: Optional[int]
-    x_posts: Optional[int]
-    # Of the X posts, how many may contain a link.
-    link_x_posts: Optional[int]
+    limits: Limits
     way_out: Optional[WayOut]
 
 
 @dataclass(frozen=True)
-class Limits:
-    """What one Allowance period, or one Top-up, allows: None is no cap."""
+class Draw:
+    """What one action needs of a count of an Allowance at `moment`, with `used` of it gone."""
 
-    generations: Optional[int]
-    x_posts: Optional[int]
-    link_x_posts: Optional[int]
+    allowance: Allowance
+    count: AllowanceCount
+    used: int
+    needed: int
+    moment: datetime
+
+    @property
+    def limit(self) -> Optional[int]:
+        return self.allowance.limits.of(self.count)
 
 
 def _caps_divided_by(divisor: int) -> Limits:
@@ -143,13 +159,8 @@ def may_buy_top_up(subscription: Optional[Subscription]) -> bool:
 def allowance_at(subscription: Subscription, moment: datetime) -> Allowance:
     """The Allowance of a Subscribed User's `subscription` at `moment`."""
     period = period_at(subscription, moment)
-    caps = limits(trial=period.trial)
     return Allowance(
-        period=period,
-        generations=caps.generations,
-        x_posts=caps.x_posts,
-        link_x_posts=caps.link_x_posts,
-        way_out=way_out_for(subscription),
+        period=period, limits=limits(trial=period.trial), way_out=way_out_for(subscription)
     )
 
 

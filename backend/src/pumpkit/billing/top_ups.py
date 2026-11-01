@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Optional
 
-from pumpkit.billing.models import AllowanceCount
+from pumpkit.billing.models import ALLOWANCE_COUNTS, AllowanceCount
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class TopUpBalance:
         return None if getattr(self, count) is None else self.left(count)
 
     def has_left(self) -> bool:
-        return any(self.left(count) for count in ("generations", "x_posts", "link_x_posts"))
+        return any(self.left(count) for count in ALLOWANCE_COUNTS)
 
 
 def shortfall(*, limit: Optional[int], used: int, needed: int) -> int:

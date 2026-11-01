@@ -26,9 +26,17 @@ function leftLine(count: UsageCount, noun: string, trial: boolean): ReactNode {
 }
 
 /** The hairline bar of what is left: primary, warning under a tenth left, destructive at none. */
-function LeftBar({ count, label }: { count: UsageCount; label: string }) {
-  const limit = count.limit ?? 0;
-  const left = count.left ?? 0;
+function LeftBar({
+  limit,
+  left,
+  low,
+  label,
+}: {
+  limit: number;
+  left: number;
+  low: boolean;
+  label: string;
+}) {
   const share = limit > 0 ? Math.min(1, left / limit) : 0;
   return (
     <div
@@ -42,7 +50,7 @@ function LeftBar({ count, label }: { count: UsageCount; label: string }) {
       <div
         className={cn(
           'h-full rounded-full',
-          left === 0 ? 'bg-destructive' : isLow(count) ? 'bg-warning' : 'bg-primary',
+          left === 0 ? 'bg-destructive' : low ? 'bg-warning' : 'bg-primary',
         )}
         style={{ width: `${share * 100}%` }}
       />
@@ -62,14 +70,14 @@ function CountLeft({
   label: string;
   topic: AllowanceTopic;
 }) {
-  if (count.limit === null) return null;
+  if (count.limit === null || count.left === null) return null;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <p className="font-sans text-sm text-foreground">{line}</p>
         <AllowanceInfo topic={topic} />
       </div>
-      <LeftBar count={count} label={label} />
+      <LeftBar limit={count.limit} left={count.left} low={isLow(count)} label={label} />
     </div>
   );
 }

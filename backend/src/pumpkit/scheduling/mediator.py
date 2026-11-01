@@ -194,7 +194,7 @@ async def check_x_posts_room(
         growing = _growing(
             needed,
             before,
-            {"x_posts": allowance.x_posts, "link_x_posts": allowance.link_x_posts},
+            {"x_posts": allowance.limits.x_posts, "link_x_posts": allowance.limits.link_x_posts},
         )
         if growing:
             await top_up_charges.check_room(
@@ -253,9 +253,9 @@ async def get_usage(db: AsyncSession, user: User, at: datetime) -> UsageResponse
             trial=period.trial,
             resets_at=period.end,
             resets_on_day=period.reset_day,
-            generations=_usage_count(allowance.generations, generations),
-            x_posts=_usage_count(allowance.x_posts, used.x_posts),
-            link_x_posts=_usage_count(allowance.link_x_posts, used.link_x_posts),
+            generations=_usage_count(allowance.limits.generations, generations),
+            x_posts=_usage_count(allowance.limits.x_posts, used.x_posts),
+            link_x_posts=_usage_count(allowance.limits.link_x_posts, used.link_x_posts),
             way_out=allowance.way_out,
             top_ups=[
                 TopUpUsageResponse(

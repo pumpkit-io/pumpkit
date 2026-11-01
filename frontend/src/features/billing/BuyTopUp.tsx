@@ -26,12 +26,10 @@ function packLine({ generations, xPosts, linkXPosts }: TopUpOffer): string {
 }
 
 function BuyTopUpDialog({
-  open,
   offer,
   termsVersion,
   onClose,
 }: {
-  open: boolean;
   offer: TopUpOffer;
   /** Null where the Instance has no Terms to accept (ADR 0011). */
   termsVersion: string | null;
@@ -56,7 +54,7 @@ function BuyTopUpDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
+    <Dialog open onOpenChange={(next) => (next ? null : onClose())}>
       <DialogContent className="max-w-[520px] max-sm:h-fit">
         <DialogHeader>
           <DialogTitle className="font-sans text-base font-semibold tracking-tight">
@@ -111,7 +109,6 @@ export function BuyTopUpButton({ className }: { className?: string }) {
       {/* Mounted only while open, so a reopened dialog starts with no box ticked. */}
       {open && (
         <BuyTopUpDialog
-          open
           offer={offer}
           termsVersion={data.termsVersion}
           onClose={() => setOpen(false)}

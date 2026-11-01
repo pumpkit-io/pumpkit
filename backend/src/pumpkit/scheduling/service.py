@@ -48,6 +48,9 @@ from pumpkit.scheduling.post_status import (
 )
 from pumpkit.scheduling.rules import XPosts, x_posts_in
 
+# A Part counts as an X post unless its Scheduled post Failed before X accepted it.
+_COUNTED_PART = or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None))
+
 
 async def create(
     db: AsyncSession,
@@ -314,15 +317,15 @@ async def stop(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> bo
 
 
 async def keep_unscheduled_live_parts(
-    db: AsyncSession, *, user_id: str, publish_at: datetime, x_posts: XPosts, now: datetime
+    db: AsyncSession, *, user_id: str, publish_at: datetime, counted: XPosts, now: datetime
 ) -> None:
     """Flushes."""
     db.add(
         UnscheduledLiveParts(
             user_id=user_id,
             publish_at=publish_at,
-            x_posts=x_posts.x_posts,
-            link_x_posts=x_posts.link_x_posts,
+            x_posts=counted.x_posts,
+            link_x_posts=counted.link_x_posts,
             created_at=now,
         )
     )
@@ -503,7 +506,7 @@ async def x_posts_used_between(
         .join(ScheduledPost)
         .where(
             *in_window,
-            or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None)),
+            _COUNTED_PART,
         )
     )
     charged: dict[str, int] = {
@@ -566,7 +569,7 @@ async def counted_parts(db: AsyncSession, *, scheduled_post_id: str) -> list[str
         .join(ScheduledPost)
         .where(
             ScheduledPost.id == scheduled_post_id,
-            or_(ScheduledPost.state != FAILED, ScheduledPostPart.x_post_id.is_not(None)),
+            _COUNTED_PART,
         )
         .order_by(ScheduledPostPart.position)
     )

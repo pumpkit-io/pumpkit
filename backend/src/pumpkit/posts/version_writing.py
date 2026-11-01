@@ -3,7 +3,7 @@ The steps of writing a Version, shared by posts' mediator (a Post's first Versio
 scheduling's (Feedback, which it gates). Flush-only: the mediators commit around the model calls.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -13,6 +13,7 @@ import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
+from pumpkit.billing.allowance import Draw
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import service
@@ -60,27 +61,26 @@ async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) 
         )
 
 
+async def _generation_draw(db: AsyncSession, *, user_id: str, now: datetime) -> Optional[Draw]:
+    """One Generation of the User's Allowance at `now`; None when it has no cap on them."""
+    allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
+    if allowance is None or allowance.limits.generations is None:
+        return None
+    used = await service.count_versions_between(
+        db, user_id=user_id, start=allowance.period.start, end=allowance.period.end
+    )
+    return Draw(allowance=allowance, count="generations", used=used, needed=1, moment=now)
+
+
 async def check_generation_left(db: AsyncSession, *, user_id: str, now: datetime) -> None:
     """
     Room for one more Generation in the User's Allowance or, once it is used up, their Top-ups,
     checked before the model calls. A Version recorded after concurrent requests filled both is
     kept, over the limit.
     """
-    allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
-    if allowance is None or allowance.generations is None:
-        return
-    used = await service.count_versions_between(
-        db, user_id=user_id, start=allowance.period.start, end=allowance.period.end
-    )
-    await billing_service.check_room_with_top_ups(
-        db,
-        user_id=user_id,
-        allowance=allowance,
-        count="generations",
-        used=used,
-        needed=1,
-        moment=now,
-    )
+    draw = await _generation_draw(db, user_id=user_id, now=now)
+    if draw is not None:
+        await billing_service.check_room_with_top_ups(db, user_id=user_id, draw=draw)
 
 
 async def charge_generation(
@@ -89,21 +89,14 @@ async def charge_generation(
     """Charge a just-recorded Version to a Top-up when the Allowance had no Generation left."""
     # Concurrent Versions then count each other before charging.
     await users_service.lock_user_id(db, user_id=user_id)
-    allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
-    if allowance is None or allowance.generations is None:
+    draw = await _generation_draw(db, user_id=user_id, now=now)
+    if draw is None:
         return
-    used = await service.count_versions_between(
-        db, user_id=user_id, start=allowance.period.start, end=allowance.period.end
-    )
     await billing_service.charge_shortfall(
         db,
         user_id=user_id,
-        allowance=allowance,
-        count="generations",
         # The count includes `version` itself.
-        used=used - 1,
-        needed=1,
-        moment=now,
+        draw=replace(draw, used=draw.used - 1),
         version_attempt_id=version.id,
     )
 
