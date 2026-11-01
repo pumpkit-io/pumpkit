@@ -30,8 +30,10 @@ from pumpkit.connected_apps.schemas import (
 from pumpkit.connected_apps.service import authorizations, clients, connections, retention, tokens
 from pumpkit.connected_apps.service.client_metadata import (
     ClientMetadataFetcher,
+    fetch_metadata_document,
+    find_cached_metadata_document_client,
     is_metadata_document_url,
-    resolve_metadata_document_client,
+    store_metadata_document_client,
 )
 from pumpkit.connected_apps.service.redirect_uris import matches_registered, redirect_host
 from pumpkit.connected_apps.service.tokens import (
@@ -259,7 +261,7 @@ async def _trusted_redirect(
     client = None
     if client_id is not None and _CLIENT_ID.fullmatch(client_id):
         if is_metadata_document_url(client_id):
-            client = await resolve_metadata_document_client(db, client_id, fetcher, now=now)
+            client = await _metadata_document_client(db, client_id, fetcher, now=now)
         else:
             client = await clients.get_client(db, client_id)
     if client is None:
@@ -271,6 +273,22 @@ async def _trusted_redirect(
     if requested is None or not matches_registered(requested, client.redirect_uris):
         raise OAuthError("invalid_redirect_uri")
     return client, requested, True
+
+
+async def _metadata_document_client(
+    db: AsyncSession, url: str, fetcher: ClientMetadataFetcher, *, now: datetime
+) -> Optional[OAuthClient]:
+    """The app the document at `url` describes: its fresh cached copy, or one fetched now."""
+    cached = await find_cached_metadata_document_client(db, url, now=now)
+    if cached is None:
+        return None
+    if cached.is_fresh:
+        return cached.client
+    # Early commit: ends the purge and the read, so no connection or row lock is held while
+    # an app's server takes up to 5 seconds to answer.
+    await db.commit()
+    fetched = await fetch_metadata_document(url, fetcher)
+    return await store_metadata_document_client(db, url, cached.client, fetched, now=now)
 
 
 def _check_request(values: dict[str, list[str]]) -> str:

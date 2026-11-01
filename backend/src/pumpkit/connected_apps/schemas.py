@@ -122,7 +122,8 @@ class ClientMetadataDocument(BaseModel):
     client_name: Optional[Annotated[str, StringConstraints(max_length=100)]] = None
     client_uri: Optional[_HttpsUrl] = None
     logo_uri: Optional[_HttpsUrl] = None
-    # ChatGPT's declares private_key_jwt. Pumpkit doesn't advertise it, so ChatGPT sends none.
+    # ChatGPT's declares private_key_jwt, which Pumpkit doesn't advertise.
+    # What ChatGPT then sends is left to the manual client test (#315).
     token_endpoint_auth_method: Literal["none", "private_key_jwt"] = "none"
     software_id: Optional[Annotated[str, StringConstraints(max_length=200)]] = None
     software_version: Optional[Annotated[str, StringConstraints(max_length=200)]] = None

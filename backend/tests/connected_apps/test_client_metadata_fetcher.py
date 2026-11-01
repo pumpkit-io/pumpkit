@@ -1,6 +1,8 @@
 """The real fetcher for Client ID Metadata Documents, against a faked network and resolver."""
 
 import asyncio
+import gzip
+import json
 from typing import Optional
 
 import httpcore
@@ -279,3 +281,55 @@ async def test_an_unreadable_max_age_counts_as_none(production, fetcher):
     )
 
     assert (await fetcher.fetch(URL)).max_age_seconds is None
+
+
+async def test_a_url_httpx_cannot_send_is_refused(production, fetcher):
+    with pytest.raises(ClientMetadataFetchError):
+        await fetcher.fetch("https://app.example.com/oauth/client\x01.json")
+
+
+@respx.mock
+async def test_a_compressed_answer_is_refused(production, fetcher):
+    respx.get(URL).mock(
+        return_value=httpx.Response(
+            200,
+            content=gzip.compress(json.dumps(DOCUMENT).encode()),
+            headers={"Content-Encoding": "gzip"},
+        )
+    )
+
+    with pytest.raises(ClientMetadataFetchError):
+        await fetcher.fetch(URL)
+
+
+@respx.mock
+async def test_an_identity_encoded_answer_is_accepted(production, fetcher):
+    respx.get(URL).mock(
+        return_value=httpx.Response(200, json=DOCUMENT, headers={"Content-Encoding": "identity"})
+    )
+
+    assert (await fetcher.fetch(URL)).document == DOCUMENT
+
+
+class unroutable_first(recording_network):
+    """A network where the first address connected to is unreachable."""
+
+    async def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        self.connected.append((host, port))
+        if len(self.connected) == 1:
+            raise httpcore.ConnectError("network is unreachable")
+        return _RecordingStream(self)
+
+
+async def test_each_checked_address_is_tried_in_order(production):
+    network = unroutable_first()
+    resolve = resolving_to("2606:2800:220:1:248:1893:25c8:1946", "93.184.215.14")
+
+    with pytest.raises(ClientMetadataFetchError):
+        await HttpClientMetadataFetcher(resolve=resolve, network=network).fetch(URL)
+
+    assert network.connected == [
+        ("2606:2800:220:1:248:1893:25c8:1946", 443),
+        ("93.184.215.14", 443),
+    ]
+    assert network.tls_hostnames == ["app.example.com"]

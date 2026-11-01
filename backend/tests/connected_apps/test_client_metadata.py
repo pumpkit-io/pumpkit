@@ -321,20 +321,24 @@ class racing_fetcher(FakeClientMetadataFetcher):
     engine: Any = None
 
     async def fetch(self, url: str) -> FetchedClientMetadata:
+        fetched = await super().fetch(url)
         async with AsyncSession(self.engine) as other:
-            await client_metadata.resolve_metadata_document_client(
-                other, url, FakeClientMetadataFetcher(self.documents), now=NOW
-            )
+            await client_metadata.store_metadata_document_client(other, url, None, fetched, now=NOW)
             await other.commit()
-        return await super().fetch(url)
+        return fetched
 
 
 async def test_two_first_authorizations_of_one_app_both_resolve_it(foreign_keys_session):
     fetcher = racing_fetcher(engine=foreign_keys_session.bind)
     fetcher.serve(document())
+    cached = await client_metadata.find_cached_metadata_document_client(
+        foreign_keys_session, DOCUMENT_URL, now=NOW
+    )
+    assert cached is not None and cached.client is None
+    fetched = await client_metadata.fetch_metadata_document(DOCUMENT_URL, fetcher)
 
-    client = await client_metadata.resolve_metadata_document_client(
-        foreign_keys_session, DOCUMENT_URL, fetcher, now=NOW
+    client = await client_metadata.store_metadata_document_client(
+        foreign_keys_session, DOCUMENT_URL, None, fetched, now=NOW
     )
 
     assert client is not None

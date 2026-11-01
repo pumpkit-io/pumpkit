@@ -2,8 +2,9 @@
 The `ClientMetadataFetcher` port, and apps that identify themselves by a Client ID Metadata
 Document (CIMD): a `client_id` that is the https URL of a JSON document describing the app.
 
-The fetcher only downloads: `resolve_metadata_document_client` validates the document and
-caches it as the app's `OAuthClient` row, keyed by the URL. Flushes, never commits.
+The fetcher only downloads: `store_metadata_document_client` validates the document and caches
+it as the app's `OAuthClient` row, keyed by the URL. Flushes, never commits, and the fetch
+touches no database, so a mediator can run it with no transaction open.
 
 Mediators reach the network only through `get_client_metadata_fetcher`; tests override it with
 `FakeClientMetadataFetcher`.
@@ -142,9 +143,9 @@ def _anyio_network() -> httpcore.AsyncNetworkBackend:
 @dataclass(frozen=True)
 class HttpClientMetadataFetcher:
     """
-    Fetches over https with no redirects or proxy, 5 seconds in all and 8 KB at most, connecting
-    to the address it checked. Outside `ENV=local` it refuses IP-literal hosts, ports other than
-    443 and any host resolving to a non-global address.
+    Fetches over https with no redirects, proxy or compression, 5 seconds in all and 8 KB at
+    most, trying each address it checked in order. Outside `ENV=local` it refuses IP-literal
+    hosts, ports other than 443 and any host resolving to a non-global address.
     """
 
     resolve: Resolver = _resolve_with_getaddrinfo
@@ -165,29 +166,41 @@ class HttpClientMetadataFetcher:
         return FetchedClientMetadata(document, _max_age(cache_control))
 
     async def _download(self, url: str) -> tuple[bytes, str]:
-        address = await self._check_destination(url)
-        transport = _PinnedTransport(_PinnedNetwork(address, self.network))
+        addresses = await self._check_destination(url)
         try:
-            async with httpx.AsyncClient(
-                transport=transport,
-                timeout=self.deadline_seconds,
-                follow_redirects=False,
-                trust_env=False,
-            ) as http:
-                async with http.stream(
-                    "GET",
-                    url,
-                    headers={"Accept": "application/json", "Accept-Encoding": "identity"},
-                ) as response:
-                    if response.status_code != 200:
-                        raise ClientMetadataFetchError(f"answered HTTP {response.status_code}")
-                    body = await _read_capped(response)
-                    return body, response.headers.get("cache-control", "")
-        except httpx.HTTPError as error:
+            for address in addresses[:-1]:
+                try:
+                    return await self._download_from(address, url)
+                except (httpx.ConnectError, httpx.ConnectTimeout):
+                    continue
+            return await self._download_from(addresses[-1], url)
+        # InvalidURL isn't an HTTPError: httpx raises it for a URL it refuses to send.
+        except (httpx.HTTPError, httpx.InvalidURL) as error:
             raise ClientMetadataFetchError(f"unreachable: {type(error).__name__}") from error
 
-    async def _check_destination(self, url: str) -> str:
-        """The address to connect to, once every address the host resolves to is allowed."""
+    async def _download_from(self, address: str, url: str) -> tuple[bytes, str]:
+        transport = _PinnedTransport(_PinnedNetwork(address, self.network))
+        async with httpx.AsyncClient(
+            transport=transport,
+            timeout=self.deadline_seconds,
+            follow_redirects=False,
+            trust_env=False,
+        ) as http:
+            async with http.stream(
+                "GET",
+                url,
+                headers={"Accept": "application/json", "Accept-Encoding": "identity"},
+            ) as response:
+                if response.status_code != 200:
+                    raise ClientMetadataFetchError(f"answered HTTP {response.status_code}")
+                # A compressed body would be expanded before the size cap could stop it.
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise ClientMetadataFetchError("answered a compressed document")
+                body = await _read_capped(response)
+                return body, response.headers.get("cache-control", "")
+
+    async def _check_destination(self, url: str) -> list[str]:
+        """The addresses to try in order, once every address the host resolves to is allowed."""
         parts = urlsplit(url)
         host = parts.hostname or ""
         local = settings.ENV == "local"
@@ -210,7 +223,7 @@ class HttpClientMetadataFetcher:
                 ip in network for network in _NAT64_NETWORKS
             ):
                 raise ClientMetadataFetchError("host resolves to a non-global address")
-        return addresses[0]
+        return addresses
 
 
 def _is_ip_literal(host: str) -> bool:
@@ -272,32 +285,57 @@ def _known_documents() -> dict[str, Any]:
     return json.loads(_KNOWN_DOCUMENTS_PATH.read_text())
 
 
-async def resolve_metadata_document_client(
-    db: AsyncSession, url: str, fetcher: ClientMetadataFetcher, *, now: datetime
-) -> Optional[OAuthClient]:
-    """
-    The app the document at `url` describes, or None when it can't be had or is invalid. A fresh
-    cached copy is used as is. When fetching fails, a cached copy is used however stale, then a
-    copy bundled for the big clients, whose bot protection sometimes refuses servers.
-    """
+@dataclass(frozen=True)
+class CachedMetadataDocumentClient:
+    """The app cached for a document URL, if any, and whether its copy may be used without a fetch."""
+
+    client: Optional[OAuthClient]
+    is_fresh: bool
+
+
+async def find_cached_metadata_document_client(
+    db: AsyncSession, url: str, *, now: datetime
+) -> Optional[CachedMetadataDocumentClient]:
+    """What is cached for `url`, or None when the id belongs to an app of another kind."""
     cached = await db.get(OAuthClient, url)
     if cached is not None and cached.kind != "metadata_document":
         return None
-    if cached is not None and _is_fresh(cached, now):
-        return cached
+    return CachedMetadataDocumentClient(cached, cached is not None and _is_fresh(cached, now))
 
+
+async def fetch_metadata_document(
+    url: str, fetcher: ClientMetadataFetcher
+) -> FetchedClientMetadata | ClientMetadataFetchError:
+    """The document at `url`, or why it couldn't be had. Touches no database."""
     try:
-        fetched = await fetcher.fetch(url)
+        return await fetcher.fetch(url)
     except ClientMetadataFetchError as error:
+        return error
+
+
+async def store_metadata_document_client(
+    db: AsyncSession,
+    url: str,
+    cached: Optional[OAuthClient],
+    fetched: FetchedClientMetadata | ClientMetadataFetchError,
+    *,
+    now: datetime,
+) -> Optional[OAuthClient]:
+    """
+    The app the fetched document describes, or None when it is invalid. When fetching failed, the
+    cached copy is used however stale, then a copy bundled for the big clients, whose bot
+    protection sometimes refuses servers.
+    """
+    if isinstance(fetched, ClientMetadataFetchError):
         host = urlsplit(url).hostname
         if cached is not None:
-            logger.warning("Metadata document at %s %s; using the cached copy", host, error)
+            logger.warning("Metadata document at %s %s; using the cached copy", host, fetched)
             return cached
         known = _known_documents().get(url)
         if known is None:
-            logger.warning("Metadata document at %s %s", host, error)
+            logger.warning("Metadata document at %s %s", host, fetched)
             return None
-        logger.warning("Metadata document at %s %s; using the bundled copy", host, error)
+        logger.warning("Metadata document at %s %s; using the bundled copy", host, fetched)
         fetched_at = datetime.fromisoformat(known["fetched_at"])
         # Stale at once, so the next authorization tries the live document again.
         return await _store(
