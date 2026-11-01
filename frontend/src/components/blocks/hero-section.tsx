@@ -52,8 +52,9 @@ export function HeroSection() {
                   <HeroHeadline />
                 </h1>
                 <p className="mx-auto mt-6 max-w-xl text-pretty text-lg text-muted-foreground">
-                  Write a brief, pick up to three X authors to learn style from, and get a post
-                  ready to paste. Not quite right? Say what to change and get a new version.
+                  Pumpkit writes and schedules posts on X for you. Posts sound like you, or like
+                  your favorite X accounts. Use it in the web app, or use the MCP to let your agents
+                  run it.
                 </p>
               </AnimatedGroup>
 

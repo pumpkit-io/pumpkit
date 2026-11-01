@@ -8,7 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
-- The landing page headline now reads "Run your X on autopilot with" and rotates through Claude Code, Codex, Cursor and Gemini CLI, each with its logo.
+- The landing page headline now reads "Run your X on autopilot with" and rotates through Claude Code, Codex, Cursor and Gemini CLI, each with its logo, and the text under it now says Pumpkit writes and schedules your posts and can be used in the web app or through the MCP.
 
 ## [0.5.0] - 2026-11-01
 
