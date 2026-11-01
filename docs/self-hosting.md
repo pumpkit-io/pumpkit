@@ -351,14 +351,14 @@ curl -s http://localhost:8080/api/v1/health
 
 ## A proxy in front of the web server
 
-Pumpkit's per-IP rate limits (Magic link, and the sign-in of connected AI apps) need each caller's real address. With the bundled stack that works with no setting: the web server passes the caller's address to the backend in `X-Forwarded-For`, and the backend trusts it from the compose network's private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).
+Pumpkit's per-IP rate limits (Magic link, and the sign-in of connected AI apps) need each caller's real address. With the bundled stack that works with no setting: the web server passes the caller's address to the backend in `X-Forwarded-For`, and the backend trusts it from the private ranges Docker allocates from (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). `compose.external-db.yml` only swaps the database, so it is unaffected.
 
-If your own proxy, load balancer or CDN sits in front of the web server, set both in `.env`, then run `docker compose up -d --wait`:
+If your own proxy, load balancer or CDN sits in front of the web server, it must send `X-Forwarded-For` with the caller's address, and two settings tell each hop to believe it:
 
-- `TRUSTED_PROXIES`: your proxy's address or range as the web server sees it, space-separated. Without it the web server discards the forwarded address and every caller looks like your proxy.
-- `FORWARDED_ALLOW_IPS`: only if the web server's own address is outside the private ranges above. It is the comma-separated list of addresses or ranges the backend trusts, and it replaces the default, so keep the ranges the web container is in. Do not set it to `*` while the backend's port is reachable from outside the compose network.
+- `TRUSTED_PROXIES` for the web server (Caddy): your proxy's address or range as the web server sees it, separated by spaces (`203.0.113.10 10.1.0.0/16`). Without it Caddy replaces the header with your proxy's address, so every caller looks like your proxy. Caddy needs this because it discards a forwarded address from any peer it was not told to trust.
+- `FORWARDED_ALLOW_IPS` for the backend (uvicorn): comma-separated addresses or ranges. The header then reaches the backend as `caller, your-proxy`, and the backend takes the first address it does not trust, so set it when your proxy has a public address: list your proxy's address next to the private ranges, which this setting replaces (`127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,203.0.113.10`). A proxy on a private address needs no change. Never set it to `*` while the backend's port is reachable from outside the compose network.
 
-Your proxy must also send `X-Forwarded-For` with the caller's address.
+Set them in `.env`, then run `docker compose up -d --wait`. Check with a few Magic link requests from different addresses: one address gets rate limited after five, the others don't.
 
 ## Backups and restore
 

@@ -48,7 +48,8 @@ Read by Docker Compose and the `web` service of the production stack (`compose.y
 | `HTTP_PORT` | The host port the web server's plain HTTP listens on. Defaults to 8080, for a laptop. A server with an `https` `PUBLIC_URL` needs 80, which redirects HTTP to HTTPS and answers the certificate authority's HTTP-01 challenge. |
 | `HTTPS_PORT` | The host port for HTTPS. Defaults to 443. |
 | `ACME_EMAIL` | The address the certificate authority sends expiry notices to, for an `https` `PUBLIC_URL`. Optional. |
-| `TRUSTED_PROXIES` | Addresses or CIDR ranges of a proxy in front of the web server, separated by spaces (such as `203.0.113.10 10.1.0.0/16`). The web server then passes on the caller address that proxy forwards, so per-IP rate limits see each caller. Leave it unset when nothing sits in front. See [self-hosting.md](self-hosting.md#a-proxy-in-front-of-the-web-server). |
+| `TRUSTED_PROXIES` | Addresses or CIDR ranges of a proxy in front of the web server, separated by spaces (such as `203.0.113.10 10.1.0.0/16`). The web server then keeps the caller address that proxy forwards instead of replacing it, so per-IP rate limits see each caller. Leave it unset when nothing sits in front. See [self-hosting.md](self-hosting.md#a-proxy-in-front-of-the-web-server). |
+| `FORWARDED_ALLOW_IPS` | Addresses or CIDR ranges the backend trusts `X-Forwarded-For` from, separated by commas. Defaults to `127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`, and a value replaces the default. Set it when a proxy with a public address sits in front of the web server, adding that address. Never `*` while the backend's port is reachable from outside the compose network. Read by the `backend`, so it lives in the same `.env`. See [self-hosting.md](self-hosting.md#a-proxy-in-front-of-the-web-server). |
 
 An `http` `PUBLIC_URL` is served as plain HTTP on any host name; an `https` one gets a certificate for its host automatically, and the web server redirects HTTP to HTTPS.
 
