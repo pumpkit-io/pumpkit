@@ -43,6 +43,8 @@ export function offerLines(allowance: OfferedAllowance, trial: OfferedTrial | nu
     });
   }
   lines.push({ text: 'Write in the voice of your favorite X creators.' });
+  lines.push({ text: 'Schedule posts and threads to X.' });
+  lines.push({ text: 'Use it from Claude Code, Codex, Cursor or Gemini CLI.', info: 'aiTools' });
   if (trial) lines.push({ text: trialLine(trial) });
   return lines;
 }

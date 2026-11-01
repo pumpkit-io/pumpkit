@@ -101,11 +101,11 @@ async def _hold(db, user, *states: SubscriptionState) -> None:
 async def test_a_user_who_never_had_a_subscription_may_subscribe_with_the_trial(
     db, user, monkeypatch
 ):
-    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
 
     offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)
 
-    assert offer == subscriptions_service.SubscriptionOffer(may_subscribe=True, trial_days=14)
+    assert offer == subscriptions_service.SubscriptionOffer(may_subscribe=True, trial_days=7)
 
 
 async def test_a_user_who_never_had_a_subscription_gets_no_trial_when_trials_are_off(
@@ -132,7 +132,7 @@ async def test_a_user_with_no_running_subscription_may_subscribe_without_a_trial
     db, user, status, monkeypatch
 ):
     """Ended and `incomplete` Subscriptions don't block, but they use up the Trial."""
-    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 14)
+    monkeypatch.setattr(settings, "BILLING_TRIAL_PERIOD_DAYS", 7)
     await _hold(db, user, replace(RUNNING, status=status))
 
     offer = await subscriptions_service.get_subscription_offer(db, user_id=user.id)

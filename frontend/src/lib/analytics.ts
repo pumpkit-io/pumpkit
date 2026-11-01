@@ -17,8 +17,14 @@ export const EVENTS = {
   landing_mobile_menu_opened: { description: 'Landing: opened the mobile header menu.' },
   landing_mobile_menu_closed: { description: 'Landing: closed the mobile header menu.' },
   landing_hero_cta_clicked: { description: 'Landing: clicked the "Start writing" hero button.' },
-  landing_hero_screenshot_viewed: {
-    description: 'Landing: the hero screenshot first scrolled into view.',
+  landing_video_played: {
+    description:
+      'Landing: the hero launch video started playing for the first time. Props: trigger (autoplay | visitor).',
+  },
+  landing_video_sound_turned_on: { description: "Landing: turned the launch video's sound on." },
+  landing_video_scrubbed: { description: "Landing: moved the launch video's scrubber." },
+  landing_video_watched_again: {
+    description: 'Landing: clicked "Watch again" at the end of the launch video.',
   },
   landing_authors_section_viewed: {
     description: 'Landing: the authors section first scrolled into view.',
@@ -27,10 +33,27 @@ export const EVENTS = {
     description: 'Landing: the pricing section scrolled into view.',
   },
   landing_pricing_plan_viewed: {
-    description: "Landing: a Plan's pricing table first scrolled into view. Props: plan_key.",
+    description:
+      'Landing: a Plan first seen on the pricing card, once per Plan: the shown Plan when the card first scrolls into view, the other when the visitor first switches to it after that. Props: plan_key.',
+  },
+  landing_pricing_toggle_switched: {
+    description:
+      'Landing: switched the pricing card between Monthly and Annual. Props: interval (monthly | annual).',
   },
   landing_pricing_cta_clicked: {
     description: 'Landing: clicked the "Get started" button at the end of the pricing section.',
+  },
+  landing_nav_github_clicked: {
+    description: 'Landing: clicked the GitHub header button. Props: surface (desktop | mobile).',
+  },
+  landing_open_source_section_viewed: {
+    description: 'Landing: the open-source section first scrolled into view.',
+  },
+  landing_open_source_github_clicked: {
+    description: 'Landing: clicked "View on GitHub" in the open-source section.',
+  },
+  landing_open_source_self_hosting_clicked: {
+    description: 'Landing: clicked "Self-hosting guide" in the open-source section.',
   },
 
   // Login (/login) + auth callbacks

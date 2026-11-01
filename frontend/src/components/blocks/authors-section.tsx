@@ -1,12 +1,33 @@
-import { useRef } from 'react';
-import { Eyebrow } from '@/components/blocks/eyebrow';
+import { useRef, type CSSProperties } from 'react';
+import authors from '@/assets/authors/authors.json';
+import { Mascot } from '@/components/blocks/mascot';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
 
-// Placeholders until real X accounts are cleared for use.
-const AUTHORS: readonly string[] = Array.from({ length: 10 }, (_, i) => `[Author ${i + 1}]`);
+type Author = { handle: string; name: string; photo: string };
 
-// The track holds three copies and scrolls by one third, so the loop has no seam.
+// Copies of each account's X photo served by the Instance, so the page never requests anything from X.
+const PHOTOS = import.meta.glob<string>('@/assets/authors/*.webp', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+const AUTHORS: readonly Author[] = authors.map(({ handle, name }) => ({
+  handle,
+  name,
+  photo: PHOTOS[`/src/assets/authors/${handle}.webp`],
+}));
+
+const ROW_LENGTH = 10;
+
+const ROWS: readonly { authors: readonly Author[]; seconds: number; reverse: boolean }[] = [
+  { authors: AUTHORS.slice(0, ROW_LENGTH), seconds: 46, reverse: false },
+  { authors: AUTHORS.slice(ROW_LENGTH, 2 * ROW_LENGTH), seconds: 54, reverse: true },
+  { authors: AUTHORS.slice(2 * ROW_LENGTH), seconds: 50, reverse: false },
+];
+
+// Each track holds three copies and scrolls by one third, so the loop has no seam.
 const REEL_COPIES = 3;
 
 export function AuthorsSection() {
@@ -20,41 +41,53 @@ export function AuthorsSection() {
       aria-labelledby="authors-heading"
       className="scroll-mt-24 bg-background pb-16 pt-20 md:pb-32 md:pt-28"
     >
-      <div className="mx-auto max-w-5xl px-6">
-        <div className="text-center">
-          <Eyebrow>Learn from the best on X</Eyebrow>
-          <h2
-            id="authors-heading"
-            className="mt-3 text-balance text-2xl font-semibold tracking-tight md:text-3xl"
-          >
-            Pick the authors whose style you want.
-          </h2>
-        </div>
+      <div className="mx-auto flex max-w-5xl items-center justify-center gap-4 px-6">
+        <h2
+          id="authors-heading"
+          className="text-balance text-center font-display text-2xl font-semibold tracking-tight md:text-3xl"
+        >
+          Write in the style of accounts like these.
+        </h2>
+        <Mascot animation="costume_change" />
+      </div>
 
-        <div className="landing-marquee mt-12 overflow-hidden">
-          <div className="landing-marquee-track flex w-max py-4">
-            {Array.from({ length: REEL_COPIES }, (_, copy) => (
-              <ul
-                key={copy}
-                aria-label={copy === 0 ? 'Authors' : undefined}
-                aria-hidden={copy === 0 ? undefined : true}
-                className="flex shrink-0 items-center gap-6 pr-6"
-              >
-                {AUTHORS.map((handle) => (
-                  <li
-                    key={handle}
-                    className="flex shrink-0 items-center gap-2.5 rounded-full border border-border bg-card py-1.5 pl-1.5 pr-4"
-                  >
-                    <span aria-hidden className="size-8 shrink-0 rounded-full bg-muted" />
-                    <span className="whitespace-nowrap text-sm font-medium text-muted-foreground">
-                      {handle}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ))}
+      <div className="mt-12 flex flex-col gap-4 md:mt-16 md:gap-5">
+        {ROWS.map((row, index) => (
+          <div key={index} className="landing-marquee overflow-hidden">
+            <div
+              className="landing-marquee-track flex w-max"
+              style={
+                {
+                  '--marquee-duration': `${row.seconds}s`,
+                  animationDirection: row.reverse ? 'reverse' : 'normal',
+                } as CSSProperties
+              }
+            >
+              {Array.from({ length: REEL_COPIES }, (_, copy) => (
+                <ul
+                  key={copy}
+                  aria-hidden={copy === 0 ? undefined : true}
+                  className="flex shrink-0 items-center gap-4 pr-4 md:gap-5 md:pr-5"
+                >
+                  {row.authors.map((author) => (
+                    <li key={author.handle} className="shrink-0">
+                      <img
+                        src={author.photo}
+                        alt={author.name}
+                        width={96}
+                        height={96}
+                        loading="lazy"
+                        decoding="async"
+                        draggable={false}
+                        className="size-14 rounded-full border border-border bg-muted object-cover md:size-16"
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ))}
+            </div>
           </div>
-        </div>
+        ))}
       </div>
     </section>
   );
