@@ -144,6 +144,24 @@ describe('The signed-in shell', () => {
     vi.mocked(track).mockClear();
   });
 
+  describe('Wordmark font preview', () => {
+    it('sets every page and dialog in the wordmark font while the switch is on', async () => {
+      const { unmount } = renderSignedIn('/posts/new');
+      const fontSwitch = await screen.findByRole('switch', { name: 'Wordmark font' });
+      const root = document.documentElement;
+
+      expect(root).not.toHaveClass('font-wordmark-preview');
+      fireEvent.click(fontSwitch);
+      expect(root).toHaveClass('font-wordmark-preview');
+      fireEvent.click(fontSwitch);
+      expect(root).not.toHaveClass('font-wordmark-preview');
+
+      fireEvent.click(fontSwitch);
+      unmount();
+      expect(root).not.toHaveClass('font-wordmark-preview');
+    });
+  });
+
   describe('Sidebar', () => {
     it('links to New post, Posts, Persona and Settings, marking the page the User is on', async () => {
       renderSignedIn('/persona');

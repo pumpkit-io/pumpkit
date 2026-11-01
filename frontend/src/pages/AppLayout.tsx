@@ -3,6 +3,7 @@ import { Toaster } from '@/components/Toaster';
 import { BillingProvider } from '@/features/billing/BillingProvider';
 import { SubscribedProvider } from '@/features/billing/SubscribedProvider';
 import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
+import { WordmarkFontSwitch } from '@/features/fontPreview/WordmarkFontSwitch';
 import { PostCountsProvider } from '@/features/posts/PostCountsProvider';
 import { Sidebar } from '@/features/sidebar/Sidebar';
 import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
@@ -28,6 +29,7 @@ function AppLayoutInner() {
               main={<Outlet />}
             />
             <Toaster />
+            <WordmarkFontSwitch />
           </PostCountsProvider>
         </InspirationAuthorsProvider>
       </XConnectionProvider>
