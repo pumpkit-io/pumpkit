@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 // Paths and brand colors from Simple Icons (CC0), on a 24x24 viewBox.
-// A tool without a color has a black brand mark, so it follows the text color in dark mode.
+// Gemini's multi-color mark is drawn by GeminiIcon (LobeHub Icons, MIT). A tool without a color has a black brand mark, so it follows the text color in dark mode.
 const X_PATH =
   'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z';
 
@@ -21,14 +21,48 @@ const TOOLS = [
     name: 'Cursor',
     path: 'M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23',
   },
-  {
-    name: 'Gemini CLI',
-    color: '#8E75B2',
-    path: 'M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81',
-  },
+  { name: 'Gemini CLI', path: null },
 ] as const;
 
 const ROTATE_MS = 2600;
+
+const GEMINI_PATH =
+  'M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z';
+
+const GEMINI_FADES = [
+  { color: '#08B962', from: [7, 15.5], to: [11, 12], end: 1 },
+  { color: '#F94543', from: [8, 5.5], to: [11.5, 11], end: 1 },
+  { color: '#FABC12', from: [3.5, 13.5], to: [17.5, 12], end: 0.46 },
+] as const;
+
+// One blue base with three layers fading out: green, red and yellow.
+function GeminiIcon({ className }: { className?: string }) {
+  const id = useId();
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className}>
+      <defs>
+        {GEMINI_FADES.map((f, i) => (
+          <linearGradient
+            key={f.color}
+            id={`${id}-${i}`}
+            gradientUnits="userSpaceOnUse"
+            x1={f.from[0]}
+            y1={f.from[1]}
+            x2={f.to[0]}
+            y2={f.to[1]}
+          >
+            <stop stopColor={f.color} />
+            <stop offset={f.end} stopColor={f.color} stopOpacity="0" />
+          </linearGradient>
+        ))}
+      </defs>
+      <path d={GEMINI_PATH} fill="#3186FF" />
+      {GEMINI_FADES.map((f, i) => (
+        <path key={f.color} d={GEMINI_PATH} fill={`url(#${id}-${i})`} />
+      ))}
+    </svg>
+  );
+}
 
 function BrandIcon({
   path,
@@ -75,11 +109,15 @@ export function HeroHeadline() {
                 i === active ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
               )}
             >
-              <BrandIcon
-                path={tool.path}
-                color={'color' in tool ? tool.color : undefined}
-                className="size-[0.8em] shrink-0"
-              />
+              {tool.path ? (
+                <BrandIcon
+                  path={tool.path}
+                  color={'color' in tool ? tool.color : undefined}
+                  className="size-[0.8em] shrink-0"
+                />
+              ) : (
+                <GeminiIcon className="size-[0.8em] shrink-0" />
+              )}
               {tool.name}
             </span>
           ))}
