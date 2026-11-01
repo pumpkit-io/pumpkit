@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Changed
+
+- **Upgrade notes:** in this changelog now mark only a manual step an upgrade needs; an entry with nothing to do by hand says so in its prose. Self-hosters can print just the entries that need a step with `sh scripts/release-notes.sh --manual-steps X.Y.Z`, or `FROM..TO` for the releases between two versions.
+
 ## [0.5.0] - 2026-11-01
 
 ### Added
