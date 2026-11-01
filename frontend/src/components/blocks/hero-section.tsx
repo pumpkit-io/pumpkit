@@ -48,7 +48,7 @@ export function HeroSection() {
           <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
             <div className="text-center lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
-                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[3.75rem]">
+                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[4rem]">
                   <HeroHeadline />
                 </h1>
                 <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg xl:text-xl text-muted-foreground">
