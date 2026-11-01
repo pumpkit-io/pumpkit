@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 // Paths from Simple Icons (CC0), all on a 24x24 viewBox.
@@ -36,11 +37,14 @@ function BrandIcon({ path, className }: { path: string; className?: string }) {
 
 export function HeroHeadline() {
   const [active, setActive] = useState(0);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    // Auto-rotating text with no pause control: hold on the first name instead.
+    if (reduceMotion) return;
     const id = window.setInterval(() => setActive((i) => (i + 1) % TOOLS.length), ROTATE_MS);
     return () => window.clearInterval(id);
-  }, []);
+  }, [reduceMotion]);
 
   return (
     <>
