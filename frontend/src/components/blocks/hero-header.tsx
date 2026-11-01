@@ -75,7 +75,7 @@ export function HeroHeader() {
     ));
 
   const getStarted = (surface: Surface) => (
-    <Button asChild size="sm" className={surface === 'mobile' ? 'w-full' : undefined}>
+    <Button asChild size="sm" className={surface === 'mobile' ? 'w-full' : 'text-base'}>
       <Link
         to="/login"
         onClick={() => {
@@ -137,7 +137,7 @@ export function HeroHeader() {
           </Link>
 
           <nav aria-label="Main" className="absolute inset-0 m-auto hidden size-fit lg:block">
-            <ul className="flex gap-8 text-sm">{navLinks('desktop')}</ul>
+            <ul className="flex gap-8 text-base">{navLinks('desktop')}</ul>
           </nav>
 
           <div className="hidden items-center gap-2 lg:flex">

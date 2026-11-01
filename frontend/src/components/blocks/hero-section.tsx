@@ -48,10 +48,10 @@ export function HeroSection() {
           <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
             <div className="text-center lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
-                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[4rem]">
+                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[70px] xl:leading-[77px]">
                   <HeroHeadline />
                 </h1>
-                <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg xl:text-xl text-muted-foreground">
+                <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg text-muted-foreground xl:text-[22px] xl:leading-[1.3]">
                   Pumpkit writes and schedules posts on X for you. Posts sound like you, or like
                   your favorite X accounts. Use it in the web app, or use the MCP to let your agents
                   run it.
@@ -60,7 +60,7 @@ export function HeroSection() {
 
               <AnimatedGroup variants={staggeredVariants} className="mt-10 flex justify-center">
                 <CtaFrame>
-                  <Button asChild size="lg" className="h-12 rounded-xl px-7 text-lg">
+                  <Button asChild size="lg" className="h-12 rounded-xl px-7 text-lg xl:text-[19px]">
                     <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
                       Start writing
                     </Link>
