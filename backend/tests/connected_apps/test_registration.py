@@ -112,6 +112,11 @@ async def test_the_name_loses_characters_that_could_disguise_it(browser):
         ["https://example.com/cb", "http://example.com/cb"],
         ["https://example.com/cb#frag"],
         [5],
+        ["https://example.com/cb?code=1"],
+        ["http://127.0.0.1/cb?team=1&state=x"],
+        ["cursor://app/cb?iss"],
+        ["https://example.com/cb?error="],
+        ["https://example.com/cb?error_description=x"],
     ],
 )
 async def test_bad_redirect_uris_are_invalid_redirect_uri(browser, redirect_uris):

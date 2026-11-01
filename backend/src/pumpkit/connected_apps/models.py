@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     String,
     Text,
+    text,
 )
 from sqlalchemy import (
     Enum as PgEnum,
@@ -53,7 +54,7 @@ class OAuthClient(Base):
 
 class AppConnection(Base):
     """
-    A User's grant to an app: a Connected app. Disconnecting sets `revoked_at`, and token
+    A User's connection to an app: a Connected app. Disconnecting sets `revoked_at`, and token
     checks refuse a revoked connection.
     """
 
@@ -72,7 +73,18 @@ class AppConnection(Base):
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (Index("ix_app_connections_user_id_revoked_at", "user_id", "revoked_at"),)
+    __table_args__ = (
+        Index("ix_app_connections_user_id_revoked_at", "user_id", "revoked_at"),
+        # One unrevoked connection per User and app, so two racing approvals can't make two.
+        Index(
+            "uq_app_connections_user_id_client_id_unrevoked",
+            "user_id",
+            "client_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+            sqlite_where=text("revoked_at IS NULL"),
+        ),
+    )
 
 
 class OAuthAuthorization(Base):

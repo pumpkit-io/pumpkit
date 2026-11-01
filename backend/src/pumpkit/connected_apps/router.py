@@ -64,7 +64,7 @@ async def authorize(
     else:
         params = request.query_params.multi_items()
     location = await mediator.start_authorization(params, db, now=clock())
-    return RedirectResponse(location, status_code=303)
+    return RedirectResponse(location, status_code=303, headers={"Cache-Control": "no-store"})
 
 
 # The consent page's API, with the web app's bearer authentication and `detail` errors.
@@ -76,9 +76,11 @@ consent_router = APIRouter(tags=["connected-apps"])
 )
 async def get_authorization(
     authorization_id: str,
+    response: Response,
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> AuthorizationDetailsResponse:
+    response.headers["Cache-Control"] = "no-store"
     return await mediator.authorization_details(db, authorization_id, now=clock())
 
 

@@ -2,7 +2,7 @@
 
 import re
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _REFUSED_SCHEMES = frozenset(
@@ -10,6 +10,8 @@ _REFUSED_SCHEMES = frozenset(
 )
 _PRIVATE_USE_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*$")
 _CONTROL_OR_SPACE = re.compile(r"[\x00-\x20\x7f]")
+# Authorize appends these, so a URI already carrying one would send the app two.
+_RESPONSE_PARAMETERS = frozenset({"code", "state", "iss", "error", "error_description"})
 
 
 class RedirectUriRefused(ValueError):
@@ -39,6 +41,11 @@ def validate_redirect_uri(uri: str) -> str:
         raise RedirectUriRefused("Redirect URI is not a valid URL.")
     if "@" in parts.netloc:
         raise RedirectUriRefused("Redirect URIs cannot contain a username or password.")
+    named = {name for name, _ in parse_qsl(parts.query, keep_blank_values=True)}
+    if reserved := sorted(named & _RESPONSE_PARAMETERS):
+        raise RedirectUriRefused(
+            f"Redirect URIs cannot already carry {', '.join(reserved)} in their query."
+        )
 
     scheme = parts.scheme
     if scheme in _REFUSED_SCHEMES:

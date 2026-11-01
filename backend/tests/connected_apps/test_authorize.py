@@ -1,24 +1,24 @@
 from datetime import timedelta
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from sqlalchemy import select
 
 from pumpkit.connected_apps.models import OAuthAuthorization
-from tests.connected_apps.conftest import MCP_URL, REDIRECT
-
-AUTHORIZE = "/api/v1/oauth/authorize"
-CONSENT = "http://localhost:5173/oauth/consent"
-ISSUER = "http://localhost:5173"
+from tests.connected_apps.conftest import (
+    AUTHORIZE,
+    CONSENT,
+    ISSUER,
+    MCP_URL,
+    REDIRECT,
+    query,
+    register,
+    start_for,
+)
 
 
 @pytest.fixture
 def browser(new_browser):
     return new_browser()
-
-
-def query(location: str) -> dict[str, str]:
-    return {key: values[0] for key, values in parse_qs(urlsplit(location).query).items()}
 
 
 async def test_a_valid_request_is_stored_and_sent_to_the_consent_page(
@@ -27,6 +27,7 @@ async def test_a_valid_request_is_stored_and_sent_to_the_consent_page(
     response = await browser.get(AUTHORIZE, params=authorize_params)
 
     assert response.status_code == 303
+    assert response.headers["cache-control"] == "no-store"
     location = response.headers["location"]
     assert location.startswith(f"{CONSENT}?request=")
     stored = (await db.execute(select(OAuthAuthorization))).scalar_one()
@@ -112,24 +113,10 @@ async def test_an_untrusted_request_goes_to_the_consent_page_and_never_to_the_cl
     assert (await db.execute(select(OAuthAuthorization))).first() is None
 
 
-async def test_an_omitted_redirect_uri_is_refused_when_the_client_registered_two(browser, db):
-    registered = await browser.post(
-        "/api/v1/oauth/register",
-        json={
-            "redirect_uris": [REDIRECT, "cursor://app/callback"],
-            "token_endpoint_auth_method": "none",
-        },
-    )
+async def test_an_omitted_redirect_uri_is_refused_when_the_client_registered_two(browser):
+    client_id = await register(browser, REDIRECT, "cursor://app/callback")
 
-    response = await browser.get(
-        AUTHORIZE,
-        params={
-            "client_id": registered.json()["client_id"],
-            "response_type": "code",
-            "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-            "code_challenge_method": "S256",
-        },
-    )
+    response = await start_for(browser, client_id)
 
     assert response.headers["location"] == f"{CONSENT}?error=invalid_redirect_uri"
 
@@ -138,6 +125,7 @@ async def test_an_omitted_redirect_uri_is_refused_when_the_client_registered_two
     ("override", "error"),
     [
         ({"response_type": "token"}, "unsupported_response_type"),
+        ({"response_type": None}, "invalid_request"),
         ({"code_challenge": None}, "invalid_request"),
         ({"code_challenge": "short"}, "invalid_request"),
         ({"code_challenge_method": "plain"}, "invalid_request"),
@@ -166,6 +154,18 @@ async def test_a_trusted_request_with_a_defect_redirects_to_the_client_with_the_
     assert (await db.execute(select(OAuthAuthorization))).first() is None
 
 
+async def test_state_is_checked_after_the_other_parameters_and_is_not_echoed_when_invalid(
+    browser, authorize_params
+):
+    authorize_params.update(state="a\x00b", response_type="token")
+
+    response = await browser.get(AUTHORIZE, params=authorize_params)
+
+    received = query(response.headers["location"])
+    assert received["error"] == "unsupported_response_type"
+    assert "state" not in received
+
+
 async def test_a_repeated_resource_is_refused(browser, authorize_params):
     response = await browser.get(
         AUTHORIZE, params=[*authorize_params.items(), ("resource", MCP_URL), ("resource", MCP_URL)]
@@ -180,31 +180,26 @@ async def test_a_state_with_non_ascii_text_comes_back_encoded(browser, authorize
     response = await browser.get(AUTHORIZE, params=authorize_params)
 
     location = response.headers["location"]
-    location.encode("latin-1")
+    assert location.isascii()
     assert query(location)["state"] == "état ✓"
 
 
 async def test_error_parameters_merge_into_the_redirect_uris_own_query(browser):
-    registered = await browser.post(
-        "/api/v1/oauth/register",
-        json={
-            "redirect_uris": ["https://app.example/cb?tenant=1"],
-            "token_endpoint_auth_method": "none",
-        },
-    )
+    client_id = await register(browser, "https://app.example/cb?team=1")
 
-    response = await browser.get(
-        AUTHORIZE,
-        params={
-            "client_id": registered.json()["client_id"],
-            "redirect_uri": "https://app.example/cb?tenant=1",
-            "response_type": "token",
-        },
-    )
+    response = await start_for(browser, client_id, response_type="token")
 
     received = query(response.headers["location"])
-    assert received["tenant"] == "1"
+    assert received["team"] == "1"
     assert received["error"] == "unsupported_response_type"
+
+
+async def test_a_redirect_uri_with_an_empty_authority_comes_back_byte_for_byte(browser):
+    client_id = await register(browser, "com.example.app:///cb")
+
+    response = await start_for(browser, client_id, response_type="token")
+
+    assert response.headers["location"].startswith("com.example.app:///cb?error=")
 
 
 async def test_authorize_is_limited_to_sixty_requests_a_minute(browser, authorize_params):

@@ -2,7 +2,7 @@ import json
 import re
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -40,7 +40,7 @@ _REQUEST_GONE = "This request expired or was already used. Start connecting agai
 class OAuthError(Exception):
     """An error the mediator answers in RFC 6749's JSON shape, not the app's `detail` one."""
 
-    def __init__(self, error: str, description: str, status_code: int = 400) -> None:
+    def __init__(self, error: str, description: str = "", status_code: int = 400) -> None:
         super().__init__(description)
         self.error = error
         self.description = description
@@ -158,14 +158,16 @@ async def start_authorization(
     params: list[tuple[str, str]], db: AsyncSession, *, now: datetime
 ) -> str:
     """
-    Where authorize sends the browser (guide section 4.4): the consent page with the stored
-    request, the consent page with an error while the app's redirect URI is untrusted, or the
-    redirect URI with an error once it is trusted.
+    Where authorize sends the browser: the consent page with the stored request, the consent
+    page with an error while the app's redirect URI is untrusted, or the redirect URI with an
+    error once it is trusted. Parameters are checked in RFC 6749's order, `state` last.
     """
     values: dict[str, list[str]] = {}
     for name, value in params:
         values.setdefault(name, []).append(value)
 
+    # Before the lookup, so it can't delete the app this request's row goes on to point at.
+    await retention.purge_expired(db, now=now)
     try:
         client, redirect_uri, redirect_uri_was_sent = await _trusted_redirect(db, values)
     except OAuthError as error:
@@ -174,13 +176,13 @@ async def start_authorization(
     sent_states = values.get("state", [])
     state = sent_states[0] if len(sent_states) == 1 and _is_valid_state(sent_states[0]) else None
     try:
+        code_challenge = _check_request(values)
         if sent_states and state is None:
             raise OAuthError(
                 "invalid_request",
                 f"state must be sent once, with at most {_MAX_STATE_LENGTH} characters "
                 "and no control characters.",
             )
-        code_challenge = _check_request(values)
     except OAuthError as error:
         return _with_query(
             redirect_uri,
@@ -192,7 +194,6 @@ async def start_authorization(
             },
         )
 
-    await retention.purge_expired(db, now=now)
     authorization = await authorizations.create_pending(
         db,
         client_id=client.id,
@@ -212,27 +213,31 @@ async def start_authorization(
 async def _trusted_redirect(
     db: AsyncSession, values: dict[str, list[str]]
 ) -> tuple[OAuthClient, str, bool]:
-    """The app, the redirect URI to answer on, and whether the request named it."""
+    """
+    The app, the redirect URI to answer on, and whether the request named it. Errors carry only
+    a code, since the consent page explains each one in its own words.
+    """
     client_id = _single(values, "client_id", "invalid_client")
     client = None
     if client_id is not None and _CLIENT_ID.fullmatch(client_id):
         client = await clients.get_client(db, client_id)
     if client is None:
-        raise OAuthError("invalid_client", "The app isn't registered with Pumpkit.")
+        raise OAuthError("invalid_client")
 
     requested = _single(values, "redirect_uri", "invalid_redirect_uri")
     if requested is None and len(client.redirect_uris) == 1:
         return client, client.redirect_uris[0], False
     if requested is None or not matches_registered(requested, client.redirect_uris):
-        raise OAuthError(
-            "invalid_redirect_uri", "The return address doesn't match what the app registered."
-        )
+        raise OAuthError("invalid_redirect_uri")
     return client, requested, True
 
 
 def _check_request(values: dict[str, list[str]]) -> str:
     """The PKCE code challenge, once every parameter after the redirect URI checks out."""
-    if _single(values, "response_type", "invalid_request") != "code":
+    response_type = _single(values, "response_type", "invalid_request")
+    if response_type is None:
+        raise OAuthError("invalid_request", "response_type is required: send code.")
+    if response_type != "code":
         raise OAuthError("unsupported_response_type", "response_type must be code.")
     code_challenge = _single(values, "code_challenge", "invalid_request")
     if code_challenge is None or not _CODE_CHALLENGE.fullmatch(code_challenge):
@@ -258,11 +263,16 @@ def _is_valid_state(state: str) -> bool:
 
 
 def _with_query(url: str, params: dict[str, Optional[str]]) -> str:
-    """The URL with `params` appended, keeping any query it already has byte for byte."""
-    parts = urlsplit(url)
+    """
+    The URL with `params` appended, keeping the rest byte for byte: re-serializing it would turn
+    `app:///cb` into `app:/cb`. Redirect URIs never carry a fragment, so the query ends the URL.
+    """
     added = urlencode({name: value for name, value in params.items() if value is not None})
-    query = f"{parts.query}&{added}" if parts.query else added
-    return urlunsplit(parts._replace(query=query))
+    if url.endswith(("?", "&")):
+        separator = ""
+    else:
+        separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{added}"
 
 
 async def authorization_details(
@@ -287,7 +297,7 @@ async def authorization_details(
 async def approve_authorization(
     db: AsyncSession, user: User, authorization_id: str, *, now: datetime
 ) -> RedirectResponseBody:
-    """Hand the app a code for the User's connection to it, reusing one that is still active."""
+    """Hand the app a code for the User's connection to it, reusing an unrevoked one."""
     hit_user_limit("approve_authorization", user.id, "20/minute")
     authorization, _ = await _get_pending(db, authorization_id, now=now)
     connection = await connections.find_or_create(

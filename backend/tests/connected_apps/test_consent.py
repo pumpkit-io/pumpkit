@@ -1,22 +1,22 @@
 from datetime import timedelta
-from urllib.parse import parse_qs, urlsplit
 
 import pytest_asyncio
 from sqlalchemy import select
 
 from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization
-from tests.connected_apps.conftest import MCP_URL, REDIRECT
-
-AUTHORIZE = "/api/v1/oauth/authorize"
-ISSUER = "http://localhost:5173"
+from tests.connected_apps.conftest import (
+    AUTHORIZE,
+    ISSUER,
+    MCP_URL,
+    REDIRECT,
+    query,
+    register,
+    start_for,
+)
 
 
 def details(request_id: str) -> str:
     return f"/api/v1/oauth/authorizations/{request_id}"
-
-
-def query(url: str) -> dict[str, str]:
-    return {key: values[0] for key, values in parse_qs(urlsplit(url).query).items()}
 
 
 @pytest_asyncio.fixture
@@ -36,19 +36,8 @@ async def request_id(start) -> str:
 
 
 async def test_the_details_name_the_app_and_where_it_sends_the_user(authed_client, new_browser):
-    registered = await new_browser().post(
-        "/api/v1/oauth/register",
-        json={"redirect_uris": ["https://claude.ai/cb"], "client_name": "Claude"},
-    )
-    started = await new_browser().get(
-        AUTHORIZE,
-        params={
-            "client_id": registered.json()["client_id"],
-            "response_type": "code",
-            "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-            "code_challenge_method": "S256",
-        },
-    )
+    client_id = await register(new_browser(), "https://claude.ai/cb", client_name="Claude")
+    started = await start_for(new_browser(), client_id)
     web_request = query(started.headers["location"])["request"]
 
     response = await authed_client.get(details(web_request))
@@ -79,24 +68,19 @@ async def test_an_app_on_the_users_computer_has_no_redirect_host(authed_client, 
 
 
 async def test_a_custom_scheme_redirect_is_local_too(authed_client, new_browser):
-    registered = await new_browser().post(
-        "/api/v1/oauth/register",
-        json={"redirect_uris": ["cursor://anysphere/cb"], "token_endpoint_auth_method": "none"},
-    )
-    started = await new_browser().get(
-        AUTHORIZE,
-        params={
-            "client_id": registered.json()["client_id"],
-            "response_type": "code",
-            "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-            "code_challenge_method": "S256",
-        },
-    )
+    client_id = await register(new_browser(), "cursor://anysphere/cb")
+    started = await start_for(new_browser(), client_id)
 
     body = (await authed_client.get(details(query(started.headers["location"])["request"]))).json()
 
     assert body["client"]["is_local"] is True
     assert body["client"]["redirect_host"] is None
+
+
+async def test_the_details_are_never_cached(authed_client, request_id):
+    response = await authed_client.get(details(request_id))
+
+    assert response.headers["cache-control"] == "no-store"
 
 
 async def test_the_details_need_a_signed_in_user(new_browser, request_id):
@@ -169,26 +153,15 @@ async def test_approving_hands_the_app_a_code_with_state_and_issuer(
 async def test_the_code_comes_back_in_the_redirect_uris_own_query(
     authed_client, new_browser, subscribed
 ):
-    registered = await new_browser().post(
-        "/api/v1/oauth/register",
-        json={"redirect_uris": ["https://app.example/cb?tenant=1"]},
-    )
-    started = await new_browser().get(
-        AUTHORIZE,
-        params={
-            "client_id": registered.json()["client_id"],
-            "response_type": "code",
-            "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-            "code_challenge_method": "S256",
-        },
-    )
+    client_id = await register(new_browser(), "https://app.example/cb?team=1")
+    started = await start_for(new_browser(), client_id)
 
     response = await authed_client.post(
         f"{details(query(started.headers['location'])['request'])}/approve"
     )
 
     received = query(response.json()["redirect_url"])
-    assert received["tenant"] == "1"
+    assert received["team"] == "1"
     assert "code" in received
     assert "state" not in received
 
@@ -196,9 +169,12 @@ async def test_the_code_comes_back_in_the_redirect_uris_own_query(
 async def test_approving_twice_is_404(authed_client, request_id, subscribed):
     await authed_client.post(f"{details(request_id)}/approve")
 
-    response = await authed_client.post(f"{details(request_id)}/approve")
+    assert (await authed_client.post(f"{details(request_id)}/approve")).status_code == 404
 
-    assert response.status_code == 404
+
+async def test_an_approved_request_has_no_details(authed_client, request_id, subscribed):
+    await authed_client.post(f"{details(request_id)}/approve")
+
     assert (await authed_client.get(details(request_id))).status_code == 404
 
 
@@ -242,7 +218,17 @@ async def test_denying_tells_the_app_the_user_refused(authed_client, request_id,
         "error_description": received["error_description"]
     }
     assert (await db.execute(select(AppConnection))).first() is None
+
+
+async def test_denying_twice_is_404(authed_client, request_id):
+    await authed_client.post(f"{details(request_id)}/deny")
+
     assert (await authed_client.post(f"{details(request_id)}/deny")).status_code == 404
+
+
+async def test_a_denied_request_has_no_details(authed_client, request_id):
+    await authed_client.post(f"{details(request_id)}/deny")
+
     assert (await authed_client.get(details(request_id))).status_code == 404
 
 

@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-# The one scope Pumpkit grants (ADR 0020): an app may use every tool the User can.
+# The one scope every app gets (ADR 0020): an app may use every tool the User can.
 SCOPE = "pumpkit"
 
 ACCESS_TOKEN_LIFETIME = timedelta(hours=1)
