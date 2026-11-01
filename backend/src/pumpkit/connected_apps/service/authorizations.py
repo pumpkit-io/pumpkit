@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import hmac
+import re
 from datetime import datetime
 from typing import Optional, cast
 
@@ -12,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization, OAuthClient
 from pumpkit.connected_apps.service.tokens import AUTHORIZATION_REQUEST_LIFETIME, CODE_LIFETIME
 from pumpkit.core.security import generate_token, hash_token
+
+# RFC 7636 section 4.1: 43 to 128 unreserved characters.
+_CODE_VERIFIER = re.compile(r"[A-Za-z0-9\-._~]{43,128}")
 
 
 async def create_pending(
@@ -111,7 +115,9 @@ async def _decide(
 
 
 def pkce_matches(verifier: str, challenge: str) -> bool:
-    """RFC 7636's S256 check, in constant time."""
+    """RFC 7636's S256 check, in constant time. A verifier of the wrong shape never matches."""
+    if not _CODE_VERIFIER.fullmatch(verifier):
+        return False
     digest = hashlib.sha256(verifier.encode()).digest()
     computed = base64.urlsafe_b64encode(digest).decode().rstrip("=")
     return hmac.compare_digest(computed, challenge)
@@ -121,8 +127,8 @@ async def find_code(
     db: AsyncSession, code: str, *, now: datetime
 ) -> Optional[tuple[OAuthAuthorization, AppConnection]]:
     """
-    The approved request a code belongs to and the connection it is for, while the code is live
-    or once it was exchanged, however long ago: presenting it again is reuse either way.
+    The approved request and connection a code is for, or None when the code is unknown or
+    expired. A code already exchanged is found however long ago: presenting it again is reuse.
     """
     row = (
         await db.execute(

@@ -44,8 +44,8 @@ async def authenticate(
     db: AsyncSession, client_id: str, secret: Optional[str]
 ) -> Optional[OAuthClient]:
     """
-    The app, unless it is unknown or was registered with a secret `secret` doesn't match. A
-    public app's secret is ignored, since some apps send an empty one.
+    The app, or None when it is unknown, or was registered with a secret and `secret` doesn't
+    match it. A public app's secret is ignored, since some apps send an empty one.
     """
     client = await get_client(db, client_id)
     if client is None or client.client_secret_hash is None:

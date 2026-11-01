@@ -455,7 +455,8 @@ def _basic_credentials(credentials: str) -> Optional[tuple[str, str]]:
         decoded = base64.b64decode(credentials, validate=True).decode()
     except (binascii.Error, UnicodeDecodeError):
         return None
-    client_id, colon, secret = decoded.partition(":")
+    # The last colon: a client id may be an unencoded URL, and Pumpkit secrets never hold one.
+    client_id, colon, secret = decoded.rpartition(":")
     if not colon:
         return None
     return unquote_plus(client_id), unquote_plus(secret)
@@ -511,12 +512,15 @@ async def _refresh(
     refresh_token = _single(values, "refresh_token", "invalid_request")
     if refresh_token is None:
         raise OAuthError("invalid_request", "refresh_token is required.")
+    unknown = OAuthError(
+        "invalid_grant", "The refresh token is unknown or the app is disconnected."
+    )
     found = await tokens.find_refresh_token(db, refresh_token)
-    if found is None or found[1].client_id != client.id or found[1].revoked_at is not None:
-        raise OAuthError(
-            "invalid_grant", "The refresh token is unknown or the app is disconnected."
-        )
+    if found is None:
+        raise unknown
     presented, connection = found
+    if connection.client_id != client.id or connection.revoked_at is not None:
+        raise unknown
     rotated_at = presented.rotated_at
     if rotated_at is not None and as_utc(rotated_at) + REFRESH_REUSE_GRACE < now:
         # Someone holds a copy of a token exchanged a while ago: likely theft.
@@ -549,23 +553,21 @@ async def revoke(
     values = _grouped(params)
     try:
         client = await _authenticate_client(db, values, authorization_header)
-        token = _single(values, "token", "invalid_request")
-        if token is None:
+        presented = _single(values, "token", "invalid_request")
+        if presented is None:
             raise OAuthError("invalid_request", "token is required.")
     except OAuthError as error:
         return error.response()
 
     # Both kinds are looked up whatever `token_type_hint` says, which RFC 7009 allows.
-    found_refresh = await tokens.find_refresh_token(db, token)
+    found_refresh = await tokens.find_refresh_token(db, presented)
     if found_refresh is not None:
         if found_refresh[1].client_id == client.id:
             await connections.revoke(db, found_refresh[1].id, now=now)
     else:
-        found_access = await tokens.find_access_token(db, token)
+        found_access = await tokens.find_access_token(db, presented)
         if found_access is not None and found_access[1].client_id == client.id:
-            access_token, _ = found_access
-            if access_token.revoked_at is None:
-                access_token.revoked_at = now
+            await tokens.revoke_access_token(db, found_access[0], now=now)
     await db.commit()
     return Response(status_code=200, headers=NO_STORE)
 

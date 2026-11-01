@@ -1,11 +1,13 @@
 import base64
+import hashlib
 from datetime import timedelta
 from urllib.parse import quote_plus
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import select
 
-from pumpkit.connected_apps.models import AppConnection
+from pumpkit.connected_apps.models import AppConnection, OAuthClient
 from tests.connected_apps.conftest import (
     MCP_URL,
     REDIRECT,
@@ -13,10 +15,8 @@ from tests.connected_apps.conftest import (
     VERIFIER,
     approved_code,
     exchange,
-    query,
     refresh,
     register,
-    start_for,
 )
 
 pytestmark = pytest.mark.usefixtures("sells_no_plans")
@@ -44,7 +44,7 @@ async def test_the_app_exchanges_its_code_for_an_access_and_a_refresh_token(
     assert body == {"token_type": "Bearer", "expires_in": 3600, "scope": "pumpkit"}
 
 
-async def refused(response, error: str, status_code: int = 400) -> None:
+def refused(response, error: str, status_code: int = 400) -> None:
     assert response.status_code == status_code, response.text
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["pragma"] == "no-cache"
@@ -58,7 +58,25 @@ async def test_a_wrong_code_verifier_is_refused(authed_client, app, oauth_client
 
     response = await exchange(app, oauth_client, code, code_verifier="x" * 43)
 
-    await refused(response, "invalid_grant")
+    refused(response, "invalid_grant")
+
+
+@pytest.mark.parametrize(
+    "verifier",
+    ["x" * 42, "x" * 129, VERIFIER[:-1] + "+", VERIFIER[:-1] + "="],
+    ids=["too-short", "too-long", "plus", "padding"],
+)
+async def test_a_code_verifier_outside_rfc_7636s_shape_is_refused(
+    authed_client, app, oauth_client, verifier
+):
+    # The verifier's own S256 challenge, so only its shape can refuse it.
+    digest = hashlib.sha256(verifier.encode()).digest()
+    challenge = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+    code = await approved_code(authed_client, app, oauth_client, code_challenge=challenge)
+
+    response = await exchange(app, oauth_client, code, code_verifier=verifier)
+
+    refused(response, "invalid_grant")
 
 
 async def test_a_missing_code_verifier_is_refused(authed_client, app, oauth_client):
@@ -74,7 +92,7 @@ async def test_a_missing_code_verifier_is_refused(authed_client, app, oauth_clie
         },
     )
 
-    await refused(response, "invalid_grant")
+    refused(response, "invalid_grant")
 
 
 async def test_a_redirect_uri_other_than_the_one_sent_to_authorize_is_refused(
@@ -84,7 +102,7 @@ async def test_a_redirect_uri_other_than_the_one_sent_to_authorize_is_refused(
 
     response = await exchange(app, oauth_client, code, redirect_uri="http://127.0.0.1:9/callback")
 
-    await refused(response, "invalid_grant")
+    refused(response, "invalid_grant")
 
 
 async def test_the_redirect_uri_sent_to_authorize_must_be_sent_again(
@@ -102,16 +120,13 @@ async def test_the_redirect_uri_sent_to_authorize_must_be_sent_again(
         },
     )
 
-    await refused(response, "invalid_grant")
+    refused(response, "invalid_grant")
 
 
 async def test_an_app_that_sent_no_redirect_uri_to_authorize_needs_none(
     authed_client, app, oauth_client
 ):
-    started = await start_for(app, oauth_client)
-    request_id = query(started.headers["location"])["request"]
-    approved = await authed_client.post(f"/api/v1/oauth/authorizations/{request_id}/approve")
-    code = query(approved.json()["redirect_url"])["code"]
+    code = await approved_code(authed_client, app, oauth_client, send_redirect_uri=False)
 
     response = await app.post(
         TOKEN,
@@ -137,18 +152,18 @@ async def test_an_expired_code_is_refused(authed_client, app, oauth_client, cloc
     code = await approved_code(authed_client, app, oauth_client)
     clock.advance(timedelta(minutes=2))
 
-    await refused(await exchange(app, oauth_client, code), "invalid_grant")
+    refused(await exchange(app, oauth_client, code), "invalid_grant")
 
 
 async def test_an_unknown_code_is_refused(app, oauth_client):
-    await refused(await exchange(app, oauth_client, "nope"), "invalid_grant")
+    refused(await exchange(app, oauth_client, "nope"), "invalid_grant")
 
 
 async def test_another_apps_code_is_refused(authed_client, app, oauth_client):
     code = await approved_code(authed_client, app, oauth_client)
     other = await register(app, REDIRECT)
 
-    await refused(await exchange(app, other, code), "invalid_grant")
+    refused(await exchange(app, other, code), "invalid_grant")
 
 
 async def test_a_resource_other_than_the_mcp_url_is_refused(authed_client, app, oauth_client):
@@ -156,7 +171,7 @@ async def test_a_resource_other_than_the_mcp_url_is_refused(authed_client, app, 
 
     response = await exchange(app, oauth_client, code, resource="https://evil.example/mcp")
 
-    await refused(response, "invalid_target")
+    refused(response, "invalid_target")
 
 
 async def test_the_mcp_url_is_accepted_as_the_resource(authed_client, app, oauth_client):
@@ -169,9 +184,9 @@ async def test_using_a_code_twice_disconnects_the_app(authed_client, app, oauth_
     code = await approved_code(authed_client, app, oauth_client)
     first = (await exchange(app, oauth_client, code)).json()
 
-    await refused(await exchange(app, oauth_client, code), "invalid_grant")
+    refused(await exchange(app, oauth_client, code), "invalid_grant")
 
-    await refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
+    refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
     assert any(
         record.levelname == "ERROR" and "reuse" in record.getMessage() for record in caplog.records
     )
@@ -183,7 +198,7 @@ async def test_a_suspended_user_cannot_exchange_a_code(
     code = await approved_code(authed_client, app, oauth_client)
     await suspend_user(user.email)
 
-    await refused(await exchange(app, oauth_client, code), "invalid_grant")
+    refused(await exchange(app, oauth_client, code), "invalid_grant")
 
 
 async def test_a_disconnected_apps_code_is_refused(authed_client, app, oauth_client, db, clock):
@@ -192,27 +207,27 @@ async def test_a_disconnected_apps_code_is_refused(authed_client, app, oauth_cli
     connection.revoked_at = clock()
     await db.commit()
 
-    await refused(await exchange(app, oauth_client, code), "invalid_grant")
+    refused(await exchange(app, oauth_client, code), "invalid_grant")
 
 
 async def test_an_unknown_app_is_refused(app):
-    await refused(await exchange(app, "oauth_client_nope", "nope"), "invalid_client", 401)
+    refused(await exchange(app, "oauth_client_nope", "nope"), "invalid_client", 401)
 
 
 async def test_another_grant_type_is_refused(app, oauth_client):
     response = await app.post(TOKEN, data={"grant_type": "password", "client_id": oauth_client})
 
-    await refused(response, "unsupported_grant_type")
+    refused(response, "unsupported_grant_type")
 
 
 async def test_a_missing_grant_type_is_refused(app, oauth_client):
-    await refused(await app.post(TOKEN, data={"client_id": oauth_client}), "invalid_request")
+    refused(await app.post(TOKEN, data={"client_id": oauth_client}), "invalid_request")
 
 
 async def test_a_json_body_gets_an_oauth_error_not_a_detail(app, oauth_client):
     response = await app.post(TOKEN, json={"grant_type": "authorization_code"})
 
-    await refused(response, "invalid_client", 401)
+    refused(response, "invalid_client", 401)
 
 
 async def test_a_field_sent_twice_is_refused(authed_client, app, oauth_client):
@@ -224,7 +239,7 @@ async def test_a_field_sent_twice_is_refused(authed_client, app, oauth_client):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    await refused(response, "invalid_request")
+    refused(response, "invalid_request")
 
 
 @pytest.fixture
@@ -277,9 +292,9 @@ async def test_a_rotated_refresh_token_presented_after_two_minutes_disconnects_t
     rotated = (await refresh(app, oauth_client, first["refresh_token"])).json()
     clock.advance(timedelta(minutes=2, seconds=1))
 
-    await refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
+    refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
 
-    await refused(await refresh(app, oauth_client, rotated["refresh_token"]), "invalid_grant")
+    refused(await refresh(app, oauth_client, rotated["refresh_token"]), "invalid_grant")
     assert any(
         record.levelname == "ERROR" and "reuse" in record.getMessage() for record in caplog.records
     )
@@ -298,11 +313,11 @@ async def test_an_expired_refresh_token_is_refused(app, oauth_client, connected,
     first = await connected()
     clock.advance(timedelta(days=90))
 
-    await refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
+    refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
 
 
 async def test_an_unknown_refresh_token_is_refused(app, oauth_client):
-    await refused(await refresh(app, oauth_client, "pumpkit_rt_nope"), "invalid_grant")
+    refused(await refresh(app, oauth_client, "pumpkit_rt_nope"), "invalid_grant")
 
 
 async def test_a_missing_refresh_token_is_refused(app, oauth_client):
@@ -310,14 +325,14 @@ async def test_a_missing_refresh_token_is_refused(app, oauth_client):
         TOKEN, data={"grant_type": "refresh_token", "client_id": oauth_client}
     )
 
-    await refused(response, "invalid_request")
+    refused(response, "invalid_request")
 
 
 async def test_another_apps_refresh_token_is_refused(app, oauth_client, connected):
     first = await connected()
     other = await register(app, REDIRECT)
 
-    await refused(await refresh(app, other, first["refresh_token"]), "invalid_grant")
+    refused(await refresh(app, other, first["refresh_token"]), "invalid_grant")
 
 
 async def test_refreshing_for_another_resource_is_refused(app, oauth_client, connected):
@@ -327,7 +342,7 @@ async def test_refreshing_for_another_resource_is_refused(app, oauth_client, con
         app, oauth_client, first["refresh_token"], resource="https://evil.example/mcp"
     )
 
-    await refused(response, "invalid_target")
+    refused(response, "invalid_target")
 
 
 async def test_refreshing_ignores_the_scope_sent(app, oauth_client, connected):
@@ -342,7 +357,7 @@ async def test_a_suspended_user_cannot_refresh(app, oauth_client, connected, sus
     first = await connected()
     await suspend_user(user.email)
 
-    await refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
+    refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
 
 
 async def test_a_suspended_user_gets_no_fresh_pair_within_the_grace(
@@ -352,7 +367,7 @@ async def test_a_suspended_user_gets_no_fresh_pair_within_the_grace(
     await refresh(app, oauth_client, first["refresh_token"])
     await suspend_user(user.email)
 
-    await refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
+    refused(await refresh(app, oauth_client, first["refresh_token"]), "invalid_grant")
 
 
 @pytest.fixture
@@ -422,7 +437,7 @@ async def test_a_secret_app_without_its_secret_is_refused(authed_client, app, se
 
     response = await app.post(TOKEN, data={**body, "client_id": client_id})
 
-    await refused(response, "invalid_client", 401)
+    refused(response, "invalid_client", 401)
     assert "www-authenticate" not in response.headers
 
 
@@ -437,7 +452,7 @@ async def test_a_wrong_secret_over_basic_is_refused_with_a_basic_challenge(
         headers=basic(client_id, "pumpkit_cs_wrong"),
     )
 
-    await refused(response, "invalid_client", 401)
+    refused(response, "invalid_client", 401)
     assert response.headers["www-authenticate"] == 'Basic realm="pumpkit"'
 
 
@@ -446,7 +461,7 @@ async def test_a_malformed_basic_header_is_refused(app):
         TOKEN, data={"grant_type": "refresh_token"}, headers={"Authorization": "Basic !!!"}
     )
 
-    await refused(response, "invalid_client", 401)
+    refused(response, "invalid_client", 401)
     assert response.headers["www-authenticate"] == 'Basic realm="pumpkit"'
 
 
@@ -460,7 +475,7 @@ async def test_basic_and_a_different_client_id_in_the_body_are_refused(
         TOKEN, data={**body, "client_id": oauth_client}, headers=basic(client_id, secret)
     )
 
-    await refused(response, "invalid_client", 401)
+    refused(response, "invalid_client", 401)
 
 
 async def test_a_public_apps_empty_secret_is_ignored(authed_client, app, oauth_client):
@@ -469,6 +484,34 @@ async def test_a_public_apps_empty_secret_is_ignored(authed_client, app, oauth_c
     response = await exchange(app, oauth_client, code, client_secret="")
 
     assert response.status_code == 200, response.text
+
+
+@pytest_asyncio.fixture
+async def url_client(db, clock) -> str:
+    """The id of an app whose client id is a metadata document URL."""
+    client = OAuthClient(
+        id="https://app.example/c.json",
+        kind="metadata_document",
+        name="App",
+        redirect_uris=[REDIRECT],
+        token_endpoint_auth_method="none",
+        created_at=clock(),
+    )
+    db.add(client)
+    await db.commit()
+    return client.id
+
+
+@pytest.mark.parametrize("encode", [quote_plus, str], ids=["encoded", "unencoded"])
+async def test_basic_carries_a_url_client_id(app, url_client, encode):
+    joined = f"{encode(url_client)}:"
+    headers = {"Authorization": f"Basic {base64.b64encode(joined.encode()).decode()}"}
+
+    response = await app.post(
+        TOKEN, data={"grant_type": "refresh_token", "refresh_token": "nope"}, headers=headers
+    )
+
+    refused(response, "invalid_grant")
 
 
 async def test_a_public_app_may_use_basic_with_an_empty_secret(authed_client, app, oauth_client):
@@ -485,5 +528,5 @@ async def test_the_token_endpoint_allows_three_hundred_requests_a_minute_per_add
 
     response = await app.post(TOKEN, data={})
 
-    await refused(response, "temporarily_unavailable", 429)
+    refused(response, "temporarily_unavailable", 429)
     assert "retry-after" in response.headers

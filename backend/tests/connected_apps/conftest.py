@@ -53,14 +53,21 @@ async def start_for(browser: AsyncClient, client_id: str, **params: str) -> Resp
 
 
 async def approved_code(
-    user_browser: AsyncClient, app: AsyncClient, client_id: str, **params
+    user_browser: AsyncClient,
+    app: AsyncClient,
+    client_id: str,
+    *,
+    send_redirect_uri: bool = True,
+    **params,
 ) -> str:
     """
     The code the app receives once the signed-in `user_browser` allows its authorization, which
-    sends `REDIRECT` unless told otherwise. Approving needs access: request `subscribed` or
-    `sells_no_plans` first.
+    sends `REDIRECT` unless told otherwise or `send_redirect_uri` is False. Approving needs
+    access: request `subscribed` or `sells_no_plans` first.
     """
-    started = await start_for(app, client_id, **{"redirect_uri": REDIRECT, **params})
+    if send_redirect_uri:
+        params = {"redirect_uri": REDIRECT, **params}
+    started = await start_for(app, client_id, **params)
     request_id = query(started.headers["location"])["request"]
     approved = await user_browser.post(f"/api/v1/oauth/authorizations/{request_id}/approve")
     assert approved.status_code == 200, approved.text

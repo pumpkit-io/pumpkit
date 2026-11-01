@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.connected_apps.models import AppConnection, OAuthAccessToken, OAuthRefreshToken
@@ -76,10 +76,26 @@ async def rotate(db: AsyncSession, presented: OAuthRefreshToken, *, now: datetim
     rotation, and two concurrent rotations both get a pair, as a retry within the grace would.
     """
     issued = await issue_pair(db, app_connection_id=presented.app_connection_id, now=now)
-    if presented.rotated_at is None:
-        presented.rotated_at = now
-        presented.replaced_by = issued.refresh_token_id
+    # Conditional, so a concurrent rotation that lost keeps the winner's successor and grace clock.
+    await db.execute(
+        update(OAuthRefreshToken)
+        .where(OAuthRefreshToken.id == presented.id, OAuthRefreshToken.rotated_at.is_(None))
+        .values(rotated_at=now, replaced_by=issued.refresh_token_id)
+        .execution_options(synchronize_session="fetch")
+    )
     return issued
+
+
+async def revoke_access_token(
+    db: AsyncSession, access_token: OAuthAccessToken, *, now: datetime
+) -> None:
+    """Revoke this access token alone, keeping the time of an earlier revocation."""
+    await db.execute(
+        update(OAuthAccessToken)
+        .where(OAuthAccessToken.id == access_token.id, OAuthAccessToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+        .execution_options(synchronize_session="fetch")
+    )
 
 
 async def find_access_token(
