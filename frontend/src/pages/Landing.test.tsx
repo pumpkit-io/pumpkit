@@ -428,6 +428,13 @@ describe('Landing header', () => {
     ).toBeVisible();
   });
 
+  it('never shows Get started in the hero button while the catalogue is loading', async () => {
+    renderLanding();
+    const hero = screen.getByRole('main');
+    expect(within(hero).queryByRole('link', { name: 'Get started' })).not.toBeInTheDocument();
+    await screen.findByRole('link', { name: 'Start a 7-day trial for €0' });
+  });
+
   it('keeps Get started on both buttons when the Instance offers no Trial', async () => {
     fakePlansEndpoint(200, { ...OFFER, trial: null, data: [MONTHLY_PLAN, ANNUAL_PLAN] });
     renderLanding();

@@ -19,7 +19,7 @@ const NAV_LINKS = [
 
 const MOBILE_MENU_ID = 'landing-mobile-menu';
 
-export function HeroHeader({ ctaLabel }: { ctaLabel: string }) {
+export function HeroHeader({ ctaLabel }: { ctaLabel: string | null }) {
   const { app_name, sells_plans } = useInstance();
   const links = sells_plans ? NAV_LINKS : NAV_LINKS.filter(({ href }) => href !== '#pricing');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -84,7 +84,7 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string }) {
           if (surface === 'mobile') closeMenu();
         }}
       >
-        <ArrowLabel>{ctaLabel}</ArrowLabel>
+        <ArrowLabel pending={ctaLabel === null}>{ctaLabel}</ArrowLabel>
       </Link>
     </Button>
   );
