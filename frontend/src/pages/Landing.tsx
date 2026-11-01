@@ -1,4 +1,5 @@
 import { AuthorsSection } from '@/components/blocks/authors-section';
+import { CtaStyleSwitcher } from '@/components/blocks/cta-style';
 import { HeroHeader } from '@/components/blocks/hero-header';
 import { HeroSection } from '@/components/blocks/hero-section';
 import { Mascot } from '@/components/blocks/mascot';
@@ -16,6 +17,7 @@ export function Landing() {
   return (
     <>
       <HeroHeader />
+      <CtaStyleSwitcher />
       <main>
         <HeroSection />
         <AuthorsSection />

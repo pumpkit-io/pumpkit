@@ -9,6 +9,7 @@ import {
   useGitHubStars,
 } from '@/components/blocks/github';
 import { ArrowLabel } from '@/components/blocks/arrow-label';
+import { ctaClasses, useCtaStyle } from '@/components/blocks/cta-style';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { useInstance } from '@/features/instance/useInstance';
@@ -75,14 +76,14 @@ export function HeroHeader() {
       </li>
     ));
 
+  const ctaStyle = useCtaStyle();
+
   const getStarted = (surface: Surface) => (
     <Button
       asChild
       size="sm"
-      className={cn(
-        'group/cta transition-all duration-200 hover:scale-105 motion-reduce:hover:scale-100',
-        surface === 'mobile' ? 'w-full' : 'text-base',
-      )}
+      variant="outline"
+      className={cn(ctaClasses(ctaStyle), surface === 'mobile' ? 'w-full' : 'text-base')}
     >
       <Link
         to="/login"
