@@ -31,7 +31,7 @@ const staggeredVariants: { container: Variants; item: Variants } = {
   ...transitionVariants,
 };
 
-export function HeroSection() {
+export function HeroSection({ ctaLabel }: { ctaLabel: string }) {
   return (
     <div className="overflow-hidden">
       <div
@@ -70,7 +70,7 @@ export function HeroSection() {
                     className={cn(CTA_CLASSES, 'h-12 rounded-xl px-5 text-lg xl:text-[19px]')}
                   >
                     <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
-                      <ArrowLabel>Start a 7-day trial for $0</ArrowLabel>
+                      <ArrowLabel>{ctaLabel}</ArrowLabel>
                     </Link>
                   </Button>
                 </CtaFrame>

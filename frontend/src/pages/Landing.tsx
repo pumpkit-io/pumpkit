@@ -1,4 +1,6 @@
 import { AuthorsSection } from '@/components/blocks/authors-section';
+import { ctaLabels } from '@/components/blocks/cta-labels';
+import { usePlanCatalog } from '@/components/blocks/use-plan-catalog';
 import { HeroHeader } from '@/components/blocks/hero-header';
 import { HeroSection } from '@/components/blocks/hero-section';
 import { Mascot } from '@/components/blocks/mascot';
@@ -12,14 +14,16 @@ const FOOTER_NAP_DELAY_MS = 5000;
 
 export function Landing() {
   const { sells_plans } = useInstance();
+  const catalog = usePlanCatalog(sells_plans);
+  const labels = ctaLabels(catalog);
 
   return (
     <>
-      <HeroHeader />
+      <HeroHeader ctaLabel={labels.nav} />
       <main>
-        <HeroSection />
+        <HeroSection ctaLabel={labels.hero} />
         <AuthorsSection />
-        {sells_plans && <PricingSection />}
+        {sells_plans && <PricingSection state={catalog} />}
         <OpenSourceSection />
       </main>
       <div className="flex justify-center pt-8">

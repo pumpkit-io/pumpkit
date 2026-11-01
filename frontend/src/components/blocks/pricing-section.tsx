@@ -1,18 +1,16 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CtaFrame } from '@/components/blocks/cta-frame';
 import { Mascot } from '@/components/blocks/mascot';
 import { Button } from '@/components/ui/button';
-import { billingService, type Plan, type PlanCatalog } from '@/services/billingService';
+import type { PlanCatalogState } from '@/components/blocks/use-plan-catalog';
+import type { Plan, PlanCatalog } from '@/services/billingService';
 import { OfferLineContent } from '@/features/billing/OfferLineContent';
 import { offerLines, trialLine } from '@/features/billing/planOffer';
 import { track } from '@/lib/analytics';
 import { formatPrice } from '@/lib/money';
 import { useOnceVisible } from '@/lib/useOnceVisible';
 import { cn } from '@/lib/utils';
-
-type State =
-  { status: 'loading' } | { status: 'ready'; catalog: PlanCatalog } | { status: 'error' };
 
 type Interval = 'monthly' | 'annual';
 
@@ -205,22 +203,10 @@ function PricingCard({ catalog }: { catalog: PlanCatalog }) {
   );
 }
 
-export function PricingSection() {
-  const [state, setState] = useState<State>({ status: 'loading' });
+export function PricingSection({ state }: { state: PlanCatalogState }) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const headingId = useId();
   useOnceVisible(sectionRef, () => track('landing_pricing_section_viewed'));
-
-  useEffect(() => {
-    let cancelled = false;
-    billingService
-      .fetchPlans()
-      .then((catalog) => !cancelled && setState({ status: 'ready', catalog }))
-      .catch(() => !cancelled && setState({ status: 'error' }));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const message =
     state.status === 'loading'

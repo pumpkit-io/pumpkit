@@ -8,7 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
-- The landing page headline now reads "Run your X on autopilot with" and rotates through Claude Code, Codex, Cursor and Gemini CLI, each with its logo, and the text under it now says Pumpkit writes and schedules your posts and can be used in the web app or through the MCP. The landing page buttons now read "Start a 7-day trial for $0" and "Start for $0", with an arrow that appears on hover.
+- The landing page headline now reads "Run your X on autopilot with" and rotates through Claude Code, Codex, Cursor and Gemini CLI, each with its logo, and the text under it now says Pumpkit writes and schedules your posts and can be used in the web app or through the MCP. The landing page buttons are white with an arrow that appears on hover. Where your Instance offers a Trial, they read "Start a 7-day trial for $0" and "Start for $0", with your Trial's length and Plan currency; otherwise they read "Get started".
 - **Upgrade notes:** in this changelog now mark only a manual step an upgrade needs; an entry with nothing to do by hand says so in its prose. Self-hosters can print just the entries that need a step with `sh scripts/release-notes.sh --manual-steps X.Y.Z`, or `FROM..TO` for the releases between two versions.
 
 ## [0.5.0] - 2026-11-01

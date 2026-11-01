@@ -206,9 +206,9 @@ describe('Landing hero', () => {
     expect(visual).toHaveTextContent(/^Run your\s+on autopilot with\s*Claude Code$/);
   });
 
-  it('tracks the hero button and no longer tracks a screenshot', () => {
+  it('tracks the hero button and no longer tracks a screenshot', async () => {
     renderLanding();
-    fireEvent.click(screen.getByRole('link', { name: 'Start a 7-day trial for $0' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Start a 7-day trial for €0' }));
     expect(track).toHaveBeenCalledWith('landing_hero_cta_clicked');
     expect(vi.mocked(track).mock.calls.map(([event]) => event)).not.toContain(
       'landing_hero_screenshot_viewed',
@@ -406,15 +406,34 @@ describe('Landing header', () => {
     );
   });
 
-  it('sends every Get started, Start for $0 and trial button to the sign-in page', () => {
+  it('sends every Get started and Trial button to the sign-in page', async () => {
     renderLanding();
+    await screen.findByRole('link', { name: 'Start a 7-day trial for €0' });
     const signInLinks = screen.getAllByRole('link', {
-      name: /^(get started|start for \$0|start a 7-day trial for \$0)$/i,
+      name: /^(get started|start for €0|start a 7-day trial for €0)$/i,
     });
     expect(signInLinks.map((link) => link.textContent)).toEqual(
-      expect.arrayContaining(['Get started', 'Start for $0', 'Start a 7-day trial for $0']),
+      expect.arrayContaining(['Start for €0', 'Start a 7-day trial for €0', 'Get started']),
     );
     for (const link of signInLinks) expect(link).toHaveAttribute('href', '/login');
+  });
+
+  it('names the Trial and its price in the hero and nav buttons once the catalogue loads', async () => {
+    renderLanding();
+    expect(
+      await screen.findByRole('link', { name: 'Start a 7-day trial for €0' }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Start for €0' }),
+    ).toBeVisible();
+  });
+
+  it('keeps Get started on both buttons when the Instance offers no Trial', async () => {
+    fakePlansEndpoint(200, { ...OFFER, trial: null, data: [MONTHLY_PLAN, ANNUAL_PLAN] });
+    renderLanding();
+    await screen.findByRole('list', { name: 'Included' });
+    expect(screen.queryByRole('link', { name: /trial|for €0/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Get started' }).length).toBeGreaterThanOrEqual(3);
   });
 
   it('tracks the logo and the desktop links with their surface', () => {
@@ -423,7 +442,7 @@ describe('Landing header', () => {
     fireEvent.click(within(header).getByRole('link', { name: 'Pumpkit home' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Authors' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Pricing' }));
-    fireEvent.click(within(header).getByRole('link', { name: 'Start for $0' }));
+    fireEvent.click(within(header).getByRole('link', { name: 'Get started' }));
     expect(track).toHaveBeenCalledWith('landing_nav_logo_clicked');
     expect(track).toHaveBeenCalledWith('landing_nav_authors_clicked', { surface: 'desktop' });
     expect(track).toHaveBeenCalledWith('landing_nav_pricing_clicked', { surface: 'desktop' });
@@ -440,7 +459,7 @@ describe('Landing mobile menu', () => {
     const menu = screen.getByRole('navigation', { name: 'Menu' });
     expect(within(menu).getByRole('link', { name: 'Authors' })).toHaveAttribute('href', '#authors');
     expect(within(menu).getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '#pricing');
-    expect(within(menu).getByRole('link', { name: 'Start for $0' })).toHaveAttribute(
+    expect(within(menu).getByRole('link', { name: 'Get started' })).toHaveAttribute(
       'href',
       '/login',
     );
@@ -465,7 +484,7 @@ describe('Landing mobile menu', () => {
   it.each([
     ['Authors', 'landing_nav_authors_clicked'],
     ['Pricing', 'landing_nav_pricing_clicked'],
-    ['Start for $0', 'landing_nav_get_started_clicked'],
+    ['Get started', 'landing_nav_get_started_clicked'],
   ])('closes when %s is tapped and tracks it as mobile', (name, event) => {
     renderLanding();
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
