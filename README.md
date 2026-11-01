@@ -85,9 +85,9 @@ Only the first two are required. Each optional provider stays off until you set 
 
 The guide's [Providers](./docs/self-hosting.md#providers) section says where to get each key, links each pricing page and lists the callback URLs to register. [docs/configuration.md](./docs/configuration.md) describes every setting.
 
-## Use Pumpkit from Claude Code
+## Use Pumpkit from AI apps
 
-Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Create an API key in Settings and run the `claude mcp add` command it shows. Claude Code can then write and revise Posts, manage your Inspiration authors, and schedule or publish posts. See [docs/claude-code.md](./docs/claude-code.md).
+Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Paste that URL into Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor or VS Code, sign in to Pumpkit and click Allow: there is no key to copy. The app can then write and revise posts, manage your inspiration authors, and schedule or publish posts. Settings shows the URL and the steps for each app, and lists the apps you connected. See [docs/mcp.md](./docs/mcp.md).
 
 Self-hosted Instances get the MCP server in the first release after 0.1.0.
 
