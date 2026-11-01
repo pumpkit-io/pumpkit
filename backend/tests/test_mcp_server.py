@@ -1,17 +1,21 @@
-"""The MCP endpoint: API key authentication, the access gate and limits every tool shares (ADR 0012)."""
+"""
+The MCP endpoint: OAuth access token authentication (ADR 0020), the access gate and limits every
+tool shares (ADR 0012).
+"""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Optional
 from unittest.mock import MagicMock
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
+from pumpkit.connected_apps.models import AppConnection
 from pumpkit.core.analytics import posthog_client
+from pumpkit.core.time import as_utc
 from tests.conftest import FIXED_NOW
 from tests.mcp_client import MCP, McpClient, error_text
-
-API_KEYS = "/api/v1/api-keys"
 
 
 async def test_initialize_returns_the_server_instructions(subscribed, mcp):
@@ -84,7 +88,7 @@ async def test_tools_list_shows_the_inspiration_author_tools_with_their_annotati
     assert tools["list_inspiration_authors"]["description"]
 
 
-async def test_a_request_without_a_key_is_401_with_a_bearer_challenge(new_browser):
+async def test_a_request_without_a_token_is_401_with_a_bearer_challenge(new_browser):
     response = await McpClient(new_browser(), None).send("tools/list")
 
     assert response.status_code == 401
@@ -92,33 +96,25 @@ async def test_a_request_without_a_key_is_401_with_a_bearer_challenge(new_browse
     assert response.json() == {"detail": "Not authenticated"}
 
 
-async def test_an_unknown_key_is_401(subscribed, new_browser, api_key):
-    response = await McpClient(new_browser(), api_key + "x").send("tools/list")
+async def test_an_unknown_token_is_401(subscribed, new_browser, mcp_access_token):
+    response = await McpClient(new_browser(), mcp_access_token + "x").send("tools/list")
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
+    assert 'error="invalid_token"' in response.headers["www-authenticate"]
     assert response.json() == {"detail": "Could not validate credentials"}
 
 
-async def test_an_access_token_is_not_an_api_key(new_browser, authed_client):
-    access_token = authed_client.headers["Authorization"].removeprefix("Bearer ")
+async def test_a_web_session_access_token_is_401(subscribed, new_browser, authed_client):
+    session_token = authed_client.headers["Authorization"].removeprefix("Bearer ")
 
-    response = await McpClient(new_browser(), access_token).send("tools/list")
-
-    assert response.status_code == 401
-
-
-async def test_a_revoked_key_is_401(subscribed, mcp, authed_client):
-    [listed] = (await authed_client.get(API_KEYS)).json()["data"]
-    assert (await authed_client.delete(f"{API_KEYS}/{listed['id']}")).status_code == 204
-
-    response = await mcp.send("tools/list")
+    response = await McpClient(new_browser(), session_token).send("tools/list")
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
+    assert 'error="invalid_token"' in response.headers["www-authenticate"]
 
 
-async def test_a_suspended_users_key_is_401_until_the_suspension_ends(
+async def test_a_suspended_users_token_is_401_until_the_suspension_ends(
     subscribed, mcp, user, suspend_user, lift_suspension
 ):
     await suspend_user(user.email)
@@ -137,25 +133,27 @@ async def test_the_endpoint_refuses_get(subscribed, mcp):
     assert response.status_code == 405
 
 
-async def test_a_call_records_when_the_key_was_last_used_at_most_once_a_minute(
-    subscribed, mcp, authed_client, fixed_clock
+async def test_a_call_records_when_the_connection_was_last_used_at_most_once_a_minute(
+    fixed_clock, subscribed, mcp, db_session_maker, user
 ):
-    async def last_used_at() -> str:
-        return (await authed_client.get(API_KEYS)).json()["data"][0]["last_used_at"]
+    async def last_used_at() -> Optional[datetime]:
+        async with db_session_maker() as db:
+            used = await db.scalar(
+                select(AppConnection.last_used_at).where(AppConnection.user_id == user.id)
+            )
+        return as_utc(used) if used is not None else None
 
     assert await last_used_at() is None
     await mcp.call_tool("list_inspiration_authors")
-    assert await last_used_at() == "2026-10-10T12:00:30Z"
+    assert await last_used_at() == FIXED_NOW
 
     fixed_clock.advance(timedelta(seconds=59))
     await mcp.call_tool("list_inspiration_authors")
-    assert await last_used_at() == "2026-10-10T12:00:30Z"
+    assert await last_used_at() == FIXED_NOW
 
     fixed_clock.advance(timedelta(seconds=1))
     await mcp.call_tool("list_inspiration_authors")
-    assert await last_used_at() == (FIXED_NOW + timedelta(minutes=1)).isoformat().replace(
-        "+00:00", "Z"
-    )
+    assert await last_used_at() == FIXED_NOW + timedelta(minutes=1)
 
 
 async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_every_tool(

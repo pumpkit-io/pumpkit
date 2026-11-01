@@ -92,6 +92,12 @@ from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa
 from pumpkit.posts.service import set_text_from_version  # noqa: E402
 from pumpkit.x_connection.service import save_connection  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
+from tests.connected_apps.conftest import (  # noqa: E402
+    REDIRECT,
+    approved_code,
+    exchange,
+    register,
+)
 from tests.mcp_client import McpClient  # noqa: E402
 
 
@@ -563,23 +569,27 @@ async def authed_client(new_browser, sign_in_by_magic_link, user) -> AsyncClient
 
 
 @pytest_asyncio.fixture
-async def api_key(authed_client) -> str:
+async def mcp_access_token(new_browser, authed_client) -> str:
     """
-    The secret of an API key `user` creates through `POST /api-keys`, signed in for real.
-    Creating one needs access: request `subscribed` or `sells_no_plans` first.
+    The access token an app gets once `user`, signed in for real, allows it: it registers,
+    authorizes and redeems the code. Approving needs access: request `subscribed` or
+    `sells_no_plans` first.
     """
-    response = await authed_client.post("/api/v1/api-keys", json={"name": "Claude Code"})
-    assert response.status_code == 201, response.text
-    return response.json()["secret"]
+    app_browser = new_browser()
+    client_id = await register(app_browser, REDIRECT, client_name="Claude Code")
+    code = await approved_code(authed_client, app_browser, client_id)
+    response = await exchange(app_browser, client_id, code)
+    assert response.status_code == 200, response.text
+    return response.json()["access_token"]
 
 
 @pytest_asyncio.fixture
-async def mcp(new_browser, api_key) -> McpClient:
+async def mcp(new_browser, mcp_access_token) -> McpClient:
     """
-    Claude Code connected to the MCP endpoint with `api_key`, on a client without the
-    `get_current_user` override, so only the API key authenticates it.
+    Claude Code connected to the MCP endpoint with `mcp_access_token`, on a client without the
+    `get_current_user` override, so only the access token authenticates it.
     """
-    return McpClient(new_browser(), api_key)
+    return McpClient(new_browser(), mcp_access_token)
 
 
 async def _set_suspended_until(db: AsyncSession, email: str, until: Optional[datetime]) -> None:
