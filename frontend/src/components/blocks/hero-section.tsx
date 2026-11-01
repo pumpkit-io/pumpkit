@@ -45,13 +45,13 @@ export function HeroSection() {
             aria-hidden
             className="absolute inset-0 -z-10 size-full [background:radial-gradient(125%_125%_at_50%_100%,transparent_0%,hsl(var(--background))_75%)]"
           />
-          <div className="mx-auto grid max-w-[96rem] gap-12 px-6 lg:grid-cols-12 lg:items-center lg:gap-12">
+          <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
             <div className="text-center lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
-                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3rem] lg:leading-[1.05] xl:text-[4rem] 2xl:text-[5.5rem]">
+                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[3.75rem]">
                   <HeroHeadline />
                 </h1>
-                <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg xl:text-xl 2xl:text-2xl text-muted-foreground">
+                <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg xl:text-xl text-muted-foreground">
                   Pumpkit writes and schedules posts on X for you. Posts sound like you, or like
                   your favorite X accounts. Use it in the web app, or use the MCP to let your agents
                   run it.
@@ -60,11 +60,7 @@ export function HeroSection() {
 
               <AnimatedGroup variants={staggeredVariants} className="mt-10 flex justify-center">
                 <CtaFrame>
-                  <Button
-                    asChild
-                    size="lg"
-                    className="h-12 rounded-xl px-7 text-lg xl:h-14 xl:px-9 xl:text-xl"
-                  >
+                  <Button asChild size="lg" className="h-12 rounded-xl px-7 text-lg">
                     <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
                       Start writing
                     </Link>
