@@ -189,23 +189,26 @@ describe('Landing hero', () => {
     renderLanding();
     expect(screen.queryByText('Open source · built for X')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      /^Your ideas, in the style of the authors you admire\.$/,
+      /^Run your X on autopilot with Claude Code, Codex, Cursor or Gemini CLI\./,
     );
     expect(
       screen.getByText(
-        'Write a brief, pick up to three X authors to learn style from, and get a post ready to paste. Not quite right? Say what to change and get a new version.',
+        'Pumpkit writes and schedules posts on X for you. Posts sound like you, or like your favorite X accounts. Use it in the web app, or use the MCP to let your agents run it.',
       ),
     ).toBeInTheDocument();
   });
 
-  it('sets no headline word apart from the rest', () => {
+  it('reads the headline once to assistive tech and shows one tool name at a time', () => {
     renderLanding();
-    expect(screen.getByRole('heading', { level: 1 }).children).toHaveLength(0);
+    const [readable, visual] = Array.from(screen.getByRole('heading', { level: 1 }).children);
+    expect(readable).toHaveClass('sr-only');
+    expect(visual).toHaveAttribute('aria-hidden', 'true');
+    expect(visual).toHaveTextContent(/^Run your\s+on autopilot with\s*Claude Code$/);
   });
 
-  it('tracks the hero button and no longer tracks a screenshot', () => {
+  it('tracks the hero button and no longer tracks a screenshot', async () => {
     renderLanding();
-    fireEvent.click(screen.getByRole('link', { name: 'Start writing' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Start a 7-day trial for €0' }));
     expect(track).toHaveBeenCalledWith('landing_hero_cta_clicked');
     expect(vi.mocked(track).mock.calls.map(([event]) => event)).not.toContain(
       'landing_hero_screenshot_viewed',
@@ -403,13 +406,34 @@ describe('Landing header', () => {
     );
   });
 
-  it('sends every Get started and Start writing button to the sign-in page', () => {
+  it('sends every Get started and Trial button to the sign-in page', async () => {
     renderLanding();
-    const signInLinks = screen.getAllByRole('link', { name: /^(get started|start writing)$/i });
+    await screen.findByRole('link', { name: 'Start a 7-day trial for €0' });
+    const signInLinks = screen.getAllByRole('link', {
+      name: /^(get started|start for €0|start a 7-day trial for €0)$/i,
+    });
     expect(signInLinks.map((link) => link.textContent)).toEqual(
-      expect.arrayContaining(['Get started', 'Start writing']),
+      expect.arrayContaining(['Start for €0', 'Start a 7-day trial for €0', 'Get started']),
     );
     for (const link of signInLinks) expect(link).toHaveAttribute('href', '/login');
+  });
+
+  it('names the Trial and its price in the hero and nav buttons once the catalogue loads', async () => {
+    renderLanding();
+    expect(
+      await screen.findByRole('link', { name: 'Start a 7-day trial for €0' }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Start for €0' }),
+    ).toBeVisible();
+  });
+
+  it('keeps Get started on both buttons when the Instance offers no Trial', async () => {
+    fakePlansEndpoint(200, { ...OFFER, trial: null, data: [MONTHLY_PLAN, ANNUAL_PLAN] });
+    renderLanding();
+    await screen.findByRole('list', { name: 'Included' });
+    expect(screen.queryByRole('link', { name: /trial|for €0/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Get started' }).length).toBeGreaterThanOrEqual(3);
   });
 
   it('tracks the logo and the desktop links with their surface', () => {

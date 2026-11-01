@@ -1,6 +1,10 @@
 import { Link } from 'react-router-dom';
 import type { Variants } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { CTA_CLASSES } from '@/components/blocks/cta-classes';
+import { ArrowLabel } from '@/components/blocks/arrow-label';
 import { CtaFrame } from '@/components/blocks/cta-frame';
+import { HeroHeadline } from '@/components/blocks/hero-headline';
 import { HeroFrame } from '@/components/blocks/hero-frame';
 import { LaunchVideo } from '@/components/blocks/launch-video';
 import { Button } from '@/components/ui/button';
@@ -27,7 +31,7 @@ const staggeredVariants: { container: Variants; item: Variants } = {
   ...transitionVariants,
 };
 
-export function HeroSection() {
+export function HeroSection({ ctaLabel }: { ctaLabel: string }) {
   return (
     <div className="overflow-hidden">
       <div
@@ -44,23 +48,29 @@ export function HeroSection() {
             aria-hidden
             className="absolute inset-0 -z-10 size-full [background:radial-gradient(125%_125%_at_50%_100%,transparent_0%,hsl(var(--background))_75%)]"
           />
-          <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
-            <div className="lg:col-span-5">
+          <div className="mx-auto grid max-w-[88rem] gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
+            <div className="text-center lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
-                <h1 className="max-w-2xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.5rem] lg:leading-[1.05] xl:text-[4rem]">
-                  Your ideas, in the style of the authors you admire.
+                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[70px] xl:leading-[77px]">
+                  <HeroHeadline />
                 </h1>
-                <p className="mt-6 max-w-xl text-pretty text-lg text-muted-foreground">
-                  Write a brief, pick up to three X authors to learn style from, and get a post
-                  ready to paste. Not quite right? Say what to change and get a new version.
+                <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg text-muted-foreground xl:text-[22px] xl:leading-[1.3]">
+                  Pumpkit writes and schedules posts on X for you. Posts sound like you, or like
+                  your favorite X accounts. Use it in the web app, or use the MCP to let your agents
+                  run it.
                 </p>
               </AnimatedGroup>
 
-              <AnimatedGroup variants={staggeredVariants} className="mt-10 flex">
+              <AnimatedGroup variants={staggeredVariants} className="mt-10 flex justify-center">
                 <CtaFrame>
-                  <Button asChild size="lg" className="rounded-xl px-5 text-base">
+                  <Button
+                    asChild
+                    size="lg"
+                    variant="outline"
+                    className={cn(CTA_CLASSES, 'h-12 rounded-xl px-5 text-lg xl:text-[19px]')}
+                  >
                     <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
-                      Start writing
+                      <ArrowLabel>{ctaLabel}</ArrowLabel>
                     </Link>
                   </Button>
                 </CtaFrame>

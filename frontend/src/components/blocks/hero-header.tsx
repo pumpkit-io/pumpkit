@@ -8,6 +8,8 @@ import {
   GitHubMark,
   useGitHubStars,
 } from '@/components/blocks/github';
+import { ArrowLabel } from '@/components/blocks/arrow-label';
+import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { useInstance } from '@/features/instance/useInstance';
@@ -22,7 +24,7 @@ const NAV_LINKS = [
 
 const MOBILE_MENU_ID = 'landing-mobile-menu';
 
-export function HeroHeader() {
+export function HeroHeader({ ctaLabel }: { ctaLabel: string }) {
   const { app_name, sells_plans } = useInstance();
   const links = sells_plans ? NAV_LINKS : NAV_LINKS.filter(({ href }) => href !== '#pricing');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -75,7 +77,12 @@ export function HeroHeader() {
     ));
 
   const getStarted = (surface: Surface) => (
-    <Button asChild size="sm" className={surface === 'mobile' ? 'w-full' : undefined}>
+    <Button
+      asChild
+      size="sm"
+      variant="outline"
+      className={cn(CTA_CLASSES, surface === 'mobile' ? 'w-full' : 'text-base')}
+    >
       <Link
         to="/login"
         onClick={() => {
@@ -83,7 +90,7 @@ export function HeroHeader() {
           if (surface === 'mobile') closeMenu();
         }}
       >
-        Get started
+        <ArrowLabel>{ctaLabel}</ArrowLabel>
       </Link>
     </Button>
   );
@@ -137,7 +144,7 @@ export function HeroHeader() {
           </Link>
 
           <nav aria-label="Main" className="absolute inset-0 m-auto hidden size-fit lg:block">
-            <ul className="flex gap-8 text-sm">{navLinks('desktop')}</ul>
+            <ul className="flex gap-8 text-base">{navLinks('desktop')}</ul>
           </nav>
 
           <div className="hidden items-center gap-2 lg:flex">
