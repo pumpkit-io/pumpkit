@@ -148,3 +148,18 @@ class TokenResponse(BaseModel):
     expires_in: int
     refresh_token: str
     scope: str
+
+
+class AppConnectionResponse(BaseModel):
+    """One of the User's Connected apps, as Settings lists it."""
+
+    id: str
+    app_name: str
+    # As on the consent page: the metadata document URL's host, None for an unverified app.
+    verified_domain: Optional[str]
+    created_at: datetime
+    last_used_at: Optional[datetime]
+
+
+class AppConnectionsListResponse(BaseModel):
+    data: list[AppConnectionResponse]
