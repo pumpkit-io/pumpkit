@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.connected_apps.models import OAuthClient
 from pumpkit.connected_apps.schemas import ClientRegistrationRequest
-from pumpkit.core.security import generate_token, hash_token
+from pumpkit.core.security import generate_token, hash_token, verify_token
 
 CLIENT_SECRET_PREFIX = "pumpkit_cs_"
 
@@ -38,3 +38,18 @@ async def register_client(
 
 async def get_client(db: AsyncSession, client_id: str) -> Optional[OAuthClient]:
     return await db.get(OAuthClient, client_id)
+
+
+async def authenticate(
+    db: AsyncSession, client_id: str, secret: Optional[str]
+) -> Optional[OAuthClient]:
+    """
+    The app, unless it is unknown or was registered with a secret `secret` doesn't match. A
+    public app's secret is ignored, since some apps send an empty one.
+    """
+    client = await get_client(db, client_id)
+    if client is None or client.client_secret_hash is None:
+        return client
+    if secret is None or not verify_token(secret, client.client_secret_hash):
+        return None
+    return client
