@@ -189,7 +189,7 @@ describe('Landing hero', () => {
     renderLanding();
     expect(screen.queryByText('Open source · built for X')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      /^Run your X on autopilot with Claude Code, Codex, Cursor or Gemini CLI\./,
+      /^Run your X on autopilot with Claude, Claude Code, ChatGPT, Codex, Cursor or Gemini CLI\./,
     );
     expect(
       screen.getByText(
@@ -203,7 +203,7 @@ describe('Landing hero', () => {
     const [readable, visual] = Array.from(screen.getByRole('heading', { level: 1 }).children);
     expect(readable).toHaveClass('sr-only');
     expect(visual).toHaveAttribute('aria-hidden', 'true');
-    expect(visual).toHaveTextContent(/^Run your\s+on autopilot with\s*Claude Code$/);
+    expect(visual).toHaveTextContent(/^Run your\s+on autopilot with\s*Claude$/);
   });
 
   it('tracks the hero button and no longer tracks a screenshot', async () => {
