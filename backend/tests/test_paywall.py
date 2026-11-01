@@ -19,8 +19,6 @@ GATED_ROUTES = [
     ("DELETE", "/api/v1/x-connection"),
     ("POST", "/api/v1/x-connection/photo/use"),
     ("POST", "/api/v1/x-connection/photo/decline"),
-    ("GET", "/api/v1/api-keys"),
-    ("DELETE", "/api/v1/api-keys/key_unknown"),
     ("POST", "/api/v1/oauth/authorizations/request_unknown/approve"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/posts/post_unknown"),
@@ -31,7 +29,6 @@ GATED_ROUTES = [
 # The gated routes a new User, with nothing stored yet, reads successfully.
 READS_OF_NOTHING_YET = [
     ("GET", "/api/v1/inspiration-authors"),
-    ("GET", "/api/v1/api-keys"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/scheduled-posts/communities"),
     ("GET", "/api/v1/usage"),

@@ -157,21 +157,18 @@ async def test_a_call_records_when_the_connection_was_last_used_at_most_once_a_m
     assert await last_used_at() == FIXED_NOW + timedelta(minutes=1)
 
 
-# TODO(#316): remove with API key authentication at the MCP endpoint.
-async def test_an_api_key_works_at_the_endpoint_until_it_is_revoked(
-    subscribed, new_browser, authed_client
-):
-    created = await authed_client.post(API_KEYS, json={"name": "Claude Code"})
-    assert created.status_code == 201, created.text
-    client = McpClient(new_browser(), created.json()["secret"])
-    assert (await client.send("tools/list")).status_code == 200
+async def test_an_api_key_is_401(subscribed, new_browser):
+    api_key = "pumpkit_" + "k" * 43
 
-    [listed] = (await authed_client.get(API_KEYS)).json()["data"]
-    assert (await authed_client.delete(f"{API_KEYS}/{listed['id']}")).status_code == 204
-    response = await client.send("tools/list")
+    response = await McpClient(new_browser(), api_key).send("tools/list")
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
+    assert 'error="invalid_token"' in response.headers["www-authenticate"]
+
+
+async def test_the_api_key_routes_are_gone(subscribed, authed_client):
+    assert (await authed_client.get(API_KEYS)).status_code == 404
+    assert (await authed_client.post(API_KEYS, json={"name": "Claude Code"})).status_code == 404
 
 
 async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_every_tool(

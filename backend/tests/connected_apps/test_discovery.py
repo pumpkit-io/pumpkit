@@ -168,7 +168,7 @@ async def test_responses_on_a_client_facing_path_expose_the_challenge_to_browser
 
 
 @pytest.mark.parametrize(
-    "path", ["/api/v1/oauth/authorize", "/api/v1/oauth/consent", "/api/v1/api-keys"]
+    "path", ["/api/v1/oauth/authorize", "/api/v1/oauth/consent", "/api/v1/app-connections"]
 )
 async def test_other_paths_keep_the_strict_origin_policy(browser, path):
     response = await browser.options(
