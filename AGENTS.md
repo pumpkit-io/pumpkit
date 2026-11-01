@@ -31,7 +31,7 @@ Open-source AI writing tool for X: turns a brief into a post written in the styl
 - `frontend/src/`: `pages/` (routes), `features/` (self-contained modules), `components/`, `services/` (API clients), `lib/`.
 - `e2e/`: Playwright smoke tests, against the dev stack in `compose.dev.yml`.
 - Self-hosting: `compose.yml` (the production stack), `compose.external-db.yml`, `infra/web/` (the web image: Caddy serving the built frontend), `scripts/setup.sh` (writes `.env`), `scripts/check-stack.sh` (smoke checks).
-- Releasing and deploying: cut a release only by following `docs/releasing.md` step by step (`scripts/prepare-release.sh`, `scripts/tag-release.sh`, `.github/workflows/release.yml`). Deploying pumpkit.io follows `deploy.md` in the private `pumpkit-io/pumpkit-ops`, cloned at `../pumpkit-ops`.
+- Releasing and deploying: cut a release only with `sh scripts/release.sh`, as `docs/releasing.md` says (it runs `scripts/prepare-release.sh`, `scripts/tag-release.sh` and `.github/workflows/release.yml`). Deploying pumpkit.io follows `deploy.md` in the private `pumpkit-io/pumpkit-ops`, cloned at `../pumpkit-ops`.
 - `docs/development.md`: project layout and recipes (Subscriptions, Scheduled posts, LLM calls, analytics events, branding).
 
 ## Rules

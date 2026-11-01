@@ -6,73 +6,43 @@ The CHANGELOG is written as the work lands: every PR adds its entry under `## [U
 
 ## Cut a release
 
-1. Start the release branch from an up-to-date `main`. Name it after the next minor version for now (step 3 can rename it):
+```sh
+sh scripts/release.sh --dry-run   # prints the version and the PRs it would cover, changes nothing
+sh scripts/release.sh             # cuts the release
+sh scripts/release.sh X.Y.Z       # the same with a version you choose
+```
 
-   ```sh
-   git checkout main && git pull
-   git checkout -b release/vX.Y.Z
-   ```
+Run it from any checkout or worktree; it needs `gh` logged in as a repository admin and Docker. It works in a `release/vX.Y.Z` worktree off `origin/main` under `.claude/worktrees/`, and goes through these steps:
 
-2. Complete the Unreleased entries. List the PRs merged since the last release:
+1. Lists the PRs merged since the last release and stops on any without a CHANGELOG entry or the `no-changelog` label.
+2. Chooses the version from the Unreleased entries, unless you give one. Before 1.0, any `### Added`, `### Changed`, `### Removed` or **Upgrade notes** means the next minor (`0.2.3` becomes `0.3.0`), and only `### Fixed` or `### Security` means the next patch (`0.2.3` becomes `0.2.4`).
+3. Runs `scripts/prepare-release.sh`, which moves the Unreleased entries under `## [X.Y.Z] - <today>`, leaves an empty `## [Unreleased]` above and sets `PUMPKIT_VERSION=X.Y.Z` in `.env.example`. Then it commits `Release X.Y.Z`, pushes the branch and opens the PR with the release notes as its summary.
+4. Waits for the PR's checks, dispatches `sdlc-review-llm.yml` on the branch and waits for the `review` status.
+5. Merges the PR with `gh pr merge --squash --delete-branch`, then runs `scripts/tag-release.sh`. That tags the tip of `origin/main` (refusing unless `.env.example` and the CHANGELOG name X.Y.Z there and the tag is new), pushes only the tag, and watches the Release workflow. If the watch drops its connection it retries, and it reports a failure only when the run's conclusion is `failure` or `cancelled`; if the conclusion stays unknown it prints the run URL instead.
+6. Reads both image manifests from `ghcr.io`, checks for `linux/amd64` and `linux/arm64`, removes the worktree and prints `Released vX.Y.Z`.
 
-   ```sh
-   gh pr list --state merged --limit 200 --json number,title,labels \
-     --search "merged:>$(gh release view --json publishedAt -q .publishedAt)"
-   ```
+Each stop prints a `STOPPED:` line saying what is wrong and a `NEXT:` line saying what to do; fix that and run the command again. It picks up where it stopped: it reuses the worktree, the branch and an open PR, and when the latest release in the CHANGELOG is merged but untagged it goes straight to the tag.
 
-   For each PR without the `no-changelog` label, find its entry under `## [Unreleased]` in `CHANGELOG.md`; where one is missing, add it, saying what changed for Users or Self-hosters. Where a change needs a manual step on upgrade (a new required setting in `.env.example`, a changed compose file, a destructive migration), add an **Upgrade notes:** line saying what to do. Keep **Upgrade notes:** for those steps: an entry with nothing to do by hand (a migration the backend applies on start, an optional setting) says so in its prose and carries none. `sh scripts/release-notes.sh --manual-steps X.Y.Z` (or `FROM..TO`) prints only the entries with Upgrade notes, and nothing when there are none; the deploy reads it. Commit any additions as `Complete the CHANGELOG for X.Y.Z`.
+`sh scripts/release-notes.sh --manual-steps X.Y.Z` (or `FROM..TO`) prints only the entries with Upgrade notes, and nothing when there are none; the deploy reads it.
 
-   **Check:** every listed PR without `no-changelog` is covered by an entry, and `## [Unreleased]` has entries. If it has none, there is nothing to release: delete the branch and stop.
+The stops, and what to do:
 
-3. Choose the version from the Unreleased entries and the latest release (`gh release list --limit 1`). Before 1.0:
-
-   - any `### Added`, `### Changed`, `### Removed` or **Upgrade notes** → the next minor: `0.2.3` becomes `0.3.0`;
-   - only `### Fixed` or `### Security` → the next patch: `0.2.3` becomes `0.2.4`.
-
-   If it differs from the branch name, rename the branch with `git branch -m release/vX.Y.Z`.
-
-4. Prepare the release commit and open its PR:
-
-   ```sh
-   sh scripts/prepare-release.sh X.Y.Z
-   git commit -am "Release X.Y.Z"
-   git push -u origin release/vX.Y.Z
-   ```
-
-   `prepare-release.sh` moves the Unreleased entries under `## [X.Y.Z] - <today>`, leaves an empty `## [Unreleased]` above it, sets `PUMPKIT_VERSION=X.Y.Z` in `.env.example`, and prints the release notes. Open a PR titled `Release X.Y.Z` with those notes as its summary, and merge it once CI passes; the Changelog check passes on its own, because the PR adds a release section.
-
-   **Check:** the PR changes only `CHANGELOG.md` and `.env.example`, and it is merged.
-
-5. Tag the merge and wait for the Release workflow:
-
-   ```sh
-   sh scripts/tag-release.sh X.Y.Z
-   ```
-
-   Run it from any checkout or worktree: it fetches and tags the tip of `origin/main`, so the local `main` can be behind or not checked out. It refuses unless `.env.example` and the CHANGELOG name X.Y.Z at that commit and the tag is new. Then it pushes only the tag, watches the workflow, and shows the release. If the watch drops its connection it retries, and it reports a failure only when the run's conclusion is `failure` or `cancelled`; if the conclusion stays unknown it prints the run URL instead.
-
-   **Check:** it ends by printing the GitHub Release `vX.Y.Z`. If the workflow failed, see [When the Release workflow fails](#when-the-release-workflow-fails).
-
-6. Check the release, logged out of `ghcr.io`:
-
-   ```sh
-   docker pull ghcr.io/pumpkit-io/pumpkit-backend:X.Y.Z
-   docker pull ghcr.io/pumpkit-io/pumpkit-web:X.Y.Z
-   docker buildx imagetools inspect ghcr.io/pumpkit-io/pumpkit-web:X.Y.Z
-   ```
-
-   **Check:** both pulls succeed and `imagetools inspect` lists `linux/amd64` and `linux/arm64`.
+- **Merged PRs without an entry:** add each entry under `## [Unreleased]`, saying what changed for Users or Self-hosters, in a PR, or label the PR `no-changelog`. Where a change needs a manual step on upgrade (a new required setting in `.env.example`, a changed compose file, a destructive migration), add an **Upgrade notes:** line saying what to do. An entry with nothing to do by hand says so in its prose and carries none.
+- **Nothing to release:** `## [Unreleased]` has no entries. Stop there.
+- **Not an admin:** only a repository admin can run the review. Ask a maintainer to run `gh workflow run sdlc-review-llm.yml --ref release/vX.Y.Z`, then run the command again.
+- **A check or the review failed:** read it with `gh pr checks <PR>` or the review's comment on the PR, push a fix to the release branch (a new commit needs a new review run) and run the command again.
+- **The merge was refused:** `gh pr view <PR>` says why, usually a required check still pending.
 
 ## When the Release workflow fails
 
 Read the failure with `gh run view <run id> --log-failed`.
 
-- **The `check` job failed:** nothing was published. Delete the tag (`git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z`), fix the cause in a PR, merge it, and run step 5 again.
+- **The `check` job failed:** nothing was published. Delete the tag (`git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z`), fix the cause in a PR, merge it, and run `sh scripts/release.sh` again, which tags the merged release.
 - **The `images` or `release` job failed** (a flaky build or registry): rerun it with `gh run rerun <run id> --failed`. Re-tag only if the cause needs a code change, and then release the next patch version instead: images already pushed under X.Y.Z must not change.
 
-## Dry run
+## Trying the Release workflow
 
-To try the Release workflow before the real tag, tag a pre-release after step 4: `sh scripts/tag-release.sh X.Y.Z-rc.1`. The workflow checks `.env.example` against `X.Y.Z`, so it only passes once the release PR is merged. A pre-release pushes only `:X.Y.Z-rc.1` (no `latest`) and creates a GitHub pre-release, which pumpkit.io never deploys. Remove it afterwards with `gh release delete vX.Y.Z-rc.1 --cleanup-tag`, and delete the rc package versions in GHCR if you don't want them, then go on with step 5.
+To try the Release workflow before the real tag, tag a pre-release once the release PR is merged: `sh scripts/tag-release.sh X.Y.Z-rc.1`. The workflow checks `.env.example` against `X.Y.Z`, so it only passes once the release PR is merged. A pre-release pushes only `:X.Y.Z-rc.1` (no `latest`) and creates a GitHub pre-release, which pumpkit.io never deploys. Remove it afterwards with `gh release delete vX.Y.Z-rc.1 --cleanup-tag`, and delete the rc package versions in GHCR if you don't want them, then tag the real release.
 
 On a fork, change `ghcr.io/pumpkit-io/` in the workflow's matrix to the fork's owner, or the push is denied.
 
