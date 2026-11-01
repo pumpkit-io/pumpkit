@@ -988,3 +988,17 @@ describe('Landing mascots', () => {
     mascots().forEach((mascot) => expect(mascot).toHaveAttribute('data-state', 'still'));
   });
 });
+
+describe('Landing font preview', () => {
+  it('sets the page in the wordmark font while the switch is on, and back when it is off', () => {
+    const { container } = renderLanding();
+    const fontSwitch = screen.getByRole('switch', { name: 'Wordmark font' });
+    const page = container.firstElementChild;
+
+    expect(page).not.toHaveClass('font-wordmark-preview');
+    fireEvent.click(fontSwitch);
+    expect(page).toHaveClass('font-wordmark-preview');
+    fireEvent.click(fontSwitch);
+    expect(page).not.toHaveClass('font-wordmark-preview');
+  });
+});

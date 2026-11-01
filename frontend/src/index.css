@@ -190,3 +190,9 @@
     }
   }
 }
+
+/* Helvetica Neue is the wordmark's font; it can't be bundled, so it comes from the visitor's system. */
+.font-wordmark-preview,
+.font-wordmark-preview :not(code, kbd, pre, .font-mono) {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
