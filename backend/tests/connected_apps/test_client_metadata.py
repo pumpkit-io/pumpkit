@@ -14,7 +14,10 @@ from pumpkit.connected_apps.service import client_metadata
 from pumpkit.connected_apps.service.client_metadata import (
     FakeClientMetadataFetcher,
     FetchedClientMetadata,
+    HttpClientMetadataFetcher,
+    get_client_metadata_fetcher,
 )
+from pumpkit.main import app
 from tests.oauth_app import CONSENT, REDIRECT, approved_code, exchange, query, start_for
 
 DOCUMENT_URL = "https://app.example.com/oauth/client.json"
@@ -127,6 +130,18 @@ async def test_the_stale_copy_is_used_when_a_refetch_fails(
 
 async def test_an_unreachable_document_with_nothing_cached_is_an_unknown_app(browser):
     started = await start_for(browser, DOCUMENT_URL)
+
+    assert started.headers["location"] == f"{CONSENT}?error=invalid_client"
+
+
+@pytest.mark.parametrize(
+    "client_id",
+    [f"https://{'a' * 64}.com/oauth/client.json", "https://a..com/oauth/client.json"],
+    ids=["label-over-63", "empty-label"],
+)
+async def test_a_document_on_a_host_that_is_not_a_valid_name_is_an_unknown_app(browser, client_id):
+    app.dependency_overrides[get_client_metadata_fetcher] = lambda: HttpClientMetadataFetcher()
+    started = await start_for(browser, client_id)
 
     assert started.headers["location"] == f"{CONSENT}?error=invalid_client"
 

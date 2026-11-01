@@ -144,6 +144,25 @@ async def test_an_unresolvable_host_is_refused(production):
         await HttpClientMetadataFetcher(resolve=fail).fetch(URL)
 
 
+@pytest.mark.parametrize(
+    "url",
+    [f"https://{'a' * 64}.com/oauth/client.json", "https://a..com/oauth/client.json"],
+    ids=["label-over-63", "empty-label"],
+)
+async def test_a_host_that_is_not_a_valid_name_is_refused(production, url):
+    with pytest.raises(ClientMetadataFetchError):
+        await HttpClientMetadataFetcher().fetch(url)
+
+
+@respx.mock
+async def test_the_document_is_asked_for_uncompressed(production, fetcher):
+    route = respx.get(URL).mock(return_value=httpx.Response(200, json=DOCUMENT))
+
+    await fetcher.fetch(URL)
+
+    assert route.calls.last.request.headers["accept-encoding"] == "identity"
+
+
 @respx.mock
 async def test_a_local_instance_may_fetch_from_this_computer(monkeypatch):
     monkeypatch.setattr(settings, "ENV", "local")

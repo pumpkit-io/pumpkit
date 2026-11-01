@@ -175,7 +175,9 @@ class HttpClientMetadataFetcher:
                 trust_env=False,
             ) as http:
                 async with http.stream(
-                    "GET", url, headers={"Accept": "application/json"}
+                    "GET",
+                    url,
+                    headers={"Accept": "application/json", "Accept-Encoding": "identity"},
                 ) as response:
                     if response.status_code != 200:
                         raise ClientMetadataFetchError(f"answered HTTP {response.status_code}")
@@ -196,7 +198,8 @@ class HttpClientMetadataFetcher:
                 raise ClientMetadataFetchError("names a port other than 443")
         try:
             addresses = await self.resolve(host, parts.port or 443)
-        except OSError as error:
+        # IDNA encoding raises UnicodeError for a label that is empty or over 63 characters.
+        except (OSError, UnicodeError) as error:
             raise ClientMetadataFetchError(f"host unresolvable: {type(error).__name__}") from error
         if not addresses:
             raise ClientMetadataFetchError("host resolves to no address")
