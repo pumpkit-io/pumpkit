@@ -7,7 +7,7 @@ import { PricingSection } from '@/components/blocks/pricing-section';
 import { useInstance } from '@/features/instance/useInstance';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 
-// The mascot nods off only once the visitor has lingered at the foot of the page.
+// The mascot nods off only once the visitor has lingered at the foot of the page, or has stopped hovering it.
 const FOOTER_NAP_DELAY_MS = 5000;
 
 export function Landing() {
@@ -23,7 +23,7 @@ export function Landing() {
         <OpenSourceSection />
       </main>
       <div className="flex justify-center pt-8">
-        <Mascot animation="doze_off" playInViewAfterMs={FOOTER_NAP_DELAY_MS} />
+        <Mascot animation="doze_off" playInViewAfterMs={FOOTER_NAP_DELAY_MS} restOnLastFrame />
       </div>
       <CompanyFooter />
     </>

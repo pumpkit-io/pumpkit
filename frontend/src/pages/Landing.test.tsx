@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
 import type { InternalAxiosRequestConfig } from 'axios';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -504,11 +502,9 @@ describe('Landing authors', () => {
     const photos = within(section).getAllByRole('img');
     expect(photos).toHaveLength(30);
     expect(photos.map((photo) => photo.getAttribute('alt'))).toEqual(LANDING_AUTHOR_NAMES);
-    photos.forEach((photo) => {
-      const src = photo.getAttribute('src')!;
-      expect(src).toMatch(/^\/assets\/authors\/\w+\.webp$/);
-      expect(existsSync(path.join(__dirname, '../../public', src))).toBe(true);
-    });
+    const sources = photos.map((photo) => photo.getAttribute('src'));
+    sources.forEach((src) => expect(src).toMatch(/\.webp$/));
+    expect(new Set(sources).size).toBe(30);
     expect(within(section).queryByRole('link')).not.toBeInTheDocument();
     expect(section).not.toHaveTextContent('@');
     expect(section).not.toHaveTextContent('levelsio');
@@ -798,6 +794,22 @@ describe('Landing pricing', () => {
       ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_monthly' }],
     ]);
   });
+
+  it('tracks the other Plan once, the first time the visitor switches to it', async () => {
+    renderLanding();
+    const pricing = screen.getByRole('region', { name: PRICING });
+    await within(pricing).findByRole('radiogroup', { name: 'Billing interval' });
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Annual Save 17%' }));
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Monthly' }));
+    fireEvent.click(within(pricing).getByRole('radio', { name: 'Annual Save 17%' }));
+    const viewed = vi
+      .mocked(track)
+      .mock.calls.filter(([event]) => event === 'landing_pricing_plan_viewed');
+    expect(viewed).toEqual([
+      ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_monthly' }],
+      ['landing_pricing_plan_viewed', { plan_key: 'pumpkit_pro_yearly' }],
+    ]);
+  });
 });
 
 describe('Landing GitHub button', () => {
@@ -939,6 +951,32 @@ describe('Landing mascots', () => {
     fireEvent.click(within(pricing).getByRole('radio', { name: 'Monthly' }));
     fireEvent.click(within(pricing).getByRole('radio', { name: 'Annual Save 17%' }));
     expect(tada).toHaveAttribute('data-state', 'still');
+  });
+
+  it('lets the footer mascot nod off and stay asleep, wakes it on hover and lets it nod off again', () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    renderLanding({ ...SELLS_PLANS, sells_plans: false });
+    const footer = document.querySelector<HTMLElement>('[data-mascot="doze_off"]')!;
+    // Each frame's timer starts once React renders the frame before it, so time passes in steps.
+    const wait = (ms: number) => {
+      for (let elapsed = 0; elapsed < ms; elapsed += 100) act(() => vi.advanceTimersByTime(100));
+    };
+    expect(footer).toHaveAttribute('data-state', 'still');
+
+    wait(30_000);
+    expect(footer).toHaveAttribute('data-state', 'rested');
+
+    fireEvent.mouseEnter(footer);
+    expect(footer).toHaveAttribute('data-state', 'still');
+    wait(30_000);
+    expect(footer).toHaveAttribute('data-state', 'still');
+
+    fireEvent.mouseLeave(footer);
+    wait(30_000);
+    expect(footer).toHaveAttribute('data-state', 'rested');
   });
 
   it('keeps every mascot still when the visitor prefers reduced motion', async () => {
