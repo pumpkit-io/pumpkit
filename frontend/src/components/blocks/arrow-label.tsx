@@ -15,7 +15,13 @@ export function ArrowLabel({
 }) {
   return (
     <span className="inline-flex translate-x-[0.6em] items-center transition-transform duration-200 group-hover/cta:translate-x-0 group-focus-visible/cta:translate-x-0 motion-reduce:transition-none">
-      {pending ? <span className="invisible">Get started</span> : children}
+      {pending ? (
+        <span aria-hidden className="invisible">
+          Get started
+        </span>
+      ) : (
+        children
+      )}
       <ArrowRight
         aria-hidden
         className="ml-[0.3em] size-[0.9em] opacity-0 transition-opacity duration-200 group-hover/cta:opacity-100 group-focus-visible/cta:opacity-100 motion-reduce:transition-none"
