@@ -1,6 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
 // Paths and brand colors from Simple Icons (CC0), on a 24x24 viewBox.
 // Gemini's multi-color mark is drawn by GeminiIcon (LobeHub Icons, MIT). A tool without a color has a black brand mark, so it follows the text color in dark mode.
@@ -91,6 +90,8 @@ export function HeroHeadline() {
     return () => window.clearInterval(id);
   }, [reduceMotion]);
 
+  const tool = TOOLS[active];
+
   return (
     <>
       <span className="sr-only">
@@ -98,16 +99,17 @@ export function HeroHeadline() {
       </span>
       <span aria-hidden>
         Run your <BrandIcon path={X_PATH} className="inline-block size-[0.8em] align-[-0.06em]" />{' '}
-        on autopilot with{' '}
-        {/* All names share one grid cell, so the widest sets the width and the line never reflows. */}
-        <span className="inline-grid whitespace-nowrap align-baseline">
-          {TOOLS.map((tool, i) => (
-            <span
+        on autopilot with
+        {/* Own line, so the centered name sizes itself: popLayout lifts the leaving name out of flow. */}
+        <span className="relative -my-[0.1em] block overflow-hidden py-[0.1em] whitespace-nowrap">
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
               key={tool.name}
-              className={cn(
-                'col-start-1 row-start-1 inline-flex justify-self-center items-center gap-[0.3em] transition-[opacity,transform] duration-500 motion-reduce:transition-none',
-                i === active ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
-              )}
+              className="inline-flex items-center gap-[0.3em]"
+              initial={{ y: '110%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '-110%' }}
+              transition={{ duration: reduceMotion ? 0 : 0.5, ease: [0.32, 0.72, 0, 1] }}
             >
               {tool.path ? (
                 <BrandIcon
@@ -119,8 +121,8 @@ export function HeroHeadline() {
                 <GeminiIcon className="size-[0.8em] shrink-0" />
               )}
               {tool.name}
-            </span>
-          ))}
+            </motion.span>
+          </AnimatePresence>
         </span>
       </span>
     </>

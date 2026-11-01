@@ -198,12 +198,12 @@ describe('Landing hero', () => {
     ).toBeInTheDocument();
   });
 
-  it('reads the headline once to assistive tech and rotates the visual tool names', () => {
+  it('reads the headline once to assistive tech and shows one tool name at a time', () => {
     renderLanding();
     const [readable, visual] = Array.from(screen.getByRole('heading', { level: 1 }).children);
     expect(readable).toHaveClass('sr-only');
     expect(visual).toHaveAttribute('aria-hidden', 'true');
-    expect(visual).toHaveTextContent('Claude CodeCodexCursorGemini CLI');
+    expect(visual).toHaveTextContent(/^Run your\s+on autopilot with\s*Claude Code$/);
   });
 
   it('tracks the hero button and no longer tracks a screenshot', () => {
