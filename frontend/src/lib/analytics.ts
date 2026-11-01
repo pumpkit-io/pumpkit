@@ -34,7 +34,7 @@ export const EVENTS = {
   },
   landing_pricing_plan_viewed: {
     description:
-      'Landing: the pricing card first scrolled into view, once per Plan it showed. Props: plan_key.',
+      'Landing: a Plan first seen on the pricing card, once per Plan: the shown Plan when the card first scrolls into view, the other when the visitor first switches to it after that. Props: plan_key.',
   },
   landing_pricing_toggle_switched: {
     description:

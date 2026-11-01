@@ -1,5 +1,5 @@
 import { useRef, type CSSProperties } from 'react';
-import authors from '../../../public/assets/authors/authors.json';
+import authors from '@/assets/authors/authors.json';
 import { Mascot } from '@/components/blocks/mascot';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
@@ -7,10 +7,16 @@ import { useOnceVisible } from '@/lib/useOnceVisible';
 type Author = { handle: string; name: string; photo: string };
 
 // Copies of each account's X photo served by the Instance, so the page never requests anything from X.
+const PHOTOS = import.meta.glob<string>('@/assets/authors/*.webp', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
 const AUTHORS: readonly Author[] = authors.map(({ handle, name }) => ({
   handle,
   name,
-  photo: `/assets/authors/${handle}.webp`,
+  photo: PHOTOS[`/src/assets/authors/${handle}.webp`],
 }));
 
 const ROW_LENGTH = 10;

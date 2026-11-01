@@ -5,12 +5,11 @@ import launchVideoMp4 from '@/assets/launch-video/launch-video.mp4';
 import launchVideoWebm from '@/assets/launch-video/launch-video.webm';
 import launchVideoPoster from '@/assets/launch-video/launch-video-poster.jpg';
 import { track } from '@/lib/analytics';
-import { useMediaQuery } from '@/lib/useMediaQuery';
+import { REDUCED_MOTION, useMediaQuery } from '@/lib/useMediaQuery';
 import { cn } from '@/lib/utils';
 
 /** Tailwind's `lg`, where the hero turns two-column. */
 const DESKTOP = '(min-width: 1024px)';
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
 type WebkitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
 
@@ -213,7 +212,7 @@ export function LaunchVideo() {
             onClick={toggleSound}
             aria-label={muted ? 'Sound on' : 'Sound off'}
             className={cn(
-              'absolute bottom-14 right-3 flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-sm font-medium text-white backdrop-blur transition-opacity hover:bg-black/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+              'absolute bottom-14 right-3 z-10 flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-sm font-medium text-white backdrop-blur transition-opacity hover:bg-black/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
               !muted &&
                 !controlsPinned &&
                 'opacity-0 group-hover/video:opacity-100 group-focus-within/video:opacity-100',

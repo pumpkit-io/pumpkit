@@ -7,7 +7,7 @@ import dozeOffSheet from '@/assets/mascot/doze_off-sheet.png';
 import dozeOff from '@/assets/mascot/doze_off-sheet.json';
 import tadaSheet from '@/assets/mascot/tada-sheet.png';
 import tada from '@/assets/mascot/tada-sheet.json';
-import { useMediaQuery } from '@/lib/useMediaQuery';
+import { REDUCED_MOTION, useMediaQuery } from '@/lib/useMediaQuery';
 import { cn } from '@/lib/utils';
 
 /** A sprite sheet's frame list, as animate-pixel-art writes it, at one screen pixel per cell. */
@@ -28,13 +28,17 @@ const ANIMATIONS = {
 
 export type MascotAnimation = keyof typeof ANIMATIONS;
 
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 const MEDIUM = '(min-width: 768px)';
 
 interface MascotProps {
   animation: MascotAnimation;
   /** Plays once on entering the view, after it has stayed in view this long. Off when null. */
   playInViewAfterMs?: number | null;
+  /**
+   * Rests on the last frame once played, as `doze_off` stays asleep. Hovering then shows the first
+   * frame, and leaving plays it again after `playInViewAfterMs`.
+   */
+  restOnLastFrame?: boolean;
   /** Each change after the first render plays the animation once. */
   trigger?: number;
   /** Whole screen pixels per cell below and from the `md` breakpoint. */
@@ -50,6 +54,7 @@ interface MascotProps {
 export function Mascot({
   animation,
   playInViewAfterMs = 0,
+  restOnLastFrame = false,
   trigger = 0,
   scale = 2,
   mdScale = 3,
@@ -59,24 +64,55 @@ export function Mascot({
   const reducedMotion = useMediaQuery(REDUCED_MOTION);
   const medium = useMediaQuery(MEDIUM);
   const [frame, setFrame] = useState<number | null>(null);
+  const [onLastFrame, setOnLastFrame] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const hoveredRef = useRef(false);
+  const replayTimerRef = useRef<number | undefined>(undefined);
 
   const play = useCallback(() => {
-    if (!reducedMotion) setFrame((current) => current ?? 0);
-  }, [reducedMotion]);
+    if (reducedMotion || (restOnLastFrame && hoveredRef.current)) return;
+    setOnLastFrame(false);
+    setFrame((current) => current ?? 0);
+  }, [reducedMotion, restOnLastFrame]);
 
   useEffect(() => {
     if (frame === null) return;
-    const timer = window.setTimeout(
-      () => setFrame(frame + 1 < meta.frames.length ? frame + 1 : null),
-      meta.frames[frame].ms,
-    );
+    const timer = window.setTimeout(() => {
+      if (frame + 1 < meta.frames.length) {
+        setFrame(frame + 1);
+      } else {
+        setFrame(null);
+        setOnLastFrame(restOnLastFrame);
+      }
+    }, meta.frames[frame].ms);
     return () => window.clearTimeout(timer);
-  }, [frame, meta]);
+  }, [frame, meta, restOnLastFrame]);
 
   useEffect(() => {
-    if (reducedMotion) setFrame(null);
+    if (!reducedMotion) return;
+    setFrame(null);
+    setOnLastFrame(false);
   }, [reducedMotion]);
+
+  useEffect(() => () => window.clearTimeout(replayTimerRef.current), []);
+
+  const onMouseEnter = () => {
+    hoveredRef.current = true;
+    if (!restOnLastFrame) {
+      play();
+      return;
+    }
+    window.clearTimeout(replayTimerRef.current);
+    setFrame(null);
+    setOnLastFrame(false);
+  };
+
+  const onMouseLeave = () => {
+    hoveredRef.current = false;
+    if (!restOnLastFrame) return;
+    window.clearTimeout(replayTimerRef.current);
+    replayTimerRef.current = window.setTimeout(() => playRef.current(), playInViewAfterMs ?? 0);
+  };
 
   const playRef = useRef(play);
   playRef.current = play;
@@ -117,15 +153,16 @@ export function Mascot({
   }, [playInViewAfterMs]);
 
   const px = medium ? mdScale : scale;
-  const { x, y } = meta.frames[frame ?? 0];
+  const { x, y } = meta.frames[frame ?? (onLastFrame ? meta.frames.length - 1 : 0)];
 
   return (
     <div
       ref={ref}
       aria-hidden="true"
       data-mascot={animation}
-      data-state={frame === null ? 'still' : 'playing'}
-      onMouseEnter={play}
+      data-state={frame !== null ? 'playing' : onLastFrame ? 'rested' : 'still'}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={cn('shrink-0 bg-no-repeat [image-rendering:pixelated]', className)}
       style={{
         width: meta.frame_width * px,

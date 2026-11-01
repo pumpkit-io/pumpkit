@@ -47,7 +47,7 @@ function PriceLine({ plan }: { plan: Plan }) {
       : `every ${plan.intervalCount} ${plan.interval}s`;
   return (
     <p className="text-lg text-muted-foreground">
-      <span className="font-display text-5xl font-semibold tracking-tight text-foreground">
+      <span className="text-5xl font-semibold tracking-tight text-foreground">
         {formatPrice(plan.amount, plan.currency)}
       </span>{' '}
       {every}
@@ -129,16 +129,30 @@ function PricingCta() {
 /** The one pricing card: a Monthly/Annual toggle over a pair of Plans, else each Plan's price. */
 function PricingCard({ catalog }: { catalog: PlanCatalog }) {
   const pair = monthlyAndAnnual(catalog.plans);
-  const [interval, setInterval] = useState<Interval>('monthly');
+  const [interval, setBillingInterval] = useState<Interval>('monthly');
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const shown = pair ? [interval === 'monthly' ? pair.monthly : pair.annual] : catalog.plans;
+  const plansFor = (value: Interval) =>
+    pair ? [value === 'monthly' ? pair.monthly : pair.annual] : catalog.plans;
+  const shown = plansFor(interval);
+
+  const cardSeenRef = useRef(false);
+  const viewedKeysRef = useRef(new Set<string>());
+  const trackViewed = (plans: Plan[]) => {
+    for (const plan of plans) {
+      if (viewedKeysRef.current.has(plan.key)) continue;
+      viewedKeysRef.current.add(plan.key);
+      track('landing_pricing_plan_viewed', { plan_key: plan.key });
+    }
+  };
   useOnceVisible(cardRef, () => {
-    for (const plan of shown) track('landing_pricing_plan_viewed', { plan_key: plan.key });
+    cardSeenRef.current = true;
+    trackViewed(shown);
   });
 
   const [celebrations, setCelebrations] = useState(0);
   const choose = (next: Interval) => {
-    setInterval(next);
+    setBillingInterval(next);
+    if (cardSeenRef.current) trackViewed(plansFor(next));
     if (next === 'annual') setCelebrations((count) => (count === 0 ? 1 : count));
     track('landing_pricing_toggle_switched', { interval: next });
   };
