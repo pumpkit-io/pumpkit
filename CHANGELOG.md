@@ -9,6 +9,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 ### Changed
 
 - Per-IP rate limits now key on each caller's real address, where they keyed on the bundled web server's. With your own proxy in front of the web server, set `TRUSTED_PROXIES` (and `FORWARDED_ALLOW_IPS` if the proxy has a public address); see "A proxy in front of the web server" in the self-hosting guide. Nothing changes on upgrade unless you run such a proxy.
+- The Privacy Policy now lists `pumpkit:return-to`, the browser storage key that brings you back to an app's connection request after you sign in.
 - On wide screens, the landing page's video now lines up with the top of the headline beside it instead of sitting a few pixels too high.
 - The GitHub button in the landing page's nav bar no longer shows the repository's star count, and it is the same size as the button beside it.
 - The landing page headline now reads "Run your X on autopilot with" and rotates through Claude Code, Codex, Cursor and Gemini CLI, each with its logo, and the text under it now says Pumpkit writes and schedules your posts and can be used in the web app or through the MCP. The landing page buttons are white with an arrow that appears on hover. Where your Instance offers a Trial, they read "Start a 7-day trial for $0" and "Start for $0", with your Trial's length and Plan currency; otherwise they read "Get started".

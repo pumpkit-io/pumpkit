@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { returnTo } from '@/lib/returnTo';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -9,6 +10,12 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  const signedOut = !isLoading && !isAuthenticated;
+  const path = location.pathname + location.search;
+
+  useEffect(() => {
+    if (signedOut) returnTo.remember(path);
+  }, [signedOut, path]);
 
   if (isLoading) {
     return (
@@ -20,7 +27,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (signedOut) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
