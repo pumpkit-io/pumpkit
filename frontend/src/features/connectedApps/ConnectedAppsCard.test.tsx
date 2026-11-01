@@ -28,12 +28,13 @@ function renderCard() {
 }
 
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+const thisYear = new Date().getFullYear();
 
 const CLAUDE: AppConnection = {
   id: 'app_connection_2',
   appName: 'Claude',
   verifiedDomain: 'claude.ai',
-  createdAt: '2026-10-31T12:00:00Z',
+  createdAt: `${thisYear}-10-31T12:00:00Z`,
   lastUsedAt: hoursAgo(2),
 };
 
@@ -41,7 +42,7 @@ const CURSOR: AppConnection = {
   id: 'app_connection_1',
   appName: 'Cursor',
   verifiedDomain: null,
-  createdAt: '2026-10-20T12:00:00Z',
+  createdAt: `${thisYear}-10-20T12:00:00Z`,
   lastUsedAt: null,
 };
 
@@ -86,7 +87,7 @@ describe('ConnectedAppsCard', () => {
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText(MCP_URL)).toBeInTheDocument();
-    expect(screen.getByText('Claude Code')).toBeInTheDocument();
+    expect(screen.getByText('Claude Code').closest('details')).not.toHaveAttribute('open');
   });
 
   it('with no apps, shows the URL from the Instance, the how-tos and the empty state', async () => {
@@ -97,10 +98,21 @@ describe('ConnectedAppsCard', () => {
     expect(await screen.findByText('No apps connected yet.')).toBeInTheDocument();
     expect(screen.getByText(MCP_URL)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add another app' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Claude Code'));
+    for (const client of [
+      'claude.ai, Claude Desktop, mobile',
+      'ChatGPT',
+      'Claude Code',
+      'Codex CLI',
+      'Gemini CLI',
+      'Cursor',
+      'VS Code',
+    ]) {
+      expect(screen.getByText(client).closest('details')).toHaveAttribute('open');
+    }
     expect(
       screen.getByText(`claude mcp add --scope user --transport http pumpkit ${MCP_URL}`),
     ).toBeInTheDocument();
+    expect(screen.getByText(/claude mcp login pumpkit/)).toBeInTheDocument();
   });
 
   it('disconnects an app after a confirmation', async () => {
@@ -140,6 +152,21 @@ describe('ConnectedAppsCard', () => {
   it('keeps the row and says why when disconnecting fails', async () => {
     vi.mocked(appConnectionService.list).mockResolvedValue([CLAUDE]);
     vi.mocked(appConnectionService.disconnect).mockRejectedValue(
+      failure(500, 'Something went wrong. Try again.'),
+    );
+    renderCard();
+    const claude = await screen.findByRole('listitem', { name: 'Claude' });
+
+    fireEvent.click(within(claude).getByRole('button', { name: 'Disconnect Claude' }));
+    fireEvent.click(within(claude).getByRole('button', { name: 'Disconnect app' }));
+
+    expect(await within(claude).findByText('Something went wrong. Try again.')).toBeInTheDocument();
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it('removes the row when the app was already disconnected elsewhere', async () => {
+    vi.mocked(appConnectionService.list).mockResolvedValue([CLAUDE, CURSOR]);
+    vi.mocked(appConnectionService.disconnect).mockRejectedValue(
       failure(404, "That app isn't connected."),
     );
     renderCard();
@@ -148,8 +175,11 @@ describe('ConnectedAppsCard', () => {
     fireEvent.click(within(claude).getByRole('button', { name: 'Disconnect Claude' }));
     fireEvent.click(within(claude).getByRole('button', { name: 'Disconnect app' }));
 
-    expect(await within(claude).findByText("That app isn't connected.")).toBeInTheDocument();
-    expect(showToast).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole('listitem', { name: 'Claude' })).not.toBeInTheDocument(),
+    );
+    expect(showToast).toHaveBeenCalledWith('Disconnected Claude.');
+    expect(screen.getByRole('listitem', { name: 'Cursor' })).toBeInTheDocument();
   });
 
   it('shows a skeleton while the list loads', () => {
