@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from pumpkit.connected_apps import mediator
 from pumpkit.connected_apps.models import OAuthClient
-from tests.connected_apps.conftest import CHALLENGE, CONSENT, REDIRECT
+from tests.oauth_app import CHALLENGE, CONSENT, REDIRECT
 
 NOW = datetime(2026, 11, 1, tzinfo=timezone.utc)
 

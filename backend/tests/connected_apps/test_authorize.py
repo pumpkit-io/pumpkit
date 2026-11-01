@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from pumpkit.connected_apps.models import OAuthAuthorization
-from tests.connected_apps.conftest import (
+from tests.oauth_app import (
     AUTHORIZE,
     CONSENT,
     ISSUER,
