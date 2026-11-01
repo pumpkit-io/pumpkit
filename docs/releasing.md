@@ -20,7 +20,7 @@ The CHANGELOG is written as the work lands: every PR adds its entry under `## [U
      --search "merged:>$(gh release view --json publishedAt -q .publishedAt)"
    ```
 
-   For each PR without the `no-changelog` label, find its entry under `## [Unreleased]` in `CHANGELOG.md`; where one is missing, add it, saying what changed for Users or Self-hosters. Where a change needs a manual step on upgrade (a new required setting in `.env.example`, a changed compose file, a destructive migration), add an **Upgrade notes:** line saying what to do. Commit any additions as `Complete the CHANGELOG for X.Y.Z`.
+   For each PR without the `no-changelog` label, find its entry under `## [Unreleased]` in `CHANGELOG.md`; where one is missing, add it, saying what changed for Users or Self-hosters. Where a change needs a manual step on upgrade (a new required setting in `.env.example`, a changed compose file, a destructive migration), add an **Upgrade notes:** line saying what to do. Keep **Upgrade notes:** for those steps: an entry with nothing to do by hand (a migration the backend applies on start, an optional setting) says so in its prose and carries none. `sh scripts/release-notes.sh --manual-steps X.Y.Z` (or `FROM..TO`) prints only the entries with Upgrade notes, and nothing when there are none; the deploy reads it. Commit any additions as `Complete the CHANGELOG for X.Y.Z`.
 
    **Check:** every listed PR without `no-changelog` is covered by an entry, and `## [Unreleased]` has entries. If it has none, there is nothing to release: delete the branch and stop.
 

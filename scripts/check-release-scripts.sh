@@ -131,6 +131,28 @@ else
 fi
 
 git reset -q --hard "$base"
+printf '%s\n' '- A change. **Upgrade notes:** Nothing to do by hand; the backend applies the migration on start.' >"$work/entry"
+awk -v f="$work/entry" '{ print } $0 == "- A fix." { while ((getline l < f) > 0) print l }' CHANGELOG.md >"$work/c" && cat "$work/c" >CHANGELOG.md
+git commit -q -am "add an entry with empty upgrade notes"
+run sh "$scripts/check-changelog-entry.sh" "$base"
+if [ "$status" -ne 0 ] && grep -q 'Upgrade notes' "$err"; then
+  pass "check-changelog-entry rejects Upgrade notes that say there is nothing to do by hand"
+else
+  fail "expected check-changelog-entry to reject empty Upgrade notes, got status $status"
+fi
+
+git reset -q --hard "$base"
+printf '%s\n' '- A change. **Upgrade notes:** If `.env` sets `OLD`, rename it to `NEW`.' >"$work/entry"
+awk -v f="$work/entry" '{ print } $0 == "- A fix." { while ((getline l < f) > 0) print l }' CHANGELOG.md >"$work/c" && cat "$work/c" >CHANGELOG.md
+git commit -q -am "add an entry with real upgrade notes"
+run sh "$scripts/check-changelog-entry.sh" "$base"
+if [ "$status" -eq 0 ]; then
+  pass "check-changelog-entry passes Upgrade notes that name a step"
+else
+  fail "expected check-changelog-entry to pass real Upgrade notes: $(cat "$err")"
+fi
+
+git reset -q --hard "$base"
 sh "$scripts/prepare-release.sh" 0.2.0 >/dev/null
 git commit -q -am "Release 0.2.0"
 run sh "$scripts/check-changelog-entry.sh" "$base"
