@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-01
+
 ### Added
 
 - The Author directory: the X accounts your Instance knows, each with its name and photo, shared by every User. It starts with 193 seeded accounts and gains every account an Inspiration author is fetched for. The Persona page shows each Inspiration author's name beside their handle, and photos load at the size each place needs. A Subscribed User reads the whole directory, with how many Users have each account in their Persona and never which ones, from `GET /api/v1/author-directory`, and `GET /api/v1/inspiration-authors` now returns each author's `name`. **Upgrade notes:** the backend applies two database migrations when it starts: one moves each Inspiration author's stored photo into the Author directory, and one seeds the directory from a data file shipped with Pumpkit, with no twitterapi.io request and no key needed. There is nothing to do by hand. The one-off photo backfill command, `python -m pumpkit.authors.photo_backfill`, is gone.
