@@ -1,14 +1,21 @@
 """Consent requests and the authorization codes approving one hands out. Flushes, never commits."""
 
+import base64
+import hashlib
+import hmac
+import re
 from datetime import datetime
 from typing import Optional, cast
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.connected_apps.models import OAuthAuthorization, OAuthClient
+from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization, OAuthClient
 from pumpkit.connected_apps.service.tokens import AUTHORIZATION_REQUEST_LIFETIME, CODE_LIFETIME
 from pumpkit.core.security import generate_token, hash_token
+
+# RFC 7636 section 4.1: 43 to 128 unreserved characters.
+_CODE_VERIFIER = re.compile(r"[A-Za-z0-9\-._~]{43,128}")
 
 
 async def create_pending(
@@ -102,6 +109,50 @@ async def _decide(
         update(OAuthAuthorization)
         .where(OAuthAuthorization.id == authorization.id, OAuthAuthorization.approved.is_(None))
         .values(user_id=user_id, approved=approved, decided_at=now, **values)
+        .execution_options(synchronize_session="fetch")
+    )
+    return cast(CursorResult, result).rowcount == 1
+
+
+def pkce_matches(verifier: str, challenge: str) -> bool:
+    """RFC 7636's S256 check, in constant time. A verifier of the wrong shape never matches."""
+    if not _CODE_VERIFIER.fullmatch(verifier):
+        return False
+    digest = hashlib.sha256(verifier.encode()).digest()
+    computed = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+    return hmac.compare_digest(computed, challenge)
+
+
+async def find_code(
+    db: AsyncSession, code: str, *, now: datetime
+) -> Optional[tuple[OAuthAuthorization, AppConnection]]:
+    """
+    The approved request and connection a code is for, or None when the code is unknown or
+    expired. A code already exchanged is found however long ago: presenting it again is reuse.
+    """
+    row = (
+        await db.execute(
+            select(OAuthAuthorization, AppConnection)
+            .join(AppConnection, AppConnection.id == OAuthAuthorization.app_connection_id)
+            .where(
+                OAuthAuthorization.code_hash == hash_token(code),
+                or_(
+                    OAuthAuthorization.exchanged_at.is_not(None),
+                    OAuthAuthorization.code_expires_at > now,
+                ),
+            )
+        )
+    ).one_or_none()
+    return None if row is None else (row[0], row[1])
+
+
+async def mark_exchanged(db: AsyncSession, authorization_id: str, *, now: datetime) -> bool:
+    """False when another request exchanged the code first."""
+    # Conditional, so two concurrent exchanges of one code can't both get tokens.
+    result = await db.execute(
+        update(OAuthAuthorization)
+        .where(OAuthAuthorization.id == authorization_id, OAuthAuthorization.exchanged_at.is_(None))
+        .values(exchanged_at=now)
         .execution_options(synchronize_session="fetch")
     )
     return cast(CursorResult, result).rowcount == 1

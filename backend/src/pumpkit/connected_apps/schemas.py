@@ -138,3 +138,13 @@ class RedirectResponseBody(BaseModel):
     """Where the consent page sends the browser after the User decides."""
 
     redirect_url: str
+
+
+class TokenResponse(BaseModel):
+    """RFC 6749 section 5.1: what the token endpoint answers with a new pair."""
+
+    access_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    expires_in: int
+    refresh_token: str
+    scope: str
