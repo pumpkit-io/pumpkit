@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, exists
+from sqlalchemy import and_, delete, exists, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization, OAuthClient
@@ -22,8 +22,14 @@ async def purge_expired(db: AsyncSession, *, now: datetime) -> None:
     cutoff = now - UNUSED_CLIENT_AGE
     await db.execute(
         delete(OAuthClient).where(
-            OAuthClient.kind == "registered",
-            OAuthClient.created_at < cutoff,
+            or_(
+                and_(OAuthClient.kind == "registered", OAuthClient.created_at < cutoff),
+                # Any URL serving a valid document makes a row, so stale unused ones go too.
+                and_(
+                    OAuthClient.kind == "metadata_document",
+                    OAuthClient.metadata_expires_at < cutoff,
+                ),
+            ),
             ~exists().where(AppConnection.client_id == OAuthClient.id),
             ~exists().where(
                 OAuthAuthorization.client_id == OAuthClient.id,

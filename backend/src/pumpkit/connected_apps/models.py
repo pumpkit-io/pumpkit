@@ -49,6 +49,7 @@ class OAuthClient(Base):
     software_id: Mapped[Optional[str]] = mapped_column(String)
     software_version: Mapped[Optional[str]] = mapped_column(String)
     metadata_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    metadata_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

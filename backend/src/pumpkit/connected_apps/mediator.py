@@ -28,6 +28,13 @@ from pumpkit.connected_apps.schemas import (
     TokenResponse,
 )
 from pumpkit.connected_apps.service import authorizations, clients, connections, retention, tokens
+from pumpkit.connected_apps.service.client_metadata import (
+    ClientMetadataFetcher,
+    fetch_metadata_document,
+    find_cached_metadata_document_client,
+    is_metadata_document_url,
+    store_metadata_document_client,
+)
 from pumpkit.connected_apps.service.redirect_uris import matches_registered, redirect_host
 from pumpkit.connected_apps.service.tokens import (
     ACCESS_TOKEN_LIFETIME,
@@ -104,6 +111,7 @@ def authorization_server_metadata() -> AuthorizationServerMetadata:
         token_endpoint_auth_methods_supported=_CLIENT_AUTH_METHODS,
         revocation_endpoint_auth_methods_supported=_CLIENT_AUTH_METHODS,
         authorization_response_iss_parameter_supported=True,
+        client_id_metadata_document_supported=True,
     )
 
 
@@ -179,7 +187,11 @@ def _too_large() -> OAuthError:
 
 
 async def start_authorization(
-    params: list[tuple[str, str]], db: AsyncSession, *, now: datetime
+    params: list[tuple[str, str]],
+    db: AsyncSession,
+    fetcher: ClientMetadataFetcher,
+    *,
+    now: datetime,
 ) -> str:
     """
     Where authorize sends the browser: the consent page with the stored request, the consent
@@ -191,7 +203,9 @@ async def start_authorization(
     # Before the lookup, so it can't delete the app this request's row goes on to point at.
     await retention.purge_expired(db, now=now)
     try:
-        client, redirect_uri, redirect_uri_was_sent = await _trusted_redirect(db, values)
+        client, redirect_uri, redirect_uri_was_sent = await _trusted_redirect(
+            db, values, fetcher, now=now
+        )
     except OAuthError as error:
         return _with_query(settings.oauth_consent_page_url(), {"error": error.error})
 
@@ -233,7 +247,11 @@ async def start_authorization(
 
 
 async def _trusted_redirect(
-    db: AsyncSession, values: dict[str, list[str]]
+    db: AsyncSession,
+    values: dict[str, list[str]],
+    fetcher: ClientMetadataFetcher,
+    *,
+    now: datetime,
 ) -> tuple[OAuthClient, str, bool]:
     """
     The app, the redirect URI to answer on, and whether the request named it. Errors carry only
@@ -242,7 +260,10 @@ async def _trusted_redirect(
     client_id = _single(values, "client_id", "invalid_client")
     client = None
     if client_id is not None and _CLIENT_ID.fullmatch(client_id):
-        client = await clients.get_client(db, client_id)
+        if is_metadata_document_url(client_id):
+            client = await _metadata_document_client(db, client_id, fetcher, now=now)
+        else:
+            client = await clients.get_client(db, client_id)
     if client is None:
         raise OAuthError("invalid_client")
 
@@ -252,6 +273,22 @@ async def _trusted_redirect(
     if requested is None or not matches_registered(requested, client.redirect_uris):
         raise OAuthError("invalid_redirect_uri")
     return client, requested, True
+
+
+async def _metadata_document_client(
+    db: AsyncSession, url: str, fetcher: ClientMetadataFetcher, *, now: datetime
+) -> Optional[OAuthClient]:
+    """The app the document at `url` describes: its fresh cached copy, or one fetched now."""
+    cached = await find_cached_metadata_document_client(db, url, now=now)
+    if cached is None:
+        return None
+    if cached.is_fresh:
+        return cached.client
+    # Early commit: ends the purge and the read, so no connection or row lock is held while
+    # an app's server takes up to 5 seconds to answer.
+    await db.commit()
+    fetched = await fetch_metadata_document(url, fetcher)
+    return await store_metadata_document_client(db, url, cached.client, fetched, now=now)
 
 
 def _check_request(values: dict[str, list[str]]) -> str:
