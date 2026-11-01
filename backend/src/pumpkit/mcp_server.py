@@ -80,8 +80,8 @@ a link to open.
 order, and get their explicit yes. Post now publishes at once and can't be undone.
 """
 
-# An OAuth access token in a header guards the endpoint, so a rebinding attack has nothing to
-# reach; the default check would also refuse every Instance's own Host.
+# A bearer header (an OAuth access token, or an API key until #316) guards the endpoint, so a
+# rebinding attack has nothing to reach; the default check would also refuse every Instance's Host.
 _TRANSPORT_SECURITY = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
 # Each request starts and stops its own session manager, which would log both at INFO.
@@ -139,17 +139,14 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
     return handler
 
 
-# ChatGPT reads it to know a tool needs sign-in; OpenAI's Apps SDK reference lists it in `_meta`.
-_SECURITY_SCHEMES = [{"type": "oauth2", "scopes": [SCOPE]}]
-
-
 def build_server(tools: list[McpTool]) -> MCPServer:
     server = MCPServer(name="pumpkit", instructions=INSTRUCTIONS)
     for tool in tools:
         server.add_tool(
             _handler(tool),
             annotations=tool.annotations,
-            meta={"securitySchemes": _SECURITY_SCHEMES},
+            # ChatGPT reads it to know a tool needs sign-in, per OpenAI's Apps SDK reference.
+            meta={"securitySchemes": [{"type": "oauth2", "scopes": [SCOPE]}]},
         )
     return server
 
@@ -157,8 +154,9 @@ def build_server(tools: list[McpTool]) -> MCPServer:
 class McpEndpoint:
     """
     The ASGI app at `/api/v1/mcp`. It answers 401 with a Bearer challenge unless an access token
-    or an API key authenticates the request, then serves it with a session manager of its own: stateless
-    requests share nothing, and FastAPI never runs a lifespan the manager could start in tests.
+    or an API key authenticates the request, then serves it with a session manager of its own:
+    stateless requests share nothing, and FastAPI never runs a lifespan the manager could start
+    in tests.
     """
 
     def __init__(self, server: MCPServer) -> None:

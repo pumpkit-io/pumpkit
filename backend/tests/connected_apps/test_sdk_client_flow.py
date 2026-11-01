@@ -118,6 +118,7 @@ async def test_the_sdk_client_refreshes_an_expired_token_without_signing_in_agai
         await client.list_tools()
         # Past the access token's hour on both the app's clock and Pumpkit's.
         later = time.time() + timedelta(hours=1, minutes=5).total_seconds()
+        # The SDK reads `time.time` to decide a token has expired.
         monkeypatch.setattr(time, "time", lambda: later)
         clock.advance(timedelta(hours=1, minutes=5))
         result = await client.call_tool("list_inspiration_authors", {})

@@ -131,7 +131,15 @@ Claude Code reaches Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 
 2. Validate input as the route does: build the route's request schema (`InspirationAuthorAddRequest(handle=handle)`) so its checks and messages are the same.
 3. Add an `McpTool(fn, rate=..., annotations=...)` to the module's `TOOLS` list. Use the web route's rate where it has one, through the area's `WRITE_RATE` in `schemas.py`, and `READ_ONLY_RATE` for tools that only read. Pick `READ_ONLY`, `ADDITIVE` or `DESTRUCTIVE`: clients ask the User before a destructive tool, and treat a tool without annotations as destructive. Every tool is refused to a User who isn't Subscribed (ADR 0018). A browser-only tool just answers with a web app link, as a `LinkToolResponse` (`core/schemas.py`): `connect_x` in `scheduling/tools.py` and `manage_subscription` in `billing/tools.py`.
 
-`pumpkit/mcp_server.py` authenticates every request before any tool runs. It takes the bearer credential to `connected_apps/mediator.authenticate_mcp_token`, which accepts an unexpired, unrevoked access token whose app is still connected, that was issued for this Instance's MCP URL (`settings.mcp_url()`), and whose User exists and isn't Suspended, and records the app's last use at most once a minute. Until API keys are removed, an API key still authenticates; a web Session's access token never does. Anything else gets a 401 whose `WWW-Authenticate` names the protected resource metadata MCP clients start sign-in from, with `error="invalid_token"` when a credential was refused. `build_server` gives every tool the OAuth security scheme in `_meta.securitySchemes`, which ChatGPT reads to know a tool needs sign-in.
+`pumpkit/mcp_server.py` authenticates every request before any tool runs. It takes the bearer credential to `connected_apps/mediator.authenticate_mcp_token`, which accepts an access token when:
+
+- it is unexpired;
+- it is unrevoked;
+- its app is still connected;
+- it was issued for this Instance's MCP URL (`settings.mcp_url()`);
+- its User exists and isn't Suspended.
+
+It then records the app's last use at most once a minute. Until API keys are removed, an API key still authenticates; a web Session's access token never does. Anything else gets a 401 whose `WWW-Authenticate` names the protected resource metadata MCP clients start sign-in from, with `error="invalid_token"` when a credential was refused. `build_server` gives every tool the OAuth security scheme in `_meta.securitySchemes`, which ChatGPT reads to know a tool needs sign-in.
 
 It registers every module's `TOOLS` and wraps each tool: it counts the call against the User's limit for that tool, checks access with `billing/service.has_access` (a tool error with the subscribe link otherwise), opens the call's session, and turns what the tool raises into a tool error. An `AppError` or a request schema's `ValidationError` keeps the web route's `detail` word for word, then the fix page's `url` when there is one, and `retry_at` when there is one; a reported error goes to PostHog with an `error_id`, as the global handler sends it. So a tool raises the mediator's refusals and never catches them. Tool calls send no product events (ADR 0012).
 

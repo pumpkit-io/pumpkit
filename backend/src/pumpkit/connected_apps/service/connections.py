@@ -10,17 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.connected_apps.models import AppConnection, OAuthRefreshToken
 from pumpkit.core.time import as_utc
 
-# How fresh `last_used_at` stays: a minute, so an app calling tools doesn't write its row every call.
+# How fresh `last_used_at` stays, so an app calling tools doesn't write its row every call.
 _LAST_USED_RESOLUTION = timedelta(minutes=1)
 
 
 async def find_or_create(
     db: AsyncSession, *, user_id: str, client_id: str, scope: str, resource: str, now: datetime
 ) -> AppConnection:
-    """The User's unrevoked connection to the app, so connecting it again keeps one row."""
+    """
+    The User's unrevoked connection to the app, so connecting it again keeps one row. One for
+    another resource is revoked and replaced: its tokens stay bound to it (RFC 8707).
+    """
     connection = await _find_unrevoked(db, user_id=user_id, client_id=client_id)
-    if connection is not None:
+    if connection is not None and connection.resource == resource:
         return connection
+    if connection is not None:
+        await revoke(db, connection.id, now=now)
     connection = AppConnection(
         user_id=user_id, client_id=client_id, scope=scope, resource=resource, created_at=now
     )
@@ -51,7 +56,7 @@ async def _find_unrevoked(
 
 
 async def record_use(db: AsyncSession, connection: AppConnection, *, now: datetime) -> None:
-    """Set `last_used_at` to `now`, unless it was set less than a minute before."""
+    """Set `last_used_at` to `now`, unless it was set within `_LAST_USED_RESOLUTION`."""
     stale_before = now - _LAST_USED_RESOLUTION
     last_used_at = connection.last_used_at
     if last_used_at is not None and as_utc(last_used_at) > stale_before:

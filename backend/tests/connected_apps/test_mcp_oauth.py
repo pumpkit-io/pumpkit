@@ -7,7 +7,7 @@ from sqlalchemy import delete
 
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
-from tests.connected_apps.conftest import REVOKE, approved_code, exchange
+from tests.connected_apps.conftest import REVOKE, approved_code, exchange, refresh
 from tests.mcp_client import MCP, McpClient, error_text
 
 INVALID_TOKEN = 'error="invalid_token"'
@@ -64,6 +64,35 @@ async def test_a_token_for_another_resource_is_refused(mcp_app, monkeypatch):
     assert_refused(await mcp_app.send("tools/list"))
 
 
+async def test_after_the_instance_moves_refreshing_disconnects_the_app_so_it_signs_in_again(
+    app, oauth_client, tokens, mcp_app, monkeypatch
+):
+    old_url = settings.PUBLIC_URL
+    monkeypatch.setattr(settings, "PUBLIC_URL", "https://pumpkit.example.org")
+
+    response = await refresh(app, oauth_client, tokens["refresh_token"])
+
+    assert response.status_code == 400, response.text
+    assert response.json()["error"] == "invalid_grant"
+    monkeypatch.setattr(settings, "PUBLIC_URL", old_url)
+    assert_refused(await mcp_app.send("tools/list"))
+
+
+async def test_after_the_instance_moves_connecting_again_gets_a_token_the_endpoint_accepts(
+    app, authed_client, oauth_client, mcp_app, monkeypatch
+):
+    old_url = settings.PUBLIC_URL
+    monkeypatch.setattr(settings, "PUBLIC_URL", "https://pumpkit.example.org")
+
+    code = await approved_code(authed_client, app, oauth_client)
+    reconnected = (await exchange(app, oauth_client, code)).json()
+
+    assert (await McpClient(app, reconnected["access_token"]).send("tools/list")).status_code == 200
+    # Back at the old URL, the old token would pass again had its connection stayed connected.
+    monkeypatch.setattr(settings, "PUBLIC_URL", old_url)
+    assert_refused(await mcp_app.send("tools/list"))
+
+
 async def test_a_suspended_users_access_token_is_refused_until_the_suspension_ends(
     mcp_app, user, suspend_user, lift_suspension
 ):
@@ -84,7 +113,7 @@ async def test_a_refresh_token_is_not_an_access_token(app, tokens):
     assert_refused(await McpClient(app, tokens["refresh_token"]).send("tools/list"))
 
 
-async def test_a_user_whose_subscription_ended_gets_the_subscribe_link(mcp_app, db):
+async def test_a_user_without_a_subscription_gets_the_subscribe_link(mcp_app, db):
     await db.execute(delete(Subscription))
     await db.commit()
 

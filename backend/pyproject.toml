@@ -48,6 +48,7 @@ dev = [
     "aiosqlite>=0.21.0",
     "import-linter>=2.15",
     "aiosmtpd>=1.4.6",
+    "httpx2>=2.13.1",
 ]
 
 [tool.hatch.build.targets.wheel]
