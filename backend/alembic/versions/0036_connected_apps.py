@@ -1,7 +1,7 @@
 """add Connected apps
 
 An AI app reaches the MCP server with OAuth (ADR 0020). `oauth_clients` holds each app's
-registration, `app_connections` a User's grant to an app (the Connected app they see and
+registration, `app_connections` a User's connection to an app (the Connected app they see and
 disconnect), `oauth_authorizations` each consent request with its single-use code, and
 `oauth_refresh_tokens` and `oauth_access_tokens` the tokens issued. Every secret is stored as a
 SHA-256 hash. Connections, tokens and requests go with the User's account.

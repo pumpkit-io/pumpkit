@@ -11,7 +11,7 @@ from pumpkit.connected_apps.service.redirect_uris import (
     "uri",
     [
         "https://claude.ai/api/mcp/auth_callback",
-        "https://example.com/cb?tenant=1",
+        "https://example.com/cb?team=1",
         "http://localhost:8080/callback",
         "http://localhost/callback",
         "http://127.0.0.1:33418/callback",
@@ -29,6 +29,8 @@ def test_allowed_redirect_uris_are_returned_unchanged(uri):
     "uri",
     [
         "https://example.com/cb#fragment",
+        "https://example.com/caf\u00e9",
+        "https://\u00e9xample.com/cb",
         "http://localhost/cb#fragment",
         "cursor://callback#fragment",
         "http://example.com/callback",

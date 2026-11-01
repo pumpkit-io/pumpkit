@@ -29,6 +29,7 @@ import pumpkit.posts.tools as posts_tools
 import pumpkit.scheduling.tools as scheduling_tools
 from pumpkit.auth.dependencies import CREDENTIALS_INVALID
 from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
+from pumpkit.connected_apps.service.tokens import SCOPE
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.mcp_tools import McpTool, ToolCall, error_result, resolve, tool_error
@@ -204,7 +205,7 @@ def _unauthorized(detail: str, *, refused: bool) -> JSONResponse:
     credential was presented and turned down, which adds `error="invalid_token"`.
     """
     challenge = f'Bearer resource_metadata="{settings.oauth_protected_resource_metadata_url()}", '
-    challenge += 'scope="pumpkit"'
+    challenge += f'scope="{SCOPE}"'
     if refused:
         challenge += f', error="invalid_token", error_description="{detail}"'
     return JSONResponse(
