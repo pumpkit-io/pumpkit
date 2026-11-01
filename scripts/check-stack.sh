@@ -92,6 +92,13 @@ else
   fail "/api/v1/instance: expected 200 with app_name, got $code $(head -c 200 "$body")"
 fi
 
+get /.well-known/oauth-authorization-server
+if [ "$code" = 200 ] && grep -q "\"issuer\":\"$base_url\"" "$body"; then
+  pass "/.well-known/oauth-authorization-server reaches the backend with issuer $base_url"
+else
+  fail "/.well-known/oauth-authorization-server: expected the backend's JSON with issuer $base_url, got $code $(head -c 200 "$body"); forward /.well-known/oauth-* to the backend"
+fi
+
 if [ "${POSTHOG_RELAY:-false}" = true ]; then
   get /ph-relay/static/array.js
   if [ "$code" = 200 ] && case $content_type in *javascript*) true ;; *) false ;; esac; then
