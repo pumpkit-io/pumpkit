@@ -9,7 +9,7 @@ import { useInstance } from '@/features/instance/useInstance';
 import { track } from '@/lib/analytics';
 import { timeAgo } from '@/lib/relativeTime';
 import { cn } from '@/lib/utils';
-import { errorMessage } from '@/services/apiErrors';
+import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { appConnectionService, type AppConnection } from '@/services/appConnectionService';
 
 const dayFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
@@ -44,9 +44,9 @@ function Steps({ children }: { children: ReactNode }) {
   return <p className="font-sans text-sm text-muted-foreground">{children}</p>;
 }
 
-function HowTo({ client, children }: { client: string; children: ReactNode }) {
+function HowTo({ client, open, children }: { client: string; open: boolean; children: ReactNode }) {
   return (
-    <details className="group">
+    <details className="group" open={open}>
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm py-2 font-sans text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
         <ChevronDown
           aria-hidden
@@ -60,7 +60,15 @@ function HowTo({ client, children }: { client: string; children: ReactNode }) {
 }
 
 /** The MCP URL and how to add it to each app: what a User needs to connect one. */
-function Setup({ mcpUrl, appName }: { mcpUrl: string | null; appName: string }) {
+function Setup({
+  mcpUrl,
+  appName,
+  howTosOpen,
+}: {
+  mcpUrl: string | null;
+  appName: string;
+  howTosOpen: boolean;
+}) {
   if (mcpUrl === null) {
     return <ErrorBanner message="Couldn't load the URL to connect apps. Reload the page." />;
   }
@@ -71,37 +79,41 @@ function Setup({ mcpUrl, appName }: { mcpUrl: string | null; appName: string }) 
     <div className="space-y-3">
       <CopyRow label="Paste this URL into your AI app" value={mcpUrl} copyLabel="Copy URL" />
       <div className="divide-y divide-border">
-        <HowTo client="claude.ai, Claude Desktop, mobile">
+        <HowTo open={howTosOpen} client="claude.ai, Claude Desktop, mobile">
           <Steps>
             In Claude, open Settings, then Connectors, and choose Add custom connector. Name it{' '}
             {appName}, paste the URL and leave the OAuth fields empty. Click Connect, sign in and
-            click Allow. On Team and Enterprise plans an Owner adds it first; on Free you get one
-            custom connector.
+            click Allow. On Team and Enterprise plans an Owner adds it first, then each member
+            connects. On Free you get one custom connector.
           </Steps>
         </HowTo>
-        <HowTo client="ChatGPT">
+        <HowTo open={howTosOpen} client="ChatGPT">
           <Steps>
-            In ChatGPT, open Settings, then Apps, then Advanced, and turn on Developer mode. Create
-            an app with the URL as its MCP server URL and OAuth as its authentication, then sign in
-            and click Allow. In a chat, pick {appName} from the + menu under Developer mode.
+            In ChatGPT, open Settings, then Apps, then Advanced, and turn on Developer mode (on
+            Business and Enterprise, a workspace admin turns it on). Create an app with the URL as
+            its MCP server URL and OAuth as its authentication, then sign in and click Allow. In a
+            chat, pick {appName} from the + menu under Developer mode.
           </Steps>
         </HowTo>
-        <HowTo client="Claude Code">
+        <HowTo open={howTosOpen} client="Claude Code">
           <CopyRow
             label="Run this in a terminal"
             value={`claude mcp add --scope user --transport http ${name} ${mcpUrl}`}
             copyLabel="Copy the Claude Code command"
           />
-          <Steps>Then, inside Claude Code, run /mcp, pick {name} and choose Authenticate.</Steps>
+          <Steps>
+            Then, inside Claude Code, run /mcp, pick {name} and choose Authenticate, or run claude
+            mcp login {name} in a terminal.
+          </Steps>
         </HowTo>
-        <HowTo client="Codex CLI">
+        <HowTo open={howTosOpen} client="Codex CLI">
           <CopyRow
             label="Run these in a terminal, then sign in"
             value={`codex mcp add ${name} --url ${mcpUrl}\ncodex mcp login ${name}`}
             copyLabel="Copy the Codex commands"
           />
         </HowTo>
-        <HowTo client="Gemini CLI">
+        <HowTo open={howTosOpen} client="Gemini CLI">
           <CopyRow
             label="Add this to ~/.gemini/settings.json"
             value={json({ mcpServers: { [name]: { httpUrl: mcpUrl } } })}
@@ -109,7 +121,7 @@ function Setup({ mcpUrl, appName }: { mcpUrl: string | null; appName: string }) 
           />
           <Steps>Then run /mcp auth {name} in Gemini CLI and sign in.</Steps>
         </HowTo>
-        <HowTo client="Cursor">
+        <HowTo open={howTosOpen} client="Cursor">
           <CopyRow
             label="Add this to ~/.cursor/mcp.json"
             value={json({ mcpServers: { [name]: { url: mcpUrl } } })}
@@ -119,7 +131,7 @@ function Setup({ mcpUrl, appName }: { mcpUrl: string | null; appName: string }) 
             Then click Connect next to {name} in Cursor&apos;s MCP settings and sign in.
           </Steps>
         </HowTo>
-        <HowTo client="VS Code">
+        <HowTo open={howTosOpen} client="VS Code">
           <CopyRow
             label="Add this to .vscode/mcp.json or your user mcp.json"
             value={json({ servers: { [name]: { type: 'http', url: mcpUrl } } })}
@@ -128,17 +140,21 @@ function Setup({ mcpUrl, appName }: { mcpUrl: string | null; appName: string }) 
           <Steps>Then start the server and sign in when VS Code asks.</Steps>
         </HowTo>
       </div>
+      <p className="font-sans text-xs text-muted-foreground">
+        None of these use a key. If an app already has {appName} set up with --header, headers or
+        http_headers, remove that entry first.
+      </p>
     </div>
   );
 }
 
 function AppRow({
   app,
-  appName,
+  instanceName,
   onDisconnected,
 }: {
   app: AppConnection;
-  appName: string;
+  instanceName: string;
   onDisconnected: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -153,12 +169,16 @@ function AppRow({
     try {
       await appConnectionService.disconnect(app.id);
       track('app_disconnected');
-      showToast(`Disconnected ${app.appName}.`);
-      onDisconnected();
     } catch (err) {
-      setError(errorMessage(err, `Couldn't disconnect ${app.appName}. Try again.`));
-      setDisconnecting(false);
+      // A 404 means it was already disconnected, from another tab or device.
+      if (errorStatus(err) !== 404) {
+        setError(errorMessage(err, `Couldn't disconnect ${app.appName}. Try again.`));
+        setDisconnecting(false);
+        return;
+      }
     }
+    showToast(`Disconnected ${app.appName}.`);
+    onDisconnected();
   };
 
   return (
@@ -195,7 +215,7 @@ function AppRow({
       {confirming && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-sans text-xs text-muted-foreground">
-            {app.appName} stops working with {appName} at once.
+            {app.appName} stops working with {instanceName} at once.
           </p>
           <div className="flex shrink-0 gap-2">
             <Button
@@ -270,7 +290,7 @@ export function ConnectedAppsCard() {
   useEffect(load, [load]);
 
   const remove = (id: string) =>
-    setApps((current) => (current ?? []).filter((app) => app.id !== id));
+    setApps((current) => current && current.filter((app) => app.id !== id));
 
   let body: ReactNode;
   if (loadFailed) {
@@ -280,7 +300,7 @@ export function ConnectedAppsCard() {
   } else if (apps.length === 0) {
     body = (
       <>
-        <Setup mcpUrl={mcpUrl} appName={appName} />
+        <Setup mcpUrl={mcpUrl} appName={appName} howTosOpen />
         <p className="font-sans text-xs text-muted-foreground">No apps connected yet.</p>
       </>
     );
@@ -294,7 +314,7 @@ export function ConnectedAppsCard() {
               <AppRow
                 key={app.id}
                 app={app}
-                appName={appName}
+                instanceName={appName}
                 onDisconnected={() => remove(app.id)}
               />
             ))}
@@ -319,7 +339,7 @@ export function ConnectedAppsCard() {
           </button>
           {addingAnother && (
             <div id={setupId}>
-              <Setup mcpUrl={mcpUrl} appName={appName} />
+              <Setup mcpUrl={mcpUrl} appName={appName} howTosOpen={false} />
             </div>
           )}
         </div>

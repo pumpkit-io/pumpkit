@@ -44,7 +44,7 @@ async def find_or_create(
 async def list_unrevoked(
     db: AsyncSession, *, user_id: str
 ) -> list[tuple[AppConnection, OAuthClient]]:
-    """The User's Connected apps with their apps, newest first."""
+    """Each of the User's unrevoked connections with its `OAuthClient`, newest first."""
     rows = await db.execute(
         select(AppConnection, OAuthClient)
         .join(OAuthClient, OAuthClient.id == AppConnection.client_id)
