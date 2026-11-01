@@ -5,7 +5,7 @@
 ```
 backend/src/pumpkit/
   main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
-  mcp_server.py    the MCP server: every area's tools behind API key authentication (OAuth soon, ADR 0020), the access gate and per-User limits
+  mcp_server.py    the MCP server: every area's tools behind OAuth access tokens (ADR 0020; API keys until they are removed), the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
   core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
@@ -131,11 +131,21 @@ Claude Code reaches Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 
 2. Validate input as the route does: build the route's request schema (`InspirationAuthorAddRequest(handle=handle)`) so its checks and messages are the same.
 3. Add an `McpTool(fn, rate=..., annotations=...)` to the module's `TOOLS` list. Use the web route's rate where it has one, through the area's `WRITE_RATE` in `schemas.py`, and `READ_ONLY_RATE` for tools that only read. Pick `READ_ONLY`, `ADDITIVE` or `DESTRUCTIVE`: clients ask the User before a destructive tool, and treat a tool without annotations as destructive. Every tool is refused to a User who isn't Subscribed (ADR 0018). A browser-only tool just answers with a web app link, as a `LinkToolResponse` (`core/schemas.py`): `connect_x` in `scheduling/tools.py` and `manage_subscription` in `billing/tools.py`.
 
-`pumpkit/mcp_server.py` registers every module's `TOOLS` and wraps each tool: it counts the call against the User's limit for that tool, checks access with `billing/service.has_access` (a tool error with the subscribe link otherwise), opens the call's session, and turns what the tool raises into a tool error. An `AppError` or a request schema's `ValidationError` keeps the web route's `detail` word for word, then the fix page's `url` when there is one, and `retry_at` when there is one; a reported error goes to PostHog with an `error_id`, as the global handler sends it. So a tool raises the mediator's refusals and never catches them. Tool calls send no product events (ADR 0012).
+`pumpkit/mcp_server.py` authenticates every request before any tool runs. It takes the bearer credential to `connected_apps/mediator.authenticate_mcp_token`, which accepts an access token when:
+
+- it is unexpired;
+- it is unrevoked;
+- its app is still connected;
+- it was issued for this Instance's MCP URL (`settings.mcp_url()`);
+- its User exists and isn't Suspended.
+
+It then records the app's last use at most once a minute. Until API keys are removed, an API key still authenticates; a web Session's access token never does. Anything else gets a 401 whose `WWW-Authenticate` names the protected resource metadata MCP clients start sign-in from, with `error="invalid_token"` when a credential was refused. `build_server` gives every tool the OAuth security scheme in `_meta.securitySchemes`, which ChatGPT reads to know a tool needs sign-in.
+
+It registers every module's `TOOLS` and wraps each tool: it counts the call against the User's limit for that tool, checks access with `billing/service.has_access` (a tool error with the subscribe link otherwise), opens the call's session, and turns what the tool raises into a tool error. An `AppError` or a request schema's `ValidationError` keeps the web route's `detail` word for word, then the fix page's `url` when there is one, and `retry_at` when there is one; a reported error goes to PostHog with an `error_id`, as the global handler sends it. So a tool raises the mediator's refusals and never catches them. Tool calls send no product events (ADR 0012).
 
 import-linter lets only `pumpkit.mcp_server` import a tools module, and keeps a tools module from importing its router or the router from importing it.
 
-Test a tool through the endpoint with the `mcp` fixture: Claude Code connected with an API key that `user` created through `POST /api/v1/api-keys` after a real sign-in, on a client without the `get_current_user` override. Request `subscribed` or `sells_no_plans` before it, since creating a key needs access. `await mcp.call_tool("add_inspiration_author", handle="levelsio")` returns the result, with `structuredContent` holding the response schema; `error_text(result)` (`tests/mcp_client.py`) asserts a tool error and returns its text. See `backend/tests/authors/test_inspiration_author_tools.py`.
+Test a tool through the endpoint with the `mcp` fixture: Claude Code connected with an API key that `user` created through `POST /api/v1/api-keys` after a real sign-in, on a client without the `get_current_user` override. Request `subscribed` or `sells_no_plans` before it, since creating a key needs access. `await mcp.call_tool("add_inspiration_author", handle="levelsio")` returns the result, with `structuredContent` holding the response schema; `error_text(result)` (`tests/mcp_client.py`) asserts a tool error and returns its text. See `backend/tests/authors/test_inspiration_author_tools.py`. `backend/tests/connected_apps/test_sdk_client_flow.py` drives the official MCP SDK client through discovery, registration, sign-in and a refresh against the app.
 
 ### Call an LLM
 
