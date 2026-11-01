@@ -1,5 +1,5 @@
 import type { InternalAxiosRequestConfig } from 'axios';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -837,32 +837,16 @@ describe('Landing pricing', () => {
 });
 
 describe('Landing GitHub button', () => {
-  it('shows the star count compactly once GitHub answers, fetched once', async () => {
+  it('links to the repository without a star count and without calling GitHub', () => {
     const fetchFake = fakeGitHubRepo(gitHubRepoWithStars(1234));
     renderLanding();
-    const header = screen.getByRole('banner');
-    const button = await within(header).findByRole('link', { name: 'GitHub, 1.2k stars' });
-    expect(button).toHaveAttribute('href', 'https://github.com/pumpkit-io/pumpkit');
-    expect(fetchFake).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows without a count when GitHub fails', async () => {
-    const fetchFake = fakeGitHubRepo(Promise.resolve(new Response('', { status: 403 })));
-    renderLanding();
-    await waitFor(() => expect(fetchFake).toHaveBeenCalled());
-    await act(async () => {});
     const header = screen.getByRole('banner');
     expect(within(header).getByRole('link', { name: 'GitHub' })).toHaveAttribute(
       'href',
       'https://github.com/pumpkit-io/pumpkit',
     );
-    expect(within(header).queryByText(/stars/)).not.toBeInTheDocument();
-  });
-
-  it('shows without a count while GitHub has not answered', () => {
-    renderLanding();
-    const header = screen.getByRole('banner');
-    expect(within(header).getByRole('link', { name: 'GitHub' })).toBeInTheDocument();
+    expect(within(header).queryByText(/1\.2k/)).not.toBeInTheDocument();
+    expect(fetchFake).not.toHaveBeenCalled();
   });
 
   it('tracks a desktop click with its surface', () => {
@@ -871,12 +855,11 @@ describe('Landing GitHub button', () => {
     expect(track).toHaveBeenCalledWith('landing_nav_github_clicked', { surface: 'desktop' });
   });
 
-  it('sits in the mobile menu with the count, and tracks a tap as mobile', async () => {
-    fakeGitHubRepo(gitHubRepoWithStars(87));
+  it('sits in the mobile menu, and tracks a tap as mobile', () => {
     renderLanding();
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const menu = screen.getByRole('navigation', { name: 'Menu' });
-    const button = await within(menu).findByRole('link', { name: 'GitHub, 87 stars' });
+    const button = within(menu).getByRole('link', { name: 'GitHub' });
     expect(button).toHaveAttribute('href', 'https://github.com/pumpkit-io/pumpkit');
 
     clickExternalLink(button);
