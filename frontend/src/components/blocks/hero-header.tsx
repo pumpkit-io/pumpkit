@@ -8,6 +8,7 @@ import {
   GitHubMark,
   useGitHubStars,
 } from '@/components/blocks/github';
+import { ArrowLabel } from '@/components/blocks/arrow-label';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { useInstance } from '@/features/instance/useInstance';
@@ -75,7 +76,14 @@ export function HeroHeader() {
     ));
 
   const getStarted = (surface: Surface) => (
-    <Button asChild size="sm" className={surface === 'mobile' ? 'w-full' : 'text-base'}>
+    <Button
+      asChild
+      size="sm"
+      className={cn(
+        'group/cta transition-all duration-200 hover:scale-105 motion-reduce:hover:scale-100',
+        surface === 'mobile' ? 'w-full' : 'text-base',
+      )}
+    >
       <Link
         to="/login"
         onClick={() => {
@@ -83,7 +91,7 @@ export function HeroHeader() {
           if (surface === 'mobile') closeMenu();
         }}
       >
-        Get started
+        <ArrowLabel>Start for $0</ArrowLabel>
       </Link>
     </Button>
   );

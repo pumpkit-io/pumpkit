@@ -208,7 +208,7 @@ describe('Landing hero', () => {
 
   it('tracks the hero button and no longer tracks a screenshot', () => {
     renderLanding();
-    fireEvent.click(screen.getByRole('link', { name: 'Start writing' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Start a 7-day trial for $0' }));
     expect(track).toHaveBeenCalledWith('landing_hero_cta_clicked');
     expect(vi.mocked(track).mock.calls.map(([event]) => event)).not.toContain(
       'landing_hero_screenshot_viewed',
@@ -406,11 +406,13 @@ describe('Landing header', () => {
     );
   });
 
-  it('sends every Get started and Start writing button to the sign-in page', () => {
+  it('sends every Get started, Start for $0 and trial button to the sign-in page', () => {
     renderLanding();
-    const signInLinks = screen.getAllByRole('link', { name: /^(get started|start writing)$/i });
+    const signInLinks = screen.getAllByRole('link', {
+      name: /^(get started|start for \$0|start a 7-day trial for \$0)$/i,
+    });
     expect(signInLinks.map((link) => link.textContent)).toEqual(
-      expect.arrayContaining(['Get started', 'Start writing']),
+      expect.arrayContaining(['Get started', 'Start for $0', 'Start a 7-day trial for $0']),
     );
     for (const link of signInLinks) expect(link).toHaveAttribute('href', '/login');
   });
@@ -421,7 +423,7 @@ describe('Landing header', () => {
     fireEvent.click(within(header).getByRole('link', { name: 'Pumpkit home' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Authors' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Pricing' }));
-    fireEvent.click(within(header).getByRole('link', { name: 'Get started' }));
+    fireEvent.click(within(header).getByRole('link', { name: 'Start for $0' }));
     expect(track).toHaveBeenCalledWith('landing_nav_logo_clicked');
     expect(track).toHaveBeenCalledWith('landing_nav_authors_clicked', { surface: 'desktop' });
     expect(track).toHaveBeenCalledWith('landing_nav_pricing_clicked', { surface: 'desktop' });
@@ -438,7 +440,7 @@ describe('Landing mobile menu', () => {
     const menu = screen.getByRole('navigation', { name: 'Menu' });
     expect(within(menu).getByRole('link', { name: 'Authors' })).toHaveAttribute('href', '#authors');
     expect(within(menu).getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '#pricing');
-    expect(within(menu).getByRole('link', { name: 'Get started' })).toHaveAttribute(
+    expect(within(menu).getByRole('link', { name: 'Start for $0' })).toHaveAttribute(
       'href',
       '/login',
     );
@@ -463,7 +465,7 @@ describe('Landing mobile menu', () => {
   it.each([
     ['Authors', 'landing_nav_authors_clicked'],
     ['Pricing', 'landing_nav_pricing_clicked'],
-    ['Get started', 'landing_nav_get_started_clicked'],
+    ['Start for $0', 'landing_nav_get_started_clicked'],
   ])('closes when %s is tapped and tracks it as mobile', (name, event) => {
     renderLanding();
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
