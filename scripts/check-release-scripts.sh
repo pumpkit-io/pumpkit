@@ -143,55 +143,28 @@ fi
 # tag-release.sh, on the release commit just made
 
 git push -q origin main
-git checkout -q -b other
-run sh "$scripts/tag-release.sh" 0.2.0
-if [ "$status" -ne 0 ] && grep -q 'main' "$err"; then
-  pass "tag-release refuses a branch other than main"
-else
-  fail "expected tag-release to refuse branch other, got status $status"
-fi
-git checkout -q main
-
-echo dirty >>CHANGELOG.md
-run sh "$scripts/tag-release.sh" 0.2.0
-if [ "$status" -ne 0 ] && grep -q 'changes' "$err"; then
-  pass "tag-release refuses a working tree with changes"
-else
-  fail "expected tag-release to refuse a dirty tree, got status $status"
-fi
-git checkout -q -- .
-
-mkdir untracked && touch untracked/notes.md
-run sh "$scripts/tag-release.sh" 0.3.0
-if ! grep -q 'changes' "$err"; then
-  pass "tag-release ignores untracked files"
-else
-  fail "expected tag-release to ignore untracked files, got: $(cat "$err")"
-fi
-rm -r untracked
 
 run sh "$scripts/tag-release.sh" 0.3.0
 if [ "$status" -ne 0 ] && grep -q 'PUMPKIT_VERSION=0.2.0' "$err"; then
-  pass "tag-release refuses a version .env.example doesn't set"
+  pass "tag-release refuses a version origin/main doesn't set"
 else
   fail "expected tag-release to refuse 0.3.0, got status $status"
 fi
 
-git commit -q --allow-empty -m "not pushed"
-run sh "$scripts/tag-release.sh" 0.2.0
-if [ "$status" -ne 0 ] && grep -q 'origin/main' "$err"; then
-  pass "tag-release refuses a main that isn't level with origin/main"
-else
-  fail "expected tag-release to refuse an unpushed main, got status $status"
-fi
-git reset -q --hard origin/main
+# A clone elsewhere pushes a later commit, so this checkout is behind origin/main, on another branch and dirty.
+git clone -q "$work/prep.git" "$work/pusher"
+git -C "$work/pusher" commit -q --allow-empty -m "after the release"
+git -C "$work/pusher" push -q origin main
+git checkout -q -b other
+echo dirty >>CHANGELOG.md
 
 run sh "$scripts/tag-release.sh" 0.2.0
 if [ "$status" -eq 0 ] && [ "$(git --git-dir="$work/prep.git" tag)" = v0.2.0 ] &&
-  [ "$(git --git-dir="$work/prep.git" cat-file -t v0.2.0)" = tag ]; then
-  pass "tag-release pushes an annotated tag"
+  [ "$(git --git-dir="$work/prep.git" cat-file -t v0.2.0)" = tag ] &&
+  [ "$(git --git-dir="$work/prep.git" rev-parse 'v0.2.0^{commit}')" = "$(git --git-dir="$work/prep.git" rev-parse main)" ]; then
+  pass "tag-release tags origin/main as an annotated tag, whatever the checkout"
 else
-  fail "expected tag-release to push v0.2.0: status $status, $(cat "$err")"
+  fail "expected tag-release to tag origin/main: status $status, $(cat "$err")"
 fi
 
 run sh "$scripts/tag-release.sh" 0.2.0
@@ -199,6 +172,81 @@ if [ "$status" -ne 0 ] && grep -q 'already exists' "$err"; then
   pass "tag-release refuses a tag that exists"
 else
   fail "expected tag-release to refuse an existing tag, got status $status"
+fi
+
+# The watch, with a gh stub whose run watch always fails like a dropped connection and whose run view answers from $GH_CONCLUSION.
+mkdir "$work/bin"
+cat >"$work/bin/gh" <<'STUB'
+#!/bin/sh
+case "$1 $2" in
+  "run list") echo 42 ;;
+  "run watch") exit 1 ;;
+  "run view")
+    case "$*" in
+      *conclusion*) cat "$GH_CONCLUSION" ;;
+      *) echo https://github.example/runs/42 ;;
+    esac ;;
+  "release view") echo "release shown" ;;
+esac
+STUB
+chmod +x "$work/bin/gh"
+export GH_CONCLUSION="$work/conclusion"
+
+# Usage: watch_release VERSION CONCLUSION. Releases VERSION from the clone, then tags it with the watch on.
+watch_release() {
+  (
+    cd "$work/pusher"
+    git pull -q --ff-only origin main
+    sh "$scripts/prepare-release.sh" "$1" >/dev/null
+    git commit -q -am "Release $1"
+    git push -q origin main
+  )
+  printf '%s' "$2" >"$GH_CONCLUSION"
+  RELEASE_WATCH=true RELEASE_POLL_SECONDS=0 PATH="$work/bin:$PATH" run sh "$scripts/tag-release.sh" "$1"
+}
+
+# prepare-release needs entries under Unreleased each time.
+add_entry() {
+  (
+    cd "$work/pusher"
+    git pull -q --ff-only origin main
+    awk '{ print } $0 == "## [Unreleased]" { print ""; print "### Fixed"; print ""; print "- Entry." }' CHANGELOG.md >"$work/c"
+    cat "$work/c" >CHANGELOG.md
+    git commit -q -am "entry"
+    git push -q origin main
+  )
+}
+
+add_entry
+watch_release 0.2.1 success
+if [ "$status" -eq 0 ] && ! grep -qi 'failed' "$err" && grep -q 'release shown' "$out"; then
+  pass "tag-release ends on a success conclusion after a dropped watch"
+else
+  fail "expected a dropped watch on a successful run to pass: status $status, $(cat "$err")"
+fi
+
+add_entry
+watch_release 0.2.2 failure
+if [ "$status" -ne 0 ] && grep -q 'ended failure' "$err"; then
+  pass "tag-release reports a failed run"
+else
+  fail "expected tag-release to report a failed run: status $status, $(cat "$err")"
+fi
+
+add_entry
+watch_release 0.2.3 cancelled
+if [ "$status" -ne 0 ] && grep -q 'ended cancelled' "$err"; then
+  pass "tag-release reports a cancelled run"
+else
+  fail "expected tag-release to report a cancelled run: status $status, $(cat "$err")"
+fi
+
+add_entry
+watch_release 0.2.4 ""
+if [ "$status" -ne 0 ] && grep -q 'lost its connection' "$err" && grep -q 'github.example/runs/42' "$err" && ! grep -q 'workflow failed' "$err"; then
+  pass "tag-release says the watch lost its connection, with the run URL, when the conclusion is unknown"
+else
+  fail "expected a lost-connection message: status $status, $(cat "$err")"
 fi
 
 if [ "$failures" -ne 0 ]; then
