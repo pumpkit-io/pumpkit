@@ -15,3 +15,5 @@ Users can drive Pumpkit from Claude Code and other MCP clients: start Posts, giv
 - API keys belong to the `auth` area, next to Sessions (ADR 0008). Pumpkit stores only a SHA-256 hash of each key, and the existing bearer dependency keeps accepting only access tokens, so a key sent to a web route gets a 401.
 - Every API key has full access in v1. The risky tools (Post now, deleting a Scheduled post, removing an Inspiration author) are marked destructive in their MCP annotations so clients ask before calling them. Per-key permissions can come later, with existing keys treated as full access.
 - MCP calls send no product events, because ADR 0009 ties analytics to Analytics consent given in a browser, and an MCP client never gives it. Error reports still go to PostHog, as they do for the web routes.
+
+ADR 0020 replaces API keys with OAuth: AI apps connect by signing in, and API keys are gone.
