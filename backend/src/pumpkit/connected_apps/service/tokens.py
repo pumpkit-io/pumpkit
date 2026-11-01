@@ -1,0 +1,8 @@
+from datetime import timedelta
+
+ACCESS_TOKEN_LIFETIME = timedelta(hours=1)
+REFRESH_TOKEN_LIFETIME = timedelta(days=90)
+# A refresh token rotated this recently may be presented again, for a retry after a lost response.
+REFRESH_REUSE_GRACE = timedelta(minutes=2)
+CODE_LIFETIME = timedelta(minutes=2)
+AUTHORIZATION_REQUEST_LIFETIME = timedelta(minutes=30)

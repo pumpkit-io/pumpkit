@@ -3,6 +3,7 @@
 import pumpkit.auth.models  # noqa: F401
 import pumpkit.authors.models  # noqa: F401
 import pumpkit.billing.models  # noqa: F401
+import pumpkit.connected_apps.models  # noqa: F401
 import pumpkit.onboarding.models  # noqa: F401
 import pumpkit.posts.models  # noqa: F401
 import pumpkit.scheduling.models  # noqa: F401

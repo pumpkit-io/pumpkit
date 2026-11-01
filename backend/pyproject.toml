@@ -104,7 +104,7 @@ layers = [
     "pumpkit.scheduling",
     "pumpkit.posts | pumpkit.onboarding",
     "pumpkit.authors | pumpkit.x_connection | pumpkit.support",
-    "pumpkit.billing",
+    "pumpkit.billing | pumpkit.connected_apps",
     "pumpkit.auth",
     "pumpkit.core",
 ]
@@ -116,6 +116,7 @@ source_modules = ["pumpkit.core"]
 forbidden_modules = [
     "pumpkit.auth",
     "pumpkit.billing",
+    "pumpkit.connected_apps",
     "pumpkit.authors",
     "pumpkit.x_connection",
     "pumpkit.support",
@@ -136,6 +137,13 @@ name = "Only billing and pumpkit.main import billing.router or billing.mediator"
 type = "protected"
 protected_modules = ["pumpkit.billing.router", "pumpkit.billing.mediator"]
 allowed_importers = ["pumpkit.billing", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
+name = "Only connected_apps, pumpkit.main and pumpkit.mcp_server import connected_apps.router or connected_apps.mediator"
+type = "protected"
+protected_modules = ["pumpkit.connected_apps.router", "pumpkit.connected_apps.mediator"]
+# The MCP server authenticates access tokens through the mediator, as a router would.
+allowed_importers = ["pumpkit.connected_apps", "pumpkit.main", "pumpkit.mcp_server"]
 
 [[tool.importlinter.contracts]]
 name = "Only authors and pumpkit.main import authors.router or authors.mediator"
@@ -196,6 +204,7 @@ type = "layers"
 containers = [
     "pumpkit.auth",
     "pumpkit.billing",
+    "pumpkit.connected_apps",
     "pumpkit.authors",
     "pumpkit.x_connection",
     "pumpkit.support",
