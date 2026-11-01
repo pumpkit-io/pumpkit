@@ -16,6 +16,17 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 git show "$base:CHANGELOG.md" >"$work/base.md" 2>/dev/null || : >"$work/base.md"
 
+# Upgrade notes are for a step to do by hand; an entry with nothing to do says so in its prose and carries none.
+grep -vxFf "$work/base.md" CHANGELOG.md >"$work/added" || true
+if grep -iE 'Upgrade notes:\*\*[^.;]*(nothing|no manual|no action|no step)' "$work/added" >"$work/empty-notes"; then
+  {
+    echo "CHANGELOG.md has an **Upgrade notes:** that says there is nothing to do by hand:"
+    cat "$work/empty-notes"
+    echo "Keep **Upgrade notes:** for a step an upgrade needs (a new required setting in .env.example, a changed compose file, a destructive migration, a default that changes behavior unless a setting is set). Say in the entry's prose that nothing needs doing, without Upgrade notes."
+  } >&2
+  exit 1
+fi
+
 versions() {
   sed -n 's/^## \[\([0-9][^]]*\)\].*/\1/p' "$1" | sort
 }
@@ -35,7 +46,7 @@ fi
 
 cat >&2 <<'EOF'
 CHANGELOG.md has no entry for this PR. Either:
-- add a line under "## [Unreleased]" saying what changes for Users or Self-hosters, under ### Added, Changed, Fixed, Removed or Security, with **Upgrade notes:** for any manual step an upgrade needs; or
+- add a line under "## [Unreleased]" saying what changes for Users or Self-hosters, under ### Added, Changed, Fixed, Removed or Security, with **Upgrade notes:** only for a manual step an upgrade needs; or
 - label the PR no-changelog when nobody running or using an Instance would notice (tests, refactors, CI, docs for contributors).
 EOF
 exit 1

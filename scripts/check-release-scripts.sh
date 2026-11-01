@@ -1,5 +1,5 @@
 #!/bin/sh
-# Checks prepare-release.sh, tag-release.sh and check-changelog-entry.sh against throwaway git repos.
+# Checks prepare-release.sh, tag-release.sh, release.sh and check-changelog-entry.sh against throwaway git repos.
 # Usage: sh scripts/check-release-scripts.sh
 set -eu
 
@@ -131,6 +131,28 @@ else
 fi
 
 git reset -q --hard "$base"
+printf '%s\n' '- A change. **Upgrade notes:** Nothing to do by hand; the backend applies the migration on start.' >"$work/entry"
+awk -v f="$work/entry" '{ print } $0 == "- A fix." { while ((getline l < f) > 0) print l }' CHANGELOG.md >"$work/c" && cat "$work/c" >CHANGELOG.md
+git commit -q -am "add an entry with empty upgrade notes"
+run sh "$scripts/check-changelog-entry.sh" "$base"
+if [ "$status" -ne 0 ] && grep -q 'Upgrade notes' "$err"; then
+  pass "check-changelog-entry rejects Upgrade notes that say there is nothing to do by hand"
+else
+  fail "expected check-changelog-entry to reject empty Upgrade notes, got status $status"
+fi
+
+git reset -q --hard "$base"
+printf '%s\n' '- A change. **Upgrade notes:** If `.env` sets `OLD`, rename it to `NEW`.' >"$work/entry"
+awk -v f="$work/entry" '{ print } $0 == "- A fix." { while ((getline l < f) > 0) print l }' CHANGELOG.md >"$work/c" && cat "$work/c" >CHANGELOG.md
+git commit -q -am "add an entry with real upgrade notes"
+run sh "$scripts/check-changelog-entry.sh" "$base"
+if [ "$status" -eq 0 ]; then
+  pass "check-changelog-entry passes Upgrade notes that name a step"
+else
+  fail "expected check-changelog-entry to pass real Upgrade notes: $(cat "$err")"
+fi
+
+git reset -q --hard "$base"
 sh "$scripts/prepare-release.sh" 0.2.0 >/dev/null
 git commit -q -am "Release 0.2.0"
 run sh "$scripts/check-changelog-entry.sh" "$base"
@@ -247,6 +269,124 @@ if [ "$status" -ne 0 ] && grep -q 'lost its connection' "$err" && grep -q 'githu
   pass "tag-release says the watch lost its connection, with the run URL, when the conclusion is unknown"
 else
   fail "expected a lost-connection message: status $status, $(cat "$err")"
+fi
+
+# release.sh --dry-run, with a gh stub answering from $GH_PRS (tab-separated number, exempt, title) and $GH_FILES/<number> (the files a PR changed).
+mkdir "$work/ghfiles" "$work/relbin"
+cat >"$work/relbin/gh" <<'STUB'
+#!/bin/sh
+case "$1 $2" in
+  "release view") echo 2026-10-12T00:00:00Z ;;
+  "pr list") cat "$GH_PRS" ;;
+  "pr view") cat "$GH_FILES/$3" ;;
+esac
+STUB
+chmod +x "$work/relbin/gh"
+export GH_PRS="$work/prs" GH_FILES="$work/ghfiles"
+printf 'CHANGELOG.md\n' >"$work/ghfiles/7"
+printf 'backend/x.py\n' >"$work/ghfiles/8"
+printf '7\tfalse\tFix a thing\n' >"$GH_PRS"
+
+# Usage: release_repo UNRELEASED_FILE. A repo at 0.1.0, tagged, whose Unreleased section is the file's content; leaves the cwd in a clone of it.
+release_repo() {
+  cd "$work"
+  rm -rf "$work/rel" "$work/rel.git" "$work/relclone"
+  new_repo "$work/rel"
+  {
+    sed -n '1,/^## \[Unreleased\]/p' "$work/rel/CHANGELOG.md"
+    cat "$1"
+    echo
+    sed -n '/^## \[0.1.0\]/,$p' "$work/rel/CHANGELOG.md"
+  } >"$work/rel-changelog"
+  cp "$work/rel-changelog" "$work/rel/CHANGELOG.md"
+  git -C "$work/rel" commit -q --allow-empty -am "unreleased"
+  git -C "$work/rel" tag -a v0.1.0 -m v0.1.0
+  git -C "$work/rel" push -q origin main v0.1.0
+  git clone -q "$work/rel.git" "$work/relclone"
+  cd "$work/relclone"
+}
+
+# Usage: release_dry_run ARGS... Runs release.sh --dry-run in the current repo with the stubs first on PATH.
+release_dry_run() {
+  PATH="$work/relbin:$PATH" run sh "$scripts/release.sh" --dry-run "$@"
+}
+
+printf '\n### Fixed\n\n- A fix.\n' >"$work/u-fixed"
+release_repo "$work/u-fixed"
+release_dry_run
+if [ "$status" -eq 0 ] && grep -q 'Version: 0.1.1 (patch after 0.1.0)' "$out" && grep -q '#7 Fix a thing' "$out"; then
+  pass "release dry run chooses a patch for Fixed entries and lists the PRs"
+else
+  fail "expected a 0.1.1 patch: status $status, $(cat "$out" "$err")"
+fi
+if [ -z "$(git worktree list | sed 1d)" ] && [ -z "$(git branch --list 'release/*')" ]; then
+  pass "release dry run adds no worktree or branch"
+else
+  fail "expected the dry run to change nothing: $(git worktree list)"
+fi
+
+release_dry_run 0.1.5
+if [ "$status" -eq 0 ] && grep -q 'Version: 0.1.5 (given; the rule would choose a patch after 0.1.0)' "$out"; then
+  pass "release dry run takes the version it is given"
+else
+  fail "expected the given version: status $status, $(cat "$out" "$err")"
+fi
+
+for heading in Added Changed Removed; do
+  printf '\n### Fixed\n\n- A fix.\n\n### %s\n\n- A change.\n' "$heading" >"$work/u-minor"
+  release_repo "$work/u-minor"
+  release_dry_run
+  if [ "$status" -eq 0 ] && grep -q 'Version: 0.2.0 (minor after 0.1.0)' "$out"; then
+    pass "release dry run chooses a minor for $heading"
+  else
+    fail "expected a 0.2.0 minor for $heading: status $status, $(cat "$out" "$err")"
+  fi
+done
+
+printf '\n### Fixed\n\n- A fix. **Upgrade notes:** Rename `OLD` to `NEW` in `.env`.\n' >"$work/u-notes"
+release_repo "$work/u-notes"
+release_dry_run
+if [ "$status" -eq 0 ] && grep -q 'Version: 0.2.0 (minor after 0.1.0)' "$out"; then
+  pass "release dry run chooses a minor for Upgrade notes"
+else
+  fail "expected a 0.2.0 minor for Upgrade notes: status $status, $(cat "$out" "$err")"
+fi
+
+release_repo "$work/u-fixed"
+printf '7\tfalse\tFix a thing\n8\tfalse\tForgot the entry\n9\ttrue\tTidy up\n' >"$GH_PRS"
+release_dry_run
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: .*#8' "$err" && ! grep -q '#7$' "$err" && grep -q '^NEXT:' "$err" && grep -q '#9 Tidy up (no-changelog)' "$out"; then
+  pass "release stops on a merged PR with no entry and no no-changelog label"
+else
+  fail "expected a stop naming #8: status $status, $(cat "$out" "$err")"
+fi
+printf '7\tfalse\tFix a thing\n' >"$GH_PRS"
+
+printf '\n' >"$work/u-empty"
+release_repo "$work/u-empty"
+release_dry_run
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: .*nothing to release' "$err" && grep -q '^NEXT:' "$err"; then
+  pass "release stops when Unreleased has no entries"
+else
+  fail "expected a nothing-to-release stop: status $status, $(cat "$out" "$err")"
+fi
+
+release_repo "$work/u-fixed"
+git -C "$work/rel" tag -d v0.1.0 >/dev/null
+git -C "$work/rel.git" tag -d v0.1.0 >/dev/null
+git fetch -q --prune --prune-tags origin
+release_dry_run
+if [ "$status" -eq 0 ] && grep -q '0.1.0 is merged but not tagged' "$out"; then
+  pass "release resumes at the tag when the latest release was merged but not tagged"
+else
+  fail "expected the resume message: status $status, $(cat "$out" "$err")"
+fi
+
+release_dry_run 1.2
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: 1.2 is not X.Y.Z' "$err"; then
+  pass "release refuses a version that is not X.Y.Z"
+else
+  fail "expected a bad-version stop: status $status, $(cat "$err")"
 fi
 
 if [ "$failures" -ne 0 ]; then
