@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Globe, Laptop, ShieldAlert, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,6 @@ import { APP_HOME } from '@/features/onboarding/paths';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { returnTo } from '@/lib/returnTo';
-import { signInPath } from '@/lib/session';
 import { cn } from '@/lib/utils';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import {
@@ -87,7 +86,7 @@ function Notice({ title, lines }: { title: string; lines: string[] }) {
   );
 }
 
-/** The spec gives an expired or used request one sentence and nothing else. */
+/** No heading or buttons: nothing on this page can revive the request. */
 function RequestGone() {
   return (
     <Column>
@@ -151,14 +150,10 @@ function SignedInAs() {
   const profile = useProfile();
   const { logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   if (!profile) return null;
 
-  // Sign-in sees where the User came from, so it keeps the saved return. Being on sign-in
-  // already when the Session ends turns sign-out's own redirect into a no-op.
   const switchAccount = () => {
     returnTo.remember(location.pathname + location.search);
-    navigate(signInPath(), { state: { from: location } });
     void logout();
   };
 
@@ -204,12 +199,15 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
         return;
       }
       redirectTo(url);
-      // An app-scheme return address leaves the browser here.
+      // An app-scheme redirect keeps this page open, so say what happened.
       setDecided(decision);
     } catch (e) {
-      if (errorStatus(e) === 404) setGone(true);
-      else if (decision === 'approve' && isSubscriptionNeeded(e)) setNeedsSubscription(true);
-      else {
+      if (errorStatus(e) === 404) {
+        returnTo.forget();
+        setGone(true);
+      } else if (decision === 'approve' && isSubscriptionNeeded(e)) {
+        setNeedsSubscription(true);
+      } else {
         const fallback =
           decision === 'approve'
             ? `Couldn't connect ${app.name}. Check your connection and try again.`
@@ -308,7 +306,10 @@ function useConsentRequest(id: string | null) {
         track('oauth_consent_viewed', eventProps(request.app));
       })
       .catch((e: unknown) => {
-        if (!cancelled) setLoad({ status: errorStatus(e) === 404 ? 'gone' : 'failed' });
+        if (cancelled) return;
+        const gone = errorStatus(e) === 404;
+        if (gone) returnTo.forget();
+        setLoad({ status: gone ? 'gone' : 'failed' });
       });
     return () => {
       cancelled = true;

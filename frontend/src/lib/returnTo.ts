@@ -35,10 +35,7 @@ export const returnTo = {
     tolerant(() => storage.set<SavedReturn>('return-to', { path, savedAt: Date.now() }), undefined);
   },
 
-  /** Whether `path` is one `remember` keeps, so a sign-in started from it may return there. */
-  isResumable,
-
-  /** Drops the saved path, once the request is decided or a sign-in starts elsewhere. */
+  /** Drops the saved path, once the request is decided, expired or used. */
   forget(): void {
     tolerant(() => storage.remove('return-to'), undefined);
   },

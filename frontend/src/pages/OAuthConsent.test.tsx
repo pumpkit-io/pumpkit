@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -31,9 +32,11 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { session } from '@/lib/session';
-import { storage } from '@/lib/storage';
 import { oauthConsentService, type ConsentApp } from '@/services/oauthConsentService';
 import { onboardingService } from '@/services/onboardingService';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { SELLS_PLANS } from '@/features/instance/testInstances';
+import { MagicLinkCallback } from './MagicLinkCallback';
 import { apiError, currentPath, renderSignedIn } from './testing/signedInApp';
 
 const CLAUDE: ConsentApp = {
@@ -66,6 +69,33 @@ function pendingWith(app: ConsentApp) {
 
 function renderConsent(query = '?request=req_1', nextStep: 'paywall' | 'persona' | null = null) {
   return renderSignedIn(`/oauth/consent${query}`, { nextStep });
+}
+
+const EXPIRES_AT = encodeURIComponent('2099-01-01T00:00:00+00:00');
+
+/** Opens a valid Magic link's callback; the consent route shows where it landed. */
+function signInWithMagicLink() {
+  render(
+    <InstanceProvider instance={SELLS_PLANS}>
+      <MemoryRouter
+        initialEntries={[
+          `/auth/magic-link/callback#access_token=tok&token_type=Bearer&expires_at=${EXPIRES_AT}`,
+        ]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/auth/magic-link/callback" element={<MagicLinkCallback />} />
+          <Route path="/new" element={<Landing />} />
+          <Route path="/oauth/consent" element={<Landing />} />
+        </Routes>
+      </MemoryRouter>
+    </InstanceProvider>,
+  );
+}
+
+function Landing() {
+  const { pathname, search } = useLocation();
+  return <p>{`at ${pathname}${search}`}</p>;
 }
 
 async function page() {
@@ -230,12 +260,12 @@ describe('Consent page', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Not you?' }));
 
-      expect(end).toHaveBeenCalledWith('user');
-      await waitFor(() => expect(currentPath()).toBe('/login'));
-      expect(storage.get<{ path: string } | null>('return-to', null)?.path).toBe(
-        '/oauth/consent?request=req_1',
-      );
+      await waitFor(() => expect(end).toHaveBeenCalledWith('user'));
       end.mockRestore();
+      cleanup();
+      signInWithMagicLink();
+
+      expect(await screen.findByText('at /oauth/consent?request=req_1')).toBeInTheDocument();
     });
   });
 

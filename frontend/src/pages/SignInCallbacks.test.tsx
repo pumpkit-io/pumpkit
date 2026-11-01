@@ -49,15 +49,18 @@ vi.mock('@/services/billingService', () => ({
 
 import { session } from '@/lib/session';
 import { authService } from '@/services/authService';
+import { oauthConsentService } from '@/services/oauthConsentService';
 import { storageKey } from '@/lib/storage';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GoogleAuthCallback } from '@/components/google/GoogleAuthCallback';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
+import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { Login } from './Login';
 import { MagicLinkCallback } from './MagicLinkCallback';
-import { renderSignedIn } from './testing/signedInApp';
+import { MagicLinkSent } from './MagicLinkSent';
+import { apiError, renderSignedIn } from './testing/signedInApp';
 
 /** Shows where the callback navigated to and whether it pushed or replaced. */
 function Destination() {
@@ -87,16 +90,18 @@ function renderSignIn(initialEntry: string, extraRoutes: ReactElement[] = []) {
   render(
     <InstanceProvider instance={SELLS_PLANS}>
       <AuthProvider>
-        <MemoryRouter
-          initialEntries={[initialEntry]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/login/magic-link/sent" element={<Destination />} />
-            {extraRoutes}
-          </Routes>
-        </MemoryRouter>
+        <ThemeProvider>
+          <MemoryRouter
+            initialEntries={[initialEntry]}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/login/magic-link/sent" element={<MagicLinkSent />} />
+              {extraRoutes}
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
       </AuthProvider>
     </InstanceProvider>,
   );
@@ -125,7 +130,13 @@ async function visitSignedOut(path: string) {
 async function requestMagicLink() {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: 'Email me a magic link' }));
-  await screen.findByText('at /login/magic-link/sent via PUSH');
+  await screen.findByRole('heading', { name: 'Magic link sent' });
+}
+
+/** Starts Google sign-in, which stops in jsdom before Google's page. */
+async function startGoogle() {
+  fireEvent.click(screen.getByRole('button', { name: /Google/ }));
+  await screen.findByText("We couldn't start Google sign-in. Try again.");
 }
 
 const MINUTE = 60 * 1000;
@@ -261,20 +272,70 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     },
   );
 
+  it('lands on the consent request after going back to use a different email', async () => {
+    await visitSignedOut('/oauth/consent?request=req_1');
+    await requestMagicLink();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
+    await screen.findByRole('heading', { name: 'Welcome back' });
+    await requestMagicLink();
+    cleanup();
+
+    renderCallback(path, page, VALID);
+
+    expect(
+      await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
+    ).toBeInTheDocument();
+  });
+
   it.each([
-    ['a Magic link', requestMagicLink],
-    [
-      'Google',
-      async () => {
-        fireEvent.click(screen.getByRole('button', { name: /Google/ }));
-        await screen.findByText("We couldn't start Google sign-in. Try again.");
-      },
-    ],
-  ])('lands on New post after %s asked for on the sign-in page itself', async (_label, signIn) => {
+    ['an invalid or expired Magic link', 'invalid_magic_link', requestMagicLink],
+    ['Google failing or being cancelled', 'sign_in_failed', startGoogle],
+  ])(
+    'lands on the consent request when signing in again after %s',
+    async (_label, errorCode, firstTry) => {
+      await visitSignedOut('/oauth/consent?request=req_1');
+      await firstTry();
+      cleanup();
+      // The backend or the callback sends the browser back with an error, as a new page load.
+      renderSignIn(`/login?error=${errorCode}`);
+      await screen.findByRole('alert');
+      await requestMagicLink();
+      cleanup();
+
+      renderCallback(path, page, VALID);
+
+      expect(
+        await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it('lands on the consent request after reloading the sign-in page that showed an error', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
     cleanup();
+    renderSignIn('/login?error=invalid_magic_link');
+    await screen.findByRole('alert');
+    cleanup();
     renderSignIn('/login');
-    await signIn();
+    await requestMagicLink();
+    cleanup();
+
+    renderCallback(path, page, VALID);
+
+    expect(
+      await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
+    ).toBeInTheDocument();
+  });
+
+  it('lands on New post once the consent page found the request expired or used', async () => {
+    await visitSignedOut('/oauth/consent?request=req_1');
+    cleanup();
+    session.startFromFragment(VALID);
+    vi.mocked(oauthConsentService.get).mockRejectedValueOnce(apiError(404, 'Not found'));
+    renderSignedIn('/oauth/consent?request=req_1');
+    await screen.findByText(
+      'This request expired or was already used. Start connecting again from your app.',
+    );
     cleanup();
 
     renderCallback(path, page, VALID);
