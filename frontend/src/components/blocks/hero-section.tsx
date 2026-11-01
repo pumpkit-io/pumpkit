@@ -45,7 +45,7 @@ export function HeroSection() {
             aria-hidden
             className="absolute inset-0 -z-10 size-full [background:radial-gradient(125%_125%_at_50%_100%,transparent_0%,hsl(var(--background))_75%)]"
           />
-          <div className="mx-auto grid max-w-7xl gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
+          <div className="mx-auto grid max-w-[88rem] gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
             <div className="text-center lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
                 <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[70px] xl:leading-[77px]">
