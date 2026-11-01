@@ -349,6 +349,17 @@ curl -s http://localhost:8080/api/v1/health
 
 **Check:** `ps --services` prints `backend`, `publisher` and `web` (no `db`), and the health check prints `{"status":"ok"}`.
 
+## A proxy in front of the web server
+
+Pumpkit's per-IP rate limits (Magic link, and the sign-in of connected AI apps) need each caller's real address. With the bundled stack that works with no setting: the web server passes the caller's address to the backend in `X-Forwarded-For`, and the backend trusts it from the private ranges Docker allocates from (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). `compose.external-db.yml` only swaps the database, so it is unaffected.
+
+If your own proxy, load balancer or CDN sits in front of the web server, it must send `X-Forwarded-For` with the caller's address, and two settings tell each hop to believe it:
+
+- `TRUSTED_PROXIES` for the web server (Caddy): your proxy's address or range as the web server sees it, separated by spaces (`203.0.113.10 10.1.0.0/16`). Without it Caddy replaces the header with your proxy's address, so every caller looks like your proxy. Caddy needs this because it discards a forwarded address from any peer it was not told to trust.
+- `FORWARDED_ALLOW_IPS` for the backend (uvicorn): comma-separated addresses or ranges. The header then reaches the backend as `caller, your-proxy`, and the backend takes the first address it does not trust, so set it when your proxy has a public address: list your proxy's address next to the private ranges, which this setting replaces (`127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,203.0.113.10`). A proxy on a private address needs no change. Never set it to `*` while the backend's port is reachable from outside the compose network.
+
+Set them in `.env`, then run `docker compose up -d --wait`. Check with a few Magic link requests from different addresses: one address gets rate limited after five, the others don't.
+
 ## Backups and restore
 
 These commands back up and restore the bundled Postgres. For an external one, use your provider's backups. Scheduling them (cron, a systemd timer) is up to you; keep copies off the server.
