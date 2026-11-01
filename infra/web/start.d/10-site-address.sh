@@ -21,3 +21,15 @@ else
   ACME_EMAIL_OPTION=
 fi
 export ACME_EMAIL_OPTION
+
+# Caddy replaces X-Forwarded-For with the address it was reached from, unless that address is a
+# trusted proxy. Another proxy in front of this container lists its address here to keep the
+# caller's real address for the backend's per-IP rate limits.
+if [ -n "${TRUSTED_PROXIES:-}" ]; then
+  TRUSTED_PROXIES_OPTION="servers {
+		trusted_proxies static $TRUSTED_PROXIES
+	}"
+else
+  TRUSTED_PROXIES_OPTION=
+fi
+export TRUSTED_PROXIES_OPTION

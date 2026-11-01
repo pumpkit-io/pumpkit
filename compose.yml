@@ -60,6 +60,7 @@ services:
     environment:
       PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
       ACME_EMAIL: ${ACME_EMAIL:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       ALLOW_SEARCH_INDEXING: ${ALLOW_SEARCH_INDEXING:-false}
       POSTHOG_RELAY: ${POSTHOG_RELAY:-false}
     ports:

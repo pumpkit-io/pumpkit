@@ -349,6 +349,17 @@ curl -s http://localhost:8080/api/v1/health
 
 **Check:** `ps --services` prints `backend`, `publisher` and `web` (no `db`), and the health check prints `{"status":"ok"}`.
 
+## A proxy in front of the web server
+
+Pumpkit's per-IP rate limits (Magic link, and the sign-in of connected AI apps) need each caller's real address. With the bundled stack that works with no setting: the web server passes the caller's address to the backend in `X-Forwarded-For`, and the backend trusts it from the compose network's private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).
+
+If your own proxy, load balancer or CDN sits in front of the web server, set both in `.env`, then run `docker compose up -d --wait`:
+
+- `TRUSTED_PROXIES`: your proxy's address or range as the web server sees it, space-separated. Without it the web server discards the forwarded address and every caller looks like your proxy.
+- `FORWARDED_ALLOW_IPS`: only if the web server's own address is outside the private ranges above. It is the comma-separated list of addresses or ranges the backend trusts, and it replaces the default, so keep the ranges the web container is in. Do not set it to `*` while the backend's port is reachable from outside the compose network.
+
+Your proxy must also send `X-Forwarded-For` with the caller's address.
+
 ## Backups and restore
 
 These commands back up and restore the bundled Postgres. For an external one, use your provider's backups. Scheduling them (cron, a systemd timer) is up to you; keep copies off the server.

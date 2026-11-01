@@ -1,7 +1,9 @@
 # The web image's Caddyfile. start.d/10-site-address.sh derives SITE_ADDRESS and
-# ACME_EMAIL_OPTION from PUBLIC_URL and ACME_EMAIL when the container starts.
+# ACME_EMAIL_OPTION and TRUSTED_PROXIES_OPTION from PUBLIC_URL, ACME_EMAIL and TRUSTED_PROXIES
+# when the container starts.
 {
 	{$ACME_EMAIL_OPTION}
+	{$TRUSTED_PROXIES_OPTION}
 }
 
 {$SITE_ADDRESS} {
