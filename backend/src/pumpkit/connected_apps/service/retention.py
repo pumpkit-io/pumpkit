@@ -8,13 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization, OAuthClient
 
 UNUSED_CLIENT_AGE = timedelta(days=30)
+AUTHORIZATION_AGE = timedelta(days=1)
 
 
 async def purge_expired(db: AsyncSession, *, now: datetime) -> None:
     """
-    Run opportunistically from registration, as `auth.service.retention` runs on sign-in.
-    Hosted apps register a client per connection, so unused ones pile up.
+    Run opportunistically from registration and authorize, as `auth.service.retention` runs
+    on sign-in. Hosted apps register a client per connection, so unused ones pile up.
     """
+    await db.execute(
+        delete(OAuthAuthorization).where(OAuthAuthorization.created_at < now - AUTHORIZATION_AGE)
+    )
     cutoff = now - UNUSED_CLIENT_AGE
     await db.execute(
         delete(OAuthClient).where(

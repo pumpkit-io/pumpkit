@@ -11,7 +11,7 @@ backend/src/pumpkit/
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
   connected_apps/  Connected apps: OAuth clients, app connections, authorization requests and access and refresh tokens for the MCP server (ADR 0020)
-                    service/: redirect_uris.py (which redirect URIs may be registered and matched), clients.py (registration), retention.py (purges stale clients)
+                    service/: redirect_uris.py (which redirect URIs may be registered and matched), clients.py (registration), authorizations.py (consent requests and their codes), connections.py (Users' grants to apps), retention.py (purges stale clients and authorization requests)
   authors/         Inspiration authors, their posts and the Author directory; the X reader (twitterapi.io)
   x_connection/    X connections; the X publisher port (X's API) and X's weighted length count
   support/         the support contact redirect (a router only)

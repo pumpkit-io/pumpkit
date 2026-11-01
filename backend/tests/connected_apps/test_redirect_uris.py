@@ -29,6 +29,8 @@ def test_allowed_redirect_uris_are_returned_unchanged(uri):
     "uri",
     [
         "https://example.com/cb#fragment",
+        "https://example.com/caf\u00e9",
+        "https://\u00e9xample.com/cb",
         "http://localhost/cb#fragment",
         "cursor://callback#fragment",
         "http://example.com/callback",

@@ -21,6 +21,9 @@ def validate_redirect_uri(uri: str) -> str:
     # A control character would let a registered URI split the Location header it ends up in.
     if _CONTROL_OR_SPACE.search(uri):
         raise RedirectUriRefused("Redirect URIs cannot contain spaces or control characters.")
+    # It ends up in a Location header, which carries only Latin-1, and IDN hosts can spoof others.
+    if not uri.isascii():
+        raise RedirectUriRefused("Redirect URIs must be ASCII; percent-encode other characters.")
     # Browsers read a backslash as a slash, so parsers that don't see a different host.
     if "\\" in uri:
         raise RedirectUriRefused("Redirect URIs cannot contain backslashes.")
@@ -73,3 +76,11 @@ def _loopback_key(uri: str) -> Optional[tuple[str, str, str]]:
     if parts.scheme != "http" or parts.hostname not in _LOOPBACK_HOSTS:
         return None
     return parts.hostname, parts.path, parts.query
+
+
+def redirect_host(uri: str) -> Optional[str]:
+    """The host a valid redirect URI sends the browser to, or None for an app on the computer."""
+    parts = urlsplit(uri)
+    if parts.scheme != "https" or parts.hostname in _LOOPBACK_HOSTS:
+        return None
+    return parts.hostname

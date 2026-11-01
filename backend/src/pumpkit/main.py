@@ -14,6 +14,8 @@ from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.billing.router import router as billing_router
 from pumpkit.connected_apps.router import (
+    approve_router,
+    consent_router,
     discovery_router,
     oauth_router,
     rate_limit_exceeded_handler,
@@ -71,6 +73,11 @@ app.include_router(scheduling_router.usage_router, prefix="/api/v1")
 app.include_router(onboarding_router, prefix="/api/v1")
 app.include_router(discovery_router)
 app.include_router(oauth_router, prefix="/api/v1")
+app.include_router(consent_router, prefix="/api/v1")
+# Approving an app needs access, as every tool call it then makes does (ADR 0020).
+app.include_router(
+    approve_router, prefix="/api/v1", dependencies=[Depends(require_subscribed_user)]
+)
 # A Route, not a Mount, so the URL has no trailing slash. GET and DELETE reach the endpoint so
 # it can answer them after authenticating.
 app.router.routes.append(

@@ -34,3 +34,7 @@ async def register_client(
     db.add(client)
     await db.flush()
     return client, secret
+
+
+async def get_client(db: AsyncSession, client_id: str) -> Optional[OAuthClient]:
+    return await db.get(OAuthClient, client_id)

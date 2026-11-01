@@ -2,13 +2,20 @@ import math
 import time
 
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.auth.dependencies import get_current_user
+from pumpkit.auth.models import User
 from pumpkit.connected_apps import mediator
-from pumpkit.connected_apps.schemas import AuthorizationServerMetadata, ProtectedResourceMetadata
+from pumpkit.connected_apps.schemas import (
+    AuthorizationDetailsResponse,
+    AuthorizationServerMetadata,
+    ProtectedResourceMetadata,
+    RedirectResponseBody,
+)
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
@@ -41,6 +48,67 @@ async def register_client(
     clock: Clock = Depends(get_clock),
 ) -> JSONResponse:
     return await mediator.register(request, db, now=clock())
+
+
+# Always 303, never 307: a 307 makes the browser replay a POST to the consent page.
+@oauth_router.api_route("/oauth/authorize", methods=["GET", "POST"], response_model=None)
+@limiter.limit("60/minute")
+async def authorize(
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> RedirectResponse:
+    if request.method == "POST":
+        form = await request.form()
+        params = [(name, value) for name, value in form.multi_items() if isinstance(value, str)]
+    else:
+        params = request.query_params.multi_items()
+    location = await mediator.start_authorization(params, db, now=clock())
+    return RedirectResponse(location, status_code=303)
+
+
+# The consent page's API, with the web app's bearer authentication and `detail` errors.
+consent_router = APIRouter(tags=["connected-apps"])
+
+
+@consent_router.get(
+    "/oauth/authorizations/{authorization_id}", dependencies=[Depends(get_current_user)]
+)
+async def get_authorization(
+    authorization_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> AuthorizationDetailsResponse:
+    return await mediator.authorization_details(db, authorization_id, now=clock())
+
+
+@consent_router.post("/oauth/authorizations/{authorization_id}/deny")
+async def deny_authorization(
+    authorization_id: str,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> RedirectResponseBody:
+    response.headers["Cache-Control"] = "no-store"
+    return await mediator.deny_authorization(db, current_user, authorization_id, now=clock())
+
+
+# Mounted behind billing's access rule in `main`, since connected_apps sits beside billing.
+approve_router = APIRouter(tags=["connected-apps"])
+
+
+@approve_router.post("/oauth/authorizations/{authorization_id}/approve")
+async def approve_authorization(
+    authorization_id: str,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> RedirectResponseBody:
+    # The answer carries the authorization code.
+    response.headers["Cache-Control"] = "no-store"
+    return await mediator.approve_authorization(db, current_user, authorization_id, now=clock())
 
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:

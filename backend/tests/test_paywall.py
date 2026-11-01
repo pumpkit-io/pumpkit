@@ -1,7 +1,7 @@
 """
 The Paywall on the backend (ADR 0018): on an Instance that sells Plans, every area route refuses a
 User who isn't Subscribed, reads included, except auth, their own account, billing, `/instance`,
-the legal pages and the Onboarding state.
+the legal pages, the Onboarding state, and reading or denying an app's connection request.
 """
 
 from datetime import datetime, timezone
@@ -21,6 +21,7 @@ GATED_ROUTES = [
     ("POST", "/api/v1/x-connection/photo/decline"),
     ("GET", "/api/v1/api-keys"),
     ("DELETE", "/api/v1/api-keys/key_unknown"),
+    ("POST", "/api/v1/oauth/authorizations/request_unknown/approve"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/posts/post_unknown"),
     ("GET", "/api/v1/scheduled-posts/communities"),
