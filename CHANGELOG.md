@@ -8,6 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
+- The landing page headline now also rotates through Claude and ChatGPT, and Claude Code and Codex show their own logos instead of the Claude and ChatGPT ones.
 - The landing page's sign-up buttons no longer flash "Get started" before switching to the trial offer; they stay blank until the offer loads.
 - On wide screens, the landing page's video now lines up with the top of the headline beside it instead of sitting a few pixels too high.
 - The GitHub button in the landing page's nav bar no longer shows the repository's star count, and it is the same size as the button beside it.
