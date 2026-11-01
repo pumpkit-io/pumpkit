@@ -14,7 +14,7 @@ from pumpkit.auth.router import router as auth_router
 from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.billing.router import router as billing_router
-from pumpkit.connected_apps.router import discovery_router
+from pumpkit.connected_apps.router import discovery_router, oauth_router
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
@@ -67,6 +67,7 @@ app.include_router(scheduling_router.router, prefix="/api/v1")
 app.include_router(scheduling_router.usage_router, prefix="/api/v1")
 app.include_router(onboarding_router, prefix="/api/v1")
 app.include_router(discovery_router)
+app.include_router(oauth_router, prefix="/api/v1")
 # A Route, not a Mount, so the URL has no trailing slash. GET and DELETE reach the endpoint so
 # it can answer them after authenticating.
 app.router.routes.append(
