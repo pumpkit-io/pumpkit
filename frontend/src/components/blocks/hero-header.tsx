@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, Star, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
-import {
-  formatStars,
-  GITHUB_REPO_URL,
-  GitHubMark,
-  useGitHubStars,
-} from '@/components/blocks/github';
+import { GITHUB_REPO_URL, GitHubMark } from '@/components/blocks/github';
 import { ArrowLabel } from '@/components/blocks/arrow-label';
 import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { Button } from '@/components/ui/button';
@@ -29,7 +24,6 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string }) {
   const links = sells_plans ? NAV_LINKS : NAV_LINKS.filter(({ href }) => href !== '#pricing');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const stars = useGitHubStars();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -100,11 +94,10 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string }) {
       asChild
       variant="outline"
       size="sm"
-      className={cn('gap-2', surface === 'mobile' && 'w-full')}
+      className={cn('gap-2', surface === 'mobile' ? 'w-full' : 'text-base')}
     >
       <a
         href={GITHUB_REPO_URL}
-        aria-label={stars === null ? undefined : `GitHub, ${formatStars(stars)} stars`}
         onClick={() => {
           track('landing_nav_github_clicked', { surface });
           if (surface === 'mobile') closeMenu();
@@ -112,12 +105,6 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string }) {
       >
         <GitHubMark className="size-4" />
         GitHub
-        {stars !== null && (
-          <span className="-mr-1 flex items-center gap-1 border-l border-border pl-2 tabular-nums text-muted-foreground">
-            <Star aria-hidden className="size-3.5" />
-            {formatStars(stars)}
-          </span>
-        )}
       </a>
     </Button>
   );
