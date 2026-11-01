@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Variants } from 'framer-motion';
 import { CtaFrame } from '@/components/blocks/cta-frame';
+import { HeroHeadline } from '@/components/blocks/hero-headline';
 import { HeroFrame } from '@/components/blocks/hero-frame';
 import { LaunchVideo } from '@/components/blocks/launch-video';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ export function HeroSection() {
             <div className="lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
                 <h1 className="max-w-2xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.5rem] lg:leading-[1.05] xl:text-[4rem]">
-                  Your ideas, in the style of the authors you admire.
+                  <HeroHeadline />
                 </h1>
                 <p className="mt-6 max-w-xl text-pretty text-lg text-muted-foreground">
                   Write a brief, pick up to three X authors to learn style from, and get a post

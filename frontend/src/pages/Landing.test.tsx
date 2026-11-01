@@ -189,7 +189,7 @@ describe('Landing hero', () => {
     renderLanding();
     expect(screen.queryByText('Open source · built for X')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      /^Your ideas, in the style of the authors you admire\.$/,
+      /^Run your X on autopilot with Claude Code, Codex, Cursor or Gemini CLI\./,
     );
     expect(
       screen.getByText(
@@ -198,9 +198,12 @@ describe('Landing hero', () => {
     ).toBeInTheDocument();
   });
 
-  it('sets no headline word apart from the rest', () => {
+  it('reads the headline once to assistive tech and rotates the visual tool names', () => {
     renderLanding();
-    expect(screen.getByRole('heading', { level: 1 }).children).toHaveLength(0);
+    const [readable, visual] = Array.from(screen.getByRole('heading', { level: 1 }).children);
+    expect(readable).toHaveClass('sr-only');
+    expect(visual).toHaveAttribute('aria-hidden', 'true');
+    expect(visual).toHaveTextContent('Claude CodeCodexCursorGemini CLI');
   });
 
   it('tracks the hero button and no longer tracks a screenshot', () => {
