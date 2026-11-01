@@ -52,6 +52,16 @@ def test_allowed_redirect_uris_are_returned_unchanged(uri):
         "https://example.com/a b",
         "1app://callback",
         "",
+        "http://localhost/cb\\@evil.com/x",
+        "http://evil.com\\@localhost/cb",
+        "https://example.com\\.evil.com/cb",
+        "https://user@example.com/cb",
+        "http://user:pw@localhost/cb",
+        "https://example.com/cb\ttab",
+        "https://example.com/cb\x00",
+        "https://example.com:notaport/cb",
+        "https://example.com:99999/cb",
+        "http://localhost:0/cb",
     ],
 )
 def test_refused_redirect_uris(uri):
@@ -89,6 +99,12 @@ def test_requested_uri_matches(requested, registered):
         ("cursor://a/b:1", ["cursor://a/b"]),
         ("http://example.com:81/cb", ["http://example.com/cb"]),
         ("https://evil.test/cb", []),
+        ("http://evil.com\\@localhost:1/cb", ["http://localhost/cb"]),
+        ("http://localhost:1/cb\r\nX: y", ["http://localhost/cb"]),
+        ("http://localhost:1/cb\ttab", ["http://localhost/cb"]),
+        ("http://user@localhost:1/cb", ["http://localhost/cb"]),
+        ("http://localhost:abc/cb", ["http://localhost/cb"]),
+        ("http://localhost:99999/cb", ["http://localhost/cb"]),
     ],
 )
 def test_requested_uri_does_not_match(requested, registered):

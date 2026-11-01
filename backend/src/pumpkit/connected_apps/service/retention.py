@@ -27,4 +27,3 @@ async def purge_expired(db: AsyncSession, *, now: datetime) -> None:
             ),
         )
     )
-    await db.flush()

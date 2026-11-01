@@ -101,30 +101,36 @@ async def _read_registration(request: Request) -> ClientRegistrationRequest:
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > _MAX_REGISTRATION_BYTES:
         raise _too_large()
-    raw = await request.body()
-    if len(raw) > _MAX_REGISTRATION_BYTES:
-        raise _too_large()
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > _MAX_REGISTRATION_BYTES:
+            raise _too_large()
+
     try:
         document = json.loads(raw)
-        if not isinstance(document, dict):
-            raise ValueError
+    # Deeply nested arrays under the size cap exhaust the parser's recursion.
+    except (ValueError, RecursionError):
+        document = None
+    if not isinstance(document, dict):
+        raise OAuthError("invalid_client_metadata", "The body must be a JSON object.")
+
+    try:
         return ClientRegistrationRequest.model_validate(document)
     except ValidationError as error:
         first = error.errors()[0]
+        field = ".".join(str(part) for part in first["loc"])
+        message = first["msg"].removeprefix("Value error, ")
         code = (
             "invalid_redirect_uri"
-            if first["loc"][:1] == ("redirect_uris",)
+            if field.startswith("redirect_uris")
             else "invalid_client_metadata"
         )
-        where = ".".join(str(part) for part in first["loc"])
-        raise OAuthError(code, f"{where}: {first['msg']}") from None
-    except ValueError:
-        raise OAuthError("invalid_client_metadata", "The body must be a JSON object.") from None
+        raise OAuthError(code, f"{field}: {message}" if field else message) from None
 
 
 def _too_large() -> OAuthError:
     return OAuthError(
         "invalid_client_metadata",
         f"The request body can be at most {_MAX_REGISTRATION_BYTES // 1024} KB.",
-        status_code=413,
     )

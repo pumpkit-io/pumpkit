@@ -162,9 +162,84 @@ async def test_a_body_over_16_kb_is_refused(browser, db):
         REGISTER, json={"redirect_uris": [REDIRECT], "software_id": padding}
     )
 
-    assert response.status_code == 413
+    assert response.status_code == 400
     assert response.json()["error"] == "invalid_client_metadata"
     assert (await db.scalars(select(OAuthClient))).first() is None
+
+
+async def test_a_streamed_body_over_16_kb_is_refused(browser, db):
+    async def chunks():
+        for _ in range(40):
+            yield b" " * 1024
+
+    response = await browser.post(
+        REGISTER, content=chunks(), headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client_metadata"
+
+
+async def test_json_too_deep_to_parse_is_invalid_client_metadata(browser, monkeypatch):
+    class TooDeep:
+        @staticmethod
+        def loads(_raw):
+            raise RecursionError
+
+    # The interpreter's recursion limit varies by version, so force the failure.
+    monkeypatch.setattr("pumpkit.connected_apps.mediator.json", TooDeep)
+
+    response = await browser.post(
+        REGISTER, content=b"[[[]]]", headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client_metadata"
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [{"logo_uri": "http://example.com/l.png"}, {"logo_uri": "https://example.com/" + "x" * 2100}],
+)
+async def test_a_bad_logo_uri_is_invalid_client_metadata(browser, metadata):
+    response = await browser.post(REGISTER, json={"redirect_uris": [REDIRECT], **metadata})
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_client_metadata"
+
+
+async def test_a_long_client_uri_is_invalid_client_metadata(browser):
+    response = await browser.post(
+        REGISTER,
+        json={"redirect_uris": [REDIRECT], "client_uri": "https://example.com/" + "x" * 2100},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_a_https_logo_uri_is_stored(browser):
+    response = await browser.post(
+        REGISTER, json={"redirect_uris": [REDIRECT], "logo_uri": "https://example.com/l.png"}
+    )
+
+    assert response.json()["logo_uri"] == "https://example.com/l.png"
+
+
+@pytest.mark.parametrize(
+    ("metadata", "description"),
+    [
+        ({"grant_types": ["refresh_token"]}, "grant_types must include authorization_code"),
+        ({"client_uri": "http://example.com"}, "client_uri: must be an https URL"),
+        ({"client_name": "x" * 101}, "client_name: String should have at most 100 characters"),
+        ({"redirect_uris": ["http://example.com/cb"]}, "redirect_uris.0: An http redirect URI"),
+    ],
+)
+async def test_error_descriptions_are_readable(browser, metadata, description):
+    body = {"redirect_uris": [REDIRECT], **metadata}
+
+    response = await browser.post(REGISTER, json=body)
+
+    assert response.json()["error_description"].startswith(description)
 
 
 async def test_the_sixty_first_registration_in_an_hour_is_rate_limited(browser):
@@ -174,6 +249,10 @@ async def test_the_sixty_first_registration_in_an_hour_is_rate_limited(browser):
     response = await browser.post(REGISTER, json={"redirect_uris": [REDIRECT]})
 
     assert response.status_code == 429
+    body = response.json()
+    assert body.keys() == {"error", "error_description"}
+    assert body["error"] == "temporarily_unavailable"
+    assert int(response.headers["retry-after"]) > 0
 
 
 async def _add_client(db, now, *, age: timedelta, name: str) -> OAuthClient:
@@ -190,7 +269,6 @@ async def _add_client(db, now, *, age: timedelta, name: str) -> OAuthClient:
 
 
 async def _names(db) -> set[str]:
-    await db.rollback()
     return {c.name for c in await db.scalars(select(OAuthClient))}
 
 
@@ -244,3 +322,28 @@ async def test_the_purge_keeps_an_old_client_with_a_recent_authorization(browser
     await browser.post(REGISTER, json={"redirect_uris": [REDIRECT], "client_name": "new"})
 
     assert "pending" in await _names(db)
+
+
+async def test_the_purge_removes_an_old_client_whose_only_authorization_is_over_30_days_old(
+    browser, db, fixed_clock
+):
+    now = fixed_clock()
+    old = await _add_client(db, now, age=timedelta(days=90), name="abandoned")
+    db.add(
+        OAuthAuthorization(
+            id="authorization-old",
+            client_id=old.id,
+            redirect_uri=REDIRECT,
+            redirect_uri_was_sent=True,
+            code_challenge="challenge",
+            scope="pumpkit",
+            resource="http://localhost:5173/api/v1/mcp",
+            created_at=now - timedelta(days=45),
+            expires_at=now - timedelta(days=45) + timedelta(minutes=30),
+        )
+    )
+    await db.commit()
+
+    await browser.post(REGISTER, json={"redirect_uris": [REDIRECT], "client_name": "new"})
+
+    assert "abandoned" not in await _names(db)

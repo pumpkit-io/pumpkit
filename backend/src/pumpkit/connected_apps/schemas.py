@@ -50,10 +50,18 @@ ClientAuthMethod = Literal["none", "client_secret_post", "client_secret_basic"]
 GrantType = Literal["authorization_code", "refresh_token"]
 
 
+_MAX_URL_LENGTH = 2048
+
+
 def _require_https(url: str) -> str:
     if not url.startswith("https://"):
         raise ValueError("must be an https URL")
     return url
+
+
+_HttpsUrl = Annotated[
+    str, StringConstraints(max_length=_MAX_URL_LENGTH), AfterValidator(_require_https)
+]
 
 
 class ClientRegistrationRequest(BaseModel):
@@ -67,8 +75,8 @@ class ClientRegistrationRequest(BaseModel):
     ]
     client_name: Annotated[str, StringConstraints(max_length=100)] = DEFAULT_CLIENT_NAME
     # Stored and never fetched or rendered, so neither can pull a third party's content in.
-    client_uri: Optional[Annotated[str, AfterValidator(_require_https)]] = None
-    logo_uri: Optional[str] = None
+    client_uri: Optional[_HttpsUrl] = None
+    logo_uri: Optional[_HttpsUrl] = None
     token_endpoint_auth_method: ClientAuthMethod = "client_secret_basic"
     grant_types: list[GrantType] = ["authorization_code", "refresh_token"]
     response_types: list[Literal["code"]] = ["code"]
