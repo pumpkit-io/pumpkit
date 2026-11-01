@@ -7,7 +7,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.connected_apps.models import AppConnection, OAuthRefreshToken
+from pumpkit.connected_apps.models import AppConnection, OAuthClient, OAuthRefreshToken
 from pumpkit.core.time import as_utc
 
 # How fresh `last_used_at` stays, so an app calling tools doesn't write its row every call.
@@ -39,6 +39,33 @@ async def find_or_create(
             raise
         return winner
     return connection
+
+
+async def list_unrevoked(
+    db: AsyncSession, *, user_id: str
+) -> list[tuple[AppConnection, OAuthClient]]:
+    """Each of the User's unrevoked connections with its `OAuthClient`, newest first."""
+    rows = await db.execute(
+        select(AppConnection, OAuthClient)
+        .join(OAuthClient, OAuthClient.id == AppConnection.client_id)
+        .where(AppConnection.user_id == user_id, AppConnection.revoked_at.is_(None))
+        .order_by(AppConnection.created_at.desc(), AppConnection.id.desc())
+    )
+    return [(connection, client) for connection, client in rows.tuples()]
+
+
+async def get_unrevoked(
+    db: AsyncSession, *, user_id: str, connection_id: str
+) -> Optional[AppConnection]:
+    return (
+        await db.execute(
+            select(AppConnection).where(
+                AppConnection.id == connection_id,
+                AppConnection.user_id == user_id,
+                AppConnection.revoked_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
 
 
 async def _find_unrevoked(

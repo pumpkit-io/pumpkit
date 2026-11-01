@@ -11,6 +11,7 @@ from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
 from pumpkit.connected_apps import mediator
 from pumpkit.connected_apps.schemas import (
+    AppConnectionsListResponse,
     AuthorizationDetailsResponse,
     AuthorizationServerMetadata,
     ProtectedResourceMetadata,
@@ -124,6 +125,24 @@ async def deny_authorization(
 ) -> RedirectResponseBody:
     response.headers["Cache-Control"] = "no-store"
     return await mediator.deny_authorization(db, current_user, authorization_id, now=clock())
+
+
+@consent_router.get("/app-connections")
+async def list_app_connections(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> AppConnectionsListResponse:
+    return await mediator.list_connections(db, current_user)
+
+
+@consent_router.delete("/app-connections/{connection_id}", status_code=204)
+async def disconnect_app(
+    connection_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    await mediator.disconnect(db, current_user, connection_id, now=clock())
 
 
 # Mounted behind billing's access rule in `main`, since connected_apps sits beside billing.

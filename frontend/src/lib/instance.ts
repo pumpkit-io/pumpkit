@@ -25,6 +25,8 @@ export interface Instance {
   analytics: AnalyticsSettings | null;
   /** False on an Instance without X's app keys: Onboarding skips its X step, and no page offers to connect X. */
   x_connection: boolean;
+  /** The MCP endpoint at `PUBLIC_URL`, which differs from the browser's origin behind a tunnel. */
+  mcp_url: string | null;
 }
 
 // Offers only what needs no provider, since without /instance nothing says which are configured.
@@ -36,6 +38,7 @@ export const DEFAULT_INSTANCE: Instance = {
   support_email: null,
   analytics: null,
   x_connection: false,
+  mcp_url: null,
 };
 
 /**

@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Added
+
+- Connect AI apps such as Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor and VS Code to Pumpkit by pasting your Instance's MCP URL into the app and signing in, with no key to copy. Settings has a "Connect AI apps" card with the URL, how to add it to each app, and your connected apps, each with whether it is verified, when it connected and when it was last used; disconnecting one stops it at once. `GET /api/v1/instance` now reports `mcp_url`. There is nothing to do by hand.
+
 ### Changed
 
 - Per-IP rate limits now key on each caller's real address, where they keyed on the bundled web server's. With your own proxy in front of the web server, set `TRUSTED_PROXIES` (and `FORWARDED_ALLOW_IPS` if the proxy has a public address); see "A proxy in front of the web server" in the self-hosting guide. Nothing changes on upgrade unless you run such a proxy.
