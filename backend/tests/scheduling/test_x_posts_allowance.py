@@ -379,3 +379,53 @@ async def test_usage_without_plans_has_no_allowance(client, sells_no_plans):
     response = await client.get(USAGE)
 
     assert response.json() == {"allowance": None}
+
+
+async def test_scheduling_after_a_cancelled_subscription_ends_is_refused(
+    client, db, ready, subscribed, post_with
+):
+    await _subscription(db, subscribed, cancel_at=_utc(2026, 10, 14, 9))
+
+    before = await _schedule(client, post_with, "2026-10-14T08:59:00Z", "Last minute")
+    after = await _schedule(client, post_with, "2026-10-14T09:00:00Z", "Too late")
+
+    assert before.status_code == 201
+    assert after.status_code == 409
+    assert after.json() == {
+        "detail": (
+            "Your subscription ends on 14 October at 09:00 UTC, so a post can't publish then "
+            "or later. Pick an earlier time, or renew with Manage subscription in Settings."
+        ),
+        "url": SETTINGS_URL,
+        "code": "SUBSCRIPTION_ENDS",
+    }
+    assert len(await scheduled_posts(client)) == 1
+
+
+async def test_moving_a_scheduled_post_past_a_cancelled_subscription_is_refused(
+    client, db, ready, subscribed, post_with
+):
+    scheduled = (await _schedule(client, post_with, "2026-10-11T09:00:00Z", "Soon")).json()
+    await _subscription(db, subscribed, cancel_at=_utc(2026, 10, 14, 9))
+
+    moved = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"publish_at": "2026-10-20T09:00:00Z"}
+    )
+
+    assert moved.status_code == 409
+    assert moved.json()["code"] == "SUBSCRIPTION_ENDS"
+    [kept] = await scheduled_posts(client)
+    assert kept["publish_at"] == scheduled["publish_at"]
+
+
+async def test_editing_the_text_of_a_post_already_past_the_end_is_not_refused(
+    client, db, ready, subscribed, post_with
+):
+    scheduled = (await _schedule(client, post_with, "2026-10-20T09:00:00Z", "Later")).json()
+    await _subscription(db, subscribed, cancel_at=_utc(2026, 10, 14, 9))
+
+    edited = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["Reworded"]}
+    )
+
+    assert edited.status_code == 200, edited.text
