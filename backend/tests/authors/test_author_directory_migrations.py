@@ -68,6 +68,7 @@ async def test_every_listed_or_fetched_handle_gets_an_entry_with_its_stored_phot
             "fetched_only": (None, None, "lookup"),
             "never_fetched": (None, None, "lookup"),
         }
+
     await migrate(db_engine, lambda config: command.upgrade(config, "head"))
     listed = (await client.get(AUTHORS)).json()["data"]
     assert [(author["handle"], author["photo_url"]) for author in listed] == [

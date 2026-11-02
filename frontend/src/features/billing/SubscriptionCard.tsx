@@ -32,8 +32,8 @@ function statusBadgeVariant(status: SubscriptionStatus): BadgeProps['variant'] {
   return PAYMENT_FAILED_STATUSES.has(status) ? 'warning' : 'default';
 }
 
-// A Trial's period end is its first charge, unless the User cancelled before it.
-function nextDate({ status, currentPeriodEnd, cancelAt }: Subscription): string | null {
+// A Trial's period end is its first charge; a cancelled Subscription only has its end.
+function nextDateLabel({ status, currentPeriodEnd, cancelAt }: Subscription): string | null {
   const [label, date] = cancelAt
     ? ['Ends on', cancelAt]
     : [status === 'trialing' ? 'Billing starts on' : 'Renews on', currentPeriodEnd];
@@ -56,7 +56,7 @@ export function SubscriptionCard({
   const subscription = data?.me.subscription ?? null;
   const plan = subscription ? data?.plans.find((p) => p.key === subscription.planKey) : undefined;
   const paymentFailed = subscription ? PAYMENT_FAILED_STATUSES.has(subscription.status) : false;
-  const next = subscription ? nextDate(subscription) : null;
+  const next = subscription ? nextDateLabel(subscription) : null;
 
   return (
     <SettingsCard title="Plan">

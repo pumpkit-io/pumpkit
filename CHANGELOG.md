@@ -12,7 +12,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Fixed
 
-- After you cancel a subscription or trial, Settings now says when it ends, where it could still say "Billing starts on" or "Renews on" with no charge coming. `GET /api/v1/billing/me` now reports the subscription's `cancel_at` date in place of `cancel_at_period_end`. A subscription you cancelled earlier shows the right date after its next change in Stripe; the upgrade's migration runs on its own.
+- After you cancel a subscription or trial, Settings now says when it ends, where it could still say "Billing starts on" or "Renews on" with no charge coming. `GET /api/v1/billing/me` now reports the subscription's `cancel_at` date in place of `cancel_at_period_end`. The upgrade's migration carries over cancellations Pumpkit already knew about; one Stripe recorded only as a date shows after the subscription's next change in Stripe.
 
 ## [0.6.0] - 2026-11-02
 
