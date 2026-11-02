@@ -92,7 +92,7 @@ Then start the server and sign in when VS Code asks.
 
 Any app that follows the MCP authorization spec connects the same way: give it the URL, and it finds how to sign in from Pumpkit's 401 answer and discovery documents.
 
-None of these setups use a header or a key. If an app already has Pumpkit set up with an API key in `--header`, `headers` or `http_headers`, remove that entry first, then add it again as above.
+None of these setups send a header. If an app already has Pumpkit set up with an `Authorization` header in `--header`, `headers` or `http_headers`, remove that entry first, then add it again as above.
 
 ## What the consent page shows
 

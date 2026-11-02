@@ -4,7 +4,6 @@ import { showToast } from '@/components/Toaster';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileCard } from '@/features/account/ProfileCard';
-import { ApiKeysSection } from '@/features/apiKeys/ApiKeysSection';
 import { generationsAndXPosts } from '@/features/billing/counts';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
 import { UsageCard } from '@/features/billing/UsageCard';
@@ -121,7 +120,6 @@ export function Settings() {
           )}
           {sells_plans && data?.me.subscribed && <UsageCard topUpBought={topUpBought} />}
           <ConnectedAppsCard />
-          <ApiKeysSection />
           <AppearanceCard />
           <footer className="pt-4">
             {/* A new tab, because leaving the signed-in layout would drop the Post on New post. */}

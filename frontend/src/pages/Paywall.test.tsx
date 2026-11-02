@@ -32,9 +32,6 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: { get: vi.fn().mockResolvedValue(null) },
 }));
-vi.mock('@/services/apiKeyService', () => ({
-  apiKeyService: { list: vi.fn().mockResolvedValue([]), create: vi.fn() },
-}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
@@ -61,7 +58,6 @@ import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import { redirectTo } from '@/lib/navigation';
-import { apiKeyService } from '@/services/apiKeyService';
 import { session } from '@/lib/session';
 import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
 import { onboardingService } from '@/services/onboardingService';
@@ -176,22 +172,6 @@ describe('Paywall', () => {
 
     it('routes / by the next step', async () => {
       renderSignedIn('/', { nextStep: 'paywall' });
-
-      await waitFor(() => expect(currentPath()).toBe('/subscribe'));
-    });
-
-    it('sends a User whose Subscription ended to the Paywall from a refused write', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
-      vi.mocked(apiKeyService.create).mockRejectedValue(
-        apiError(403, 'This needs a subscription. Subscribe to continue.'),
-      );
-      renderSignedIn('/settings', { nextStep: null });
-
-      fireEvent.change(await screen.findByLabelText('Key name'), {
-        target: { value: 'Work laptop' },
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Create key' }));
 
       await waitFor(() => expect(currentPath()).toBe('/subscribe'));
     });

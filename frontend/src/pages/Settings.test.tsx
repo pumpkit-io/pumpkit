@@ -34,9 +34,6 @@ vi.mock('@/services/xConnectionService', () => ({
 vi.mock('@/services/appConnectionService', () => ({
   appConnectionService: { list: vi.fn(), disconnect: vi.fn() },
 }));
-vi.mock('@/services/apiKeyService', () => ({
-  apiKeyService: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
-}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
@@ -60,7 +57,6 @@ import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import type { Instance } from '@/lib/instance';
 import { redirectTo } from '@/lib/navigation';
-import { apiKeyService } from '@/services/apiKeyService';
 import { appConnectionService } from '@/services/appConnectionService';
 import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
 import { usageService } from '@/services/usageService';
@@ -185,7 +181,6 @@ describe('Settings', () => {
     vi.mocked(xConnectionService.disconnect).mockReset();
     vi.mocked(xConnectionService.acceptPhoto).mockReset();
     vi.mocked(xConnectionService.declinePhoto).mockReset().mockResolvedValue();
-    vi.mocked(apiKeyService.list).mockReset().mockResolvedValue([]);
     vi.mocked(appConnectionService.list).mockReset().mockResolvedValue([]);
     vi.mocked(usageService.get).mockReset().mockResolvedValue(usageWith());
     vi.mocked(redirectTo).mockReset();
@@ -193,7 +188,7 @@ describe('Settings', () => {
     vi.mocked(track).mockClear();
   });
 
-  it('shows Profile, X account, Plan, Usage, Connect AI apps, API keys and Appearance to a Subscribed User', async () => {
+  it('shows Profile, X account, Plan, Usage, Connect AI apps and Appearance to a Subscribed User', async () => {
     renderSettings();
 
     await card('Usage');
@@ -204,7 +199,6 @@ describe('Settings', () => {
       'Plan',
       'Usage',
       'Connect AI apps',
-      'API keys',
       'Appearance',
     ]);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
@@ -1076,7 +1070,6 @@ describe('Settings', () => {
         'Profile',
         'X account',
         'Connect AI apps',
-        'API keys',
         'Appearance',
       ]);
       expect(
@@ -1094,35 +1087,6 @@ describe('Settings', () => {
       await card('Profile');
       expect(screen.queryByRole('region', { name: 'X account' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('API keys', () => {
-    it('creates a key, shows its secret once, and revokes it', async () => {
-      vi.mocked(apiKeyService.create).mockResolvedValue({
-        apiKey: {
-          id: 'api_key_1',
-          name: 'Work laptop',
-          prefix: 'pumpkit_AbCd1234',
-          createdAt: '2026-10-01T09:00:00Z',
-          lastUsedAt: null,
-        },
-        secret: 'pumpkit_AbCd1234-secret',
-        claudeCommand: 'claude mcp add pumpkit',
-      });
-      vi.mocked(apiKeyService.revoke).mockResolvedValue();
-      renderSettings();
-
-      const keys = await card('API keys');
-      await keys.findByText(/No API keys yet/);
-      fireEvent.change(keys.getByLabelText('Key name'), { target: { value: 'Work laptop' } });
-      fireEvent.click(keys.getByRole('button', { name: 'Create key' }));
-      expect(await keys.findByText('pumpkit_AbCd1234-secret')).toBeInTheDocument();
-
-      fireEvent.click(keys.getByRole('button', { name: 'Revoke Work laptop' }));
-      fireEvent.click(await keys.findByRole('button', { name: 'Revoke key' }));
-
-      await waitFor(() => expect(apiKeyService.revoke).toHaveBeenCalledWith('api_key_1'));
     });
   });
 
