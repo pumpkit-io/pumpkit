@@ -41,7 +41,6 @@ def _state(status: SubscriptionStatus) -> SubscriptionState:
         price_id="price_monthly",
         plan_key="pumpkit_pro_monthly",
         current_period_end=TRIAL_END,
-        cancel_at_period_end=False,
         created_at=TRIAL_START,
         trial_start=TRIAL_START,
         trial_end=TRIAL_END,

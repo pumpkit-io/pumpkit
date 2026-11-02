@@ -41,7 +41,8 @@ class Subscription(Base):
         PgEnum(*get_args(SubscriptionStatus), name="subscription_status_enum"), index=True
     )
     current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When a cancelled Subscription ends; None while it renews.
+    cancel_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     # When Stripe created the Subscription: the order between a User's
     # Subscriptions, since rows synced in one transaction share `created_at`.
     stripe_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

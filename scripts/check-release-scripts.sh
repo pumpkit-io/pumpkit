@@ -389,6 +389,86 @@ else
   fail "expected a bad-version stop: status $status, $(cat "$err")"
 fi
 
+# release.sh past the PR, with a gh stub whose checks appear only on the $GH_CHECKS_AFTER-th poll and whose review dispatch
+# leaves a failure status, so the run stops at the review. Every call lands in $GH_LOG.
+mkdir "$work/prbin"
+cat >"$work/prbin/gh" <<'STUB'
+#!/bin/sh
+echo "$*" >>"$GH_LOG"
+case "$1 $2" in
+  "release view") echo 2026-10-12T00:00:00Z ;;
+  "pr list") case "$*" in *--head*) ;; *) cat "$GH_PRS" ;; esac ;;
+  "pr view") cat "$GH_FILES/$3" ;;
+  "pr create") echo https://github.example/pumpkit-io/pumpkit/pull/5 ;;
+  "pr checks")
+    case "$*" in
+      *--watch* | *bucket*) ;;
+      *)
+        polls=$(($(cat "$GH_POLLS" 2>/dev/null || echo 0) + 1))
+        echo "$polls" >"$GH_POLLS"
+        [ "$polls" -ge "$GH_CHECKS_AFTER" ] || { echo "no checks reported on the 'release' branch" >&2; exit 1; }
+        echo 3 ;;
+    esac ;;
+  "run list") case "$*" in *databaseId*) cat "$GH_RUN_ID" ;; *) cat "$GH_RUN" ;; esac ;;
+  "workflow run") printf failure >"$GH_REVIEW"; printf queued >"$GH_RUN"; echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
+  "api "*/statuses) cat "$GH_REVIEW" ;;
+  "api "*) echo true ;;
+esac
+STUB
+chmod +x "$work/prbin/gh"
+export GH_LOG="$work/ghlog" GH_POLLS="$work/polls" GH_REVIEW="$work/review" GH_RUN="$work/run" GH_RUN_ID="$work/runid"
+
+# Usage: release_to_review CHECKS_AFTER WAIT_SECONDS [REVIEW_STATUS] [REVIEW_RUN_STATUS]. Runs release.sh in a fresh repo until it stops.
+release_to_review() {
+  release_repo "$work/u-fixed"
+  mkdir scripts
+  cp "$scripts/prepare-release.sh" "$scripts/release-notes.sh" scripts/
+  git add scripts
+  git commit -q -m scripts
+  git push -q origin main
+  rm -f "$GH_LOG" "$GH_POLLS"
+  printf '%s' "${3:-}" >"$GH_REVIEW"
+  printf '%s' "${4:-}" >"$GH_RUN"
+  rm -f "$GH_RUN_ID"
+  GH_CHECKS_AFTER=$1 RELEASE_CHECKS_WAIT_SECONDS=$2 RELEASE_POLL_SECONDS=0 PATH="$work/prbin:$PATH" run sh "$scripts/release.sh"
+}
+
+release_to_review 3 300
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && [ "$(cat "$GH_POLLS")" = 3 ]; then
+  pass "release waits for the PR's checks to be reported before watching them"
+else
+  fail "expected release to poll until checks appear: status $status, polls $(cat "$GH_POLLS" 2>/dev/null), $(cat "$err")"
+fi
+first_dispatch=$(grep -n '^workflow run sdlc-review-llm.yml' "$GH_LOG" | head -1 | cut -d: -f1)
+first_checks=$(grep -n '^pr checks' "$GH_LOG" | head -1 | cut -d: -f1)
+if [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] && [ "${first_dispatch:-99999}" -lt "${first_checks:-0}" ]; then
+  pass "release starts the review once, before waiting on the checks"
+else
+  fail "expected one review dispatch before the checks: $(cat "$GH_LOG")"
+fi
+
+release_to_review 99999 0
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: no checks were reported on PR #5' "$err" && grep -q '^NEXT:' "$err"; then
+  pass "release stops when no checks are reported in time"
+else
+  fail "expected a no-checks stop: status $status, $(cat "$err")"
+fi
+
+# A rerun after a review run that died, leaving the status pending, starts a new one instead of waiting on the dead one.
+release_to_review 1 300 pending completed
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && grep -q '^workflow run sdlc-review-llm.yml' "$GH_LOG"; then
+  pass "release starts the review again when the last run ended without a final status"
+else
+  fail "expected a new review dispatch: status $status, $(cat "$err")"
+fi
+
+release_to_review 1 300 pending in_progress
+if ! grep -q '^workflow run' "$GH_LOG"; then
+  pass "release leaves a review run in progress alone"
+else
+  fail "expected no dispatch while a review runs: $(cat "$GH_LOG")"
+fi
+
 if [ "$failures" -ne 0 ]; then
   printf '%s check(s) failed\n' "$failures"
   exit 1

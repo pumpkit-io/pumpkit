@@ -10,6 +10,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - The sign-in page now reads "Welcome to" your Instance's name, with the mascot above the form, and its email button reads "Sign in with email". Both sign-in buttons are now raised, with white text, and change shade when you hover over them: the email button in the same pumpkin colour as "Get started", the Google button in dark grey. On wide screens, the animated mascot sits in the right half of the page.
 
+### Fixed
+
+- After you cancel a subscription or trial, Settings now says when it ends, where it could still say "Billing starts on" or "Renews on" with no charge coming. `GET /api/v1/billing/me` now reports the subscription's `cancel_at` date in place of `cancel_at_period_end`. The upgrade's migration carries over cancellations Pumpkit already knew about; one Stripe recorded only as a date shows after the subscription's next change in Stripe.
+
 ## [0.6.0] - 2026-11-02
 
 ### Added

@@ -124,14 +124,14 @@ const TOP_UP = { amount: 1000, currency: 'eur', generations: 250, xPosts: 50, li
 function holding(
   status: NonNullable<BillingMe['subscription']>['status'],
   subscribed: boolean,
-  cancelAtPeriodEnd = false,
+  cancelAt: string | null = null,
 ): BillingMe {
   return {
     subscription: {
       status,
       planKey: 'pumpkit_pro_monthly',
       currentPeriodEnd: PERIOD_END,
-      cancelAtPeriodEnd,
+      cancelAt,
     },
     subscribed,
     maySubscribe: false,
@@ -547,14 +547,22 @@ describe('Settings', () => {
       },
     );
 
-    it('says when a Subscription set to cancel ends', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('active', true, true));
-      renderSettings();
+    it.each(['trialing', 'active'] as const)(
+      'says when a %s Subscription set to cancel ends, not when it would bill',
+      async (status) => {
+        const cancelAt = '2029-06-15T00:00:00Z';
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding(status, true, cancelAt));
+        renderSettings();
 
-      expect(
-        await (await card('Plan')).findByText(`Ends on ${PERIOD_END_LABEL}`),
-      ).toBeInTheDocument();
-    });
+        const plan = await card('Plan');
+        expect(
+          await plan.findByText(
+            `Ends on ${new Date(cancelAt).toLocaleDateString(undefined, { dateStyle: 'long' })}`,
+          ),
+        ).toBeInTheDocument();
+        expect(plan.queryByText(/Billing starts on|Renews on/)).not.toBeInTheDocument();
+      },
+    );
 
     it.each([
       ['past_due', true, 'Past due'],
