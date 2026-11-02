@@ -16,7 +16,7 @@ export interface Subscription {
   status: SubscriptionStatus;
   planKey: string | null;
   currentPeriodEnd: string | null;
-  cancelAtPeriodEnd: boolean;
+  cancelAt: string | null;
 }
 
 /** What the backend says the User holds and may do. */
@@ -80,7 +80,7 @@ interface BillingMeApi {
     status: SubscriptionStatus;
     plan_key: string | null;
     current_period_end: string | null;
-    cancel_at_period_end: boolean;
+    cancel_at: string | null;
   } | null;
   subscribed: boolean;
   may_subscribe: boolean;
@@ -132,7 +132,7 @@ function billingMe(data: BillingMeApi): BillingMe {
       status: s.status,
       planKey: s.plan_key,
       currentPeriodEnd: s.current_period_end,
-      cancelAtPeriodEnd: s.cancel_at_period_end,
+      cancelAt: s.cancel_at,
     },
     subscribed: data.subscribed,
     maySubscribe: data.may_subscribe,

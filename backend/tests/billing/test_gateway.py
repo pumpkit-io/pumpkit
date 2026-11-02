@@ -141,7 +141,8 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
             price_id="price_1Monthly",
             plan_key="pumpkit_pro_monthly",
             current_period_end=datetime(2025, 11, 6, tzinfo=timezone.utc),
-            cancel_at_period_end=True,
+            # Cancelled at its period end, the older way Stripe records a cancellation.
+            cancel_at=datetime(2025, 11, 6, tzinfo=timezone.utc),
             created_at=datetime(2025, 10, 6, tzinfo=timezone.utc),
             billing_cycle_anchor=datetime(2025, 10, 6, tzinfo=timezone.utc),
         ),
@@ -151,7 +152,6 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
             price_id="price_1Legacy",
             plan_key=None,
             current_period_end=datetime(2025, 9, 1, tzinfo=timezone.utc),
-            cancel_at_period_end=False,
             created_at=datetime(2025, 8, 1, tzinfo=timezone.utc),
             billing_cycle_anchor=datetime(2025, 8, 1, tzinfo=timezone.utc),
         ),
@@ -177,6 +177,33 @@ async def test_the_stripe_adapter_reads_a_trials_start_and_end():
     assert subscription.trial_start == datetime(2025, 10, 6, tzinfo=timezone.utc)
     assert subscription.trial_end == datetime(2025, 10, 13, tzinfo=timezone.utc)
     assert subscription.billing_cycle_anchor == datetime(2025, 10, 13, tzinfo=timezone.utc)
+
+
+async def test_the_stripe_adapter_reads_a_cancellation_set_as_a_date():
+    """Flexible billing mode, and Stripe's cancellation page with it, set `cancel_at` instead."""
+    listing = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
+    trialing = listing["data"][0]
+    trialing.update(status="trialing", cancel_at_period_end=False, cancel_at=1762387200)
+    listing["data"] = [trialing]
+    http = _RecordedStripe(json.dumps(listing))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    [subscription] = await gateway.list_subscriptions(customer_id="cus_Contract")
+
+    assert subscription.cancel_at == datetime(2025, 11, 6, tzinfo=timezone.utc)
+
+
+async def test_the_stripe_adapter_reads_no_cancellation_on_a_renewing_subscription():
+    listing = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
+    renewing = listing["data"][0]
+    renewing.update(status="active", cancel_at_period_end=False, cancel_at=None)
+    listing["data"] = [renewing]
+    http = _RecordedStripe(json.dumps(listing))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    [subscription] = await gateway.list_subscriptions(customer_id="cus_Contract")
+
+    assert subscription.cancel_at is None
 
 
 async def test_the_stripe_adapter_cancels_a_subscription_now():
@@ -311,7 +338,6 @@ async def test_the_fake_ends_a_trial_at_its_clock_and_starts_the_paid_period():
         price_id="price_monthly",
         plan_key="pumpkit_pro_monthly",
         current_period_end=datetime(2026, 10, 14, tzinfo=timezone.utc),
-        cancel_at_period_end=False,
         created_at=datetime(2026, 10, 7, tzinfo=timezone.utc),
         trial_start=datetime(2026, 10, 7, tzinfo=timezone.utc),
         trial_end=datetime(2026, 10, 14, tzinfo=timezone.utc),
@@ -372,7 +398,6 @@ async def test_the_fake_lists_a_cancelled_subscription_as_ended():
         price_id="price_monthly",
         plan_key="pumpkit_pro_monthly",
         current_period_end=None,
-        cancel_at_period_end=False,
         created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
     )
     gateway.set_subscription("cus_1", incomplete)
@@ -386,7 +411,6 @@ async def test_the_fake_lists_a_cancelled_subscription_as_ended():
             price_id="price_monthly",
             plan_key="pumpkit_pro_monthly",
             current_period_end=None,
-            cancel_at_period_end=False,
             created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
         )
     ]

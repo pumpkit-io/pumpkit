@@ -79,7 +79,7 @@ describe('billingService.subscribeNow', () => {
           status: 'active',
           plan_key: 'pumpkit_pro_monthly',
           current_period_end: '2026-11-10T12:00:30Z',
-          cancel_at_period_end: false,
+          cancel_at: null,
         },
         subscribed: true,
         may_subscribe: false,
@@ -94,7 +94,7 @@ describe('billingService.subscribeNow', () => {
       status: 'active',
       planKey: 'pumpkit_pro_monthly',
       currentPeriodEnd: '2026-11-10T12:00:30Z',
-      cancelAtPeriodEnd: false,
+      cancelAt: null,
     });
   });
 });

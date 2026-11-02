@@ -111,7 +111,7 @@ function holding(status: NonNullable<BillingMe['subscription']>['status']): Bill
       status,
       planKey: 'pumpkit_pro_monthly',
       currentPeriodEnd: null,
-      cancelAtPeriodEnd: false,
+      cancelAt: null,
     },
     subscribed: false,
     maySubscribe: status === 'incomplete',

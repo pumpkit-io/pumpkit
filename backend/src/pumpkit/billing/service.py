@@ -188,7 +188,7 @@ async def sync_customer(
         subscription.plan_key = state.plan_key
         subscription.status = state.status
         subscription.current_period_end = state.current_period_end
-        subscription.cancel_at_period_end = state.cancel_at_period_end
+        subscription.cancel_at = state.cancel_at
         subscription.stripe_created_at = state.created_at
         subscription.trial_start = state.trial_start
         subscription.trial_end = state.trial_end

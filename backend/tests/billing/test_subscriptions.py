@@ -16,7 +16,6 @@ RUNNING = SubscriptionState(
     price_id="price_monthly",
     plan_key="pumpkit_pro_monthly",
     current_period_end=datetime(2026, 11, 6, tzinfo=timezone.utc),
-    cancel_at_period_end=False,
     created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
 )
 ENDED = SubscriptionState(
@@ -25,7 +24,6 @@ ENDED = SubscriptionState(
     price_id="price_legacy",
     plan_key=None,
     current_period_end=datetime(2026, 9, 1, tzinfo=timezone.utc),
-    cancel_at_period_end=False,
     created_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
 )
 
@@ -47,7 +45,7 @@ async def test_sync_copies_every_subscription_of_the_customer(db, user):
     )
     assert running.current_period_end is not None
     assert running.current_period_end.replace(tzinfo=timezone.utc) == RUNNING.current_period_end
-    assert running.cancel_at_period_end is False
+    assert running.cancel_at is None
     ended = await subscriptions_service.get_subscription_by_stripe_id(db, "sub_old")
     assert ended is not None
     assert (ended.status, ended.plan_key) == ("canceled", None)

@@ -32,10 +32,13 @@ function statusBadgeVariant(status: SubscriptionStatus): BadgeProps['variant'] {
   return PAYMENT_FAILED_STATUSES.has(status) ? 'warning' : 'default';
 }
 
-// A Trial's period end is its first charge, unless the User cancelled before it.
-function nextBillingLabel({ status, cancelAtPeriodEnd }: Subscription): string {
-  if (cancelAtPeriodEnd) return 'Ends on';
-  return status === 'trialing' ? 'Billing starts on' : 'Renews on';
+// A Trial's period end is its first charge; a cancelled Subscription only has its end.
+function nextDateLabel({ status, currentPeriodEnd, cancelAt }: Subscription): string | null {
+  const [label, date] = cancelAt
+    ? ['Ends on', cancelAt]
+    : [status === 'trialing' ? 'Billing starts on' : 'Renews on', currentPeriodEnd];
+  if (!date) return null;
+  return `${label} ${new Date(date).toLocaleDateString(undefined, { dateStyle: 'long' })}`;
 }
 
 /** The User's Plan, its status and next billing date, with the billing portal for the rest. */
@@ -53,6 +56,7 @@ export function SubscriptionCard({
   const subscription = data?.me.subscription ?? null;
   const plan = subscription ? data?.plans.find((p) => p.key === subscription.planKey) : undefined;
   const paymentFailed = subscription ? PAYMENT_FAILED_STATUSES.has(subscription.status) : false;
+  const next = subscription ? nextDateLabel(subscription) : null;
 
   return (
     <SettingsCard title="Plan">
@@ -83,13 +87,7 @@ export function SubscriptionCard({
           </div>
           <div className="flex flex-col gap-3 border-t border-border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             {/* While a payment fails Stripe retries it, so nothing renews on the period end. */}
-            {subscription.currentPeriodEnd && !paymentFailed && (
-              <p className="font-sans text-sm text-foreground">
-                {`${nextBillingLabel(subscription)} ${new Date(
-                  subscription.currentPeriodEnd,
-                ).toLocaleDateString(undefined, { dateStyle: 'long' })}`}
-              </p>
-            )}
+            {next && !paymentFailed && <p className="font-sans text-sm text-foreground">{next}</p>}
             <Button
               type="button"
               variant={paymentFailed ? 'default' : 'outline'}

@@ -84,7 +84,7 @@ export const SUBSCRIBED: BillingMe = {
     status: 'active',
     planKey: 'pumpkit_pro_monthly',
     currentPeriodEnd: null,
-    cancelAtPeriodEnd: false,
+    cancelAt: null,
   },
   subscribed: true,
   maySubscribe: false,
