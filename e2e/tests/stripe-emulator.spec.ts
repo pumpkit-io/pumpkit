@@ -26,15 +26,22 @@ interface Delivery {
 
 const planButtons = (page: Page) => page.getByRole('button', { name: /^Start trial: / });
 
-/** Opens the Paywall once it lists Plans. */
+/** Opens the Paywall once it lists Plans, or skips when the stack's Stripe can't list them. */
 async function openPaywall(page: Page): Promise<void> {
-  await page.goto('/subscribe');
+  let status = 0;
   // The suite's earlier specs share one client address, which can use up /billing/plans'
   // per-minute limit: reload until the window lets the Paywall load its Plans.
   await expect(async () => {
-    if (await page.getByText("Couldn't load plans.").isVisible()) await page.reload();
-    await expect(planButtons(page)).toHaveCount(2, { timeout: 2_000 });
+    const plans = page.waitForResponse((r) => r.url().endsWith('/api/v1/billing/plans'));
+    await page.goto('/subscribe');
+    status = (await plans).status();
+    expect(status).not.toBe(429);
   }).toPass({ timeout: 70_000 });
+  test.skip(
+    status !== 200,
+    `Plans answered ${status}: run the suite against scripts/dev-stack's Stripe Emulator.`,
+  );
+  await expect(planButtons(page)).toHaveCount(2);
 }
 
 /** Opens Checkout for the monthly Plan, or skips when Checkout is Stripe's own. */
