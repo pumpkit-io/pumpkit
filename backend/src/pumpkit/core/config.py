@@ -237,6 +237,21 @@ class Settings(BaseSettings):
     def api_url(self) -> str:
         return f"{self.PUBLIC_URL}/api/v1"
 
+    def oauth_issuer(self) -> str:
+        return self.PUBLIC_URL
+
+    def mcp_url(self) -> str:
+        return f"{self.api_url()}/mcp"
+
+    def oauth_protected_resource_metadata_url(self) -> str:
+        return f"{self.PUBLIC_URL}/.well-known/oauth-protected-resource/api/v1/mcp"
+
+    def oauth_endpoint(self, name: str) -> str:
+        return f"{self.api_url()}/oauth/{name}"
+
+    def oauth_consent_page_url(self) -> str:
+        return f"{self.frontend_url()}/oauth/consent"
+
     def cors_origins(self) -> list[str]:
         return [self.PUBLIC_URL]
 

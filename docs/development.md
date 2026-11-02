@@ -10,6 +10,7 @@ backend/src/pumpkit/
   core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
+  connected_apps/  Connected apps: OAuth clients, app connections, authorization requests and access and refresh tokens for the MCP server (ADR 0020)
   authors/         Inspiration authors, their posts and the Author directory; the X reader (twitterapi.io)
   x_connection/    X connections; the X publisher port (X's API) and X's weighted length count
   support/         the support contact redirect (a router only)
@@ -48,7 +49,7 @@ Every other page renders inside `pages/AppLayout.tsx` (the providers, the sideba
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
 
-ADR 0008 orders the areas `core` <- `auth` <- `billing` <- {`authors`, `x_connection`, `support`} <- {`posts`, `onboarding`} <- `scheduling`: an area imports only areas to its left, and only their service, models, schemas and domain modules, never a router or mediator. `core` imports no area. `cd backend && uv run --extra dev lint-imports` checks these rules with the contracts in `backend/pyproject.toml`, and CI runs it. When an endpoint belongs to one area but needs a higher area's data, serve it from the higher area: `GET /x-connection` and `POST /x-connection/authorizations/complete` answer with the count of waiting Scheduled posts, so `scheduling/router.py` serves them, and `x_connection/router.py` keeps starting an authorization, disconnecting, and using or declining the X account's photo as the User's Photo.
+ADR 0008 orders the areas `core` <- `auth` <- {`billing`, `connected_apps`} <- {`authors`, `x_connection`, `support`} <- {`posts`, `onboarding`} <- `scheduling`: an area imports only areas to its left, and only their service, models, schemas and domain modules, never a router or mediator. `core` imports no area. `cd backend && uv run --extra dev lint-imports` checks these rules with the contracts in `backend/pyproject.toml`, and CI runs it. When an endpoint belongs to one area but needs a higher area's data, serve it from the higher area: `GET /x-connection` and `POST /x-connection/authorizations/complete` answer with the count of waiting Scheduled posts, so `scheduling/router.py` serves them, and `x_connection/router.py` keeps starting an authorization, disconnecting, and using or declining the X account's photo as the User's Photo.
 
 ## Recipes
 

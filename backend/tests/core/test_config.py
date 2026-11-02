@@ -335,3 +335,24 @@ def test_jev_is_off_without_a_typesafe_key_and_pins_its_model(instance_env):
 
     assert s.TYPESAFE_API_KEY is None
     assert s.TYPESAFE_MODEL == "jev-1.13.0"
+
+
+def test_oauth_urls_derive_from_the_public_url(instance_env):
+    s = instance_env(PUBLIC_URL="https://pumpkit.example.org/")
+
+    assert s.oauth_issuer() == "https://pumpkit.example.org"
+    assert s.mcp_url() == "https://pumpkit.example.org/api/v1/mcp"
+    assert s.oauth_protected_resource_metadata_url() == (
+        "https://pumpkit.example.org/.well-known/oauth-protected-resource/api/v1/mcp"
+    )
+    assert s.oauth_endpoint("authorize") == "https://pumpkit.example.org/api/v1/oauth/authorize"
+    assert s.oauth_endpoint("revoke") == "https://pumpkit.example.org/api/v1/oauth/revoke"
+    assert s.oauth_consent_page_url() == "https://pumpkit.example.org/oauth/consent"
+
+
+def test_oauth_urls_keep_a_localhost_port(instance_env):
+    s = instance_env(PUBLIC_URL="http://localhost:8080")
+
+    assert s.oauth_issuer() == "http://localhost:8080"
+    assert s.mcp_url() == "http://localhost:8080/api/v1/mcp"
+    assert s.oauth_endpoint("token") == "http://localhost:8080/api/v1/oauth/token"
