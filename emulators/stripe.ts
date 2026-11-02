@@ -1,6 +1,5 @@
-// The dev stack's Stripe (docs/agents/dev-stack.md): an emulate custom Emulator serving only the calls
-// backend/src/pumpkit/billing/gateway.py makes, in the shapes its recorded fixtures show.
-// Loaded by emulate with Node's type stripping, so it keeps to erasable TypeScript and Node built-ins.
+// The dev stack's Stripe, scoped to billing/gateway.py's calls (docs/agents/dev-stack.md).
+// emulate loads it with Node's type stripping, so it keeps to erasable TypeScript and Node built-ins.
 
 import { createHmac } from 'node:crypto';
 
@@ -79,8 +78,8 @@ function newSubscription(
   price: StripeObject,
   quantity: number,
   trialDays: number | null,
+  created = now(),
 ): StripeObject {
-  const created = now();
   const trialEnd = trialDays ? created + trialDays * DAY : null;
   return {
     id: newId('sub'),
@@ -154,11 +153,21 @@ function seedState(seed: Seed): State {
     };
   }
   for (const s of seed.subscriptions ?? []) {
-    const subscription = newSubscription(s.customer, state.prices[s.price], 1, null);
-    subscription.id = s.id;
-    subscription.status = s.status;
-    subscription.created = subscription.start_date = Math.floor(Date.parse(s.created) / 1000);
-    state.subscriptions[s.id] = subscription;
+    const price = state.prices[s.price];
+    const subscription = newSubscription(
+      s.customer,
+      price,
+      1,
+      null,
+      Math.floor(Date.parse(s.created) / 1000),
+    );
+    // Roll the period on from `created` to the current one, as Stripe's renewals would have.
+    const [item] = subscription.items.data;
+    while (item.current_period_end <= now()) {
+      item.current_period_start = item.current_period_end;
+      item.current_period_end = periodEnd(item.current_period_start, price);
+    }
+    state.subscriptions[s.id] = { ...subscription, id: s.id, status: s.status };
   }
   return state;
 }
@@ -167,9 +176,8 @@ function seedState(seed: Seed): State {
 function parseStripeParams(params: URLSearchParams): StripeObject {
   const out: StripeObject = {};
   for (const [key, value] of params) {
-    const [head, ...rest] = key.replace(/\]/g, '').split('[');
+    const path = key.replace(/\]/g, '').split('[');
     let node: StripeObject = out;
-    const path = [head, ...rest];
     path.forEach((segment, i) => {
       const last = i === path.length - 1;
       const nextIsIndex = !last && /^\d*$/.test(path[i + 1]);
@@ -233,7 +241,9 @@ export function pumpkitStripe(target: WebhookTarget) {
     apiVersion: 1,
     name: OWNER,
     state: emptyState,
-    validateSeed: (value: unknown) => seedState((value ?? {}) as Seed),
+    // emulate passes a restored snapshot through here too, already in State's shape.
+    validateSeed: (value: any) =>
+      value?.checkoutSessions ? (value as State) : seedState((value ?? {}) as Seed),
     setup({
       app,
       state,
@@ -297,13 +307,15 @@ export function pumpkitStripe(target: WebhookTarget) {
 
       app.get('/_pumpkit/webhook-deliveries', (c: any) =>
         c.json(
-          webhooks
-            .getDeliveries()
-            .map((d: StripeObject) => ({
+          webhooks.getDeliveries().map((d: StripeObject) => {
+            const object = d.payload.data.object;
+            return {
               event: d.event,
               status_code: d.status_code,
-              success: d.success,
-            })),
+              object: object.id,
+              customer: object.object === 'customer' ? object.id : object.customer,
+            };
+          }),
         ),
       );
 
@@ -502,7 +514,8 @@ export function pumpkitStripe(target: WebhookTarget) {
         const subscription = state.subscriptions[c.req.param('id')];
         if (!subscription) return notFound(c, 'subscription', c.req.param('id'));
         const { trial_end: trialEnd, expand = [] } = await bodyParams(c);
-        if (trialEnd === 'now') {
+        // Like Stripe, ending a Trial that already ended changes nothing.
+        if (trialEnd === 'now' && subscription.status === 'trialing') {
           const start = now();
           const [item] = subscription.items.data;
           Object.assign(subscription, {

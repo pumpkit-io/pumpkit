@@ -1,4 +1,4 @@
-"""Seed a User with no Subscription, named by the email argument, and print `E2E_ACCESS_TOKEN=<jwt>`.
+"""Seed a User with no Subscription and no Stripe customer, named by the email argument, and print `E2E_ACCESS_TOKEN=<jwt>`.
 
 Each test passes an email of its own, so the User starts at the Paywall whatever earlier runs did.
 Run it like `seed_user.py`, with the email after `-`.
@@ -18,7 +18,7 @@ async def main(email: str) -> None:
     async with _db_session_handler.async_session_maker() as db:
         user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
         if user is None:
-            user = User(email=email, display_name="E2E Subscriber", first_name="E2E")
+            user = User(email=email, display_name="E2E Newcomer", first_name="E2E")
             db.add(user)
         await db.commit()
         await db.refresh(user)

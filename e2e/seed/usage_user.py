@@ -34,9 +34,7 @@ async def main() -> None:
         settings.X_POSTS_MONTHLY_CAP,
         settings.X_LINK_POSTS_MONTHLY_CAP,
     ) != (500, 100, 10):
-        raise RuntimeError(
-            "Usage smoke tests need caps 500/100/10; see CONTRIBUTING.md"
-        )
+        raise RuntimeError("Usage smoke tests need caps 500/100/10; see CONTRIBUTING.md")
     scenario = sys.argv[1]
     trial = scenario == "trial"
     used = 500 if scenario == "limit" else 3
@@ -64,9 +62,7 @@ async def main() -> None:
                     trial_end=now + timedelta(days=5) if trial else None,
                     current_period_end=now + timedelta(days=5 if trial else 28),
                 ),
-                InspirationAuthor(
-                    user_id=user.id, handle="e2e_usage", position=0, added_at=anchor
-                ),
+                InspirationAuthor(user_id=user.id, handle="e2e_usage", position=0, added_at=anchor),
             ]
         )
         if await db.get(AuthorPost, "e2e-usage-author-post") is None:
@@ -82,9 +78,7 @@ async def main() -> None:
         await save_connection(
             db,
             user_id=user.id,
-            account=XAccount(
-                user_id="e2e-x-usage", handle="e2e_usage", subscription_type="None"
-            ),
+            account=XAccount(user_id="e2e-x-usage", handle="e2e_usage", subscription_type="None"),
             tokens=XTokens(
                 access_token="e2e-access",
                 refresh_token="e2e-refresh",

@@ -45,6 +45,8 @@ async def main() -> None:
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))
         await db.execute(delete(OnboardingFinish).where(OnboardingFinish.user_id == user.id))
         await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
+        # The Stripe Emulator seeds this customer and Subscription (emulate.config.ts).
+        user.stripe_customer_id = "cus_e2e_onboarding"
         held = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
         if held.first() is None:
             db.add(

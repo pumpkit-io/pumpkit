@@ -5,7 +5,7 @@ import { runSeedScript } from '../backend';
 test.use({ storageState: { cookies: [], origins: [] } });
 
 async function signInAsNewUser(page: Page): Promise<void> {
-  const email = `e2e-subscriber-${Date.now()}@e2e-user.dev`;
+  const email = `e2e-newcomer-${Date.now()}@e2e-user.dev`;
   const token = runSeedScript('new_user.py', [email]).match(/E2E_ACCESS_TOKEN=(\S+)/)?.[1];
   if (!token) throw new Error('new_user.py printed no token');
   await page.addInitScript((t) => {
@@ -15,6 +15,13 @@ async function signInAsNewUser(page: Page): Promise<void> {
     );
     localStorage.setItem('pumpkit:analytics-consent', JSON.stringify('denied'));
   }, token);
+}
+
+interface Delivery {
+  event: string;
+  status_code: number | null;
+  object: string;
+  customer: string;
 }
 
 const planButtons = (page: Page) => page.getByRole('button', { name: /^Start trial: / });
@@ -55,17 +62,21 @@ test('the Paywall offers the Plans the Stripe Emulator sells', async ({ page }) 
 test('a Trial bought through the Emulator Checkout opens Onboarding', async ({ page }) => {
   await signInAsNewUser(page);
   await startMonthlyTrial(page);
-  const emulator = new URL(page.url()).origin;
+  const checkout = new URL(page.url());
+  const sessionId = checkout.pathname.split('/').pop();
 
   await page.getByRole('button', { name: 'Pay' }).click();
 
   await expect(page).toHaveURL(/\/onboarding$/);
-  // Every webhook the Checkout sent was accepted, so the backend learnt of the Trial from them.
-  const deliveries = await (
-    await page.request.get(`${emulator}/_pumpkit/webhook-deliveries`)
+  // This User's webhooks were all accepted, so the backend learnt of the Trial from them.
+  const all: Delivery[] = await (
+    await page.request.get(`${checkout.origin}/_pumpkit/webhook-deliveries`)
   ).json();
-  expect(deliveries.map((d: { event: string }) => d.event)).toEqual(
-    expect.arrayContaining(['customer.subscription.created', 'checkout.session.completed']),
-  );
-  expect(deliveries.filter((d: { status_code: number }) => d.status_code !== 200)).toEqual([]);
+  const customer = all.find((d) => d.object === sessionId)?.customer;
+  const mine = all.filter((d) => d.customer === customer);
+  expect(mine.map((d) => [d.event, d.status_code])).toEqual([
+    ['customer.created', 200],
+    ['customer.subscription.created', 200],
+    ['checkout.session.completed', 200],
+  ]);
 });
