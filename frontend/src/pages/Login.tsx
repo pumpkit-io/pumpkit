@@ -9,6 +9,8 @@ import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
 import { authService } from '../services/authService';
 import { errorMessage, errorStatus } from '../services/apiErrors';
 import { track } from '../lib/analytics';
+import mascot from '@/assets/brand/mascot.svg';
+import mascotHopWave from '@/assets/brand/mascot-hop-wave.gif';
 import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
 
 function emailDomain(email: string): string {
@@ -35,7 +37,7 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { sign_in_methods, operator } = useInstance();
+  const { sign_in_methods, operator, app_name } = useInstance();
   const offersGoogle = sign_in_methods.includes('google');
   const hasTerms = operator !== null;
 
@@ -72,32 +74,30 @@ export function Login() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <main className="flex flex-1 items-center justify-center p-4">
-        <div className="w-full max-w-[380px]">
-          <div className="rounded-xl border border-border bg-card">
-            <div className="flex flex-col space-y-1.5 p-6">
-              <h1 className="text-3xl font-normal leading-none tracking-tight text-foreground">
-                Welcome back
+    <div className="grid min-h-screen bg-background text-foreground lg:grid-cols-2">
+      <div className="flex flex-col">
+        <main className="flex flex-1 items-center justify-center px-4 py-12">
+          <div className="w-full max-w-[440px]">
+            <div className="rounded-2xl border border-border bg-card p-8 shadow-raised sm:p-10">
+              <img src={mascot} alt="" className="h-10 w-auto select-none" draggable={false} />
+              <h1 className="mt-6 text-3xl font-normal leading-tight tracking-tight text-foreground">
+                Welcome to {app_name}
               </h1>
-              <p className="text-sm text-muted-foreground">
-                {offersGoogle ? 'Sign in with Google or a magic link' : 'Sign in with a magic link'}
+              <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+                Write X posts in the style of the authors you choose.
               </p>
-            </div>
-            <div className="p-6 pt-0">
-              <div className="grid gap-6">
+
+              <div className="mt-8 grid gap-6">
                 {offersGoogle && (
                   <>
                     <GoogleAuthButton
+                      className="h-11"
                       onError={() => setError("We couldn't start Google sign-in. Try again.")}
                     />
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="h-px w-full shrink-0 bg-border" />
-                      </div>
-                      <div className="relative flex justify-center text-xs">
-                        <span className="bg-card px-2 text-muted-foreground">or</span>
-                      </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <div className="h-px flex-1 bg-border" />
+                      or
+                      <div className="h-px flex-1 bg-border" />
                     </div>
                   </>
                 )}
@@ -119,7 +119,7 @@ export function Login() {
                       disabled={loading}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-11 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                     />
                   </div>
                   {error && (
@@ -130,30 +130,42 @@ export function Login() {
                       {error}
                     </div>
                   )}
-                  <Button type="submit" className="w-full" disabled={loading || !email}>
-                    {loading ? 'Sending…' : 'Email me a magic link'}
+                  <Button type="submit" className="h-11 w-full" disabled={loading || !email}>
+                    {loading ? 'Sending…' : 'Sign in with email'}
                   </Button>
                 </form>
-                {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}
-                {hasTerms && (
-                  <p className="text-center text-xs leading-5 text-muted-foreground">
-                    By continuing, you agree to the{' '}
-                    <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
-                      Terms
-                    </Link>{' '}
-                    and acknowledge the{' '}
-                    <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
-                      Privacy Policy
-                    </Link>
-                    .
-                  </p>
-                )}
               </div>
             </div>
+            {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}
+            {hasTerms && (
+              <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
+                By continuing, you agree to the{' '}
+                <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
+                  Terms
+                </Link>{' '}
+                and acknowledge the{' '}
+                <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            )}
           </div>
-        </div>
-      </main>
-      <CompanyFooter />
+        </main>
+        <CompanyFooter />
+      </div>
+      {/* Placeholder for a product video. */}
+      <aside className="hidden items-center justify-center border-l border-border bg-muted lg:flex">
+        <picture>
+          <source srcSet={mascot} media="(prefers-reduced-motion: reduce)" />
+          <img
+            src={mascotHopWave}
+            alt=""
+            className="w-72 select-none [image-rendering:pixelated]"
+            draggable={false}
+          />
+        </picture>
+      </aside>
     </div>
   );
 }

@@ -123,13 +123,13 @@ async function visitSignedOut(path: string) {
       />
     )),
   );
-  await screen.findByRole('heading', { name: 'Welcome back' });
+  await screen.findByRole('heading', { name: 'Welcome to Pumpkit' });
 }
 
 /** Asks for a Magic link on the sign-in page already on screen. */
 async function requestMagicLink() {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Email me a magic link' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
   await screen.findByRole('heading', { name: 'Magic link sent' });
 }
 
@@ -276,7 +276,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     await visitSignedOut('/oauth/consent?request=req_1');
     await requestMagicLink();
     fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
-    await screen.findByRole('heading', { name: 'Welcome back' });
+    await screen.findByRole('heading', { name: 'Welcome to Pumpkit' });
     await requestMagicLink();
     cleanup();
 
