@@ -1,6 +1,7 @@
 """What `purge_expired` deletes, and what it keeps."""
 
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import pytest
 
@@ -94,7 +95,7 @@ async def test_a_document_app_with_a_recent_authorization_is_kept(foreign_keys_s
     assert await survives_purge(foreign_keys_session)
 
 
-async def user_with_connection(db, *, revoked_ago: timedelta | None = None) -> AppConnection:
+async def user_with_connection(db, *, revoked_ago: Optional[timedelta] = None) -> AppConnection:
     user = User(email="ana@example.com", display_name="Ana")
     db.add_all([user, metadata_document_client(expired_ago=timedelta(days=1))])
     await db.flush()

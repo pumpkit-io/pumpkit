@@ -33,7 +33,7 @@ async def purge_expired(db: AsyncSession, *, now: datetime) -> None:
             OAuthRefreshToken.expires_at < now - EXPIRED_REFRESH_TOKEN_AGE
         )
     )
-    # Their tokens and authorizations go with them by cascade, and their clients may then go too.
+    # Their tokens and authorizations go with them by cascade, so the client purge below can then remove their clients.
     await db.execute(
         delete(AppConnection).where(AppConnection.revoked_at < now - REVOKED_CONNECTION_AGE)
     )
