@@ -9,6 +9,7 @@ import { generationsAndXPosts } from '@/features/billing/counts';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
 import { UsageCard } from '@/features/billing/UsageCard';
 import { useBilling } from '@/features/billing/useBilling';
+import { ConnectedAppsCard } from '@/features/connectedApps/ConnectedAppsCard';
 import { useInstance } from '@/features/instance/useInstance';
 import { LegalLinks } from '@/features/legal/LegalLinks';
 import { AppearanceCard } from '@/features/theme/AppearanceCard';
@@ -119,6 +120,7 @@ export function Settings() {
             />
           )}
           {sells_plans && data?.me.subscribed && <UsageCard topUpBought={topUpBought} />}
+          <ConnectedAppsCard />
           <ApiKeysSection />
           <AppearanceCard />
           <footer className="pt-4">

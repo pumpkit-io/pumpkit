@@ -28,6 +28,8 @@ class InstanceResponse(BaseModel):
     support_email: Optional[str]
     analytics: Optional[AnalyticsSettings]
     x_connection: bool
+    # Served by the backend so the copied URL is the one apps reach, not the browser's origin.
+    mcp_url: str
 
 
 class HealthResponse(BaseModel):

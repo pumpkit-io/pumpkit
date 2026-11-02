@@ -37,6 +37,7 @@ async def test_instance_without_posthog_has_no_analytics(
         "support_email": None,
         "analytics": None,
         "x_connection": False,
+        "mcp_url": "http://localhost:5173/api/v1/mcp",
     }
 
 
@@ -134,3 +135,11 @@ async def test_an_instance_with_only_one_x_key_offers_no_x_connection(client, mo
     response = await client.get("/api/v1/instance")
 
     assert response.json()["x_connection"] is False
+
+
+async def test_instance_mcp_url_follows_public_url(client, monkeypatch):
+    monkeypatch.setattr(settings, "PUBLIC_URL", "https://pumpkit.example.org")
+
+    response = await client.get("/api/v1/instance")
+
+    assert response.json()["mcp_url"] == "https://pumpkit.example.org/api/v1/mcp"

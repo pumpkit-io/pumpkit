@@ -16,6 +16,8 @@ from pumpkit.auth.service import users
 from pumpkit.auth.service.sessions import may_hold_session
 from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization, OAuthClient
 from pumpkit.connected_apps.schemas import (
+    AppConnectionResponse,
+    AppConnectionsListResponse,
     AuthorizationDetailsResponse,
     AuthorizationServerMetadata,
     ClientRegistrationRequest,
@@ -315,15 +317,17 @@ async def authorization_details(
     return AuthorizationDetailsResponse(
         client=ConsentClient(
             name=client.name,
-            verified_domain=(
-                urlsplit(client.id).hostname if client.kind == "metadata_document" else None
-            ),
+            verified_domain=_verified_domain(client),
             redirect_host=host,
             is_local=host is None,
         ),
         scope=authorization.scope,
         expires_at=authorization.expires_at,
     )
+
+
+def _verified_domain(client: OAuthClient) -> Optional[str]:
+    return urlsplit(client.id).hostname if client.kind == "metadata_document" else None
 
 
 async def approve_authorization(
@@ -602,3 +606,28 @@ async def _may_connect(db: AsyncSession, user_id: str) -> bool:
     """Whether the User exists and isn't Suspended, the rule a Session follows too."""
     user = await users.get_user_by_id(db, user_id)
     return user is not None and may_hold_session(user)
+
+
+async def list_connections(db: AsyncSession, user: User) -> AppConnectionsListResponse:
+    listed = await connections.list_unrevoked(db, user_id=user.id)
+    return AppConnectionsListResponse(
+        data=[
+            AppConnectionResponse(
+                id=connection.id,
+                app_name=client.name,
+                verified_domain=_verified_domain(client),
+                created_at=as_utc(connection.created_at),
+                last_used_at=as_utc(connection.last_used_at) if connection.last_used_at else None,
+            )
+            for connection, client in listed
+        ]
+    )
+
+
+async def disconnect(db: AsyncSession, user: User, connection_id: str, *, now: datetime) -> None:
+    """Disconnect one of the User's apps; another User's and a disconnected one both read as 404."""
+    connection = await connections.get_unrevoked(db, user_id=user.id, connection_id=connection_id)
+    if connection is None:
+        raise NotFoundError("That app isn't connected.")
+    await connections.revoke(db, connection.id, now=now)
+    await db.commit()

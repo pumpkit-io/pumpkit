@@ -9,6 +9,7 @@ const MAGIC_LINK_ONLY = {
   support_email: null,
   analytics: null,
   x_connection: false,
+  mcp_url: null,
 };
 
 describe('fetchInstance', () => {
@@ -21,7 +22,7 @@ describe('fetchInstance', () => {
     vi.restoreAllMocks();
   });
 
-  it('offers only the Magic link, with no Plans, X, Operator details, support address or analytics, when the backend is unreachable', async () => {
+  it('offers only the Magic link, with no Plans, X, Operator details, support address, analytics or MCP URL, when the backend is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
     await expect(fetchInstance()).resolves.toEqual(MAGIC_LINK_ONLY);
