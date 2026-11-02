@@ -5,7 +5,7 @@
 ```
 backend/src/pumpkit/
   main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
-  mcp_server.py    the MCP server: every area's tools behind OAuth access tokens (ADR 0020; API keys until they are removed), the access gate and per-User limits
+  mcp_server.py    the MCP server: every area's tools behind OAuth access tokens (ADR 0020), the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
   core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions, refresh tokens, Google identities, Magic links; Google sign-in, the auth mailer and its templates/
@@ -21,7 +21,7 @@ backend/src/pumpkit/
   scheduling/      Scheduled posts: rules, publish steps, publishing, and the publisher process
 backend/tests/     pytest suite, mirroring the package tree; fixtures in conftest.py
 frontend/src/
-  features/        self-contained feature modules (account, analyticsConsent, apiKeys, billing, connectedApps, inspirationAuthors, instance, legal, onboarding, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
+  features/        self-contained feature modules (account, analyticsConsent, billing, connectedApps, inspirationAuthors, instance, legal, onboarding, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives, the Settings card
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
@@ -47,7 +47,7 @@ Every other page renders inside `pages/AppLayout.tsx` (the providers, the sideba
 - `/posts/scheduled`, `/posts/drafts`, `/posts/published` and `/posts/failed` (`pages/Posts.tsx`): one tab per status, built from `features/posts/list/`. `/posts` opens the Scheduled tab.
 - `/posts/:id` (`pages/PostPage.tsx`): the Text card (`features/posts/TextCard.tsx`) and, pinned below it, one dock per status from `features/posts/panels/`; the "Post to…" dialog is `features/posts/postTo/` and the inline edit of a Scheduled post is `features/posts/edit/`.
 - `/persona` (`pages/Persona.tsx`): the Inspiration authors, `features/inspirationAuthors/`.
-- `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile), `features/xConnection/` (X account), `features/connectedApps/` (Connect AI apps), `features/apiKeys/` and `features/theme/` (Appearance).
+- `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile), `features/xConnection/` (X account), `features/connectedApps/` (Connect AI apps) and `features/theme/` (Appearance).
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
 
@@ -139,7 +139,7 @@ AI apps reach Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 0012),
 - it was issued for this Instance's MCP URL (`settings.mcp_url()`);
 - its User exists and isn't Suspended.
 
-It then records the app's last use at most once a minute. Until API keys are removed, an API key still authenticates; a web Session's access token never does. Anything else gets a 401 whose `WWW-Authenticate` names the protected resource metadata MCP clients start sign-in from, with `error="invalid_token"` when a credential was refused. `build_server` gives every tool the OAuth security scheme in `_meta.securitySchemes`, which ChatGPT reads to know a tool needs sign-in.
+It then records the app's last use at most once a minute. A web Session's access token never authenticates. Anything else gets a 401 whose `WWW-Authenticate` names the protected resource metadata MCP clients start sign-in from, with `error="invalid_token"` when a credential was refused. `build_server` gives every tool the OAuth security scheme in `_meta.securitySchemes`, which ChatGPT reads to know a tool needs sign-in.
 
 It registers every module's `TOOLS` and wraps each tool: it counts the call against the User's limit for that tool, checks access with `billing/service.has_access` (a tool error with the subscribe link otherwise), opens the call's session, and turns what the tool raises into a tool error. An `AppError` or a request schema's `ValidationError` keeps the web route's `detail` word for word, then the fix page's `url` when there is one, and `retry_at` when there is one; a reported error goes to PostHog with an `error_id`, as the global handler sends it. So a tool raises the mediator's refusals and never catches them. Tool calls send no product events (ADR 0012).
 

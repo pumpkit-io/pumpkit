@@ -30,7 +30,7 @@ function datesLabel(app: AppConnection): string {
   return `Connected ${connectedDay(app.createdAt)} · ${used}`;
 }
 
-/** The name apps list the server under, as the backend's `claude mcp add` line names it. */
+/** The name each app lists the server under, slugged so CLI arguments and config keys take it unquoted. */
 function serverName(appName: string): string {
   return (
     appName
@@ -141,8 +141,8 @@ function Setup({
         </HowTo>
       </div>
       <p className="font-sans text-xs text-muted-foreground">
-        None of these use a key. If an app already has {appName} set up with --header, headers or
-        http_headers, remove that entry first.
+        None of these send a header. If an app already has {appName} set up with --header, headers
+        or http_headers, remove that entry first.
       </p>
     </div>
   );
@@ -350,7 +350,7 @@ export function ConnectedAppsCard() {
   return (
     <SettingsCard
       title="Connect AI apps"
-      description={`Use ${appName} from Claude, ChatGPT, Cursor and other AI apps. Paste the URL into the app, then sign in and click Allow. There's no key to copy.`}
+      description={`Use ${appName} from Claude, ChatGPT, Cursor and other AI apps. Paste the URL into the app, then sign in and click Allow.`}
     >
       {body}
     </SettingsCard>
