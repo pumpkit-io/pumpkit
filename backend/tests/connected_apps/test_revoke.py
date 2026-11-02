@@ -1,7 +1,7 @@
 import pytest
 
-from tests.connected_apps.conftest import REVOKE, approved_code, exchange, refresh, register
 from tests.mcp_client import McpClient
+from tests.oauth_app import REVOKE, approved_code, exchange, refresh, register
 
 pytestmark = pytest.mark.usefixtures("sells_no_plans")
 

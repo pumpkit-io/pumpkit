@@ -564,7 +564,7 @@ async def test_the_read_only_and_link_tools_allow_60_calls_a_minute(subscribed, 
 
 @pytest.fixture
 async def subscription_ended(connected, mcp, db) -> None:
-    """Ends the Subscription after `user` connected X and created the API key."""
+    """Ends the Subscription after `user` connected X and allowed an app to use the MCP server."""
     await db.execute(delete(Subscription))
     await db.commit()
 

@@ -7,8 +7,8 @@ from sqlalchemy import delete
 
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
-from tests.connected_apps.conftest import REVOKE, approved_code, exchange, refresh
 from tests.mcp_client import MCP, McpClient, error_text
+from tests.oauth_app import REVOKE, approved_code, exchange, refresh
 
 INVALID_TOKEN = 'error="invalid_token"'
 

@@ -4,7 +4,7 @@ import pytest_asyncio
 from sqlalchemy import select
 
 from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization
-from tests.connected_apps.conftest import (
+from tests.oauth_app import (
     AUTHORIZE,
     ISSUER,
     MCP_URL,

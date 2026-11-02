@@ -18,7 +18,7 @@ from mcp.shared.auth import (
 )
 
 from pumpkit.main import app
-from tests.connected_apps.conftest import ISSUER, MCP_URL, REDIRECT, query
+from tests.oauth_app import ISSUER, MCP_URL, REDIRECT, query
 
 pytestmark = pytest.mark.usefixtures("subscribed")
 

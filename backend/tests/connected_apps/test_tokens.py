@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pumpkit.connected_apps.models import AppConnection, OAuthRefreshToken
 from pumpkit.connected_apps.service import tokens
 from pumpkit.core.time import as_utc
-from tests.connected_apps.conftest import MCP_URL
+from tests.oauth_app import MCP_URL
 
 NOW = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
 

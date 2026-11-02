@@ -9,7 +9,8 @@ from sqlalchemy.orm import ORMExecuteState
 
 from pumpkit.connected_apps.models import AppConnection, OAuthClient
 from pumpkit.connected_apps.service import connections
-from tests.connected_apps.conftest import (
+from tests.mcp_client import McpClient
+from tests.oauth_app import (
     MCP_URL,
     REDIRECT,
     approved_code,
@@ -17,7 +18,6 @@ from tests.connected_apps.conftest import (
     refresh,
     register,
 )
-from tests.mcp_client import McpClient
 
 CONNECTIONS = "/api/v1/app-connections"
 
