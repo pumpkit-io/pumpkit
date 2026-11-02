@@ -143,7 +143,7 @@ A Post that has at least one Version and no Scheduled post: it was never schedul
 _Avoid_: unpublished post, not published
 
 **Text**:
-The one text a Post has at any time, the text meant for X. It is what the User reads and edits on the Post, what Feedback rewrites, and what a Scheduled post is copied from. It starts as the first Version and changes when the User edits it, sends Feedback, or restores a Version. A Thread's Text has one text per Part.
+The one text a Post has at any time, the text meant for X. It is what the User reads and edits on the Post, what Feedback rewrites, and what a Scheduled post is copied from. It starts as the first Version and changes when the User edits it, sends Feedback, or restores a Version. A Thread's Text has one text per Part. The Text also holds the Media the User attached; Versions never do.
 _Avoid_: working text, current version, content
 
 **Version**:
@@ -169,6 +169,10 @@ _Avoid_: tweetstorm, chain, multi-post
 **Part**:
 One X post within a Thread, in its place in the order.
 _Avoid_: tweet, segment, item
+
+**Media**:
+The images, animated GIF or video a User attaches to a Post's Text, on its single X post or on one Part of a Thread, to be published with that X post on X. It is the User's own content, like a hand edit: Pumpkit's writing never sees it, Feedback and restoring a Version leave it where it is, and only the User writes an image's alt text. One X post carries up to four images, or one GIF, or one video.
+_Avoid_: attachment, file, asset, upload
 
 **Sketch**:
 The text Pumpkit writes first in a Version, Hook included, before it is rewritten to sound like a person typed it. Users never see it.
@@ -197,7 +201,7 @@ Where a Scheduled post goes: the profile of the X account of the User's X connec
 _Avoid_: target, location, channel
 
 **Scheduled post**:
-A Post's Text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is always copied from the Post's Text, and a Post has at most one. One Scheduled post is one X post, or one Thread published at one time; posting the same text in two places takes two Posts. It keeps its own copy of the text, which the User may edit, and stays a Scheduled post after it is Published or Failed. Unscheduling a waiting one deletes it and makes its Post a Draft again.
+A Post's Text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is always copied from the Post's Text, Media included, and a Post has at most one. One Scheduled post is one X post, or one Thread published at one time; posting the same text in two places takes two Posts. It keeps its own copy of the text, which the User may edit, and stays a Scheduled post after it is Published or Failed. Unscheduling a waiting one deletes it and makes its Post a Draft again.
 _Avoid_: queued tweet, publication, scheduled tweet
 
 **Published**:
