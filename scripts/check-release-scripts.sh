@@ -799,7 +799,9 @@ printf '!fail' >"$GH_MERGEABLE.2"
 printf CONFLICTING >"$GH_MERGEABLE"
 release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: PR #5 conflicts with main' "$err" &&
-  grep -q '^NEXT: Pull main into release/v0.1.1 in its worktree with git -C .*/release-v0.1.1 pull origin main, resolve the conflicts, push, and run this again' "$err" &&
+  grep -q '^NEXT: Merge main into release/v0.1.1 with git -C .*/release-v0.1.1 fetch origin && git -C .*/release-v0.1.1 merge origin/main, ' "$err" &&
+  grep -q 'move each entry that arrived under ## \[Unreleased\] into ## \[0.1.1\]' "$err" &&
+  grep -q 'Push, then run this again with the same version: sh scripts/release.sh 0.1.1\. Auto-merge stays on\.$' "$err" &&
   [ "$(grep -c '^pr view 5 --json mergeable' "$GH_LOG")" = 3 ] && ! merged_by_hand; then
   pass "release waits through an unknown or failed mergeable read, then stops when the Release PR conflicts with main"
 else

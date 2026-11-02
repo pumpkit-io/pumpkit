@@ -262,7 +262,7 @@ while :; do
   # A PR merged to main during the wait can leave this one conflicting, and then CI never runs and auto-merge never fires.
   mergeable=$(gh pr view "$pr" --json mergeable -q .mergeable 2>/dev/null) || mergeable=
   [ "$mergeable" != CONFLICTING ] ||
-    stop "PR #$pr conflicts with main, so its checks do not run and GitHub cannot merge it" "Pull main into $branch in its worktree with git -C $dir pull origin main, resolve the conflicts, push, and run this again. Auto-merge stays on."
+    stop "PR #$pr conflicts with main, so its checks do not run and GitHub cannot merge it" "Merge main into $branch with git -C $dir fetch origin && git -C $dir merge origin/main, and resolve the conflicts; in CHANGELOG.md, move each entry that arrived under ## [Unreleased] into ## [$version], since its code ships in this Release. Push, then run this again with the same version: sh scripts/release.sh $version. Auto-merge stays on."
   # gh pr checks exits non-zero while checks are pending or none are reported yet, so its output decides.
   failed=$(gh pr checks "$pr" --json name,bucket -q '.[] | select(.name != "review") | select(.bucket == "fail" or .bucket == "cancel") | .name' 2>/dev/null || true)
   [ -z "$failed" ] ||
