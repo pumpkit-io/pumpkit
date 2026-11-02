@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-02
+
 ### Added
 
 - Connect AI apps such as Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor and VS Code to Pumpkit by pasting your Instance's MCP URL into the app and signing in. Settings has a "Connect AI apps" card with the URL, how to add it to each app, and your connected apps, each with whether it is verified, when it connected and when it was last used; disconnecting one stops it at once. `GET /api/v1/instance` now reports `mcp_url`. **Upgrade notes:** if you run your own reverse proxy in front of the web server, forward `/.well-known/oauth-*` and `/.well-known/openid-configuration` to it as well as `/api/*`, or AI apps can't find how to sign in. The bundled stack needs nothing.
@@ -26,6 +28,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 ### Removed
 
 - API keys are removed: signing in is now the only way to connect an app. The MCP endpoint accepts only the access tokens an app gets by signing in and refuses a `pumpkit_` key with a 401, and the `/api/v1/api-keys` routes are gone. **Upgrade notes:** the backend applies a database migration when it starts that deletes every API key and its table, so existing keys stop working. In each MCP client, remove the Pumpkit server you added with an `Authorization: Bearer pumpkit_…` header and add it again without the header, then sign in when asked. Claude Code doesn't fall back to sign-in while the old header is configured.
+
+### Fixed
+
+- The browser tab, and AI apps such as Claude where they show Pumpkit, now show the pumpkin mascot instead of a placeholder square, and `/favicon.ico` is served as an icon instead of the app's HTML.
 
 ## [0.5.0] - 2026-11-01
 

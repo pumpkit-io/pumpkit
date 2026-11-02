@@ -85,6 +85,13 @@ else
   fail "/robots.txt: expected 200 with '$robots_rule', got $code $(head -c 200 "$body")"
 fi
 
+# AI apps fetch /favicon.ico directly; without the file, the SPA fallback answers with index.html.
+get /favicon.ico
+case "$code $content_type" in
+  "200 image/"*) pass "/favicon.ico is served as an image" ;;
+  *) fail "/favicon.ico: expected 200 with an image, got $code $content_type" ;;
+esac
+
 get /api/v1/instance
 if [ "$code" = 200 ] && grep -q '"app_name"' "$body"; then
   pass "/api/v1/instance answers on the same origin"
