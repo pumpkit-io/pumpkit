@@ -60,7 +60,7 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
                 status=subscription.status,
                 plan_key=subscription.plan_key,
                 current_period_end=subscription.current_period_end,
-                cancel_at_period_end=subscription.cancel_at_period_end,
+                cancel_at=subscription.cancel_at,
             )
         ),
         subscribed=service.is_subscribed(subscription),

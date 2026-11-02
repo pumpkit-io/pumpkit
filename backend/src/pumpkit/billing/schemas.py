@@ -56,12 +56,12 @@ class BillingPortalResponse(BaseModel):
 
 
 class BillingSubscriptionResponse(BaseModel):
-    """The User's Subscription as Pumpkit's copy holds it."""
+    """The User's Subscription as Pumpkit's copy holds it. `cancel_at` is when a cancelled one ends."""
 
     status: SubscriptionStatus
     plan_key: Optional[str]
     current_period_end: Optional[datetime]
-    cancel_at_period_end: bool
+    cancel_at: Optional[datetime]
 
 
 class BillingMeResponse(BaseModel):

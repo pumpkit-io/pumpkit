@@ -73,7 +73,8 @@ class SubscriptionState:
     """
     A Subscription as the provider holds it now. `plan_key` is the price's
     lookup key, None when the price has none. `billing_cycle_anchor` is when its
-    paid periods start: the Trial's end after a Trial, else its start.
+    paid periods start: the Trial's end after a Trial, else its start. `cancel_at`
+    is when a cancelled one ends, None while it renews.
     """
 
     id: str
@@ -81,8 +82,8 @@ class SubscriptionState:
     price_id: Optional[str]
     plan_key: Optional[str]
     current_period_end: Optional[datetime]
-    cancel_at_period_end: bool
     created_at: datetime
+    cancel_at: Optional[datetime] = None
     trial_start: Optional[datetime] = None
     trial_end: Optional[datetime] = None
     billing_cycle_anchor: Optional[datetime] = None
@@ -244,14 +245,18 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         price = {"id": price} if isinstance(price, str) else {}
     # Current Stripe API versions put the period end on the subscription items.
     period_end = subscription.get("current_period_end") or first_item.get("current_period_end")
+    # Flexible billing mode records a cancellation as `cancel_at`, the older way as a flag.
+    cancel_at = subscription.get("cancel_at") or (
+        period_end if subscription.get("cancel_at_period_end") else None
+    )
     return SubscriptionState(
         id=subscription["id"],
         status=cast(SubscriptionStatus, status),
         price_id=price.get("id"),
         plan_key=price.get("lookup_key"),
         current_period_end=_optional_timestamp(period_end),
-        cancel_at_period_end=bool(subscription.get("cancel_at_period_end")),
         created_at=_timestamp(subscription["created"]),
+        cancel_at=_optional_timestamp(cancel_at),
         trial_start=_optional_timestamp(subscription.get("trial_start")),
         trial_end=_optional_timestamp(subscription.get("trial_end")),
         billing_cycle_anchor=_optional_timestamp(subscription.get("billing_cycle_anchor")),

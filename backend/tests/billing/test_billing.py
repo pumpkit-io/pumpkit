@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -114,7 +115,6 @@ def _subscription(sub_id: str, status: SubscriptionStatus) -> SubscriptionState:
         price_id="price_monthly",
         plan_key="pumpkit_pro_monthly",
         current_period_end=datetime(2026, 11, 6, tzinfo=timezone.utc),
-        cancel_at_period_end=False,
         created_at=datetime(2026, 10, 6, tzinfo=timezone.utc),
     )
 
@@ -586,7 +586,7 @@ def _billing_subscription(status: str) -> dict:
         "plan_key": "pumpkit_pro_monthly",
         # SQLite drops the time zone that Postgres keeps.
         "current_period_end": "2026-11-06T00:00:00",
-        "cancel_at_period_end": False,
+        "cancel_at": None,
     }
 
 
@@ -630,6 +630,16 @@ async def test_billing_me_reports_the_running_subscription_and_offers_nothing(
         "may_subscribe": False,
         "trial_days": None,
     }
+
+
+async def test_billing_me_reports_when_a_cancelled_trial_ends(client, db, fake_billing, user):
+    ends = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    await _hold(db, user, replace(_subscription("sub_1", "trialing"), cancel_at=ends))
+
+    response = await client.get(BILLING_ME)
+
+    assert response.status_code == 200
+    assert response.json()["subscription"]["cancel_at"] == "2026-11-09T00:00:00"
 
 
 async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_one(
