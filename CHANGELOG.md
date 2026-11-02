@@ -16,7 +16,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 - The Privacy Policy now says what Pumpkit keeps about the AI apps you connect, and for how long.
 - The Privacy Policy now lists `pumpkit:return-to`, the browser storage key that brings you back to an app's connection request after you sign in.
 - The landing page headline now also rotates through Claude and ChatGPT, and Claude Code and Codex show their own logos instead of the Claude and ChatGPT ones.
-- The sign-in page now reads "Welcome to" your Instance's name, with the mascot above the form, and its email button reads "Sign in with email". Both sign-in buttons are now raised, with white text, and darken when you hover over them: the email button in the same pumpkin colour as "Get started", the Google button in charcoal. On wide screens, the animated mascot sits in the right half of the page.
+- The sign-in page now reads "Welcome to" your Instance's name, with the mascot above the form, and its email button reads "Sign in with email". Both sign-in buttons are now raised, with white text, and change shade when you hover over them: the email button in the same pumpkin colour as "Get started", the Google button in dark grey. On wide screens, the animated mascot sits in the right half of the page.
 - The landing page's sign-up buttons no longer flash "Get started" before switching to the trial offer; they stay blank until the offer loads.
 - On wide screens, the landing page's video now lines up with the top of the headline beside it instead of sitting a few pixels too high.
 - The GitHub button in the landing page's nav bar no longer shows the repository's star count, and it is the same size as the button beside it.
