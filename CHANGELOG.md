@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-02
+
 ### Added
 
 - Connect AI apps such as Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor and VS Code to Pumpkit by pasting your Instance's MCP URL into the app and signing in. Settings has a "Connect AI apps" card with the URL, how to add it to each app, and your connected apps, each with whether it is verified, when it connected and when it was last used; disconnecting one stops it at once. `GET /api/v1/instance` now reports `mcp_url`. **Upgrade notes:** if you run your own reverse proxy in front of the web server, forward `/.well-known/oauth-*` and `/.well-known/openid-configuration` to it as well as `/api/*`, or AI apps can't find how to sign in. The bundled stack needs nothing.
