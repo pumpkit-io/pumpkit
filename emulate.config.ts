@@ -9,7 +9,7 @@ export default {
     users: [{ email: 'test@example.com', name: 'Test User' }],
   },
   stripe: {
-    // e2e/seed/seed_user.py's User and Subscription. emulate already seeds test@example.com,
+    // The customer of e2e/seed/seed_user.py's Subscription. emulate already seeds test@example.com,
     // and a second customer with that email would be skipped.
     customers: [{ id: 'cus_e2e', email: 'e2e@e2e-user.dev', name: 'E2E User' }],
     // emulate 0.13.0 seeds one-off prices with no lookup key, and has no subscriptions,

@@ -184,7 +184,7 @@ class Settings(BaseSettings):
         overrides = [key for key in _PROVIDER_URL_OVERRIDES if getattr(self, key)]
         if overrides and self.ENV == "prod":
             raise ValueError(
-                f"{', '.join(overrides)} point Pumpkit at an Emulator, which production refuses; "
+                f"{', '.join(overrides)} point Pumpkit at an emulator, which production refuses; "
                 "unset them or set ENV=local"
             )
         if bool(self.GOOGLE_ISSUER) != bool(self.GOOGLE_API_URL):

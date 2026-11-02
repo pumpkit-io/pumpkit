@@ -480,6 +480,21 @@ async def test_the_stripe_adapter_resolves_only_a_one_off_price_for_the_top_up()
     assert await gateway.get_one_off_price("pumpkit_top_up") is None
 
 
+async def test_a_one_off_price_without_its_lookup_key_is_no_top_up():
+    # The dev stack's Stripe Emulator ignores the lookup_keys filter and leaves the field out.
+    unkeyed = {
+        "id": "price_top_up",
+        "object": "price",
+        "active": True,
+        "currency": "eur",
+        "type": "one_time",
+        "unit_amount": 500,
+    }
+    gateway, _ = _recorded_gateway(json.dumps({"object": "list", "data": [unkeyed]}))
+
+    assert await gateway.get_one_off_price("pumpkit_top_up") is None
+
+
 async def test_the_stripe_top_up_checkout_takes_one_payment_marked_as_a_top_up():
     gateway, http = _recorded_gateway(
         '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'

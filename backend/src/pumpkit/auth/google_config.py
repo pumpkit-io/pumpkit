@@ -15,7 +15,7 @@ GOOGLE_SIGN_IN_SCOPES: Final[list[str]] = [
 GOOGLE_SIGN_IN_STATE_COOKIE: Final[str] = "google_oauth_sign_in_state"
 
 # Transport for fetching Google's certs when verifying ID tokens.
-GOOGLE_JWKS_REQUEST = google_requests.Request()
+GOOGLE_CERTS_REQUEST = google_requests.Request()
 
 
 @dataclass(frozen=True)

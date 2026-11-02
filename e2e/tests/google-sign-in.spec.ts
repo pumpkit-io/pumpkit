@@ -14,15 +14,18 @@ test('signing in with Google through the Emulator starts a session', async ({ pa
   test.skip(!instance.sign_in_methods.includes('google'), 'The stack has no Google sign-in.');
   await page.goto('/login');
 
+  const appOrigin = new URL(page.url()).origin;
   await page.getByRole('button', { name: 'Sign in with Google' }).click();
-  await page.waitForURL((url) => url.pathname === '/o/oauth2/v2/auth');
+  // Real Google redirects on from its authorize URL, so wait only for leaving the app.
+  await page.waitForURL((url) => url.origin !== appOrigin);
   test.skip(
-    new URL(page.url()).hostname === 'accounts.google.com',
+    new URL(page.url()).hostname.endsWith('google.com'),
     'Google sign-in reaches Google itself: run the suite against scripts/dev-stack.',
   );
   await page.getByRole('button', { name: /test@example\.com/ }).click();
 
-  await expect(page).not.toHaveURL(/\/(login|oauth\/google\/callback)/);
+  // A new User's first stop: the Emulator's prices carry no lookup key, so the Paywall offers no Plans.
+  await expect(page).toHaveURL(/\/(subscribe|onboarding)$/);
   const session = await page.evaluate(() => localStorage.getItem('pumpkit:session'));
   expect(JSON.parse(session ?? '{}').accessToken).toBeTruthy();
 });

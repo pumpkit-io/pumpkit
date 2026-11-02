@@ -277,7 +277,11 @@ _TOP_UP_METADATA = {"pumpkit_purchase": "top_up"}
 
 
 def _one_off_price(price: dict[str, Any]) -> Optional[OneOffPrice]:
-    if price.get("type") != "one_time" or price.get("unit_amount") is None:
+    if (
+        not price.get("lookup_key")
+        or price.get("type") != "one_time"
+        or price.get("unit_amount") is None
+    ):
         return None
     return OneOffPrice(
         key=price["lookup_key"],

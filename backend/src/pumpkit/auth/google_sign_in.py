@@ -14,7 +14,7 @@ from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import id_token
 from starlette.concurrency import run_in_threadpool
 
-from pumpkit.auth.google_config import GOOGLE_JWKS_REQUEST, google_endpoints
+from pumpkit.auth.google_config import GOOGLE_CERTS_REQUEST, google_endpoints
 from pumpkit.core.config import settings
 from pumpkit.core.providers import require_provider
 
@@ -84,7 +84,7 @@ class GoogleOAuthSignIn:
         try:
             id_info = id_token.verify_token(
                 id_token_value,
-                GOOGLE_JWKS_REQUEST,
+                GOOGLE_CERTS_REQUEST,
                 audience=settings.GOOGLE_CLIENT_ID,
                 certs_url=endpoints.certs,
             )

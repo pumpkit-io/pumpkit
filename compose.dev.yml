@@ -51,7 +51,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: /app/start.sh
-    env_file: .env
+    # scripts/dev-stack writes the second file: its Emulator URLs and throwaway credentials win over .env's.
+    env_file: &dev-backend-env-files
+      - .env
+      - path: .sdlc/dev-stack/emulators.env
+        required: false
     # The dev stack always runs locally against its own Postgres, behind the Vite dev server.
     environment: &dev-backend-environment
       ENV: local
@@ -63,17 +67,6 @@ services:
       SMTP_HOST: ${SMTP_HOST:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       POSTHOG_ENABLED: ${POSTHOG_ENABLED:-false}
-      # Emulators: scripts/dev-stack sets these, and otherwise they keep .env's values.
-      GOOGLE_ISSUER: ${GOOGLE_ISSUER:-}
-      GOOGLE_API_URL: ${GOOGLE_API_URL:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      STRIPE_API_URL: ${STRIPE_API_URL:-}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      BILLING_PLAN_KEYS: ${BILLING_PLAN_KEYS:-}
-      BILLING_TOP_UP_KEY: ${BILLING_TOP_UP_KEY:-}
     volumes:
       - ./backend:/app
       - /app/.venv
@@ -89,7 +82,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: python -m pumpkit.scheduling.publisher
-    env_file: .env
+    env_file: *dev-backend-env-files
     environment: *dev-backend-environment
     volumes:
       - ./backend:/app

@@ -138,9 +138,11 @@ async def test_an_id_token_for_another_client_is_refused(issuer):
 
 
 async def test_an_id_token_signed_with_another_key_is_refused(issuer):
+    # The claims are valid and the kid matches: only the key differs from the one the JWKS serves.
+    genuine = issuer.id_token()
     forged = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     issuer.id_token = lambda: jwt.encode(
-        {"iss": ISSUER, "aud": settings.GOOGLE_CLIENT_ID, "sub": "x", "nonce": NONCE},
+        jwt.decode(genuine, options={"verify_signature": False}),
         forged,
         algorithm="RS256",
         headers={"kid": "emulate-google-1"},
