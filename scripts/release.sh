@@ -69,12 +69,12 @@ ensure_review() {
   echo "review started on $head"
 }
 
-# Tags the merged release and checks its images; also how a run resumes after a merge that was not tagged.
+# Tags the Release PR's merge commit $2 as v$1 and checks its images; also how a run resumes after a merge that was not tagged.
 tag_and_check() {
   version=$1
   tag=v$version
   step "Tag"
-  sh "$scripts_dir/tag-release.sh" "$version" ||
+  sh "$scripts_dir/tag-release.sh" "$version" "$2" ||
     stop "tagging $tag did not finish" "See docs/releasing.md, 'When the Release workflow fails', then run this again."
 
   step "Images"
@@ -124,7 +124,10 @@ if [ -n "$latest" ] && [ -z "$(git ls-remote --tags origin "refs/tags/v$latest")
   [ "$dry_run" = false ] || { echo "Dry run: a real run would tag v$latest."; exit 0; }
   dir=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.claude/worktrees/release-v$latest
   branch=release/v$latest
-  tag_and_check "$latest"
+  merged=$(gh pr list --head "$branch" --state merged --json mergeCommit -q '.[0].mergeCommit.oid // ""' 2>/dev/null) || merged=
+  [ -n "$merged" ] ||
+    stop "gh could not find the merge commit of the merged Release PR from $branch" "Run gh pr list --head $branch --state merged, then run this again; or tag it by hand with sh scripts/tag-release.sh $latest <merge commit>."
+  tag_and_check "$latest" "$merged"
   exit 0
 fi
 
@@ -259,7 +262,7 @@ while :; do
   # A PR merged to main during the wait can leave this one conflicting, and then CI never runs and auto-merge never fires.
   mergeable=$(gh pr view "$pr" --json mergeable -q .mergeable 2>/dev/null) || mergeable=
   [ "$mergeable" != CONFLICTING ] ||
-    stop "PR #$pr conflicts with main, so its checks do not run and GitHub cannot merge it" "Merge origin/main into $branch in its worktree with git -C $dir merge origin/main, resolve the conflicts, push, and run this again. Auto-merge stays on."
+    stop "PR #$pr conflicts with main, so its checks do not run and GitHub cannot merge it" "Pull main into $branch in its worktree with git -C $dir pull origin main, resolve the conflicts, push, and run this again. Auto-merge stays on."
   # gh pr checks exits non-zero while checks are pending or none are reported yet, so its output decides.
   failed=$(gh pr checks "$pr" --json name,bucket -q '.[] | select(.name != "review") | select(.bucket == "fail" or .bucket == "cancel") | .name' 2>/dev/null || true)
   [ -z "$failed" ] ||
@@ -283,5 +286,9 @@ while :; do
   sleep "$poll"
 done
 echo "PR #$pr merged"
+# Main may already be past the Release PR's merge, and its later commits still name this version.
+merged=$(gh pr view "$pr" --json mergeCommit -q .mergeCommit.oid 2>/dev/null) || merged=
+[ -n "$merged" ] ||
+  stop "gh could not read the merge commit of PR #$pr" "Run this again; it finds PR #$pr merged and tags its merge commit."
 
-tag_and_check "$version"
+tag_and_check "$version" "$merged"

@@ -196,6 +196,34 @@ else
   fail "expected tag-release to refuse an existing tag, got status $status"
 fi
 
+# With COMMIT, tag-release tags that commit, here a release that main has since moved past.
+(
+  cd "$work/pusher"
+  git pull -q --ff-only origin main
+  awk '{ print } $0 == "## [Unreleased]" { print ""; print "### Fixed"; print ""; print "- Entry." }' CHANGELOG.md >"$work/c"
+  cat "$work/c" >CHANGELOG.md
+  git commit -q -am "entry"
+  sh "$scripts/prepare-release.sh" 0.2.1 >/dev/null
+  git commit -q -am "Release 0.2.1"
+  git commit -q --allow-empty -m "merged after the release"
+  git push -q origin main
+)
+git fetch -q origin
+release_commit=$(git rev-parse origin/main~1)
+stray=$(git commit-tree "$release_commit^{tree}" -p "$release_commit" -m stray)
+run sh "$scripts/tag-release.sh" 0.2.1 "$stray"
+if [ "$status" -ne 0 ] && grep -q 'not on origin/main' "$err" && [ -z "$(git ls-remote --tags origin refs/tags/v0.2.1)" ]; then
+  pass "tag-release refuses a COMMIT that is not on origin/main"
+else
+  fail "expected tag-release to refuse a stray commit: status $status, $(cat "$err")"
+fi
+run sh "$scripts/tag-release.sh" 0.2.1 "$release_commit"
+if [ "$status" -eq 0 ] && [ "$(git --git-dir="$work/prep.git" rev-parse 'v0.2.1^{commit}')" = "$release_commit" ]; then
+  pass "tag-release tags the COMMIT it is given rather than origin/main's tip"
+else
+  fail "expected v0.2.1 at the release commit: status $status, $(cat "$err")"
+fi
+
 # The watch, with a gh stub whose run watch always fails like a dropped connection and whose run view answers from $GH_CONCLUSION.
 mkdir "$work/bin"
 cat >"$work/bin/gh" <<'STUB'
@@ -240,7 +268,7 @@ add_entry() {
 }
 
 add_entry
-watch_release 0.2.1 success
+watch_release 0.2.6 success
 if [ "$status" -eq 0 ] && ! grep -qi 'failed' "$err" && grep -q 'release shown' "$out"; then
   pass "tag-release ends on a success conclusion after a dropped watch"
 else
@@ -248,7 +276,7 @@ else
 fi
 
 add_entry
-watch_release 0.2.2 failure
+watch_release 0.2.7 failure
 if [ "$status" -ne 0 ] && grep -q 'ended failure' "$err"; then
   pass "tag-release reports a failed run"
 else
@@ -256,7 +284,7 @@ else
 fi
 
 add_entry
-watch_release 0.2.3 cancelled
+watch_release 0.2.8 cancelled
 if [ "$status" -ne 0 ] && grep -q 'ended cancelled' "$err"; then
   pass "tag-release reports a cancelled run"
 else
@@ -264,7 +292,7 @@ else
 fi
 
 add_entry
-watch_release 0.2.4 ""
+watch_release 0.2.9 ""
 if [ "$status" -ne 0 ] && grep -q 'lost its connection' "$err" && grep -q 'github.example/runs/42' "$err" && ! grep -q 'workflow failed' "$err"; then
   pass "tag-release says the watch lost its connection, with the run URL, when the conclusion is unknown"
 else
@@ -419,18 +447,24 @@ query() {
     shift
   done
 }
-# What GitHub does on a merge: origin's main moves to the release branch, where tag-release.sh finds the release.
+# What GitHub does on a merge: origin's main moves to the release branch, which becomes the PR's merge commit.
+# With $GH_MAIN_MOVES set, another PR merges right after, so main's tip still names the version but is not the release.
 merge_on_github() {
-  git push -q origin "$(release_branch_head):refs/heads/main"
+  merged=$(release_branch_head)
+  git push -q origin "$merged:refs/heads/main"
+  printf '%s' "$merged" >"$GH_MERGE_COMMIT"
+  [ -z "${GH_MAIN_MOVES:-}" ] ||
+    git push -q origin "$(git commit-tree "$merged^{tree}" -p "$merged" -m 'merged after the release'):refs/heads/main"
 }
 case "$1 $2" in
   "release view") echo 2026-10-12T00:00:00Z ;;
-  "pr list") case "$*" in *--head*) ;; *) cat "$GH_PRS" ;; esac ;;
+  "pr list") case "$*" in *--head*merged*) cat "$GH_MERGE_COMMIT" 2>/dev/null || true ;; *--head*) ;; *) cat "$GH_PRS" ;; esac ;;
   "pr view")
     case "$*" in
       *headRefOid*)
         [ -e "$GH_HEAD" ] || release_branch_head >"$GH_HEAD"
         answer "$GH_HEAD" ;;
+      *mergeCommit*) answer "$GH_MERGE_COMMIT" ;;
       *mergeable*)
         [ -e "$GH_MERGEABLE" ] || printf MERGEABLE >"$GH_MERGEABLE"
         answer "$GH_MERGEABLE" ;;
@@ -483,7 +517,7 @@ printf 'Name:      %s\n\nManifests:\n  Platform:    linux/amd64\n  Platform:    
 STUB
 chmod +x "$work/prbin/gh" "$work/prbin/docker"
 export GH_LOG="$work/gh-log" GH_PR_STATE="$work/gh-prstate" GH_HEAD="$work/gh-head" GH_CHECKS="$work/gh-checks" GH_REVIEW="$work/gh-review" GH_RUN="$work/gh-run"
-export GH_RUN_ID="$work/gh-runid" GH_ADMIN="$work/gh-admin" GH_REVIEW_FINAL_STATUS="$work/gh-review-final-status" GH_MERGEABLE="$work/gh-mergeable"
+export GH_RUN_ID="$work/gh-runid" GH_ADMIN="$work/gh-admin" GH_REVIEW_FINAL_STATUS="$work/gh-review-final-status" GH_MERGEABLE="$work/gh-mergeable" GH_MERGE_COMMIT="$work/gh-merge-commit"
 
 # Usage: release_case. A fresh repo, and the stub's state reset to an admin login, an open PR whose checks pass, no review yet,
 # and a review that ends success once dispatched. The PR stays open until the case changes $GH_PR_STATE, as merges_on_read does.
@@ -550,6 +584,20 @@ if [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] &&
   pass "release starts the review once, right after turning on auto-merge"
 else
   fail "expected one review dispatch between auto-merge and the checks: $(cat "$GH_LOG")"
+fi
+
+# Another PR merges to main right after the Release PR, before the tag.
+release_case
+merges_on_read 2
+export GH_MAIN_MOVES=1
+release_run 60
+unset GH_MAIN_MOVES
+if [ "$status" -eq 0 ] && grep -q '^Released v0.1.1\.$' "$out" &&
+  [ "$(git --git-dir="$work/rel.git" rev-parse 'v0.1.1^{commit}')" = "$(cat "$GH_MERGE_COMMIT")" ] &&
+  [ "$(git --git-dir="$work/rel.git" log -1 --format=%s main)" = "merged after the release" ]; then
+  pass "release tags the Release PR's merge commit, not a later tip of main"
+else
+  fail "expected v0.1.1 at the Release PR's merge commit: status $status, $(cat "$out" "$err")"
 fi
 
 release_case
@@ -653,10 +701,15 @@ else
   fail "expected a timeout stop: status $status, $(cat "$err")"
 fi
 git push -q origin release/v0.1.1:main
+release_merge=$(git rev-parse release/v0.1.1)
+printf '%s' "$release_merge" >"$GH_MERGE_COMMIT"
+git push -q origin "$(git commit-tree "$release_merge^{tree}" -p "$release_merge" -m 'merged after the release'):refs/heads/main"
 : >"$GH_LOG"
 release_run 60
-if released && ! grep -q '^pr ' "$GH_LOG"; then
-  pass "a rerun after GitHub merged the PR goes straight to the tag"
+if [ "$status" -eq 0 ] && grep -q '^Released v0.1.1\.$' "$out" &&
+  [ "$(git --git-dir="$work/rel.git" rev-parse 'v0.1.1^{commit}')" = "$release_merge" ] &&
+  [ "$(grep '^pr ' "$GH_LOG")" = 'pr list --head release/v0.1.1 --state merged --json mergeCommit -q .[0].mergeCommit.oid // ""' ]; then
+  pass "a rerun after GitHub merged the PR tags the Release PR's merge commit, though main moved past it"
 else
   fail "expected the rerun to tag: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
@@ -746,7 +799,7 @@ printf '!fail' >"$GH_MERGEABLE.2"
 printf CONFLICTING >"$GH_MERGEABLE"
 release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: PR #5 conflicts with main' "$err" &&
-  grep -q '^NEXT: Merge origin/main into release/v0.1.1 in its worktree with git -C .*/release-v0.1.1 merge origin/main' "$err" &&
+  grep -q '^NEXT: Pull main into release/v0.1.1 in its worktree with git -C .*/release-v0.1.1 pull origin main, resolve the conflicts, push, and run this again' "$err" &&
   [ "$(grep -c '^pr view 5 --json mergeable' "$GH_LOG")" = 3 ] && ! merged_by_hand; then
   pass "release waits through an unknown or failed mergeable read, then stops when the Release PR conflicts with main"
 else
