@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-02
+
 ### Added
 
 - `GOOGLE_ISSUER`, `GOOGLE_API_URL` and `STRIPE_API_URL` point Google sign-in and Stripe at local emulators for development. With `ENV=prod`, the default, the backend refuses to start when any of them is set, so production only ever reaches Google and Stripe.
