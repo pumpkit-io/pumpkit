@@ -37,9 +37,8 @@ is_final() {
   return 1
 }
 
-# Returns 0 unless $head has a final review status or a review run still going, and 2 when gh could not say.
+# Returns 0 unless $head has a review run still going or a final review status, and 2 when gh could not say.
 # A run that ended before posting a final status needs a new one.
-# The run is read before the status, as in the wait, so a run that completes between the reads has its final status seen.
 review_needed() {
   needed_run=$(review_run 2>/dev/null) || return 2
   needed_status=$(review_status 2>/dev/null) || return 2
@@ -108,7 +107,7 @@ if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.
   stop "$version is not X.Y.Z" "Pass a plain version such as 0.6.0, or none to let the script choose."
 fi
 
-# Pruning drops origin/release/* refs whose branch is gone, so an abandoned release attempt is not reused.
+# Pruning drops an origin/release/* ref whose branch was deleted on origin, so that stale ref is not reused.
 git fetch --quiet --prune --tags origin ||
   stop "git could not fetch origin" "Check your network and that origin is the pumpkit repository, then run it again."
 commit=$(git rev-parse --verify --quiet "origin/main^{commit}") ||
@@ -263,17 +262,16 @@ while :; do
     stop "these checks on PR #$pr did not pass: $(echo "$failed" | tr '\n' ' ')" "Read them with gh pr checks $pr, push a fix to $branch, and run this again; it starts the review on the new commit."
   if [ "$reviewed" = "$head" ]; then
     # The run is read before the status, so a completed run's final status is already visible.
-    run=$(review_run 2>/dev/null) || run=
-    # A failed status read says nothing about the run either, so it must not pass for a run that ended without one.
-    review=$(review_status 2>/dev/null) || { review=; run=; }
-    if is_final "$review"; then
-      case $review in
-        failure) stop "the review of PR #$pr ended failure" "Read its comment on the PR, fix the findings, push to $branch, and run this again." ;;
-        error) stop "the review of PR #$pr ended error" "The review run was cancelled, timed out or broke. Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, then start the review again with gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is still on, so GitHub merges PR #$pr once it passes; then run this again to tag it." ;;
-      esac
-    else
-      [ "$run" != completed ] ||
+    # A run still going has not posted pending yet, so the status may be a stale one from an earlier run.
+    if run=$(review_run 2>/dev/null) && review=$(review_status 2>/dev/null) && { [ -z "$run" ] || [ "$run" = completed ]; }; then
+      if is_final "$review"; then
+        case $review in
+          failure) stop "the review of PR #$pr ended failure" "Read its comment on the PR, fix the findings, push to $branch, and run this again." ;;
+          error) stop "the review of PR #$pr ended error" "Read its comment on PR #$pr, which may say why the run was cancelled, timed out or broke, then the run with gh run list --workflow sdlc-review-llm.yml --branch $branch, then start the review again with gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is still on, so GitHub merges PR #$pr once it passes; then run this again to tag it." ;;
+        esac
+      elif [ "$run" = completed ]; then
         stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run this again; it starts a new review."
+      fi
     fi
   fi
   [ "$(date +%s)" -lt "$deadline" ] ||

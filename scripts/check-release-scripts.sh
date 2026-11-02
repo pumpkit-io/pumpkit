@@ -394,7 +394,8 @@ fi
 # $GH_REVIEW (a commit's review status) and $GH_RUN (its review run's status) answer from FILE.N on the Nth read when it exists, else FILE;
 # a file reading !fail makes that call fail like a dropped connection. $GH_REVIEW@SHA and $GH_RUN@SHA, when they exist, answer for that commit only.
 # With $GH_REVIEW_CLOCK set, review and run reads share one count, so FILE.N is the Nth read of either and two files can change together.
-# A dispatch posts its final status for the PR's head (the last headRefOid answered, else the local release branch); status reads are logged with their answer.
+# A dispatch posts its final status for the PR's head (the last headRefOid answered, else the local release branch), and its run reads queued once, then completed;
+# status reads are logged with their answer.
 mkdir "$work/prbin"
 cat >"$work/prbin/gh" <<'STUB'
 #!/bin/sh
@@ -465,7 +466,8 @@ case "$1 $2" in
     if [ -e "$GH_HEAD.last" ]; then sha=$(cat "$GH_HEAD.last"); else sha=$(release_branch_head); fi
     rm -f "$GH_REVIEW@$sha".* "$GH_RUN@$sha".*
     cp "$GH_REVIEW_FINAL_STATUS" "$GH_REVIEW@$sha"
-    printf queued >"$GH_RUN@$sha"
+    printf queued >"$GH_RUN@$sha.1"
+    printf completed >"$GH_RUN@$sha"
     echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
   "api "*/statuses)
     sha=${2%/statuses}
@@ -585,10 +587,27 @@ fi
 release_case
 printf error >"$GH_REVIEW_FINAL_STATUS"
 release_run 60
-if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended error' "$err" && grep -q '^NEXT: .*gh workflow run sdlc-review-llm.yml' "$err" && ! merged_by_hand; then
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended error' "$err" &&
+  grep -q '^NEXT: Read its comment on PR #5.*gh run list.*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1' "$err" && ! merged_by_hand; then
   pass "release stops when the review ends error, saying to start it again"
 else
   fail "expected an errored-review stop: status $status, $(cat "$err")"
+fi
+
+# A rerun after an errored review, started again by hand, finds the new run going while the commit still shows the old error.
+release_case
+printf in_progress >"$GH_RUN.1"
+printf error >"$GH_REVIEW.2"
+printf in_progress >"$GH_RUN.3"
+printf error >"$GH_REVIEW.4"
+printf completed >"$GH_RUN"
+printf success >"$GH_REVIEW"
+merges_on_read 3
+GH_REVIEW_CLOCK="$work/gh-review-clock" release_run 60
+if released && ! grep -q '^workflow run' "$GH_LOG"; then
+  pass "release waits on a review run still going rather than an old final status"
+else
+  fail "expected the wait to ignore the old error: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
 
 # The review run seen in progress when the PR opens dies before posting a status.
