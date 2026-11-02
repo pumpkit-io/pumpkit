@@ -66,8 +66,14 @@ describe('the sign-in page', () => {
   ])('shows no error message %s', (_label, path) => {
     renderLogin(path);
 
-    expect(screen.getByText('Welcome back')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Welcome to Pumpkit' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it("welcomes people by the Instance's app name", () => {
+    renderLogin('/login', { ...SELLS_PLANS, app_name: 'acmeWriter' });
+
+    expect(screen.getByRole('heading', { name: 'Welcome to acmeWriter' })).toBeInTheDocument();
   });
 
   it('tells people that continuing means agreeing to the Terms, with links to both documents', () => {
@@ -96,7 +102,7 @@ describe('the sign-in page', () => {
     renderLogin('/login', { ...SELLS_PLANS, sign_in_methods: ['magic_link', 'google'] });
 
     expect(screen.getByRole('button', { name: /google/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with email' })).toBeInTheDocument();
   });
 
   it('offers only the magic link when the Instance has no Google sign-in', () => {
@@ -104,7 +110,15 @@ describe('the sign-in page', () => {
 
     expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/google/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Email me a magic link' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with email' })).toBeInTheDocument();
+  });
+
+  it('sends no magic link while the email field is empty', () => {
+    renderLogin('/login');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
+
+    expect(authService.requestMagicLink).not.toHaveBeenCalled();
   });
 
   it('says the site does not accept an email the Sign-up allowlist refuses', async () => {
@@ -114,7 +128,7 @@ describe('the sign-in page', () => {
     renderLogin('/login');
 
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'mallory@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Email me a magic link' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /^This site doesn't accept sign-ins from that email address\.$/i,

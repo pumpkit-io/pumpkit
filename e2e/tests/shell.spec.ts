@@ -6,7 +6,7 @@ test.describe('logged out', () => {
   test('visiting /new redirects to /login', async ({ page }) => {
     await page.goto('/new');
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Welcome to / })).toBeVisible();
   });
 });
 

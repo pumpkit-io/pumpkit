@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Changed
+
+- The sign-in page now reads "Welcome to" your Instance's name, with the mascot above the form, and its email button reads "Sign in with email". Both sign-in buttons are now raised, with white text, and change shade when you hover over them: the email button in the same pumpkin colour as "Get started", the Google button in dark grey. On wide screens, the animated mascot sits in the right half of the page.
+
 ## [0.6.0] - 2026-11-02
 
 ### Added
