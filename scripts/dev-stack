@@ -21,14 +21,14 @@ safe_mode_env() {
 }
 
 # Emulators, as "<service> <path that answers 200>".
-EMULATORS=("google /.well-known/openid-configuration" "stripe /v1/customers")
+EMULATORS=("google /.well-known/openid-configuration" "pumpkit-stripe /_emulate")
 
 # compose.emulators.yml hands these to the backend over .env's, so .env's real keys never reach an Emulator.
 emulator_env() {
   # Assign before export: export would hide a failed command substitution from set -e.
   GOOGLE_ISSUER=$(emulator_url google)
   GOOGLE_API_URL=$(b_emulator_api_url google)
-  STRIPE_API_URL=$(b_emulator_api_url stripe)
+  STRIPE_API_URL=$(b_emulator_api_url pumpkit-stripe)
   export GOOGLE_ISSUER GOOGLE_API_URL STRIPE_API_URL
   export GOOGLE_CLIENT_ID="pumpkit-dev" GOOGLE_CLIENT_SECRET="pumpkit-dev-secret"
   export STRIPE_SECRET_KEY="sk_test_dev" STRIPE_PUBLISHABLE_KEY="pk_test_dev"
