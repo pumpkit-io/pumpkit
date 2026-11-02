@@ -7,13 +7,14 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Optional, Protocol
 
+import jwt
 import requests
 from fastapi import status
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import id_token
 from starlette.concurrency import run_in_threadpool
 
-from pumpkit.auth.google_config import GOOGLE_JWKS_REQUEST, GOOGLE_TOKEN_ENDPOINT
+from pumpkit.auth.google_config import GOOGLE_JWKS_REQUEST, google_endpoints
 from pumpkit.core.config import settings
 from pumpkit.core.providers import require_provider
 
@@ -51,9 +52,10 @@ class GoogleOAuthSignIn:
         )
 
     def _exchange_code(self, *, code: str, code_verifier: str, nonce: str) -> GoogleClaims:
+        endpoints = google_endpoints()
         try:
             token_response = requests.post(
-                GOOGLE_TOKEN_ENDPOINT,
+                endpoints.token,
                 data={
                     "code": code,
                     "client_id": settings.GOOGLE_CLIENT_ID,
@@ -80,11 +82,17 @@ class GoogleOAuthSignIn:
             raise GoogleSignInError("Google token response has no ID token")
 
         try:
-            id_info = id_token.verify_oauth2_token(
-                id_token_value, GOOGLE_JWKS_REQUEST, settings.GOOGLE_CLIENT_ID
+            id_info = id_token.verify_token(
+                id_token_value,
+                GOOGLE_JWKS_REQUEST,
+                audience=settings.GOOGLE_CLIENT_ID,
+                certs_url=endpoints.certs,
             )
-        except (ValueError, GoogleAuthError) as error:
+        except (ValueError, GoogleAuthError, jwt.PyJWTError) as error:
             raise GoogleSignInError("Google ID token failed verification") from error
+
+        if id_info.get("iss") not in endpoints.issuers:
+            raise GoogleSignInError("Google ID token has an unexpected issuer")
 
         if id_info.get("nonce") != nonce:
             raise GoogleSignInError("Google ID token nonce mismatch")

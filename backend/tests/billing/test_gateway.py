@@ -24,6 +24,7 @@ from pumpkit.billing.gateway import (
     TopUpPurchase,
     WebhookEvent,
     WebhookSignatureError,
+    stripe_client,
 )
 from pumpkit.core.config import settings
 
@@ -505,3 +506,25 @@ async def test_the_stripe_adapter_finds_the_customer_of_a_charge():
 
     assert await gateway.get_charge_customer(charge_id="ch_1") == "cus_Contract"
     assert urlsplit(http.urls[0]).path == "/v1/charges/ch_1"
+
+
+@pytest.mark.parametrize(
+    ("api_url", "called"),
+    [
+        (None, "https://api.stripe.com/v1/customers"),
+        ("http://emulate:4001", "http://emulate:4001/v1/customers"),
+    ],
+)
+async def test_the_stripe_adapter_calls_stripe_api_url_when_one_is_set(
+    monkeypatch, api_url, called
+):
+    monkeypatch.setattr(settings, "STRIPE_API_URL", api_url)
+    http = _RecordedStripe('{"id": "cus_e2e", "object": "customer"}')
+    gateway = StripeBillingGateway(stripe_client(http_client=http))
+
+    customer_id = await gateway.create_customer(
+        email="test@example.com", name="Test", user_id="u1", idempotency_key="k1"
+    )
+
+    assert customer_id == "cus_e2e"
+    assert http.urls == [called]

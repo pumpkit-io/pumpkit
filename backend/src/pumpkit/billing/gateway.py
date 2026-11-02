@@ -325,12 +325,19 @@ def _webhook_event(event: dict[str, Any]) -> WebhookEvent:
 _T = TypeVar("_T")
 
 
+def stripe_client(**options: Any) -> stripe.StripeClient:
+    """A Stripe client with this Instance's API key, calling `STRIPE_API_URL` when one is set."""
+    if settings.STRIPE_API_URL:
+        options["base_addresses"] = {"api": settings.STRIPE_API_URL}
+    # Without Stripe billing configured, Stripe rejects every call made with the empty key.
+    return stripe.StripeClient(settings.STRIPE_SECRET_KEY or "", **options)
+
+
 class StripeBillingGateway:
     """Calls Stripe with its own client and API key, off the event loop, and returns plain data."""
 
     def __init__(self, client: Optional[stripe.StripeClient] = None) -> None:
-        # Without Stripe billing configured, Stripe rejects every call made with the empty key.
-        self._client = client or stripe.StripeClient(settings.STRIPE_SECRET_KEY or "")
+        self._client = client or stripe_client()
 
     async def _call(self, what: str, call: Callable[[], _T]) -> _T:
         try:

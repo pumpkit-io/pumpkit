@@ -356,3 +356,42 @@ def test_oauth_urls_keep_a_localhost_port(instance_env):
     assert s.oauth_issuer() == "http://localhost:8080"
     assert s.mcp_url() == "http://localhost:8080/api/v1/mcp"
     assert s.oauth_endpoint("token") == "http://localhost:8080/api/v1/oauth/token"
+
+
+_EMULATOR_ENV = {
+    "GOOGLE_ISSUER": "http://google.emulate.pumpkit.localhost:1355",
+    "GOOGLE_API_URL": "http://emulate:4000",
+    "STRIPE_API_URL": "http://emulate:4001",
+}
+
+
+def test_an_instance_reaches_the_real_google_and_stripe_unless_told_otherwise(instance_env):
+    s = instance_env()
+
+    assert s.GOOGLE_ISSUER is None
+    assert s.GOOGLE_API_URL is None
+    assert s.STRIPE_API_URL is None
+
+
+def test_a_local_instance_may_point_google_and_stripe_at_emulators(instance_env):
+    s = instance_env(ENV="local", **{key: f"{url}/" for key, url in _EMULATOR_ENV.items()})
+
+    # A trailing slash is dropped, so paths join cleanly.
+    assert s.GOOGLE_ISSUER == "http://google.emulate.pumpkit.localhost:1355"
+    assert s.GOOGLE_API_URL == "http://emulate:4000"
+    assert s.STRIPE_API_URL == "http://emulate:4001"
+
+
+@pytest.mark.parametrize("key", list(_EMULATOR_ENV))
+def test_production_refuses_to_start_with_a_provider_url_override(instance_env, key):
+    # The URL is Google's own: production refuses the override itself, whatever it points at.
+    with pytest.raises(ValidationError, match=key):
+        instance_env(**{key: "https://accounts.google.com"})
+
+
+@pytest.mark.parametrize("key", ["GOOGLE_ISSUER", "GOOGLE_API_URL"])
+def test_google_issuer_and_api_url_are_set_together(instance_env, key):
+    other = "GOOGLE_API_URL" if key == "GOOGLE_ISSUER" else "GOOGLE_ISSUER"
+
+    with pytest.raises(ValidationError, match=other):
+        instance_env(ENV="local", **{key: _EMULATOR_ENV[key]})

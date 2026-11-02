@@ -15,11 +15,11 @@ import pumpkit.auth.service.magic_links as magic_links
 import pumpkit.auth.service.sessions as sessions
 import pumpkit.auth.service.users as user_service
 from pumpkit.auth.google_config import (
-    GOOGLE_AUTHORIZATION_ENDPOINT,
     GOOGLE_CODE_VERIFIER_COOKIE,
     GOOGLE_NONCE_COOKIE,
     GOOGLE_SIGN_IN_SCOPES,
     GOOGLE_SIGN_IN_STATE_COOKIE,
+    google_endpoints,
 )
 from pumpkit.auth.google_sign_in import GoogleSignIn, GoogleSignInError
 from pumpkit.auth.gravatar import gravatar_url
@@ -77,7 +77,7 @@ async def start_google_sign_in() -> JSONResponse:
         "prompt": "consent",
     }
 
-    authorization_url = f"{GOOGLE_AUTHORIZATION_ENDPOINT}?{urlencode(query_params)}"
+    authorization_url = f"{google_endpoints().authorization}?{urlencode(query_params)}"
 
     response = JSONResponse(content={"url": authorization_url})
 
