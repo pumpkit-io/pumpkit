@@ -17,11 +17,15 @@ export default defineConfig({
     },
     host: true, // Docker needs the dev server on all interfaces.
     strictPort: true,
+    // Vite's own preflight answer would shadow the backend's open CORS on the MCP and OAuth paths.
+    cors: false,
     port: 5173,
     allowedHosts: ['pumpkit.io', 'www.pumpkit.io'],
     proxy: {
       // compose.dev.yml points this at the backend service.
       '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:8000',
+      // OAuth discovery for MCP clients.
+      '/.well-known': process.env.API_PROXY_TARGET ?? 'http://localhost:8000',
     },
   },
 });

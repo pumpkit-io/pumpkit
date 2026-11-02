@@ -19,6 +19,12 @@
 		}
 	}
 
+	# OAuth discovery for MCP clients, including the OpenID path so it answers 404 and not the SPA.
+	@oauth_discovery path /.well-known/oauth-authorization-server* /.well-known/oauth-protected-resource* /.well-known/openid-configuration*
+	handle @oauth_discovery {
+		reverse_proxy backend:8000
+	}
+
 	# Optional routes that start.d steps turn on, such as the PostHog relay.
 	import /etc/caddy/site.d/*.caddy
 

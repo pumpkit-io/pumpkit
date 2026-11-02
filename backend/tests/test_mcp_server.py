@@ -88,7 +88,7 @@ async def test_a_request_without_a_key_is_401_with_a_bearer_challenge(new_browse
     response = await McpClient(new_browser(), None).send("tools/list")
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
     assert response.json() == {"detail": "Not authenticated"}
 
 
@@ -96,7 +96,7 @@ async def test_an_unknown_key_is_401(subscribed, new_browser, api_key):
     response = await McpClient(new_browser(), api_key + "x").send("tools/list")
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
     assert response.json() == {"detail": "Could not validate credentials"}
 
 
@@ -115,7 +115,7 @@ async def test_a_revoked_key_is_401(subscribed, mcp, authed_client):
     response = await mcp.send("tools/list")
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
 
 
 async def test_a_suspended_users_key_is_401_until_the_suspension_ends(
@@ -126,7 +126,7 @@ async def test_a_suspended_users_key_is_401_until_the_suspension_ends(
     response = await mcp.send("tools/list")
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
     await lift_suspension(user.email)
     assert (await mcp.send("tools/list")).status_code == 200
 

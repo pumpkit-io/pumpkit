@@ -17,7 +17,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import CallToolResult
 from starlette.datastructures import Headers
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.types import Receive, Scope, Send
 
 import pumpkit.auth.mediator as auth_mediator
@@ -157,11 +157,15 @@ class McpEndpoint:
         app: FastAPI = scope["app"]
         secret = _bearer_secret(scope)
         if secret is None:
-            await _unauthorized("Not authenticated")(scope, receive, send)
+            await _unauthorized("Not authenticated", refused=False)(scope, receive, send)
             return
         user_id = await _authenticate(app, secret)
         if user_id is None:
-            await _unauthorized(CREDENTIALS_INVALID)(scope, receive, send)
+            await _unauthorized(CREDENTIALS_INVALID, refused=True)(scope, receive, send)
+            return
+        if scope["method"] != "POST":
+            # A stateless server has no stream for GET to open, and it would hang.
+            await Response(status_code=405, headers={"Allow": "POST"})(scope, receive, send)
             return
 
         token = _caller.set(_Caller(app=app, request=Request(scope), user_id=user_id))
@@ -194,12 +198,19 @@ async def _authenticate(app: FastAPI, secret: str) -> Optional[str]:
         return user.id if user is not None else None
 
 
-def _unauthorized(detail: str) -> JSONResponse:
-    """The 401 `get_current_user` answers with, worded the same."""
+def _unauthorized(detail: str, *, refused: bool) -> JSONResponse:
+    """
+    The 401 with the discovery challenge MCP clients start sign-in from. `refused` says a
+    credential was presented and turned down, which adds `error="invalid_token"`.
+    """
+    challenge = f'Bearer resource_metadata="{settings.oauth_protected_resource_metadata_url()}", '
+    challenge += 'scope="pumpkit"'
+    if refused:
+        challenge += f', error="invalid_token", error_description="{detail}"'
     return JSONResponse(
         {"detail": detail},
         status_code=status.HTTP_401_UNAUTHORIZED,
-        headers={"WWW-Authenticate": "Bearer"},
+        headers={"WWW-Authenticate": challenge},
     )
 
 
