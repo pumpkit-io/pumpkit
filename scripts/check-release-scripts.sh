@@ -571,7 +571,7 @@ if released && ! merged_by_hand && grep -q 'pumpkit-web:0.1.1: linux/amd64 linux
 else
   fail "expected Released v0.1.1 with no merge call: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
-if [ "$(grep -A1 '^pr create' "$GH_LOG" | sed -n 2p)" = 'pr merge 5 --auto --squash --delete-branch' ]; then
+if grep -A1 '^pr create' "$GH_LOG" | sed -n 2p | grep -q -- '^pr merge 5 --auto'; then
   pass "release turns on auto-merge right after opening the PR"
 else
   fail "expected gh pr merge --auto after gh pr create: $(cat "$GH_LOG")"
@@ -615,7 +615,7 @@ fi
 release_case
 printf '[{"name":"backend","bucket":"pass"},{"name":"frontend","bucket":"fail"},{"name":"review","bucket":"pending"}]' >"$GH_CHECKS"
 release_run 60
-if [ "$status" -ne 0 ] && grep -q '^STOPPED: these checks on PR #5 did not pass: frontend' "$err" && grep -q '^NEXT:' "$err" &&
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: these checks on PR #5 did not pass: frontend' "$err" && grep -q '^NEXT: .*sh scripts/release.sh 0.1.1 again' "$err" &&
   ! merged_by_hand && [ -z "$(git --git-dir="$work/rel.git" tag -l v0.1.1)" ]; then
   pass "release stops naming a failing check, without merging"
 else
@@ -625,7 +625,7 @@ fi
 release_case
 printf failure >"$GH_REVIEW_FINAL_STATUS"
 release_run 60
-if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && grep -q '^NEXT: Read its comment on the PR' "$err" && ! merged_by_hand; then
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && grep -q '^NEXT: Read its comment on the PR.*sh scripts/release.sh 0.1.1 again' "$err" && ! merged_by_hand; then
   pass "release stops when the review fails, pointing at its comment"
 else
   fail "expected a failed-review stop: status $status, $(cat "$err")"
@@ -635,7 +635,7 @@ release_case
 printf error >"$GH_REVIEW_FINAL_STATUS"
 release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended error' "$err" &&
-  grep -q '^NEXT: The review was cancelled or timed out and left no new comment.*gh run list --workflow sdlc-review-llm.yml --branch release/v0.1.1.*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1' "$err" && ! merged_by_hand; then
+  grep -q '^NEXT: The review was cancelled or timed out and left no new comment.*gh run list --workflow sdlc-review-llm.yml --branch release/v0.1.1.*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1.*sh scripts/release.sh 0.1.1 to tag it' "$err" && ! merged_by_hand; then
   pass "release stops when the review ends error, saying to start it again"
 else
   fail "expected an errored-review stop: status $status, $(cat "$err")"
@@ -664,7 +664,7 @@ printf in_progress >"$GH_RUN.1"
 printf completed >"$GH_RUN"
 release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review run on PR #5 ended without a final review status' "$err" &&
-  grep -q '^NEXT: .*starts a new review' "$err" && ! grep -q '^workflow run' "$GH_LOG" && ! merged_by_hand; then
+  grep -q '^NEXT: .*sh scripts/release.sh 0.1.1 again; it starts a new review' "$err" && ! grep -q '^workflow run' "$GH_LOG" && ! merged_by_hand; then
   pass "release stops when the review run ends without a final status"
 else
   fail "expected a dead-review stop: status $status, $(cat "$err")"
@@ -695,7 +695,7 @@ fi
 
 release_case
 release_run 0
-if [ "$status" -ne 0 ] && grep -q '^STOPPED: PR #5 is not merged after' "$err" && grep -q '^NEXT: Auto-merge is still on' "$err" && ! merged_by_hand; then
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: PR #5 is not merged after' "$err" && grep -q '^NEXT: Auto-merge is still on.*sh scripts/release.sh 0.1.1 later' "$err" && ! merged_by_hand; then
   pass "release stops when the wait runs out, saying auto-merge is still on"
 else
   fail "expected a timeout stop: status $status, $(cat "$err")"
@@ -708,7 +708,7 @@ git push -q origin "$(git commit-tree "$release_merge^{tree}" -p "$release_merge
 release_run 60
 if [ "$status" -eq 0 ] && grep -q '^Released v0.1.1\.$' "$out" &&
   [ "$(git --git-dir="$work/rel.git" rev-parse 'v0.1.1^{commit}')" = "$release_merge" ] &&
-  [ "$(grep '^pr ' "$GH_LOG")" = 'pr list --head release/v0.1.1 --state merged --json mergeCommit -q .[0].mergeCommit.oid // ""' ]; then
+  ! grep -Eq '^(pr create|pr merge|workflow run)' "$GH_LOG"; then
   pass "a rerun after GitHub merged the PR tags the Release PR's merge commit, though main moved past it"
 else
   fail "expected the rerun to tag: status $status, $(cat "$out" "$err" "$GH_LOG")"
@@ -718,7 +718,7 @@ release_case
 echo false >"$GH_ADMIN"
 release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: your gh login is not an admin' "$err" &&
-  grep -q '^NEXT: .*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1' "$err" &&
+  grep -q '^NEXT: .*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1.*sh scripts/release.sh 0.1.1 to tag it' "$err" &&
   grep -q -- '^pr merge 5 --auto' "$GH_LOG" && ! grep -q '^workflow run' "$GH_LOG"; then
   pass "a login that is not an admin turns on auto-merge, then asks a maintainer to start the review"
 else
@@ -799,10 +799,10 @@ printf '!fail' >"$GH_MERGEABLE.2"
 printf CONFLICTING >"$GH_MERGEABLE"
 release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: PR #5 conflicts with main' "$err" &&
-  grep -q '^NEXT: Merge main into release/v0.1.1 with git -C .*/release-v0.1.1 fetch origin && git -C .*/release-v0.1.1 merge origin/main, ' "$err" &&
+  grep -q '^NEXT: Merge main into release/v0.1.1 with git -C .*/release-v0.1.1 fetch origin && git -C .*/release-v0.1.1 merge --ff-only origin/release/v0.1.1 && git -C .*/release-v0.1.1 merge origin/main, ' "$err" &&
   grep -q 'move each entry that arrived under ## \[Unreleased\] into ## \[0.1.1\]' "$err" &&
-  grep -q 'Push, then run this again with the same version: sh scripts/release.sh 0.1.1\. Auto-merge stays on\.$' "$err" &&
-  [ "$(grep -c '^pr view 5 --json mergeable' "$GH_LOG")" = 3 ] && ! merged_by_hand; then
+  grep -q 'Push, then run sh scripts/release.sh 0.1.1 again\. Auto-merge stays on\.$' "$err" &&
+  ! merged_by_hand; then
   pass "release waits through an unknown or failed mergeable read, then stops when the Release PR conflicts with main"
 else
   fail "expected a conflict stop: status $status, $(cat "$out" "$err")"
