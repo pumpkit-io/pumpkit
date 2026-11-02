@@ -56,6 +56,8 @@ class Allowance:
     period: AllowancePeriod
     limits: Limits
     way_out: Optional[WayOut]
+    # When a cancelled Subscription ends; None while it renews.
+    ends_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -160,7 +162,10 @@ def allowance_at(subscription: Subscription, moment: datetime) -> Allowance:
     """The Allowance of a Subscribed User's `subscription` at `moment`."""
     period = period_at(subscription, moment)
     return Allowance(
-        period=period, limits=limits(trial=period.trial), way_out=way_out_for(subscription)
+        period=period,
+        limits=limits(trial=period.trial),
+        way_out=way_out_for(subscription),
+        ends_at=as_utc(subscription.cancel_at) if subscription.cancel_at is not None else None,
     )
 
 
@@ -244,3 +249,21 @@ class AllowanceUsedUp(ConflictError):
             "resets_at": self.resets_at.isoformat().replace("+00:00", "Z"),
             "way_out": self.way_out,
         }
+
+
+class SubscriptionEnds(ConflictError):
+    """A Scheduled post would publish once the User's cancelled Subscription has ended."""
+
+    def __init__(self, ends_at: datetime) -> None:
+        super().__init__(
+            f"Your subscription ends on {_day(ends_at)}, so nothing can publish after that. "
+            "Pick an earlier time, or renew your subscription in Settings.",
+            fix_page=SETTINGS_PAGE,
+            code="SUBSCRIPTION_ENDS",
+        )
+
+
+def check_publishes_before_end(allowance: Allowance, publish_at: datetime) -> None:
+    """Refuse a publish time at or after a cancelled Subscription's end, where it would fail."""
+    if allowance.ends_at is not None and publish_at >= allowance.ends_at:
+        raise SubscriptionEnds(allowance.ends_at)
