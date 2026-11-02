@@ -409,14 +409,14 @@ case "$1 $2" in
         [ "$polls" -ge "$GH_CHECKS_AFTER" ] || { echo "no checks reported on the 'release' branch" >&2; exit 1; }
         echo 3 ;;
     esac ;;
-  "run list") cat "$GH_RUN" ;;
-  "workflow run") printf failure >"$GH_REVIEW"; printf queued >"$GH_RUN" ;;
+  "run list") case "$*" in *databaseId*) cat "$GH_RUN_ID" ;; *) cat "$GH_RUN" ;; esac ;;
+  "workflow run") printf failure >"$GH_REVIEW"; printf queued >"$GH_RUN"; echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
   "api "*/statuses) cat "$GH_REVIEW" ;;
   "api "*) echo true ;;
 esac
 STUB
 chmod +x "$work/prbin/gh"
-export GH_LOG="$work/ghlog" GH_POLLS="$work/polls" GH_REVIEW="$work/review" GH_RUN="$work/run"
+export GH_LOG="$work/ghlog" GH_POLLS="$work/polls" GH_REVIEW="$work/review" GH_RUN="$work/run" GH_RUN_ID="$work/runid"
 
 # Usage: release_to_review CHECKS_AFTER WAIT_SECONDS [REVIEW_STATUS] [REVIEW_RUN_STATUS]. Runs release.sh in a fresh repo until it stops.
 release_to_review() {
@@ -429,6 +429,7 @@ release_to_review() {
   rm -f "$GH_LOG" "$GH_POLLS"
   printf '%s' "${3:-}" >"$GH_REVIEW"
   printf '%s' "${4:-}" >"$GH_RUN"
+  rm -f "$GH_RUN_ID"
   GH_CHECKS_AFTER=$1 RELEASE_CHECKS_WAIT_SECONDS=$2 RELEASE_POLL_SECONDS=0 PATH="$work/prbin:$PATH" run sh "$scripts/release.sh"
 }
 

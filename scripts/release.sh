@@ -28,6 +28,10 @@ review_run() {
   gh run list --workflow sdlc-review-llm.yml --branch "$branch" --commit "$head" --json status -q '.[0].status // ""'
 }
 
+review_run_id() {
+  gh run list --workflow sdlc-review-llm.yml --branch "$branch" --commit "$head" --json databaseId -q '.[0].databaseId // ""'
+}
+
 is_admin() {
   [ "$(gh api "repos/$repo" -q .permissions.admin)" = true ]
 }
@@ -38,11 +42,12 @@ start_review() {
   case $(review_status) in success | failure | error) return 0 ;; esac
   case $(review_run) in "" | completed) ;; *) return 0 ;; esac
   is_admin || return 0
+  before=$(review_run_id)
   gh workflow run sdlc-review-llm.yml --ref "$branch" || return
   # Until the new run is listed, the newest run on $head may be the dead one, which would read as a finished review.
   tries=0
   while [ "$tries" -lt 20 ]; do
-    case $(review_run) in "" | completed) ;; *) return 0 ;; esac
+    [ "$(review_run_id || echo "$before")" = "$before" ] || return 0
     sleep "$poll"
     tries=$((tries + 1))
   done
@@ -221,8 +226,9 @@ if [ "$state" != success ]; then
   waited=0
   while :; do
     # The run is read before the status, so a completed run's final status is already visible.
-    run=$(review_run)
-    state=$(review_status)
+    # A failed poll, such as a network blip, reads as still running.
+    run=$(review_run) || run=
+    state=$(review_status) || state=
     case $state in
       success | failure | error) break ;;
     esac
