@@ -389,20 +389,41 @@ else
   fail "expected a bad-version stop: status $status, $(cat "$err")"
 fi
 
-# release.sh past the PR, with a gh stub whose checks appear only on the $GH_CHECKS_AFTER-th poll and whose review dispatch
-# leaves a failure status, so the run stops at the review. Every call lands in $GH_LOG.
+# release.sh past the PR, with a gh stub logging every call to $GH_LOG, checks appearing on the $GH_CHECKS_AFTER-th poll, a review dispatch leaving $GH_REVIEW_AFTER.
+# The checks' buckets ($GH_CHECKS, JSON) and the PR's state ($GH_PR_STATE) answer from FILE.N on the Nth read when it exists, else FILE.
 mkdir "$work/prbin"
 cat >"$work/prbin/gh" <<'STUB'
 #!/bin/sh
 echo "$*" >>"$GH_LOG"
+answer() {
+  n=$(($(cat "$1.reads" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$1.reads"
+  if [ -f "$1.$n" ]; then cat "$1.$n"; else cat "$1"; fi
+}
+query() {
+  while [ $# -gt 0 ]; do
+    [ "$1" != -q ] || { printf '%s' "$2"; return; }
+    shift
+  done
+}
 case "$1 $2" in
   "release view") echo 2026-10-12T00:00:00Z ;;
   "pr list") case "$*" in *--head*) ;; *) cat "$GH_PRS" ;; esac ;;
-  "pr view") cat "$GH_FILES/$3" ;;
+  "pr view") case "$*" in *state*) answer "$GH_PR_STATE" ;; *) cat "$GH_FILES/$3" ;; esac ;;
   "pr create") echo https://github.example/pumpkit-io/pumpkit/pull/5 ;;
+  "pr merge")
+    case "$*" in
+      *--auto*) ;;
+      *)
+        # Moves origin's main to the release branch, so tag-release.sh finds the release there.
+        git push -q origin "$(git for-each-ref --format='%(refname)' 'refs/heads/release/*' | head -1):refs/heads/main"
+        rm -f "$GH_PR_STATE".*
+        printf MERGED >"$GH_PR_STATE" ;;
+    esac ;;
   "pr checks")
     case "$*" in
-      *--watch* | *bucket*) ;;
+      *--watch*) ;;
+      *bucket*) answer "$GH_CHECKS" | jq -r "$(query "$@")" ;;
       *)
         polls=$(($(cat "$GH_POLLS" 2>/dev/null || echo 0) + 1))
         echo "$polls" >"$GH_POLLS"
@@ -410,13 +431,18 @@ case "$1 $2" in
         echo 3 ;;
     esac ;;
   "run list") case "$*" in *databaseId*) cat "$GH_RUN_ID" ;; *) cat "$GH_RUN" ;; esac ;;
-  "workflow run") printf failure >"$GH_REVIEW"; printf queued >"$GH_RUN"; echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
+  "workflow run") printf '%s' "${GH_REVIEW_AFTER:-failure}" >"$GH_REVIEW"; printf queued >"$GH_RUN"; echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
   "api "*/statuses) cat "$GH_REVIEW" ;;
   "api "*) echo true ;;
 esac
 STUB
-chmod +x "$work/prbin/gh"
+cat >"$work/prbin/docker" <<'STUB'
+#!/bin/sh
+printf 'Name:      %s\n\nManifests:\n  Platform:    linux/amd64\n  Platform:    linux/arm64\n' "$4"
+STUB
+chmod +x "$work/prbin/gh" "$work/prbin/docker"
 export GH_LOG="$work/ghlog" GH_POLLS="$work/polls" GH_REVIEW="$work/review" GH_RUN="$work/run" GH_RUN_ID="$work/runid"
+export GH_CHECKS="$work/checks" GH_PR_STATE="$work/prstate"
 
 # Usage: release_to_review CHECKS_AFTER WAIT_SECONDS [REVIEW_STATUS] [REVIEW_RUN_STATUS]. Runs release.sh in a fresh repo until it stops.
 release_to_review() {
@@ -429,7 +455,9 @@ release_to_review() {
   rm -f "$GH_LOG" "$GH_POLLS"
   printf '%s' "${3:-}" >"$GH_REVIEW"
   printf '%s' "${4:-}" >"$GH_RUN"
-  rm -f "$GH_RUN_ID"
+  rm -f "$GH_RUN_ID" "$GH_CHECKS".* "$GH_PR_STATE".*
+  [ -f "$GH_CHECKS" ] || echo '[]' >"$GH_CHECKS"
+  [ -f "$GH_PR_STATE" ] || printf OPEN >"$GH_PR_STATE"
   GH_CHECKS_AFTER=$1 RELEASE_CHECKS_WAIT_SECONDS=$2 RELEASE_POLL_SECONDS=0 PATH="$work/prbin:$PATH" run sh "$scripts/release.sh"
 }
 
@@ -467,6 +495,30 @@ if ! grep -q '^workflow run' "$GH_LOG"; then
   pass "release leaves a review run in progress alone"
 else
   fail "expected no dispatch while a review runs: $(cat "$GH_LOG")"
+fi
+
+# Usage: release_through CHECKS_JSON. Runs release.sh with every check answering CHECKS_JSON and the dispatched review passing.
+release_through() {
+  printf '%s' "$1" >"$GH_CHECKS"
+  printf OPEN >"$GH_PR_STATE"
+  GH_REVIEW_AFTER=success release_to_review 1 300
+}
+
+release_through '[{"name":"backend","bucket":"pass"},{"name":"e2e","bucket":"skipping"},{"name":"review","bucket":"pending"}]'
+if [ "$status" -eq 0 ] && grep -q '^Released v0.1.1\.$' "$out" && grep -q '^pr merge 5 --squash --delete-branch$' "$GH_LOG" &&
+  [ "$(git --git-dir="$work/rel.git" rev-parse 'v0.1.1^{commit}')" = "$(git --git-dir="$work/rel.git" rev-parse main)" ] &&
+  grep -q 'pumpkit-web:0.1.1: linux/amd64 linux/arm64' "$out"; then
+  pass "release merges, tags and checks the images once the checks and the review pass"
+else
+  fail "expected Released v0.1.1: status $status, $(cat "$out" "$err")"
+fi
+
+release_through '[{"name":"backend","bucket":"pass"},{"name":"frontend","bucket":"fail"},{"name":"review","bucket":"pending"}]'
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: these checks on PR #5 did not pass: frontend' "$err" && grep -q '^NEXT:' "$err" &&
+  ! grep -q '^pr merge' "$GH_LOG" && [ -z "$(git --git-dir="$work/rel.git" tag -l v0.1.1)" ]; then
+  pass "release stops naming a failing check, without merging"
+else
+  fail "expected a stop naming frontend: status $status, $(cat "$err")"
 fi
 
 if [ "$failures" -ne 0 ]; then
