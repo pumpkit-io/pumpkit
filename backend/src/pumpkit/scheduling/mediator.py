@@ -16,7 +16,7 @@ from pumpkit.authors.x_reader import (
     XReaderError,
     XReaderNotConfiguredError,
 )
-from pumpkit.billing.allowance import COUNT_NOUNS
+from pumpkit.billing.allowance import COUNT_NOUNS, check_publishes_before_end
 from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
@@ -184,13 +184,15 @@ async def check_x_posts_room(
     in its Allowance period, then the Top-ups, with every post in the period charged afresh; else
     in its UTC calendar month. Pass `excluding_id` when changing an existing one, so it doesn't
     count itself, and `before`, what it used, when it stays in place, so only what grows is
-    checked.
+    checked. A new or moved one must publish before a cancelled Subscription ends.
     """
     needed = rules.x_posts_in(parts)
     if billing_service.sells_plans():
         allowance = await billing_service.get_allowance(db, user_id=user_id, moment=publish_at)
         if allowance is None:
             return
+        if before is None:
+            check_publishes_before_end(allowance, publish_at)
         growing = _growing(
             needed,
             before,
