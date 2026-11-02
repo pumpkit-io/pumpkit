@@ -55,10 +55,10 @@ ensure_review() {
   fi
   admin=$(gh api "repos/$repo" -q .permissions.admin 2>/dev/null) || return 2
   [ "$admin" = true ] ||
-    stop "your gh login is not an admin, and only an admin can run the review" "Ask a maintainer to run: gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is on, so GitHub merges PR #$pr once it passes; then run this again to tag it."
+    stop "your gh login is not an admin, and only an admin can run the review" "Ask a maintainer to run: gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is on, so GitHub merges PR #$pr once it passes; then run sh scripts/release.sh $version to tag it."
   before=$(review_run_id 2>/dev/null) || return 2
   gh workflow run sdlc-review-llm.yml --ref "$branch" ||
-    stop "gh could not start the review workflow" "Run gh workflow run sdlc-review-llm.yml --ref $branch, then run this again."
+    stop "gh could not start the review workflow" "Run gh workflow run sdlc-review-llm.yml --ref $branch, then sh scripts/release.sh $version."
   # Until the new run is listed, the newest run on $head may be the dead one, which would read as a finished review.
   tries=0
   while [ "$tries" -lt 20 ]; do
@@ -232,7 +232,7 @@ step "Auto-merge"
 # GitHub merges the PR once every required check passes, review included, even if this run dies before then.
 gh pr merge "$pr" --auto --squash --delete-branch >/dev/null ||
   [ "$(gh pr view "$pr" --json state -q .state)" = MERGED ] ||
-  stop "gh could not turn on auto-merge for PR #$pr" "Run gh pr merge $pr --auto --squash --delete-branch, then run this again."
+  stop "gh could not turn on auto-merge for PR #$pr" "Run gh pr merge $pr --auto --squash --delete-branch, then sh scripts/release.sh $version."
 echo "auto-merge on for PR #$pr"
 
 step "Review"
@@ -262,27 +262,27 @@ while :; do
   # A PR merged to main during the wait can leave this one conflicting, and then CI never runs and auto-merge never fires.
   mergeable=$(gh pr view "$pr" --json mergeable -q .mergeable 2>/dev/null) || mergeable=
   [ "$mergeable" != CONFLICTING ] ||
-    stop "PR #$pr conflicts with main, so its checks do not run and GitHub cannot merge it" "Merge main into $branch with git -C $dir fetch origin && git -C $dir merge origin/main, and resolve the conflicts; in CHANGELOG.md, move each entry that arrived under ## [Unreleased] into ## [$version], since its code ships in this Release. Push, then run this again with the same version: sh scripts/release.sh $version. Auto-merge stays on."
+    stop "PR #$pr conflicts with main, so its checks do not run and GitHub cannot merge it" "Merge main into $branch with git -C $dir fetch origin && git -C $dir merge --ff-only origin/$branch && git -C $dir merge origin/main, and resolve the conflicts; in CHANGELOG.md, move each entry that arrived under ## [Unreleased] into ## [$version], since its code ships in this Release. Push, then run sh scripts/release.sh $version again. Auto-merge stays on."
   # gh pr checks exits non-zero while checks are pending or none are reported yet, so its output decides.
   failed=$(gh pr checks "$pr" --json name,bucket -q '.[] | select(.name != "review") | select(.bucket == "fail" or .bucket == "cancel") | .name' 2>/dev/null || true)
   [ -z "$failed" ] ||
-    stop "these checks on PR #$pr did not pass: $(echo "$failed" | tr '\n' ' ')" "Read them with gh pr checks $pr, push a fix to $branch, and run this again; it starts the review on the new commit."
+    stop "these checks on PR #$pr did not pass: $(echo "$failed" | tr '\n' ' ')" "Read them with gh pr checks $pr, push a fix to $branch, and run sh scripts/release.sh $version again; it starts the review on the new commit."
   if [ "$reviewed" = "$head" ]; then
     # The run is read before the status, so a completed run's final status is already visible.
     # A run still going has not posted pending yet, so the status may be a stale one from an earlier run.
     if run=$(review_run 2>/dev/null) && review=$(review_status 2>/dev/null) && { [ -z "$run" ] || [ "$run" = completed ]; }; then
       if is_final "$review"; then
         case $review in
-          failure) stop "the review of PR #$pr ended failure" "Read its comment on the PR, fix the findings, push to $branch, and run this again." ;;
-          error) stop "the review of PR #$pr ended error" "The review was cancelled or timed out and left no new comment. Read the run with gh run list --workflow sdlc-review-llm.yml --branch $branch, and start it again with gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is still on, so GitHub merges PR #$pr once it passes; then run this again to tag it." ;;
+          failure) stop "the review of PR #$pr ended failure" "Read its comment on the PR, fix the findings, push to $branch, and run sh scripts/release.sh $version again." ;;
+          error) stop "the review of PR #$pr ended error" "The review was cancelled or timed out and left no new comment. Read the run with gh run list --workflow sdlc-review-llm.yml --branch $branch, and start it again with gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is still on, so GitHub merges PR #$pr once it passes; then run sh scripts/release.sh $version to tag it." ;;
         esac
       elif [ "$run" = completed ]; then
-        stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run this again; it starts a new review."
+        stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run sh scripts/release.sh $version again; it starts a new review."
       fi
     fi
   fi
   [ "$(date +%s)" -lt "$deadline" ] ||
-    stop "PR #$pr is not merged after $((wait_limit / 60)) minutes" "Auto-merge is still on, so GitHub merges it once its checks and review pass. See where they stand with gh pr checks $pr, and run this again later to tag it."
+    stop "PR #$pr is not merged after $((wait_limit / 60)) minutes" "Auto-merge is still on, so GitHub merges it once its checks and review pass. See where they stand with gh pr checks $pr, and run sh scripts/release.sh $version later to tag it."
   sleep "$poll"
 done
 echo "PR #$pr merged"
