@@ -154,7 +154,6 @@ export function Login() {
         </main>
         <CompanyFooter />
       </div>
-      {/* Placeholder for a product video. */}
       <aside className="hidden items-center justify-center border-l border-border bg-muted lg:flex">
         <picture>
           <source srcSet={mascot} media="(prefers-reduced-motion: reduce)" />
