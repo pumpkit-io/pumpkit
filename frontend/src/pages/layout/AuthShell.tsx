@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Brand } from '@/components/brand/Brand';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 
-/** The signed-out shell of the sign-in pages, drawn like FocusedLayout so signing in feels like the app. */
+/** The signed-out shell of the sign-in pages, with FocusedLayout's brand header and panel. */
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-background text-foreground">

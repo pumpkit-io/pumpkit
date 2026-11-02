@@ -113,6 +113,7 @@ export function Login() {
                 disabled={loading}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
               />
             </div>
             {error && (
