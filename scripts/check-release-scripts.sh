@@ -390,8 +390,9 @@ else
 fi
 
 # release.sh past the PR, with a gh stub logging every call to $GH_LOG and answering from state files a case writes.
-# $GH_PR_STATE, $GH_CHECKS (JSON, empty for none reported), $GH_REVIEW (the head's review status) and $GH_RUN (its review run's status)
-# answer from FILE.N on the Nth read when it exists, else FILE; a file reading !fail makes that call fail like a dropped connection.
+# $GH_PR_STATE, $GH_HEAD (the PR's head commit, the local release branch by default), $GH_CHECKS (JSON, empty for none reported),
+# $GH_REVIEW (a commit's review status) and $GH_RUN (its review run's status) answer from FILE.N on the Nth read when it exists, else FILE;
+# a file reading !fail makes that call fail like a dropped connection. $GH_REVIEW@SHA and $GH_RUN@SHA, when they exist, answer for that commit only.
 mkdir "$work/prbin"
 cat >"$work/prbin/gh" <<'STUB'
 #!/bin/sh
@@ -402,6 +403,10 @@ answer() {
   if [ -f "$1.$n" ]; then a=$(cat "$1.$n"); else a=$(cat "$1"); fi
   [ "$a" != '!fail' ] || { echo "error connecting to api.github.com" >&2; exit 1; }
   printf '%s' "$a"
+}
+# Usage: answer_for SHA FILE.
+answer_for() {
+  if [ -e "$2@$1" ]; then answer "$2@$1"; else answer "$2"; fi
 }
 query() {
   while [ $# -gt 0 ]; do
@@ -418,6 +423,9 @@ case "$1 $2" in
   "pr list") case "$*" in *--head*) ;; *) cat "$GH_PRS" ;; esac ;;
   "pr view")
     case "$*" in
+      *headRefOid*)
+        [ -e "$GH_HEAD" ] || git rev-parse "$(git for-each-ref --format='%(refname)' 'refs/heads/release/*' | head -1)" >"$GH_HEAD"
+        answer "$GH_HEAD" ;;
       *state*)
         state=$(answer "$GH_PR_STATE") || exit 1
         [ "$state" != MERGED ] || merge_on_github
@@ -439,13 +447,17 @@ case "$1 $2" in
     printf '%s' "$checks" | jq -r "$(query "$@")"
     # Like gh, exits 8 while a check is pending.
     case $checks in *pending*) exit 8 ;; esac ;;
-  "run list") case "$*" in *databaseId*) cat "$GH_RUN_ID" 2>/dev/null ;; *) answer "$GH_RUN" ;; esac ;;
+  "run list")
+    case "$*" in
+      *databaseId*) cat "$GH_RUN_ID" 2>/dev/null || true ;;
+      *) sha=$*; sha=${sha#*--commit }; answer_for "${sha%% *}" "$GH_RUN" ;;
+    esac ;;
   "workflow run")
     rm -f "$GH_REVIEW".* "$GH_RUN".*
     cp "$GH_REVIEW_FINAL_STATUS" "$GH_REVIEW"
     printf queued >"$GH_RUN"
     echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
-  "api "*/statuses) answer "$GH_REVIEW" ;;
+  "api "*/statuses) sha=${2%/statuses}; answer_for "${sha##*/}" "$GH_REVIEW" ;;
   "api "*) cat "$GH_ADMIN" ;;
 esac
 STUB
@@ -454,11 +466,11 @@ cat >"$work/prbin/docker" <<'STUB'
 printf 'Name:      %s\n\nManifests:\n  Platform:    linux/amd64\n  Platform:    linux/arm64\n' "$4"
 STUB
 chmod +x "$work/prbin/gh" "$work/prbin/docker"
-export GH_LOG="$work/gh-log" GH_PR_STATE="$work/gh-prstate" GH_CHECKS="$work/gh-checks" GH_REVIEW="$work/gh-review" GH_RUN="$work/gh-run"
+export GH_LOG="$work/gh-log" GH_PR_STATE="$work/gh-prstate" GH_HEAD="$work/gh-head" GH_CHECKS="$work/gh-checks" GH_REVIEW="$work/gh-review" GH_RUN="$work/gh-run"
 export GH_RUN_ID="$work/gh-runid" GH_ADMIN="$work/gh-admin" GH_REVIEW_FINAL_STATUS="$work/gh-review-final-status"
 
 # Usage: release_case. A fresh repo, and the stub's state reset to an admin login, an open PR whose checks pass, no review yet,
-# and a review that ends success once dispatched. The PR merges only when the case says so in a $GH_PR_STATE.N.
+# and a review that ends success once dispatched. The PR stays open until the case changes $GH_PR_STATE, as merges_on_read does.
 release_case() {
   release_repo "$work/u-fixed"
   mkdir scripts
@@ -491,7 +503,7 @@ merges_on_read() {
   printf MERGED >"$GH_PR_STATE"
 }
 
-# Usage: merged_by_hand. Fails when the log shows a merge call without --auto.
+# Usage: merged_by_hand. Succeeds when the log shows a merge call without --auto.
 merged_by_hand() {
   grep '^pr merge' "$GH_LOG" | grep -qv -- '--auto'
 }
@@ -519,7 +531,7 @@ first_dispatch=$(grep -n '^workflow run sdlc-review-llm.yml' "$GH_LOG" | head -1
 first_checks=$(grep -n '^pr checks' "$GH_LOG" | head -1 | cut -d: -f1)
 if [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] &&
   [ "${first_auto:-99999}" -lt "${first_dispatch:-0}" ] && [ "${first_dispatch:-99999}" -lt "${first_checks:-0}" ]; then
-  pass "release starts the review once, before waiting on the checks"
+  pass "release starts the review once, right after turning on auto-merge"
 else
   fail "expected one review dispatch between auto-merge and the checks: $(cat "$GH_LOG")"
 fi
@@ -631,6 +643,78 @@ if released; then
   pass "release reads a failed gh call in the wait as still waiting"
 else
   fail "expected failed polls to keep the wait going: status $status, $(cat "$out" "$err")"
+fi
+
+# A rerun after a fix is pushed to the release branch from another checkout starts the review on the fix and releases.
+release_case
+printf '[{"name":"backend","bucket":"pass"},{"name":"frontend","bucket":"fail"},{"name":"review","bucket":"pending"}]' >"$GH_CHECKS"
+release_run 60
+rm -rf "$work/fixer"
+git clone -q -b release/v0.1.1 "$work/rel.git" "$work/fixer"
+git -C "$work/fixer" commit -q --allow-empty -m "fix the frontend"
+git -C "$work/fixer" push -q origin release/v0.1.1
+fix=$(git -C "$work/fixer" rev-parse HEAD)
+rm -f "$work"/gh-checks* "$work"/gh-prstate* "$GH_HEAD" "$GH_LOG"
+printf '[{"name":"backend","bucket":"pass"},{"name":"frontend","bucket":"pass"},{"name":"review","bucket":"pending"}]' >"$GH_CHECKS"
+: >"$GH_REVIEW@$fix"
+: >"$GH_RUN@$fix"
+merges_on_read 3
+release_run 60
+if released && grep -q "^review started on $fix\$" "$out" && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] &&
+  [ "$(git --git-dir="$work/rel.git" log -1 --format=%s main)" = "fix the frontend" ]; then
+  pass "a rerun after a fix pushed to the release branch reviews the fix and releases"
+else
+  fail "expected the rerun to pick up the fix: status $status, $(cat "$out" "$err" "$GH_LOG")"
+fi
+
+# A commit pushed to the release branch during the wait gets its own review.
+release_case
+new_head=0123456789abcdef0123456789abcdef01234567
+printf '%s' "$new_head" >"$GH_HEAD.2"
+printf '%s' "$new_head" >"$GH_HEAD"
+: >"$GH_REVIEW@$new_head"
+: >"$GH_RUN@$new_head"
+merges_on_read 4
+release_run 60
+if released && grep -q "^review started on $new_head\$" "$out" && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 2 ] &&
+  grep -q "commits/$new_head/statuses" "$GH_LOG"; then
+  pass "release starts the review on a commit pushed to the release branch during the wait"
+else
+  fail "expected a review on the new head: status $status, $(cat "$out" "$err" "$GH_LOG")"
+fi
+
+release_case
+printf '%s' "$new_head" >"$GH_HEAD.2"
+printf '%s' "$new_head" >"$GH_HEAD"
+printf failure >"$GH_REVIEW@$new_head"
+release_run 60
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && ! merged_by_hand; then
+  pass "release judges the review of the PR's new head commit, not the one it started with"
+else
+  fail "expected the new head's failed review to stop: status $status, $(cat "$out" "$err")"
+fi
+
+# A failed read of the review run must not pass for no run, which would start a second paid review.
+release_case
+printf pending >"$GH_REVIEW"
+printf in_progress >"$GH_RUN"
+printf '!fail' >"$GH_RUN.1"
+merges_on_read 3
+release_run 60
+if released && ! grep -q '^workflow run' "$GH_LOG"; then
+  pass "release starts no review when gh fails to read the review run"
+else
+  fail "expected no dispatch after a failed read: status $status, $(cat "$out" "$err" "$GH_LOG")"
+fi
+
+release_case
+printf '!fail' >"$GH_REVIEW.1"
+merges_on_read 3
+release_run 60
+if released && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ]; then
+  pass "release starts the review on a later poll when gh fails to read the review status"
+else
+  fail "expected one dispatch on a later poll: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
 
 if [ "$failures" -ne 0 ]; then

@@ -32,28 +32,41 @@ review_run_id() {
   gh run list --workflow sdlc-review-llm.yml --branch "$branch" --commit "$head" --json databaseId -q '.[0].databaseId // ""'
 }
 
-is_admin() {
-  [ "$(gh api "repos/$repo" -q .permissions.admin)" = true ]
+is_final() {
+  case $1 in success | failure | error) return 0 ;; esac
+  return 1
 }
 
-# Succeeds unless $head has a final review status or a review run still going.
+# Returns 0 unless $head has a final review status or a review run still going, and 2 when gh could not say.
 # A run that ended without a final status (cancelled, timed out, failed early) needs a new one.
 review_needed() {
-  case $(review_status) in success | failure | error) return 1 ;; esac
-  case $(review_run) in "" | completed) ;; *) return 1 ;; esac
+  needed_status=$(review_status 2>/dev/null) || return 2
+  ! is_final "$needed_status" || return 1
+  needed_run=$(review_run 2>/dev/null) || return 2
+  case $needed_run in "" | completed) ;; *) return 1 ;; esac
 }
 
-# Dispatches the LLM review on $head. Fails only if gh does.
-start_review() {
-  before=$(review_run_id)
-  gh workflow run sdlc-review-llm.yml --ref "$branch" || return
+# Dispatches the LLM review on $head unless it has one. Returns 2, having started nothing, when a gh read failed.
+ensure_review() {
+  if review_needed; then :; else
+    [ $? -eq 1 ] || return 2
+    echo "review already on $head"
+    return 0
+  fi
+  admin=$(gh api "repos/$repo" -q .permissions.admin 2>/dev/null) || return 2
+  [ "$admin" = true ] ||
+    stop "your gh login is not an admin, and only an admin can run the review" "Ask a maintainer to run: gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is on, so GitHub merges PR #$pr once it passes; then run this again to tag it."
+  before=$(review_run_id 2>/dev/null) || return 2
+  gh workflow run sdlc-review-llm.yml --ref "$branch" ||
+    stop "gh could not start the review workflow" "Run gh workflow run sdlc-review-llm.yml --ref $branch, then run this again."
   # Until the new run is listed, the newest run on $head may be the dead one, which would read as a finished review.
   tries=0
   while [ "$tries" -lt 20 ]; do
-    [ "$(review_run_id || echo "$before")" = "$before" ] || return 0
+    [ "$(review_run_id 2>/dev/null || echo "$before")" = "$before" ] || break
     sleep "$poll"
     tries=$((tries + 1))
   done
+  echo "review started on $head"
 }
 
 # Tags the merged release and checks its images; also how a run resumes after a merge that was not tagged.
@@ -174,17 +187,23 @@ common=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)
 dir=$common/.claude/worktrees/release-v$version
 
 step "Worktree $dir"
+# A release branch already on origin carries the release commit and any fix pushed from another checkout.
+remote=$(git rev-parse --verify --quiet "refs/remotes/origin/$branch^{commit}") || remote=
 if [ ! -d "$dir" ]; then
   git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
     stop "the branch $branch exists without a worktree at $dir" "Delete it with git branch -D $branch if it is stale, then run it again."
-  git worktree add --quiet -b "$branch" "$dir" "$commit" ||
+  git worktree add --quiet -b "$branch" "$dir" "${remote:-$commit}" ||
     stop "git could not add the worktree $dir" "Fix what git printed above, then run it again."
+fi
+[ -z "$(git -C "$dir" status --porcelain)" ] ||
+  stop "the worktree $dir has uncommitted changes" "Commit or discard them there, then run it again."
+if [ -n "$remote" ]; then
+  git -C "$dir" merge --quiet --ff-only "$remote" ||
+    stop "the worktree $dir has commits that origin/$branch does not, and git could not fast-forward it" "Rebase them onto origin/$branch with git -C $dir rebase origin/$branch, or drop them with git -C $dir reset --hard origin/$branch, then run it again."
 fi
 
 step "Release commit"
-if ! git -C "$dir" log -1 --format=%s | grep -qx "Release $version"; then
-  [ -z "$(git -C "$dir" status --porcelain)" ] ||
-    stop "the worktree $dir has uncommitted changes" "Commit or discard them there, then run it again."
+if ! git -C "$dir" log --format=%s "$commit..HEAD" | grep -qx "Release $version"; then
   (cd "$dir" && sh scripts/prepare-release.sh "$version" >"$work/notes") ||
     stop "prepare-release.sh refused $version" "Read its message above, and pass another version if it is the version that is wrong."
   git -C "$dir" commit --quiet -am "Release $version"
@@ -202,6 +221,8 @@ if [ -z "$pr" ]; then
 fi
 echo "PR #$pr"
 head=$(git -C "$dir" rev-parse HEAD)
+# The commit whose review this run started or found; empty while a failed gh read leaves that unknown.
+reviewed=
 
 step "Auto-merge"
 # GitHub merges the PR once every required check passes, review included, even if this run dies before then.
@@ -212,14 +233,10 @@ echo "auto-merge on for PR #$pr"
 
 step "Review"
 # The review takes as long as CI, so it runs alongside it.
-if review_needed; then
-  is_admin ||
-    stop "your gh login is not an admin, and only an admin can run the review" "Ask a maintainer to run: gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is on, so GitHub merges PR #$pr once it passes; then run this again to tag it."
-  start_review ||
-    stop "gh could not start the review workflow" "Run gh workflow run sdlc-review-llm.yml --ref $branch, then run this again."
-  echo "review started on $head"
+if ensure_review; then
+  reviewed=$head
 else
-  echo "review already on $head"
+  echo "gh could not read the review on $head; the wait tries again"
 fi
 
 step "Waiting for GitHub to merge PR #$pr"
@@ -228,21 +245,32 @@ deadline=$(($(date +%s) + wait_limit))
 while :; do
   state=$(gh pr view "$pr" --json state -q .state 2>/dev/null) || state=
   [ "$state" != MERGED ] || break
+  # A push to the release branch during the wait moves the PR to a commit that needs its own review.
+  current=$(gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null) || current=
+  if [ -n "$current" ] && [ "$current" != "$head" ]; then
+    head=$current
+    reviewed=
+    echo "PR #$pr moved to $head"
+  fi
+  if [ "$reviewed" != "$head" ] && ensure_review; then
+    reviewed=$head
+  fi
   # gh pr checks exits non-zero while checks are pending or none are reported yet, so its output decides.
   failed=$(gh pr checks "$pr" --json name,bucket -q '.[] | select(.name != "review") | select(.bucket == "fail" or .bucket == "cancel") | .name' 2>/dev/null || true)
   [ -z "$failed" ] ||
     stop "these checks on PR #$pr did not pass: $(echo "$failed" | tr '\n' ' ')" "Read them with gh pr checks $pr, push a fix to $branch, and run this again; it starts the review on the new commit."
-  # The run is read before the status, so a completed run's final status is already visible.
-  run=$(review_run 2>/dev/null) || run=
-  review=$(review_status 2>/dev/null) || review=
-  case $review in
-    failure | error)
-      stop "the review of PR #$pr ended $review" "Read its comment on the PR, fix the findings, push to $branch, and run this again." ;;
-    success) ;;
-    *)
+  if [ "$reviewed" = "$head" ]; then
+    # The run is read before the status, so a completed run's final status is already visible.
+    run=$(review_run 2>/dev/null) || run=
+    review=$(review_status 2>/dev/null) || review=
+    if is_final "$review"; then
+      [ "$review" = success ] ||
+        stop "the review of PR #$pr ended $review" "Read its comment on the PR, fix the findings, push to $branch, and run this again."
+    else
       [ "$run" != completed ] ||
-        stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run this again; it starts a new review." ;;
-  esac
+        stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run this again; it starts a new review."
+    fi
+  fi
   [ "$(date +%s)" -lt "$deadline" ] ||
     stop "PR #$pr is not merged after $((wait_limit / 60)) minutes" "Auto-merge is still on, so GitHub merges it once its checks and review pass. See where they stand with gh pr checks $pr, and run this again later to tag it."
   sleep "$poll"
