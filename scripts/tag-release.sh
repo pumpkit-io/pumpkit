@@ -1,6 +1,7 @@
 #!/bin/sh
-# Tags origin/main as vVERSION after checking it is ready, pushes only the tag, then waits for the Release workflow.
-# Usage: sh scripts/tag-release.sh VERSION, from any checkout of the repo (X.Y.Z, or X.Y.Z-rc.N for a dry run).
+# Tags COMMIT, or origin/main's tip without one, as vVERSION after checking it is ready, pushes only the tag, then waits for the Release workflow.
+# Usage: sh scripts/tag-release.sh VERSION [COMMIT], from any checkout of the repo (X.Y.Z, or X.Y.Z-rc.N for a dry run).
+# COMMIT must be on origin/main; release.sh passes the Release PR's merge commit, so work merged after it stays out of the tag.
 # RELEASE_WATCH=false skips waiting on GitHub, for the tests; RELEASE_POLL_SECONDS sets the pause between polls.
 set -eu
 
@@ -11,8 +12,8 @@ fail() {
   exit 1
 }
 
-if [ $# -ne 1 ]; then
-  echo "Usage: sh scripts/tag-release.sh VERSION" >&2
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "Usage: sh scripts/tag-release.sh VERSION [COMMIT]" >&2
   exit 2
 fi
 version=${1#v}
@@ -22,6 +23,12 @@ tag=v$version
 
 git fetch --quiet --tags origin
 commit=$(git rev-parse --verify --quiet "origin/main^{commit}") || fail "origin/main not found; is origin the pumpkit repository?"
+if [ $# -eq 2 ]; then
+  if ! given=$(git rev-parse --verify --quiet "$2^{commit}") || ! git merge-base --is-ancestor "$given" "$commit"; then
+    fail "$2 is not on origin/main, so it cannot be tagged"
+  fi
+  commit=$given
+fi
 
 # Reads the files at that commit, so the checkout and its working tree never matter.
 work=$(mktemp -d)
