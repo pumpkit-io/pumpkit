@@ -15,7 +15,7 @@ const FOOTER_NAP_DELAY_MS = 5000;
 export function Landing() {
   const { sells_plans } = useInstance();
   const catalog = usePlanCatalog(sells_plans);
-  const labels = ctaLabels(catalog);
+  const labels = ctaLabels(catalog, sells_plans);
 
   return (
     <>
