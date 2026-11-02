@@ -1,0 +1,18 @@
+# Added only by scripts/dev-stack: the backend reaches this stack's Emulators with throwaway credentials.
+x-emulator-environment: &emulator-environment
+  GOOGLE_ISSUER: ${GOOGLE_ISSUER:-}
+  GOOGLE_API_URL: ${GOOGLE_API_URL:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  STRIPE_API_URL: ${STRIPE_API_URL:-}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  BILLING_PLAN_KEYS: ${BILLING_PLAN_KEYS:-}
+  BILLING_TOP_UP_KEY: ${BILLING_TOP_UP_KEY:-}
+
+services:
+  backend:
+    environment: *emulator-environment
+  publisher:
+    environment: *emulator-environment

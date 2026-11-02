@@ -367,3 +367,20 @@ async def test_without_google_settings_the_google_sign_in_routes_are_not_found(
 
     assert start.status_code == 404
     assert callback.status_code == 404
+
+
+async def test_google_sign_in_starts_at_the_google_issuer_when_one_is_set(new_browser, monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_ISSUER", "http://google.emulate.pumpkit.localhost:1355")
+    monkeypatch.setattr(settings, "GOOGLE_API_URL", "http://emulate:4000")
+
+    started = await new_browser().get("/api/v1/login/google")
+
+    assert started.json()["url"].startswith(
+        "http://google.emulate.pumpkit.localhost:1355/o/oauth2/v2/auth?"
+    )
+
+
+async def test_google_sign_in_starts_at_google_without_an_issuer(new_browser):
+    started = await new_browser().get("/api/v1/login/google")
+
+    assert started.json()["url"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")

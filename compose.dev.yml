@@ -20,6 +20,32 @@ services:
       interval: 10s
       timeout: 5s
 
+  # Google sign-in and Stripe Emulators, one per stack; only scripts/dev-stack starts them, with compose.emulators.yml.
+  emulate:
+    build:
+      context: .
+      dockerfile: emulate.Dockerfile
+    profiles: [emulators]
+    command:
+      - start
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4000"
+      - --service
+      - ${EMULATE_SERVICES:-google,stripe}
+      - --base-url
+      - ${EMULATE_BASE_URL:-http://localhost:4000}
+    environment:
+      DEV_PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
+      STRIPE_WEBHOOK_URL: ${STRIPE_WEBHOOK_URL:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    volumes:
+      - ./emulate.config.ts:/emulate/emulate.config.ts:ro
+    ports:
+      - 127.0.0.1::4000
+      - 127.0.0.1::4001
+
   backend:
     build:
       context: ./backend

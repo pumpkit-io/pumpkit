@@ -17,6 +17,8 @@ _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "no
 BILLING_PAGE = "/billing"
 PAYWALL_PAGE = "/subscribe"
 
+_PROVIDER_URL_OVERRIDES = ("GOOGLE_ISSUER", "GOOGLE_API_URL", "STRIPE_API_URL")
+
 
 class ProviderGroup(StrEnum):
     """An optional provider's settings group (ADR 0011); the value names it in startup errors."""
@@ -68,6 +70,10 @@ class Settings(BaseSettings):
     GOOGLE_CODE_VERIFIER_TOKEN_NUM_BYTES: int = 64
     GOOGLE_COOKIE_MAX_AGE_SECONDS: int = 600
     GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS: int = 30
+    # Dev only, set together: point Google sign-in at an Emulator; unset reaches Google itself.
+    # The issuer is browser-facing and names the ID tokens' issuer; the API URL is server-to-server.
+    GOOGLE_ISSUER: Optional[str] = None
+    GOOGLE_API_URL: Optional[str] = None
 
     # Optional: Magic link sign-in fills an empty Photo from Gravatar, which receives a hash of the email.
     GRAVATAR_ENABLED: bool = False
@@ -93,6 +99,8 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_PUBLISHABLE_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
+    # Dev only: points the Stripe SDK at an Emulator; unset reaches Stripe itself.
+    STRIPE_API_URL: Optional[str] = None
 
     # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
     # Nothing else can be listed or bought.
@@ -164,6 +172,26 @@ class Settings(BaseSettings):
                 f"like https://pumpkit.example.org; got {value!r}"
             )
         return origin
+
+    @field_validator("GOOGLE_ISSUER", "GOOGLE_API_URL", "STRIPE_API_URL")
+    @classmethod
+    def _no_trailing_slash(cls, value: Optional[str]) -> Optional[str]:
+        return value.rstrip("/") if value else None
+
+    @model_validator(mode="after")
+    def _no_provider_overrides_in_production(self) -> Self:
+        # Decided by the environment, not by the URL: production only ever reaches the real providers.
+        overrides = [key for key in _PROVIDER_URL_OVERRIDES if getattr(self, key)]
+        if overrides and self.ENV == "prod":
+            raise ValueError(
+                f"Production refuses emulator URLs; unset {', '.join(overrides)} or set ENV=local"
+            )
+        if bool(self.GOOGLE_ISSUER) != bool(self.GOOGLE_API_URL):
+            missing = "GOOGLE_API_URL" if self.GOOGLE_ISSUER else "GOOGLE_ISSUER"
+            raise ValueError(
+                f"GOOGLE_ISSUER and GOOGLE_API_URL must be set together; missing: {missing}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _providers_all_or_nothing(self) -> Self:

@@ -12,10 +12,12 @@
 
 ## Emulators
 
-Emulator state resets to its config whenever `up` starts an Emulator, so on the first `up` after `down`.
+Emulator state resets to its config whenever `up` starts an Emulator, so on the first `up` after `down`. `scripts/dev-stack` adds `compose.emulators.yml`, which hands the backend the variables `up` sets over `.env`'s.
 
-- Google sign-in: route `google.emulate.pumpkit`; `up` sets `GOOGLE_ISSUER` (browser-facing, also the token issuer) and `GOOGLE_API_URL` (server-to-server); no webhooks; `GET /o/oauth2/v2/auth` lists the seeded users; `emulate.config.ts` seeds the user `test@example.com`.
-- Stripe: route `stripe.emulate.pumpkit`; `up` sets `STRIPE_API_URL`, `STRIPE_WEBHOOK_URL` and `STRIPE_WEBHOOK_SECRET`, with throwaway `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`, and `BILLING_PLAN_KEYS` and `BILLING_TOP_UP_KEY` set to the seeded lookup keys; delivers webhooks to `http://backend:8000/api/v1/stripe/webhook`; `GET /v1/customers` lists customers; `emulate.config.ts` seeds prices with the lookup keys `pumpkit_pro_monthly`, `pumpkit_pro_yearly` and `pumpkit_top_up`, and the customer `cus_e2e` with the subscription `sub_e2e` that `e2e/seed/` refers to.
+- Google sign-in: route `google.emulate.pumpkit`; `up` sets `GOOGLE_ISSUER` (browser-facing, also the token issuer) and `GOOGLE_API_URL` (server-to-server), with throwaway `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; no webhooks; `GET /o/oauth2/v2/auth` lists the seeded users; `emulate.config.ts` seeds the user `test@example.com`, beside emulate's own `testuser@gmail.com`.
+- Stripe: route `stripe.emulate.pumpkit`; `up` sets `STRIPE_API_URL`, `STRIPE_WEBHOOK_URL` and `STRIPE_WEBHOOK_SECRET`, with throwaway `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`, and `BILLING_PLAN_KEYS` and `BILLING_TOP_UP_KEY` set to Pumpkit's lookup keys; delivers webhooks to `http://backend:8000/api/v1/stripe/webhook`; `GET /v1/customers` lists customers; `emulate.config.ts` seeds the customer `cus_e2e` that `e2e/seed/seed_user.py` refers to, and a Pumpkit Pro product with one-off prices.
+  - emulate 0.13.0's Stripe has customers, products, one-off prices, payment intents, charges and Checkout sessions only. Prices carry no lookup key and there are no subscriptions, billing portal or invoice payments, so the Plan catalog comes back empty, `sub_e2e` can't be seeded, and calls for subscriptions answer 404. A new User who signs in on the dev stack stops at the Paywall with no Plans and no Top-up; e2e Users get their Subscriptions from `e2e/seed/`.
+  - Its webhook events are signed correctly but carry no event `id`, so the backend refuses them with 400.
 
 ## Safe mode
 

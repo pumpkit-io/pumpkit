@@ -24,6 +24,7 @@ from pumpkit.billing.gateway import (
     TopUpPurchase,
     WebhookEvent,
     WebhookSignatureError,
+    stripe_client,
 )
 from pumpkit.core.config import settings
 
@@ -479,6 +480,21 @@ async def test_the_stripe_adapter_resolves_only_a_one_off_price_for_the_top_up()
     assert await gateway.get_one_off_price("pumpkit_top_up") is None
 
 
+async def test_a_one_off_price_without_its_lookup_key_is_no_top_up():
+    # The dev stack's Stripe Emulator ignores the lookup_keys filter and leaves the field out.
+    unkeyed = {
+        "id": "price_top_up",
+        "object": "price",
+        "active": True,
+        "currency": "eur",
+        "type": "one_time",
+        "unit_amount": 500,
+    }
+    gateway, _ = _recorded_gateway(json.dumps({"object": "list", "data": [unkeyed]}))
+
+    assert await gateway.get_one_off_price("pumpkit_top_up") is None
+
+
 async def test_the_stripe_top_up_checkout_takes_one_payment_marked_as_a_top_up():
     gateway, http = _recorded_gateway(
         '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'
@@ -505,3 +521,25 @@ async def test_the_stripe_adapter_finds_the_customer_of_a_charge():
 
     assert await gateway.get_charge_customer(charge_id="ch_1") == "cus_Contract"
     assert urlsplit(http.urls[0]).path == "/v1/charges/ch_1"
+
+
+@pytest.mark.parametrize(
+    ("api_url", "called"),
+    [
+        (None, "https://api.stripe.com/v1/customers"),
+        ("http://emulate:4001", "http://emulate:4001/v1/customers"),
+    ],
+)
+async def test_the_stripe_adapter_calls_stripe_api_url_when_one_is_set(
+    monkeypatch, api_url, called
+):
+    monkeypatch.setattr(settings, "STRIPE_API_URL", api_url)
+    http = _RecordedStripe('{"id": "cus_e2e", "object": "customer"}')
+    gateway = StripeBillingGateway(stripe_client(http_client=http))
+
+    customer_id = await gateway.create_customer(
+        email="test@example.com", name="Test", user_id="u1", idempotency_key="k1"
+    )
+
+    assert customer_id == "cus_e2e"
+    assert http.urls == [called]
