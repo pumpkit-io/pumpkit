@@ -127,11 +127,10 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Only auth, pumpkit.main and pumpkit.mcp_server import auth.router or auth.mediator"
+name = "Only auth and pumpkit.main import auth.router or auth.mediator"
 type = "protected"
 protected_modules = ["pumpkit.auth.router", "pumpkit.auth.mediator"]
-# The MCP server authenticates API keys through auth's mediator, as a router would.
-allowed_importers = ["pumpkit.auth", "pumpkit.main", "pumpkit.mcp_server"]
+allowed_importers = ["pumpkit.auth", "pumpkit.main"]
 
 [[tool.importlinter.contracts]]
 name = "Only billing and pumpkit.main import billing.router or billing.mediator"

@@ -8,7 +8,6 @@ from starlette.routing import Route
 import pumpkit.mcp_server as mcp_server
 import pumpkit.scheduling.router as scheduling_router
 from pumpkit.auth.mailer import announce_magic_link_delivery
-from pumpkit.auth.router import api_keys_router
 from pumpkit.auth.router import router as auth_router
 from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.dependencies import require_subscribed_user
@@ -56,10 +55,6 @@ app.add_middleware(OpenCorsMiddleware)
 
 # The prefix lives here so routers stay unaware of their mount point.
 app.include_router(auth_router, prefix="/api/v1")
-# Billing's access rule gates API keys here, since auth sits below billing (ADR 0008).
-app.include_router(
-    api_keys_router, prefix="/api/v1", dependencies=[Depends(require_subscribed_user)]
-)
 app.include_router(billing_router, prefix="/api/v1")
 app.include_router(support_router, prefix="/api/v1")
 app.include_router(authors_router, prefix="/api/v1")

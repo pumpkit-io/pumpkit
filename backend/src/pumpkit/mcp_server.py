@@ -1,7 +1,7 @@
 """
 The MCP server (ADR 0012): every area's tools behind OAuth access token authentication (ADR
 0020), the access gate and per-User limits, served at one stateless Streamable HTTP endpoint
-that `main` mounts. API keys still authenticate until they are removed.
+that `main` mounts.
 """
 
 import functools
@@ -21,7 +21,6 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse, Response
 from starlette.types import Receive, Scope, Send
 
-import pumpkit.auth.mediator as auth_mediator
 import pumpkit.auth.service.users as user_service
 import pumpkit.authors.tools as authors_tools
 import pumpkit.billing.service as billing_service
@@ -80,8 +79,8 @@ a link to open.
 order, and get their explicit yes. Post now publishes at once and can't be undone.
 """
 
-# A bearer header (an OAuth access token, or an API key until #316) guards the endpoint, so a
-# rebinding attack has nothing to reach; the default check would also refuse every Instance's Host.
+# An OAuth access token in a bearer header guards the endpoint, so a rebinding attack has nothing
+# to reach; the default check would also refuse every Instance's Host.
 _TRANSPORT_SECURITY = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
 # Each request starts and stops its own session manager, which would log both at INFO.
@@ -154,9 +153,8 @@ def build_server(tools: list[McpTool]) -> MCPServer:
 class McpEndpoint:
     """
     The ASGI app at `/api/v1/mcp`. It answers 401 with a Bearer challenge unless an access token
-    or an API key authenticates the request, then serves it with a session manager of its own:
-    stateless requests share nothing, and FastAPI never runs a lifespan the manager could start
-    in tests.
+    authenticates the request, then serves it with a session manager of its own: stateless
+    requests share nothing, and FastAPI never runs a lifespan the manager could start in tests.
     """
 
     def __init__(self, server: MCPServer) -> None:
@@ -200,19 +198,13 @@ def _bearer_secret(scope: Scope) -> Optional[str]:
 
 async def _authenticate(app: FastAPI, secret: str) -> Optional[str]:
     """
-    The id of the User the access token or API key acts for, or None to refuse it. A web
-    Session's access token is neither, so it is refused.
+    The id of the User the access token acts for, or None to refuse it. A web Session's
+    access token is not one, so it is refused.
     """
     async with AsyncExitStack() as stack:
         db = await resolve(app, stack, get_async_db)
         clock = await resolve(app, stack, get_clock)
-        now = clock()
-        user_id = await connected_apps_mediator.authenticate_mcp_token(db, secret, now=now)
-        if user_id is not None:
-            return user_id
-        # TODO(#316): drop API keys once the MCP tool suite runs on OAuth tokens (ADR 0020).
-        user = await auth_mediator.authenticate_api_key(db=db, secret=secret, now=now)
-        return user.id if user is not None else None
+        return await connected_apps_mediator.authenticate_mcp_token(db, secret, now=clock())
 
 
 def _unauthorized(detail: str, *, refused: bool) -> JSONResponse:

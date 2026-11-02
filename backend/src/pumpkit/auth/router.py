@@ -11,9 +11,6 @@ from pumpkit.auth.google_sign_in import GoogleSignIn, get_google_sign_in, requir
 from pumpkit.auth.mailer import AuthMailer, get_auth_mailer
 from pumpkit.auth.models import User
 from pumpkit.auth.schemas import (
-    ApiKeyCreatedResponse,
-    ApiKeyCreateRequest,
-    ApiKeysListResponse,
     MagicLinkRequest,
     UserProfileResponse,
     UserProfileUpdate,
@@ -26,10 +23,6 @@ from pumpkit.core.time import Clock, get_clock
 
 # Tags are set per route: the Sign-in method and Session routes are "auth", the profile "users".
 router = APIRouter()
-
-# API keys need the web app's access rule, which billing owns and auth may not import
-# (ADR 0008), so `main` mounts this router behind billing's subscribed-User dependency.
-api_keys_router = APIRouter(tags=["api-keys"])
 
 
 @router.get(
@@ -165,41 +158,3 @@ async def update_current_user_profile(
     await db.refresh(current_user)
 
     return UserProfileResponse.model_validate(current_user)
-
-
-@api_keys_router.get(
-    "/api-keys",
-    response_model=ApiKeysListResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def list_api_keys(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> ApiKeysListResponse:
-    return await mediator.list_api_keys(db=db, user=current_user)
-
-
-@api_keys_router.delete("/api-keys/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_api_key(
-    api_key_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db),
-    clock: Clock = Depends(get_clock),
-) -> None:
-    await mediator.revoke_api_key(db=db, user=current_user, api_key_id=api_key_id, now=clock())
-
-
-@api_keys_router.post(
-    "/api-keys",
-    response_model=ApiKeyCreatedResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_api_key(
-    create_request: ApiKeyCreateRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db),
-    clock: Clock = Depends(get_clock),
-) -> ApiKeyCreatedResponse:
-    return await mediator.create_api_key(
-        db=db, user=current_user, name=create_request.name, now=clock()
-    )
