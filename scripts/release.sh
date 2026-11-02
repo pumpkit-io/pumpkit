@@ -256,6 +256,10 @@ while :; do
   if [ "$reviewed" != "$head" ] && ensure_review; then
     reviewed=$head
   fi
+  # A PR merged to main during the wait can leave this one conflicting, and then CI never runs and auto-merge never fires.
+  mergeable=$(gh pr view "$pr" --json mergeable -q .mergeable 2>/dev/null) || mergeable=
+  [ "$mergeable" != CONFLICTING ] ||
+    stop "PR #$pr conflicts with main, so its checks do not run and GitHub cannot merge it" "Merge origin/main into $branch in its worktree with git -C $dir merge origin/main, resolve the conflicts, push, and run this again. Auto-merge stays on."
   # gh pr checks exits non-zero while checks are pending or none are reported yet, so its output decides.
   failed=$(gh pr checks "$pr" --json name,bucket -q '.[] | select(.name != "review") | select(.bucket == "fail" or .bucket == "cancel") | .name' 2>/dev/null || true)
   [ -z "$failed" ] ||
@@ -267,7 +271,7 @@ while :; do
       if is_final "$review"; then
         case $review in
           failure) stop "the review of PR #$pr ended failure" "Read its comment on the PR, fix the findings, push to $branch, and run this again." ;;
-          error) stop "the review of PR #$pr ended error" "Read its comment on PR #$pr, which may say why the run was cancelled, timed out or broke, then the run with gh run list --workflow sdlc-review-llm.yml --branch $branch, then start the review again with gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is still on, so GitHub merges PR #$pr once it passes; then run this again to tag it." ;;
+          error) stop "the review of PR #$pr ended error" "The review was cancelled or timed out and left no new comment. Read the run with gh run list --workflow sdlc-review-llm.yml --branch $branch, and start it again with gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is still on, so GitHub merges PR #$pr once it passes; then run this again to tag it." ;;
         esac
       elif [ "$run" = completed ]; then
         stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run this again; it starts a new review."

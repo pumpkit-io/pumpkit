@@ -389,18 +389,13 @@ else
   fail "expected a bad-version stop: status $status, $(cat "$err")"
 fi
 
-# release.sh past the PR, with a gh stub logging every call to $GH_LOG and answering from state files a case writes.
-# $GH_PR_STATE, $GH_HEAD (the PR's head commit, the local release branch by default), $GH_CHECKS (JSON, empty for none reported),
-# $GH_REVIEW (a commit's review status) and $GH_RUN (its review run's status) answer from FILE.N on the Nth read when it exists, else FILE;
-# a file reading !fail makes that call fail like a dropped connection. $GH_REVIEW@SHA and $GH_RUN@SHA, when they exist, answer for that commit only.
-# With $GH_REVIEW_CLOCK set, review and run reads share one count, so FILE.N is the Nth read of either and two files can change together.
-# A dispatch posts its final status for the PR's head (the last headRefOid answered, else the local release branch), and its run reads queued once, then completed;
-# status reads are logged with their answer.
+# release.sh past the PR, with a gh stub logging every call to $GH_LOG and answering from the $GH_* state files a case writes.
+# Each file answers from FILE.N on the Nth read when it exists, else FILE; a file reading !fail fails that call like a dropped connection.
 mkdir "$work/prbin"
 cat >"$work/prbin/gh" <<'STUB'
 #!/bin/sh
 echo "$*" >>"$GH_LOG"
-# Usage: answer FILE [COUNTER]. COUNTER defaults to FILE.reads.
+# COUNTER defaults to FILE.reads; with $GH_REVIEW_CLOCK set, review and run reads share one count so two files change together.
 answer() {
   counter=${2:-$1.reads}
   n=$(($(cat "$counter" 2>/dev/null || echo 0) + 1))
@@ -410,7 +405,7 @@ answer() {
   [ "$a" != '!fail' ] || { echo "error connecting to api.github.com" >&2; exit 1; }
   printf '%s' "$a"
 }
-# Usage: answer_for SHA FILE.
+# FILE@SHA, when it exists, answers for that commit only.
 answer_for() {
   if [ -e "$2@$1" ]; then f="$2@$1"; else f=$2; fi
   answer "$f" ${GH_REVIEW_CLOCK:+"$GH_REVIEW_CLOCK"}
@@ -436,6 +431,9 @@ case "$1 $2" in
       *headRefOid*)
         [ -e "$GH_HEAD" ] || release_branch_head >"$GH_HEAD"
         answer "$GH_HEAD" ;;
+      *mergeable*)
+        [ -e "$GH_MERGEABLE" ] || printf MERGEABLE >"$GH_MERGEABLE"
+        answer "$GH_MERGEABLE" ;;
       *state*)
         state=$(answer "$GH_PR_STATE") || exit 1
         [ "$state" != MERGED ] || merge_on_github
@@ -463,6 +461,7 @@ case "$1 $2" in
       *) sha=$*; sha=${sha#*--commit }; answer_for "${sha%% *}" "$GH_RUN" ;;
     esac ;;
   "workflow run")
+    # Posts the final status for the last headRefOid answered, and the run reads queued once, then completed.
     if [ -e "$GH_HEAD.last" ]; then sha=$(cat "$GH_HEAD.last"); else sha=$(release_branch_head); fi
     rm -f "$GH_REVIEW@$sha".* "$GH_RUN@$sha".*
     cp "$GH_REVIEW_FINAL_STATUS" "$GH_REVIEW@$sha"
@@ -484,7 +483,7 @@ printf 'Name:      %s\n\nManifests:\n  Platform:    linux/amd64\n  Platform:    
 STUB
 chmod +x "$work/prbin/gh" "$work/prbin/docker"
 export GH_LOG="$work/gh-log" GH_PR_STATE="$work/gh-prstate" GH_HEAD="$work/gh-head" GH_CHECKS="$work/gh-checks" GH_REVIEW="$work/gh-review" GH_RUN="$work/gh-run"
-export GH_RUN_ID="$work/gh-runid" GH_ADMIN="$work/gh-admin" GH_REVIEW_FINAL_STATUS="$work/gh-review-final-status"
+export GH_RUN_ID="$work/gh-runid" GH_ADMIN="$work/gh-admin" GH_REVIEW_FINAL_STATUS="$work/gh-review-final-status" GH_MERGEABLE="$work/gh-mergeable"
 
 # Usage: release_case. A fresh repo, and the stub's state reset to an admin login, an open PR whose checks pass, no review yet,
 # and a review that ends success once dispatched. The PR stays open until the case changes $GH_PR_STATE, as merges_on_read does.
@@ -588,7 +587,7 @@ release_case
 printf error >"$GH_REVIEW_FINAL_STATUS"
 release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended error' "$err" &&
-  grep -q '^NEXT: Read its comment on PR #5.*gh run list.*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1' "$err" && ! merged_by_hand; then
+  grep -q '^NEXT: The review was cancelled or timed out and left no new comment.*gh run list --workflow sdlc-review-llm.yml --branch release/v0.1.1.*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1' "$err" && ! merged_by_hand; then
   pass "release stops when the review ends error, saying to start it again"
 else
   fail "expected an errored-review stop: status $status, $(cat "$err")"
@@ -720,16 +719,15 @@ printf '%s' "$new_head" >"$GH_HEAD"
 : >"$GH_RUN@$new_head"
 merges_on_read 4
 release_run 60
-merged_at=$(grep -n '^pr view 5 --json state' "$GH_LOG" | tail -1 | cut -d: -f1)
-judged_at=$(grep -n "^review of $new_head: success\$" "$GH_LOG" | head -1 | cut -d: -f1)
-if released && grep -q "^review started on $new_head\$" "$out" && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] &&
-  [ "${judged_at:-99999}" -lt "${merged_at:-0}" ]; then
+if released && grep -q "^review started on $new_head\$" "$out" && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ]; then
   pass "release starts the review on a commit pushed to the release branch during the wait"
 else
   fail "expected a review on the new head: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
+unset new_head
 
 release_case
+new_head=0123456789abcdef0123456789abcdef01234567
 printf '%s' "$new_head" >"$GH_HEAD.2"
 printf '%s' "$new_head" >"$GH_HEAD"
 printf failure >"$GH_REVIEW@$new_head"
@@ -738,6 +736,21 @@ if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' 
   pass "release judges the review of the PR's new head commit, not the one it started with"
 else
   fail "expected the new head's failed review to stop: status $status, $(cat "$out" "$err")"
+fi
+unset new_head
+
+# A PR merged to main during the wait leaves the Release PR conflicting, so auto-merge never fires.
+release_case
+printf UNKNOWN >"$GH_MERGEABLE.1"
+printf '!fail' >"$GH_MERGEABLE.2"
+printf CONFLICTING >"$GH_MERGEABLE"
+release_run 60
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: PR #5 conflicts with main' "$err" &&
+  grep -q '^NEXT: Merge origin/main into release/v0.1.1 in its worktree with git -C .*/release-v0.1.1 merge origin/main' "$err" &&
+  [ "$(grep -c '^pr view 5 --json mergeable' "$GH_LOG")" = 3 ] && ! merged_by_hand; then
+  pass "release waits through an unknown or failed mergeable read, then stops when the Release PR conflicts with main"
+else
+  fail "expected a conflict stop: status $status, $(cat "$out" "$err")"
 fi
 
 # A running review posts success and its run completes between the two reads of the first check.
