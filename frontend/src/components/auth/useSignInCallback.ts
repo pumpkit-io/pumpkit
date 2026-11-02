@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { returnTo } from '@/lib/returnTo';
 import { session, signInPath, type SignInErrorCode, type StartFailureReason } from '@/lib/session';
 
 interface SignInCallbackOptions {
@@ -12,7 +13,8 @@ interface SignInCallbackOptions {
 }
 
 /**
- * Starts the Session from the URL fragment, then goes to New post or to sign-in with an error.
+ * Starts the Session from the URL fragment, then goes to the page the User was sent to sign in
+ * from (see `returnTo`), to New post, or to sign-in with an error.
  * Both navigations replace the entry so the access-token URL leaves browser history.
  */
 export function useSignInCallback({ errorCodeFor, onSucceeded, onFailed }: SignInCallbackOptions) {
@@ -27,7 +29,7 @@ export function useSignInCallback({ errorCodeFor, onSucceeded, onFailed }: SignI
     const result = session.startFromFragment(hash);
     if (result.ok) {
       onSucceeded();
-      navigate('/new', { replace: true });
+      navigate(returnTo.take() ?? '/new', { replace: true });
       return;
     }
     const errorCode = errorCodeFor(result.reason);

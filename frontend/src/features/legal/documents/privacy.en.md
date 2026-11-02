@@ -166,13 +166,14 @@ Pumpkit stores a few things in your browser. Some are strictly necessary for Pum
 
 ### Strictly necessary {#cookies-necessary}
 
-| Name                                                                             | Kind          | Purpose                                                     | Lifetime                               |
-| -------------------------------------------------------------------------------- | ------------- | ----------------------------------------------------------- | -------------------------------------- |
-| `__Host-refresh_token`                                                           | Cookie        | Keeps you signed in to your Session                         | 30 days                                |
-| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookies       | Protect Google sign-in from forgery                         | 10 minutes                             |
-| `pumpkit:session`                                                                | Local storage | Holds the access token of your current Session              | Until you sign out or the Session ends |
-| `pumpkit:theme`                                                                  | Local storage | Remembers whether you chose the light, dark or system theme | Until you clear it                     |
-| `pumpkit:analytics-consent`                                                      | Local storage | Remembers whether you gave Analytics consent                | Until you clear it                     |
+| Name                                                                             | Kind          | Purpose                                                                             | Lifetime                               |
+| -------------------------------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------- | -------------------------------------- |
+| `__Host-refresh_token`                                                           | Cookie        | Keeps you signed in to your Session                                                 | 30 days                                |
+| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookies       | Protect Google sign-in from forgery                                                 | 10 minutes                             |
+| `pumpkit:session`                                                                | Local storage | Holds the access token of your current Session                                      | Until you sign out or the Session ends |
+| `pumpkit:theme`                                                                  | Local storage | Remembers whether you chose the light, dark or system theme                         | Until you clear it                     |
+| `pumpkit:analytics-consent`                                                      | Local storage | Remembers whether you gave Analytics consent                                        | Until you clear it                     |
+| `pumpkit:return-to`                                                              | Local storage | Remembers the app connection you were signing in to approve, so you land back on it | Until your next sign-in                |
 
 ### Analytics, only with Analytics consent {#cookies-analytics}
 
