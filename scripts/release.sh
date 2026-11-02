@@ -2,10 +2,12 @@
 # Cuts a release from origin/main: checks the CHANGELOG, picks the version, opens and merges the Release PR, tags it, checks the images.
 # Usage: sh scripts/release.sh [--dry-run] [X.Y.Z], from any checkout or worktree. docs/releasing.md explains every stop.
 # RELEASE_POLL_SECONDS sets the pause between polls of GitHub; the tests set it to 0.
+# RELEASE_CHECKS_WAIT_SECONDS caps the wait for the PR's first check to be reported.
 set -eu
 
 scripts_dir=$(cd "$(dirname "$0")" && pwd)
 poll=${RELEASE_POLL_SECONDS:-15}
+checks_wait=${RELEASE_CHECKS_WAIT_SECONDS:-300}
 repo=pumpkit-io/pumpkit
 
 stop() {
@@ -15,6 +17,40 @@ stop() {
 
 step() {
   printf '\n==> %s\n' "$*"
+}
+
+review_status() {
+  gh api "repos/$repo/commits/$head/statuses" -q '[.[] | select(.context == "review")][0].state // ""'
+}
+
+# The status of the newest review run on $head, or nothing when it has none.
+review_run() {
+  gh run list --workflow sdlc-review-llm.yml --branch "$branch" --commit "$head" --json status -q '.[0].status // ""'
+}
+
+review_run_id() {
+  gh run list --workflow sdlc-review-llm.yml --branch "$branch" --commit "$head" --json databaseId -q '.[0].databaseId // ""'
+}
+
+is_admin() {
+  [ "$(gh api "repos/$repo" -q .permissions.admin)" = true ]
+}
+
+# Dispatches the LLM review on $head unless it has a final status, a run is still going, or the login isn't an admin.
+# A run that ended without a final status (cancelled, timed out, failed early) is dispatched again. Fails only if gh does.
+start_review() {
+  case $(review_status) in success | failure | error) return 0 ;; esac
+  case $(review_run) in "" | completed) ;; *) return 0 ;; esac
+  is_admin || return 0
+  before=$(review_run_id)
+  gh workflow run sdlc-review-llm.yml --ref "$branch" || return
+  # Until the new run is listed, the newest run on $head may be the dead one, which would read as a finished review.
+  tries=0
+  while [ "$tries" -lt 20 ]; do
+    [ "$(review_run_id || echo "$before")" = "$before" ] || return 0
+    sleep "$poll"
+    tries=$((tries + 1))
+  done
 }
 
 # Tags the merged release and checks its images; also how a run resumes after a merge that was not tagged.
@@ -162,30 +198,42 @@ if [ -z "$pr" ]; then
   pr=${url##*/}
 fi
 echo "PR #$pr"
+head=$(git -C "$dir" rev-parse HEAD)
+# The review takes as long as CI, so it runs alongside it; the Review step still waits for its status.
+start_review || true
 
 step "Checks"
-head=$(git -C "$dir" rev-parse HEAD)
+# Checks take a few seconds to register on a new PR, and gh pr checks --watch exits at once until they do.
+waited=0
+until [ "$(gh pr checks "$pr" --json name -q length 2>/dev/null || echo 0)" -gt 0 ]; do
+  [ "$waited" -lt "$checks_wait" ] ||
+    stop "no checks were reported on PR #$pr within $checks_wait seconds" "Check that GitHub Actions is running (gh pr checks $pr), then run this again."
+  sleep "$poll"
+  waited=$((waited + (poll > 0 ? poll : 1)))
+done
 gh pr checks "$pr" --watch --interval "$poll" >/dev/null 2>&1 || true
 checks=$(gh pr checks "$pr" --json name,bucket -q '.[] | select(.name != "review") | select(.bucket != "pass" and .bucket != "skipping") | .name')
 [ -z "$checks" ] ||
   stop "these checks on PR #$pr did not pass: $(echo "$checks" | tr '\n' ' ')" "Read them with gh pr checks $pr, fix the cause in the branch, and run it again."
 
 step "Review"
-state=$(gh api "repos/$repo/commits/$head/statuses" -q '[.[] | select(.context == "review")][0].state // ""')
+state=$(review_status)
 if [ "$state" != success ]; then
-  admin=$(gh api "repos/$repo" -q .permissions.admin)
-  [ "$admin" = true ] ||
+  is_admin ||
     stop "your gh login is not an admin, and only an admin can run the review" "Ask a maintainer to run: gh workflow run sdlc-review-llm.yml --ref $branch"
-  if [ -z "$state" ]; then
-    gh workflow run sdlc-review-llm.yml --ref "$branch" ||
-      stop "gh could not start the review workflow" "Run gh workflow run sdlc-review-llm.yml --ref $branch, then run this again."
-  fi
+  start_review ||
+    stop "gh could not start the review workflow" "Run gh workflow run sdlc-review-llm.yml --ref $branch, then run this again."
   waited=0
   while :; do
-    state=$(gh api "repos/$repo/commits/$head/statuses" -q '[.[] | select(.context == "review")][0].state // ""')
+    # The run is read before the status, so a completed run's final status is already visible.
+    # A failed poll, such as a network blip, reads as still running.
+    run=$(review_run) || run=
+    state=$(review_status) || state=
     case $state in
       success | failure | error) break ;;
     esac
+    [ "$run" != completed ] ||
+      stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run this again; it starts a new review."
     waited=$((waited + 1))
     [ "$waited" -lt 240 ] ||
       stop "the review status on PR #$pr did not finish within an hour" "Watch it with gh run list --workflow sdlc-review-llm.yml --branch $branch, then run this again."

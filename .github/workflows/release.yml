@@ -1,12 +1,15 @@
 name: Release
 # Pushing a tag vX.Y.Z publishes both images to GHCR, then a GitHub Release with that version's CHANGELOG section.
+# Running it by hand on any branch builds every image without pushing or releasing, to try a Dockerfile change.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   check:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -44,14 +47,18 @@ jobs:
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: sh scripts/release-notes.sh "$VERSION" || { [ "$PRERELEASE" = true ] && sh scripts/release-notes.sh Unreleased; }
 
+  # One native runner per platform, so no platform builds under QEMU; each pushes its image by digest for the merge job.
   images:
     needs: check
-    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && (needs.check.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
+        image: [pumpkit-backend, pumpkit-web]
+        platform: [linux/amd64, linux/arm64]
         include:
           - image: pumpkit-backend
             context: backend
@@ -59,34 +66,90 @@ jobs:
           - image: pumpkit-web
             context: .
             file: infra/web/Dockerfile
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      PUSH: ${{ github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - if: env.PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/pumpkit-io/${{ matrix.image }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ghcr.io/pumpkit-io/${{ matrix.image }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ env.PUSH }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+      - if: env.PUSH == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - if: env.PUSH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+
+  # Tags X.Y.Z, plus latest unless the tag is a pre-release, on one manifest list holding both platforms.
+  manifests:
+    needs: images
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [pumpkit-backend, pumpkit-web]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Tags X.Y.Z, plus latest unless the tag is a pre-release.
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/pumpkit-io/${{ matrix.image }}
           tags: type=semver,pattern={{version}}
-      - uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ghcr.io/pumpkit-io/${{ matrix.image }}
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$IMAGE:$DOCKER_METADATA_OUTPUT_VERSION"
 
   release:
-    needs: [check, images]
+    needs: [check, manifests]
     runs-on: ubuntu-latest
     permissions:
       contents: write
