@@ -85,7 +85,7 @@ else
   fail "/robots.txt: expected 200 with '$robots_rule', got $code $(head -c 200 "$body")"
 fi
 
-# AI apps fetch /favicon.ico for a connector's icon without reading the HTML; missing, the SPA answers it.
+# AI apps fetch /favicon.ico directly; without the file, the SPA fallback answers with index.html.
 get /favicon.ico
 case "$code $content_type" in
   "200 image/"*) pass "/favicon.ico is served as an image" ;;

@@ -20,12 +20,15 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 - On wide screens, the landing page's video now lines up with the top of the headline beside it instead of sitting a few pixels too high.
 - The GitHub button in the landing page's nav bar no longer shows the repository's star count, and it is the same size as the button beside it.
 - The landing page headline now reads "Run your X on autopilot with" and rotates through Claude Code, Codex, Cursor and Gemini CLI, each with its logo, and the text under it now says Pumpkit writes and schedules your posts and can be used in the web app or through the MCP. The landing page buttons are white with an arrow that appears on hover. Where your Instance offers a Trial, they read "Start a 7-day trial for $0" and "Start for $0", with your Trial's length and Plan currency; otherwise they read "Get started".
-- The browser tab and the Pumpkit connector in AI apps such as Claude now show the pumpkin mascot instead of a placeholder square, and `/favicon.ico` is served as an icon instead of the app's HTML.
 - **Upgrade notes:** in this changelog now mark only a manual step an upgrade needs; an entry with nothing to do by hand says so in its prose. Self-hosters can print just the entries that need a step with `sh scripts/release-notes.sh --manual-steps X.Y.Z`, or `FROM..TO` for the releases between two versions.
 
 ### Removed
 
 - API keys are removed: signing in is now the only way to connect an app. The MCP endpoint accepts only the access tokens an app gets by signing in and refuses a `pumpkit_` key with a 401, and the `/api/v1/api-keys` routes are gone. **Upgrade notes:** the backend applies a database migration when it starts that deletes every API key and its table, so existing keys stop working. In each MCP client, remove the Pumpkit server you added with an `Authorization: Bearer pumpkit_…` header and add it again without the header, then sign in when asked. Claude Code doesn't fall back to sign-in while the old header is configured.
+
+### Fixed
+
+- The browser tab, and AI apps such as Claude where they show Pumpkit, now show the pumpkin mascot instead of a placeholder square, and `/favicon.ico` is served as an icon instead of the app's HTML.
 
 ## [0.5.0] - 2026-11-01
 
