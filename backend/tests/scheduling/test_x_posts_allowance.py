@@ -393,8 +393,8 @@ async def test_scheduling_after_a_cancelled_subscription_ends_is_refused(
     assert after.status_code == 409
     assert after.json() == {
         "detail": (
-            "Your subscription ends on 14 October, so nothing can publish after that. "
-            "Pick an earlier time, or renew your subscription in Settings."
+            "Your subscription ends on 14 October at 09:00 UTC, so a post can't publish then "
+            "or later. Pick an earlier time, or renew with Manage subscription in Settings."
         ),
         "url": SETTINGS_URL,
         "code": "SUBSCRIPTION_ENDS",
@@ -414,6 +414,8 @@ async def test_moving_a_scheduled_post_past_a_cancelled_subscription_is_refused(
 
     assert moved.status_code == 409
     assert moved.json()["code"] == "SUBSCRIPTION_ENDS"
+    [kept] = await scheduled_posts(client)
+    assert kept["publish_at"] == scheduled["publish_at"]
 
 
 async def test_editing_the_text_of_a_post_already_past_the_end_is_not_refused(

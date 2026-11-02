@@ -57,7 +57,7 @@ class Allowance:
     limits: Limits
     way_out: Optional[WayOut]
     # When a cancelled Subscription ends; None while it renews.
-    ends_at: Optional[datetime] = None
+    ends_at: Optional[datetime]
 
 
 @dataclass(frozen=True)
@@ -256,8 +256,9 @@ class SubscriptionEnds(ConflictError):
 
     def __init__(self, ends_at: datetime) -> None:
         super().__init__(
-            f"Your subscription ends on {_day(ends_at)}, so nothing can publish after that. "
-            "Pick an earlier time, or renew your subscription in Settings.",
+            f"Your subscription ends on {_day(ends_at)} at {ends_at:%H:%M} UTC, so a post can't "
+            "publish then or later. Pick an earlier time, or renew with Manage subscription "
+            "in Settings.",
             fix_page=SETTINGS_PAGE,
             code="SUBSCRIPTION_ENDS",
         )
