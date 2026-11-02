@@ -21,7 +21,7 @@ backend/src/pumpkit/
   scheduling/      Scheduled posts: rules, publish steps, publishing, and the publisher process
 backend/tests/     pytest suite, mirroring the package tree; fixtures in conftest.py
 frontend/src/
-  features/        self-contained feature modules (account, analyticsConsent, apiKeys, billing, inspirationAuthors, instance, legal, onboarding, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
+  features/        self-contained feature modules (account, analyticsConsent, apiKeys, billing, connectedApps, inspirationAuthors, instance, legal, onboarding, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives, the Settings card
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
@@ -47,7 +47,7 @@ Every other page renders inside `pages/AppLayout.tsx` (the providers, the sideba
 - `/posts/scheduled`, `/posts/drafts`, `/posts/published` and `/posts/failed` (`pages/Posts.tsx`): one tab per status, built from `features/posts/list/`. `/posts` opens the Scheduled tab.
 - `/posts/:id` (`pages/PostPage.tsx`): the Text card (`features/posts/TextCard.tsx`) and, pinned below it, one dock per status from `features/posts/panels/`; the "Post to…" dialog is `features/posts/postTo/` and the inline edit of a Scheduled post is `features/posts/edit/`.
 - `/persona` (`pages/Persona.tsx`): the Inspiration authors, `features/inspirationAuthors/`.
-- `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile), `features/xConnection/` (X account), `features/apiKeys/` and `features/theme/` (Appearance).
+- `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile), `features/xConnection/` (X account), `features/connectedApps/` (Connect AI apps), `features/apiKeys/` and `features/theme/` (Appearance).
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
 
@@ -125,9 +125,9 @@ A mediator serves both the web routes and the MCP tools, so it refuses with one 
 
 ### Add an MCP tool
 
-Claude Code reaches Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 0012; the user guide is `docs/claude-code.md`). A tool lives in its area's `tools.py`, beside the router, and calls only that area's mediator, as the router does. `authors/tools.py` is the example to copy.
+AI apps reach Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 0012), signed in with OAuth (ADR 0020; the user guide is `docs/mcp.md`). A tool lives in its area's `tools.py`, beside the router, and calls only that area's mediator, as the router does. `authors/tools.py` is the example to copy.
 
-1. Write the tool as an async function whose first parameter is `call: ToolCall[User]` (`core/mcp_tools.py`), followed by the tool's arguments. Its name is the tool's name (a snake_case verb), its docstring is the description Claude Code reads, its arguments become the input schema, and its return type, a response schema, becomes the output schema. `call.user`, `call.db` and `call.now` are what a route gets from `get_current_user`, `get_async_db` and `clock()`; `await call.provide(get_x_reader)` gives any other provider, honouring the app's dependency overrides, so the tests' fakes apply.
+1. Write the tool as an async function whose first parameter is `call: ToolCall[User]` (`core/mcp_tools.py`), followed by the tool's arguments. Its name is the tool's name (a snake_case verb), its docstring is the description the app reads, its arguments become the input schema, and its return type, a response schema, becomes the output schema. `call.user`, `call.db` and `call.now` are what a route gets from `get_current_user`, `get_async_db` and `clock()`; `await call.provide(get_x_reader)` gives any other provider, honouring the app's dependency overrides, so the tests' fakes apply.
 2. Validate input as the route does: build the route's request schema (`InspirationAuthorAddRequest(handle=handle)`) so its checks and messages are the same.
 3. Add an `McpTool(fn, rate=..., annotations=...)` to the module's `TOOLS` list. Use the web route's rate where it has one, through the area's `WRITE_RATE` in `schemas.py`, and `READ_ONLY_RATE` for tools that only read. Pick `READ_ONLY`, `ADDITIVE` or `DESTRUCTIVE`: clients ask the User before a destructive tool, and treat a tool without annotations as destructive. Every tool is refused to a User who isn't Subscribed (ADR 0018). A browser-only tool just answers with a web app link, as a `LinkToolResponse` (`core/schemas.py`): `connect_x` in `scheduling/tools.py` and `manage_subscription` in `billing/tools.py`.
 

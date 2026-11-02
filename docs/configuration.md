@@ -31,7 +31,7 @@ None of these is a setting. A trailing slash on `PUBLIC_URL` is dropped.
 | Stripe Checkout return | `PUBLIC_URL/billing/success` and `PUBLIC_URL/billing/cancelled` | Where Checkout returns after paying or cancelling. |
 | Stripe customer portal return | `PUBLIC_URL/billing` | Where the customer portal returns. |
 | Stripe webhook | `PUBLIC_URL/api/v1/stripe/webhook` | Register it as the webhook endpoint in Stripe. |
-| MCP endpoint | `PUBLIC_URL/api/v1/mcp` | Claude Code and other MCP clients connect to it with an API key; the `claude mcp add` command in Settings' API keys card names it. |
+| MCP endpoint | `PUBLIC_URL/api/v1/mcp` | AI apps connect to it by signing in with OAuth, with nothing to configure: Pumpkit is its own authorization server and serves its discovery documents under `PUBLIC_URL/.well-known/`. Settings' Connect AI apps card shows this URL. Hosted apps such as claude.ai and ChatGPT reach it from their own servers, so for them `PUBLIC_URL` must be reachable from the internet over HTTPS. |
 | Canonical and social URLs | `PUBLIC_URL/` | The web container writes them into `index.html`'s canonical, Open Graph, Twitter card and JSON-LD tags, and into `sitemap.xml`, when it starts. |
 
 The scheme of `PUBLIC_URL` also decides the sign-in cookies. With `https` they are `Secure`, and the refresh cookie is named `__Host-refresh_token`; with `http` they are plain and the refresh cookie is `refresh_token`, because Safari drops `Secure` cookies on `http://localhost`.
