@@ -1212,6 +1212,7 @@ dependencies = [
 dev = [
     { name = "aiosmtpd" },
     { name = "aiosqlite" },
+    { name = "httpx2" },
     { name = "import-linter" },
     { name = "pyright" },
     { name = "pytest" },
@@ -1232,6 +1233,7 @@ requires-dist = [
     { name = "google-auth-oauthlib", specifier = ">=1.2.1" },
     { name = "greenlet", specifier = ">=3.2.4" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.13.1" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.15" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "jinja2", specifier = ">=3.1.6" },

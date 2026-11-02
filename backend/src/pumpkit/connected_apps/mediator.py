@@ -521,6 +521,10 @@ async def _refresh(
     presented, connection = found
     if connection.client_id != client.id or connection.revoked_at is not None:
         raise unknown
+    if connection.resource != settings.mcp_url():
+        # The Instance moved and the MCP endpoint refuses these tokens: make the app sign in again.
+        await connections.revoke(db, connection.id, now=now)
+        raise OAuthError("invalid_grant", "The app was connected under another URL. Sign in again.")
     rotated_at = presented.rotated_at
     if rotated_at is not None and as_utc(rotated_at) + REFRESH_REUSE_GRACE < now:
         # Someone holds a copy of a token exchanged a while ago: likely theft.
@@ -570,6 +574,28 @@ async def revoke(
             await tokens.revoke_access_token(db, found_access[0], now=now)
     await db.commit()
     return Response(status_code=200, headers=NO_STORE)
+
+
+async def authenticate_mcp_token(db: AsyncSession, secret: str, *, now: datetime) -> Optional[str]:
+    """
+    The id of the User an access token acts for, recording that their app used it; None for a
+    token that is unknown, expired or revoked, whose app is disconnected, that was issued for
+    another resource, or whose User is gone or Suspended.
+    """
+    found = await tokens.find_access_token(db, secret)
+    if found is None:
+        return None
+    access_token, connection = found
+    if access_token.revoked_at is not None or as_utc(access_token.expires_at) <= now:
+        return None
+    # RFC 8707: a token for another resource, such as this Instance under an old URL, is refused.
+    if connection.revoked_at is not None or connection.resource != settings.mcp_url():
+        return None
+    if not await _may_connect(db, connection.user_id):
+        return None
+    await connections.record_use(db, connection, now=now)
+    await db.commit()
+    return connection.user_id
 
 
 async def _may_connect(db: AsyncSession, user_id: str) -> bool:

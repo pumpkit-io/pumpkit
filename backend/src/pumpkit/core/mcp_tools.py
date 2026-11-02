@@ -45,7 +45,7 @@ class McpTool:
 @dataclass(frozen=True)
 class ToolCall(Generic[UserT]):
     """
-    What a tool gets about its call: the User its API key acts for, the call's database session
+    What a tool gets about its call: the User its credential acts for, the call's database session
     and the time, read once like a route's `clock()`.
     """
 

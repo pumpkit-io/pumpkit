@@ -1,9 +1,7 @@
 import pytest
-from sqlalchemy import select
 
-from pumpkit.connected_apps.models import OAuthAccessToken
-from pumpkit.core.security import hash_token
 from tests.connected_apps.conftest import REVOKE, approved_code, exchange, refresh, register
+from tests.mcp_client import McpClient
 
 pytestmark = pytest.mark.usefixtures("sells_no_plans")
 
@@ -41,18 +39,16 @@ async def test_revoking_a_rotated_refresh_token_disconnects_the_app_too(app, oau
     assert (await refresh(app, oauth_client, rotated["refresh_token"])).status_code == 400
 
 
-async def test_revoking_the_access_token_revokes_only_it(app, oauth_client, tokens, db):
+async def test_revoking_the_access_token_revokes_only_it(app, oauth_client, tokens):
     await revoke(app, oauth_client, tokens["access_token"], token_type_hint="access_token")
 
-    access = (
-        await db.execute(
-            select(OAuthAccessToken).where(
-                OAuthAccessToken.token_hash == hash_token(tokens["access_token"])
-            )
-        )
-    ).scalar_one()
-    assert access.revoked_at is not None
-    assert (await refresh(app, oauth_client, tokens["refresh_token"])).status_code == 200
+    refused = await McpClient(app, tokens["access_token"]).send("tools/list")
+    assert refused.status_code == 401
+    assert 'error="invalid_token"' in refused.headers["www-authenticate"]
+    refreshed = await refresh(app, oauth_client, tokens["refresh_token"])
+    assert refreshed.status_code == 200
+    renewed = McpClient(app, refreshed.json()["access_token"])
+    assert (await renewed.send("tools/list")).status_code == 200
 
 
 async def test_a_wrong_hint_still_finds_the_token(app, oauth_client, tokens):
