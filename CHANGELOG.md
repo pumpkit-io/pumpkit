@@ -8,6 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
+- Per-IP rate limits now key on each caller's real address, where they keyed on the bundled web server's. With your own proxy in front of the web server, set `TRUSTED_PROXIES` (and `FORWARDED_ALLOW_IPS` if the proxy has a public address); see "A proxy in front of the web server" in the self-hosting guide. Nothing changes on upgrade unless you run such a proxy.
 - The landing page headline now also rotates through Claude and ChatGPT, and Claude Code and Codex show their own logos instead of the Claude and ChatGPT ones.
 - The landing page's sign-up buttons no longer flash "Get started" before switching to the trial offer; they stay blank until the offer loads.
 - On wide screens, the landing page's video now lines up with the top of the headline beside it instead of sitting a few pixels too high.
