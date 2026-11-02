@@ -31,6 +31,7 @@ The stops, and what to do:
 - **Nothing to release:** `## [Unreleased]` has no entries. Stop there.
 - **Not an admin:** only a repository admin can run the review. Ask a maintainer to run `gh workflow run sdlc-review-llm.yml --ref release/vX.Y.Z`, then run the command again.
 - **No checks reported:** none of the PR's checks registered within five minutes. Check that GitHub Actions is running (`gh pr checks <PR>`), then run the command again.
+- **The review run ended without a final status:** it was cancelled, timed out or failed before reviewing. Read it with `gh run list --workflow sdlc-review-llm.yml --branch release/vX.Y.Z`, fix the cause, and run the command again; it starts a new review.
 - **A check or the review failed:** read it with `gh pr checks <PR>` or the review's comment on the PR, push a fix to the release branch (a new commit needs a new review run) and run the command again.
 - **The merge was refused:** `gh pr view <PR>` says why, usually a required check still pending.
 

@@ -110,7 +110,6 @@ jobs:
           name: digests-${{ matrix.image }}-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
-          retention-days: 1
 
   # Tags X.Y.Z, plus latest unless the tag is a pre-release, on one manifest list holding both platforms.
   manifests:

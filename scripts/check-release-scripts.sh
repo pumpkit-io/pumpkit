@@ -409,16 +409,16 @@ case "$1 $2" in
         [ "$polls" -ge "$GH_CHECKS_AFTER" ] || { echo "no checks reported on the 'release' branch" >&2; exit 1; }
         echo 3 ;;
     esac ;;
-  "run list") ;;
-  "workflow run") printf failure >"$GH_REVIEW" ;;
+  "run list") cat "$GH_RUN" ;;
+  "workflow run") printf failure >"$GH_REVIEW"; printf queued >"$GH_RUN" ;;
   "api "*/statuses) cat "$GH_REVIEW" ;;
   "api "*) echo true ;;
 esac
 STUB
 chmod +x "$work/prbin/gh"
-export GH_LOG="$work/ghlog" GH_POLLS="$work/polls" GH_REVIEW="$work/review"
+export GH_LOG="$work/ghlog" GH_POLLS="$work/polls" GH_REVIEW="$work/review" GH_RUN="$work/run"
 
-# Usage: release_to_review CHECKS_AFTER WAIT_SECONDS. Runs release.sh in a fresh repo until it stops.
+# Usage: release_to_review CHECKS_AFTER WAIT_SECONDS [REVIEW_STATUS] [REVIEW_RUN_STATUS]. Runs release.sh in a fresh repo until it stops.
 release_to_review() {
   release_repo "$work/u-fixed"
   mkdir scripts
@@ -427,7 +427,8 @@ release_to_review() {
   git commit -q -m scripts
   git push -q origin main
   rm -f "$GH_LOG" "$GH_POLLS"
-  : >"$GH_REVIEW"
+  printf '%s' "${3:-}" >"$GH_REVIEW"
+  printf '%s' "${4:-}" >"$GH_RUN"
   GH_CHECKS_AFTER=$1 RELEASE_CHECKS_WAIT_SECONDS=$2 RELEASE_POLL_SECONDS=0 PATH="$work/prbin:$PATH" run sh "$scripts/release.sh"
 }
 
@@ -450,6 +451,21 @@ if [ "$status" -ne 0 ] && grep -q '^STOPPED: no checks were reported on PR #5' "
   pass "release stops when no checks are reported in time"
 else
   fail "expected a no-checks stop: status $status, $(cat "$err")"
+fi
+
+# A rerun after a review run that died, leaving the status pending, starts a new one instead of waiting on the dead one.
+release_to_review 1 300 pending completed
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && grep -q '^workflow run sdlc-review-llm.yml' "$GH_LOG"; then
+  pass "release starts the review again when the last run ended without a final status"
+else
+  fail "expected a new review dispatch: status $status, $(cat "$err")"
+fi
+
+release_to_review 1 300 pending in_progress
+if ! grep -q '^workflow run' "$GH_LOG"; then
+  pass "release leaves a review run in progress alone"
+else
+  fail "expected no dispatch while a review runs: $(cat "$GH_LOG")"
 fi
 
 if [ "$failures" -ne 0 ]; then
