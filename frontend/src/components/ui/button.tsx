@@ -3,6 +3,9 @@ import { Slot } from '@radix-ui/react-slot';
 import { type VariantProps, cva } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
 
+const RAISED =
+  'text-white transition-[filter,transform] hover:brightness-90 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60';
+
 const buttonVariants = cva(
   'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-[color,background-color,border-color,filter] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
   {
@@ -10,9 +13,9 @@ const buttonVariants = cva(
       variant: {
         default:
           'bg-primary bg-primary-gradient text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.16),0_0_0_1px_hsl(var(--primary)),0_1px_2px_rgb(0_0_0/0.12)] hover:brightness-95 dark:hover:brightness-105 disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none',
-        // The primary gradient lifted off the page, darkening on hover and pressing in on click.
-        raised:
-          'bg-primary bg-primary-gradient text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.16),inset_0_-1px_2px_rgb(0_0_0/0.24),0_0_0_1px_hsl(var(--primary)/0.16),0_1px_1px_rgb(0_0_0/0.06),0_8px_16px_-8px_hsl(var(--primary)/0.64)] transition-[filter,transform] hover:brightness-90 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60',
+        // Lifted off the page, darkening on hover and pressing in on click.
+        raised: `${RAISED} bg-primary bg-primary-gradient shadow-[inset_0_1px_0_rgb(255_255_255/0.16),inset_0_-1px_2px_rgb(0_0_0/0.24),0_1px_1px_rgb(0_0_0/0.06),0_0_0_1px_hsl(var(--primary)/0.16),0_8px_16px_-8px_hsl(var(--primary)/0.64)]`,
+        raisedNeutral: `${RAISED} bg-[var(--raised-neutral)] shadow-[inset_0_1px_0_rgb(255_255_255/0.16),inset_0_-1px_2px_rgb(0_0_0/0.24),0_1px_1px_rgb(0_0_0/0.06),0_0_0_1px_rgb(0_0_0/0.16),0_8px_16px_-8px_rgb(0_0_0/0.5)]`,
         // The primary fill without the gradient, for pages that keep gradients off.
         solid:
           'bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100',

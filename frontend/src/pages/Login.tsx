@@ -91,7 +91,7 @@ export function Login() {
                 {offersGoogle && (
                   <>
                     <GoogleAuthButton
-                      variant="raised"
+                      variant="raisedNeutral"
                       className="h-11"
                       onError={() => setError("We couldn't start Google sign-in. Try again.")}
                     />
