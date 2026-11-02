@@ -373,6 +373,9 @@ async def approve_authorization(
     """Hand the app a code for the User's connection to it, reusing an unrevoked one."""
     hit_user_limit("approve_authorization", user.id, "20/minute")
     authorization, _ = await _get_pending(db, authorization_id, now=now)
+    # PUBLIC_URL changed while it was pending: approving would rebind the connection to the old URL.
+    if authorization.resource != settings.mcp_url():
+        raise NotFoundError(_REQUEST_GONE)
     connection = await connections.find_or_create(
         db,
         user_id=user.id,

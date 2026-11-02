@@ -5,10 +5,19 @@ from datetime import datetime, timedelta
 from sqlalchemy import and_, delete, exists, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization, OAuthClient
+from pumpkit.connected_apps.models import (
+    AppConnection,
+    OAuthAccessToken,
+    OAuthAuthorization,
+    OAuthClient,
+    OAuthRefreshToken,
+)
 
 UNUSED_CLIENT_AGE = timedelta(days=30)
 AUTHORIZATION_AGE = timedelta(days=1)
+EXPIRED_ACCESS_TOKEN_AGE = timedelta(days=1)
+EXPIRED_REFRESH_TOKEN_AGE = timedelta(days=90)
+REVOKED_CONNECTION_AGE = timedelta(days=90)
 
 
 async def purge_expired(db: AsyncSession, *, now: datetime) -> None:
@@ -16,6 +25,18 @@ async def purge_expired(db: AsyncSession, *, now: datetime) -> None:
     Run opportunistically from registration and authorize, as `auth.service.retention` runs
     on sign-in. Hosted apps register a client per connection, so unused ones pile up.
     """
+    await db.execute(
+        delete(OAuthAccessToken).where(OAuthAccessToken.expires_at < now - EXPIRED_ACCESS_TOKEN_AGE)
+    )
+    await db.execute(
+        delete(OAuthRefreshToken).where(
+            OAuthRefreshToken.expires_at < now - EXPIRED_REFRESH_TOKEN_AGE
+        )
+    )
+    # Their tokens and authorizations go with them by cascade, so the client purge below can then remove their clients.
+    await db.execute(
+        delete(AppConnection).where(AppConnection.revoked_at < now - REVOKED_CONNECTION_AGE)
+    )
     await db.execute(
         delete(OAuthAuthorization).where(OAuthAuthorization.created_at < now - AUTHORIZATION_AGE)
     )

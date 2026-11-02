@@ -68,6 +68,12 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 - **Perché:** per pubblicare sul tuo account X quando lo chiedi a Pumpkit.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
+### Connected app {#data-connected-apps}
+
+- **Quali dati:** per ogni app di intelligenza artificiale che autorizzi a usare Pumpkit per tuo conto, come Claude o Cursor: il nome, il sito web, il logo e l'indirizzo di ritorno che l'app comunica a Pumpkit, se la sua identità è verificata, quando l'hai collegata, quando ha usato Pumpkit l'ultima volta e quando l'hai scollegata. I token usati dall'app sono conservati solo come hash. Non vengono conservati indirizzi IP né user agent.
+- **Perché:** per permettere a ogni app che colleghi di usare Pumpkit a tuo nome, e per elencarle nelle Impostazioni, dove puoi scollegarne una in qualsiasi momento.
+- **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
+
 ### Fatturazione {#data-billing}
 
 - **Quali dati:** il tuo identificativo cliente Stripe e lo stato del tuo Abbonamento: Piano, stato e periodi di fatturazione. Stripe riceve il tuo nome e il tuo indirizzo email, e inserisci i dati di pagamento direttamente presso Stripe. I dati della tua carta non arrivano mai al Gestore.
@@ -119,6 +125,7 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 
 - **Contenuti dell'account** (il tuo profilo, l'identità Google, i Brief, i Feedback, le Versioni, gli Inspiration author, gli Scheduled post e la X connection): fino all'eliminazione del tuo account.
 - **Registrazioni delle Sessioni e dei Magic link:** 90 giorni dalla scadenza. Ciò include un Magic link richiesto da chi non ha mai creato un account.
+- **Connected app:** finché non scolleghi l'app o il tuo account non viene eliminato. I dati di un'app scollegata e i suoi token vengono eliminati 90 giorni dopo che l'hai scollegata, e un token scaduto entro 90 giorni dalla scadenza.
 - **Post pubblici degli Inspiration author:** finché almeno un Utente ha quell'autore tra i propri Inspiration author, oppure finché l'autore non si oppone.
 - **Dati di fatturazione conservati da Stripe e fatture:** 10 anni, come richiesto dalla normativa fiscale italiana.
 - **Eventi di analisi, eventi del server e segnalazioni di errore:** 30 giorni.
