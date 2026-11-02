@@ -54,9 +54,9 @@ _Avoid_: banned, inactive, deactivated
 The steps a User goes through once, after the Paywall and before the rest of Pumpkit opens: connecting X, then choosing a Persona. Each step counts as done when what it asks for exists. Once a User finishes Onboarding they never see it again, even if they later disconnect X or empty their Persona.
 _Avoid_: setup wizard, first run, welcome flow
 
-**API key**:
-A secret a User creates so a program, such as Claude Code, can use Pumpkit on their behalf. It is never a Sign-in method and never opens a Session. A User may hold several, each with a name, and can revoke any of them at any time.
-_Avoid_: token, access token, personal access token, credential
+**Connected app**:
+A program, such as Claude, ChatGPT or Claude Code, that a User allowed in their browser to use Pumpkit on their behalf. It is never a Sign-in method and never opens a Session. A User can disconnect any of them at any time, in Settings.
+_Avoid_: OAuth client, integration, connector, grant, authorized app
 
 ### Billing
 
