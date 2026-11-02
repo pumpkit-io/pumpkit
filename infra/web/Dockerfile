@@ -1,6 +1,7 @@
 # The web image: the built frontend served by Caddy, which also proxies /api to the backend.
 # Build it from the repo root: docker build -f infra/web/Dockerfile .
-FROM node:22-slim AS build
+# The build output is static files, so it builds once on the builder's own platform, not under emulation per target.
+FROM --platform=$BUILDPLATFORM node:22-slim AS build
 
 WORKDIR /app
 
