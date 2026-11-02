@@ -10,6 +10,9 @@ const buttonVariants = cva(
       variant: {
         default:
           'bg-primary bg-primary-gradient text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.16),0_0_0_1px_hsl(var(--primary)),0_1px_2px_rgb(0_0_0/0.12)] hover:brightness-95 dark:hover:brightness-105 disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none',
+        // The primary gradient lifted off the page, darkening on hover and pressing in on click.
+        raised:
+          'bg-primary bg-primary-gradient text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.16),inset_0_-1px_2px_rgb(114_36_13/0.48),0_0_0_1px_hsl(var(--primary)/0.16),0_1px_1px_rgb(0_0_0/0.06),0_8px_16px_-8px_hsl(var(--primary)/0.64)] transition-[filter,transform] hover:brightness-90 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60',
         // The primary fill without the gradient, for pages that keep gradients off.
         solid:
           'bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100',

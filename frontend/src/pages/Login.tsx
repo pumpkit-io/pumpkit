@@ -91,6 +91,7 @@ export function Login() {
                 {offersGoogle && (
                   <>
                     <GoogleAuthButton
+                      variant="raised"
                       className="h-11"
                       onError={() => setError("We couldn't start Google sign-in. Try again.")}
                     />
@@ -130,7 +131,7 @@ export function Login() {
                       {error}
                     </div>
                   )}
-                  <Button type="submit" className="h-11 w-full" disabled={loading || !email}>
+                  <Button type="submit" variant="raised" className="h-11 w-full" disabled={loading}>
                     {loading ? 'Sending…' : 'Sign in with email'}
                   </Button>
                 </form>

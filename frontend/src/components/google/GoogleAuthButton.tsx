@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '../ui/button';
+import { Button, type ButtonProps } from '../ui/button';
 import { authService } from '../../services/authService';
 import { cn } from '../../lib/utils';
 import { track } from '../../lib/analytics';
@@ -7,9 +7,14 @@ import { track } from '../../lib/analytics';
 interface GoogleAuthButtonProps {
   onError?: (error: Error) => void;
   className?: string;
+  variant?: ButtonProps['variant'];
 }
 
-export function GoogleAuthButton({ onError, className }: GoogleAuthButtonProps) {
+export function GoogleAuthButton({
+  onError,
+  className,
+  variant = 'outline',
+}: GoogleAuthButtonProps) {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleAuth = async () => {
@@ -33,7 +38,7 @@ export function GoogleAuthButton({ onError, className }: GoogleAuthButtonProps) 
     <Button
       onClick={handleGoogleAuth}
       disabled={loading}
-      variant="outline"
+      variant={variant}
       className={cn('w-full justify-center rounded-lg', className)}
     >
       {loading ? (

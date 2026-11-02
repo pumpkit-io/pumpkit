@@ -113,6 +113,14 @@ describe('the sign-in page', () => {
     expect(screen.getByRole('button', { name: 'Sign in with email' })).toBeInTheDocument();
   });
 
+  it('sends no magic link while the email field is empty', () => {
+    renderLogin('/login');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
+
+    expect(authService.requestMagicLink).not.toHaveBeenCalled();
+  });
+
   it('says the site does not accept an email the Sign-up allowlist refuses', async () => {
     vi.mocked(authService.requestMagicLink).mockRejectedValueOnce({
       response: { status: 403, data: { detail: 'email_not_allowed' } },
