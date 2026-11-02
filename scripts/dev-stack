@@ -23,29 +23,17 @@ safe_mode_env() {
 # Emulators, as "<service> <path that answers 200>".
 EMULATORS=("google /.well-known/openid-configuration" "stripe /v1/customers")
 
-# compose.dev.yml reads this after .env, so only this stack's backend sees the overrides, and the shell's variables can't.
-EMULATOR_ENV_FILE=".sdlc/dev-stack/emulators.env"
-
-# The emulate service reads the webhook target and secret; the backend gets the Emulator URLs and throwaway
-# credentials, so .env's real keys never reach an Emulator.
+# compose.emulators.yml hands these to the backend over .env's, so .env's real keys never reach an Emulator.
 emulator_env() {
-  local google_issuer google_api stripe_api
+  # Assign before export: export would hide a failed command substitution from set -e.
+  GOOGLE_ISSUER=$(emulator_url google)
+  GOOGLE_API_URL=$(b_emulator_api_url google)
+  STRIPE_API_URL=$(b_emulator_api_url stripe)
+  export GOOGLE_ISSUER GOOGLE_API_URL STRIPE_API_URL
+  export GOOGLE_CLIENT_ID="pumpkit-dev" GOOGLE_CLIENT_SECRET="pumpkit-dev-secret"
+  export STRIPE_SECRET_KEY="sk_test_dev" STRIPE_PUBLISHABLE_KEY="pk_test_dev"
   export STRIPE_WEBHOOK_URL="http://backend:8000/api/v1/stripe/webhook" STRIPE_WEBHOOK_SECRET="whsec_dev"
-  google_issuer=$(emulator_url google) || exit 1
-  google_api=$(b_emulator_api_url google) || exit 1
-  stripe_api=$(b_emulator_api_url stripe) || exit 1
-  cat >"$ROOT/$EMULATOR_ENV_FILE" <<EOF
-GOOGLE_ISSUER=$google_issuer
-GOOGLE_API_URL=$google_api
-GOOGLE_CLIENT_ID=pumpkit-dev
-GOOGLE_CLIENT_SECRET=pumpkit-dev-secret
-STRIPE_API_URL=$stripe_api
-STRIPE_SECRET_KEY=sk_test_dev
-STRIPE_PUBLISHABLE_KEY=pk_test_dev
-STRIPE_WEBHOOK_SECRET=$STRIPE_WEBHOOK_SECRET
-BILLING_PLAN_KEYS='["pumpkit_pro_monthly","pumpkit_pro_yearly"]'
-BILLING_TOP_UP_KEY=pumpkit_top_up
-EOF
+  export BILLING_PLAN_KEYS='["pumpkit_pro_monthly","pumpkit_pro_yearly"]' BILLING_TOP_UP_KEY="pumpkit_top_up"
 }
 
 # Every route change would otherwise rewrite /etc/hosts, which needs root.
@@ -175,6 +163,8 @@ wait_healthy() {
 # Strategy B: Docker Compose behind portless alias, one Compose project per Slug.
 
 B_COMPOSE_FILE="compose.dev.yml"
+# Only this script passes it, so a plain compose.dev.yml run never points the backend at an Emulator.
+B_EMULATORS_COMPOSE_FILE="compose.emulators.yml"
 B_WEB_SERVICE="frontend"
 B_WEB_PORT=5173
 # An empty host port lets Docker pick a free one on 127.0.0.1, so stacks never collide.
@@ -194,7 +184,8 @@ b_emulate_env() {
 # The emulators profile keeps plain `docker compose -f compose.dev.yml up` free of Emulators.
 b_compose() {
   b_emulate_env
-  docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/$B_COMPOSE_FILE" --profile emulators "$@"
+  docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/$B_COMPOSE_FILE" -f "$ROOT/$B_EMULATORS_COMPOSE_FILE" \
+    --profile emulators "$@"
 }
 
 b_service_alive() { [ -n "$(b_compose ps -q --status running "$1" 2>/dev/null)" ]; }
@@ -268,7 +259,6 @@ b_remove_routes() {
 b_down() {
   b_compose down >&2
   b_remove_routes
-  rm -f "$ROOT/$EMULATOR_ENV_FILE"
 }
 
 b_destroy() {

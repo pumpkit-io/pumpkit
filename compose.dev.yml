@@ -20,7 +20,7 @@ services:
       interval: 10s
       timeout: 5s
 
-  # Google sign-in and Stripe Emulators, one per stack; only scripts/dev-stack starts them.
+  # Google sign-in and Stripe Emulators, one per stack; only scripts/dev-stack starts them, with compose.emulators.yml.
   emulate:
     build:
       context: .
@@ -51,11 +51,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: /app/start.sh
-    # scripts/dev-stack writes the second file: its Emulator URLs and throwaway credentials win over .env's.
-    env_file: &dev-backend-env-files
-      - .env
-      - path: .sdlc/dev-stack/emulators.env
-        required: false
+    env_file: .env
     # The dev stack always runs locally against its own Postgres, behind the Vite dev server.
     environment: &dev-backend-environment
       ENV: local
@@ -82,7 +78,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: python -m pumpkit.scheduling.publisher
-    env_file: *dev-backend-env-files
+    env_file: .env
     environment: *dev-backend-environment
     volumes:
       - ./backend:/app

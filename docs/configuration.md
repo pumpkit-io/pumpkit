@@ -170,7 +170,7 @@ These rarely need changing. `.env.example` lists only `APP_NAME` and `LOG_LEVEL`
 | --- | --- |
 | `APP_NAME` | Brand name used in emails, server-side copy and the UI, which reads it from `GET /api/v1/instance`. Defaults to `Pumpkit`. |
 | `LOG_LEVEL` | Python log level. Defaults to `INFO`. |
-| `ENV` | `prod` (default) or `local`. It tags each PostHog event with `env`, so one PostHog project can keep environments apart, and with `prod` the backend refuses to start when any Emulator URL below is set. The dev stack sets `local`. |
+| `ENV` | `prod` (default) or `local`. It tags each PostHog event with `env`, so one PostHog project can keep environments apart, and with `prod` the backend refuses to start when any emulator URL below is set. The dev stack sets `local`. |
 | `JWT_ALGORITHM` | Signing algorithm. Defaults to `HS256`. |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime. Defaults to 30. |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime. Defaults to 30. |
@@ -186,6 +186,6 @@ These rarely need changing. `.env.example` lists only `APP_NAME` and `LOG_LEVEL`
 | Variable | Meaning |
 | --- | --- |
 | `VITE_BYPASS_AUTH` | `true` makes the Vite dev server treat every route as authenticated. Ignored in production builds. |
-| `GOOGLE_ISSUER`, `GOOGLE_API_URL` | Point Google sign-in at an Emulator; set both or neither. `GOOGLE_ISSUER` is the browser-facing URL and the issuer ID tokens must name; `GOOGLE_API_URL` is where the backend exchanges codes and fetches certs. Unset, sign-in reaches Google itself. `scripts/dev-stack` sets both. |
-| `STRIPE_API_URL` | Points the Stripe SDK at an Emulator. Unset, billing reaches Stripe itself. `scripts/dev-stack` sets it. |
+| `GOOGLE_ISSUER`, `GOOGLE_API_URL` | Point Google sign-in at an emulator; set both or neither. `GOOGLE_ISSUER` is the browser-facing URL and the issuer ID tokens must name; `GOOGLE_API_URL` is where the backend exchanges codes and fetches certs. Unset, sign-in reaches Google itself. `scripts/dev-stack` sets both. |
+| `STRIPE_API_URL` | Points the Stripe SDK at an emulator. Unset, billing reaches Stripe itself. `scripts/dev-stack` sets it. |
 | `API_PROXY_TARGET` | Where the Vite dev server proxies `/api`. Defaults to `http://localhost:8000`; `compose.dev.yml` sets `http://backend:8000`. Not read from `.env`. |
