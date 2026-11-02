@@ -70,18 +70,20 @@ function Destination() {
 
 function renderCallback(path: string, page: ReactElement, fragment: string) {
   render(
-    <MemoryRouter
-      initialEntries={['/login', `${path}${fragment}`]}
-      initialIndex={1}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
-      <Routes>
-        <Route path={path} element={page} />
-        <Route path="/new" element={<Destination />} />
-        <Route path="/login" element={<Destination />} />
-        <Route path="/oauth/consent" element={<Destination />} />
-      </Routes>
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter
+        initialEntries={['/login', `${path}${fragment}`]}
+        initialIndex={1}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path={path} element={page} />
+          <Route path="/new" element={<Destination />} />
+          <Route path="/login" element={<Destination />} />
+          <Route path="/oauth/consent" element={<Destination />} />
+        </Routes>
+      </MemoryRouter>
+    </ThemeProvider>,
   );
 }
 

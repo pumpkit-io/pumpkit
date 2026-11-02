@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { Login } from './Login';
 import { authService } from '@/services/authService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 
@@ -14,12 +15,14 @@ vi.mock('@/services/authService', () => ({
 function renderLogin(path: string, instance: Instance = SELLS_PLANS) {
   render(
     <InstanceProvider instance={instance}>
-      <MemoryRouter
-        initialEntries={[path]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <Login />
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter
+          initialEntries={[path]}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <Login />
+        </MemoryRouter>
+      </ThemeProvider>
     </InstanceProvider>,
   );
 }
@@ -45,12 +48,14 @@ describe('the sign-in page', () => {
     ];
     const messages = codes.map((code) => {
       const { unmount } = render(
-        <MemoryRouter
-          initialEntries={[`/login?error=${code}`]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <Login />
-        </MemoryRouter>,
+        <ThemeProvider>
+          <MemoryRouter
+            initialEntries={[`/login?error=${code}`]}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            <Login />
+          </MemoryRouter>
+        </ThemeProvider>,
       );
       const text = screen.getByRole('alert').textContent;
       unmount();

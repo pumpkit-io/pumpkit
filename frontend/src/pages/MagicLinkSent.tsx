@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, MailCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { Brand } from '@/components/brand/Brand';
 import { useInstance } from '@/features/instance/useInstance';
-import { CompanyFooter } from '@/features/legal/CompanyFooter';
+import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
+import { AUTH_HEADING_CLASS, AuthShell } from './layout/AuthShell';
 import { API_BASE_URL } from '@/lib/api';
 import { isGmailAddress } from '../lib/gmailSearch';
 
@@ -33,64 +33,55 @@ export function MagicLinkSent() {
   const showGmailButton = isGmailAddress(email);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <main className="flex flex-1 items-center justify-center p-4">
-        <div className="w-full max-w-[380px]">
-          <button
-            type="button"
-            aria-label="Back to sign in"
-            onClick={() => navigate('/login')}
-            className="mb-4 inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Sign in
-          </button>
-
-          <div className="rounded-xl border border-border bg-card">
-            <div className="flex items-center justify-center gap-2 border-b border-border p-6">
-              <Brand />
-            </div>
-
-            <div className="flex flex-col items-center gap-4 p-6 text-center">
-              <h1 className="text-3xl font-normal leading-none tracking-tight text-foreground">
-                Magic link sent
-              </h1>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Check your inbox for{' '}
-                <strong className="font-medium text-foreground">{email}</strong> and click the link
-                to sign in.
-              </p>
-
-              {showGmailButton && (
-                <Button asChild className="mt-2 w-full">
-                  <a href={INBOX_REDIRECT_URL} target="_blank" rel="noopener noreferrer">
-                    Open Gmail inbox
-                    <ArrowUpRight className="ml-1 h-4 w-4" />
-                  </a>
-                </Button>
-              )}
-            </div>
+    <AuthShell>
+      <div className="space-y-8">
+        <div className="space-y-4">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <MailCheck aria-hidden className="h-5 w-5" />
+          </span>
+          <div className="space-y-2">
+            <h1 className={AUTH_HEADING_CLASS}>Magic link sent</h1>
+            <p className="font-sans text-sm leading-relaxed text-muted-foreground">
+              Check your inbox for{' '}
+              <strong className="break-all font-medium text-foreground">{email}</strong> and click
+              the link to sign in.
+            </p>
           </div>
+        </div>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
+        {showGmailButton && (
+          <Button asChild className="w-full">
+            <a href={INBOX_REDIRECT_URL} target="_blank" rel="noopener noreferrer">
+              Open Gmail inbox
+              <ArrowUpRight aria-hidden className="ml-1 h-4 w-4" />
+            </a>
+          </Button>
+        )}
+
+        <div className="space-y-3 border-t border-border pt-5 font-sans text-sm text-muted-foreground">
+          <p>
             Can't find it? Check your spam folder.
             {support_email && (
               <>
                 {' '}
                 Still need help?{' '}
-                <a
-                  href={SUPPORT_CONTACT_URL}
-                  className="text-foreground underline underline-offset-4 hover:opacity-70 transition-opacity"
-                >
+                <a href={SUPPORT_CONTACT_URL} className={TEXT_LINK_CLASS}>
                   Contact support
                 </a>
                 .
               </>
             )}
           </p>
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="inline-flex items-center gap-1.5 rounded-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft aria-hidden className="h-4 w-4" />
+            Back to sign in
+          </button>
         </div>
-      </main>
-      <CompanyFooter />
-    </div>
+      </div>
+    </AuthShell>
   );
 }

@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
-import { CompanyFooter } from '@/features/legal/CompanyFooter';
+import { CircleAlert } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { AUTH_HEADING_CLASS, AuthShell } from './layout/AuthShell';
 import { useInstance } from '@/features/instance/useInstance';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
 import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
@@ -72,88 +74,77 @@ export function Login() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <main className="flex flex-1 items-center justify-center p-4">
-        <div className="w-full max-w-[380px]">
-          <div className="rounded-xl border border-border bg-card">
-            <div className="flex flex-col space-y-1.5 p-6">
-              <h1 className="text-3xl font-normal leading-none tracking-tight text-foreground">
-                Welcome back
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {offersGoogle ? 'Sign in with Google or a magic link' : 'Sign in with a magic link'}
-              </p>
-            </div>
-            <div className="p-6 pt-0">
-              <div className="grid gap-6">
-                {offersGoogle && (
-                  <>
-                    <GoogleAuthButton
-                      onError={() => setError("We couldn't start Google sign-in. Try again.")}
-                    />
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="h-px w-full shrink-0 bg-border" />
-                      </div>
-                      <div className="relative flex justify-center text-xs">
-                        <span className="bg-card px-2 text-muted-foreground">or</span>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <label
-                      className="text-sm font-medium leading-none text-foreground"
-                      htmlFor="email"
-                    >
-                      Email
-                    </label>
-                    <input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                      required
-                      disabled={loading}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                  </div>
-                  {error && (
-                    <div
-                      role="alert"
-                      className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
-                    >
-                      {error}
-                    </div>
-                  )}
-                  <Button type="submit" className="w-full" disabled={loading || !email}>
-                    {loading ? 'Sending…' : 'Email me a magic link'}
-                  </Button>
-                </form>
-                {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}
-                {hasTerms && (
-                  <p className="text-center text-xs leading-5 text-muted-foreground">
-                    By continuing, you agree to the{' '}
-                    <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
-                      Terms
-                    </Link>{' '}
-                    and acknowledge the{' '}
-                    <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
-                      Privacy Policy
-                    </Link>
-                    .
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
+    <AuthShell>
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <h1 className={AUTH_HEADING_CLASS}>Welcome back</h1>
+          <p className="font-sans text-sm text-muted-foreground">
+            {offersGoogle
+              ? 'Sign in with Google or a magic link sent to your email.'
+              : 'Sign in with a magic link sent to your email.'}
+          </p>
         </div>
-      </main>
-      <CompanyFooter />
-    </div>
+
+        <div className="space-y-5">
+          {offersGoogle && (
+            <>
+              <GoogleAuthButton
+                onError={() => setError("We couldn't start Google sign-in. Try again.")}
+              />
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                or
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            </>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="font-sans text-sm font-medium text-foreground" htmlFor="email">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                disabled={loading}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            {error && (
+              <div
+                role="alert"
+                className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+              >
+                <CircleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="min-w-0 break-words">{error}</span>
+              </div>
+            )}
+            <Button type="submit" className="w-full" disabled={loading || !email}>
+              {loading ? 'Sending…' : 'Email me a magic link'}
+            </Button>
+          </form>
+        </div>
+
+        {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}
+        {hasTerms && (
+          <p className="text-xs leading-5 text-muted-foreground">
+            By continuing, you agree to the{' '}
+            <Link to={TERMS_PATH} className={TEXT_LINK_CLASS}>
+              Terms
+            </Link>{' '}
+            and acknowledge the{' '}
+            <Link to={PRIVACY_PATH} className={TEXT_LINK_CLASS}>
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        )}
+      </div>
+    </AuthShell>
   );
 }

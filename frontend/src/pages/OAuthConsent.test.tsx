@@ -35,6 +35,7 @@ import { session } from '@/lib/session';
 import { oauthConsentService, type ConsentApp } from '@/services/oauthConsentService';
 import { onboardingService } from '@/services/onboardingService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
+import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import type { Instance } from '@/lib/instance';
 import { MagicLinkCallback } from './MagicLinkCallback';
@@ -81,18 +82,20 @@ const EXPIRES_AT = encodeURIComponent('2099-01-01T00:00:00+00:00');
 function signInWithMagicLink() {
   render(
     <InstanceProvider instance={SELLS_PLANS}>
-      <MemoryRouter
-        initialEntries={[
-          `/auth/magic-link/callback#access_token=tok&token_type=Bearer&expires_at=${EXPIRES_AT}`,
-        ]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <Routes>
-          <Route path="/auth/magic-link/callback" element={<MagicLinkCallback />} />
-          <Route path="/new" element={<Landing />} />
-          <Route path="/oauth/consent" element={<Landing />} />
-        </Routes>
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter
+          initialEntries={[
+            `/auth/magic-link/callback#access_token=tok&token_type=Bearer&expires_at=${EXPIRES_AT}`,
+          ]}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <Routes>
+            <Route path="/auth/magic-link/callback" element={<MagicLinkCallback />} />
+            <Route path="/new" element={<Landing />} />
+            <Route path="/oauth/consent" element={<Landing />} />
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>
     </InstanceProvider>,
   );
 }

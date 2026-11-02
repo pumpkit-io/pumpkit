@@ -1,5 +1,6 @@
 import { useSignInCallback } from '@/components/auth/useSignInCallback';
-import { CompanyFooter } from '@/features/legal/CompanyFooter';
+import { LoaderCircle } from 'lucide-react';
+import { AuthShell } from './layout/AuthShell';
 import { SIGN_IN_ERROR } from '@/lib/session';
 import { track } from '@/lib/analytics';
 
@@ -11,11 +12,17 @@ export function MagicLinkCallback() {
   });
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <main className="flex flex-1 items-center justify-center">
-        <p role="status">Signing you in…</p>
-      </main>
-      <CompanyFooter />
-    </div>
+    <AuthShell>
+      <p
+        role="status"
+        className="flex items-center gap-2.5 font-sans text-sm text-muted-foreground"
+      >
+        <LoaderCircle
+          aria-hidden
+          className="h-4 w-4 animate-spin text-primary motion-reduce:animate-none"
+        />
+        Signing you in…
+      </p>
+    </AuthShell>
   );
 }
