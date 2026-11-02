@@ -68,6 +68,12 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 - **Why:** to publish on your X account when you ask Pumpkit to.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
+### Connected apps {#data-connected-apps}
+
+- **What:** for each AI app you allow to use Pumpkit on your behalf, such as Claude or Cursor: the name, website, logo and return address the app gives Pumpkit, whether its identity is verified, when you connected it, when it last used Pumpkit and when you disconnected it. The tokens the app uses are stored only as hashes. No IP address or user agent is stored.
+- **Why:** to let each app you connect use Pumpkit as you, and to list them in Settings, where you can disconnect any of them at any time.
+- **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
+
 ### Billing {#data-billing}
 
 - **What:** your Stripe customer identifier and the state of your Subscription: its Plan, status and billing periods. Stripe receives your name and email address, and you enter your payment details directly with Stripe. Your card details never reach the Operator.
@@ -119,6 +125,7 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 
 - **Account content** (your profile, Google identity, Briefs, Feedback, Versions, Inspiration authors, Scheduled posts and X connection): until your account is deleted.
 - **Session and Magic link records:** 90 days after they expire. This includes a Magic link requested by someone who never created an account.
+- **Connected apps:** until you disconnect the app or your account is deleted. A disconnected app's record and its tokens are deleted 90 days after you disconnect it, and an expired token within 90 days of expiring.
 - **Inspiration authors' public posts:** while any User has that author among their Inspiration authors, or until the author objects.
 - **Billing records held by Stripe, and invoices:** 10 years, as Italian tax law requires.
 - **Analytics events, server events and error reports:** 30 days.

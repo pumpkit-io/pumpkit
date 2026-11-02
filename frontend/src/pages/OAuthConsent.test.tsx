@@ -36,6 +36,7 @@ import { oauthConsentService, type ConsentApp } from '@/services/oauthConsentSer
 import { onboardingService } from '@/services/onboardingService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
+import type { Instance } from '@/lib/instance';
 import { MagicLinkCallback } from './MagicLinkCallback';
 import { apiError, currentPath, renderSignedIn } from './testing/signedInApp';
 
@@ -67,8 +68,11 @@ function pendingWith(app: ConsentApp) {
   vi.mocked(oauthConsentService.get).mockResolvedValue({ app });
 }
 
+/** A Self-hoster may name their Instance, and the page must use that name. */
+const QUILL: Instance = { ...SELLS_PLANS, app_name: 'Quill' };
+
 function renderConsent(query = '?request=req_1', nextStep: 'paywall' | 'persona' | null = null) {
-  return renderSignedIn(`/oauth/consent${query}`, { nextStep });
+  return renderSignedIn(`/oauth/consent${query}`, { nextStep, instance: QUILL });
 }
 
 const EXPIRES_AT = encodeURIComponent('2099-01-01T00:00:00+00:00');
@@ -127,7 +131,7 @@ describe('Consent page', () => {
 
   describe('Invalid link', () => {
     it.each([
-      ['invalid_client', "The app isn't registered with Pumpkit."],
+      ['invalid_client', "The app isn't registered with Quill."],
       ['invalid_redirect_uri', "The return address doesn't match what the app registered."],
     ])('explains %s and offers no buttons', async (code, cause) => {
       renderConsent(`?error=${code}`);
@@ -187,7 +191,7 @@ describe('Consent page', () => {
     fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
 
     expect(
-      await screen.findByRole('heading', { name: 'Connect Claude to Pumpkit' }),
+      await screen.findByRole('heading', { name: 'Connect Claude to Quill' }),
     ).toBeInTheDocument();
     expect(oauthConsentService.get).toHaveBeenCalledTimes(2);
   });
@@ -199,14 +203,14 @@ describe('Consent page', () => {
       const main = await page();
 
       expect(
-        await main.findByRole('heading', { name: 'Connect Claude to Pumpkit' }),
+        await main.findByRole('heading', { name: 'Connect Claude to Quill' }),
       ).toBeInTheDocument();
       expect(await main.findByText(/Signed in as/)).toHaveTextContent(
         'Signed in as ada@example.com',
       );
       expect(
         main.getByText(
-          "Claude will be able to use Pumpkit as you: write and revise posts, manage your inspiration authors, schedule posts and publish them on X. It can't see your password or change your subscription.",
+          "Claude will be able to use Quill as you: write and revise posts, manage your inspiration authors, schedule posts and publish them on X. It can't see your password or change your subscription.",
         ),
       ).toBeInTheDocument();
       expect(main.getByText('Verified: claude.ai')).toBeInTheDocument();
@@ -248,7 +252,7 @@ describe('Consent page', () => {
       renderConsent('?request=req_1', 'persona');
 
       expect(
-        await screen.findByRole('heading', { name: 'Connect Claude to Pumpkit' }),
+        await screen.findByRole('heading', { name: 'Connect Claude to Quill' }),
       ).toBeInTheDocument();
       expect(currentPath()).toBe('/oauth/consent');
     });
@@ -277,7 +281,7 @@ describe('Consent page', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
 
       expect(await screen.findByText('Done. Return to Cursor.')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Go to Pumpkit' })).toHaveAttribute('href', '/new');
+      expect(screen.getByRole('link', { name: 'Go to Quill' })).toHaveAttribute('href', '/new');
       expect(oauthConsentService.approve).toHaveBeenCalledWith('req_1');
       expect(redirectTo).toHaveBeenCalledWith(APPROVED_URL);
       expect(buttons()).toEqual({ allow: null, cancel: null });
@@ -368,7 +372,7 @@ describe('Consent page', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
-        "Claude gave a return address Pumpkit won't open. Try connecting again from the app.",
+        "Claude gave a return address Quill won't open. Try connecting again from the app.",
       );
       expect(redirectTo).not.toHaveBeenCalled();
       expect(buttons()).toEqual({ allow: null, cancel: null });

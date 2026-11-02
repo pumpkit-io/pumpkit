@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { SubscribePrompt } from '@/features/billing/SubscribePrompt';
 import { isSubscriptionNeeded } from '@/features/billing/subscriptionNeeded';
+import { useInstance } from '@/features/instance/useInstance';
 import { APP_HOME } from '@/features/onboarding/paths';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
@@ -20,10 +21,12 @@ import {
 import { useProfile } from './layout/ProfileContext';
 
 /** The causes authorize names in `?error=` while the app's return address is still untrusted. */
-const INVALID_CAUSE: Record<string, string> = {
-  invalid_client: "The app isn't registered with Pumpkit.",
-  invalid_redirect_uri: "The return address doesn't match what the app registered.",
-};
+function invalidCause(code: string, instanceName: string): string | undefined {
+  if (code === 'invalid_client') return `The app isn't registered with ${instanceName}.`;
+  if (code === 'invalid_redirect_uri')
+    return "The return address doesn't match what the app registered.";
+  return undefined;
+}
 
 const REQUEST_GONE =
   'This request expired or was already used. Start connecting again from your app.';
@@ -172,6 +175,7 @@ function SignedInAs() {
 }
 
 function Ready({ id, app }: { id: string; app: ConsentApp }) {
+  const { app_name: instanceName } = useInstance();
   const headingId = useId();
   const [inFlight, setInFlight] = useState<Decision | null>(null);
   const [failure, setFailure] = useState<{ message: string; decision: Decision } | null>(null);
@@ -225,14 +229,14 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
     <Column labelledBy={headingId}>
       <div className="space-y-2">
         <h1 id={headingId} className={HEADING_CLASS}>
-          Connect {app.name} to Pumpkit
+          Connect {app.name} to {instanceName}
         </h1>
         <SignedInAs />
       </div>
 
       {unsafeReturn ? (
         <ErrorBanner
-          message={`${app.name} gave a return address Pumpkit won't open. Try connecting again from the app.`}
+          message={`${app.name} gave a return address ${instanceName} won't open. Try connecting again from the app.`}
         />
       ) : decided ? (
         <div className="space-y-3">
@@ -240,14 +244,14 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
             {decided === 'approve' ? 'Done' : 'Cancelled'}. Return to {app.name}.
           </p>
           <Button asChild variant="outline" className="h-10">
-            <Link to={APP_HOME}>Go to Pumpkit</Link>
+            <Link to={APP_HOME}>Go to {instanceName}</Link>
           </Button>
         </div>
       ) : (
         <>
           <p className="font-sans text-sm text-foreground">
-            {app.name} will be able to use Pumpkit as you: write and revise posts, manage your
-            inspiration authors, schedule posts and publish them on X. It can&apos;t see your
+            {app.name} will be able to use {instanceName} as you: write and revise posts, manage
+            your inspiration authors, schedule posts and publish them on X. It can&apos;t see your
             password or change your subscription.
           </p>
           <Identity app={app} />
@@ -329,9 +333,10 @@ export function OAuthConsent() {
   const errorCode = params.get('error');
   const id = errorCode === null ? params.get('request') : null;
   const { load, retry } = useConsentRequest(id);
+  const { app_name: instanceName } = useInstance();
 
   if (!id) {
-    const cause = errorCode ? INVALID_CAUSE[errorCode] : undefined;
+    const cause = errorCode ? invalidCause(errorCode, instanceName) : undefined;
     return (
       <Notice
         title="This connection request isn't valid"

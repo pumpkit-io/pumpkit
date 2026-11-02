@@ -141,8 +141,8 @@ function Setup({
         </HowTo>
       </div>
       <p className="font-sans text-xs text-muted-foreground">
-        None of these send a header. If an app already has {appName} set up with --header, headers
-        or http_headers, remove that entry first.
+        None of these setups add a header. If an app already has {appName} set up with an
+        Authorization header in --header, headers or http_headers, remove that entry first.
       </p>
     </div>
   );

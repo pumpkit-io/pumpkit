@@ -8,11 +8,12 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Added
 
-- Connect AI apps such as Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor and VS Code to Pumpkit by pasting your Instance's MCP URL into the app and signing in, with no key to copy. Settings has a "Connect AI apps" card with the URL, how to add it to each app, and your connected apps, each with whether it is verified, when it connected and when it was last used; disconnecting one stops it at once. `GET /api/v1/instance` now reports `mcp_url`. **Upgrade notes:** if you run your own reverse proxy in front of the web server, forward `/.well-known/oauth-*` and `/.well-known/openid-configuration` to it as well as `/api/*`, or AI apps can't find how to sign in. The bundled stack needs nothing.
+- Connect AI apps such as Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor and VS Code to Pumpkit by pasting your Instance's MCP URL into the app and signing in. Settings has a "Connect AI apps" card with the URL, how to add it to each app, and your connected apps, each with whether it is verified, when it connected and when it was last used; disconnecting one stops it at once. `GET /api/v1/instance` now reports `mcp_url`. **Upgrade notes:** if you run your own reverse proxy in front of the web server, forward `/.well-known/oauth-*` and `/.well-known/openid-configuration` to it as well as `/api/*`, or AI apps can't find how to sign in. The bundled stack needs nothing.
 
 ### Changed
 
 - Per-IP rate limits now key on each caller's real address, where they keyed on the bundled web server's. With your own proxy in front of the web server, set `TRUSTED_PROXIES` (and `FORWARDED_ALLOW_IPS` if the proxy has a public address); see "A proxy in front of the web server" in the self-hosting guide. Nothing changes on upgrade unless you run such a proxy.
+- The Privacy Policy now says what Pumpkit keeps about the AI apps you connect, and for how long.
 - The Privacy Policy now lists `pumpkit:return-to`, the browser storage key that brings you back to an app's connection request after you sign in.
 - On wide screens, the landing page's video now lines up with the top of the headline beside it instead of sitting a few pixels too high.
 - The GitHub button in the landing page's nav bar no longer shows the repository's star count, and it is the same size as the button beside it.

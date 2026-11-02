@@ -208,6 +208,24 @@ async def test_a_disconnected_apps_next_approval_makes_a_new_connection(
     assert len((await db.execute(select(AppConnection))).scalars().all()) == 2
 
 
+async def test_a_request_for_a_former_mcp_url_is_404_and_keeps_the_connection(
+    authed_client, start, subscribed, db
+):
+    await authed_client.post(f"{details(await start())}/approve")
+    pending = await db.get(OAuthAuthorization, await start())
+    assert pending is not None
+    pending.resource = "https://old.example.com/api/v1/mcp"
+    await db.commit()
+
+    response = await authed_client.post(f"{details(pending.id)}/approve")
+
+    assert response.status_code == 404
+    db.expunge_all()
+    connection = (await db.execute(select(AppConnection))).scalar_one()
+    assert connection.resource == MCP_URL
+    assert connection.revoked_at is None
+
+
 async def test_denying_tells_the_app_the_user_refused(authed_client, request_id, db):
     response = await authed_client.post(f"{details(request_id)}/deny")
 

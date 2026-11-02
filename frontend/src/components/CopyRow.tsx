@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
-/** A labelled value to copy, such as a secret, a URL or a command, with a Copy button. */
+/** A labelled value to copy, such as a URL or a command, with a Copy button. */
 export function CopyRow({
   label,
   value,
