@@ -33,7 +33,7 @@ services:
       - --port
       - "4000"
       - --service
-      - ${EMULATE_SERVICES:-google,stripe}
+      - ${EMULATE_SERVICES:-google,pumpkit-stripe}
       - --base-url
       - ${EMULATE_BASE_URL:-http://localhost:4000}
     environment:
@@ -42,6 +42,7 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     volumes:
       - ./emulate.config.ts:/emulate/emulate.config.ts:ro
+      - ./emulators:/emulate/emulators:ro
     ports:
       - 127.0.0.1::4000
       - 127.0.0.1::4001

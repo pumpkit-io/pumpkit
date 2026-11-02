@@ -24,7 +24,7 @@ test('signing in with Google through the Emulator starts a session', async ({ pa
   );
   await page.getByRole('button', { name: /test@example\.com/ }).click();
 
-  // A new User's first stop: the Emulator's prices carry no lookup key, so the Paywall offers no Plans.
+  // A new User's first stop is the Paywall, or Onboarding once test@example.com has subscribed.
   await expect(page).toHaveURL(/\/(subscribe|onboarding)$/);
   const session = await page.evaluate(() => localStorage.getItem('pumpkit:session'));
   expect(JSON.parse(session ?? '{}').accessToken).toBeTruthy();
