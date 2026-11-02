@@ -425,7 +425,7 @@ query() {
 }
 # What GitHub does on a merge: origin's main moves to the release branch, where tag-release.sh finds the release.
 merge_on_github() {
-  git push -q origin "$(git for-each-ref --format='%(refname)' 'refs/heads/release/*' | head -1):refs/heads/main"
+  git push -q origin "$(release_branch_head):refs/heads/main"
 }
 case "$1 $2" in
   "release view") echo 2026-10-12T00:00:00Z ;;
@@ -582,6 +582,15 @@ else
   fail "expected a failed-review stop: status $status, $(cat "$err")"
 fi
 
+release_case
+printf error >"$GH_REVIEW_FINAL_STATUS"
+release_run 60
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended error' "$err" && grep -q '^NEXT: .*gh workflow run sdlc-review-llm.yml' "$err" && ! merged_by_hand; then
+  pass "release stops when the review ends error, saying to start it again"
+else
+  fail "expected an errored-review stop: status $status, $(cat "$err")"
+fi
+
 # The review run seen in progress when the PR opens dies before posting a status.
 release_case
 printf pending >"$GH_REVIEW"
@@ -726,7 +735,7 @@ else
   fail "expected no dispatch for a review finishing mid-check: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
 
-# An abandoned Release left origin/release/v0.1.1 in this clone, though its branch is gone from origin.
+# An abandoned release attempt left origin/release/v0.1.1 in this clone, though its branch is gone from origin.
 release_case
 git update-ref refs/remotes/origin/release/v0.1.1 "$(git commit-tree 'HEAD^{tree}' -p HEAD -m abandoned)"
 merges_on_read 3

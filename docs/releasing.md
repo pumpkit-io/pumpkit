@@ -34,8 +34,9 @@ The stops, and what to do:
 - **gh could not turn on auto-merge:** run `gh pr merge <PR> --auto --squash --delete-branch` yourself, and run the command again.
 - **Not an admin:** only a repository admin can run the review. The script has turned on auto-merge, so ask a maintainer to run `gh workflow run sdlc-review-llm.yml --ref release/vX.Y.Z`; once the review passes GitHub merges the PR, and running the command again tags it.
 - **gh could not start the review workflow:** run `gh workflow run sdlc-review-llm.yml --ref release/vX.Y.Z` yourself, and run the command again.
-- **The review run ended without a final status:** it was cancelled, timed out or failed before reviewing. Read it with `gh run list --workflow sdlc-review-llm.yml --branch release/vX.Y.Z`, fix the cause, and run the command again; it starts a new review.
+- **The review run ended without a final status:** it ended before posting one, for example cancelled or failed before finding the PR. Read it with `gh run list --workflow sdlc-review-llm.yml --branch release/vX.Y.Z`, fix the cause, and run the command again; it starts a new review.
 - **A check or the review failed:** read it with `gh pr checks <PR>` or the review's comment on the PR, push a fix to the release branch and run the command again, which starts the review on the new commit. Auto-merge stays on, and the new commit can't merge before its own review passes.
+- **The review ended `error`:** the review run was cancelled, timed out or broke after finding the PR, so there may be no findings. Read it with `gh run list --workflow sdlc-review-llm.yml --branch release/vX.Y.Z`, then start the review again with `gh workflow run sdlc-review-llm.yml --ref release/vX.Y.Z`. Auto-merge is still on, so GitHub merges the PR once it passes, and running the command again tags it.
 - **Not merged after an hour:** a check or the review is still pending. Auto-merge is still on, so GitHub merges the PR when they pass; see where they stand with `gh pr checks <PR>`, and run the command again later to tag it.
 
 ## When the Release workflow fails

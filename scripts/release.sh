@@ -38,7 +38,7 @@ is_final() {
 }
 
 # Returns 0 unless $head has a final review status or a review run still going, and 2 when gh could not say.
-# A run that ended without a final status (cancelled, timed out, failed early) needs a new one.
+# A run that ended before posting a final status needs a new one.
 # The run is read before the status, as in the wait, so a run that completes between the reads has its final status seen.
 review_needed() {
   needed_run=$(review_run 2>/dev/null) || return 2
@@ -108,7 +108,7 @@ if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.
   stop "$version is not X.Y.Z" "Pass a plain version such as 0.6.0, or none to let the script choose."
 fi
 
-# Pruning drops origin/release/* refs whose branch is gone, so an abandoned Release is not reused.
+# Pruning drops origin/release/* refs whose branch is gone, so an abandoned release attempt is not reused.
 git fetch --quiet --prune --tags origin ||
   stop "git could not fetch origin" "Check your network and that origin is the pumpkit repository, then run it again."
 commit=$(git rev-parse --verify --quiet "origin/main^{commit}") ||
@@ -267,8 +267,10 @@ while :; do
     # A failed status read says nothing about the run either, so it must not pass for a run that ended without one.
     review=$(review_status 2>/dev/null) || { review=; run=; }
     if is_final "$review"; then
-      [ "$review" = success ] ||
-        stop "the review of PR #$pr ended $review" "Read its comment on the PR, fix the findings, push to $branch, and run this again."
+      case $review in
+        failure) stop "the review of PR #$pr ended failure" "Read its comment on the PR, fix the findings, push to $branch, and run this again." ;;
+        error) stop "the review of PR #$pr ended error" "The review run was cancelled, timed out or broke. Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, then start the review again with gh workflow run sdlc-review-llm.yml --ref $branch. Auto-merge is still on, so GitHub merges PR #$pr once it passes; then run this again to tag it." ;;
+      esac
     else
       [ "$run" != completed ] ||
         stop "the review run on PR #$pr ended without a final review status" "Read it with gh run list --workflow sdlc-review-llm.yml --branch $branch, fix the cause, and run this again; it starts a new review."
