@@ -389,8 +389,9 @@ else
   fail "expected a bad-version stop: status $status, $(cat "$err")"
 fi
 
-# release.sh past the PR, with a gh stub logging every call to $GH_LOG, checks appearing on the $GH_CHECKS_AFTER-th poll, a review dispatch leaving $GH_REVIEW_AFTER.
-# The checks' buckets ($GH_CHECKS, JSON) and the PR's state ($GH_PR_STATE) answer from FILE.N on the Nth read when it exists, else FILE.
+# release.sh past the PR, with a gh stub logging every call to $GH_LOG and answering from state files a case writes.
+# $GH_PR_STATE, $GH_CHECKS (JSON, empty for none reported), $GH_REVIEW (the head's review status) and $GH_RUN (its review run's status)
+# answer from FILE.N on the Nth read when it exists, else FILE; a file reading !fail makes that call fail like a dropped connection.
 mkdir "$work/prbin"
 cat >"$work/prbin/gh" <<'STUB'
 #!/bin/sh
@@ -398,7 +399,9 @@ echo "$*" >>"$GH_LOG"
 answer() {
   n=$(($(cat "$1.reads" 2>/dev/null || echo 0) + 1))
   echo "$n" >"$1.reads"
-  if [ -f "$1.$n" ]; then cat "$1.$n"; else cat "$1"; fi
+  if [ -f "$1.$n" ]; then a=$(cat "$1.$n"); else a=$(cat "$1"); fi
+  [ "$a" != '!fail' ] || { echo "error connecting to api.github.com" >&2; exit 1; }
+  printf '%s' "$a"
 }
 query() {
   while [ $# -gt 0 ]; do
@@ -406,34 +409,44 @@ query() {
     shift
   done
 }
+# What GitHub does on a merge: origin's main moves to the release branch, where tag-release.sh finds the release.
+merge_on_github() {
+  git push -q origin "$(git for-each-ref --format='%(refname)' 'refs/heads/release/*' | head -1):refs/heads/main"
+}
 case "$1 $2" in
   "release view") echo 2026-10-12T00:00:00Z ;;
   "pr list") case "$*" in *--head*) ;; *) cat "$GH_PRS" ;; esac ;;
-  "pr view") case "$*" in *state*) answer "$GH_PR_STATE" ;; *) cat "$GH_FILES/$3" ;; esac ;;
+  "pr view")
+    case "$*" in
+      *state*)
+        state=$(answer "$GH_PR_STATE") || exit 1
+        [ "$state" != MERGED ] || merge_on_github
+        printf '%s\n' "$state" ;;
+      *) cat "$GH_FILES/$3" ;;
+    esac ;;
   "pr create") echo https://github.example/pumpkit-io/pumpkit/pull/5 ;;
   "pr merge")
     case "$*" in
       *--auto*) ;;
       *)
-        # Moves origin's main to the release branch, so tag-release.sh finds the release there.
-        git push -q origin "$(git for-each-ref --format='%(refname)' 'refs/heads/release/*' | head -1):refs/heads/main"
+        merge_on_github
         rm -f "$GH_PR_STATE".*
         printf MERGED >"$GH_PR_STATE" ;;
     esac ;;
   "pr checks")
-    case "$*" in
-      *--watch*) ;;
-      *bucket*) answer "$GH_CHECKS" | jq -r "$(query "$@")" ;;
-      *)
-        polls=$(($(cat "$GH_POLLS" 2>/dev/null || echo 0) + 1))
-        echo "$polls" >"$GH_POLLS"
-        [ "$polls" -ge "$GH_CHECKS_AFTER" ] || { echo "no checks reported on the 'release' branch" >&2; exit 1; }
-        echo 3 ;;
-    esac ;;
-  "run list") case "$*" in *databaseId*) cat "$GH_RUN_ID" ;; *) cat "$GH_RUN" ;; esac ;;
-  "workflow run") printf '%s' "${GH_REVIEW_AFTER:-failure}" >"$GH_REVIEW"; printf queued >"$GH_RUN"; echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
-  "api "*/statuses) cat "$GH_REVIEW" ;;
-  "api "*) echo true ;;
+    checks=$(answer "$GH_CHECKS") || exit 1
+    [ -n "$checks" ] || { echo "no checks reported on the 'release' branch" >&2; exit 1; }
+    printf '%s' "$checks" | jq -r "$(query "$@")"
+    # Like gh, exits 8 while a check is pending.
+    case $checks in *pending*) exit 8 ;; esac ;;
+  "run list") case "$*" in *databaseId*) cat "$GH_RUN_ID" 2>/dev/null ;; *) answer "$GH_RUN" ;; esac ;;
+  "workflow run")
+    rm -f "$GH_REVIEW".* "$GH_RUN".*
+    cp "$GH_REVIEW_FINAL_STATUS" "$GH_REVIEW"
+    printf queued >"$GH_RUN"
+    echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
+  "api "*/statuses) answer "$GH_REVIEW" ;;
+  "api "*) cat "$GH_ADMIN" ;;
 esac
 STUB
 cat >"$work/prbin/docker" <<'STUB'
@@ -441,84 +454,183 @@ cat >"$work/prbin/docker" <<'STUB'
 printf 'Name:      %s\n\nManifests:\n  Platform:    linux/amd64\n  Platform:    linux/arm64\n' "$4"
 STUB
 chmod +x "$work/prbin/gh" "$work/prbin/docker"
-export GH_LOG="$work/ghlog" GH_POLLS="$work/polls" GH_REVIEW="$work/review" GH_RUN="$work/run" GH_RUN_ID="$work/runid"
-export GH_CHECKS="$work/checks" GH_PR_STATE="$work/prstate"
+export GH_LOG="$work/gh-log" GH_PR_STATE="$work/gh-prstate" GH_CHECKS="$work/gh-checks" GH_REVIEW="$work/gh-review" GH_RUN="$work/gh-run"
+export GH_RUN_ID="$work/gh-runid" GH_ADMIN="$work/gh-admin" GH_REVIEW_FINAL_STATUS="$work/gh-review-final-status"
 
-# Usage: release_to_review CHECKS_AFTER WAIT_SECONDS [REVIEW_STATUS] [REVIEW_RUN_STATUS]. Runs release.sh in a fresh repo until it stops.
-release_to_review() {
+# Usage: release_case. A fresh repo, and the stub's state reset to an admin login, an open PR whose checks pass, no review yet,
+# and a review that ends success once dispatched. The PR merges only when the case says so in a $GH_PR_STATE.N.
+release_case() {
   release_repo "$work/u-fixed"
   mkdir scripts
   cp "$scripts/prepare-release.sh" "$scripts/release-notes.sh" scripts/
   git add scripts
   git commit -q -m scripts
   git push -q origin main
-  rm -f "$GH_LOG" "$GH_POLLS"
-  printf '%s' "${3:-}" >"$GH_REVIEW"
-  printf '%s' "${4:-}" >"$GH_RUN"
-  rm -f "$GH_RUN_ID" "$GH_CHECKS".* "$GH_PR_STATE".*
-  [ -f "$GH_CHECKS" ] || echo '[]' >"$GH_CHECKS"
-  [ -f "$GH_PR_STATE" ] || printf OPEN >"$GH_PR_STATE"
-  GH_CHECKS_AFTER=$1 RELEASE_CHECKS_WAIT_SECONDS=$2 RELEASE_POLL_SECONDS=0 PATH="$work/prbin:$PATH" run sh "$scripts/release.sh"
+  rm -f "$work"/gh-*
+  printf OPEN >"$GH_PR_STATE"
+  printf '[{"name":"backend","bucket":"pass"},{"name":"e2e","bucket":"skipping"},{"name":"review","bucket":"pending"}]' >"$GH_CHECKS"
+  : >"$GH_REVIEW"
+  : >"$GH_RUN"
+  echo true >"$GH_ADMIN"
+  printf success >"$GH_REVIEW_FINAL_STATUS"
 }
 
-release_to_review 3 300
-if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && [ "$(cat "$GH_POLLS")" = 3 ]; then
-  pass "release waits for the PR's checks to be reported before watching them"
+# Usage: release_run WAIT_SECONDS. Runs release.sh in the current repo with the stubs first on PATH.
+# Every case that should not time out passes a minute, so a broken one stops instead of hanging.
+release_run() {
+  run env RELEASE_POLL_SECONDS=0 RELEASE_WAIT_SECONDS="$1" PATH="$work/prbin:$PATH" sh "$scripts/release.sh"
+}
+
+# Usage: merges_on_read N. GitHub merges the PR on its own, so the Nth read of its state and every later one say MERGED.
+merges_on_read() {
+  i=1
+  while [ "$i" -lt "$1" ]; do
+    printf OPEN >"$GH_PR_STATE.$i"
+    i=$((i + 1))
+  done
+  printf MERGED >"$GH_PR_STATE"
+}
+
+# Usage: merged_by_hand. Fails when the log shows a merge call without --auto.
+merged_by_hand() {
+  grep '^pr merge' "$GH_LOG" | grep -qv -- '--auto'
+}
+
+released() {
+  [ "$status" -eq 0 ] && grep -q '^Released v0.1.1\.$' "$out" &&
+    [ "$(git --git-dir="$work/rel.git" rev-parse 'v0.1.1^{commit}')" = "$(git --git-dir="$work/rel.git" rev-parse main)" ]
+}
+
+release_case
+merges_on_read 3
+release_run 60
+if released && ! merged_by_hand && grep -q 'pumpkit-web:0.1.1: linux/amd64 linux/arm64' "$out"; then
+  pass "release tags and checks the images once GitHub merges the PR, without merging it itself"
 else
-  fail "expected release to poll until checks appear: status $status, polls $(cat "$GH_POLLS" 2>/dev/null), $(cat "$err")"
+  fail "expected Released v0.1.1 with no merge call: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
+if [ "$(grep -A1 '^pr create' "$GH_LOG" | sed -n 2p)" = 'pr merge 5 --auto --squash --delete-branch' ]; then
+  pass "release turns on auto-merge right after opening the PR"
+else
+  fail "expected gh pr merge --auto after gh pr create: $(cat "$GH_LOG")"
+fi
+first_auto=$(grep -n -- '^pr merge 5 --auto' "$GH_LOG" | head -1 | cut -d: -f1)
 first_dispatch=$(grep -n '^workflow run sdlc-review-llm.yml' "$GH_LOG" | head -1 | cut -d: -f1)
 first_checks=$(grep -n '^pr checks' "$GH_LOG" | head -1 | cut -d: -f1)
-if [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] && [ "${first_dispatch:-99999}" -lt "${first_checks:-0}" ]; then
+if [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] &&
+  [ "${first_auto:-99999}" -lt "${first_dispatch:-0}" ] && [ "${first_dispatch:-99999}" -lt "${first_checks:-0}" ]; then
   pass "release starts the review once, before waiting on the checks"
 else
-  fail "expected one review dispatch before the checks: $(cat "$GH_LOG")"
+  fail "expected one review dispatch between auto-merge and the checks: $(cat "$GH_LOG")"
 fi
 
-release_to_review 99999 0
-if [ "$status" -ne 0 ] && grep -q '^STOPPED: no checks were reported on PR #5' "$err" && grep -q '^NEXT:' "$err"; then
-  pass "release stops when no checks are reported in time"
+release_case
+: >"$GH_CHECKS.1"
+: >"$GH_CHECKS.2"
+printf '[{"name":"backend","bucket":"pending"},{"name":"review","bucket":"pending"}]' >"$GH_CHECKS.3"
+merges_on_read 5
+release_run 60
+if released && [ "$(grep -c '^pr checks' "$GH_LOG")" -ge 3 ]; then
+  pass "release keeps waiting while no checks are reported, then releases"
 else
-  fail "expected a no-checks stop: status $status, $(cat "$err")"
+  fail "expected release to wait through no checks: status $status, $(cat "$out" "$err")"
 fi
 
-# A rerun after a review run that died, leaving the status pending, starts a new one instead of waiting on the dead one.
-release_to_review 1 300 pending completed
-if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && grep -q '^workflow run sdlc-review-llm.yml' "$GH_LOG"; then
-  pass "release starts the review again when the last run ended without a final status"
-else
-  fail "expected a new review dispatch: status $status, $(cat "$err")"
-fi
-
-release_to_review 1 300 pending in_progress
-if ! grep -q '^workflow run' "$GH_LOG"; then
-  pass "release leaves a review run in progress alone"
-else
-  fail "expected no dispatch while a review runs: $(cat "$GH_LOG")"
-fi
-
-# Usage: release_through CHECKS_JSON. Runs release.sh with every check answering CHECKS_JSON and the dispatched review passing.
-release_through() {
-  printf '%s' "$1" >"$GH_CHECKS"
-  printf OPEN >"$GH_PR_STATE"
-  GH_REVIEW_AFTER=success release_to_review 1 300
-}
-
-release_through '[{"name":"backend","bucket":"pass"},{"name":"e2e","bucket":"skipping"},{"name":"review","bucket":"pending"}]'
-if [ "$status" -eq 0 ] && grep -q '^Released v0.1.1\.$' "$out" && grep -q '^pr merge 5 --squash --delete-branch$' "$GH_LOG" &&
-  [ "$(git --git-dir="$work/rel.git" rev-parse 'v0.1.1^{commit}')" = "$(git --git-dir="$work/rel.git" rev-parse main)" ] &&
-  grep -q 'pumpkit-web:0.1.1: linux/amd64 linux/arm64' "$out"; then
-  pass "release merges, tags and checks the images once the checks and the review pass"
-else
-  fail "expected Released v0.1.1: status $status, $(cat "$out" "$err")"
-fi
-
-release_through '[{"name":"backend","bucket":"pass"},{"name":"frontend","bucket":"fail"},{"name":"review","bucket":"pending"}]'
+release_case
+printf '[{"name":"backend","bucket":"pass"},{"name":"frontend","bucket":"fail"},{"name":"review","bucket":"pending"}]' >"$GH_CHECKS"
+release_run 60
 if [ "$status" -ne 0 ] && grep -q '^STOPPED: these checks on PR #5 did not pass: frontend' "$err" && grep -q '^NEXT:' "$err" &&
-  ! grep -q '^pr merge' "$GH_LOG" && [ -z "$(git --git-dir="$work/rel.git" tag -l v0.1.1)" ]; then
+  ! merged_by_hand && [ -z "$(git --git-dir="$work/rel.git" tag -l v0.1.1)" ]; then
   pass "release stops naming a failing check, without merging"
 else
   fail "expected a stop naming frontend: status $status, $(cat "$err")"
+fi
+
+release_case
+printf failure >"$GH_REVIEW_FINAL_STATUS"
+release_run 60
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' "$err" && grep -q '^NEXT: Read its comment on the PR' "$err" && ! merged_by_hand; then
+  pass "release stops when the review fails, pointing at its comment"
+else
+  fail "expected a failed-review stop: status $status, $(cat "$err")"
+fi
+
+# The review run seen in progress when the PR opens dies before posting a status.
+release_case
+printf pending >"$GH_REVIEW"
+printf in_progress >"$GH_RUN.1"
+printf completed >"$GH_RUN"
+release_run 60
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review run on PR #5 ended without a final review status' "$err" &&
+  grep -q '^NEXT: .*starts a new review' "$err" && ! grep -q '^workflow run' "$GH_LOG" && ! merged_by_hand; then
+  pass "release stops when the review run ends without a final status"
+else
+  fail "expected a dead-review stop: status $status, $(cat "$err")"
+fi
+
+# A rerun after a review run that died, leaving the status pending, starts a new one instead of waiting on the dead one.
+release_case
+printf pending >"$GH_REVIEW"
+printf completed >"$GH_RUN"
+merges_on_read 2
+release_run 60
+if released && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ]; then
+  pass "release starts the review again when the last run ended without a final status"
+else
+  fail "expected a new review dispatch: status $status, $(cat "$err" "$GH_LOG")"
+fi
+
+release_case
+printf pending >"$GH_REVIEW"
+printf in_progress >"$GH_RUN"
+merges_on_read 2
+release_run 60
+if released && ! grep -q '^workflow run' "$GH_LOG"; then
+  pass "release leaves a review run in progress alone"
+else
+  fail "expected no dispatch while a review runs: status $status, $(cat "$err" "$GH_LOG")"
+fi
+
+release_case
+release_run 0
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: PR #5 is not merged after' "$err" && grep -q '^NEXT: Auto-merge is still on' "$err" && ! merged_by_hand; then
+  pass "release stops when the wait runs out, saying auto-merge is still on"
+else
+  fail "expected a timeout stop: status $status, $(cat "$err")"
+fi
+git push -q origin release/v0.1.1:main
+: >"$GH_LOG"
+release_run 60
+if released && ! grep -q '^pr ' "$GH_LOG"; then
+  pass "a rerun after GitHub merged the PR goes straight to the tag"
+else
+  fail "expected the rerun to tag: status $status, $(cat "$out" "$err" "$GH_LOG")"
+fi
+
+release_case
+echo false >"$GH_ADMIN"
+release_run 60
+if [ "$status" -ne 0 ] && grep -q '^STOPPED: your gh login is not an admin' "$err" &&
+  grep -q '^NEXT: .*gh workflow run sdlc-review-llm.yml --ref release/v0.1.1' "$err" &&
+  grep -q -- '^pr merge 5 --auto' "$GH_LOG" && ! grep -q '^workflow run' "$GH_LOG"; then
+  pass "a login that is not an admin turns on auto-merge, then asks a maintainer to start the review"
+else
+  fail "expected auto-merge and a not-admin stop: status $status, $(cat "$err" "$GH_LOG")"
+fi
+
+release_case
+printf success >"$GH_REVIEW"
+printf '!fail' >"$GH_REVIEW.2"
+printf completed >"$GH_RUN"
+printf '!fail' >"$GH_RUN.1"
+printf '!fail' >"$GH_CHECKS.1"
+printf '!fail' >"$GH_PR_STATE.1"
+printf MERGED >"$GH_PR_STATE"
+release_run 60
+if released; then
+  pass "release reads a failed gh call in the wait as still waiting"
+else
+  fail "expected failed polls to keep the wait going: status $status, $(cat "$out" "$err")"
 fi
 
 if [ "$failures" -ne 0 ]; then
