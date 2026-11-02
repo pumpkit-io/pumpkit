@@ -1,7 +1,6 @@
-"""Seed a User with no Subscription and no Stripe customer, named by the email argument, and print `E2E_ACCESS_TOKEN=<jwt>`.
+"""Seed a User with no Subscription or Stripe customer and print `E2E_ACCESS_TOKEN=<jwt>`.
 
-Each test passes an email of its own, so the User starts at the Paywall whatever earlier runs did.
-Run it like `seed_user.py`, with the email after `-`.
+Run it like `seed_user.py`, with an email of the test's own after `-`, so it starts at the Paywall.
 """
 
 import asyncio

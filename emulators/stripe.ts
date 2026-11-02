@@ -286,7 +286,9 @@ export function pumpkitStripe(target: WebhookTarget) {
       // An API call never waits for its webhook: the backend may hold the User's lock until the
       // call answers, and its webhook handler takes the same lock.
       function sendLater(type: string, object: StripeObject): void {
-        void send(type, structuredClone(object)).catch(() => undefined);
+        void send(type, structuredClone(object)).catch((error) =>
+          console.error(`${type} not sent:`, error),
+        );
       }
 
       function expandedPrice(price: StripeObject, expand: string[]): StripeObject {
