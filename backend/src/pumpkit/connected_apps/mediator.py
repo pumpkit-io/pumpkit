@@ -1,16 +1,20 @@
+import base64
+import binascii
 import json
 import re
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import unquote_plus, urlencode, urlsplit
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.connected_apps.models import OAuthAuthorization, OAuthClient
+from pumpkit.auth.service import users
+from pumpkit.auth.service.sessions import may_hold_session
+from pumpkit.connected_apps.models import AppConnection, OAuthAuthorization, OAuthClient
 from pumpkit.connected_apps.schemas import (
     AuthorizationDetailsResponse,
     AuthorizationServerMetadata,
@@ -19,13 +23,20 @@ from pumpkit.connected_apps.schemas import (
     ConsentClient,
     ProtectedResourceMetadata,
     RedirectResponseBody,
+    TokenResponse,
 )
-from pumpkit.connected_apps.service import authorizations, clients, connections, retention
+from pumpkit.connected_apps.service import authorizations, clients, connections, retention, tokens
 from pumpkit.connected_apps.service.redirect_uris import matches_registered, redirect_host
-from pumpkit.connected_apps.service.tokens import SCOPE
+from pumpkit.connected_apps.service.tokens import (
+    ACCESS_TOKEN_LIFETIME,
+    REFRESH_REUSE_GRACE,
+    SCOPE,
+)
 from pumpkit.core.config import settings
 from pumpkit.core.errors import NotFoundError
+from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import hit_user_limit
+from pumpkit.core.time import as_utc
 
 _CLIENT_AUTH_METHODS = ["none", "client_secret_post", "client_secret_basic"]
 _MAX_REGISTRATION_BYTES = 16 * 1024
@@ -37,20 +48,31 @@ _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 _REQUEST_GONE = "This request expired or was already used. Start connecting again from your app."
 
 
+# RFC 6749 section 5.1: no cache may keep an answer that can carry a token or a code.
+NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+
+
 class OAuthError(Exception):
     """An error the mediator answers in RFC 6749's JSON shape, not the app's `detail` one."""
 
-    def __init__(self, error: str, description: str = "", status_code: int = 400) -> None:
+    def __init__(
+        self,
+        error: str,
+        description: str = "",
+        status_code: int = 400,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         super().__init__(description)
         self.error = error
         self.description = description
         self.status_code = status_code
+        self.headers = headers or {}
 
     def response(self) -> JSONResponse:
         return JSONResponse(
             {"error": self.error, "error_description": self.description},
             status_code=self.status_code,
-            headers={"Cache-Control": "no-store"},
+            headers={**NO_STORE, **self.headers},
         )
 
 
@@ -162,9 +184,7 @@ async def start_authorization(
     page with an error while the app's redirect URI is untrusted, or the redirect URI with an
     error once it is trusted. Parameters are checked in RFC 6749's order, `state` last.
     """
-    values: dict[str, list[str]] = {}
-    for name, value in params:
-        values.setdefault(name, []).append(value)
+    values = _grouped(params)
 
     # Before the lookup, so it can't delete the app this request's row goes on to point at.
     await retention.purge_expired(db, now=now)
@@ -245,10 +265,22 @@ def _check_request(values: dict[str, list[str]]) -> str:
     # A missing method means plain, which leaks the verifier to whoever sees the request.
     if _single(values, "code_challenge_method", "invalid_request") != "S256":
         raise OAuthError("invalid_request", "code_challenge_method must be S256.")
+    _check_resource(values)
+    return code_challenge
+
+
+def _check_resource(values: dict[str, list[str]]) -> None:
+    """RFC 8707: an app that names a resource may name only the MCP URL (ADR 0020)."""
     resource = _single(values, "resource", "invalid_target")
     if resource is not None and resource.removesuffix("/") != settings.mcp_url():
         raise OAuthError("invalid_target", f"resource must be {settings.mcp_url()}.")
-    return code_challenge
+
+
+def _grouped(params: list[tuple[str, str]]) -> dict[str, list[str]]:
+    values: dict[str, list[str]] = {}
+    for name, value in params:
+        values.setdefault(name, []).append(value)
+    return values
 
 
 def _single(values: dict[str, list[str]], name: str, error: str) -> Optional[str]:
@@ -347,3 +379,200 @@ async def _get_pending(
     if pending is None:
         raise NotFoundError(_REQUEST_GONE)
     return pending
+
+
+async def token(
+    params: list[tuple[str, str]],
+    authorization_header: Optional[str],
+    db: AsyncSession,
+    *,
+    now: datetime,
+) -> JSONResponse:
+    """Redeem a code or rotate a refresh token for a new access and refresh token pair."""
+    values = _grouped(params)
+    try:
+        client = await _authenticate_client(db, values, authorization_header)
+        grant_type = _single(values, "grant_type", "invalid_request")
+        if grant_type == "authorization_code":
+            issued = await _redeem_code(db, client, values, now=now)
+        elif grant_type == "refresh_token":
+            issued = await _refresh(db, client, values, now=now)
+        elif grant_type is None:
+            raise OAuthError("invalid_request", "grant_type is required.")
+        else:
+            raise OAuthError(
+                "unsupported_grant_type", "grant_type must be authorization_code or refresh_token."
+            )
+    except OAuthError as error:
+        # Commit refusals too: a reused code or refresh token disconnects its app.
+        await db.commit()
+        return error.response()
+
+    await db.commit()
+    body = TokenResponse(
+        access_token=issued.access_token,
+        expires_in=int(ACCESS_TOKEN_LIFETIME.total_seconds()),
+        refresh_token=issued.refresh_token,
+        scope=SCOPE,
+    )
+    return JSONResponse(body.model_dump(), headers=NO_STORE)
+
+
+async def _authenticate_client(
+    db: AsyncSession, values: dict[str, list[str]], authorization_header: Optional[str]
+) -> OAuthClient:
+    """
+    The app, by HTTP Basic or by `client_id` and `client_secret` in the body (RFC 6749 section
+    2.3.1). An app registered with a secret must present it; a public app's secret is ignored.
+    """
+    client_id = _single(values, "client_id", "invalid_request")
+    secret = _single(values, "client_secret", "invalid_request")
+    challenge = None
+    scheme, _, credentials = (authorization_header or "").partition(" ")
+    if scheme.lower() == "basic":
+        # RFC 6749 section 2.3.1: an app that used Basic is told to retry with it.
+        challenge = {"WWW-Authenticate": 'Basic realm="pumpkit"'}
+        basic = _basic_credentials(credentials)
+        if basic is None or client_id not in (None, basic[0]):
+            raise OAuthError(
+                "invalid_client", "The Basic credentials are malformed.", 401, challenge
+            )
+        client_id, secret = basic
+
+    client = None
+    if client_id is not None and _CLIENT_ID.fullmatch(client_id):
+        client = await clients.authenticate(db, client_id, secret)
+    if client is None:
+        raise OAuthError(
+            "invalid_client", "The app is unknown or its secret is wrong.", 401, challenge
+        )
+    return client
+
+
+def _basic_credentials(credentials: str) -> Optional[tuple[str, str]]:
+    """The client id and secret of a Basic header, or None when it is malformed."""
+    try:
+        decoded = base64.b64decode(credentials, validate=True).decode()
+    except (binascii.Error, UnicodeDecodeError):
+        return None
+    # The last colon: a client id may be an unencoded URL, and Pumpkit secrets never hold one.
+    client_id, colon, secret = decoded.rpartition(":")
+    if not colon:
+        return None
+    return unquote_plus(client_id), unquote_plus(secret)
+
+
+async def _redeem_code(
+    db: AsyncSession, client: OAuthClient, values: dict[str, list[str]], *, now: datetime
+) -> tokens.IssuedTokens:
+    """RFC 6749 section 4.1.3, with PKCE (RFC 7636) and the code's single use (OAuth 2.1)."""
+    code = _single(values, "code", "invalid_request")
+    if code is None:
+        raise OAuthError("invalid_request", "code is required.")
+    found = await authorizations.find_code(db, code, now=now)
+    if found is None:
+        raise OAuthError("invalid_grant", "The code is unknown or expired.")
+    authorization, connection = found
+    if authorization.exchanged_at is not None:
+        raise await _code_reused(db, connection, now=now)
+    if authorization.client_id != client.id:
+        raise OAuthError("invalid_grant", "The code was issued to another app.")
+
+    redirect_uri = _single(values, "redirect_uri", "invalid_request")
+    missing = redirect_uri is None and authorization.redirect_uri_was_sent
+    if missing or (redirect_uri is not None and redirect_uri != authorization.redirect_uri):
+        raise OAuthError("invalid_grant", "redirect_uri must be the one sent to authorize.")
+    verifier = _single(values, "code_verifier", "invalid_request")
+    if verifier is None or not authorizations.pkce_matches(verifier, authorization.code_challenge):
+        raise OAuthError("invalid_grant", "code_verifier doesn't match the code_challenge.")
+    _check_resource(values)
+    if connection.revoked_at is not None or not await _may_connect(db, connection.user_id):
+        raise OAuthError("invalid_grant", "The user disconnected the app or can't use Pumpkit.")
+
+    if not await authorizations.mark_exchanged(db, authorization.id, now=now):
+        raise await _code_reused(db, connection, now=now)
+    return await tokens.issue_pair(db, app_connection_id=connection.id, now=now)
+
+
+async def _code_reused(db: AsyncSession, connection: AppConnection, *, now: datetime) -> OAuthError:
+    # OAuth 2.1 section 4.1.3: whoever holds a copy of a used code may hold its tokens too.
+    logger.error(
+        "Authorization code reuse detected: disconnecting app (app_connection_id=%s, user_id=%s)",
+        connection.id,
+        connection.user_id,
+    )
+    await connections.revoke(db, connection.id, now=now)
+    return OAuthError("invalid_grant", "The code was already used. The app is disconnected.")
+
+
+async def _refresh(
+    db: AsyncSession, client: OAuthClient, values: dict[str, list[str]], *, now: datetime
+) -> tokens.IssuedTokens:
+    """RFC 6749 section 6, rotating the refresh token every time (OAuth 2.1 section 4.3.1)."""
+    refresh_token = _single(values, "refresh_token", "invalid_request")
+    if refresh_token is None:
+        raise OAuthError("invalid_request", "refresh_token is required.")
+    unknown = OAuthError(
+        "invalid_grant", "The refresh token is unknown or the app is disconnected."
+    )
+    found = await tokens.find_refresh_token(db, refresh_token)
+    if found is None:
+        raise unknown
+    presented, connection = found
+    if connection.client_id != client.id or connection.revoked_at is not None:
+        raise unknown
+    rotated_at = presented.rotated_at
+    if rotated_at is not None and as_utc(rotated_at) + REFRESH_REUSE_GRACE < now:
+        # Someone holds a copy of a token exchanged a while ago: likely theft.
+        logger.error(
+            "Refresh token reuse detected: disconnecting app (app_connection_id=%s, user_id=%s)",
+            connection.id,
+            connection.user_id,
+        )
+        await connections.revoke(db, connection.id, now=now)
+        raise OAuthError("invalid_grant", "The refresh token was already used.")
+    if presented.revoked_at is not None or as_utc(presented.expires_at) <= now:
+        raise OAuthError("invalid_grant", "The refresh token expired or was revoked.")
+    if not await _may_connect(db, connection.user_id):
+        raise OAuthError("invalid_grant", "The user can't use Pumpkit.")
+    _check_resource(values)
+    return await tokens.rotate(db, presented, now=now)
+
+
+async def revoke(
+    params: list[tuple[str, str]],
+    authorization_header: Optional[str],
+    db: AsyncSession,
+    *,
+    now: datetime,
+) -> Response:
+    """
+    RFC 7009: a refresh token disconnects its app, an access token dies alone. Unknown tokens
+    and other apps' tokens get the same 200, so the answer reveals nothing about them.
+    """
+    values = _grouped(params)
+    try:
+        client = await _authenticate_client(db, values, authorization_header)
+        presented = _single(values, "token", "invalid_request")
+        if presented is None:
+            raise OAuthError("invalid_request", "token is required.")
+    except OAuthError as error:
+        return error.response()
+
+    # Both kinds are looked up whatever `token_type_hint` says, which RFC 7009 allows.
+    found_refresh = await tokens.find_refresh_token(db, presented)
+    if found_refresh is not None:
+        if found_refresh[1].client_id == client.id:
+            await connections.revoke(db, found_refresh[1].id, now=now)
+    else:
+        found_access = await tokens.find_access_token(db, presented)
+        if found_access is not None and found_access[1].client_id == client.id:
+            await tokens.revoke_access_token(db, found_access[0], now=now)
+    await db.commit()
+    return Response(status_code=200, headers=NO_STORE)
+
+
+async def _may_connect(db: AsyncSession, user_id: str) -> bool:
+    """Whether the User exists and isn't Suspended, the rule a Session follows too."""
+    user = await users.get_user_by_id(db, user_id)
+    return user is not None and may_hold_session(user)

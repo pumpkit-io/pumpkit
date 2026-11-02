@@ -59,12 +59,42 @@ async def authorize(
     clock: Clock = Depends(get_clock),
 ) -> RedirectResponse:
     if request.method == "POST":
-        form = await request.form()
-        params = [(name, value) for name, value in form.multi_items() if isinstance(value, str)]
+        params = await _form_params(request)
     else:
         params = request.query_params.multi_items()
     location = await mediator.start_authorization(params, db, now=clock())
     return RedirectResponse(location, status_code=303, headers={"Cache-Control": "no-store"})
+
+
+# Generous on purpose: hosted apps refresh for all their users from a few shared addresses.
+@oauth_router.post("/oauth/token", response_model=None)
+@limiter.limit("300/minute")
+async def token(
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> JSONResponse:
+    return await mediator.token(
+        await _form_params(request), request.headers.get("authorization"), db, now=clock()
+    )
+
+
+@oauth_router.post("/oauth/revoke", response_model=None)
+@limiter.limit("300/minute")
+async def revoke(
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> Response:
+    return await mediator.revoke(
+        await _form_params(request), request.headers.get("authorization"), db, now=clock()
+    )
+
+
+async def _form_params(request: Request) -> list[tuple[str, str]]:
+    """The form body's fields, read by hand so a bad body is an OAuth error, not a 422."""
+    form = await request.form()
+    return [(name, value) for name, value in form.multi_items() if isinstance(value, str)]
 
 
 # The consent page's API, with the web app's bearer authentication and `detail` errors.
@@ -128,5 +158,5 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
             "error_description": f"Too many requests ({exc.detail}). Try again later.",
         },
         status_code=429,
-        headers={"Cache-Control": "no-store", "Retry-After": str(retry_after)},
+        headers={**mediator.NO_STORE, "Retry-After": str(retry_after)},
     )
