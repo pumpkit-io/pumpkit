@@ -42,7 +42,7 @@ async def test_the_protected_resource_metadata_follows_public_url(browser, monke
     assert bodies[0]["authorization_servers"] == ["https://pumpkit.example.org"]
 
 
-async def test_the_authorization_server_metadata_lists_the_endpoints_without_cimd(browser):
+async def test_the_authorization_server_metadata_lists_the_endpoints_and_cimd(browser):
     response = await browser.get("/.well-known/oauth-authorization-server")
 
     assert response.status_code == 200
@@ -68,6 +68,7 @@ async def test_the_authorization_server_metadata_lists_the_endpoints_without_cim
             "client_secret_basic",
         ],
         "authorization_response_iss_parameter_supported": True,
+        "client_id_metadata_document_supported": True,
     }
 
 

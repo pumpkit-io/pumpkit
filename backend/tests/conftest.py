@@ -78,6 +78,10 @@ from pumpkit.auth.models import MagicLink, User  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
+from pumpkit.connected_apps.service.client_metadata import (  # noqa: E402
+    FakeClientMetadataFetcher,
+    get_client_metadata_fetcher,
+)
 from pumpkit.core.classifier import FakeClassifier, get_classifier  # noqa: E402
 from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
@@ -199,6 +203,18 @@ def fake_x_reader():
     app.dependency_overrides[get_x_reader] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_x_reader, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_client_metadata_fetcher():
+    """
+    Every test fetches Client ID Metadata Documents through a fake. Request it by name to
+    `serve(document)` at its `client_id` and read `fetched`; any other URL fails to fetch.
+    """
+    fake = FakeClientMetadataFetcher()
+    app.dependency_overrides[get_client_metadata_fetcher] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_client_metadata_fetcher, None)
 
 
 @pytest.fixture(autouse=True)
