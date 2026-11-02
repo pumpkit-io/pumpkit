@@ -1,4 +1,5 @@
-import re
+import unicodedata
+from datetime import datetime
 from typing import Annotated, Literal, Optional
 
 from pydantic import (
@@ -14,7 +15,9 @@ from pydantic import (
 from pumpkit.connected_apps.service.redirect_uris import validate_redirect_uri
 
 DEFAULT_CLIENT_NAME = "Unnamed app"
-_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
+# Control, format (bidi overrides, zero-width) and line-separator characters, which let a
+# name look like another app's on the consent page.
+_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
 
 
 class ProtectedResourceMetadata(BaseModel):
@@ -88,7 +91,8 @@ class ClientRegistrationRequest(BaseModel):
     def _clean_name(cls, value: object) -> object:
         if not isinstance(value, str):
             return value
-        return _CONTROL_CHARACTERS.sub("", value).strip() or DEFAULT_CLIENT_NAME
+        visible = "".join(c for c in value if unicodedata.category(c) not in _HIDDEN_CATEGORIES)
+        return visible.strip() or DEFAULT_CLIENT_NAME
 
     @model_validator(mode="after")
     def _grants_include_authorization_code(self) -> "ClientRegistrationRequest":
@@ -111,3 +115,26 @@ class ClientRegistrationResponse(BaseModel):
     logo_uri: Optional[str] = None
     software_id: Optional[str] = None
     software_version: Optional[str] = None
+
+
+class ConsentClient(BaseModel):
+    name: str
+    # The metadata document URL's host; None for an app that registered itself, so is unverified.
+    verified_domain: Optional[str]
+    # None when the app runs on the User's computer: a loopback or app-scheme redirect.
+    redirect_host: Optional[str]
+    is_local: bool
+
+
+class AuthorizationDetailsResponse(BaseModel):
+    """What the consent page shows about a pending request."""
+
+    client: ConsentClient
+    scope: str
+    expires_at: datetime
+
+
+class RedirectResponseBody(BaseModel):
+    """Where the consent page sends the browser after the User decides."""
+
+    redirect_url: str

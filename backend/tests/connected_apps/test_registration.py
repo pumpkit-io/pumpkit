@@ -92,6 +92,15 @@ async def test_the_name_loses_control_characters(browser):
     assert response.json()["client_name"] == "My App"
 
 
+async def test_the_name_loses_characters_that_could_disguise_it(browser):
+    response = await browser.post(
+        REGISTER,
+        json={"redirect_uris": [REDIRECT], "client_name": "Pay\u202epal\u200b \u2066App\ufeff"},
+    )
+
+    assert response.json()["client_name"] == "Paypal App"
+
+
 @pytest.mark.parametrize(
     "redirect_uris",
     [
@@ -103,6 +112,11 @@ async def test_the_name_loses_control_characters(browser):
         ["https://example.com/cb", "http://example.com/cb"],
         ["https://example.com/cb#frag"],
         [5],
+        ["https://example.com/cb?code=1"],
+        ["http://127.0.0.1/cb?team=1&state=x"],
+        ["cursor://app/cb?iss"],
+        ["https://example.com/cb?error="],
+        ["https://example.com/cb?error_description=x"],
     ],
 )
 async def test_bad_redirect_uris_are_invalid_redirect_uri(browser, redirect_uris):
@@ -313,8 +327,8 @@ async def test_the_purge_keeps_an_old_client_with_a_recent_authorization(browser
             code_challenge="challenge",
             scope="pumpkit",
             resource="http://localhost:5173/api/v1/mcp",
-            created_at=now - timedelta(days=2),
-            expires_at=now - timedelta(days=2) + timedelta(minutes=30),
+            created_at=now - timedelta(hours=2),
+            expires_at=now - timedelta(hours=2) + timedelta(minutes=30),
         )
     )
     await db.commit()

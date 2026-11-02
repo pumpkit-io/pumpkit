@@ -2,7 +2,7 @@
 
 import re
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _REFUSED_SCHEMES = frozenset(
@@ -10,6 +10,8 @@ _REFUSED_SCHEMES = frozenset(
 )
 _PRIVATE_USE_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*$")
 _CONTROL_OR_SPACE = re.compile(r"[\x00-\x20\x7f]")
+# Authorize appends these, so a URI already carrying one would send the app two.
+_RESPONSE_PARAMETERS = frozenset({"code", "state", "iss", "error", "error_description"})
 
 
 class RedirectUriRefused(ValueError):
@@ -21,6 +23,9 @@ def validate_redirect_uri(uri: str) -> str:
     # A control character would let a registered URI split the Location header it ends up in.
     if _CONTROL_OR_SPACE.search(uri):
         raise RedirectUriRefused("Redirect URIs cannot contain spaces or control characters.")
+    # It ends up in a Location header, which carries only Latin-1, and IDN hosts can spoof others.
+    if not uri.isascii():
+        raise RedirectUriRefused("Redirect URIs must be ASCII; percent-encode other characters.")
     # Browsers read a backslash as a slash, so parsers that don't see a different host.
     if "\\" in uri:
         raise RedirectUriRefused("Redirect URIs cannot contain backslashes.")
@@ -36,6 +41,11 @@ def validate_redirect_uri(uri: str) -> str:
         raise RedirectUriRefused("Redirect URI is not a valid URL.")
     if "@" in parts.netloc:
         raise RedirectUriRefused("Redirect URIs cannot contain a username or password.")
+    named = {name for name, _ in parse_qsl(parts.query, keep_blank_values=True)}
+    if reserved := sorted(named & _RESPONSE_PARAMETERS):
+        raise RedirectUriRefused(
+            f"Redirect URIs cannot already carry {', '.join(reserved)} in their query."
+        )
 
     scheme = parts.scheme
     if scheme in _REFUSED_SCHEMES:
@@ -73,3 +83,11 @@ def _loopback_key(uri: str) -> Optional[tuple[str, str, str]]:
     if parts.scheme != "http" or parts.hostname not in _LOOPBACK_HOSTS:
         return None
     return parts.hostname, parts.path, parts.query
+
+
+def redirect_host(uri: str) -> Optional[str]:
+    """The host a valid redirect URI sends the browser to, or None for an app on the computer."""
+    parts = urlsplit(uri)
+    if parts.scheme != "https" or parts.hostname in _LOOPBACK_HOSTS:
+        return None
+    return parts.hostname
