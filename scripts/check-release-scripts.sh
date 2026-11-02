@@ -393,20 +393,29 @@ fi
 # $GH_PR_STATE, $GH_HEAD (the PR's head commit, the local release branch by default), $GH_CHECKS (JSON, empty for none reported),
 # $GH_REVIEW (a commit's review status) and $GH_RUN (its review run's status) answer from FILE.N on the Nth read when it exists, else FILE;
 # a file reading !fail makes that call fail like a dropped connection. $GH_REVIEW@SHA and $GH_RUN@SHA, when they exist, answer for that commit only.
+# With $GH_REVIEW_CLOCK set, review and run reads share one count, so FILE.N is the Nth read of either and two files can change together.
+# A dispatch posts its final status for the PR's head (the last headRefOid answered, else the local release branch); status reads are logged with their answer.
 mkdir "$work/prbin"
 cat >"$work/prbin/gh" <<'STUB'
 #!/bin/sh
 echo "$*" >>"$GH_LOG"
+# Usage: answer FILE [COUNTER]. COUNTER defaults to FILE.reads.
 answer() {
-  n=$(($(cat "$1.reads" 2>/dev/null || echo 0) + 1))
-  echo "$n" >"$1.reads"
+  counter=${2:-$1.reads}
+  n=$(($(cat "$counter" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$counter"
   if [ -f "$1.$n" ]; then a=$(cat "$1.$n"); else a=$(cat "$1"); fi
+  printf '%s' "$a" >"$1.last"
   [ "$a" != '!fail' ] || { echo "error connecting to api.github.com" >&2; exit 1; }
   printf '%s' "$a"
 }
 # Usage: answer_for SHA FILE.
 answer_for() {
-  if [ -e "$2@$1" ]; then answer "$2@$1"; else answer "$2"; fi
+  if [ -e "$2@$1" ]; then f="$2@$1"; else f=$2; fi
+  answer "$f" ${GH_REVIEW_CLOCK:+"$GH_REVIEW_CLOCK"}
+}
+release_branch_head() {
+  git rev-parse "$(git for-each-ref --format='%(refname)' 'refs/heads/release/*' | head -1)"
 }
 query() {
   while [ $# -gt 0 ]; do
@@ -424,7 +433,7 @@ case "$1 $2" in
   "pr view")
     case "$*" in
       *headRefOid*)
-        [ -e "$GH_HEAD" ] || git rev-parse "$(git for-each-ref --format='%(refname)' 'refs/heads/release/*' | head -1)" >"$GH_HEAD"
+        [ -e "$GH_HEAD" ] || release_branch_head >"$GH_HEAD"
         answer "$GH_HEAD" ;;
       *state*)
         state=$(answer "$GH_PR_STATE") || exit 1
@@ -453,11 +462,17 @@ case "$1 $2" in
       *) sha=$*; sha=${sha#*--commit }; answer_for "${sha%% *}" "$GH_RUN" ;;
     esac ;;
   "workflow run")
-    rm -f "$GH_REVIEW".* "$GH_RUN".*
-    cp "$GH_REVIEW_FINAL_STATUS" "$GH_REVIEW"
-    printf queued >"$GH_RUN"
+    if [ -e "$GH_HEAD.last" ]; then sha=$(cat "$GH_HEAD.last"); else sha=$(release_branch_head); fi
+    rm -f "$GH_REVIEW@$sha".* "$GH_RUN@$sha".*
+    cp "$GH_REVIEW_FINAL_STATUS" "$GH_REVIEW@$sha"
+    printf queued >"$GH_RUN@$sha"
     echo $(($(cat "$GH_RUN_ID" 2>/dev/null || echo 0) + 1)) >"$GH_RUN_ID" ;;
-  "api "*/statuses) sha=${2%/statuses}; answer_for "${sha##*/}" "$GH_REVIEW" ;;
+  "api "*/statuses)
+    sha=${2%/statuses}
+    sha=${sha##*/}
+    review=$(answer_for "$sha" "$GH_REVIEW") || exit 1
+    echo "review of $sha: $review" >>"$GH_LOG"
+    printf '%s' "$review" ;;
   "api "*) cat "$GH_ADMIN" ;;
 esac
 STUB
@@ -667,17 +682,20 @@ else
   fail "expected the rerun to pick up the fix: status $status, $(cat "$out" "$err" "$GH_LOG")"
 fi
 
-# A commit pushed to the release branch during the wait gets its own review.
+# A commit pushed to the release branch during the wait gets its own review; the first commit's failed review no longer counts.
 release_case
 new_head=0123456789abcdef0123456789abcdef01234567
-printf '%s' "$new_head" >"$GH_HEAD.2"
+printf failure >"$GH_REVIEW"
+printf completed >"$GH_RUN"
 printf '%s' "$new_head" >"$GH_HEAD"
 : >"$GH_REVIEW@$new_head"
 : >"$GH_RUN@$new_head"
 merges_on_read 4
 release_run 60
-if released && grep -q "^review started on $new_head\$" "$out" && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 2 ] &&
-  grep -q "commits/$new_head/statuses" "$GH_LOG"; then
+merged_at=$(grep -n '^pr view 5 --json state' "$GH_LOG" | tail -1 | cut -d: -f1)
+judged_at=$(grep -n "^review of $new_head: success\$" "$GH_LOG" | head -1 | cut -d: -f1)
+if released && grep -q "^review started on $new_head\$" "$out" && [ "$(grep -c '^workflow run sdlc-review-llm.yml' "$GH_LOG")" = 1 ] &&
+  [ "${judged_at:-99999}" -lt "${merged_at:-0}" ]; then
   pass "release starts the review on a commit pushed to the release branch during the wait"
 else
   fail "expected a review on the new head: status $status, $(cat "$out" "$err" "$GH_LOG")"
@@ -692,6 +710,31 @@ if [ "$status" -ne 0 ] && grep -q '^STOPPED: the review of PR #5 ended failure' 
   pass "release judges the review of the PR's new head commit, not the one it started with"
 else
   fail "expected the new head's failed review to stop: status $status, $(cat "$out" "$err")"
+fi
+
+# A running review posts success and its run completes between the two reads of the first check.
+release_case
+printf pending >"$GH_REVIEW.1"
+printf in_progress >"$GH_RUN.1"
+printf success >"$GH_REVIEW"
+printf completed >"$GH_RUN"
+merges_on_read 3
+GH_REVIEW_CLOCK="$work/gh-review-clock" release_run 60
+if released && ! grep -q '^workflow run' "$GH_LOG"; then
+  pass "release starts no second review when the running one finishes between its reads"
+else
+  fail "expected no dispatch for a review finishing mid-check: status $status, $(cat "$out" "$err" "$GH_LOG")"
+fi
+
+# An abandoned Release left origin/release/v0.1.1 in this clone, though its branch is gone from origin.
+release_case
+git update-ref refs/remotes/origin/release/v0.1.1 "$(git commit-tree 'HEAD^{tree}' -p HEAD -m abandoned)"
+merges_on_read 3
+release_run 60
+if released && ! git --git-dir="$work/rel.git" log --format=%s main | grep -qx abandoned; then
+  pass "release starts the branch from origin/main when the release branch was deleted from origin"
+else
+  fail "expected the stale origin/release/v0.1.1 to be ignored: status $status, $(cat "$out" "$err")"
 fi
 
 # A failed read of the review run must not pass for no run, which would start a second paid review.
