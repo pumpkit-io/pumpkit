@@ -16,6 +16,14 @@ _Avoid_: deployment, server, tenant, edition
 A person who runs their own Instance. They are not the Operator, and the Operator's Terms and Privacy Policy do not cover their Instance.
 _Avoid_: admin, host, operator (for anyone but the Operator)
 
+**Release**:
+A numbered copy of Pumpkit, `X.Y.Z`, that Self-hosters and the Operator install on their Instance, with its CHANGELOG section as its notes. Its number is not a Version, which belongs to a Post.
+_Avoid_: version (for a Release), build, deploy
+
+**Upgrade notes**:
+The manual steps a Release's CHANGELOG entries ask of an Instance that upgrades to it, written for any Instance, such as a new required setting or a step for a Self-hoster's own proxy. An entry with nothing to do by hand has none.
+_Avoid_: migration notes, breaking changes, manual steps (as a name)
+
 **Sign-up allowlist**:
 The email addresses and email domains that may sign in to an Instance. An Instance without one lets anyone sign in.
 _Avoid_: whitelist, invite list, access list
