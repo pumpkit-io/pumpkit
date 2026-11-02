@@ -88,6 +88,7 @@ from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402
 from pumpkit.core.photos import FakePhotoFetcher, get_photo_fetcher  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
+from pumpkit.core.storage import LocalDirectoryStorage, get_file_storage  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
 from pumpkit.posts.formats import format_of  # noqa: E402
@@ -252,6 +253,18 @@ def fake_classifier():
     app.dependency_overrides[get_classifier] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_classifier, None)
+
+
+@pytest.fixture(autouse=True)
+def file_storage(tmp_path):
+    """
+    Every test stores files with the real local-directory adapter, on its own temporary
+    directory. Request it by name to put, open or delete files the app stores.
+    """
+    storage = LocalDirectoryStorage(tmp_path / "storage")
+    app.dependency_overrides[get_file_storage] = lambda: storage
+    yield storage
+    app.dependency_overrides.pop(get_file_storage, None)
 
 
 @pytest.fixture(autouse=True)

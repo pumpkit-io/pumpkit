@@ -364,7 +364,9 @@ Set them in `.env`, then run `docker compose up -d --wait`. Check with a few Mag
 
 ## Backups and restore
 
-These commands back up and restore the bundled Postgres. For an external one, use your provider's backups. Scheduling them (cron, a systemd timer) is up to you; keep copies off the server.
+These commands back up and restore the bundled Postgres and the `media_data` volume. For an external Postgres, use your provider's backups for the database. Scheduling them (cron, a systemd timer) is up to you; keep copies off the server.
+
+The `media_data` volume holds Media: the images, GIFs and videos Users attach to their posts, kept until each goes out on X. Back it up together with the database, which records which files belong to which post; a database restored without its Media leaves those posts unable to publish their Media.
 
 Back up, from the clone:
 
@@ -375,6 +377,15 @@ docker compose exec -T db pg_restore --list < pumpkit-backup.dump | grep -c 'TAB
 
 **Check:** the dump exits 0 and the second command prints the number of tables in the backup, such as `16`. If you set `POSTGRES_USER` or `POSTGRES_DB`, use those in place of `postgres`.
 
+Then the Media:
+
+```sh
+docker compose exec -T backend tar czf - -C /var/lib/pumpkit/media . > pumpkit-media.tar.gz
+tar tzf pumpkit-media.tar.gz | wc -l
+```
+
+**Check:** `tar` exits 0 and the second command prints a count of at least `1`, the archive's top directory.
+
 Also keep a copy of `.env`: without `FERNET_ENCRYPTION_KEY` a restored database cannot read its X connections.
 
 Restore, which replaces the database's contents with the backup's:
@@ -382,18 +393,19 @@ Restore, which replaces the database's contents with the backup's:
 ```sh
 docker compose stop backend publisher web
 docker compose exec -T db pg_restore -U postgres -d postgres --clean --if-exists < pumpkit-backup.dump
+docker compose run --rm --no-deps -T backend sh -c 'find /var/lib/pumpkit/media -mindepth 1 -delete && tar xzf - -C /var/lib/pumpkit/media' < pumpkit-media.tar.gz
 docker compose up -d --wait
 curl -s http://localhost:8080/api/v1/health
 ```
 
-**Check:** `pg_restore` exits 0, `up` ends with every service `Healthy`, and the health check prints `{"status":"ok"}`. Users from the backup can sign in.
+**Check:** `pg_restore` and `tar` exit 0, `up` ends with every service `Healthy`, and the health check prints `{"status":"ok"}`. Users from the backup can sign in.
 
 ## Upgrades
 
 Before 1.0, an upgrade may need manual steps. Each release lists them under **Upgrade notes** in [`CHANGELOG.md`](../CHANGELOG.md).
 
 1. Read every CHANGELOG section between your version and the new one, and follow its **Upgrade notes**. Your version is `PUMPKIT_VERSION` in `.env`; releases are listed on [GitHub](https://github.com/pumpkit-io/pumpkit/releases).
-2. [Back up](#backups-and-restore) the database.
+2. [Back up](#backups-and-restore) the database and the Media.
 3. Set `PUMPKIT_VERSION` in `.env` to the new version, without the `v` (for example `PUMPKIT_VERSION=0.2.0`).
 4. Check out the new release, pull its images and restart:
 
