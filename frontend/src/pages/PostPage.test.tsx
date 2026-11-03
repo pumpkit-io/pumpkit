@@ -1474,6 +1474,49 @@ describe('Post page', () => {
         expect(dialog.queryByRole('list', { name: 'Media on Part 1' })).not.toBeInTheDocument();
       });
 
+      it('waits to open while an image uploads, saying why, then opens once it is on', async () => {
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attach).mockReturnValue(
+          new Promise((resolve) => (answer = resolve)),
+        );
+        renderPost(threadOfTwo());
+        await textCard();
+        chooseFiles('Part 2', photo());
+        await mediaOn('Part 2').findByRole('progressbar');
+
+        const postTo = card().getByRole('button', { name: 'Post to…' });
+        expect(postTo).toHaveAttribute('aria-disabled', 'true');
+        act(() => postTo.focus());
+        expect((await screen.findAllByText('An image is still uploading'))[0]).toBeInTheDocument();
+        fireEvent.click(postTo);
+        expect(screen.queryByRole('dialog', { name: 'Post to…' })).not.toBeInTheDocument();
+
+        await act(async () => answer(image('media_01')));
+
+        expect(postTo).not.toHaveAttribute('aria-disabled');
+        fireEvent.click(postTo);
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+        fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+        expect(dialog.getByRole('list', { name: 'Media on Part 2' })).toBeInTheDocument();
+      });
+
+      it('waits to open while an image is being removed, saying why', async () => {
+        vi.mocked(mediaService.remove).mockReturnValue(new Promise(() => {}));
+        renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 1' }));
+
+        const postTo = card().getByRole('button', { name: 'Post to…' });
+        expect(postTo).toHaveAttribute('aria-disabled', 'true');
+        act(() => postTo.focus());
+        expect(
+          (await screen.findAllByText('An image is still being removed'))[0],
+        ).toBeInTheDocument();
+        fireEvent.click(postTo);
+        expect(screen.queryByRole('dialog', { name: 'Post to…' })).not.toBeInTheDocument();
+      });
+
       it("won't post a Part holding more media than X takes, and names the Part", async () => {
         const five = ['a', 'b', 'c', 'd', 'e'].map(image);
         const dialog = await openPostTo(withMedia(threadOfTwo(), [five, []]));

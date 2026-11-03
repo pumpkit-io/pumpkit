@@ -99,6 +99,7 @@ function DraftPostTo({
   format,
   parts,
   disabled,
+  waitingFor,
   prepare,
   onScheduled,
 }: {
@@ -106,6 +107,7 @@ function DraftPostTo({
   format: Format;
   parts: ShownPart[];
   disabled: boolean;
+  waitingFor: string | null;
   /** Saves the User's last edit before "Post to…" opens. */
   prepare: () => Promise<boolean>;
   onScheduled: (scheduledPost: ScheduledPost) => void;
@@ -117,6 +119,7 @@ function DraftPostTo({
       parts={parts}
       sender={sender}
       disabled={disabled}
+      waitingFor={waitingFor}
       prepare={prepare}
       onDone={onScheduled}
     />
@@ -180,6 +183,16 @@ function withTextMedia(parts: ShownPart[], media: TextMedia): ShownPart[] {
             .flatMap((tile) => (tile.state === 'ready' && !tile.removing ? [tile.media] : [])),
         },
   );
+}
+
+/** Why "Post to…" waits for the Text's Media, or null when none is uploading or being removed. */
+function mediaWait(parts: ShownPart[], media: TextMedia): string | null {
+  const tiles = parts.flatMap((part, index) => (part.live ? [] : media.tilesOf(index)));
+  if (tiles.some((tile) => tile.state === 'uploading')) return 'An image is still uploading';
+  if (tiles.some((tile) => tile.state === 'ready' && tile.removing)) {
+    return 'An image is still being removed';
+  }
+  return null;
 }
 
 function LoadedPost({
@@ -267,6 +280,7 @@ function LoadedPost({
 
   const textChanges = post.status === 'draft' || post.status === 'failed';
   const partsToPost = textChanges ? withTextMedia(parts, media) : parts;
+  const waitingFor = textChanges ? mediaWait(parts, media) : null;
   const onUndo = can.undo ? () => controller.undo() : undefined;
   const onRedo = can.redo ? () => controller.redo() : undefined;
   const settle = () => controller.settle();
@@ -303,6 +317,7 @@ function LoadedPost({
         format={textVersion.format}
         parts={partsToPost}
         disabled={!can.postTo}
+        waitingFor={waitingFor}
         prepare={settle}
         onScheduled={onScheduledPost}
       />
@@ -322,6 +337,7 @@ function LoadedPost({
         textVersion={textVersion}
         retryParts={partsToPost}
         disabled={!can.postTo}
+        waitingFor={waitingFor}
         prepare={settle}
         onRetried={onScheduledPost}
       />

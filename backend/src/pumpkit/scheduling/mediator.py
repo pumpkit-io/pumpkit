@@ -26,7 +26,7 @@ from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
-from pumpkit.core.time import as_utc, running_from
+from pumpkit.core.time import Clock, as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import Media, Post
@@ -286,12 +286,13 @@ async def create_scheduled_post(
     reader: XReader,
     user: User,
     new: NewScheduledPost,
-    now: datetime,
+    clock: Clock,
 ) -> ScheduledPostResponse:
     """
     With `publish_now`, published within the request: Published, Failed, or back in scheduled.
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
+    now = clock()
     connection = await connection_to_publish_on(db, user_id=user.id)
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
@@ -326,7 +327,9 @@ async def create_scheduled_post(
         raise _already_scheduled()
     await rebalance_top_ups(db, user_id=user.id, moments=[as_utc(scheduled_post.publish_at)])
     if new.publish_now:
-        return await _post_now(db, publisher, storage, scheduled_post_id=scheduled_post.id, now=now)
+        return await _post_now(
+            db, publisher, storage, scheduled_post_id=scheduled_post.id, now=now, clock=clock
+        )
     await db.commit()
     return scheduled_post_response(scheduled_post)
 
@@ -389,6 +392,7 @@ async def _post_now(
     *,
     scheduled_post_id: str,
     now: datetime,
+    clock: Clock,
 ) -> ScheduledPostResponse:
     # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(
@@ -397,7 +401,7 @@ async def _post_now(
         storage,
         scheduled_post_id=scheduled_post_id,
         now=now,
-        clock=running_from(now),
+        clock=clock,
     )
     published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
     return scheduled_post_response(published)
@@ -422,13 +426,14 @@ async def edit_scheduled_post(
     user: User,
     scheduled_post_id: str,
     edit: ScheduledPostEdit,
-    now: datetime,
+    clock: Clock,
 ) -> ScheduledPostResponse:
     """
     New Parts or the Post's Text, time, Community or share with followers for a scheduled or Failed
     Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
     so a Failed one gets another try. With publish now it answers like Post now.
     """
+    now = clock()
     await users_service.lock_user_id(db, user_id=user.id)
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
@@ -498,7 +503,9 @@ async def edit_scheduled_post(
     moments = [publish_at_before, reschedule.publish_at] if reschedule else [publish_at_before]
     await rebalance_top_ups(db, user_id=user.id, moments=moments)
     if edit.publish_now:
-        return await _post_now(db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now)
+        return await _post_now(
+            db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
+        )
     await db.commit()
     return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
 

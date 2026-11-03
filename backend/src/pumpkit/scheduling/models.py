@@ -135,7 +135,6 @@ class ScheduledPostMedia(Base):
     media_id: Mapped[str] = mapped_column(
         ForeignKey("media.id", ondelete="CASCADE"), primary_key=True, index=True
     )
-    # The position of its Part, from 0.
     part_position: Mapped[int] = mapped_column(Integer)
     position: Mapped[int] = mapped_column(Integer)
 

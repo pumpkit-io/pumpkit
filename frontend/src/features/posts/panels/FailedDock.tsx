@@ -44,6 +44,7 @@ export function FailedPostTo({
   textVersion,
   retryParts,
   disabled,
+  waitingFor,
   prepare,
   onRetried,
 }: {
@@ -52,6 +53,7 @@ export function FailedPostTo({
   /** What the retry sends, the live Parts first. */
   retryParts: ShownPart[];
   disabled: boolean;
+  waitingFor: string | null;
   /** Saves the User's last edit before "Post to…" opens. */
   prepare: () => Promise<boolean>;
   onRetried: (scheduledPost: ScheduledPost) => void;
@@ -64,6 +66,7 @@ export function FailedPostTo({
       sender={sender}
       initialWhere={destinationDraftOf(scheduledPost)}
       disabled={disabled}
+      waitingFor={waitingFor}
       prepare={prepare}
       onDone={onRetried}
     />

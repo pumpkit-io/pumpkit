@@ -16,6 +16,7 @@ from pumpkit.core.mcp_tools import (
 )
 from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.core.storage import get_file_storage
+from pumpkit.core.time import get_clock
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
@@ -93,7 +94,7 @@ async def _create_scheduled_post(
         reader=await call.provide(get_x_reader),
         user=call.user,
         new=new,
-        now=call.now,
+        clock=await call.provide(get_clock),
     )
     return _tool_response(scheduled_post)
 
@@ -192,9 +193,8 @@ async def edit_scheduled_post(
     profile instead. Leave out what stays the same. Live parts of a thread that failed partway
     are on X and locked: keep them first in `parts`, unchanged; the text's parts in their
     places are skipped. A new time publishes only the parts not live, as replies to the last
-    live one. Media stays with the part in its place, so while a part not live has media,
-    `parts` keeps the number of parts: to add or remove one, change the post's text and use
-    `copy_text`.
+    live one. While a part that isn't on X yet has media, `parts` must keep the same number of
+    parts: to add or remove one, change the post's text and use `copy_text`.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
         {
@@ -219,7 +219,7 @@ async def edit_scheduled_post(
         user=call.user,
         scheduled_post_id=scheduled_post_id,
         edit=edit,
-        now=call.now,
+        clock=await call.provide(get_clock),
     )
     return _tool_response(scheduled_post)
 

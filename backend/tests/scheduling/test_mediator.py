@@ -60,7 +60,7 @@ def create(
             reader=fake_x_reader,
             user=user,
             new=NewScheduledPost(**fields),
-            now=fixed_clock(),
+            clock=fixed_clock,
         )
 
     return _create
@@ -77,7 +77,7 @@ def edit(db, user, fake_x_publisher, file_storage, fake_x_reader, fixed_clock):
             user=user,
             scheduled_post_id=scheduled_post_id,
             edit=ScheduledPostEdit(**fields),
-            now=fixed_clock(),
+            clock=fixed_clock,
         )
 
     return _edit

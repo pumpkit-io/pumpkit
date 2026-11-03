@@ -194,9 +194,8 @@ async def call_x(
     media_ids: list[str],
 ) -> str:
     """
-    X's post id for `part`, sent with the uploaded `media_ids` as a reply to `reply_to` when
-    given, or `Failed`, whose reason names the Part in a Thread. A "reconnect_needed" one means
-    X refused the access token.
+    X's post id for `part`, or `Failed`, whose reason names the Part in a Thread. Outlasting
+    `X_CALL_LIMIT` is "outcome_unknown": X may have taken it.
     """
     subject = _subject(scheduled_post, part)
     try:
@@ -239,8 +238,15 @@ async def upload_media(
     if media.file_key is None:
         raise Failed("media_missing", _not_published(subject, MEDIA_MISSING))
     try:
-        async with asyncio.timeout(UPLOAD_LIMIT.total_seconds()):
-            with await storage.open(media.file_key) as source:
+        source = await storage.open(media.file_key)
+    except StoredFileNotFoundError:
+        raise Failed("media_missing", _not_published(subject, MEDIA_MISSING))
+    except (OSError, ValueError):
+        logger.exception("Reading the stored file of media %s failed", media.id)
+        raise Failed("media_not_sent", _not_published(subject, MEDIA_NOT_SENT))
+    try:
+        with source:
+            async with asyncio.timeout(UPLOAD_LIMIT.total_seconds()):
                 return await publisher.upload_media(
                     access_token=access_token,
                     source=source,
@@ -248,8 +254,6 @@ async def upload_media(
                     content_type=media.content_type,
                     category=_CATEGORIES[media.kind],
                 )
-    except StoredFileNotFoundError:
-        raise Failed("media_missing", _not_published(subject, MEDIA_MISSING))
     except XReconnectNeededError:
         raise Failed("reconnect_needed", _not_published(subject, RECONNECT_NEEDED))
     except XMediaRefusedError as refused:
@@ -257,8 +261,9 @@ async def upload_media(
         raise Failed("refused_by_x", f"X refused {where}: {refused.message}")
     except (XPublisherError, TimeoutError):
         raise Failed("x_unavailable", _not_published(subject, X_UNAVAILABLE))
-    except Exception:
-        logger.exception("Sending media %s to X failed before X was called", media.id)
+    except OSError:
+        # Reading the file between chunks; X was sent no post.
+        logger.exception("Reading the stored file of media %s failed", media.id)
         raise Failed("media_not_sent", _not_published(subject, MEDIA_NOT_SENT))
 
 
@@ -269,7 +274,7 @@ async def delete_published_files(storage: FileStorage, media: list[Media]) -> No
             continue
         try:
             await storage.delete(one.file_key)
-        except OSError:
+        except (OSError, ValueError):
             # Left on disk: the Part is live, so its file is never read again.
             logger.exception("Deleting the published file of %s failed", one.id)
             continue

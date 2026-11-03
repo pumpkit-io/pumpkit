@@ -157,7 +157,7 @@ async def create_scheduled_post(
         reader=reader,
         user=current_user,
         new=new,
-        now=clock(),
+        clock=clock,
     )
 
 
@@ -202,7 +202,7 @@ async def edit_scheduled_post(
         user=current_user,
         scheduled_post_id=scheduled_post_id,
         edit=edit,
-        now=clock(),
+        clock=clock,
     )
 
 

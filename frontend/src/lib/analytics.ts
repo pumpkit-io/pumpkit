@@ -221,7 +221,7 @@ export const EVENTS = {
   },
   scheduled_post_failed: {
     description:
-      'Publisher or Post now: a Scheduled post Failed. Props: format (post | thread), part_count (number), reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown | media_missing), has_media (boolean).',
+      'Publisher or Post now: a Scheduled post Failed. Props: format (post | thread), part_count (number), reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown | media_missing | media_not_sent), has_media (boolean).',
   },
 
   // Connecting AI apps: the consent page (/oauth/consent) and Settings

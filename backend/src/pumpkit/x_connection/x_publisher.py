@@ -176,10 +176,8 @@ class XPublisher(Protocol):
         category: MediaCategory,
     ) -> str:
         """
-        X's media id for the `byte_size` bytes of `source`, once X has processed them. Nothing is
-        published, so any failure may be retried: a refused token raises `XReconnectNeededError`,
-        a 429 `XRateLimitedError`, a refusal or failed processing `XMediaRefusedError`, anything
-        else `XMediaUnavailableError` or `XNotReceivedError`.
+        X's media id for the `byte_size` bytes of `source`, once X has processed them. It
+        publishes nothing, so a failed upload may be tried again.
         """
         ...
 

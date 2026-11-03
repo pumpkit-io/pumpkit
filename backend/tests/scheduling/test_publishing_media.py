@@ -4,7 +4,7 @@ Scheduled post, uploaded to X just before that Part's X post, and deleted once i
 """
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,7 +14,7 @@ from sqlalchemy import update
 import pumpkit.scheduling.publish as publish_module
 from pumpkit.core.storage import StoredFileNotFoundError
 from pumpkit.posts.media import file_key, preview_key
-from pumpkit.posts.models import TextMedia
+from pumpkit.posts.models import Media, TextMedia
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.scheduling.publishing import recover_stuck
 from pumpkit.x_connection.models import XConnection
@@ -568,6 +568,169 @@ async def test_a_stored_file_that_cant_be_read_fails_the_post_with_nothing_publi
         "Part 2 not published: Pumpkit couldn't send its media to X. Reschedule it to try again."
     )
     assert [p["live"] for p in failed["parts"]] == [True, False]
+
+
+def _taking(fixed_clock, wait: timedelta):
+    """An upload during which `wait` passes."""
+
+    async def take() -> None:
+        fixed_clock.advance(wait)
+
+    return take
+
+
+async def test_a_post_published_after_a_long_upload_is_published_when_x_took_it(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.while_uploading = _taking(fixed_clock, timedelta(minutes=4))
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    published = await _scheduled_post(client, post_id)
+    assert datetime.fromisoformat(published["published_at"]) == fixed_clock()
+
+
+async def test_a_long_upload_x_didnt_take_waits_its_backoff_from_when_it_ended(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.while_uploading = _taking(fixed_clock, timedelta(minutes=5))
+    fake_x_publisher.fail_upload = XRateLimitedError("429")
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    fake_x_publisher.while_uploading = None
+    fake_x_publisher.fail_upload = None
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    waiting = await _scheduled_post(client, post_id)
+    assert waiting["state"] == "scheduled", waiting["failed_reason"]
+    assert fake_x_publisher.upload_attempts == 1
+
+    fixed_clock.advance(timedelta(minutes=1))
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
+
+
+async def test_an_upload_x_didnt_take_that_ends_after_the_retry_window_fails_the_post(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.while_uploading = _taking(
+        fixed_clock, publish_module.RETRY_WINDOW + timedelta(minutes=1)
+    )
+    fake_x_publisher.fail_upload = XRateLimitedError("429")
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    failed = await _scheduled_post(client, post_id)
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == f"Not published: {publish_module.X_UNAVAILABLE}"
+
+
+async def test_a_stored_file_with_an_invalid_key_fails_the_post_with_nothing_published(
+    client,
+    db,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    media = await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    await db.execute(update(Media).where(Media.id == media["id"]).values(file_key="../escape"))
+    await db.commit()
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    failed = await _scheduled_post(client, post_id)
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == (
+        "Not published: Pumpkit couldn't send its media to X. Reschedule it to try again."
+    )
+    assert fake_x_publisher.uploads == []
+
+
+async def test_a_bug_while_uploading_is_not_taken_for_a_failed_upload(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.fail_upload = KeyError("tweet_image")
+
+    with pytest.raises(KeyError):
+        await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+
+async def test_a_file_whose_key_cant_be_deleted_leaves_the_part_published(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+    monkeypatch,
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+
+    async def invalid_key(key: str) -> None:
+        raise ValueError(f"Not a valid storage key: {key!r}")
+
+    monkeypatch.setattr(file_storage, "delete", invalid_key)
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
 
 
 async def _connect_x_before_media(db) -> None:

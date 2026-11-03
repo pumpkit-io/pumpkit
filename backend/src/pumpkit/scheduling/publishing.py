@@ -90,8 +90,7 @@ class _ClaimLost(Exception):
 class _Claim:
     """
     A publish's hold on its Scheduled post, renewed before each call to X so `recover_stuck`
-    leaves a long publish alone. Once recovery or a retry took the post, the publish stops and
-    writes nothing more: what it would write could undo a Failed the User may already act on.
+    leaves a long publish alone. Once lost, the publish writes nothing more.
     """
 
     scheduled_post: ScheduledPost
@@ -150,7 +149,9 @@ async def _settle(
         await _publish(db, publisher, storage, claim, now=now)
     except publish.Failed as failed:
         await claim.check(db)
-        failed_for_good = await publish.record_failure(db, scheduled_post, failed, now=now)
+        failed_for_good = await publish.record_failure(
+            db, scheduled_post, failed, now=claim.clock()
+        )
         if failed_for_good:
             await rebalance_top_ups(
                 db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)]
@@ -161,7 +162,7 @@ async def _settle(
         return
 
     await claim.check(db)
-    await service.record_published(db, scheduled_post, now=now)
+    await service.record_published(db, scheduled_post, now=claim.clock())
     await db.commit()
     publish.capture_published(scheduled_post)
 
@@ -210,7 +211,9 @@ async def _publish(
             except publish.Failed as failed:
                 if failed.category == "reconnect_needed":
                     await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
-                    await x_connections_service.flag_needs_reconnect(db, connection, now=now)
+                    await x_connections_service.flag_needs_reconnect(
+                        db, connection, now=claim.clock()
+                    )
                 raise
             try:
                 await claim.check(db)
