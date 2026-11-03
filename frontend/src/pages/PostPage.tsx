@@ -7,9 +7,7 @@ import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
-import { MediaButton } from '@/features/posts/media/MediaButton';
-import { MediaTiles, ReadOnlyMediaTiles } from '@/features/posts/media/MediaTiles';
-import { mediaWhere } from '@/features/posts/media/mediaRules';
+import { mediaWait, partMediaOf, readOnlyMediaOf } from '@/features/posts/media/partMedia';
 import { useTextMedia, type TextMedia } from '@/features/posts/media/useTextMedia';
 import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import {
@@ -30,7 +28,6 @@ import { PostToButton } from '@/features/posts/postTo/PostToButton';
 import { useCreateFromText } from '@/features/posts/postTo/senders';
 import { cardParts, copiedText, type ShownPart } from '@/features/posts/shownText';
 import type { TextController, TextSnapshot } from '@/features/posts/text/textController';
-import type { PartMedia } from '@/features/posts/TextCard';
 import { TextEditor } from '@/features/posts/TextEditor';
 import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import { usePost } from '@/features/posts/usePost';
@@ -126,52 +123,6 @@ function DraftPostTo({
   );
 }
 
-/**
- * Media controls for each Part of the Text not yet live on X. With `askToReconnect`, the media
- * button, a drop and a paste each ask to reconnect X instead of taking files.
- */
-function partMediaOf(
-  media: TextMedia,
-  parts: ShownPart[],
-  askToReconnect: (() => void) | undefined,
-) {
-  return (index: number): PartMedia | null => {
-    if (parts[index]?.live) return readOnlyMediaOf(parts)(index);
-    const where = mediaWhere(index, parts.length);
-    return {
-      tiles: (
-        <MediaTiles
-          tiles={media.tilesOf(index)}
-          where={where}
-          canRetry={media.roomOn(index) > 0}
-          onRemove={media.remove}
-          onRetry={media.retry}
-        />
-      ),
-      button: (
-        <MediaButton
-          where={where}
-          full={media.roomOn(index) <= 0}
-          saving={media.saving(index)}
-          onFiles={(files) => media.attach(index, files, 'button')}
-          onClickInsteadOfPicker={askToReconnect}
-        />
-      ),
-      onFiles: (files, via) =>
-        askToReconnect ? askToReconnect() : media.attach(index, files, via),
-    };
-  };
-}
-
-/** The Media each Part goes, or went, to X with, shown as it is. */
-function readOnlyMediaOf(parts: ShownPart[]) {
-  return (index: number): PartMedia | null => {
-    const shown = parts[index]?.media ?? [];
-    if (!shown.length) return null;
-    return { tiles: <ReadOnlyMediaTiles media={shown} where={mediaWhere(index, parts.length)} /> };
-  };
-}
-
 /** The Text's Parts with the Media now on them, for "Post to…" to check and show. */
 function withTextMedia(parts: ShownPart[], media: TextMedia): ShownPart[] {
   return parts.map((part, index) =>
@@ -184,16 +135,6 @@ function withTextMedia(parts: ShownPart[], media: TextMedia): ShownPart[] {
             .flatMap((tile) => (tile.state === 'ready' && !tile.removing ? [tile.media] : [])),
         },
   );
-}
-
-/** Why "Post to…" waits for the Text's Media, or null when none is uploading or being removed. */
-function mediaWait(parts: ShownPart[], media: TextMedia): string | null {
-  const tiles = parts.flatMap((part, index) => (part.live ? [] : media.tilesOf(index)));
-  if (tiles.some((tile) => tile.state === 'uploading')) return 'An image is still uploading';
-  if (tiles.some((tile) => tile.state === 'ready' && tile.removing)) {
-    return 'An image is still being removed';
-  }
-  return null;
 }
 
 function LoadedPost({
@@ -252,8 +193,11 @@ function LoadedPost({
     return (
       <Page title={breadcrumb}>
         <ScheduledPostEditor
+          postId={post.id}
           scheduledPost={scheduledPost}
           charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
+          askToReconnect={connection?.needsReconnectForMedia ? askToReconnect : undefined}
+          onReconnectNeeded={onReconnectNeeded}
           onSaved={(saved) => {
             onScheduledPost(saved);
             setEditing(false);
@@ -262,7 +206,14 @@ function LoadedPost({
             onScheduledPost(null);
             setEditing(false);
           }}
-          onCancel={() => setEditing(false)}
+          onCancel={(current) => {
+            onScheduledPost(current);
+            setEditing(false);
+          }}
+        />
+        <ReconnectXForMediaDialog
+          open={reconnectingForMedia}
+          onClose={() => setReconnectingForMedia(false)}
         />
       </Page>
     );

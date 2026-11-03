@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { showToast } from '@/components/Toaster';
 import { track } from '@/lib/analytics';
 import { useConfirmLeaving } from '@/lib/useConfirmLeaving';
 import { errorCode, errorStatus } from '@/services/apiErrors';
-import { mediaService, type Media } from '@/services/mediaService';
-import { postService } from '@/services/postService';
+import type { Media } from '@/services/mediaService';
 import {
   IMAGES_PER_PART,
   PART_SAVING,
@@ -15,6 +14,7 @@ import {
   type AttachVia,
   type Refusal,
 } from './mediaRules';
+import { textMediaPlace, type MediaPlace } from './mediaPlaces';
 
 /** One file on a Part as the card shows it, from the moment it is chosen. */
 export type Tile =
@@ -104,7 +104,10 @@ export function useTextMedia(
   partCount: number,
   /** Called when the server refuses an upload until X is reconnected; the file is dropped. */
   onReconnectNeeded: () => void,
+  /** Where the Media lives instead of the Text, such as a Scheduled post's own copy. */
+  placeInstead?: MediaPlace,
 ): TextMedia {
+  const place = useMemo(() => placeInstead ?? textMediaPlace(postId), [placeInstead, postId]);
   const nextKey = useRef(0);
   const newKey = useCallback(() => `tile-${++nextKey.current}`, []);
   const [parts, setParts] = useState<Tile[][]>(() =>
@@ -183,20 +186,20 @@ export function useTextMedia(
   const discard = useCallback(
     async (media: Media) => {
       discarded.current.add(media.id);
-      await mediaService.remove(postId, media.id).catch(() => {});
+      await place.remove(media.id).catch(() => {});
     },
-    [postId],
+    [place],
   );
 
   /**
-   * The Media on each Part of the server's Text, or null when it can't be read. Never more Parts
+   * The Media on each Part as the server holds it, or null when it can't be read. Never more Parts
    * than `partCount`, and exactly that many when the Text changed while the read was under way.
    */
   const read = useCallback(async (): Promise<Media[][] | null> => {
     const changesBefore = partCountChanges.current;
     let text: Media[][];
     try {
-      text = (await postService.get(postId)).textMedia;
+      text = await place.read();
     } catch {
       return null;
     }
@@ -211,7 +214,7 @@ export function useTextMedia(
     );
     while (server.length < count) server.push([]);
     return server;
-  }, [postId]);
+  }, [place]);
 
   /**
    * Shows each Part's Media as the server holds it, matching tiles by Media id, with the files
@@ -260,7 +263,7 @@ export function useTextMedia(
         let media: Media | null = null;
         let error: unknown = null;
         try {
-          media = await mediaService.attach(postId, sentTo + 1, file, {
+          media = await place.attach(sentTo + 1, file, {
             onProgress: (sent) => {
               changeTile(key, (tile) =>
                 tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
@@ -337,7 +340,7 @@ export function useTextMedia(
         return;
       }
     },
-    [postId, partWith, changeTile, dropTile, read, reconcile, discard, onReconnectNeeded],
+    [place, partWith, changeTile, dropTile, read, reconcile, discard, onReconnectNeeded],
   );
 
   const upload = useCallback(
@@ -428,7 +431,7 @@ export function useTextMedia(
         track('media_removed', { kind: tile.media.kind, source: 'web' });
       };
       enqueue(() =>
-        mediaService.remove(postId, tile.media.id).then(removed, (error: unknown) => {
+        place.remove(tile.media.id).then(removed, (error: unknown) => {
           // A read after a failed upload may already have found it gone.
           if (errorStatus(error) === 404) return removed();
           changeTile(key, (t) => ({ ...t, removing: false }) as Tile);
@@ -436,7 +439,7 @@ export function useTextMedia(
         }),
       );
     },
-    [postId, tileWith, changeTile, dropTile, enqueue],
+    [place, tileWith, changeTile, dropTile, enqueue],
   );
 
   const uploading = parts.some((tiles) => tiles.some((tile) => tile.state === 'uploading'));

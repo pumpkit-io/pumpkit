@@ -76,7 +76,13 @@ vi.mock('@/services/scheduledPostService', () => ({
 }));
 vi.mock('@/services/mediaService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/mediaService')>()),
-  mediaService: { attach: vi.fn(), remove: vi.fn(), preview: vi.fn() },
+  mediaService: {
+    attach: vi.fn(),
+    remove: vi.fn(),
+    attachToScheduledPost: vi.fn(),
+    removeFromScheduledPost: vi.fn(),
+    preview: vi.fn(),
+  },
 }));
 vi.mock('@/services/usageService', () => ({
   usageService: { get: vi.fn() },
@@ -2137,6 +2143,127 @@ describe('Post page', () => {
       await textCard();
 
       expect(screen.queryByRole('button', { name: /add media/i })).not.toBeInTheDocument();
+    });
+
+    describe("on a scheduled post's edit", () => {
+      const THREAD: ScheduledPost = {
+        ...SCHEDULED,
+        parts: [
+          { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1', media: [] },
+          { text: 'Two.', live: false, xPostUrl: null, media: [] },
+        ],
+      };
+
+      beforeEach(() => {
+        vi.mocked(mediaService.attachToScheduledPost).mockReset();
+        vi.mocked(mediaService.removeFromScheduledPost).mockReset().mockResolvedValue();
+        vi.mocked(scheduledPostService.edit).mockReset();
+      });
+
+      async function startEditing(scheduledPost: ScheduledPost) {
+        renderPost(withScheduledPost(scheduledPost));
+        await textCard();
+        fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
+        return within(await screen.findByRole('region', { name: 'Edit the scheduled post' }));
+      }
+
+      it("attaches an image to the scheduled post's own copy, not to the Text", async () => {
+        vi.mocked(mediaService.attachToScheduledPost).mockResolvedValue(image('media_02'));
+        await startEditing(THREAD);
+        const file = photo();
+
+        chooseFiles('Part 2', file);
+
+        expect(await mediaOn('Part 2').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+        expect(mediaService.attachToScheduledPost).toHaveBeenCalledWith(
+          'scheduled_post_01',
+          2,
+          file,
+          expect.anything(),
+        );
+        expect(mediaService.attach).not.toHaveBeenCalled();
+      });
+
+      it("shows a live Part's media read-only, with no media button", async () => {
+        await startEditing({
+          ...THREAD,
+          parts: [{ ...THREAD.parts[0]!, media: [image('media_01')] }, THREAD.parts[1]!],
+        });
+
+        const one = (await textCard()).getByRole('listitem', { name: 'Part 1 of 2' });
+        expect(within(one).getByRole('listitem', { name: 'Image 1' })).toBeInTheDocument();
+        expect(within(one).queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
+        expect(within(one).queryByRole('button', { name: /add media/i })).not.toBeInTheDocument();
+        expect(card().getByRole('button', { name: 'Add media to Part 2' })).toBeInTheDocument();
+      });
+
+      it("removes an image from the scheduled post's copy, which the card shows after Cancel", async () => {
+        const editor = await startEditing({
+          ...THREAD,
+          parts: [THREAD.parts[0]!, { ...THREAD.parts[1]!, media: [image('m1'), image('m2')] }],
+        });
+
+        fireEvent.click(mediaOn('Part 2').getByRole('button', { name: 'Remove image 1' }));
+        await waitFor(() => expect(mediaOn('Part 2').getAllByRole('listitem')).toHaveLength(1));
+        fireEvent.click(editor.getByRole('button', { name: 'Cancel' }));
+
+        expect(mediaService.removeFromScheduledPost).toHaveBeenCalledWith(
+          'scheduled_post_01',
+          'm1',
+        );
+        expect(mediaService.remove).not.toHaveBeenCalled();
+        await panel('Scheduled').findByRole('button', { name: 'Edit' });
+        const tiles = mediaOn('Part 2').getAllByRole('listitem');
+        expect(tiles).toHaveLength(1);
+        expect(mediaOn('Part 2').queryByRole('button')).not.toBeInTheDocument();
+      });
+
+      it('waits to save while an image uploads, saying why', async () => {
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attachToScheduledPost).mockReturnValue(
+          new Promise((resolve) => (answer = resolve)),
+        );
+        vi.mocked(scheduledPostService.edit).mockResolvedValue(THREAD);
+        const editor = await startEditing(THREAD);
+        fireEvent.change(card().getByRole('textbox', { name: 'Part 2 text' }), {
+          target: { value: 'Two, edited.' },
+        });
+        chooseFiles('Part 2', photo());
+
+        await mediaOn('Part 2').findByRole('progressbar');
+        const save = editor.getByRole('button', { name: 'Save changes' });
+        expect(save).toHaveAttribute('aria-disabled', 'true');
+        act(() => save.focus());
+        expect((await screen.findAllByText('An image is still uploading'))[0]).toBeInTheDocument();
+        fireEvent.click(save);
+        expect(scheduledPostService.edit).not.toHaveBeenCalled();
+
+        await act(async () => answer(image('media_02')));
+        expect(save).not.toHaveAttribute('aria-disabled');
+        fireEvent.click(save);
+
+        await waitFor(() =>
+          expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+            parts: ['Live one.', 'Two, edited.'],
+          }),
+        );
+      });
+
+      it('asks to reconnect X instead of taking files on a connection made before media', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue({
+          ...CONNECTED,
+          needsReconnectForMedia: true,
+        });
+        await startEditing(THREAD);
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        fireEvent.click(card().getByRole('button', { name: 'Add media to Part 2' }));
+
+        expect(
+          await screen.findByRole('dialog', { name: 'Reconnect X to add media' }),
+        ).toBeInTheDocument();
+        expect(mediaService.attachToScheduledPost).not.toHaveBeenCalled();
+      });
     });
   });
 
