@@ -13,6 +13,7 @@ function Uploading() {
     <>
       <Link to="/elsewhere">Elsewhere</Link>
       <button onClick={() => navigate('/elsewhere')}>Go elsewhere</button>
+      <button onClick={() => navigate(-1)}>Go back</button>
     </>
   );
 }
@@ -87,5 +88,55 @@ describe('ConfirmLeavingNavigation', () => {
 
     await waitFor(() => expect(path()).toBe('/start'));
     expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks once before navigate(-1) goes back, and stays when declined', async () => {
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+      await waitFor(() => expect(confirm).toHaveBeenCalled());
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/uploading'));
+    expect(path()).toBe('/uploading');
+    expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks once before navigate(-1) goes back, and goes when confirmed', async () => {
+    confirm.mockReturnValue(true);
+
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Go back' })));
+
+    await waitFor(() => expect(path()).toBe('/start'));
+    expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
+  describe('popstate', () => {
+    const shown = () => (window.history.state as { idx: number }).idx;
+    const pop = (idx: number) =>
+      act(() => {
+        window.dispatchEvent(new PopStateEvent('popstate', { state: { idx } }));
+      });
+
+    it('lets a pop onto the entry shown through without asking or moving', () => {
+      const go = vi.spyOn(window.history, 'go');
+
+      pop(shown());
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(go).not.toHaveBeenCalled();
+      go.mockRestore();
+    });
+
+    it('still asks on the next pop when turning back a declined one moved nowhere', () => {
+      const go = vi.spyOn(window.history, 'go').mockImplementation(() => {});
+      const before = shown() - 1;
+
+      pop(before);
+      pop(before);
+
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(go).toHaveBeenNthCalledWith(2, 1);
+      go.mockRestore();
+    });
   });
 });

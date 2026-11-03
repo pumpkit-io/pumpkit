@@ -15,22 +15,15 @@ function pathnameOf(to: To, from: string): string {
 
 /** The history entry the mounted guard shows, or null with no guard mounted. */
 let shownIndex: number | null = null;
-let restoring = false;
 
 /**
- * Turns back a history move the User declines. Added as the module loads, so it runs before
- * React Router's own popstate listener, which BrowserRouter adds once it mounts.
+ * Turns back a history move the User declines. Added at module load, to run before BrowserRouter's.
+ * The pop that turns a move back lands on the shown entry, so it passes without asking.
  */
 function onPopState(event: PopStateEvent) {
-  if (restoring) {
-    restoring = false;
-    event.stopImmediatePropagation();
-    return;
-  }
   const to = entryIndex(event.state);
-  if (to === null || shownIndex === null || confirmLeaving()) return;
+  if (to === null || shownIndex === null || to === shownIndex || confirmLeaving()) return;
   event.stopImmediatePropagation();
-  restoring = true;
   window.history.go(shownIndex - to);
 }
 
@@ -39,7 +32,7 @@ if (typeof window !== 'undefined') window.addEventListener('popstate', onPopStat
 /**
  * Makes every in-app navigation below it go through `confirmLeaving`: links, `navigate()` and
  * the browser's back and forward. The app's BrowserRouter has no blocker, so this wraps its
- * navigator, and tells the popstate listener which entry to go back to.
+ * navigator's push and replace; `navigate(-1)` pops, so the popstate listener asks for it.
  */
 export function ConfirmLeavingNavigation({ children }: { children: ReactNode }) {
   const navigation = useContext(UNSAFE_NavigationContext);
@@ -72,10 +65,6 @@ export function ConfirmLeavingNavigation({ children }: { children: ReactNode }) 
       replace: (to: To, ...rest: unknown[]) => {
         if (leaves(to)) return;
         (navigator.replace as (to: To, ...rest: unknown[]) => void)(to, ...rest);
-      },
-      go: (delta: number) => {
-        if (delta !== 0 && !confirmLeaving()) return;
-        navigator.go(delta);
       },
     });
     return { ...navigation, navigator: wrapped };

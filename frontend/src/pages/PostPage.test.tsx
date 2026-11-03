@@ -1283,23 +1283,71 @@ describe('Post page', () => {
       expect(mediaService.attach).toHaveBeenCalledTimes(1);
     });
 
-    it('shows the Media the server holds when an upload fails on the way', async () => {
-      renderPost(postWith('the final text'));
+    it('shows an upload whose answer got lost as attached, with no Retry to send it twice', async () => {
+      renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
       await textCard();
       vi.mocked(mediaService.attach).mockImplementationOnce(async () => {
         // The server took the file, but its answer never arrived.
         vi.mocked(postService.get).mockResolvedValue(
-          withMedia(postWith('the final text'), [[image('media_taken')]]),
+          withMedia(postWith('the final text'), [[image('media_01'), image('media_taken')]]),
         );
         throw new Error('Network Error');
       });
 
       chooseFiles('the post', photo('lost.png'));
 
+      const taken = await mediaOn('the post').findByRole('listitem', { name: 'Image 2' });
+      await waitFor(() => expect(within(taken).queryByRole('progressbar')).toBeNull());
+      expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(2);
+      expect(mediaOn('the post').queryByRole('button', { name: /retry/i })).toBeNull();
+      expect(track).toHaveBeenCalledWith('media_attached', {
+        kind: 'image',
+        via: 'button',
+        source: 'web',
+      });
+
+      fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 2' }));
+      await waitFor(() =>
+        expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_taken'),
+      );
+    });
+
+    it('offers Retry when the server holds no Media from a failed upload', async () => {
+      vi.mocked(mediaService.attach).mockRejectedValueOnce(new Error('Network Error'));
+      renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+      await textCard();
+
+      chooseFiles('the post', photo('lost.png'));
+
       expect(
         await mediaOn('the post').findByRole('button', { name: 'Retry lost.png' }),
       ).toBeInTheDocument();
-      expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+      expect(mediaOn('the post').getAllByRole('listitem', { name: /^Image/ })).toHaveLength(1);
+    });
+
+    it('sends the next upload on a Part only once the server Media after a failure are shown', async () => {
+      vi.mocked(mediaService.attach)
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockResolvedValueOnce(image('media_02'));
+      renderPost(postWith('the final text'));
+      await textCard();
+      let stored: (post: PostDetail) => void = () => {};
+      vi.mocked(postService.get)
+        .mockClear()
+        .mockImplementation(() => new Promise((resolve) => (stored = resolve)));
+
+      chooseFiles('the post', photo('flaky.png'), photo('next.png'));
+      await waitFor(() => expect(postService.get).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(mediaService.attach).toHaveBeenCalledTimes(1);
+
+      await act(async () => stored(withMedia(postWith('the final text'), [[]])));
+
+      await waitFor(() => expect(mediaService.attach).toHaveBeenCalledTimes(2));
+      const images = await mediaOn('the post').findAllByRole('listitem', { name: /^Image/ });
+      await waitFor(() => expect(within(images[0]!).queryByRole('progressbar')).toBeNull());
+      expect(mediaOn('the post').getAllByRole('listitem', { name: /^Image/ })).toHaveLength(1);
+      expect(mediaOn('the post').getByRole('button', { name: 'Retry flaky.png' })).toBeTruthy();
     });
 
     it('shows the Media the server holds when it refuses a Part as full', async () => {

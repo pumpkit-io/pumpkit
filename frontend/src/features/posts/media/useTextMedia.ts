@@ -75,8 +75,8 @@ function release(tile: Tile) {
 
 /**
  * The Media on each Part of a Post's Text, kept apart from its words: undo, redo, restoring and
- * Feedback never touch it. Uploads on one Part go one at a time, so the server keeps the order
- * the card shows.
+ * Feedback never touch it. Uploads on one Part, and the read after a failed one, go one at a
+ * time, so the server keeps the order the card shows and no read races an upload.
  */
 export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
   const nextKey = useRef(0);
@@ -122,15 +122,33 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
     [newKey],
   );
 
-  /** Shows the Part's Media as the server holds it, catching any a failed upload left there. */
-  const reload = useCallback(
-    async (partIndex: number) => {
-      let stored: Media[];
+  /** Media the page took off the server, which a read racing the removal may still list. */
+  const discarded = useRef(new Set<string>());
+
+  const discard = useCallback(
+    async (media: Media) => {
+      discarded.current.add(media.id);
+      await mediaService.remove(postId, media.id).catch(() => {});
+    },
+    [postId],
+  );
+
+  /** The Part's Media as the server holds it, or null when it can't be read. */
+  const storedOn = useCallback(
+    async (partIndex: number): Promise<Media[] | null> => {
       try {
-        stored = (await postService.get(postId)).textMedia[partIndex] ?? [];
+        const stored = (await postService.get(postId)).textMedia[partIndex] ?? [];
+        return stored.filter((media) => !discarded.current.has(media.id));
       } catch {
-        return;
+        return null;
       }
+    },
+    [postId],
+  );
+
+  /** Shows `stored` as the Part's ready tiles, one per Media, keeping the tiles already shown. */
+  const show = useCallback(
+    (partIndex: number, stored: Media[]) =>
       change(partIndex, (tiles) => {
         const ready = new Map(
           tiles.flatMap((t) => (t.state === 'ready' ? [[t.media.id, t] as const] : [])),
@@ -142,9 +160,85 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
           ...stored.map((media) => ready.get(media.id) ?? readyTile(media)),
           ...tiles.filter((t) => t.state !== 'ready'),
         ];
-      });
+      }),
+    [change, readyTile],
+  );
+
+  /** Turns an upload's tile into its Media's, unless another tile shows that Media already. */
+  const settle = useCallback(
+    (partIndex: number, key: string, media: Media) =>
+      change(partIndex, (tiles) => {
+        const shown = tiles.some((t) => t.state === 'ready' && t.media.id === media.id);
+        return tiles.flatMap((tile) => {
+          if (tile.key !== key) return [tile];
+          if (shown) {
+            release(tile);
+            return [];
+          }
+          return [
+            { key, state: 'ready' as const, media, localUrl: tile.localUrl, removing: false },
+          ];
+        });
+      }),
+    [change],
+  );
+
+  /**
+   * Sends one file, and after a failure reads back the Part's Media. Media the page didn't know
+   * of then is this file's, landed before its answer got lost: no other upload runs on the Part.
+   */
+  const send = useCallback(
+    async (partIndex: number, key: string, file: File, via: AttachVia, under: Upload) => {
+      let media: Media | null = null;
+      let error: unknown = null;
+      try {
+        media = await mediaService.attach(postId, partIndex + 1, file, {
+          onProgress: (sent) => {
+            changeTile(partIndex, key, (tile) =>
+              tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
+            );
+          },
+        });
+      } catch (caught) {
+        error = caught;
+      }
+      const refusal = media ? null : refusalOf(error);
+      if (refusal && (refusal.retry || errorCode(error) === 'MEDIA_PART_FULL')) {
+        const stored = await storedOn(partIndex);
+        if (stored) {
+          const known = new Set(
+            (current.current[partIndex] ?? []).flatMap((t) =>
+              t.state === 'ready' ? [t.media.id] : [],
+            ),
+          );
+          const landed = refusal.retry ? stored.filter((m) => !known.has(m.id)).at(-1) : undefined;
+          show(
+            partIndex,
+            stored.filter((m) => m !== landed),
+          );
+          media = landed ?? null;
+        }
+      }
+      if (media && under.dropped) {
+        await discard(media);
+        return;
+      }
+      if (under.dropped) return;
+      if (media) {
+        settle(partIndex, key, media);
+        track('media_attached', { kind: media.kind, via, source: 'web' });
+        return;
+      }
+      changeTile(partIndex, key, (tile) => ({
+        key,
+        state: 'refused',
+        file,
+        localUrl: tile.localUrl,
+        refusal: refusal ?? refusalOf(error),
+        via,
+      }));
     },
-    [postId, change, readyTile],
+    [postId, changeTile, storedOn, show, settle, discard],
   );
 
   const upload = useCallback(
@@ -152,51 +246,16 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
       const under: Upload = { dropped: false };
       uploads.current.set(key, under);
       const run = async () => {
-        if (under.dropped) {
-          uploads.current.delete(key);
-          return;
-        }
         try {
-          const media = await mediaService.attach(postId, partIndex + 1, file, {
-            onProgress: (sent) => {
-              changeTile(partIndex, key, (tile) =>
-                tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
-              );
-            },
-          });
-          if (under.dropped) {
-            void mediaService.remove(postId, media.id).catch(() => {});
-            return;
-          }
-          changeTile(partIndex, key, (tile) => ({
-            key,
-            state: 'ready',
-            media,
-            localUrl: tile.localUrl,
-            removing: false,
-          }));
-          track('media_attached', { kind: media.kind, via, source: 'web' });
-        } catch (error) {
-          if (under.dropped) return;
-          const refusal = refusalOf(error);
-          // A full Part, or a failure that may have come after the server took the file.
-          if (refusal.retry || errorCode(error) === 'MEDIA_PART_FULL') void reload(partIndex);
-          changeTile(partIndex, key, (tile) => ({
-            key,
-            state: 'refused',
-            file,
-            localUrl: tile.localUrl,
-            refusal,
-            via,
-          }));
+          if (!under.dropped) await send(partIndex, key, file, via, under);
         } finally {
           uploads.current.delete(key);
         }
       };
-      const queued = (queues.current.get(partIndex) ?? Promise.resolve()).then(run);
+      const queued = (queues.current.get(partIndex) ?? Promise.resolve()).then(run, run);
       queues.current.set(partIndex, queued);
     },
-    [postId, changeTile, reload],
+    [send],
   );
 
   const roomOn = useCallback(
@@ -265,6 +324,7 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
       changeTile(partIndex, key, (t) => ({ ...t, removing: true }) as Tile);
       mediaService.remove(postId, tile.media.id).then(
         () => {
+          discarded.current.add(tile.media.id);
           drop();
           track('media_removed', { kind: tile.media.kind, source: 'web' });
         },
