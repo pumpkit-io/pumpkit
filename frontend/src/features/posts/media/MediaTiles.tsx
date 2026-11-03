@@ -156,10 +156,8 @@ function RefusedTile({
 }
 
 /**
- * A Part's Media under its text, in X's layout for one to four images, files that couldn't go
- * on it among them, with why. `where` names the Part: "Part 2", or "the post". `canRetry` is
- * false while the Part has no room for a retried file. A rewrite with fewer Parts can leave more
- * Media on a Part than X takes: every tile shows, with the rule under them.
+ * A Part's Media in X's layout, refused files among them with why; `where` names the Part.
+ * A rewrite with fewer Parts can leave more Media than X takes: all show, with the rule under.
  */
 export function MediaTiles({
   tiles,
@@ -210,7 +208,7 @@ export function MediaTiles({
     <div className="space-y-1.5">
       {grid}
       <p className="font-sans text-[13px] font-medium text-destructive">
-        {X_MEDIA_RULE}. Remove some from {where} before posting.
+        {X_MEDIA_RULE}. Remove some media from {where} before posting.
       </p>
     </div>
   );

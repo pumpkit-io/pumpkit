@@ -644,10 +644,8 @@ async def give_feedback(
     sent_text: Optional[list[str]] = None,
 ) -> VersionResponse:
     """
-    Write the Post's next Version from Feedback on its Text, which the Version then becomes. Only
-    a Draft or a Failed Post takes Feedback, checked again after the model calls in case the Post
-    was scheduled meanwhile; then a Version that drops Parts holding Media is refused when its last
-    Part is already live on X. `sent_text`, the Parts the sender shows, must be the saved Text.
+    Write the Post's next Version from Feedback on its Text; `sent_text` must be the saved Text.
+    Takes-Feedback and Media checks run again after the model calls, under the Post's lock.
     """
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)

@@ -76,8 +76,16 @@ function release(tile: Tile) {
   }
 }
 
+function readyTile(
+  key: string,
+  media: Media,
+  localUrl: string | null,
+): Extract<Tile, { state: 'ready' }> {
+  return { key, state: 'ready', media, localUrl, removing: false };
+}
+
 /** `parts` with every Part from `count` on appended to the last one, as the server moves Media. */
-function folded(parts: Tile[][], count: number): Tile[][] {
+function folded<T>(parts: T[][], count: number): T[][] {
   if (count < 1 || parts.length <= count) return parts;
   return [...parts.slice(0, count - 1), parts.slice(count - 1).flat()];
 }
@@ -99,23 +107,16 @@ export function useTextMedia(
   const place = useMemo(() => placeInstead ?? textMediaPlace(postId), [placeInstead, postId]);
   const nextKey = useRef(0);
   const newKey = useCallback(() => `tile-${++nextKey.current}`, []);
-  const readyTile = useCallback(
-    (media: Media): Tile => ({
-      key: newKey(),
-      state: 'ready',
-      media,
-      localUrl: null,
-      removing: false,
-    }),
-    [newKey],
-  );
   const [parts, setParts] = useState<Tile[][]>(() =>
-    initial.map((onPart) => onPart.map(readyTile)),
+    initial.map((onPart) => onPart.map((media) => readyTile(newKey(), media, null))),
   );
   // Read synchronously, so files chosen together each see the room the ones before took.
   const current = useRef(parts);
-  /** The Parts the server's Text was last known to have; no tile sits past them. */
-  const stored = useRef(partCount);
+  /** The Parts a read found the server's Text to have, under the `partCount` then given. */
+  const stored = useRef({ partCount, count: partCount });
+  const latestPartCount = useRef(partCount);
+  /** Counts `partCount` changes, so a read can tell the Text changed while it was under way. */
+  const partCountChanges = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const uploads = useRef(new Map<string, Upload>());
   /** Media the page took off the server, which a later read may still list. */
@@ -126,22 +127,21 @@ export function useTextMedia(
     setParts(next);
   }, []);
 
-  /** The Part a tile chosen for `partIndex` goes on: the last stored one, past the stored Text. */
-  const placeOf = useCallback(
+  /** Whether the Part is on the server yet; one an undo shows before it lands isn't. */
+  const isStored = useCallback(
     (partIndex: number) =>
-      stored.current > 0 ? Math.min(partIndex, stored.current - 1) : partIndex,
-    [],
+      partIndex < (stored.current.partCount === partCount ? stored.current.count : partCount),
+    [partCount],
   );
 
   const change = useCallback(
     (partIndex: number, edit: (tiles: Tile[]) => Tile[]) => {
-      const on = placeOf(partIndex);
       const next = [...current.current];
-      while (next.length <= on) next.push([]);
-      next[on] = edit(next[on] ?? []);
+      while (next.length <= partIndex) next.push([]);
+      next[partIndex] = edit(next[partIndex] ?? []);
       set(next);
     },
-    [placeOf, set],
+    [set],
   );
 
   const partWith = useCallback(
@@ -175,7 +175,8 @@ export function useTextMedia(
 
   // Moves tiles once the server has moved their Media: posts/media.move_dropped_parts_media.
   useLayoutEffect(() => {
-    stored.current = partCount;
+    latestPartCount.current = partCount;
+    partCountChanges.current++;
     if (current.current.length > partCount) set(folded(current.current, partCount));
   }, [partCount, set]);
 
@@ -187,15 +188,29 @@ export function useTextMedia(
     [place],
   );
 
-  /** The Media on each Part as the server holds it, or null when it can't be read. */
+  /**
+   * The Media on each Part as the server holds it, or null when it can't be read. Never more Parts
+   * than `partCount`, and exactly that many when the Text changed while the read was under way.
+   */
   const read = useCallback(async (): Promise<Media[][] | null> => {
+    const changesBefore = partCountChanges.current;
+    let text: Media[][];
     try {
-      const stored = await place.read();
-      if (stored.length === 0) return null;
-      return stored.map((onPart) => onPart.filter((m) => !discarded.current.has(m.id)));
+      text = await place.read();
     } catch {
       return null;
     }
+    if (text.length === 0) return null;
+    const count =
+      changesBefore === partCountChanges.current
+        ? Math.min(text.length, latestPartCount.current)
+        : latestPartCount.current;
+    const server = folded(
+      text.map((onPart) => onPart.filter((m) => !discarded.current.has(m.id))),
+      count,
+    );
+    while (server.length < count) server.push([]);
+    return server;
   }, [place]);
 
   /**
@@ -204,20 +219,14 @@ export function useTextMedia(
    */
   const reconcile = useCallback(
     (server: Media[][], claimed: { key: string; media: Media } | null) => {
-      stored.current = server.length;
+      stored.current = { partCount: latestPartCount.current, count: server.length };
       const tiles = current.current.flat();
       const shown = new Map(
         tiles.flatMap((t) => (t.state === 'ready' ? [[t.media.id, t] as const] : [])),
       );
       const claimedTile = claimed ? tiles.find((t) => t.key === claimed.key) : undefined;
       if (claimed && claimedTile) {
-        shown.set(claimed.media.id, {
-          key: claimed.key,
-          state: 'ready',
-          media: claimed.media,
-          localUrl: claimedTile.localUrl,
-          removing: false,
-        });
+        shown.set(claimed.media.id, readyTile(claimed.key, claimed.media, claimedTile.localUrl));
       }
       const onServer = new Set(server.flat().map((m) => m.id));
       tiles.filter((t) => t.state === 'ready' && !onServer.has(t.media.id)).forEach(release);
@@ -226,12 +235,12 @@ export function useTextMedia(
       );
       set(
         server.map((onPart, index) => [
-          ...onPart.map((media) => shown.get(media.id) ?? readyTile(media)),
+          ...onPart.map((media) => shown.get(media.id) ?? readyTile(newKey(), media, null)),
           ...(pending[index] ?? []),
         ]),
       );
     },
-    [readyTile, set],
+    [newKey, set],
   );
 
   const enqueue = useCallback((job: () => Promise<void>) => {
@@ -267,14 +276,7 @@ export function useTextMedia(
             .flat()
             .some((t) => t.state === 'ready' && t.media.id === landed.id);
           if (elsewhere) dropTile(key);
-          else
-            changeTile(key, (tile) => ({
-              key,
-              state: 'ready',
-              media: landed,
-              localUrl: tile.localUrl,
-              removing: false,
-            }));
+          else changeTile(key, (tile) => readyTile(key, landed, tile.localUrl));
           track('media_attached', { kind: landed.kind, via, source: 'web' });
           return;
         }
@@ -323,7 +325,7 @@ export function useTextMedia(
         return;
       }
     },
-    [place, partWith, changeTile, dropTile, readyTile, read, reconcile, discard, onReconnectNeeded],
+    [place, partWith, changeTile, dropTile, read, reconcile, discard, onReconnectNeeded],
   );
 
   const upload = useCallback(
@@ -343,12 +345,15 @@ export function useTextMedia(
 
   const roomOn = useCallback(
     (partIndex: number) =>
-      IMAGES_PER_PART - (current.current[placeOf(partIndex)] ?? []).filter(holdsPlace).length,
-    [placeOf],
+      isStored(partIndex)
+        ? IMAGES_PER_PART - (current.current[partIndex] ?? []).filter(holdsPlace).length
+        : 0,
+    [isStored],
   );
 
   const attach = useCallback(
     (partIndex: number, files: File[], via: AttachVia) => {
+      if (!isStored(partIndex)) return;
       for (const file of files) {
         const key = newKey();
         const localUrl = localUrlOf(file);
@@ -369,7 +374,7 @@ export function useTextMedia(
         upload(key, file, via);
       }
     },
-    [change, newKey, roomOn, upload],
+    [change, isStored, newKey, roomOn, upload],
   );
 
   const retry = useCallback(
@@ -402,18 +407,18 @@ export function useTextMedia(
       }
       if (tile.removing) return;
       changeTile(key, (t) => ({ ...t, removing: true }) as Tile);
+      const removed = () => {
+        discarded.current.add(tile.media.id);
+        dropTile(key);
+        track('media_removed', { kind: tile.media.kind, source: 'web' });
+      };
       enqueue(() =>
-        place.remove(tile.media.id).then(
-          () => {
-            discarded.current.add(tile.media.id);
-            dropTile(key);
-            track('media_removed', { kind: tile.media.kind, source: 'web' });
-          },
-          () => {
-            changeTile(key, (t) => ({ ...t, removing: false }) as Tile);
-            showToast("Couldn't remove the image. Try again.");
-          },
-        ),
+        place.remove(tile.media.id).then(removed, (error: unknown) => {
+          // A read after a failed upload may already have found it gone.
+          if (errorStatus(error) === 404) return removed();
+          changeTile(key, (t) => ({ ...t, removing: false }) as Tile);
+          showToast("Couldn't remove the image. Try again.");
+        }),
       );
     },
     [place, tileWith, changeTile, dropTile, enqueue],
