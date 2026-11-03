@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Path, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
@@ -12,6 +12,7 @@ from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.llm import LLM, get_llm
+from pumpkit.posts.media_upload import ReceivedMedia, receive_media
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.scheduling import mediator
@@ -314,15 +315,17 @@ async def attach_text_media(
     request: Request,
     post_id: str,
     part_number: Annotated[int, Path(ge=1)],
-    file: UploadFile,
     current_user: User = Depends(require_subscribed_user),
+    received: ReceivedMedia = Depends(receive_media),
     db: AsyncSession = Depends(get_async_db),
     storage: FileStorage = Depends(get_file_storage),
     clock: Clock = Depends(get_clock),
 ) -> MediaResponse:
     """
-    Attaches an image to Part `part_number` (from 1) of the Post's Text, after the Part's other
-    Media. The type is read from the file's bytes. A Scheduled or Published Post is refused.
+    Attaches an image, sent as the multipart field `file`, to Part `part_number` (from 1) of the
+    Post's Text, after the Part's other Media. The type is read from the file's bytes, and an
+    upload larger than X takes is refused while it streams. A Scheduled or Published Post is
+    refused.
     """
     return await mediator.attach_text_media(
         db=db,
@@ -330,8 +333,8 @@ async def attach_text_media(
         user=current_user,
         post_id=post_id,
         part_number=part_number,
-        file=file.file,
-        byte_size=file.size or 0,
+        file=received.file,
+        byte_size=received.byte_size,
         now=clock(),
     )
 

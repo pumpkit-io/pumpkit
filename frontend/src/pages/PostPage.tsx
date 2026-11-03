@@ -130,6 +130,7 @@ function partMediaOf(media: TextMedia, parts: ShownPart[]) {
         <MediaTiles
           tiles={media.tilesOf(index)}
           where={where}
+          canRetry={media.roomOn(index) > 0}
           onRemove={(key) => media.remove(index, key)}
           onRetry={(key) => media.retry(index, key)}
         />

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import BinaryIO, Optional
 
@@ -673,13 +674,13 @@ async def attach_text_media(
     """
     Attach the file to Part `part_number` of the Post's Text, last among its Media, once it is
     an image Pumpkit takes and the Part has room. Only a Draft or a Failed Post's, on a Part not
-    live on X. Media stays put through a rewrite, so writing a Version doesn't stop it.
+    live on X. Allowed while Feedback writes a Version, which leaves the Text's Media as it is.
     """
     post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
     part_index = part_number - 1
     _check_not_live(scheduled_post, part_index=part_index)
     media_service.check_text_part_room(post, part_index=part_index)
-    checked = media_files.check_image(file, byte_size)
+    checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
     media = await media_service.attach_to_text(
         db, storage, post=post, part_index=part_index, checked=checked, file=file, now=now
     )
@@ -690,10 +691,9 @@ async def attach_text_media(
 async def remove_text_media(db: AsyncSession, user: User, post_id: str, media_id: str) -> None:
     """Take the Media off the Post's Text. Only a Draft or a Failed Post's, on a Part not live."""
     post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
-    placed = next((p for p in post.text_media if p.media_id == media_id), None)
-    if placed is not None:
-        _check_not_live(scheduled_post, part_index=placed.part_index)
-    await media_service.remove_from_text(db, post=post, media_id=media_id)
+    placed = media_service.text_media_on(post, media_id=media_id)
+    _check_not_live(scheduled_post, part_index=placed.part_index)
+    media_service.remove_from_text(post, placed)
     await db.commit()
 
 

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { showToast } from '@/components/Toaster';
 import { track } from '@/lib/analytics';
+import { useConfirmLeaving } from '@/lib/useConfirmLeaving';
+import { errorCode } from '@/services/apiErrors';
 import { mediaService, type Media } from '@/services/mediaService';
+import { postService } from '@/services/postService';
 import {
   IMAGES_PER_PART,
   X_MEDIA_RULE,
@@ -52,6 +55,23 @@ function localUrlOf(file: File): string | null {
   return typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
 }
 
+const LEAVE_WHILE_UPLOADING =
+  "An image is still uploading and won't be attached if you leave. Leave anyway?";
+
+/** An upload under way. Once its file is sent, aborting can't keep the server from attaching it. */
+interface Upload {
+  controller: AbortController;
+  sent: boolean;
+  /** Stopped after its file was sent: the Media it answers with is taken off again. */
+  dropped: boolean;
+}
+
+/** Stops an upload; one whose file was sent finishes, and its Media is then taken off again. */
+function stop(upload: Upload) {
+  if (upload.sent) upload.dropped = true;
+  else upload.controller.abort();
+}
+
 function release(tile: Tile) {
   if (tile.localUrl && typeof URL.revokeObjectURL === 'function') {
     URL.revokeObjectURL(tile.localUrl);
@@ -80,7 +100,7 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
   // Read synchronously, so files chosen together each see the room the ones before took.
   const current = useRef(parts);
   const queues = useRef(new Map<number, Promise<void>>());
-  const uploads = useRef(new Map<string, AbortController>());
+  const uploads = useRef(new Map<string, Upload>());
 
   const change = useCallback((partIndex: number, edit: (tiles: Tile[]) => Tile[]) => {
     const next = [...current.current];
@@ -96,20 +116,63 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
     [change],
   );
 
+  const readyTile = useCallback(
+    (media: Media): Tile => ({
+      key: newKey(),
+      state: 'ready',
+      media,
+      localUrl: null,
+      removing: false,
+    }),
+    [newKey],
+  );
+
+  /** Shows the Part's Media as the server holds it, catching any an upload stopped too late put there. */
+  const reload = useCallback(
+    async (partIndex: number) => {
+      let stored: Media[];
+      try {
+        stored = (await postService.get(postId)).textMedia[partIndex] ?? [];
+      } catch {
+        return;
+      }
+      change(partIndex, (tiles) => {
+        const ready = new Map(
+          tiles.flatMap((t) => (t.state === 'ready' ? [[t.media.id, t] as const] : [])),
+        );
+        tiles
+          .filter((t) => t.state === 'ready' && !stored.some((m) => m.id === t.media.id))
+          .forEach(release);
+        return [
+          ...stored.map((media) => ready.get(media.id) ?? readyTile(media)),
+          ...tiles.filter((t) => t.state !== 'ready'),
+        ];
+      });
+    },
+    [postId, change, readyTile],
+  );
+
   const upload = useCallback(
     (partIndex: number, key: string, file: File, via: AttachVia) => {
       const controller = new AbortController();
-      uploads.current.set(key, controller);
+      const under: Upload = { controller, sent: false, dropped: false };
+      uploads.current.set(key, under);
       const run = async () => {
         if (controller.signal.aborted) return;
         try {
           const media = await mediaService.attach(postId, partIndex + 1, file, {
             signal: controller.signal,
-            onProgress: (sent) =>
+            onProgress: (sent) => {
+              if (sent >= 1) under.sent = true;
               changeTile(partIndex, key, (tile) =>
                 tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
-              ),
+              );
+            },
           });
+          if (under.dropped) {
+            void mediaService.remove(postId, media.id).catch(() => {});
+            return;
+          }
           changeTile(partIndex, key, (tile) => ({
             key,
             state: 'ready',
@@ -119,7 +182,8 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
           }));
           track('media_attached', { kind: media.kind, via, source: 'web' });
         } catch (error) {
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted || under.dropped) return;
+          if (errorCode(error) === 'MEDIA_PART_FULL') void reload(partIndex);
           changeTile(partIndex, key, (tile) => ({
             key,
             state: 'refused',
@@ -135,7 +199,7 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
       const queued = (queues.current.get(partIndex) ?? Promise.resolve()).then(run);
       queues.current.set(partIndex, queued);
     },
-    [postId, changeTile],
+    [postId, changeTile, reload],
   );
 
   const roomOn = useCallback(
@@ -196,7 +260,8 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
         change(partIndex, (tiles) => tiles.filter((t) => t.key !== key));
       };
       if (tile.state !== 'ready') {
-        uploads.current.get(key)?.abort();
+        const under = uploads.current.get(key);
+        if (under) stop(under);
         drop();
         return;
       }
@@ -216,20 +281,11 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
   );
 
   const uploading = parts.some((tiles) => tiles.some((tile) => tile.state === 'uploading'));
-  useEffect(() => {
-    if (!uploading) return;
-    const confirmLeaving = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      // Older browsers ask only when this is set.
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', confirmLeaving);
-    return () => window.removeEventListener('beforeunload', confirmLeaving);
-  }, [uploading]);
+  useConfirmLeaving(uploading, LEAVE_WHILE_UPLOADING);
 
   useEffect(
     () => () => {
-      uploads.current.forEach((controller) => controller.abort());
+      uploads.current.forEach(stop);
       current.current.flat().forEach(release);
     },
     [],

@@ -15,7 +15,8 @@ const CELLS: Record<number, string[]> = {
   4: ['', '', '', ''],
 };
 
-function gridStyle(tiles: Tile[]): CSSProperties {
+function gridStyle(tiles: Tile[]): CSSProperties | undefined {
+  if (tiles.length > 4) return undefined;
   if (tiles.length > 1) return { aspectRatio: '16 / 9' };
   const tile = tiles[0];
   const media = tile?.state === 'ready' ? tile.media : null;
@@ -87,43 +88,51 @@ function MediaTile({
 
 function RefusedTile({
   tile,
+  className,
+  canRetry,
   onRemove,
   onRetry,
 }: {
   tile: Extract<Tile, { state: 'refused' }>;
+  className: string;
+  canRetry: boolean;
   onRemove: () => void;
   onRetry: () => void;
 }) {
   const name = tile.file.name;
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-dashed border-destructive p-2">
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-        {tile.localUrl && tile.file.type.startsWith('image/') ? (
-          <img src={tile.localUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <ImageIcon aria-hidden className="h-5 w-5 text-muted-foreground" />
+    <li aria-label={name} className={cn('relative overflow-hidden bg-muted', className)}>
+      {tile.localUrl && tile.file.type.startsWith('image/') && (
+        <img
+          src={tile.localUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-20"
+        />
+      )}
+      <div className="absolute inset-1 flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-destructive px-2 pt-6 text-center font-sans text-xs leading-4 sm:px-8 sm:pt-0 sm:text-[13px] sm:leading-5">
+        <p className="font-medium text-destructive">{tile.refusal.message}</p>
+        <p className="hidden max-w-full truncate text-muted-foreground sm:block">{name}</p>
+        {canRetry && tile.refusal.retry && (
+          <button
+            type="button"
+            aria-label={`Retry ${name}`}
+            onClick={onRetry}
+            className={cn(
+              ROUND_BUTTON,
+              // A corner button like the × on narrow tiles, a labelled one under the cause on wider ones.
+              'absolute left-0.5 top-0.5 gap-1.5 sm:static sm:mt-1 sm:h-8 sm:w-auto sm:rounded-lg sm:bg-card sm:px-2.5 sm:font-medium sm:text-foreground sm:hover:bg-[var(--hover)]',
+            )}
+          >
+            <RotateCw aria-hidden className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Retry</span>
+          </button>
         )}
       </div>
-      <div className="min-w-0 flex-1 font-sans text-[13px] leading-5">
-        <p className="font-medium text-destructive">{tile.refusal.message}</p>
-        <p className="truncate text-muted-foreground">{name}</p>
-      </div>
-      {tile.refusal.retry && (
-        <button
-          type="button"
-          aria-label={`Retry ${name}`}
-          onClick={onRetry}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 font-sans text-[13px] font-medium text-foreground transition-colors hover:bg-[var(--hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
-        >
-          <RotateCw aria-hidden className="h-3.5 w-3.5" />
-          Retry
-        </button>
-      )}
       <button
         type="button"
         aria-label={`Remove ${name}`}
         onClick={onRemove}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+        className={cn(ROUND_BUTTON, 'absolute right-1.5 top-1.5')}
       >
         <X aria-hidden className="h-4 w-4" />
       </button>
@@ -132,61 +141,60 @@ function RefusedTile({
 }
 
 /**
- * A Part's Media under its text, in X's layout for one to four images, then any file that
- * couldn't go on it, with why. `where` names the Part: "Part 2", or "the post".
+ * A Part's Media under its text, in X's layout for one to four images, files that couldn't go
+ * on it among them, with why. `where` names the Part: "Part 2", or "the post". `canRetry` is
+ * false while the Part has no room for a retried file.
  */
 export function MediaTiles({
   tiles,
   where,
+  canRetry,
   onRemove,
   onRetry,
 }: {
   tiles: Tile[];
   where: string;
+  canRetry: boolean;
   onRemove: (key: string) => void;
   onRetry: (key: string) => void;
 }) {
-  const placed = tiles.filter(holdsPlace);
-  const refused = tiles.filter(
-    (t): t is Extract<Tile, { state: 'refused' }> => t.state === 'refused',
-  );
-  if (!placed.length && !refused.length) return null;
-  const cells = CELLS[placed.length] ?? CELLS[4]!;
+  const shown = tiles.filter((t) => holdsPlace(t) || t.state === 'refused');
+  if (!shown.length) return null;
+  const many = shown.length > 4;
+  const cells = CELLS[shown.length] ?? [];
+  let images = 0;
   return (
-    <div className="space-y-2">
-      {placed.length > 0 && (
-        <ul
-          aria-label={`Media on ${where}`}
-          style={gridStyle(placed)}
-          className={cn(
-            'grid max-h-[32rem] w-full gap-0.5 overflow-hidden rounded-2xl border border-border bg-card',
-            placed.length > 1 && 'grid-cols-2',
-            placed.length > 2 && 'grid-rows-2',
-          )}
-        >
-          {placed.map((tile, index) => (
-            <MediaTile
-              key={tile.key}
-              tile={tile}
-              number={index + 1}
-              className={cells[index] ?? ''}
-              onRemove={() => onRemove(tile.key)}
-            />
-          ))}
-        </ul>
+    <ul
+      aria-label={`Media on ${where}`}
+      style={gridStyle(shown)}
+      className={cn(
+        'grid w-full gap-0.5 overflow-hidden rounded-2xl border border-border bg-card',
+        !many && 'max-h-[32rem]',
+        shown.length > 1 && 'grid-cols-2',
+        shown.length > 2 && !many && 'grid-rows-2',
       )}
-      {refused.length > 0 && (
-        <ul aria-label={`Refused media on ${where}`} className="space-y-2">
-          {refused.map((tile) => (
-            <RefusedTile
-              key={tile.key}
-              tile={tile}
-              onRemove={() => onRemove(tile.key)}
-              onRetry={() => onRetry(tile.key)}
-            />
-          ))}
-        </ul>
-      )}
-    </div>
+    >
+      {shown.map((tile, index) => {
+        const className = many ? 'aspect-video' : (cells[index] ?? '');
+        return tile.state === 'refused' ? (
+          <RefusedTile
+            key={tile.key}
+            tile={tile}
+            className={className}
+            canRetry={canRetry}
+            onRemove={() => onRemove(tile.key)}
+            onRetry={() => onRetry(tile.key)}
+          />
+        ) : (
+          <MediaTile
+            key={tile.key}
+            tile={tile}
+            number={++images}
+            className={className}
+            onRemove={() => onRemove(tile.key)}
+          />
+        );
+      })}
+    </ul>
   );
 }

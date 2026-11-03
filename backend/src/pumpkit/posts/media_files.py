@@ -13,6 +13,8 @@ from pumpkit.core.errors import RefusedError
 from pumpkit.posts.models import MEDIA_IMAGE, MediaKind
 
 IMAGE_MAX_BYTES = 5 * 1024 * 1024
+# The most X takes of each kind, which an upload is refused past while it streams.
+MAX_BYTES: dict[MediaKind, int] = {MEDIA_IMAGE: IMAGE_MAX_BYTES}
 IMAGES_PER_PART = 4
 # Shown on the web app's tiles too, so they name X's rule the same way.
 X_MEDIA_RULE = "X takes up to 4 images, or 1 GIF, or 1 video, per post."
@@ -63,6 +65,11 @@ def content_type_of(head: bytes) -> Optional[str]:
     return None
 
 
+def kind_of(content_type: str) -> MediaKind:
+    """Every type `content_type_of` names is an image for now."""
+    return MEDIA_IMAGE
+
+
 @dataclass(frozen=True)
 class CheckedMedia:
     kind: MediaKind
@@ -82,7 +89,7 @@ def check_image(source: BinaryIO, byte_size: int) -> CheckedMedia:
     content_type = content_type_of(source.read(SNIFF_BYTES))
     if content_type is None:
         raise media_type_refused()
-    if byte_size > IMAGE_MAX_BYTES:
+    if byte_size > MAX_BYTES[kind_of(content_type)]:
         raise media_too_large()
     source.seek(0)
     try:
@@ -93,10 +100,16 @@ def check_image(source: BinaryIO, byte_size: int) -> CheckedMedia:
             upright = ImageOps.exif_transpose(opened)
             width, height = upright.size
             preview = _preview(upright)
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, SyntaxError):
+    except (
+        UnidentifiedImageError,
+        OSError,
+        Image.DecompressionBombError,
+        SyntaxError,
+        ValueError,
+    ):
         raise media_unreadable() from None
     return CheckedMedia(
-        kind=MEDIA_IMAGE,
+        kind=kind_of(content_type),
         content_type=content_type,
         byte_size=byte_size,
         width=width,

@@ -4,6 +4,8 @@ Attaching Media to a Post's Text and removing it, through
 reading it back on `GET /posts/{id}` (ADR 0021). Only a Draft or a Failed Post's Text takes it.
 """
 
+from collections.abc import AsyncIterator
+
 from httpx import AsyncClient
 
 from tests.media_files import MB, gif, jpeg, padded, png, webp
@@ -107,6 +109,51 @@ async def test_an_image_over_5_mb_is_refused(client, subscribed, post_with):
         "detail": "This image is larger than 5 MB, the most X takes.",
         "code": "MEDIA_TOO_LARGE",
     }
+    assert await _media_of(client, post_id) == [[]]
+
+
+async def test_an_oversize_upload_is_refused_while_it_streams(client, subscribed, post_with):
+    post_id = await post_with("Endless.")
+    sent = 0
+
+    async def endless_image() -> AsyncIterator[bytes]:
+        nonlocal sent
+        boundary = b"--b0undary"
+        chunks = [
+            boundary + b"\r\n",
+            b'Content-Disposition: form-data; name="file"; filename="huge.png"\r\n',
+            b"Content-Type: image/png\r\n\r\n",
+            png(),
+        ]
+        for chunk in chunks:
+            sent += len(chunk)
+            yield chunk
+        # With no Content-Length, nothing says how large the file is until it ends.
+        while sent < 50 * MB:
+            sent += 64 * 1024
+            yield b"\0" * (64 * 1024)
+        yield b"\r\n" + boundary + b"--\r\n"
+
+    response = await client.post(
+        f"{POSTS}/{post_id}/text/parts/1/media",
+        content=endless_image(),
+        headers={"Content-Type": "multipart/form-data; boundary=b0undary"},
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "MEDIA_TOO_LARGE"
+    assert sent < 6 * MB
+    assert await _media_of(client, post_id) == [[]]
+
+
+async def test_an_upload_without_a_file_is_refused(client, subscribed, post_with):
+    post_id = await post_with("Empty-handed.")
+
+    response = await client.post(
+        f"{POSTS}/{post_id}/text/parts/1/media", files={"other": ("a.png", png(), "image/png")}
+    )
+
+    assert response.status_code == 400, response.text
     assert await _media_of(client, post_id) == [[]]
 
 

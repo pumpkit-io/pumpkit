@@ -1,4 +1,4 @@
-import { errorCode, errorStatus } from '@/services/apiErrors';
+import { errorCode, errorMessage, errorStatus } from '@/services/apiErrors';
 
 /** The types the file picker offers; the backend checks each file's bytes again. */
 export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -41,8 +41,8 @@ export function refusalOf(error: unknown): Refusal {
   const status = errorStatus(error);
   // Another refusal, such as a Post scheduled meanwhile, says itself.
   if (status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429) {
-    const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
-    if (typeof detail === 'string') return { message: detail, retry: false };
+    const message = errorMessage(error, UPLOAD_FAILED);
+    return { message, retry: message === UPLOAD_FAILED };
   }
   return { message: UPLOAD_FAILED, retry: true };
 }

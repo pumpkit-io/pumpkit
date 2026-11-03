@@ -101,17 +101,17 @@ async def attach_to_text(
     return media
 
 
-async def remove_from_text(db: AsyncSession, *, post: Post, media_id: str) -> Media:
-    """
-    Take the Media off the Text. The record and its file stay until nothing references them.
-    Flushes.
-    """
+def text_media_on(post: Post, *, media_id: str) -> TextMedia:
+    """Where the Media sits on the Post's Text. Raises `NotFoundError` when it isn't there."""
     placed = next((p for p in post.text_media if p.media_id == media_id), None)
     if placed is None:
         raise NotFoundError("This post's text has no such media.")
+    return placed
+
+
+def remove_from_text(post: Post, placed: TextMedia) -> None:
+    """Take the Media off the Text. The record and its file stay until nothing references them."""
     post.text_media.remove(placed)
-    await db.flush()
-    return placed.media
 
 
 async def get_user_media(db: AsyncSession, *, user_id: str, media_id: str) -> Optional[Media]:
