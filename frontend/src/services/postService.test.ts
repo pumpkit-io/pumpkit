@@ -65,6 +65,7 @@ describe('postService', () => {
           community: null,
           share_with_followers: false,
           created_at: '2026-10-10T12:00:00Z',
+          posting: false,
         },
       },
     } as never);
@@ -93,6 +94,7 @@ describe('postService', () => {
       community: null,
       shareWithFollowers: false,
       createdAt: '2026-10-10T12:00:00Z',
+      posting: false,
     });
   });
 
@@ -195,6 +197,7 @@ describe('postService', () => {
               share_with_followers: false,
               failed_reason: null,
               x_post_url: 'https://x.com/i/web/status/1',
+              posting: false,
             },
           },
         ],
@@ -227,6 +230,7 @@ describe('postService', () => {
             shareWithFollowers: false,
             failedReason: null,
             xPostUrl: 'https://x.com/i/web/status/1',
+            posting: false,
           },
         },
       ],

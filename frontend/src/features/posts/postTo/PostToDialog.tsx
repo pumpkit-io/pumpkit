@@ -31,7 +31,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
-import { POST_NOW_VIDEO, X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
+import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
@@ -206,13 +206,8 @@ export function PostToDialog({
   const destination = destinationFrom(where);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
-  const withVideo = parts.some((part) => !part.live && part.media.some((m) => m.kind === 'video'));
   const unpostable = ready
-    ? [
-        ...overLimit(parts, lengths, connection.charLimit, thread),
-        ...overMediaRule(parts, thread),
-        ...(when.now && withVideo ? [POST_NOW_VIDEO] : []),
-      ]
+    ? [...overLimit(parts, lengths, connection.charLimit, thread), ...overMediaRule(parts, thread)]
     : [];
   const links = linkNote(
     parts.filter((part) => !part.live && hasLink(part.text)).length,
@@ -252,8 +247,9 @@ export function PostToDialog({
       onClose();
     } else if (outcome.kind === 'created') {
       const { scheduledPost } = outcome;
-      // Posted now but still waiting: X was busy, and the publisher retries.
-      if (when.now && scheduledPost.state === 'scheduled') setStep({ kind: 'busy', scheduledPost });
+      // Posted now but waiting, not handed to the publisher: X was busy and the publisher retries.
+      if (when.now && scheduledPost.state === 'scheduled' && !scheduledPost.posting)
+        setStep({ kind: 'busy', scheduledPost });
       else onDone(scheduledPost);
     }
   };

@@ -88,6 +88,8 @@ export interface ScheduledPostSummary {
   failedReason: string | null;
   /** The first Part on X, once it is live. */
   xPostUrl: string | null;
+  /** As on `ScheduledPost`. */
+  posting: boolean;
 }
 
 /** A Post as the Posts tabs list it. */
@@ -119,6 +121,7 @@ interface ScheduledPostSummaryApi {
   share_with_followers: boolean;
   failed_reason: string | null;
   x_post_url: string | null;
+  posting: boolean;
 }
 
 interface PostsPageApi {
@@ -145,6 +148,7 @@ const toSummary = (s: ScheduledPostSummaryApi): ScheduledPostSummary => ({
   shareWithFollowers: s.share_with_followers,
   failedReason: s.failed_reason,
   xPostUrl: s.x_post_url,
+  posting: s.posting,
 });
 
 /** How many Posts a page of the Posts tabs holds. */

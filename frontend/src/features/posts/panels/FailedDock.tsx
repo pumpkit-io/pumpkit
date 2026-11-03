@@ -1,3 +1,4 @@
+import { Notice } from '@/components/Notice';
 import { destinationDraftOf } from '@/features/scheduledPosts/communities';
 import type { Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
@@ -13,12 +14,15 @@ export function FailedDock({
   textVersion,
   feedback,
   restoreError,
+  notice,
 }: {
   scheduledPost: ScheduledPost;
   /** The Text, as the Version it came from. */
   textVersion: Version;
   feedback: FeedbackSending;
   restoreError?: string | null;
+  /** Why the editor closed, under the reason; the Post page announces it. */
+  notice: string | null;
 }) {
   return (
     <FeedbackDock
@@ -29,6 +33,11 @@ export function FailedDock({
             This post didn’t go out. It was due {formatWhen(scheduledPost.publishAt)}.
           </p>
           {scheduledPost.failedReason && <p>{scheduledPost.failedReason}</p>}
+          {notice && (
+            <div className="pt-1.5">
+              <Notice message={notice} announced={false} />
+            </div>
+          )}
         </div>
       }
       format={textVersion.format}

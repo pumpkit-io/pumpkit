@@ -126,11 +126,16 @@ async def schedule_post(
 
 
 def _post_now_message(posted: ScheduledPostToolResponse) -> str:
-    """The web app's words for how Post now ended."""
+    """What the web app tells the User after Post now: published, failed, posting, or X was busy."""
     if posted.state == PUBLISHED:
         return f"Published on X: {posted.x_post_url}"
     if posted.state == FAILED:
         return f"Failed. {posted.failed_reason}"
+    if posted.posting:
+        return (
+            "Being published: Pumpkit uploads the media to X and waits while X processes it, "
+            "which can take up to an hour for a video. Call get_post to see when it's published."
+        )
     # Back in scheduled: X never took it, so the publisher retries it.
     minutes = int(RETRY_WINDOW.total_seconds() // 60)
     return f"X was busy. Pumpkit will keep trying for the next {minutes} minutes."
@@ -148,6 +153,9 @@ async def post_now(
     replying to the one before. A post goes out once: one that already has a scheduled post is
     refused. The post goes to the user's profile, or to the community whose URL or ID is in
     `community`. In a community, `share_with_followers` also shows it to the user's followers.
+    A post with a GIF or a video comes back scheduled before its media is uploaded: Pumpkit then
+    uploads it and waits while X processes it, up to an hour for a video, and `get_post` shows
+    when it's published.
     """
     posted = await _create_scheduled_post(
         call,
@@ -256,7 +264,12 @@ async def list_posts(
     """
     page = PostsPageRequest(status=status, limit=limit, offset=offset)
     return await mediator.list_posts(
-        db=call.db, user=call.user, status=page.status, limit=page.limit, offset=page.offset
+        db=call.db,
+        user=call.user,
+        status=page.status,
+        limit=page.limit,
+        offset=page.offset,
+        now=call.now,
     )
 
 
@@ -268,10 +281,11 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     when it was written and its `starting_text`: the text that feedback was given on, with the
     version it came from, when it wasn't the version before as written. `status` is "draft" with no
     scheduled post, else "scheduled", "published" or "failed" from its one scheduled post, returned
-    in `scheduled_post` with its own copy of the text, which the user may have edited since. A draft
-    has no scheduled post, so its text can be scheduled.
+    in `scheduled_post` with its own copy of the text, which the user may have edited since, and
+    `posting`, true while it is being published or due. A draft has no scheduled post, so its text
+    can be scheduled.
     """
-    return await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
+    return await mediator.get_post(db=call.db, user=call.user, post_id=post_id, now=call.now)
 
 
 async def give_feedback(

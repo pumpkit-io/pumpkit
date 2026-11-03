@@ -143,7 +143,10 @@ async def create_scheduled_post(
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
-    """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
+    """
+    With `publish_now`, publishes on X before answering: it comes back Published or Failed. With
+    a GIF or a video it comes back scheduled and `posting`, due now, for the publisher.
+    """
     new = NewScheduledPost(
         post_id=create_request.post_id,
         publish_at=create_request.publish_at,
@@ -316,9 +319,15 @@ async def list_posts(
     page: Annotated[PostsPageRequest, Query()],
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
 ) -> PostsPageResponse:
     return await mediator.list_posts(
-        db=db, user=current_user, status=page.status, limit=page.limit, offset=page.offset
+        db=db,
+        user=current_user,
+        status=page.status,
+        limit=page.limit,
+        offset=page.offset,
+        now=clock(),
     )
 
 
@@ -329,8 +338,9 @@ async def get_post(
     post_id: str,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
 ) -> PostDetailResponse:
-    return await mediator.get_post(db=db, user=current_user, post_id=post_id)
+    return await mediator.get_post(db=db, user=current_user, post_id=post_id, now=clock())
 
 
 @posts_router.post(

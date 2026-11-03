@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
+import { useIsPosting } from '@/features/scheduledPosts/usePosting';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import { cn } from '@/lib/utils';
@@ -60,9 +61,19 @@ function When({ iso }: { iso: string }) {
 
 /**
  * Every Part with its length, then where and when it goes; the moment is in `TIME_ZONE`. Edit
- * opens the Post page on the inline edit while the Scheduled post still waits.
+ * opens the Post page on the inline edit while the Scheduled post still waits, not yet posting.
  */
-function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; charLimit: number }) {
+function Expanded({
+  post,
+  id,
+  charLimit,
+  posting,
+}: {
+  post: PostListItem;
+  id: string;
+  charLimit: number;
+  posting: boolean;
+}) {
   const navigate = useNavigate();
   const scheduled = post.scheduledPost;
   const thread = post.parts.length > 1;
@@ -90,7 +101,7 @@ function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; cha
           ]}
         />
       )}
-      {post.status === 'scheduled' && scheduled?.state === 'scheduled' && (
+      {post.status === 'scheduled' && scheduled?.state === 'scheduled' && !posting && (
         <Button
           type="button"
           variant="outline"
@@ -113,6 +124,8 @@ export function PostRow({ post, charLimit }: { post: PostListItem; charLimit: nu
   const partsId = useId();
   const title = postTitle(post.parts[0] ?? post.brief) || 'Untitled post';
   const scheduled = post.scheduledPost;
+  // Here, not in Expanded, so a row expanded after its time came still knows it is posting.
+  const posting = useIsPosting(scheduled);
 
   return (
     <li aria-label={title} className="flex gap-4 px-4 py-4">
@@ -151,7 +164,12 @@ export function PostRow({ post, charLimit }: { post: PostListItem; charLimit: nu
           </p>
         )}
         {expanded && (
-          <Expanded post={post} id={partsId} charLimit={charLimit ?? X_POST_MAX_CHARS} />
+          <Expanded
+            post={post}
+            id={partsId}
+            charLimit={charLimit ?? X_POST_MAX_CHARS}
+            posting={posting}
+          />
         )}
       </div>
     </li>

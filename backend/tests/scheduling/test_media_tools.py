@@ -10,11 +10,15 @@ from sqlalchemy import update
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
-from tests.media_files import MB, image, padded, png
+from tests.media_files import MB, image, mp4, padded, png
 
 POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
 IMAGE_URL = "https://images.example.com/chart.png"
+POSTING = (
+    "Being published: Pumpkit uploads the media to X and waits while X processes it, which can "
+    "take up to an hour for a video. Call get_post to see when it's published."
+)
 
 
 async def _media_through_mcp(mcp, post_id: str) -> list[list[dict]]:
@@ -300,3 +304,21 @@ async def test_the_server_instructions_say_media_goes_out_as_given_and_is_never_
 
     assert "publishes media exactly as given" in instructions
     assert "its writing never reads it" in instructions
+
+
+async def test_post_now_with_a_video_says_it_is_being_published_and_how_to_check(
+    connected, mcp, post_with, fake_media_url_fetcher, fake_x_publisher
+):
+    post_id = await post_with("A demo, now.")
+    video_url = "https://videos.example.com/demo.mp4"
+    fake_media_url_fetcher.serve(video_url, mp4())
+    attached = await mcp.call_tool("attach_media", post_id=post_id, url=video_url)
+    assert attached["structuredContent"]["media"]["kind"] == "video", attached
+
+    result = await mcp.call_tool("post_now", post_id=post_id)
+
+    assert result["isError"] is False, result
+    posting = result["structuredContent"]
+    assert (posting["state"], posting["posting"]) == ("scheduled", True)
+    assert posting["message"] == POSTING
+    assert fake_x_publisher.published == []

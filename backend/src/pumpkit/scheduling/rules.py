@@ -8,7 +8,7 @@ from typing import Optional, Union
 from pumpkit.core.errors import ConflictError, RefusedError
 from pumpkit.posts.formats import part_name
 from pumpkit.posts.media_files import X_MEDIA_RULE, over_x_rule
-from pumpkit.posts.models import MEDIA_VIDEO, MediaKind
+from pumpkit.posts.models import MEDIA_GIF, MEDIA_VIDEO, MediaKind
 from pumpkit.x_connection.x_length import has_link, x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
@@ -74,16 +74,16 @@ def check_media(kinds_by_part: Sequence[Sequence[MediaKind]]) -> None:
             )
 
 
-def check_post_now_media(kinds_by_part: Sequence[Sequence[MediaKind]], *, live_count: int) -> None:
+def hands_post_now_to_publisher(
+    kinds_by_part: Sequence[Sequence[MediaKind]], *, live_count: int
+) -> bool:
     """
-    Post now publishes within the request, which a video's upload and X's processing of it can
-    outlast, so a Part not live with a video is refused.
+    Whether Post now leaves the Scheduled post to the publisher, due now: X processes a GIF or a
+    video after its upload, which together can outlast the request (ADR 0021).
     """
-    if any(MEDIA_VIDEO in kinds for kinds in kinds_by_part[live_count:]):
-        raise RefusedError(
-            "Post now can't publish a video yet. Schedule the post a minute from now instead.",
-            code="POST_NOW_VIDEO",
-        )
+    return any(
+        kind in (MEDIA_GIF, MEDIA_VIDEO) for kinds in kinds_by_part[live_count:] for kind in kinds
+    )
 
 
 def check_media_kept(kept_by_part: Sequence[Sequence[bool]], *, live_count: int = 0) -> None:

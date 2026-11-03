@@ -36,8 +36,15 @@ import { ReconnectXForMediaDialog } from '@/features/xConnection/ReconnectXForMe
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { useXConnectionNotice } from '@/features/xConnection/xConnectionReturn';
 import type { Format, PostDetail } from '@/services/postService';
+import { usePosting } from '@/features/scheduledPosts/usePosting';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
+type EditClosedBy = 'posting' | 'failed' | 'published';
+const EDIT_CLOSED: Record<EditClosedBy, string> = {
+  posting: "Posting started while you were editing, so your changes weren't saved.",
+  failed: "This post failed while you were editing, so your changes weren't saved.",
+  published: "This post was published while you were editing, so your changes weren't saved.",
+};
 const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
 
 /**
@@ -144,6 +151,7 @@ function LoadedPost({
   feedback,
   rewritesDropped,
   onScheduledPost,
+  onGone,
 }: {
   post: PostDetail;
   text: TextSnapshot;
@@ -152,14 +160,31 @@ function LoadedPost({
   /** An edit just dropped rewrites from redo, which History still holds. */
   rewritesDropped: boolean;
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
+  onGone: () => void;
 }) {
   const post: PostDetail = { ...loaded, text: text.text, versions: text.versions };
   const { connection, reload: reloadXConnection } = useXConnectionContext();
   const location = useLocation();
   const opensEditor = opensEditing(location.state);
+  const posting = usePosting(loaded.id, loaded.scheduledPost, onScheduledPost, onGone);
   const [editing, setEditing] = useState(
-    () => opensEditor && post.scheduledPost?.state === 'scheduled',
+    () => opensEditor && post.scheduledPost?.state === 'scheduled' && !posting,
   );
+  const [editClosedBy, setEditClosedBy] = useState<EditClosedBy | null>(null);
+  const state = loaded.scheduledPost?.state;
+  const situation: EditClosedBy | null = posting
+    ? 'posting'
+    : state === 'failed' || state === 'published'
+      ? state
+      : null;
+  // No editor while posting, even if X was busy and it comes back scheduled.
+  if (editing && (situation || state !== 'scheduled')) {
+    setEditing(false);
+    setEditClosedBy(situation);
+  } else if (editClosedBy && editClosedBy !== situation) {
+    setEditClosedBy(null);
+  }
+  const editClosed = editClosedBy && EDIT_CLOSED[editClosedBy];
   const navigate = useNavigate();
   const [reconnectingForMedia, setReconnectingForMedia] = useState(false);
   const askToReconnect = useCallback(() => setReconnectingForMedia(true), []);
@@ -188,34 +213,47 @@ function LoadedPost({
   const parts = cardParts(post, textVersion, charLimit);
   const title = postTitle(parts[0]?.text ?? post.brief);
   const breadcrumb = <PostBreadcrumb status={post.status} title={title} />;
+  // One region across the editor and the Post, so a change of its text is announced.
+  const announcements = (
+    <p role="status" className="sr-only">
+      {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}
+      {posting && <span>Posting…</span>}
+      {editClosed && <span>{editClosed}</span>}
+    </p>
+  );
 
   if (editing && scheduledPost?.state === 'scheduled') {
     return (
-      <Page title={breadcrumb}>
-        <ScheduledPostEditor
-          postId={post.id}
-          scheduledPost={scheduledPost}
-          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
-          askToReconnect={connection?.needsReconnectForMedia ? askToReconnect : undefined}
-          onReconnectNeeded={onReconnectNeeded}
-          onSaved={(saved) => {
-            onScheduledPost(saved);
-            setEditing(false);
-          }}
-          onUnscheduled={() => {
-            onScheduledPost(null);
-            setEditing(false);
-          }}
-          onCancel={(current) => {
-            onScheduledPost(current);
-            setEditing(false);
-          }}
-        />
-        <ReconnectXForMediaDialog
-          open={reconnectingForMedia}
-          onClose={() => setReconnectingForMedia(false)}
-        />
-      </Page>
+      <>
+        <Page title={breadcrumb}>
+          <ScheduledPostEditor
+            postId={post.id}
+            scheduledPost={scheduledPost}
+            charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
+            askToReconnect={connection?.needsReconnectForMedia ? askToReconnect : undefined}
+            onReconnectNeeded={onReconnectNeeded}
+            onSaved={(saved) => {
+              onScheduledPost(saved);
+              setEditing(false);
+              // A save still in flight when posting closed the editor went through after all.
+              setEditClosedBy(null);
+            }}
+            onUnscheduled={() => {
+              onScheduledPost(null);
+              setEditing(false);
+            }}
+            onCancel={(current) => {
+              onScheduledPost(current);
+              setEditing(false);
+            }}
+          />
+          <ReconnectXForMediaDialog
+            open={reconnectingForMedia}
+            onClose={() => setReconnectingForMedia(false)}
+          />
+        </Page>
+        {announcements}
+      </>
     );
   }
 
@@ -281,6 +319,7 @@ function LoadedPost({
         textVersion={textVersion}
         feedback={feedback}
         restoreError={text.restoreError}
+        notice={editClosed}
       />
     );
     postTo = (
@@ -295,41 +334,48 @@ function LoadedPost({
       />
     );
   } else if (post.status === 'scheduled' && scheduledPost) {
-    dock = <ScheduledDock scheduledPost={scheduledPost} onEdit={() => setEditing(true)} />;
+    dock = (
+      <ScheduledDock
+        scheduledPost={scheduledPost}
+        posting={posting}
+        notice={editClosed}
+        onEdit={() => setEditing(true)}
+      />
+    );
   } else if (post.status === 'published' && scheduledPost) {
-    dock = <PublishedDock scheduledPost={scheduledPost} />;
+    dock = <PublishedDock scheduledPost={scheduledPost} notice={editClosed} />;
   }
 
   return (
-    <Page title={breadcrumb} dock={dock} pinned>
-      <TextEditor
-        parts={parts}
-        texts={post.text?.parts.map((p) => p.text) ?? []}
-        editable={can.edit}
-        onEdit={(texts, change) => controller.edit(texts, change.cause)}
-        onUndo={onUndo}
-        onRedo={onRedo}
-        trace={text.trace}
-        busy={text.writing}
-        media={
-          textChanges
-            ? partMediaOf(
-                media,
-                parts,
-                connection?.needsReconnectForMedia ? askToReconnect : undefined,
-              )
-            : readOnlyMediaOf(parts)
-        }
-        header={<TextHeader origin={origin} tools={tools} action={postTo} />}
-      />
-      <ReconnectXForMediaDialog
-        open={reconnectingForMedia}
-        onClose={() => setReconnectingForMedia(false)}
-      />
-      <p role="status" className="sr-only">
-        {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}
-      </p>
-    </Page>
+    <>
+      <Page title={breadcrumb} dock={dock} pinned>
+        <TextEditor
+          parts={parts}
+          texts={post.text?.parts.map((p) => p.text) ?? []}
+          editable={can.edit}
+          onEdit={(texts, change) => controller.edit(texts, change.cause)}
+          onUndo={onUndo}
+          onRedo={onRedo}
+          trace={text.trace}
+          busy={text.writing}
+          media={
+            textChanges
+              ? partMediaOf(
+                  media,
+                  parts,
+                  connection?.needsReconnectForMedia ? askToReconnect : undefined,
+                )
+              : readOnlyMediaOf(parts)
+          }
+          header={<TextHeader origin={origin} tools={tools} action={postTo} />}
+        />
+        <ReconnectXForMediaDialog
+          open={reconnectingForMedia}
+          onClose={() => setReconnectingForMedia(false)}
+        />
+      </Page>
+      {announcements}
+    </>
   );
 }
 
@@ -340,6 +386,7 @@ export function PostPage() {
     load,
     reload,
     setScheduledPost,
+    gone,
     text,
     sendFeedback,
     rewritesDropped,
@@ -358,6 +405,7 @@ export function PostPage() {
         feedback={{ isWriting: text.writing, error, notice, allowanceUsedUp, onSend: sendFeedback }}
         rewritesDropped={rewritesDropped}
         onScheduledPost={setScheduledPost}
+        onGone={gone}
       />
     );
   }

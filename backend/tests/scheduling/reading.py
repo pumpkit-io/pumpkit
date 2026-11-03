@@ -4,6 +4,8 @@ and its `GET /posts/{id}`, for tests that check what a change left behind. MCP t
 the same way through `list_posts` and `get_post`.
 """
 
+from datetime import datetime
+
 from httpx import AsyncClient
 
 from pumpkit.auth.models import User
@@ -31,13 +33,15 @@ async def scheduled_posts(client: AsyncClient) -> list[dict]:
     return found
 
 
-async def scheduled_posts_through_the_mediator(db, user: User) -> list[ScheduledPostResponse]:
+async def scheduled_posts_through_the_mediator(
+    db, user: User, now: datetime
+) -> list[ScheduledPostResponse]:
     """`scheduled_posts`, for tests that call the mediator without the API."""
     found = []
     for status in STATUSES:
-        listed = await mediator.list_posts(db, user, status=status, limit=50, offset=0)
+        listed = await mediator.list_posts(db, user, status=status, limit=50, offset=0, now=now)
         for item in listed.data:
-            post = await mediator.get_post(db, user, post_id=item.id)
+            post = await mediator.get_post(db, user, post_id=item.id, now=now)
             assert post.scheduled_post is not None
             found.append(post.scheduled_post)
     return found

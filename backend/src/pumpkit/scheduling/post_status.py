@@ -1,8 +1,10 @@
 """A Post's status, which its one Scheduled post decides (ADR 0015), and what each status allows."""
 
+from datetime import datetime
 from typing import Literal, Optional
 
 from pumpkit.core.errors import ConflictError
+from pumpkit.core.time import as_utc
 from pumpkit.scheduling.models import FAILED, PUBLISHED, PUBLISHING, SCHEDULED, ScheduledPostState
 
 PostStatus = Literal["draft", "scheduled", "published", "failed"]
@@ -24,6 +26,26 @@ STATUS_OF_STATE: dict[ScheduledPostState, PostStatus] = {
 def post_status(state: Optional[ScheduledPostState]) -> PostStatus:
     """From the state of the Post's Scheduled post, None when it has none."""
     return DRAFT if state is None else STATUS_OF_STATE[state]
+
+
+def is_posting(
+    state: ScheduledPostState,
+    *,
+    publish_at: datetime,
+    next_attempt_at: Optional[datetime],
+    now: datetime,
+) -> bool:
+    """
+    Being published, or due for the publisher to claim; not while it waits for a retry after X
+    was busy, so that answer stays apart from a Post now handed to the publisher.
+    """
+    if state == PUBLISHING:
+        return True
+    return (
+        state == SCHEDULED
+        and as_utc(publish_at) <= now
+        and (next_attempt_at is None or as_utc(next_attempt_at) <= now)
+    )
 
 
 class TakesNoFeedback(ConflictError):

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { LimitNotice } from '@/components/LimitNotice';
+import { Notice } from '@/components/Notice';
 import { Button } from '@/components/ui/button';
 import { BillingProvider, type BillingData } from '@/features/billing/BillingProvider';
 import { checkoutStatusOf } from '@/features/billing/checkoutArrival';
@@ -164,9 +164,7 @@ function PaywallContent() {
       />
     );
   }
-  return (
-    <Offer data={data} notice={cancelled ? <LimitNotice message={CHECKOUT_CANCELLED} /> : null} />
-  );
+  return <Offer data={data} notice={cancelled ? <Notice message={CHECKOUT_CANCELLED} /> : null} />;
 }
 
 /** `/subscribe`: the only page a signed-in User who isn't Subscribed sees (ADR 0018). */

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -93,6 +93,7 @@ function summary(extra: Partial<ScheduledPostSummary> = {}): ScheduledPostSummar
     shareWithFollowers: false,
     failedReason: null,
     xPostUrl: null,
+    posting: false,
     ...extra,
   };
 }
@@ -335,6 +336,7 @@ describe('Posts page', () => {
           community: null,
           shareWithFollowers: false,
           createdAt: at(-1, 15),
+          posting: false,
         },
       });
       renderSignedIn('/posts/scheduled');
@@ -354,7 +356,9 @@ describe('Posts page', () => {
     it('offers no Edit on a row being published', async () => {
       vi.mocked(postService.list).mockResolvedValue(
         page([
-          item('post_01', ['Ship small.'], { scheduledPost: summary({ state: 'publishing' }) }),
+          item('post_01', ['Ship small.'], {
+            scheduledPost: summary({ state: 'publishing', posting: true }),
+          }),
         ]),
       );
       renderSignedIn('/posts/scheduled');
@@ -363,6 +367,63 @@ describe('Posts page', () => {
       fireEvent.click(scheduled.getByRole('button', { name: 'Show every part' }));
 
       expect(scheduled.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    });
+
+    it('offers no Edit on a row due and waiting for the publisher', async () => {
+      vi.mocked(postService.list).mockResolvedValue(
+        page([
+          item('post_01', ['Ship small.'], {
+            scheduledPost: summary({
+              publishAt: new Date(Date.now() - 60_000).toISOString(),
+              posting: true,
+            }),
+          }),
+        ]),
+      );
+      renderSignedIn('/posts/scheduled');
+      const scheduled = await row('Ship small.');
+
+      fireEvent.click(scheduled.getByRole('button', { name: 'Show every part' }));
+
+      expect(scheduled.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    });
+
+    it('offers no Edit on a row expanded after its time came while the list was open', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        vi.mocked(postService.list).mockResolvedValue(
+          page([
+            item('post_01', ['Ship small.'], {
+              scheduledPost: summary({ publishAt: new Date(Date.now() + 5_000).toISOString() }),
+            }),
+          ]),
+        );
+        renderSignedIn('/posts/scheduled');
+        const scheduled = await row('Ship small.');
+
+        await act(() => vi.advanceTimersByTimeAsync(10_000));
+        fireEvent.click(scheduled.getByRole('button', { name: 'Show every part' }));
+
+        expect(scheduled.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('offers Edit on a row X was busy for, waiting for its retry', async () => {
+      vi.mocked(postService.list).mockResolvedValue(
+        page([
+          item('post_01', ['Ship small.'], {
+            scheduledPost: summary({ publishAt: new Date(Date.now() - 60_000).toISOString() }),
+          }),
+        ]),
+      );
+      renderSignedIn('/posts/scheduled');
+      const scheduled = await row('Ship small.');
+
+      fireEvent.click(scheduled.getByRole('button', { name: 'Show every part' }));
+
+      expect(scheduled.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     });
 
     it("opens the Post's page from the row's title", async () => {

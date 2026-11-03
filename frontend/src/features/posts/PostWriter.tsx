@@ -6,7 +6,7 @@ import { track } from '@/lib/analytics';
 import { BRIEF_MAX_CHARS, FORMAT_POST, postService, type Format } from '@/services/postService';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Composer } from './Composer';
-import { LimitNotice } from '@/components/LimitNotice';
+import { Notice } from '@/components/Notice';
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
 import { useUsage } from '@/features/billing/useUsage';
@@ -115,7 +115,7 @@ export function PostWriter() {
         </p>
       )}
       {error && <ErrorBanner message={error} onRetry={typed ? send : undefined} />}
-      {notice && <LimitNotice message={notice} />}
+      {notice && <Notice message={notice} />}
       {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
     </section>
   );

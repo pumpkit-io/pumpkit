@@ -1,6 +1,6 @@
 import { useId, useRef, type ReactNode } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { LimitNotice } from '@/components/LimitNotice';
+import { Notice } from '@/components/Notice';
 import { cn } from '@/lib/utils';
 import { MAX_INSPIRATION_AUTHORS } from '@/services/inspirationAuthorService';
 import { AuthorPicker } from './AuthorPicker';
@@ -68,7 +68,7 @@ export function InspirationAuthorsPanel({ step }: { step?: OnboardingStep }) {
             error={error}
             onPick={(handle, { lookup }) => add(handle, { lookup })}
           />
-          {notice && <LimitNotice message={notice} />}
+          {notice && <Notice message={notice} />}
           {(steadier || step) && (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
               {steadier && (

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { LimitNotice } from '@/components/LimitNotice';
+import { Notice } from '@/components/Notice';
 import { SettingsCard } from '@/components/SettingsCard';
 import { UserAvatar } from '@/components/UserAvatar';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ export function XAccountCard({ notice }: { notice: string | null }) {
       title="X account"
       description="The X account Pumpkit publishes your scheduled posts on. Pumpkit never sees your X password."
     >
-      {notice && <LimitNotice message={notice} />}
+      {notice && <Notice message={notice} />}
       {error && <ErrorBanner message={error} />}
 
       {loadFailed ? (
