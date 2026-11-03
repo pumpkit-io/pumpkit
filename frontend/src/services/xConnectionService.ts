@@ -7,6 +7,8 @@ export interface XConnection {
   handle: string;
   /** The longest Scheduled post X accepts from this account, in X's weighted characters. */
   charLimit: number;
+  /** X Premium, which also lets the account post videos over 20 minutes. */
+  premium: boolean;
   needsReconnect: boolean;
   /** X's consent predates the media permission: attaching Media first takes reconnecting X. */
   needsReconnectForMedia: boolean;
@@ -21,6 +23,7 @@ export interface XConnection {
 interface XConnectionApi {
   handle: string;
   char_limit: number;
+  premium: boolean;
   needs_reconnect: boolean;
   needs_reconnect_for_media: boolean;
   scheduled_posts_waiting: number;
@@ -31,6 +34,7 @@ interface XConnectionApi {
 const toXConnection = (c: XConnectionApi): XConnection => ({
   handle: c.handle,
   charLimit: c.char_limit,
+  premium: c.premium,
   needsReconnect: c.needs_reconnect,
   needsReconnectForMedia: c.needs_reconnect_for_media,
   scheduledPostsWaiting: c.scheduled_posts_waiting,

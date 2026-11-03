@@ -81,6 +81,7 @@ const ADA: UserProfile = {
 const CONNECTED: XConnection = {
   handle: 'ada',
   charLimit: 280,
+  premium: false,
   needsReconnect: false,
   needsReconnectForMedia: false,
   scheduledPostsWaiting: 0,

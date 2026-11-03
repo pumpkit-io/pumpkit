@@ -155,31 +155,31 @@ Media is your own content, like a hand edit: Pumpkit publishes it inside the X p
 
 | Tool | What it does |
 | --- | --- |
-| `attach_media` | Downloads an image from a public https URL and attaches it to a Part of a Post, `part` 1 unless you name another, last after the Media it has, with optional alt text of up to 1,000 characters. On a Draft or a Failed Post it changes the Text; on a Scheduled Post it changes the Scheduled post's own copy. It refuses a Published Post and a Part already live on X. Without a URL, it answers with a one-time upload link for that Part and the `curl` command that sends a local image to it, as the next section shows. |
+| `attach_media` | Downloads an image, a GIF or a video from a public https URL and attaches it to a Part of a Post, `part` 1 unless you name another, last after the Media it has, with optional alt text of up to 1,000 characters for an image or GIF. On a Draft or a Failed Post it changes the Text; on a Scheduled Post it changes the Scheduled post's own copy. It refuses a Published Post and a Part already live on X. Without a URL, it answers with a one-time upload link for that Part and the `curl` command that sends local media to it, as the next section shows. |
 | `remove_media` | Takes one Media, by the id `get_post` lists, off a Post, by the same rule. |
 
-`attach_media` takes what the web app's upload takes: a JPEG, PNG or WEBP image up to 5 MB, up to 4 on a Part. Pumpkit checks the type from the image's own bytes. It downloads only from public hosts on port 443, following up to 3 redirects, stops a download that passes 5 MB, and gives up after 60 seconds. It refuses, with the web app's words, an image too large, a type Pumpkit doesn't take, an image it can't read, a URL it can't download and a Part that holds 4 images. An X connection made before Pumpkit could publish Media is asked to reconnect first, with the link to the Settings page. Neither tool uses a generation, and each allows 10 calls a minute.
+`attach_media` takes what the web app's upload takes: a JPEG, PNG or WEBP image up to 5 MB, a GIF up to 15 MB, or an MP4 or MOV video up to 512 MB. A Part takes up to 4 images, or 1 GIF, or 1 video, as X does. Pumpkit checks the type from its own bytes. It downloads only from public hosts on port 443, following up to 3 redirects, stops a download that passes its kind's limit, and gives up after 60 seconds for an image, 2 minutes for a GIF and 4 minutes for a video, so the app gets its answer before the web server's 5 minutes run out. A large video on a slow host is better sent through an upload link, as the next section shows. It refuses, with the web app's words, an image, GIF or video too large, a type Pumpkit doesn't take, an image it can't read, a URL it can't download and a Part that holds all X takes. Pumpkit never reads a video's length, so a video over 20 minutes on an X account without Premium fails when X refuses it at publish time; the web app warns of it, an app doesn't. An X connection made before Pumpkit could publish Media is asked to reconnect first, with the link to the Settings page. Neither tool uses a generation, and each allows 10 calls a minute.
 
-Alt text is stored with the image, `get_post` lists it, and Pumpkit sets it on X when the image goes out, for people using screen readers. You can also change or clear it on the Post's page in the web app.
+Alt text is stored with the image or GIF (a video takes none), `get_post` lists it, and Pumpkit sets it on X when the image goes out, for people using screen readers. You can also change or clear it on the Post's page in the web app.
 
-### Attaching a local image
+### Attaching local media
 
-An app that can run commands, such as Claude Code, attaches an image from your disk without a public URL. Called without `url`, `attach_media` checks the Post and Part as it would for a URL and answers with:
+An app that can run commands, such as Claude Code, attaches an image, a GIF or a video from your disk without a public URL. Called without `url`, `attach_media` checks the Post and Part as it would for a URL and answers with:
 
 - `upload_url`: a link under `/api/v1/media-uploads/`, made for that Part of that Post. It works once, for 15 minutes.
 - `upload_expires_at`: when the link stops working.
-- `curl_command`: the command that sends the image, with `IMAGE_PATH` in place of the image's path.
-- `post_url`: the Post's page, for an app that can't run commands, where you attach the image yourself.
+- `curl_command`: the command that sends the file, with `FILE_PATH` in place of the file's path.
+- `post_url`: the Post's page, for an app that can't run commands, where you attach the media yourself.
 
-The app replaces `IMAGE_PATH` with the image's path, quoted as its shell needs, and runs the command:
+The app replaces `FILE_PATH` with the file's path, quoted as its shell needs, and runs the command:
 
 ```sh
 curl -F 'file=@-' 'https://pumpkit.example.com/api/v1/media-uploads/Xq3…' < ~/"Desktop/Q3 chart.png"
 ```
 
-The shell opens the image and passes it to `curl` on its standard input, so `~`, `$HOME` and any character a quoted path may hold work in the path.
+The shell opens the file and passes it to `curl` on its standard input, so `~`, `$HOME` and any character a quoted path may hold work in the path. Since standard input is the file itself, `curl` streams it, so a 512 MB video isn't read into memory first; piping the file in (`cat video.mp4 | curl …`) would be.
 
-The link takes the image as the multipart field `file`, with no other credentials, and attaches it where `attach_media` named, with the alt text given to `attach_media`: to the Post's Text, or to its waiting Scheduled post's own copy. It answers with the attached image as `get_post` lists it. Uploads through links follow the web app's rules: the same checks on the image, the web upload's limit of 60 a minute, and a refusal when your subscription has ended or X needs reconnecting. An upload spends the link once your account and the Part pass these checks, before the image arrives, even when the image is then refused. A second use, or a use after 15 minutes, is refused with a message saying to call `attach_media` again. Disconnecting the app in Settings stops the links it made and hasn't used. The link names no Post or Part: Pumpkit keeps them with a hash of the link's token, so a changed link is unknown.
+The link takes the file as the multipart field `file`, with no other credentials, and attaches it where `attach_media` named, with the alt text given to `attach_media`: to the Post's Text, or to its waiting Scheduled post's own copy. It answers with the attached Media as `get_post` lists it. Uploads through links follow the web app's rules: the same checks on the file, the web upload's limit of 60 a minute, and a refusal when your subscription has ended or X needs reconnecting. An upload spends the link once your account and the Part pass these checks, before the file arrives, even when the file is then refused. A second use, or a use after 15 minutes, is refused with a message saying to call `attach_media` again. Disconnecting the app in Settings stops the links it made and hasn't used. The link names no Post or Part: Pumpkit keeps them with a hash of the link's token, so a changed link is unknown.
 
 ## Scheduled post and link tools
 
@@ -188,7 +188,7 @@ Every Scheduled post is copied from its Post's Text, the text set from each new 
 | Tool | What it does |
 | --- | --- |
 | `schedule_post` | Schedules the Text of a Post you name by its id, for a time you give with its UTC offset. A Thread keeps every Part in order. It goes to your profile, or to a Community you name by its URL or ID, and can also be shared with your followers. A Post goes out once: if it already has a Scheduled post, in any state, the tool refuses and tells you to edit that one, or unschedule it first. |
-| `post_now` | Publishes the Text of a Post you name by its id on X right away. In a Thread, each Part replies to the one before. Like `schedule_post`, it refuses a Post that already has a Scheduled post. It goes to your profile or a Community, as with `schedule_post`. Pumpkit's instructions tell the app to show you the exact text of every Part and ask before calling it. It answers Published with the link to the post on X, Failed with the reason, or, when X hasn't taken the post yet, that Pumpkit keeps trying for 15 minutes. |
+| `post_now` | Publishes the Text of a Post you name by its id on X right away. In a Thread, each Part replies to the one before. Like `schedule_post`, it refuses a Post that already has a Scheduled post. It goes to your profile or a Community, as with `schedule_post`. Pumpkit's instructions tell the app to show you the exact text of every Part and ask before calling it. It answers Published with the link to the post on X, Failed with the reason, or, when X hasn't taken the post yet, that Pumpkit keeps trying for 15 minutes. A Post with a video can't go out with Post now yet: schedule it a minute ahead instead. |
 | `edit_scheduled_post` | Changes the text, time or Community of a waiting or Failed Scheduled post, or moves it back to your profile. The text can be every Part typed out, edited from what the Scheduled post holds, or, with `copy_text`, its Post's Text as it is now, Media included, such as after Feedback on a Failed Post. A new time gives a Failed one another try. In a Thread that failed partway, the live Parts are locked; the others can be edited, added, removed and reordered, the Text's Parts in the live ones' places are skipped, and a new time publishes only the rest, as replies to the last live Part. |
 | `delete_scheduled_post` | Deletes a waiting or Failed Scheduled post, which unschedules it: its Post is a Draft again, so it takes Feedback and can be scheduled anew. Apps such as Claude Code ask before calling it. |
 | `list_past_communities` | Lists the Communities you posted to before from your connected X account. |

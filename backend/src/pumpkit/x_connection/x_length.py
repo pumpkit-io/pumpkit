@@ -95,9 +95,14 @@ _EMOJI = re.compile(
 )
 
 
+def has_premium(subscription_type: Optional[str]) -> bool:
+    """Whether an X account with this `subscription_type`, as read from `users/me`, has Premium."""
+    return subscription_type in _LONG_POST_SUBSCRIPTION_TYPES
+
+
 def x_post_max_chars(subscription_type: Optional[str]) -> int:
     """The post limit for an X account with this `subscription_type`, as read from `users/me`."""
-    if subscription_type in _LONG_POST_SUBSCRIPTION_TYPES:
+    if has_premium(subscription_type):
         return X_LONG_POST_MAX_CHARS
     return X_POST_MAX_CHARS
 

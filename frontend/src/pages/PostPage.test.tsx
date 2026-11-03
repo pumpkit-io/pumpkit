@@ -7,6 +7,7 @@ import {
   type BoundFunctions,
   type queries,
 } from '@testing-library/react';
+import { CanceledError } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -86,6 +87,7 @@ vi.mock('@/services/mediaService', async (importOriginal) => ({
     preview: vi.fn(),
   },
 }));
+vi.mock('@/features/posts/media/videoFile', () => ({ readVideo: vi.fn() }));
 vi.mock('@/services/usageService', () => ({
   usageService: { get: vi.fn() },
 }));
@@ -120,6 +122,7 @@ import {
   type ScheduledPostPart,
 } from '@/services/scheduledPostService';
 import { mediaService, type Media } from '@/services/mediaService';
+import { readVideo } from '@/features/posts/media/videoFile';
 import { usageService, type Usage } from '@/services/usageService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { xConnectionReturn } from '@/features/xConnection/xConnectionReturn';
@@ -139,6 +142,7 @@ import {
 const CONNECTED: XConnection = {
   handle: 'ada',
   charLimit: 280,
+  premium: false,
   needsReconnect: false,
   needsReconnectForMedia: false,
   scheduledPostsWaiting: 0,
@@ -960,6 +964,7 @@ describe('Post page', () => {
         width: 40,
         height: 30,
         altText: null,
+        durationMs: null,
       };
     }
 
@@ -1014,7 +1019,7 @@ describe('Post page', () => {
     });
 
     it('shows a chosen image uploading with its progress, then its stored preview', async () => {
-      let progress: (sent: number) => void = () => {};
+      let progress: (sent: number, bytesLeft: number) => void = () => {};
       let answer: (media: Media) => void = () => {};
       vi.mocked(mediaService.attach).mockImplementation((_post, _part, _file, options) => {
         progress = options?.onProgress ?? progress;
@@ -1031,7 +1036,7 @@ describe('Post page', () => {
       const bar = within(tile).getByRole('progressbar', { name: 'Uploading image 1' });
       expect(mediaService.attach).toHaveBeenCalledWith('post_01', 2, file, expect.anything());
 
-      act(() => progress(0.5));
+      act(() => progress(0.5, 1024));
       expect(bar).toHaveAttribute('aria-valuenow', '50');
 
       await act(async () => answer(image('media_01')));
@@ -1115,13 +1120,16 @@ describe('Post page', () => {
       chooseFiles(
         'the post',
         photo('big.png', 'image/png', 5 * MB + 1),
-        photo('clip.mp4', 'video/mp4'),
+        photo('clip.avi', 'video/x-msvideo'),
+        photo('photo.heic', 'image/heic'),
       );
 
       const big = within(await mediaOn('the post').findByRole('listitem', { name: 'big.png' }));
-      const clip = within(mediaOn('the post').getByRole('listitem', { name: 'clip.mp4' }));
+      const clip = within(mediaOn('the post').getByRole('listitem', { name: 'clip.avi' }));
+      const heic = within(mediaOn('the post').getByRole('listitem', { name: 'photo.heic' }));
       expect(big.getByText('Larger than 5 MB')).toBeInTheDocument();
-      expect(clip.getByText('JPEG, PNG or WEBP only')).toBeInTheDocument();
+      expect(clip.getByText('MP4 or MOV only')).toBeInTheDocument();
+      expect(heic.getByText('JPEG, PNG, WEBP or GIF only')).toBeInTheDocument();
       const refused = mediaOn('the post');
       expect(refused.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
       expect(mediaService.attach).not.toHaveBeenCalled();
@@ -1469,6 +1477,324 @@ describe('Post page', () => {
         screen.getByRole('list', { name: 'Media on the post' }).closest('.opacity-60'),
       ).toBeNull();
       expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    });
+
+    describe('GIFs and videos', () => {
+      const MINUTE = 60 * 1000;
+
+      function gif(id: string): Media {
+        return { ...image(id), kind: 'gif' };
+      }
+
+      function video(id: string, durationMs: number | null = 42 * 1000): Media {
+        return { ...image(id), kind: 'video', width: 1280, height: 720, durationMs };
+      }
+
+      function sized(file: File, size: number): File {
+        Object.defineProperty(file, 'size', { value: size });
+        return file;
+      }
+
+      beforeEach(() => {
+        vi.mocked(readVideo)
+          .mockReset()
+          .mockResolvedValue({ durationMs: 42_000, poster: new Blob(['frame']) });
+      });
+
+      it('shows a GIF with its GIF chip and its Alt chip once it is on', async () => {
+        vi.mocked(mediaService.attach).mockResolvedValue(gif('media_01'));
+        renderPost(postWith('the final text'));
+        await textCard();
+
+        chooseFiles('the post', photo('loop.gif', 'image/gif'));
+
+        const tile = within(await mediaOn('the post').findByRole('listitem', { name: 'GIF 1' }));
+        expect(tile.getByText('GIF')).toBeInTheDocument();
+        expect(
+          await tile.findByRole('button', { name: 'Add alt text to GIF 1' }),
+        ).toBeInTheDocument();
+        expect(tile.getByRole('button', { name: 'Remove GIF 1' })).toBeInTheDocument();
+        expect(readVideo).not.toHaveBeenCalled();
+        expect(track).toHaveBeenCalledWith('media_attached', {
+          kind: 'gif',
+          via: 'button',
+          source: 'web',
+        });
+      });
+
+      it('shows a video uploading with its first frame and length, read in the browser and sent with it', async () => {
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attach).mockReturnValue(
+          new Promise((resolve) => (answer = resolve)),
+        );
+        const poster = new Blob(['frame'], { type: 'image/jpeg' });
+        vi.mocked(readVideo).mockResolvedValue({ durationMs: 42_400, poster });
+        renderPost(postWith('the final text'));
+        await textCard();
+        const file = photo('demo.mp4', 'video/mp4');
+
+        chooseFiles('the post', file);
+
+        const shown = await mediaOn('the post').findByRole('listitem', { name: 'Video 1' });
+        const tile = within(shown);
+        expect(await tile.findByText('0:42')).toBeInTheDocument();
+        expect(shown.querySelector('img')).toHaveAttribute('src', 'blob:local-1');
+        expect(URL.createObjectURL).toHaveBeenCalledWith(poster);
+        expect(tile.getByRole('progressbar', { name: 'Uploading video 1' })).toBeInTheDocument();
+        await waitFor(() =>
+          expect(mediaService.attach).toHaveBeenCalledWith(
+            'post_01',
+            1,
+            file,
+            expect.objectContaining({ video: { durationMs: 42_400, poster } }),
+          ),
+        );
+
+        await act(async () => answer(video('media_01', 42_400)));
+
+        expect(tile.queryByRole('progressbar')).not.toBeInTheDocument();
+        expect(tile.getByText('0:42')).toBeInTheDocument();
+        expect(tile.queryByRole('button', { name: /alt text/i })).not.toBeInTheDocument();
+      });
+
+      it('shows a video as loading while the browser reads its first frame and length', async () => {
+        let read: (facts: { durationMs: number; poster: Blob }) => void = () => {};
+        vi.mocked(readVideo).mockReturnValue(new Promise((resolve) => (read = resolve)));
+        vi.mocked(mediaService.attach).mockReturnValue(new Promise(() => {}));
+        renderPost(postWith('the final text'));
+        await textCard();
+
+        chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+
+        const tile = within(await mediaOn('the post').findByRole('listitem', { name: 'Video 1' }));
+        expect(tile.getByRole('status')).toHaveTextContent('Reading video 1');
+
+        await act(async () => read({ durationMs: 42_000, poster: new Blob(['frame']) }));
+
+        expect(tile.queryByRole('status')).not.toBeInTheDocument();
+        expect(tile.getByText('0:42')).toBeInTheDocument();
+      });
+
+      it('takes a MOV whose type the browser leaves out', async () => {
+        vi.mocked(mediaService.attach).mockResolvedValue(video('media_01'));
+        renderPost(postWith('the final text'));
+        await textCard();
+
+        chooseFiles('the post', photo('IMG_0001.MOV', ''));
+
+        expect(
+          await mediaOn('the post').findByRole('listitem', { name: 'Video 1' }),
+        ).toBeInTheDocument();
+        await waitFor(() => expect(mediaService.attach).toHaveBeenCalled());
+      });
+
+      it('shows a video stored without a frame as a muted block with a film icon', async () => {
+        renderPost(
+          withMedia(postWith('the final text'), [[{ ...video('media_01'), previewUrl: null }]]),
+        );
+        await textCard();
+
+        const tile = mediaOn('the post').getByRole('listitem', { name: 'Video 1' });
+        expect(tile.querySelector('img')).toBeNull();
+        expect(tile.querySelector('svg.lucide-film')).not.toBeNull();
+        expect(mediaService.preview).not.toHaveBeenCalled();
+      });
+
+      it("refuses a GIF over 15 MB and a video over 512 MB on their tiles, naming each one's limit", async () => {
+        renderPost(threadOfTwo());
+        await textCard();
+
+        chooseFiles('Part 1', sized(photo('loop.gif', 'image/gif'), 15 * MB + 1));
+        chooseFiles('Part 2', sized(photo('demo.mov', 'video/quicktime'), 512 * MB + 1));
+
+        expect(
+          within(await mediaOn('Part 1').findByRole('listitem', { name: 'loop.gif' })).getByText(
+            'Larger than 15 MB',
+          ),
+        ).toBeInTheDocument();
+        expect(
+          within(mediaOn('Part 2').getByRole('listitem', { name: 'demo.mov' })).getByText(
+            'Larger than 512 MB',
+          ),
+        ).toBeInTheDocument();
+        expect(mediaService.attach).not.toHaveBeenCalled();
+      });
+
+      it("refuses mixing kinds on one Part, naming X's rule, and stops taking files once it holds a GIF", async () => {
+        renderPost(withMedia(threadOfTwo(), [[image('media_01')], [gif('media_02')]]));
+        await textCard();
+
+        chooseFiles('Part 1', photo('demo.mp4', 'video/mp4'));
+
+        const refused = within(
+          await mediaOn('Part 1').findByRole('listitem', { name: 'demo.mp4' }),
+        );
+        expect(
+          refused.getByText('X takes up to 4 images, or 1 GIF, or 1 video, per post'),
+        ).toBeInTheDocument();
+        expect(mediaService.attach).not.toHaveBeenCalled();
+        expect(card().getByRole('button', { name: 'Add media to Part 2' })).toHaveAttribute(
+          'aria-disabled',
+          'true',
+        );
+        expect(card().getByRole('button', { name: 'Add media to Part 1' })).not.toHaveAttribute(
+          'aria-disabled',
+        );
+      });
+
+      it('warns under a video over 20 minutes when the X account has no Premium', async () => {
+        renderPost(withMedia(threadOfTwo(), [[video('media_01', 21 * MINUTE)], []]));
+        await textCard();
+
+        expect(
+          await screen.findByText(
+            'Over 20 minutes: X takes longer videos only from Premium accounts.',
+          ),
+        ).toBeInTheDocument();
+      });
+
+      it('says nothing of a long video on a Premium account, or of a short one', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, premium: true });
+        renderPost(
+          withMedia(threadOfTwo(), [[video('media_01', 21 * MINUTE)], [video('media_02')]]),
+        );
+        await textCard();
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        expect(screen.queryByText(/Over 20 minutes/)).not.toBeInTheDocument();
+      });
+
+      it('says nothing of a long video while no X account is connected', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(null);
+        renderPost(withMedia(threadOfTwo(), [[video('media_01', 21 * MINUTE)], []]));
+        await textCard();
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        expect(screen.queryByText(/Over 20 minutes/)).not.toBeInTheDocument();
+      });
+
+      it('says nothing of a long video a published post went out with', async () => {
+        renderPost(
+          withScheduledPost({
+            ...SCHEDULED,
+            state: 'published',
+            parts: [{ ...SCHEDULED.parts[0]!, live: true, media: [video('m1', 21 * MINUTE)] }],
+          }),
+        );
+        await textCard();
+        await mediaOn('the post').findByRole('listitem', { name: 'Video 1' });
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        expect(screen.queryByText(/Over 20 minutes/)).not.toBeInTheDocument();
+      });
+
+      /** A video upload that has sent `sent` of its bytes, with `bytesLeft` to go, or no news. */
+      function sendingUntilAborted(
+        progress: { sent: number; bytesLeft: number } | null = {
+          sent: 0.1,
+          bytesLeft: 400 * MB,
+        },
+      ): {
+        signal: () => AbortSignal | undefined;
+        answer: (media: Media) => void;
+      } {
+        let signal: AbortSignal | undefined;
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attach).mockImplementation(
+          (_post, _part, _file, options) =>
+            new Promise((resolve, reject) => {
+              signal = options?.signal;
+              answer = resolve;
+              if (progress) options?.onProgress?.(progress.sent, progress.bytesLeft);
+              options?.signal?.addEventListener('abort', () => reject(new CanceledError()));
+            }),
+        );
+        return { signal: () => signal, answer: (media) => answer(media) };
+      }
+
+      it.each([
+        ['almost all sent', { sent: 0.99, bytesLeft: 4 * MB }],
+        ['sent without news of its progress', null],
+      ])(
+        'lets a video %s finish when its tile is removed, then takes it off the server',
+        async (_case, progress) => {
+          const sending = sendingUntilAborted(progress);
+          renderPost(postWith('the final text'));
+          await textCard();
+          chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+          await waitFor(() => expect(sending.signal()).toBeDefined());
+
+          fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove video 1' }));
+          expect(sending.signal()?.aborted).toBe(false);
+          await act(async () => sending.answer(video('media_09')));
+
+          expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_09');
+          expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();
+        },
+      );
+
+      it('shows, and keeps, media an app attached while a stopped video was sending', async () => {
+        const sending = sendingUntilAborted();
+        renderPost(postWith('the final text'));
+        await textCard();
+        chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+        await waitFor(() => expect(sending.signal()).toBeDefined());
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(postWith('the final text'), [[video('from_an_app')]]),
+        );
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove video 1' }));
+
+        await waitFor(() =>
+          expect(
+            mediaOn('the post').getByRole('listitem', { name: 'Video 1' }),
+          ).toBeInTheDocument(),
+        );
+        expect(mediaService.remove).not.toHaveBeenCalled();
+      });
+
+      it('stops a video still sending when its tile is removed, attaching nothing', async () => {
+        const sending = sendingUntilAborted();
+        vi.mocked(postService.get).mockResolvedValue(postWith('the final text'));
+        renderPost(postWith('the final text'));
+        await textCard();
+        chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+        await waitFor(() => expect(sending.signal()).toBeDefined());
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove video 1' }));
+
+        expect(sending.signal()?.aborted).toBe(true);
+        await waitFor(() => expect(postService.get).toHaveBeenCalled());
+        expect(mediaService.remove).not.toHaveBeenCalled();
+        expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();
+      });
+
+      it('says a video is uploading while "Post to…" waits for it', async () => {
+        vi.mocked(mediaService.attach).mockReturnValue(new Promise(() => {}));
+        renderPost(postWith('the final text'));
+        await textCard();
+        chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+        await mediaOn('the post').findByRole('progressbar');
+
+        act(() => card().getByRole('button', { name: 'Post to…' }).focus());
+
+        expect((await screen.findAllByText('A video is still uploading'))[0]).toBeInTheDocument();
+      });
+
+      it('keeps Post now from a Text with a video, saying to schedule it instead', async () => {
+        renderPost(withMedia(threadOfTwo(), [[], [video('media_01')]]));
+        await textCard();
+
+        fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+        expect(
+          dialog.getByText(
+            "Post now can't publish a video yet. Schedule the post a minute from now instead.",
+          ),
+        ).toBeInTheDocument();
+        expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();
+      });
     });
 
     describe('alt text', () => {

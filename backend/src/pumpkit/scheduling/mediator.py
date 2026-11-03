@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
-from typing import BinaryIO, Optional
+from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,7 +82,7 @@ from pumpkit.scheduling.schemas import (
 )
 from pumpkit.scheduling.top_up_charges import rebalance_top_ups
 from pumpkit.x_connection.models import XConnection
-from pumpkit.x_connection.x_length import x_post_max_chars
+from pumpkit.x_connection.x_length import has_premium, x_post_max_chars
 from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
 # Where the User sees their Posts; one Post's page is under it.
@@ -315,6 +315,8 @@ async def create_scheduled_post(
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
     media = media_service.text_media_by_part(post)
     await _check_media(db, media, user_id=user.id)
+    if new.publish_now:
+        rules.check_post_now_media(media_service.kinds_by_part(media), live_count=0)
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_x_posts_room(db, user_id=user.id, publish_at=publish_at, parts=parts)
     community = await _community(reader, new.community) if new.community is not None else None
@@ -350,7 +352,7 @@ async def _check_media(
     db: AsyncSession, media: list[list[Media]], *, user_id: str, live_count: int = 0
 ) -> None:
     """The Media the Parts not live will go out with fits X, is still stored, and can go out."""
-    rules.check_media([[m.kind for m in part] for part in media])
+    rules.check_media(media_service.kinds_by_part(media))
     rules.check_media_kept(
         [[m.file_key is not None for m in part] for part in media], live_count=live_count
     )
@@ -466,6 +468,13 @@ async def edit_scheduled_post(
     elif edit.reschedules:
         await _check_media(
             db, service.media_by_part(scheduled_post), user_id=user.id, live_count=len(live)
+        )
+    if edit.publish_now:
+        rules.check_post_now_media(
+            media_service.kinds_by_part(
+                media if media is not None else service.media_by_part(scheduled_post)
+            ),
+            live_count=len(live),
         )
     reschedule = None
     connection = (
@@ -755,8 +764,7 @@ async def attach_text_media(
     user: User,
     post_id: str,
     part_number: int,
-    file: BinaryIO,
-    byte_size: int,
+    received: ReceivedMedia,
     now: datetime,
     alt_text: Optional[str] = None,
 ) -> MediaResponse:
@@ -768,19 +776,30 @@ async def attach_text_media(
     post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
     part_index = part_number - 1
     _check_text_part_takes_media(post, scheduled_post, part_index=part_index)
-    checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
+    checked = await _checked(received)
+    media_service.check_text_part_room(post, part_index=part_index, kind=checked.kind)
     media = await media_service.attach_to_text(
         db,
         storage,
         post=post,
         part_index=part_index,
         checked=checked,
-        file=file,
+        file=received.file,
         now=now,
         alt_text=alt_text,
     )
     await db.commit()
     return media_service.media_response(media)
+
+
+async def _checked(received: ReceivedMedia) -> media_files.CheckedMedia:
+    return await asyncio.to_thread(
+        media_files.check_media,
+        received.file,
+        received.byte_size,
+        duration_ms=received.duration_ms,
+        poster=received.poster,
+    )
 
 
 async def start_media_upload(db: AsyncSession, user: User) -> None:
@@ -823,8 +842,7 @@ async def attach_scheduled_post_media(
     user: User,
     scheduled_post_id: str,
     part_number: int,
-    file: BinaryIO,
-    byte_size: int,
+    received: ReceivedMedia,
     now: datetime,
     alt_text: Optional[str] = None,
 ) -> MediaResponse:
@@ -837,9 +855,16 @@ async def attach_scheduled_post_media(
     )
     part_index = part_number - 1
     _check_scheduled_post_part_takes_media(scheduled_post, media, part_index=part_index)
-    checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
+    checked = await _checked(received)
+    media_service.check_part_room(media, part_index=part_index, kind=checked.kind)
     attached = await media_service.store(
-        db, storage, user_id=user.id, checked=checked, file=file, now=now, alt_text=alt_text
+        db,
+        storage,
+        user_id=user.id,
+        checked=checked,
+        file=received.file,
+        now=now,
+        alt_text=alt_text,
     )
     async with media_service.files_deleted_on_failure(storage, attached):
         media[part_index].append(attached)
@@ -952,8 +977,7 @@ async def _attach_received(
             user,
             post_id,
             part_number,
-            received.file,
-            received.byte_size,
+            received,
             now,
             alt_text=alt_text,
         )
@@ -964,8 +988,7 @@ async def _attach_received(
         user,
         taking.id,
         part_number,
-        received.file,
-        received.byte_size,
+        received,
         now,
         alt_text=alt_text,
     )
@@ -1242,6 +1265,7 @@ async def _x_connection_response(
     return XConnectionResponse(
         handle=connection.handle,
         char_limit=x_post_max_chars(connection.subscription_type),
+        premium=has_premium(connection.subscription_type),
         needs_reconnect=connection.needs_reconnect,
         needs_reconnect_for_media=x_connections_service.needs_reconnect_for_media(connection),
         scheduled_posts_waiting=await service.count_waiting(

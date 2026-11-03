@@ -4,7 +4,9 @@ redirect checked again, capped by the file's kind while it downloads, and within
 """
 
 import asyncio
+import re
 import socket
+from pathlib import Path
 
 import httpx
 import pytest
@@ -13,7 +15,8 @@ import respx
 from pumpkit.core.config import settings
 from pumpkit.posts.media_fetcher import HttpMediaUrlFetcher
 from pumpkit.posts.media_files import MediaRefused
-from tests.media_files import MB, padded, png
+from pumpkit.posts.models import MEDIA_VIDEO
+from tests.media_files import MB, mp4, padded, png
 
 URL = "https://images.example.com/chart.png"
 
@@ -189,3 +192,33 @@ async def test_a_file_trickled_slowly_is_refused_at_the_deadline(production):
     refusal = await asyncio.wait_for(_refusal(fetcher, URL), timeout=0.5)
 
     assert refusal.code == "MEDIA_URL_UNREACHABLE"
+
+
+@respx.mock
+async def test_a_video_has_longer_to_download_than_an_image(production):
+    async def trickle():
+        yield mp4()
+        for _ in range(30):
+            await asyncio.sleep(0.01)
+            yield b"\0"
+
+    respx.get(URL).mock(return_value=httpx.Response(200, content=trickle()))
+    fetcher = HttpMediaUrlFetcher(
+        resolve=resolving({"images.example.com": "93.184.215.14"}),
+        deadline_seconds=0.1,
+        longer_deadlines={MEDIA_VIDEO: 5.0},
+    )
+
+    async with fetcher.fetch(URL) as received:
+        assert received.byte_size == len(mp4()) + 30
+
+
+def test_the_longest_download_ends_a_minute_before_the_proxy_gives_up_on_the_tool_call():
+    caddyfile = (Path(__file__).parents[3] / "infra" / "web" / "Caddyfile").read_text()
+    api_routes = caddyfile.split("handle /api/* {")[1].split("handle ")[0]
+    timeout = re.search(r"response_header_timeout (\d+)m", api_routes)
+    assert timeout is not None
+
+    longest = max(HttpMediaUrlFetcher().longer_deadlines.values())
+
+    assert longest <= (int(timeout.group(1)) - 1) * 60

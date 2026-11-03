@@ -14,11 +14,12 @@ from sqlalchemy import update
 import pumpkit.scheduling.publisher as publisher
 from pumpkit.auth.models import User
 from pumpkit.billing.models import Subscription
-from pumpkit.posts.media_files import IMAGE_MAX_BYTES
+from pumpkit.posts.media_files import MAX_BYTES
+from pumpkit.posts.models import MEDIA_IMAGE
 from pumpkit.posts.schemas import MEDIA_RATE
 from pumpkit.x_connection.models import XConnection
 from tests.mcp_client import error_text
-from tests.media_files import gif, padded, png
+from tests.media_files import image, padded, png
 
 POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
@@ -56,7 +57,7 @@ async def test_without_a_url_the_tool_answers_a_link_its_expiry_and_a_ready_curl
     assert datetime.fromisoformat(link["upload_expires_at"]) == fixed_clock() + timedelta(
         minutes=15
     )
-    assert link["curl_command"] == f"curl -F 'file=@-' '{upload_url}' < IMAGE_PATH"
+    assert link["curl_command"] == f"curl -F 'file=@-' '{upload_url}' < FILE_PATH"
     page = f"{POSTS_PAGE}/{post_id}"
     assert link["post_url"] == page
     assert link["media"] is None
@@ -137,7 +138,7 @@ async def test_files_the_web_upload_refuses_are_refused_and_spend_the_link(
     post_id = await post_with("One")
     link = await _link(mcp, post_id)
 
-    refused = await _upload(new_browser, link, gif())
+    refused = await _upload(new_browser, link, image("BMP"))
 
     assert refused.status_code == 422
     assert refused.json()["code"] == "MEDIA_TYPE_UNSUPPORTED"
@@ -153,7 +154,9 @@ async def test_the_upload_takes_only_the_file_field(subscribed, mcp, new_browser
     response = await new_browser().post(path, files={"image": ("chart.png", png(), "image/png")})
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Send one file, as the `file` field, and nothing else."
+    assert response.json()["detail"] == (
+        "Send one file, as the `file` field, with at most a video's `duration_ms` and `poster`."
+    )
 
 
 @pytest.fixture
@@ -287,7 +290,7 @@ async def test_a_file_larger_than_x_takes_is_refused_and_spends_the_link(
     post_id = await post_with("One")
     link = await _link(mcp, post_id)
 
-    refused = await _upload(new_browser, link, padded(png(), IMAGE_MAX_BYTES + 1))
+    refused = await _upload(new_browser, link, padded(png(), MAX_BYTES[MEDIA_IMAGE] + 1))
 
     assert refused.status_code == 422
     assert refused.json()["code"] == "MEDIA_TOO_LARGE"

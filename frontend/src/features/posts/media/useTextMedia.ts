@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
 import { showToast } from '@/components/Toaster';
 import { track } from '@/lib/analytics';
 import { useConfirmLeaving } from '@/lib/useConfirmLeaving';
 import { errorCode, errorStatus } from '@/services/apiErrors';
-import type { Media } from '@/services/mediaService';
+import type { Media, MediaKind, VideoFacts } from '@/services/mediaService';
 import {
   IMAGES_PER_PART,
   PART_SAVING,
   UPLOAD_FAILED,
   X_MEDIA_RULE,
+  kindOfFile,
+  mediaNoun,
   refusalBeforeUpload,
   refusalOf,
+  takesMore,
   type AttachVia,
   type Refusal,
 } from './mediaRules';
 import { textMediaPlace, type MediaPlace } from './mediaPlaces';
+import { readVideo } from './videoFile';
 
 /** One file on a Part as the card shows it, from the moment it is chosen. */
 export type Tile =
@@ -22,8 +27,13 @@ export type Tile =
       key: string;
       state: 'uploading';
       file: File;
-      /** The chosen file itself, shown until the stored preview loads. */
+      kind: MediaKind;
+      /** The chosen file itself, or a video's first frame, shown until the stored preview loads. */
       localUrl: string | null;
+      /** A video's length, once the browser read it. */
+      durationMs: number | null;
+      /** A video whose length and first frame the browser is still reading. */
+      reading: boolean;
       /** The share sent so far, from 0 to 1. */
       progress: number;
       via: AttachVia;
@@ -33,7 +43,9 @@ export type Tile =
       key: string;
       state: 'refused';
       file: File;
+      kind: MediaKind;
       localUrl: string | null;
+      durationMs: number | null;
       refusal: Refusal;
       via: AttachVia;
     };
@@ -41,7 +53,7 @@ export type Tile =
 export interface TextMedia {
   /** The Part's tiles in order, refused files included. */
   tilesOf: (partIndex: number) => Tile[];
-  /** How many more images the Part takes. */
+  /** How many more images the Part takes; none once it holds a GIF or a video. */
   roomOn: (partIndex: number) => number;
   /** Whether the Part is one an undo shows before it lands, which takes no files yet. */
   saving: (partIndex: number) => boolean;
@@ -57,22 +69,35 @@ export function holdsPlace(tile: Tile): boolean {
   return tile.state === 'uploading' || (tile.state === 'ready' && !tile.removing);
 }
 
-function localUrlOf(file: File): string | null {
+export function kindOfTile(tile: Tile): MediaKind {
+  return tile.state === 'ready' ? tile.media.kind : tile.kind;
+}
+
+function localUrlOf(file: Blob): string | null {
   return typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
 }
 
 const RECONNECT_FOR_MEDIA = 'X_RECONNECT_FOR_MEDIA';
 
-const LEAVE_WHILE_UPLOADING =
-  "An image is still uploading. If you leave, it won't stay on the post. Leave anyway?";
+/** "An image", "A GIF" or "A video". */
+export function aMedia(kind: MediaKind): string {
+  return kind === 'image' ? 'An image' : `A ${mediaNoun(kind)}`;
+}
+
+/** Progress events lag the bytes sent: only this much left proves the server lacks the file. */
+const ABORTABLE_BYTES_LEFT = 32 * 1024 * 1024;
 
 /**
- * An upload, queued or under way. One under way is never aborted: an abort can't tell whether
- * the server already took the file, so a stopped upload finishes and its Media is taken off.
+ * An upload, queued or under way. A stopped one finishes and its Media is taken off, unless it
+ * is a video known to have far to go: aborting it can't leave a Media behind.
  */
 interface Upload {
+  kind: MediaKind;
   /** Stopped by the User or by leaving the page. */
   dropped: boolean;
+  /** Null until the browser reports progress. */
+  bytesLeft: number | null;
+  controller: AbortController;
 }
 
 function release(tile: Tile) {
@@ -87,6 +112,18 @@ function readyTile(
   localUrl: string | null,
 ): Extract<Tile, { state: 'ready' }> {
   return { key, state: 'ready', media, localUrl, removing: false };
+}
+
+/** Drops an upload; a video with far to go stops at once. */
+function stop(under: Upload) {
+  under.dropped = true;
+  if (
+    under.kind === 'video' &&
+    under.bytesLeft !== null &&
+    under.bytesLeft >= ABORTABLE_BYTES_LEFT
+  ) {
+    under.controller.abort();
+  }
 }
 
 /** `parts` with every Part from `count` on appended to the last one, as the server moves Media. */
@@ -124,6 +161,8 @@ export function useTextMedia(
   const partCountChanges = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const uploads = useRef(new Map<string, Upload>());
+  /** Each video's length and first frame, read in the browser as it is chosen. */
+  const videoReads = useRef(new Map<string, Promise<VideoFacts>>());
   /** Media the page took off the server, which a later read may still list. */
   const discarded = useRef(new Set<string>());
 
@@ -258,22 +297,33 @@ export function useTextMedia(
    */
   const send = useCallback(
     async (key: string, file: File, via: AttachVia, under: Upload) => {
+      const video = (await videoReads.current.get(key)) ?? null;
       for (let attempt = 0; ; attempt++) {
         const changesBefore = partCountChanges.current;
         const sentTo = partWith(key);
-        if (sentTo === -1) return;
+        if (sentTo === -1 || under.dropped) return;
         let media: Media | null = null;
         let error: unknown = null;
         try {
           media = await place.attach(sentTo + 1, file, {
-            onProgress: (sent) => {
+            onProgress: (sent, bytesLeft) => {
+              under.bytesLeft = bytesLeft;
               changeTile(key, (tile) =>
                 tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
               );
             },
+            video,
+            signal: under.controller.signal,
           });
         } catch (caught) {
           error = caught;
+        }
+        if (under.dropped && axios.isCancel(error)) {
+          // Aborted far from the end, so the server can't have attached it. Media the
+          // read finds that the page didn't know of came from elsewhere, such as an AI app: shown.
+          const server = await read();
+          if (server) reconcile(server, null);
+          return;
         }
         if (media) {
           const landed = media;
@@ -305,7 +355,7 @@ export function useTextMedia(
         }
         // The Part went away on the server, by Feedback here or elsewhere: send it again.
         const partGone = errorStatus(error) === 404;
-        const refusal = partGone ? { message: UPLOAD_FAILED, retry: true } : refusalOf(error);
+        const refusal = partGone ? { message: UPLOAD_FAILED, retry: true } : refusalOf(error, file);
         const server =
           refusal.retry || errorCode(error) === 'MEDIA_PART_FULL' ? await read() : null;
         if (server) {
@@ -331,14 +381,20 @@ export function useTextMedia(
           if (partGone && attempt === 0 && !under.dropped) continue;
         }
         if (under.dropped) return;
-        changeTile(key, (tile) => ({
-          key,
-          state: 'refused',
-          file,
-          localUrl: tile.localUrl,
-          refusal,
-          via,
-        }));
+        changeTile(key, (tile) =>
+          tile.state === 'uploading'
+            ? {
+                key,
+                state: 'refused',
+                file,
+                kind: tile.kind,
+                localUrl: tile.localUrl,
+                durationMs: tile.durationMs,
+                refusal,
+                via,
+              }
+            : tile,
+        );
         return;
       }
     },
@@ -346,8 +402,13 @@ export function useTextMedia(
   );
 
   const upload = useCallback(
-    (key: string, file: File, via: AttachVia) => {
-      const under: Upload = { dropped: false };
+    (key: string, file: File, kind: MediaKind, via: AttachVia) => {
+      const under: Upload = {
+        kind,
+        dropped: false,
+        bytesLeft: null,
+        controller: new AbortController(),
+      };
       uploads.current.set(key, under);
       enqueue(async () => {
         try {
@@ -360,12 +421,41 @@ export function useTextMedia(
     [enqueue, send],
   );
 
+  const kindsOn = useCallback(
+    (partIndex: number) => (current.current[partIndex] ?? []).filter(holdsPlace).map(kindOfTile),
+    [],
+  );
+
   const roomOn = useCallback(
-    (partIndex: number) =>
-      isStored(partIndex)
-        ? IMAGES_PER_PART - (current.current[partIndex] ?? []).filter(holdsPlace).length
-        : 0,
-    [isStored],
+    (partIndex: number) => {
+      if (!isStored(partIndex)) return 0;
+      const kinds = kindsOn(partIndex);
+      return kinds.some((kind) => kind !== 'image') ? 0 : IMAGES_PER_PART - kinds.length;
+    },
+    [isStored, kindsOn],
+  );
+
+  /** Reads a chosen video's length and first frame, shown on its tile and sent with it. */
+  const readVideoOf = useCallback(
+    (key: string, file: File) => {
+      const reading = readVideo(file);
+      videoReads.current.set(key, reading);
+      void reading.then(({ durationMs, poster }) => {
+        const localUrl = poster ? localUrlOf(poster) : null;
+        if (!tileWith(key)) {
+          if (localUrl) URL.revokeObjectURL(localUrl);
+          return;
+        }
+        changeTile(key, (tile) =>
+          tile.state === 'ready'
+            ? { ...tile, localUrl }
+            : tile.state === 'uploading'
+              ? { ...tile, localUrl, durationMs, reading: false }
+              : { ...tile, localUrl, durationMs },
+        );
+      });
+    },
+    [tileWith, changeTile],
   );
 
   const attach = useCallback(
@@ -376,43 +466,49 @@ export function useTextMedia(
       }
       for (const file of files) {
         const key = newKey();
-        const localUrl = localUrlOf(file);
+        const kind = kindOfFile(file) ?? 'image';
+        const video = kind === 'video';
+        const localUrl = video ? null : localUrlOf(file);
         const refusal =
           refusalBeforeUpload(file) ??
-          (roomOn(partIndex) > 0 ? null : { message: X_MEDIA_RULE, retry: false });
+          (isStored(partIndex) && takesMore(kindsOn(partIndex), kind)
+            ? null
+            : { message: X_MEDIA_RULE, retry: false });
+        const shown = { key, file, kind, localUrl, durationMs: null, via };
         if (refusal) {
-          change(partIndex, (tiles) => [
-            ...tiles,
-            { key, state: 'refused', file, localUrl, refusal, via },
-          ]);
+          change(partIndex, (tiles) => [...tiles, { ...shown, state: 'refused', refusal }]);
           continue;
         }
         change(partIndex, (tiles) => [
           ...tiles,
-          { key, state: 'uploading', file, localUrl, progress: 0, via },
+          { ...shown, state: 'uploading', reading: video, progress: 0 },
         ]);
-        upload(key, file, via);
+        if (video) readVideoOf(key, file);
+        upload(key, file, kind, via);
       }
     },
-    [change, isStored, newKey, roomOn, upload],
+    [change, isStored, kindsOn, newKey, readVideoOf, upload],
   );
 
   const retry = useCallback(
     (key: string) => {
       const tile = tileWith(key);
       if (tile?.state !== 'refused') return;
-      if (roomOn(partWith(key)) <= 0) return;
+      if (!takesMore(kindsOn(partWith(key)), tile.kind)) return;
       changeTile(key, () => ({
         key,
         state: 'uploading',
         file: tile.file,
+        kind: tile.kind,
         localUrl: tile.localUrl,
+        durationMs: tile.durationMs,
+        reading: false,
         progress: 0,
         via: tile.via,
       }));
-      upload(key, tile.file, tile.via);
+      upload(key, tile.file, tile.kind, tile.via);
     },
-    [tileWith, partWith, changeTile, roomOn, upload],
+    [tileWith, partWith, changeTile, kindsOn, upload],
   );
 
   const remove = useCallback(
@@ -421,7 +517,8 @@ export function useTextMedia(
       if (!tile) return;
       if (tile.state !== 'ready') {
         const under = uploads.current.get(key);
-        if (under) under.dropped = true;
+        if (under) stop(under);
+        videoReads.current.delete(key);
         dropTile(key);
         return;
       }
@@ -437,7 +534,7 @@ export function useTextMedia(
           // A read after a failed upload may already have found it gone.
           if (errorStatus(error) === 404) return removed();
           changeTile(key, (t) => ({ ...t, removing: false }) as Tile);
-          showToast("Couldn't remove the image. Try again.");
+          showToast(`Couldn't remove the ${mediaNoun(tile.media.kind)}. Try again.`);
         }),
       );
     },
@@ -455,12 +552,15 @@ export function useTextMedia(
     [place, tileWith, changeTile],
   );
 
-  const uploading = parts.some((tiles) => tiles.some((tile) => tile.state === 'uploading'));
-  useConfirmLeaving(uploading, LEAVE_WHILE_UPLOADING);
+  const uploading = parts.flat().find((tile) => tile.state === 'uploading');
+  useConfirmLeaving(
+    Boolean(uploading),
+    `${aMedia(uploading ? kindOfTile(uploading) : 'image')} is still uploading. If you leave, it won't stay on the post. Leave anyway?`,
+  );
 
   useEffect(
     () => () => {
-      uploads.current.forEach((under) => (under.dropped = true));
+      uploads.current.forEach(stop);
       current.current.flat().forEach(release);
     },
     [],

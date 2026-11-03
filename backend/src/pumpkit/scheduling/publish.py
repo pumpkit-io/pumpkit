@@ -23,6 +23,7 @@ from pumpkit.scheduling.models import ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
     MediaCategory,
+    TokenForCall,
     XMediaRefusedError,
     XNotReceivedError,
     XPostRejectedError,
@@ -36,8 +37,8 @@ from pumpkit.x_connection.x_publisher import (
 # Refresh an access token this close to expiry, so it can't lapse during the call to X.
 REFRESH_MARGIN = timedelta(minutes=5)
 
-# A Scheduled post X never took (429, refused connection) is retried this long after its
-# publish time, then Failed. Calling X again is safe only because X surely didn't publish it.
+# A Scheduled post X never took (429, refused connection) is retried until it has waited this long
+# between attempts, then Failed. Calling X again is safe only because X surely didn't publish it.
 RETRY_WINDOW = timedelta(minutes=15)
 FIRST_BACKOFF = timedelta(minutes=1)
 
@@ -85,6 +86,8 @@ COMMUNITY_MEMBERSHIP_HINT = (
 STUCK_AFTER = timedelta(minutes=10)
 # One Media's chunked upload and X's processing of it; the adapter's own processing cap is lower.
 UPLOAD_LIMIT = timedelta(minutes=5)
+# A video's, up to 512 MB: the claim is renewed before each of its calls to X, each far shorter.
+VIDEO_UPLOAD_LIMIT = timedelta(hours=2)
 X_CALL_LIMIT = timedelta(minutes=2)
 
 
@@ -140,7 +143,13 @@ async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPo
     """The X connection, row-locked until the next commit, or `Failed`."""
     if not await subscriptions_service.has_access(db, user_id=scheduled_post.user_id):
         raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
+    return await connection_still_publishing_on(db, scheduled_post)
 
+
+async def connection_still_publishing_on(
+    db: AsyncSession, scheduled_post: ScheduledPost
+) -> XConnection:
+    """The X connection a publish under way goes on with, row-locked until the next commit."""
     connection = await x_connections_service.lock_connection(db, user_id=scheduled_post.user_id)
     if connection is None or connection.x_user_id != scheduled_post.x_user_id:
         raise Failed("x_account_changed", X_ACCOUNT_CHANGED_REASON)
@@ -228,11 +237,11 @@ async def upload_media(
     part: ScheduledPostPart,
     media: Media,
     *,
-    access_token: str,
+    token_for_call: TokenForCall,
 ) -> str:
     """
-    X's media id for one of the Part's `media`, or `Failed`. X has published nothing for the Part
-    yet, so every failure here is a definite one, and one X didn't take may be tried again.
+    X's media id for one of the Part's `media`, or `Failed`, which `token_for_call` may raise too.
+    X has published nothing for the Part yet, so one X didn't take may be tried again.
     """
     subject = _subject(scheduled_post, part)
     if media.file_key is None:
@@ -246,9 +255,20 @@ async def upload_media(
         raise Failed("media_not_sent", _not_published(subject, MEDIA_NOT_SENT))
     try:
         with source:
-            async with asyncio.timeout(UPLOAD_LIMIT.total_seconds()):
+            limit = VIDEO_UPLOAD_LIMIT if media.kind == MEDIA_VIDEO else UPLOAD_LIMIT
+            async with asyncio.timeout(limit.total_seconds()) as upload_timeout:
+
+                async def token_outside_the_limit() -> str:
+                    # Never cancel a refresh or commit midway; a passed limit fires at the next call.
+                    deadline = upload_timeout.when()
+                    upload_timeout.reschedule(None)
+                    try:
+                        return await token_for_call()
+                    finally:
+                        upload_timeout.reschedule(deadline)
+
                 return await publisher.upload_media(
-                    access_token=access_token,
+                    token_for_call=token_outside_the_limit,
                     source=source,
                     byte_size=media.byte_size,
                     content_type=media.content_type,
@@ -324,8 +344,8 @@ async def record_failure(
     db: AsyncSession, scheduled_post: ScheduledPost, failed: Failed, *, now: datetime
 ) -> bool:
     """
-    Flushes Failed, or, for one X never took, back to scheduled with a backoff until
-    `RETRY_WINDOW` is over. True when it became Failed.
+    Flushes Failed, or, for one X never took, back to scheduled with a backoff until its waits
+    fill `RETRY_WINDOW`. True when it became Failed.
     """
     next_attempt_at = _next_attempt_at(scheduled_post, now=now)
     if failed.category == "x_unavailable" and next_attempt_at:
@@ -338,11 +358,15 @@ async def record_failure(
 
 
 def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optional[datetime]:
-    """Doubling from `FIRST_BACKOFF`, with one last try at the deadline; None after it."""
-    deadline = as_utc(scheduled_post.publish_at) + RETRY_WINDOW
-    if now >= deadline:
+    """
+    Doubling from `FIRST_BACKOFF` until the waits fill `RETRY_WINDOW`, then None. Time spent in
+    attempts doesn't count, so an upload X refuses an hour in still gets its retries.
+    """
+    waited = FIRST_BACKOFF * (2**scheduled_post.retry_count - 1)
+    wait = min(FIRST_BACKOFF * 2**scheduled_post.retry_count, RETRY_WINDOW - waited)
+    if wait <= timedelta(0):
         return None
-    return min(now + FIRST_BACKOFF * 2**scheduled_post.retry_count, deadline)
+    return now + wait
 
 
 def _shape(scheduled_post: ScheduledPost) -> dict[str, object]:

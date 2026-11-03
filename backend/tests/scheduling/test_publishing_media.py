@@ -633,32 +633,6 @@ async def test_a_long_upload_x_didnt_take_waits_its_backoff_from_when_it_ended(
     assert (await _scheduled_post(client, post_id))["state"] == "published"
 
 
-async def test_an_upload_x_didnt_take_that_ends_after_the_retry_window_fails_the_post(
-    client,
-    subscribed,
-    db_session_maker,
-    file_storage,
-    fake_x_publisher,
-    fixed_clock,
-    connect_x,
-    post_with,
-):
-    await connect_x()
-    post_id = await post_with("A picture")
-    await _attach(client, post_id, png())
-    await _due(client, post_id, fixed_clock)
-    fake_x_publisher.while_uploading = _taking(
-        fixed_clock, publish_module.RETRY_WINDOW + timedelta(minutes=1)
-    )
-    fake_x_publisher.fail_upload = XRateLimitedError("429")
-
-    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
-
-    failed = await _scheduled_post(client, post_id)
-    assert failed["state"] == "failed"
-    assert failed["failed_reason"] == f"Not published: {publish_module.X_UNAVAILABLE}"
-
-
 async def test_a_stored_file_with_an_invalid_key_fails_the_post_with_nothing_published(
     client,
     db,

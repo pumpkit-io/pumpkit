@@ -1,9 +1,19 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import type { Server } from 'http';
 import path from 'path';
 
+/** Node ends a request whose body still arrives after 5 minutes: a slow 512 MB video upload. */
+const longUploads: Plugin = {
+  name: 'long-uploads',
+  configureServer(server) {
+    const http = server.httpServer as Server | null;
+    if (http) http.requestTimeout = 0;
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), longUploads],
   // The repo root's single .env; inside the dev container compose passes it as the environment.
   envDir: path.resolve(__dirname, '..'),
   resolve: {

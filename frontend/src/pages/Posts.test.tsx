@@ -148,6 +148,7 @@ describe('Posts page', () => {
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue({
       handle: 'ada',
       charLimit: 280,
+      premium: false,
       needsReconnect: false,
       needsReconnectForMedia: false,
       scheduledPostsWaiting: 0,

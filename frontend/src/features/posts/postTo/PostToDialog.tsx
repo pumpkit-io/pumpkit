@@ -31,7 +31,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
-import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
+import { POST_NOW_VIDEO, X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
@@ -206,8 +206,13 @@ export function PostToDialog({
   const destination = destinationFrom(where);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
+  const withVideo = parts.some((part) => !part.live && part.media.some((m) => m.kind === 'video'));
   const unpostable = ready
-    ? [...overLimit(parts, lengths, connection.charLimit, thread), ...overMediaRule(parts, thread)]
+    ? [
+        ...overLimit(parts, lengths, connection.charLimit, thread),
+        ...overMediaRule(parts, thread),
+        ...(when.now && withVideo ? [POST_NOW_VIDEO] : []),
+      ]
     : [];
   const links = linkNote(
     parts.filter((part) => !part.live && hasLink(part.text)).length,

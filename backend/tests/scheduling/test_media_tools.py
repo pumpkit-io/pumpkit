@@ -10,7 +10,7 @@ from sqlalchemy import update
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
-from tests.media_files import MB, gif, padded, png
+from tests.media_files import MB, image, padded, png
 
 POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
@@ -179,13 +179,15 @@ async def test_files_the_web_upload_refuses_are_refused_in_its_words(
     post_id = await post_with("One")
 
     too_large = await _attach(mcp, fake_media_url_fetcher, post_id, padded(png(), 5 * MB + 1))
-    a_gif = await _attach(mcp, fake_media_url_fetcher, post_id, gif())
+    a_bmp = await _attach(mcp, fake_media_url_fetcher, post_id, image("BMP"))
     unreadable = await _attach(mcp, fake_media_url_fetcher, post_id, png()[:40])
 
     assert error_text(too_large) == "This image is larger than 5 MB, the most X takes."
     assert too_large["structuredContent"]["code"] == "MEDIA_TOO_LARGE"
-    assert error_text(a_gif) == "Pumpkit takes JPEG, PNG or WEBP images."
-    assert a_gif["structuredContent"]["code"] == "MEDIA_TYPE_UNSUPPORTED"
+    assert (
+        error_text(a_bmp) == "Pumpkit takes JPEG, PNG, WEBP or GIF images, and MP4 or MOV videos."
+    )
+    assert a_bmp["structuredContent"]["code"] == "MEDIA_TYPE_UNSUPPORTED"
     assert unreadable["structuredContent"]["code"] == "MEDIA_UNREADABLE"
     assert await _media_through_mcp(mcp, post_id) == [[]]
 

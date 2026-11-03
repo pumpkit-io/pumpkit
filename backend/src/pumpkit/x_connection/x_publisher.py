@@ -39,9 +39,12 @@ X_MEDIA_SCOPE = "media.write"
 X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
 _TIMEOUT_SECONDS = 30.0
 # Under X's 5 MB cap on an APPEND segment, with room for the multipart framing around it.
-_MEDIA_CHUNK_BYTES = 4 * 1024 * 1024
-# Kept under the publish's own limit per Media, so this cap ends a slow upload with its own error.
-_MEDIA_PROCESSING_SECONDS = 3 * 60
+MEDIA_CHUNK_BYTES = 4 * 1024 * 1024
+# One APPEND's whole time, under the publisher's 3-minute stop grace period: a slow uplink fails
+# the upload, which posted nothing, rather than outlasting a stop.
+_APPEND_LIMIT_SECONDS = 120.0
+# The longest wait between STATUS polls, so each step of an upload stays short.
+_MAX_POLL_WAIT_SECONDS = 60.0
 # X's documented access token lifetime, used when a token response leaves out expires_in.
 _DEFAULT_EXPIRES_IN_SECONDS = 7200
 # X's refusals are shown to the User; this keeps a runaway body readable.
@@ -112,6 +115,14 @@ class XMediaRefusedError(XPublisherError):
 
 # X's media_category for what the upload is for, which sets its limits and processing.
 MediaCategory = Literal["tweet_image", "tweet_gif", "tweet_video"]
+# Kept under the publish's own limit per Media, so this cap ends a slow upload with its own error.
+_MEDIA_PROCESSING_SECONDS: dict[MediaCategory, float] = {
+    "tweet_image": 3 * 60,
+    "tweet_gif": 3 * 60,
+    "tweet_video": 30 * 60,
+}
+# Awaited before each call of an upload for the access token to send with it.
+TokenForCall = Callable[[], Awaitable[str]]
 
 
 @dataclass(frozen=True)
@@ -170,15 +181,15 @@ class XPublisher(Protocol):
     async def upload_media(
         self,
         *,
-        access_token: str,
+        token_for_call: TokenForCall,
         source: BinaryIO,
         byte_size: int,
         content_type: str,
         category: MediaCategory,
     ) -> str:
         """
-        X's media id for the `byte_size` bytes of `source`, once X has processed them. It
-        publishes nothing, so a failed upload may be tried again.
+        X's media id for `source` once X processed it. A video's upload can take an hour, so
+        `token_for_call` is awaited before every call to X, each chunk and STATUS poll included.
         """
         ...
 
@@ -292,13 +303,15 @@ class OfficialXPublisher:
     async def upload_media(
         self,
         *,
-        access_token: str,
+        token_for_call: TokenForCall,
         source: BinaryIO,
         byte_size: int,
         content_type: str,
         category: MediaCategory,
     ) -> str:
-        headers = {"Authorization": f"Bearer {access_token}"}
+        async def headers() -> dict[str, str]:
+            return {"Authorization": f"Bearer {await token_for_call()}"}
+
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 initialized = await _media_call(
@@ -309,27 +322,38 @@ class OfficialXPublisher:
                             "total_bytes": byte_size,
                             "media_category": category,
                         },
-                        headers=headers,
+                        headers=await headers(),
                     )
                 )
                 media_id = _media_data(initialized).get("id")
                 if not isinstance(media_id, str) or not media_id:
                     raise XMediaUnavailableError("X's media initialize answered without an id")
                 segment = 0
-                while chunk := await asyncio.to_thread(source.read, _MEDIA_CHUNK_BYTES):
-                    await _media_call(
-                        client.post(
-                            f"{X_MEDIA_UPLOAD_URL}/{media_id}/append",
-                            data={"segment_index": str(segment)},
-                            files={"media": ("media", chunk, "application/octet-stream")},
-                            headers=headers,
-                        )
+                while chunk := await asyncio.to_thread(source.read, MEDIA_CHUNK_BYTES):
+                    append = client.post(
+                        f"{X_MEDIA_UPLOAD_URL}/{media_id}/append",
+                        data={"segment_index": str(segment)},
+                        files={"media": ("media", chunk, "application/octet-stream")},
+                        headers=await headers(),
                     )
+                    try:
+                        async with asyncio.timeout(_APPEND_LIMIT_SECONDS):
+                            await _media_call(append)
+                    except TimeoutError as error:
+                        raise XMediaUnavailableError("X took too long to take a chunk") from error
                     segment += 1
                 finalized = await _media_call(
-                    client.post(f"{X_MEDIA_UPLOAD_URL}/{media_id}/finalize", headers=headers)
+                    client.post(
+                        f"{X_MEDIA_UPLOAD_URL}/{media_id}/finalize", headers=await headers()
+                    )
                 )
-                await _await_processing(client, media_id, _media_data(finalized), headers)
+                await _await_processing(
+                    client,
+                    media_id,
+                    _media_data(finalized),
+                    headers,
+                    limit_seconds=_MEDIA_PROCESSING_SECONDS[category],
+                )
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as error:
             raise XNotReceivedError(f"X unreachable: {type(error).__name__}") from error
         except httpx.HTTPError as error:
@@ -427,7 +451,12 @@ def _media_data(response: httpx.Response) -> dict[str, Any]:
 
 
 async def _await_processing(
-    client: httpx.AsyncClient, media_id: str, data: dict[str, Any], headers: dict[str, str]
+    client: httpx.AsyncClient,
+    media_id: str,
+    data: dict[str, Any],
+    headers: Callable[[], Awaitable[dict[str, str]]],
+    *,
+    limit_seconds: float,
 ) -> None:
     """Polls STATUS until X has processed the upload; no `processing_info` means it is ready."""
     waited = 0.0
@@ -445,8 +474,10 @@ async def _await_processing(
                 None, message if isinstance(message, str) and message else "Processing failed."
             )
         wait = info.get("check_after_secs")
-        wait = float(wait) if isinstance(wait, int) and wait > 0 else 1.0
-        if waited + wait > _MEDIA_PROCESSING_SECONDS:
+        wait = (
+            min(float(wait), _MAX_POLL_WAIT_SECONDS) if isinstance(wait, int) and wait > 0 else 1.0
+        )
+        if waited + wait > limit_seconds:
             raise XMediaUnavailableError("X took too long to process media")
         await asyncio.sleep(wait)
         waited += wait
@@ -454,7 +485,7 @@ async def _await_processing(
             client.get(
                 X_MEDIA_UPLOAD_URL,
                 params={"command": "STATUS", "media_id": media_id},
-                headers=headers,
+                headers=await headers(),
             )
         )
         data = _media_data(status)
@@ -582,9 +613,13 @@ class FakeXPublisher:
     nth publish call, counting from 1, raises `fail_publish`. Post ids are
     `1890000000000000000` plus the call's number. Records `uploads` and the `published_media`
     ids sent with each publish; `fail_upload` makes uploads raise it, and with `fail_upload_on`
-    only the nth. Media ids are `1880000000000000000` plus the upload's number. Records
-    `alt_texts` set, and `fail_alt_text` makes setting one raise it. `while_uploading`,
-    `while_setting_alt_text` and `while_publishing`, when set, are awaited inside each such call.
+    only the nth. Media ids are `1880000000000000000` plus the upload's number. An upload makes
+    X's calls as the real one: initialize, one per `chunk_bytes` of the file, finalize, then
+    `processing_polls` STATUS polls, counted in `upload_calls`, each with a token from
+    `token_for_call` recorded in `upload_tokens`, and `while_calling_x_to_upload` awaited after
+    it. Records `alt_texts` set, and `fail_alt_text` makes setting one raise it.
+    `while_uploading`, `while_setting_alt_text` and `while_publishing`, when set, are awaited
+    inside each such call.
     """
 
     account: XAccount = field(
@@ -608,6 +643,7 @@ class FakeXPublisher:
     fail_alt_text: Optional[XPublisherError] = None
     fail_fetch_account: Optional[XPublisherError] = None
     while_uploading: Optional[Callable[[], Awaitable[None]]] = None
+    while_calling_x_to_upload: Optional[Callable[[], Awaitable[None]]] = None
     while_setting_alt_text: Optional[Callable[[], Awaitable[None]]] = None
     while_publishing: Optional[Callable[[], Awaitable[None]]] = None
     fail_revoke: bool = False
@@ -616,6 +652,10 @@ class FakeXPublisher:
     refresh_scope: str = X_SCOPES
     issued: int = 0
     upload_attempts: int = 0
+    chunk_bytes: int = MEDIA_CHUNK_BYTES
+    processing_polls: int = 0
+    upload_calls: int = 0
+    upload_tokens: list[str] = field(default_factory=list)
 
     def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
         if self.not_configured:
@@ -663,7 +703,7 @@ class FakeXPublisher:
     async def upload_media(
         self,
         *,
-        access_token: str,
+        token_for_call: TokenForCall,
         source: BinaryIO,
         byte_size: int,
         content_type: str,
@@ -674,17 +714,30 @@ class FakeXPublisher:
             await self.while_uploading()
         if self.fail_upload is not None and self.fail_upload_on in (None, self.upload_attempts):
             raise self.fail_upload
+        await self._call_x_to_upload(token_for_call)
+        data = b""
+        while chunk := source.read(self.chunk_bytes):
+            await self._call_x_to_upload(token_for_call)
+            data += chunk
+        for _ in range(1 + self.processing_polls):
+            await self._call_x_to_upload(token_for_call)
         media_id = str(1_880_000_000_000_000_000 + len(self.uploads) + 1)
         self.uploads.append(
             FakeUpload(
-                access_token=access_token,
-                data=source.read(),
+                access_token=self.upload_tokens[-1],
+                data=data,
                 content_type=content_type,
                 category=category,
                 media_id=media_id,
             )
         )
         return media_id
+
+    async def _call_x_to_upload(self, token_for_call: TokenForCall) -> None:
+        self.upload_tokens.append(await token_for_call())
+        self.upload_calls += 1
+        if self.while_calling_x_to_upload is not None:
+            await self.while_calling_x_to_upload()
 
     async def set_alt_text(self, *, access_token: str, media_id: str, alt_text: str) -> None:
         if self.while_setting_alt_text is not None:

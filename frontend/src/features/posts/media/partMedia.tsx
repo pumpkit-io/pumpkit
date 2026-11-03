@@ -1,7 +1,7 @@
 import { MediaButton } from './MediaButton';
 import { MediaTiles, ReadOnlyMediaTiles } from './MediaTiles';
 import { mediaWhere } from './mediaRules';
-import type { TextMedia } from './useTextMedia';
+import { aMedia, kindOfTile, type TextMedia } from './useTextMedia';
 import type { ShownPart } from '../shownText';
 import type { PartMedia } from '../TextCard';
 
@@ -55,9 +55,9 @@ export function readOnlyMediaOf(parts: ShownPart[]) {
 /** Why sending the Parts waits for their Media, or null when none is uploading or being removed. */
 export function mediaWait(parts: ShownPart[], media: TextMedia): string | null {
   const tiles = parts.flatMap((part, index) => (part.live ? [] : media.tilesOf(index)));
-  if (tiles.some((tile) => tile.state === 'uploading')) return 'An image is still uploading';
-  if (tiles.some((tile) => tile.state === 'ready' && tile.removing)) {
-    return 'An image is still being removed';
-  }
+  const uploading = tiles.find((tile) => tile.state === 'uploading');
+  if (uploading) return `${aMedia(kindOfTile(uploading))} is still uploading`;
+  const removing = tiles.find((tile) => tile.state === 'ready' && tile.removing);
+  if (removing) return `${aMedia(kindOfTile(removing))} is still being removed`;
   return null;
 }

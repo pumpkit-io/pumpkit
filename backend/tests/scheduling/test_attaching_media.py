@@ -15,7 +15,7 @@ from pumpkit.posts import media_files
 from pumpkit.posts.schemas import MEDIA_RATE
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPostRejectedError
-from tests.media_files import MB, gif, jpeg, padded, png, webp
+from tests.media_files import MB, jpeg, padded, png, webp
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -81,6 +81,7 @@ async def test_an_image_attached_to_a_draft_shows_on_its_part(client, subscribed
         "width": 40,
         "height": 30,
         "alt_text": None,
+        "duration_ms": None,
     }
     assert await _media_of(client, post_id) == [[media]]
 
@@ -117,19 +118,10 @@ async def test_the_type_comes_from_the_bytes_not_the_name(client, subscribed, po
 
     assert response.status_code == 422, response.text
     assert response.json() == {
-        "detail": "Pumpkit takes JPEG, PNG or WEBP images.",
+        "detail": "Pumpkit takes JPEG, PNG, WEBP or GIF images, and MP4 or MOV videos.",
         "code": "MEDIA_TYPE_UNSUPPORTED",
     }
     assert await _media_of(client, post_id) == [[]]
-
-
-async def test_a_gif_is_not_taken_yet(client, subscribed, post_with):
-    post_id = await post_with("Animated.")
-
-    response = await _attach(client, post_id, gif(), name="loop.gif", content_type="image/gif")
-
-    assert response.status_code == 422, response.text
-    assert response.json()["code"] == "MEDIA_TYPE_UNSUPPORTED"
 
 
 async def test_an_image_over_5_mb_is_refused(client, subscribed, post_with):

@@ -278,6 +278,8 @@ class XConnectionResponse(BaseModel):
     handle: str
     # The longest Scheduled post X accepts from this account, in X's weighted characters.
     char_limit: int
+    # X Premium, which also lets the account post videos over 20 minutes.
+    premium: bool
     needs_reconnect: bool
     # X's consent predates media.write, so attaching Media first takes reconnecting X.
     needs_reconnect_for_media: bool

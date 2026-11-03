@@ -74,8 +74,8 @@ failed post takes feedback: a scheduled or published one doesn't.
 - Each post started and each feedback uses one generation of the user's allowance, \
 and each X post published uses one X post, each part of a thread counting as one. Write a new \
 version only when the user asks for one. `get_usage` says what is left and when it resets.
-- `attach_media` attaches an image to a part from a public URL, or, without one, answers \
-with a one-time upload link and the `curl` command that sends a local image to it. `remove_media` \
+- `attach_media` attaches an image, a GIF or a video to a part from a public URL, or, without \
+one, answers with a one-time upload link and the `curl` command that sends local media to it. `remove_media` \
 takes one off. On a draft or a failed post they change the post's text, and on a scheduled \
 post the scheduled post's own copy. \
 Pumpkit publishes media exactly as given, and its writing never reads it, not even its alt \
