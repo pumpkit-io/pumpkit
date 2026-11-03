@@ -142,6 +142,9 @@ class Settings(BaseSettings):
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
 
+    # Where Media files are kept until published; the compose files mount the `media` volume here.
+    MEDIA_STORAGE_DIR: str = "/var/lib/pumpkit/media"
+
     # False keeps the publisher process running without publishing, for dev stacks that share X credentials.
     PUBLISHER_ENABLED: bool = True
     # How often the publisher process looks for due Scheduled posts.

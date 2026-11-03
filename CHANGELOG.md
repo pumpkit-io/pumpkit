@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Added
+
+- A new `media_data` volume, mounted in the `backend` and `publisher` services, will keep the images and videos Users attach to their posts until each goes out on X. `MEDIA_STORAGE_DIR` names the directory and defaults to where the compose files mount it. **Upgrade notes:** `docker compose up` creates the volume; add it to your backups with the database, as the self-hosting guide's "Backups and restore" shows. If you run the backend and publisher outside the bundled compose files, give both the same persistent directory at `MEDIA_STORAGE_DIR`.
+
 ### Fixed
 
 - After you cancel a subscription or trial, Pumpkit no longer lets you schedule a post, or move one, to a time after the subscription ends, where it would have failed with "your subscription had ended". It asks you to pick an earlier time or renew in Settings. Posts already scheduled past the end stay as they are.

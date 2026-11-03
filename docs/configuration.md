@@ -144,6 +144,12 @@ To send Magic links through Resend, set `SMTP_HOST=smtp.resend.com`, `SMTP_USERN
 | `POSTHOG_RELAY` | `true` to have the web server relay PostHog on the Instance's own origin, so adblockers that block PostHog's hosts let analytics through. It proxies `/ph-relay/static/*` to `https://eu-assets.i.posthog.com` and the rest of `/ph-relay/*` to `https://eu.i.posthog.com`, PostHog's EU Cloud. Point `POSTHOG_HOST` at it. Defaults to `false`, which leaves `/ph-relay` an ordinary app route. Read by the `web` service only. |
 | `POSTHOG_UI_HOST` | PostHog app host the browser links to when `POSTHOG_HOST` is a relay. Defaults to `https://eu.posthog.com`. |
 
+### Media storage
+
+| Variable | Meaning |
+| --- | --- |
+| `MEDIA_STORAGE_DIR` | The directory where the backend keeps Media files until they are published, and the publisher reads them to upload to X. Defaults to `/var/lib/pumpkit/media`, where every compose file mounts the `media_data` volume in both the `backend` and `publisher` services, so leave it unset with them. If you run the two outside the compose files, point both at the same directory. Back it up with the database ([Backups and restore](self-hosting.md#backups-and-restore)). |
+
 ### Database
 
 The defaults reach the compose stack's bundled Postgres; set these only for an external one, together with `COMPOSE_FILE=compose.yml:compose.external-db.yml`, which leaves the bundled `db` service out of every `docker compose` command ([External Postgres](self-hosting.md#external-postgres)). The backend builds its sync database URL (used by Alembic) with the `psycopg2` driver explicitly and the async one with `asyncpg`.

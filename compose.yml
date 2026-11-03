@@ -23,6 +23,8 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - media_data:/var/lib/pumpkit/media
     depends_on:
       db:
         condition: service_healthy
@@ -39,6 +41,8 @@ services:
     command: ["python", "-m", "pumpkit.scheduling.publisher"]
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - media_data:/var/lib/pumpkit/media
     depends_on:
       backend:
         condition: service_healthy
@@ -79,6 +83,8 @@ services:
 
 volumes:
   postgres_data:
+  # Media files the backend stores and the publisher uploads to X (ADR 0021); back it up.
+  media_data:
   # Caddy's certificates and ACME account.
   caddy_data:
   caddy_config:
