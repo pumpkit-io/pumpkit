@@ -38,10 +38,8 @@ async def run_pass(
     files_swept_at: Optional[datetime] = None,
 ) -> Optional[datetime]:
     """
-    Publish every due Scheduled post, then delete the Media nothing references any more, and,
-    `FILES_SWEPT_EVERY` after `files_swept_at`, the stored files no Media names. A failed deletion
-    is logged and leaves the pass complete. With `stop` set, it returns after the Scheduled post in
-    hand. Returns when it last swept files, for the next pass.
+    Publish every due Scheduled post (only the one in hand once `stop` is set), then sweep Media.
+    Returns when it last swept files, for the next pass; a failed sweep is logged, not raised.
     """
     async with session_maker() as db:
         await recover_stuck(db, now=clock())

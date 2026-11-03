@@ -22,7 +22,6 @@ UNREFERENCED_GRACE = timedelta(hours=1)
 FILES_SWEPT_EVERY = timedelta(hours=1)
 _USERS_PER_PAGE = 100
 _IDS_PER_QUERY = 500
-_MEDIA_PREFIX = "media/"
 
 
 async def delete_unreferenced_media(
@@ -54,14 +53,20 @@ async def delete_unreferenced_media(
 async def delete_unnamed_files(db: AsyncSession, storage: FileStorage, *, now: datetime) -> None:
     """
     Delete stored Media files written more than `UNREFERENCED_GRACE` before `now` whose Media
-    record doesn't exist: left by an attach that never committed.
+    record doesn't exist, left by an attach that never committed, and partial writes as old.
     """
     cutoff = now - UNREFERENCED_GRACE
+    await storage.delete_abandoned_writes(media_service.MEDIA_PREFIX, written_before=cutoff)
     keys_by_id: dict[str, list[str]] = {}
-    for stored in await storage.list_files(_MEDIA_PREFIX):
-        media_id = stored.key.removeprefix(_MEDIA_PREFIX).split("/", 1)[0]
+    for stored in await storage.list_files(media_service.MEDIA_PREFIX):
         if stored.modified_at < cutoff:
-            keys_by_id.setdefault(media_id, []).append(stored.key)
+            keys_by_id.setdefault(media_service.media_id_of(stored.key), []).append(stored.key)
+    if keys_by_id and not (await db.execute(select(exists().select_from(Media)))).scalar():
+        logger.warning(
+            "Stored media files kept: the database holds no Media at all. Check the publisher "
+            "uses the Instance's database and media volume."
+        )
+        return
     ids = list(keys_by_id)
     for start in range(0, len(ids), _IDS_PER_QUERY):
         chunk = ids[start : start + _IDS_PER_QUERY]
@@ -70,7 +75,7 @@ async def delete_unnamed_files(db: AsyncSession, storage: FileStorage, *, now: d
             for key in keys_by_id[media_id]:
                 try:
                     await storage.delete(key)
-                except (OSError, ValueError):
+                except OSError:
                     logger.exception("Deleting the unnamed file %s failed", key)
 
 
@@ -85,7 +90,7 @@ async def _delete_users_unreferenced(
     for media in found.scalars().all():
         try:
             await media_service.delete(db, storage, media)
-        except (OSError, ValueError):
+        except OSError:
             logger.exception("Deleting the files of unreferenced %s failed", media.id)
     await db.commit()
 
