@@ -646,7 +646,8 @@ async def give_feedback(
     """
     Write the Post's next Version from Feedback on its Text, which the Version then becomes. Only
     a Draft or a Failed Post takes Feedback, checked again after the model calls in case the Post
-    was scheduled meanwhile. `sent_text`, the Parts the sender shows, must be the saved Text.
+    was scheduled meanwhile; then a Version that drops Parts holding Media is refused when its last
+    Part is already live on X. `sent_text`, the Parts the sender shows, must be the saved Text.
     """
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
@@ -669,8 +670,7 @@ async def give_feedback(
         )
         # The Post may have been scheduled, or its Media changed, during the calls.
         post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
-        scheduled_post = await service.get_for_post(db, post_id=post_id)
-        check_takes_feedback(post_status(scheduled_post.state if scheduled_post else None))
+        scheduled_post = await _check_takes_feedback(db, post_id=post_id)
         media_service.check_dropped_parts_media_movable(
             post, part_count=len(written.parts), live_count=_live_count(scheduled_post)
         )
@@ -828,9 +828,10 @@ async def _commit_text(db: AsyncSession, *, user: User, post: Post) -> TextRespo
     return text
 
 
-async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:
+async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> Optional[ScheduledPost]:
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_takes_feedback(post_status(scheduled_post.state if scheduled_post else None))
+    return scheduled_post
 
 
 async def _x_connection_response(

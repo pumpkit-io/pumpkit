@@ -1541,7 +1541,7 @@ describe('Post page', () => {
 
         expect(
           await card().findByText(
-            'X takes up to 4 images, or 1 GIF, or 1 video, per post. Remove some to post it.',
+            'X takes up to 4 images, or 1 GIF, or 1 video, per post. Remove some from the post before posting.',
           ),
         ).toHaveClass('text-destructive');
         expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(5);
@@ -1653,6 +1653,107 @@ describe('Post page', () => {
 
         await waitFor(() => expect(mediaIdsOn('Part 2')).resolves.toEqual(['landed/preview']));
         expect(card().queryByRole('button', { name: 'Retry late.png' })).not.toBeInTheDocument();
+      });
+
+      it('sends one upload at a time across the Text, onto a Part Feedback merged too', async () => {
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attach)
+          .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+          .mockResolvedValueOnce(image('second'));
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(withMedia(threeParts(), [[], [], []]));
+        await textCard();
+
+        chooseFiles('Part 3', photo('first.png'));
+        await sendFeedback('two parts');
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        chooseFiles('Part 2', photo('second.png'));
+        await act(async () => {});
+        expect(mediaService.attach).toHaveBeenCalledTimes(1);
+
+        await act(async () => answer(image('first')));
+
+        await waitFor(() => expect(mediaService.attach).toHaveBeenCalledTimes(2));
+        await waitFor(() =>
+          expect(mediaIdsOn('Part 2')).resolves.toEqual(['first/preview', 'second/preview']),
+        );
+      });
+
+      it('sends an upload again to the Part its tile moved to when its Part went away on the server', async () => {
+        vi.mocked(mediaService.attach)
+          .mockRejectedValueOnce(apiError(404, "This post's text has no part 3."))
+          .mockResolvedValueOnce(image('moved'));
+        renderPost(withMedia(threeParts(), [[], [], []]));
+        await textCard();
+        // Feedback from another tab left the Text with two Parts.
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [[], []]),
+        );
+
+        chooseFiles('Part 3', photo('late.png'));
+
+        await waitFor(() => expect(mediaIdsOn('Part 2')).resolves.toEqual(['moved/preview']));
+        expect(vi.mocked(mediaService.attach).mock.calls.map((call) => call[1])).toEqual([3, 2]);
+        expect(card().queryByText(/no part 3/)).not.toBeInTheDocument();
+      });
+
+      it('keeps the Media the server moved when a failed upload reads back a Part that went away', async () => {
+        vi.mocked(mediaService.attach).mockRejectedValueOnce(new Error('Network Error'));
+        renderPost(withMedia(threeParts(), [[], [], [image('m3')]]));
+        await textCard();
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [[], [image('m3')]]),
+        );
+
+        chooseFiles('Part 3', photo('late.png'));
+
+        await waitFor(() =>
+          expect(mediaOn('Part 2').getByRole('button', { name: 'Retry late.png' })).toBeTruthy(),
+        );
+        const kept = mediaOn('Part 2').getByRole('listitem', { name: 'Image 1' });
+        await waitFor(() =>
+          expect(kept.querySelector('img')).toHaveAttribute('src', 'blob:/media/m3/preview'),
+        );
+      });
+
+      it('puts an image chosen on a Part an undo shows before it lands on the last stored Part', async () => {
+        const versions = [version(1, ['a', 'b', 'c']), version(2, ['x', 'y'])];
+        let undone: (error: Error) => void = () => {};
+        vi.mocked(postService.restoreVersion)
+          .mockResolvedValueOnce(textOf(versions[0]!))
+          .mockResolvedValueOnce(textOf(versions[1]!))
+          .mockReturnValueOnce(new Promise((_, fail) => (undone = fail)));
+        vi.mocked(mediaService.attach).mockResolvedValue(image('m3'));
+        renderPost(withMedia(draft(versions), [[], [image('m2')]]));
+        await textCard();
+        for (const number of [1, 2]) {
+          fireEvent.click(card().getByRole('button', { name: 'History' }));
+          const history = within(await screen.findByRole('dialog', { name: 'History' }));
+          fireEvent.click(history.getByRole('button', { name: new RegExp(`^Version ${number}`) }));
+          await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        }
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+
+        fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+        expect(await card().findByRole('textbox', { name: 'Part 3 text' })).toHaveValue('c');
+        chooseFiles('Part 3', photo('three.png'));
+        await act(async () => undone(apiError(409, 'Version 1 is gone.')));
+
+        expect(await screen.findByText('Version 1 is gone.')).toBeInTheDocument();
+        expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2);
+        await waitFor(() =>
+          expect(mediaIdsOn('Part 2')).resolves.toEqual(['m2/preview', 'm3/preview']),
+        );
+        expect(mediaService.attach).toHaveBeenCalledWith(
+          'post_01',
+          2,
+          expect.any(File),
+          expect.anything(),
+        );
       });
 
       it('leaves Media be when a text edit is undone and redone', async () => {

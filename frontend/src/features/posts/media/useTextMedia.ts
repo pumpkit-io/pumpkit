@@ -7,6 +7,7 @@ import { mediaService, type Media } from '@/services/mediaService';
 import { postService } from '@/services/postService';
 import {
   IMAGES_PER_PART,
+  UPLOAD_FAILED,
   X_MEDIA_RULE,
   refusalBeforeUpload,
   refusalOf,
@@ -75,9 +76,15 @@ function release(tile: Tile) {
   }
 }
 
+/** `parts` with every Part from `count` on appended to the last one, as the server moves Media. */
+function folded(parts: Tile[][], count: number): Tile[][] {
+  if (count < 1 || parts.length <= count) return parts;
+  return [...parts.slice(0, count - 1), parts.slice(count - 1).flat()];
+}
+
 /**
- * The Media on each Part of a Post's Text, apart from its words. Uploads on one Part, and the
- * read after a failed one, go one at a time, so the server keeps the order the card shows.
+ * The Media on each Part of a Post's Text, apart from its words. Uploads and removals share one
+ * queue for the whole Text, so a read after a failed upload sees nothing else under way.
  */
 export function useTextMedia(
   postId: string,
@@ -89,70 +96,6 @@ export function useTextMedia(
 ): TextMedia {
   const nextKey = useRef(0);
   const newKey = useCallback(() => `tile-${++nextKey.current}`, []);
-  const [parts, setParts] = useState<Tile[][]>(() =>
-    initial.map((onPart) =>
-      onPart.map((media) => ({
-        key: newKey(),
-        state: 'ready' as const,
-        media,
-        localUrl: null,
-        removing: false,
-      })),
-    ),
-  );
-  // Read synchronously, so files chosen together each see the room the ones before took.
-  const current = useRef(parts);
-  const queues = useRef(new Map<number, Promise<void>>());
-  const uploads = useRef(new Map<string, Upload>());
-
-  const change = useCallback((partIndex: number, edit: (tiles: Tile[]) => Tile[]) => {
-    const next = [...current.current];
-    while (next.length <= partIndex) next.push([]);
-    next[partIndex] = edit(next[partIndex] ?? []);
-    current.current = next;
-    setParts(next);
-  }, []);
-
-  /** The Part a tile is on now, which a rewrite may have moved it to since it was chosen. */
-  const partWith = useCallback(
-    (key: string) => current.current.findIndex((tiles) => tiles.some((t) => t.key === key)),
-    [],
-  );
-
-  /** Edits the tiles of the Part that holds `key`, if any still does. */
-  const changePartWith = useCallback(
-    (key: string, edit: (tiles: Tile[]) => Tile[]) => {
-      const on = partWith(key);
-      if (on !== -1) change(on, edit);
-    },
-    [change, partWith],
-  );
-
-  const changeTile = useCallback(
-    (key: string, edit: (tile: Tile) => Tile) =>
-      changePartWith(key, (tiles) => tiles.map((tile) => (tile.key === key ? edit(tile) : tile))),
-    [changePartWith],
-  );
-
-  const dropTile = useCallback(
-    (key: string) =>
-      changePartWith(key, (tiles) =>
-        tiles.filter((tile) => {
-          if (tile.key === key) release(tile);
-          return tile.key !== key;
-        }),
-      ),
-    [changePartWith],
-  );
-
-  // Moves tiles once the server has moved their Media: posts/media.move_dropped_parts_media.
-  useLayoutEffect(() => {
-    if (current.current.length <= partCount) return;
-    const last = partCount - 1;
-    current.current = [...current.current.slice(0, last), current.current.slice(last).flat()];
-    setParts(current.current);
-  }, [partCount]);
-
   const readyTile = useCallback(
     (media: Media): Tile => ({
       key: newKey(),
@@ -163,9 +106,75 @@ export function useTextMedia(
     }),
     [newKey],
   );
-
-  /** Media the page took off the server, which a read racing the removal may still list. */
+  const [parts, setParts] = useState<Tile[][]>(() =>
+    initial.map((onPart) => onPart.map(readyTile)),
+  );
+  // Read synchronously, so files chosen together each see the room the ones before took.
+  const current = useRef(parts);
+  /** The Parts the server's Text was last known to have; no tile sits past them. */
+  const stored = useRef(partCount);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const uploads = useRef(new Map<string, Upload>());
+  /** Media the page took off the server, which a later read may still list. */
   const discarded = useRef(new Set<string>());
+
+  const set = useCallback((next: Tile[][]) => {
+    current.current = next;
+    setParts(next);
+  }, []);
+
+  /** The Part a tile chosen for `partIndex` goes on: the last stored one, past the stored Text. */
+  const placeOf = useCallback(
+    (partIndex: number) =>
+      stored.current > 0 ? Math.min(partIndex, stored.current - 1) : partIndex,
+    [],
+  );
+
+  const change = useCallback(
+    (partIndex: number, edit: (tiles: Tile[]) => Tile[]) => {
+      const on = placeOf(partIndex);
+      const next = [...current.current];
+      while (next.length <= on) next.push([]);
+      next[on] = edit(next[on] ?? []);
+      set(next);
+    },
+    [placeOf, set],
+  );
+
+  const partWith = useCallback(
+    (key: string) => current.current.findIndex((tiles) => tiles.some((t) => t.key === key)),
+    [],
+  );
+
+  const tileWith = useCallback(
+    (key: string) => current.current.flat().find((t) => t.key === key),
+    [],
+  );
+
+  const changeTile = useCallback(
+    (key: string, edit: (tile: Tile) => Tile) =>
+      set(current.current.map((tiles) => tiles.map((t) => (t.key === key ? edit(t) : t)))),
+    [set],
+  );
+
+  const dropTile = useCallback(
+    (key: string) =>
+      set(
+        current.current.map((tiles) =>
+          tiles.filter((t) => {
+            if (t.key === key) release(t);
+            return t.key !== key;
+          }),
+        ),
+      ),
+    [set],
+  );
+
+  // Moves tiles once the server has moved their Media: posts/media.move_dropped_parts_media.
+  useLayoutEffect(() => {
+    stored.current = partCount;
+    if (current.current.length > partCount) set(folded(current.current, partCount));
+  }, [partCount, set]);
 
   const discard = useCallback(
     async (media: Media) => {
@@ -175,147 +184,174 @@ export function useTextMedia(
     [postId],
   );
 
-  /** The Part's Media as the server holds it, or null when it can't be read. */
-  const storedOn = useCallback(
-    async (partIndex: number): Promise<Media[] | null> => {
-      try {
-        const stored = (await postService.get(postId)).textMedia[partIndex] ?? [];
-        return stored.filter((media) => !discarded.current.has(media.id));
-      } catch {
-        return null;
-      }
-    },
-    [postId],
-  );
-
-  /** Shows `stored` as the Part's ready tiles, one per Media, keeping the tiles already shown. */
-  const show = useCallback(
-    (partIndex: number, stored: Media[]) =>
-      change(partIndex, (tiles) => {
-        const ready = new Map(
-          tiles.flatMap((t) => (t.state === 'ready' ? [[t.media.id, t] as const] : [])),
-        );
-        tiles
-          .filter((t) => t.state === 'ready' && !stored.some((m) => m.id === t.media.id))
-          .forEach(release);
-        return [
-          ...stored.map((media) => ready.get(media.id) ?? readyTile(media)),
-          ...tiles.filter((t) => t.state !== 'ready'),
-        ];
-      }),
-    [change, readyTile],
-  );
-
-  /** Turns an upload's tile into its Media's, unless another tile shows that Media already. */
-  const settle = useCallback(
-    (key: string, media: Media) =>
-      changePartWith(key, (tiles) => {
-        const shown = tiles.some((t) => t.state === 'ready' && t.media.id === media.id);
-        return tiles.flatMap((tile) => {
-          if (tile.key !== key) return [tile];
-          if (shown) {
-            release(tile);
-            return [];
-          }
-          return [
-            { key, state: 'ready' as const, media, localUrl: tile.localUrl, removing: false },
-          ];
-        });
-      }),
-    [changePartWith],
-  );
+  /** The Media on each Part of the server's Text, or null when it can't be read. */
+  const read = useCallback(async (): Promise<Media[][] | null> => {
+    try {
+      const text = (await postService.get(postId)).textMedia;
+      if (text.length === 0) return null;
+      return text.map((onPart) => onPart.filter((m) => !discarded.current.has(m.id)));
+    } catch {
+      return null;
+    }
+  }, [postId]);
 
   /**
-   * Sends one file to the Part its tile is on, and after a failure reads back that Part's Media.
-   * Media the page didn't know of then is this file's, landed before its answer got lost.
+   * Shows each Part's Media as the server holds it, matching tiles by Media id, with the files
+   * not yet stored after them. `claimed` turns the tile `key` into that Media's tile.
+   */
+  const reconcile = useCallback(
+    (server: Media[][], claimed: { key: string; media: Media } | null) => {
+      stored.current = server.length;
+      const tiles = current.current.flat();
+      const shown = new Map(
+        tiles.flatMap((t) => (t.state === 'ready' ? [[t.media.id, t] as const] : [])),
+      );
+      const claimedTile = claimed ? tiles.find((t) => t.key === claimed.key) : undefined;
+      if (claimed && claimedTile) {
+        shown.set(claimed.media.id, {
+          key: claimed.key,
+          state: 'ready',
+          media: claimed.media,
+          localUrl: claimedTile.localUrl,
+          removing: false,
+        });
+      }
+      const onServer = new Set(server.flat().map((m) => m.id));
+      tiles.filter((t) => t.state === 'ready' && !onServer.has(t.media.id)).forEach(release);
+      const pending = folded(current.current, server.length).map((onPart) =>
+        onPart.filter((t) => t.state !== 'ready' && t.key !== claimed?.key),
+      );
+      set(
+        server.map((onPart, index) => [
+          ...onPart.map((media) => shown.get(media.id) ?? readyTile(media)),
+          ...(pending[index] ?? []),
+        ]),
+      );
+    },
+    [readyTile, set],
+  );
+
+  const enqueue = useCallback((job: () => Promise<void>) => {
+    queue.current = queue.current.then(job, job);
+  }, []);
+
+  /**
+   * Sends one file to the Part its tile is on. After a failure it reads the whole Text's Media:
+   * one Media the page didn't know of then is this file's, landed before its answer got lost.
    */
   const send = useCallback(
     async (key: string, file: File, via: AttachVia, under: Upload) => {
-      const sentTo = partWith(key);
-      if (sentTo === -1) return;
-      let media: Media | null = null;
-      let error: unknown = null;
-      try {
-        media = await mediaService.attach(postId, sentTo + 1, file, {
-          onProgress: (sent) => {
-            changeTile(key, (tile) =>
-              tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
-            );
-          },
-        });
-      } catch (caught) {
-        error = caught;
-      }
-      if (errorCode(error) === RECONNECT_FOR_MEDIA) {
-        if (under.dropped) return;
-        dropTile(key);
-        onReconnectNeeded();
-        return;
-      }
-      // A dropped upload's tile is gone, so its Part is the one it went to.
-      const on = under.dropped ? sentTo : partWith(key);
-      // A rewrite dropped the Part while the file went to it, so the server refused it.
-      const partGone = on !== sentTo && errorStatus(error) === 404;
-      const refusal = media ? null : refusalOf(partGone ? null : error);
-      if (refusal && (refusal.retry || errorCode(error) === 'MEDIA_PART_FULL')) {
-        const stored = await storedOn(on);
-        if (stored) {
-          const known = new Set(
-            (current.current[on] ?? []).flatMap((t) => (t.state === 'ready' ? [t.media.id] : [])),
-          );
-          const landed = refusal.retry ? stored.filter((m) => !known.has(m.id)).at(-1) : undefined;
-          if (!under.dropped) {
-            show(
-              on,
-              stored.filter((m) => m !== landed),
-            );
-          }
-          media = landed ?? null;
+      for (let attempt = 0; ; attempt++) {
+        const sentTo = partWith(key);
+        if (sentTo === -1) return;
+        let media: Media | null = null;
+        let error: unknown = null;
+        try {
+          media = await mediaService.attach(postId, sentTo + 1, file, {
+            onProgress: (sent) => {
+              changeTile(key, (tile) =>
+                tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
+              );
+            },
+          });
+        } catch (caught) {
+          error = caught;
         }
-      }
-      if (media && under.dropped) {
-        await discard(media);
+        if (media) {
+          if (under.dropped) return discard(media);
+          const landed = media;
+          const elsewhere = current.current
+            .flat()
+            .some((t) => t.state === 'ready' && t.media.id === landed.id);
+          if (elsewhere) dropTile(key);
+          else
+            changeTile(key, (tile) => ({
+              key,
+              state: 'ready',
+              media: landed,
+              localUrl: tile.localUrl,
+              removing: false,
+            }));
+          track('media_attached', { kind: landed.kind, via, source: 'web' });
+          return;
+        }
+        if (errorCode(error) === RECONNECT_FOR_MEDIA) {
+          if (under.dropped) return;
+          dropTile(key);
+          onReconnectNeeded();
+          return;
+        }
+        // The Part went away on the server, by Feedback here or elsewhere: send it again.
+        const partGone = errorStatus(error) === 404;
+        const refusal = partGone ? { message: UPLOAD_FAILED, retry: true } : refusalOf(error);
+        const server =
+          refusal.retry || errorCode(error) === 'MEDIA_PART_FULL' ? await read() : null;
+        if (server) {
+          const known = new Set([
+            ...current.current.flat().flatMap((t) => (t.state === 'ready' ? [t.media.id] : [])),
+            ...discarded.current,
+          ]);
+          const unknown = server.flat().filter((m) => !known.has(m.id));
+          const landed = refusal.retry && !partGone && unknown.length === 1 ? unknown[0]! : null;
+          if (landed && under.dropped) {
+            discarded.current.add(landed.id);
+            reconcile(
+              server.map((onPart) => onPart.filter((m) => m.id !== landed.id)),
+              null,
+            );
+            return discard(landed);
+          }
+          reconcile(server, landed && { key, media: landed });
+          if (landed) {
+            track('media_attached', { kind: landed.kind, via, source: 'web' });
+            return;
+          }
+          if (partGone && attempt === 0 && !under.dropped) continue;
+        }
+        if (under.dropped) return;
+        changeTile(key, (tile) => ({
+          key,
+          state: 'refused',
+          file,
+          localUrl: tile.localUrl,
+          refusal,
+          via,
+        }));
         return;
       }
-      if (under.dropped) return;
-      if (media) {
-        settle(key, media);
-        track('media_attached', { kind: media.kind, via, source: 'web' });
-        return;
-      }
-      changeTile(key, (tile) => ({
-        key,
-        state: 'refused',
-        file,
-        localUrl: tile.localUrl,
-        refusal: refusal ?? refusalOf(error),
-        via,
-      }));
     },
-    [postId, partWith, changeTile, dropTile, storedOn, show, settle, discard, onReconnectNeeded],
+    [
+      postId,
+      partWith,
+      changeTile,
+      dropTile,
+      readyTile,
+      read,
+      reconcile,
+      discard,
+      onReconnectNeeded,
+    ],
   );
 
   const upload = useCallback(
-    (partIndex: number, key: string, file: File, via: AttachVia) => {
+    (key: string, file: File, via: AttachVia) => {
       const under: Upload = { dropped: false };
       uploads.current.set(key, under);
-      const run = async () => {
+      enqueue(async () => {
         try {
           if (!under.dropped) await send(key, file, via, under);
         } finally {
           uploads.current.delete(key);
         }
-      };
-      const queued = (queues.current.get(partIndex) ?? Promise.resolve()).then(run, run);
-      queues.current.set(partIndex, queued);
+      });
     },
-    [send],
+    [enqueue, send],
   );
 
   const roomOn = useCallback(
     (partIndex: number) =>
-      IMAGES_PER_PART - (current.current[partIndex] ?? []).filter(holdsPlace).length,
-    [],
+      IMAGES_PER_PART - (current.current[placeOf(partIndex)] ?? []).filter(holdsPlace).length,
+    [placeOf],
   );
 
   const attach = useCallback(
@@ -337,7 +373,7 @@ export function useTextMedia(
           ...tiles,
           { key, state: 'uploading', file, localUrl, progress: 0, via },
         ]);
-        upload(partIndex, key, file, via);
+        upload(key, file, via);
       }
     },
     [change, newKey, roomOn, upload],
@@ -345,10 +381,9 @@ export function useTextMedia(
 
   const retry = useCallback(
     (key: string) => {
-      const on = partWith(key);
-      const tile = current.current[on]?.find((t) => t.key === key);
+      const tile = tileWith(key);
       if (tile?.state !== 'refused') return;
-      if (roomOn(on) <= 0) return;
+      if (roomOn(partWith(key)) <= 0) return;
       changeTile(key, () => ({
         key,
         state: 'uploading',
@@ -357,14 +392,14 @@ export function useTextMedia(
         progress: 0,
         via: tile.via,
       }));
-      upload(on, key, tile.file, tile.via);
+      upload(key, tile.file, tile.via);
     },
-    [partWith, changeTile, roomOn, upload],
+    [tileWith, partWith, changeTile, roomOn, upload],
   );
 
   const remove = useCallback(
     (key: string) => {
-      const tile = current.current[partWith(key)]?.find((t) => t.key === key);
+      const tile = tileWith(key);
       if (!tile) return;
       if (tile.state !== 'ready') {
         const under = uploads.current.get(key);
@@ -372,20 +407,23 @@ export function useTextMedia(
         dropTile(key);
         return;
       }
+      if (tile.removing) return;
       changeTile(key, (t) => ({ ...t, removing: true }) as Tile);
-      mediaService.remove(postId, tile.media.id).then(
-        () => {
-          discarded.current.add(tile.media.id);
-          dropTile(key);
-          track('media_removed', { kind: tile.media.kind, source: 'web' });
-        },
-        () => {
-          changeTile(key, (t) => ({ ...t, removing: false }) as Tile);
-          showToast("Couldn't remove the image. Try again.");
-        },
+      enqueue(() =>
+        mediaService.remove(postId, tile.media.id).then(
+          () => {
+            discarded.current.add(tile.media.id);
+            dropTile(key);
+            track('media_removed', { kind: tile.media.kind, source: 'web' });
+          },
+          () => {
+            changeTile(key, (t) => ({ ...t, removing: false }) as Tile);
+            showToast("Couldn't remove the image. Try again.");
+          },
+        ),
       );
     },
-    [postId, partWith, changeTile, dropTile],
+    [postId, tileWith, changeTile, dropTile, enqueue],
   );
 
   const uploading = parts.some((tiles) => tiles.some((tile) => tile.state === 'uploading'));
