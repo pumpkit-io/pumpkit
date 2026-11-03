@@ -1,11 +1,19 @@
-import { Image as ImageIcon, RotateCw, X } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import { Film, Image as ImageIcon, Play, RotateCw, TriangleAlert, X } from 'lucide-react';
+import { useContext, type CSSProperties } from 'react';
+import { XConnectionContext } from '@/features/xConnection/XConnectionProvider';
 import { cn } from '@/lib/utils';
 import type { Media } from '@/services/mediaService';
-import { AltTextChip, AltTextMark } from './AltText';
-import { breaksXMediaRule, X_MEDIA_RULE } from './mediaRules';
+import { AltTextChip, AltTextMark, CHIP, SOLID } from './AltText';
+import {
+  breaksXMediaRule,
+  formatDuration,
+  LONG_VIDEO,
+  mediaNoun,
+  PREMIUM_VIDEO_MS,
+  X_MEDIA_RULE,
+} from './mediaRules';
 import { useMediaPreview } from './useMediaPreview';
-import { holdsPlace, type Tile } from './useTextMedia';
+import { holdsPlace, kindOfTile, type Tile } from './useTextMedia';
 
 /** X shows one image at about its own shape, within these bounds, and crops the rest. */
 const SINGLE_RATIO = { min: 0.8, max: 1.91, unknown: 16 / 9 };
@@ -43,6 +51,11 @@ function gridClass(tiles: Tile[]): string {
 const ROUND_BUTTON =
   'inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground/75 text-background transition-colors hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transition-none';
 
+/** A video's length as the browser read it, on its tile or its stored Media. */
+function durationOf(tile: Tile): number | null {
+  return tile.state === 'ready' ? tile.media.durationMs : tile.durationMs;
+}
+
 function MediaTile({
   tile,
   number,
@@ -59,13 +72,17 @@ function MediaTile({
   onDescribe?: (altText: string | null) => Promise<void>;
 }) {
   const media = tile.state === 'ready' ? tile.media : null;
+  const kind = kindOfTile(tile);
+  const name = `${mediaNoun(kind)} ${number}`;
   const preview = useMediaPreview(media?.previewUrl ?? null);
-  const describable = media !== null && media.kind !== 'video';
+  const describable = media !== null && kind !== 'video';
   const src = preview.url ?? tile.localUrl;
   const progress = tile.state === 'uploading' ? Math.round(tile.progress * 100) : null;
+  const duration = durationOf(tile);
+  const KindIcon = kind === 'video' ? Film : ImageIcon;
   return (
     <li
-      aria-label={`Image ${number}`}
+      aria-label={name[0]!.toUpperCase() + name.slice(1)}
       className={cn('relative overflow-hidden bg-muted', className)}
     >
       {src ? (
@@ -75,23 +92,41 @@ function MediaTile({
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (
-        preview.failed && (
+        (preview.failed || !media?.previewUrl) && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-            <ImageIcon aria-hidden className="h-6 w-6" />
-            <span className="sr-only">Preview didn&apos;t load</span>
+            <KindIcon aria-hidden className="h-6 w-6" />
+            {preview.failed && <span className="sr-only">Preview didn&apos;t load</span>}
           </div>
         )
       )}
-      {describable &&
-        (onDescribe ? (
-          <AltTextChip media={media} number={number} onSave={onDescribe} />
-        ) : (
-          <AltTextMark media={media} />
-        ))}
+      <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
+        {kind === 'gif' && (
+          <span aria-hidden className={cn(CHIP, SOLID)}>
+            GIF
+          </span>
+        )}
+        {kind === 'video' && (
+          <span className={cn(CHIP, SOLID, 'gap-1 tabular-nums')}>
+            <Play aria-hidden className="h-3 w-3 fill-current" />
+            {duration !== null && (
+              <>
+                <span className="sr-only">Length </span>
+                {formatDuration(duration)}
+              </>
+            )}
+          </span>
+        )}
+        {describable &&
+          (onDescribe ? (
+            <AltTextChip media={media} name={name} onSave={onDescribe} />
+          ) : (
+            <AltTextMark media={media} />
+          ))}
+      </div>
       {onRemove && (
         <button
           type="button"
-          aria-label={`Remove image ${number}`}
+          aria-label={`Remove ${name}`}
           onClick={onRemove}
           className={cn(ROUND_BUTTON, 'absolute right-1.5 top-1.5')}
         >
@@ -101,7 +136,7 @@ function MediaTile({
       {progress !== null && (
         <div
           role="progressbar"
-          aria-label={`Uploading image ${number}`}
+          aria-label={`Uploading ${name}`}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={progress}
@@ -172,6 +207,27 @@ function RefusedTile({
 }
 
 /**
+ * The warning under a video X would refuse at publish time: over 20 minutes, from an X account
+ * without Premium, or with none connected yet to say.
+ */
+function LongVideoWarning({ tiles }: { tiles: Tile[] }) {
+  const connection = useContext(XConnectionContext)?.connection;
+  const long = tiles.some(
+    (tile) =>
+      holdsPlace(tile) &&
+      kindOfTile(tile) === 'video' &&
+      (durationOf(tile) ?? 0) > PREMIUM_VIDEO_MS,
+  );
+  if (!long || connection === undefined || connection?.premium) return null;
+  return (
+    <p className="flex items-start gap-1.5 font-sans text-[13px] font-medium text-foreground">
+      <TriangleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+      {LONG_VIDEO}
+    </p>
+  );
+}
+
+/**
  * A Part's Media in X's layout, refused files among them with why; `where` names the Part.
  * A rewrite with fewer Parts can leave more Media than X takes: all show, with the rule under.
  */
@@ -222,13 +278,15 @@ export function MediaTiles({
       })}
     </ul>
   );
-  if (!breaksXMediaRule(media)) return grid;
   return (
     <div className="space-y-1.5">
       {grid}
-      <p className="font-sans text-[13px] font-medium text-destructive">
-        {X_MEDIA_RULE}. Remove some media from {where} before posting.
-      </p>
+      {breaksXMediaRule(media) && (
+        <p className="font-sans text-[13px] font-medium text-destructive">
+          {X_MEDIA_RULE}. Remove some media from {where} before posting.
+        </p>
+      )}
+      <LongVideoWarning tiles={shown} />
     </div>
   );
 }
@@ -245,15 +303,18 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
   if (!shown.length) return null;
   const cells = CELLS[shown.length] ?? [];
   return (
-    <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
-      {shown.map((tile, index) => (
-        <MediaTile
-          key={tile.key}
-          tile={tile}
-          number={index + 1}
-          className={shown.length > 4 ? 'aspect-video' : (cells[index] ?? '')}
-        />
-      ))}
-    </ul>
+    <div className="space-y-1.5">
+      <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
+        {shown.map((tile, index) => (
+          <MediaTile
+            key={tile.key}
+            tile={tile}
+            number={index + 1}
+            className={shown.length > 4 ? 'aspect-video' : (cells[index] ?? '')}
+          />
+        ))}
+      </ul>
+      <LongVideoWarning tiles={shown} />
+    </div>
   );
 }

@@ -9,7 +9,25 @@
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
+	# Media uploads, the web app's and AI apps' upload links: up to a 512 MB video and its first frame.
+	# No read_timeout: it counts while the body is still arriving, so it would cut a slow upload.
+	@media_uploads path_regexp ^/api/v1/(posts/[^/]+/text/parts/[^/]+/media|scheduled-posts/[^/]+/parts/[^/]+/media|media-uploads/[^/]+)$
+	handle @media_uploads {
+		request_body {
+			max_size 520MiB
+		}
+		reverse_proxy backend:8000 {
+			transport http {
+				response_header_timeout 5m
+			}
+		}
+	}
+
 	handle /api/* {
+		# Far above any JSON body Pumpkit takes.
+		request_body {
+			max_size 10MiB
+		}
 		reverse_proxy backend:8000 {
 			# Writing a Version is two model calls answered in one response; allow minutes.
 			transport http {

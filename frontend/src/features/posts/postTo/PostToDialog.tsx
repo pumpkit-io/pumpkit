@@ -95,6 +95,10 @@ function overMediaRule(parts: ShownPart[], thread: boolean): string[] {
   });
 }
 
+/** The server's refusal: Post now publishes within the request, which a video's upload can outlast. */
+const POST_NOW_VIDEO =
+  "Post now can't publish a video yet. Schedule the post a minute from now instead.";
+
 /**
  * What the Parts about to go out with a link use of the link posts left, in the period and in
  * Top-ups; null without a link, or without a cap on them.
@@ -206,8 +210,13 @@ export function PostToDialog({
   const destination = destinationFrom(where);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
+  const withVideo = parts.some((part) => !part.live && part.media.some((m) => m.kind === 'video'));
   const unpostable = ready
-    ? [...overLimit(parts, lengths, connection.charLimit, thread), ...overMediaRule(parts, thread)]
+    ? [
+        ...overLimit(parts, lengths, connection.charLimit, thread),
+        ...overMediaRule(parts, thread),
+        ...(when.now && withVideo ? [POST_NOW_VIDEO] : []),
+      ]
     : [];
   const links = linkNote(
     parts.filter((part) => !part.live && hasLink(part.text)).length,

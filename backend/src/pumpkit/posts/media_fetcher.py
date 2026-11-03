@@ -9,7 +9,7 @@ Mediators reach the network only through `get_media_url_fetcher`; tests override
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -29,9 +29,12 @@ from pumpkit.core.public_http import (
 )
 from pumpkit.posts.media_files import MediaRefused
 from pumpkit.posts.media_upload import IncomingMedia, ReceivedMedia
+from pumpkit.posts.models import MEDIA_GIF, MEDIA_VIDEO, MediaKind
 
 # Long enough for the largest image on a slow host.
 _DEADLINE_SECONDS = 60.0
+# A larger kind's whole download, counted from its start once the file's first bytes name it.
+_LONGER_DEADLINES: Mapping[MediaKind, float] = {MEDIA_GIF: 2 * 60.0, MEDIA_VIDEO: 10 * 60.0}
 _MAX_REDIRECTS = 3
 
 logger = logging.getLogger(__name__)
@@ -78,13 +81,21 @@ class HttpMediaUrlFetcher:
     resolve: Resolver = resolve_with_getaddrinfo
     network: httpcore.AsyncNetworkBackend = field(default_factory=anyio_network)
     deadline_seconds: float = _DEADLINE_SECONDS
+    longer_deadlines: Mapping[MediaKind, float] = field(default_factory=lambda: _LONGER_DEADLINES)
 
     @asynccontextmanager
     async def fetch(self, url: str) -> AsyncIterator[ReceivedMedia]:
         incoming = IncomingMedia()
+        started = asyncio.get_running_loop().time()
         try:
             try:
-                async with asyncio.timeout(self.deadline_seconds):
+                async with asyncio.timeout(self.deadline_seconds) as deadline:
+
+                    def extend(kind: MediaKind) -> None:
+                        if kind in self.longer_deadlines:
+                            deadline.reschedule(started + self.longer_deadlines[kind])
+
+                    incoming.on_kind = extend
                     await self._download(url, incoming)
             except TimeoutError:
                 raise media_url_unreachable(url, "took too long") from None

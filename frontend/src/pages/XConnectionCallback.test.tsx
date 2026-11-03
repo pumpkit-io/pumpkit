@@ -74,6 +74,7 @@ function apiError(status: number, detail: string) {
 const ADA = {
   handle: 'ada',
   charLimit: 280,
+  premium: false,
   needsReconnect: false,
   needsReconnectForMedia: false,
   scheduledPostsWaiting: 0,
@@ -92,6 +93,7 @@ describe('the X callback', () => {
     vi.mocked(xConnectionService.complete).mockResolvedValue({
       handle: 'ada',
       charLimit: 280,
+      premium: false,
       needsReconnect: false,
       needsReconnectForMedia: false,
       scheduledPostsWaiting: 0,

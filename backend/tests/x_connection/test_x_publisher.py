@@ -549,9 +549,14 @@ def _upload_routes(finalized: dict = FINALIZED) -> tuple[respx.Route, respx.Rout
     )
 
 
-async def _upload(data: bytes = b"png", **fields) -> str:
+async def _upload(data: bytes = b"png", tokens: list[str] | None = None, **fields) -> str:
+    sent = iter(tokens) if tokens is not None else None
+
+    async def token_for_call() -> str:
+        return next(sent) if sent is not None else "access-1"
+
     return await OfficialXPublisher().upload_media(
-        access_token="access-1",
+        token_for_call=token_for_call,
         source=io.BytesIO(data),
         byte_size=len(data),
         content_type=fields.get("content_type", "image/png"),
@@ -619,6 +624,62 @@ async def test_an_upload_x_processes_is_polled_until_it_succeeds(no_waiting):
         {"command": "STATUS", "media_id": MEDIA_ID}
     ] * 2
     assert no_waiting == [1.0, 1.0]
+
+
+@respx.mock
+async def test_each_call_of_an_upload_sends_the_token_asked_for_it(no_waiting):
+    initialize, append, finalize = _upload_routes(_processing("pending"))
+    status = respx.get(X_MEDIA_UPLOAD_URL).mock(
+        return_value=httpx.Response(200, json=_processing("succeeded"))
+    )
+
+    await _upload(
+        b"x" * (5 * 1024 * 1024),
+        tokens=["t-init", "t-chunk-0", "t-chunk-1", "t-finalize", "t-status"],
+        category="tweet_video",
+        content_type="video/mp4",
+    )
+
+    sent = [
+        call.request.headers["Authorization"]
+        for route in (initialize, append, finalize, status)
+        for call in route.calls
+    ]
+    assert sent == [
+        "Bearer t-init",
+        "Bearer t-chunk-0",
+        "Bearer t-chunk-1",
+        "Bearer t-finalize",
+        "Bearer t-status",
+    ]
+
+
+@respx.mock
+async def test_a_video_x_processes_for_minutes_is_waited_on_in_short_polls(no_waiting):
+    _upload_routes(_processing("pending", check_after_secs=300))
+    respx.get(X_MEDIA_UPLOAD_URL).mock(
+        side_effect=[
+            *[httpx.Response(200, json=_processing("in_progress", check_after_secs=300))] * 9,
+            httpx.Response(200, json=_processing("succeeded")),
+        ]
+    )
+
+    assert await _upload(category="tweet_video", content_type="video/mp4") == MEDIA_ID
+
+    assert no_waiting == [60.0] * 10
+
+
+@respx.mock
+async def test_an_image_x_is_still_processing_after_3_minutes_is_a_passing_failure(no_waiting):
+    _upload_routes(_processing("pending", check_after_secs=60))
+    respx.get(X_MEDIA_UPLOAD_URL).mock(
+        return_value=httpx.Response(200, json=_processing("in_progress", check_after_secs=60))
+    )
+
+    with pytest.raises(XMediaUnavailableError):
+        await _upload()
+
+    assert sum(no_waiting) == 180
 
 
 @respx.mock

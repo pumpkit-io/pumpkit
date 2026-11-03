@@ -17,12 +17,12 @@ from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.formats import part_name
 from pumpkit.posts.media_files import (
-    IMAGES_PER_PART,
     CheckedMedia,
     alt_text_unsupported,
     part_full,
+    takes_more,
 )
-from pumpkit.posts.models import MEDIA_VIDEO, Media, Post, TextMedia
+from pumpkit.posts.models import MEDIA_VIDEO, Media, MediaKind, Post, TextMedia
 from pumpkit.posts.schemas import MediaResponse
 
 # Every key of a Media's files starts with this, then the Media's id.
@@ -50,10 +50,11 @@ def media_response(media: Media) -> MediaResponse:
     return MediaResponse(
         id=media.id,
         kind=media.kind,
-        preview_url=preview_url(media.id),
+        preview_url=preview_url(media.id) if media.preview_key is not None else None,
         width=media.width,
         height=media.height,
         alt_text=media.alt_text,
+        duration_ms=media.duration_ms,
     )
 
 
@@ -92,19 +93,25 @@ def check_dropped_parts_media_movable(post: Post, *, part_count: int, live_count
     )
 
 
-def check_text_part_room(post: Post, *, part_index: int) -> None:
-    """Refuses a Part of the Text that holds as many images as X takes on one X post."""
+def check_text_part_room(post: Post, *, part_index: int, kind: Optional[MediaKind] = None) -> None:
+    """Refuses a Part of the Text whose X post can't take Media of `kind` too, as `check_part_room`."""
     count = len(post.text_parts or [])
     if not 0 <= part_index < count:
         raise NotFoundError(f"This post's text has no part {part_index + 1}.")
-    check_part_room(text_media_by_part(post), part_index=part_index)
+    check_part_room(text_media_by_part(post), part_index=part_index, kind=kind)
 
 
-def check_part_room(media_by_part: list[list[Media]], *, part_index: int) -> None:
-    """Refuses Part `part_index` of a Text or Scheduled post when it can't take another image."""
-    if len(media_by_part[part_index]) >= IMAGES_PER_PART:
+def check_part_room(
+    media_by_part: list[list[Media]], *, part_index: int, kind: Optional[MediaKind] = None
+) -> None:
+    """
+    Refuses Part `part_index` of a Text or Scheduled post when its X post can't take Media of
+    `kind` too. With no `kind`, before the file is read, only when it can't take any more.
+    """
+    holds: list[MediaKind] = [m.kind for m in media_by_part[part_index]]
+    if not takes_more(holds, kind):
         name = part_name(part_index + 1, len(media_by_part)) or "this post"
-        raise part_full(name.capitalize())
+        raise part_full(name.capitalize(), holds)
 
 
 async def attach_to_text(
@@ -158,6 +165,7 @@ async def store(
         width=checked.width,
         height=checked.height,
         alt_text=alt_text,
+        duration_ms=checked.duration_ms,
         created_at=now,
     )
     db.add(media)
@@ -165,9 +173,10 @@ async def store(
     file.seek(0)
     async with files_deleted_on_failure(storage, media):
         await storage.put(file_key(media.id), file)
-        await storage.put(preview_key(media.id), io.BytesIO(checked.preview))
         media.file_key = file_key(media.id)
-        media.preview_key = preview_key(media.id)
+        if checked.preview is not None:
+            await storage.put(preview_key(media.id), io.BytesIO(checked.preview))
+            media.preview_key = preview_key(media.id)
         await db.flush()
     return media
 

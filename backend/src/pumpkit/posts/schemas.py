@@ -63,12 +63,14 @@ class MediaResponse(BaseModel):
 
     id: str
     kind: MediaKind
-    # Under the API's root, served only to the Media's owner.
-    preview_url: str
+    # Under the API's root, served only to the Media's owner; None for a video sent without one.
+    preview_url: Optional[str]
     width: Optional[int]
     height: Optional[int]
     # The image described for screen readers; None until the User or their AI app writes it.
     alt_text: Optional[str]
+    # A video's length as the web app read it; None for images, GIFs and videos sent otherwise.
+    duration_ms: Optional[int]
 
 
 class AltTextRequest(BaseModel):

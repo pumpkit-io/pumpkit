@@ -360,6 +360,8 @@ If your own proxy, load balancer or CDN sits in front of the web server, it must
 
 Your proxy must also forward `/.well-known/oauth-*` and `/.well-known/openid-configuration` to the web server, as well as `/api/*`. AI apps find how to sign in there, and `sh scripts/check-stack.sh PUBLIC_URL` fails when those paths do not reach the backend.
 
+Your proxy must also let Media uploads through: a video can be up to 512 MB, sent in one request that can take many minutes on a slow connection. Allow request bodies of at least 520 MiB (nginx's `client_max_body_size 520m`, which defaults to 1 MB), and no time limit, or a long one, on reading a request's body. The bundled web server allows that much only on the upload paths, and 10 MiB elsewhere.
+
 Set them in `.env`, then run `docker compose up -d --wait`. Check with a few Magic link requests from different addresses: one address gets rate limited after five, the others don't.
 
 ## Backups and restore

@@ -13,7 +13,8 @@ import respx
 from pumpkit.core.config import settings
 from pumpkit.posts.media_fetcher import HttpMediaUrlFetcher
 from pumpkit.posts.media_files import MediaRefused
-from tests.media_files import MB, padded, png
+from pumpkit.posts.models import MEDIA_VIDEO
+from tests.media_files import MB, mp4, padded, png
 
 URL = "https://images.example.com/chart.png"
 
@@ -189,3 +190,22 @@ async def test_a_file_trickled_slowly_is_refused_at_the_deadline(production):
     refusal = await asyncio.wait_for(_refusal(fetcher, URL), timeout=0.5)
 
     assert refusal.code == "MEDIA_URL_UNREACHABLE"
+
+
+@respx.mock
+async def test_a_video_has_longer_to_download_than_an_image(production):
+    async def trickle():
+        yield mp4()
+        for _ in range(30):
+            await asyncio.sleep(0.01)
+            yield b"\0"
+
+    respx.get(URL).mock(return_value=httpx.Response(200, content=trickle()))
+    fetcher = HttpMediaUrlFetcher(
+        resolve=resolving({"images.example.com": "93.184.215.14"}),
+        deadline_seconds=0.1,
+        longer_deadlines={MEDIA_VIDEO: 5.0},
+    )
+
+    async with fetcher.fetch(URL) as received:
+        assert received.byte_size == len(mp4()) + 30

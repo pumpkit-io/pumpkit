@@ -23,6 +23,7 @@ from pumpkit.scheduling.models import ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
     MediaCategory,
+    TokenForCall,
     XMediaRefusedError,
     XNotReceivedError,
     XPostRejectedError,
@@ -85,6 +86,8 @@ COMMUNITY_MEMBERSHIP_HINT = (
 STUCK_AFTER = timedelta(minutes=10)
 # One Media's chunked upload and X's processing of it; the adapter's own processing cap is lower.
 UPLOAD_LIMIT = timedelta(minutes=5)
+# A video's, up to 512 MB: the claim is renewed before each of its calls to X, each far shorter.
+VIDEO_UPLOAD_LIMIT = timedelta(hours=2)
 X_CALL_LIMIT = timedelta(minutes=2)
 
 
@@ -140,7 +143,13 @@ async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPo
     """The X connection, row-locked until the next commit, or `Failed`."""
     if not await subscriptions_service.has_access(db, user_id=scheduled_post.user_id):
         raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
+    return await connection_still_publishing_on(db, scheduled_post)
 
+
+async def connection_still_publishing_on(
+    db: AsyncSession, scheduled_post: ScheduledPost
+) -> XConnection:
+    """The X connection a publish under way goes on with, row-locked until the next commit."""
     connection = await x_connections_service.lock_connection(db, user_id=scheduled_post.user_id)
     if connection is None or connection.x_user_id != scheduled_post.x_user_id:
         raise Failed("x_account_changed", X_ACCOUNT_CHANGED_REASON)
@@ -228,11 +237,12 @@ async def upload_media(
     part: ScheduledPostPart,
     media: Media,
     *,
-    access_token: str,
+    token_for_call: TokenForCall,
 ) -> str:
     """
     X's media id for one of the Part's `media`, or `Failed`. X has published nothing for the Part
     yet, so every failure here is a definite one, and one X didn't take may be tried again.
+    `token_for_call` may raise `Failed` too, which passes through.
     """
     subject = _subject(scheduled_post, part)
     if media.file_key is None:
@@ -246,9 +256,10 @@ async def upload_media(
         raise Failed("media_not_sent", _not_published(subject, MEDIA_NOT_SENT))
     try:
         with source:
-            async with asyncio.timeout(UPLOAD_LIMIT.total_seconds()):
+            limit = VIDEO_UPLOAD_LIMIT if media.kind == MEDIA_VIDEO else UPLOAD_LIMIT
+            async with asyncio.timeout(limit.total_seconds()):
                 return await publisher.upload_media(
-                    access_token=access_token,
+                    token_for_call=token_for_call,
                     source=source,
                     byte_size=media.byte_size,
                     content_type=media.content_type,

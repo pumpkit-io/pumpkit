@@ -12,11 +12,13 @@ from typing import BinaryIO, Optional
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from pumpkit.core.errors import RefusedError
-from pumpkit.posts.models import MEDIA_IMAGE, MediaKind
+from pumpkit.posts.models import MEDIA_GIF, MEDIA_IMAGE, MEDIA_VIDEO, MediaKind
 
-IMAGE_MAX_BYTES = 5 * 1024 * 1024
+MB = 1024 * 1024
 # The most X takes of each kind, which an upload is refused past while it streams.
-MAX_BYTES: dict[MediaKind, int] = {MEDIA_IMAGE: IMAGE_MAX_BYTES}
+MAX_BYTES: dict[MediaKind, int] = {MEDIA_IMAGE: 5 * MB, MEDIA_GIF: 15 * MB, MEDIA_VIDEO: 512 * MB}
+# A video's first frame, which the web app sends with it as its preview.
+POSTER_MAX_BYTES = 5 * MB
 IMAGES_PER_PART = 4
 # X's limit on an image or GIF's alt text.
 ALT_TEXT_MAX_CHARS = 1000
@@ -33,7 +35,40 @@ SNIFF_BYTES = 16
 _IMAGE_SIGNATURES = (
     (b"\xff\xd8\xff", "image/jpeg"),
     (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
 )
+# ISO media files share MP4's `ftyp` box; these brands are still images or audio, not video.
+_NOT_VIDEO_BRANDS = {
+    b"heic",
+    b"heix",
+    b"heim",
+    b"heis",
+    b"hevc",
+    b"hevx",
+    b"hevm",
+    b"hevs",
+    b"mif1",
+    b"msf1",
+    b"avif",
+    b"avis",
+    b"avio",
+    b"crx ",
+    b"M4A ",
+    b"M4B ",
+    b"M4P ",
+    b"jp2 ",
+    b"jpm ",
+    b"jpx ",
+}
+# A QuickTime movie made before `ftyp` existed starts straight with one of these atoms.
+_QUICKTIME_ATOMS = {b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"}
+_KINDS: dict[str, MediaKind] = {
+    "image/gif": MEDIA_GIF,
+    "video/mp4": MEDIA_VIDEO,
+    "video/quicktime": MEDIA_VIDEO,
+}
+_NAMES: dict[MediaKind, str] = {MEDIA_IMAGE: "image", MEDIA_GIF: "GIF", MEDIA_VIDEO: "video"}
 
 
 class MediaRefused(RefusedError):
@@ -53,11 +88,17 @@ def alt_text_unsupported() -> MediaRefused:
 
 
 def media_type_refused() -> MediaRefused:
-    return MediaRefused("Pumpkit takes JPEG, PNG or WEBP images.", code="MEDIA_TYPE_UNSUPPORTED")
+    return MediaRefused(
+        "Pumpkit takes JPEG, PNG, WEBP or GIF images, and MP4 or MOV videos.",
+        code="MEDIA_TYPE_UNSUPPORTED",
+    )
 
 
-def media_too_large() -> MediaRefused:
-    return MediaRefused("This image is larger than 5 MB, the most X takes.", code="MEDIA_TOO_LARGE")
+def media_too_large(kind: MediaKind) -> MediaRefused:
+    return MediaRefused(
+        f"This {_NAMES[kind]} is larger than {MAX_BYTES[kind] // MB} MB, the most X takes.",
+        code="MEDIA_TOO_LARGE",
+    )
 
 
 def media_unreadable() -> MediaRefused:
@@ -66,9 +107,25 @@ def media_unreadable() -> MediaRefused:
     )
 
 
-def part_full(where: str) -> MediaRefused:
-    """`where` names the Part as a sentence starts: "Part 2", or "This post"."""
-    return MediaRefused(f"{where} holds 4 images already. {X_MEDIA_RULE}", code="MEDIA_PART_FULL")
+def part_full(where: str, holds: Sequence[MediaKind]) -> MediaRefused:
+    """
+    `where` names the Part as a sentence starts: "Part 2", or "This post". `holds` is the Media
+    already on it.
+    """
+    if MEDIA_GIF in holds or MEDIA_VIDEO in holds:
+        held = f"a {_NAMES[MEDIA_GIF if MEDIA_GIF in holds else MEDIA_VIDEO]}"
+    elif len(holds) >= IMAGES_PER_PART:
+        held = f"{IMAGES_PER_PART} images"
+    else:
+        held = "images"
+    return MediaRefused(f"{where} holds {held} already. {X_MEDIA_RULE}", code="MEDIA_PART_FULL")
+
+
+def takes_more(holds: Sequence[MediaKind], kind: Optional[MediaKind] = None) -> bool:
+    """Whether one X post holding `holds` takes Media of `kind` too, or of some kind when None."""
+    if kind is None:
+        return not over_x_rule([*holds, MEDIA_IMAGE])
+    return not over_x_rule([*holds, kind])
 
 
 def over_x_rule(kinds: Sequence[MediaKind]) -> bool:
@@ -79,18 +136,25 @@ def over_x_rule(kinds: Sequence[MediaKind]) -> bool:
 
 
 def content_type_of(head: bytes) -> Optional[str]:
-    """The type of an image Pumpkit takes, from the file's first `SNIFF_BYTES`; None otherwise."""
+    """The type of a file Pumpkit takes, from the file's first `SNIFF_BYTES`; None otherwise."""
     for signature, content_type in _IMAGE_SIGNATURES:
         if head.startswith(signature):
             return content_type
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return "image/webp"
+    box = head[4:8]
+    if box == b"ftyp":
+        brand = head[8:12]
+        if brand in _NOT_VIDEO_BRANDS or len(brand) < 4:
+            return None
+        return "video/quicktime" if brand == b"qt  " else "video/mp4"
+    if box in _QUICKTIME_ATOMS:
+        return "video/quicktime"
     return None
 
 
 def kind_of(content_type: str) -> MediaKind:
-    """Every type `content_type_of` names is an image for now."""
-    return MEDIA_IMAGE
+    return _KINDS.get(content_type, MEDIA_IMAGE)
 
 
 @dataclass(frozen=True)
@@ -98,23 +162,63 @@ class CheckedMedia:
     kind: MediaKind
     content_type: str
     byte_size: int
-    width: int
-    height: int
-    # Always PREVIEW_CONTENT_TYPE.
-    preview: bytes
+    width: Optional[int]
+    height: Optional[int]
+    # Always PREVIEW_CONTENT_TYPE; None for a video sent without its first frame.
+    preview: Optional[bytes]
+    # A video's length as the browser read it.
+    duration_ms: Optional[int] = None
 
 
-def check_image(source: BinaryIO, byte_size: int) -> CheckedMedia:
+def check_media(
+    source: BinaryIO,
+    byte_size: int,
+    *,
+    duration_ms: Optional[int] = None,
+    poster: Optional[bytes] = None,
+) -> CheckedMedia:
     """
-    The image `source` holds, once it is one Pumpkit takes and X allows, with its preview.
-    Raises `MediaRefused` naming the reason otherwise. Reads `source` from where it stands.
+    The Media `source` holds, once it is a file Pumpkit takes and X allows, with its preview.
+    Raises `MediaRefused` naming the reason otherwise. Reads `source` from where it stands. A
+    video is never decoded: its preview is `poster`, the first frame the browser read, when that
+    is an image, and `duration_ms` is kept as the browser measured it. Both are ignored otherwise.
     """
     content_type = content_type_of(source.read(SNIFF_BYTES))
     if content_type is None:
         raise media_type_refused()
-    if byte_size > MAX_BYTES[kind_of(content_type)]:
-        raise media_too_large()
-    source.seek(0)
+    kind = kind_of(content_type)
+    if byte_size > MAX_BYTES[kind]:
+        raise media_too_large(kind)
+    if kind != MEDIA_VIDEO:
+        source.seek(0)
+        return _check_image(source, kind, content_type, byte_size)
+    shown = _poster(poster) if poster is not None else None
+    return CheckedMedia(
+        kind=kind,
+        content_type=content_type,
+        byte_size=byte_size,
+        width=shown.width if shown else None,
+        height=shown.height if shown else None,
+        preview=shown.preview if shown else None,
+        duration_ms=duration_ms,
+    )
+
+
+def _poster(data: bytes) -> Optional[CheckedMedia]:
+    """The video's first frame as a checked image, or None when it isn't one Pumpkit reads."""
+    content_type = content_type_of(data[:SNIFF_BYTES])
+    if content_type is None or kind_of(content_type) != MEDIA_IMAGE:
+        return None
+    try:
+        return _check_image(io.BytesIO(data), MEDIA_IMAGE, content_type, len(data))
+    except MediaRefused:
+        return None
+
+
+def _check_image(
+    source: BinaryIO, kind: MediaKind, content_type: str, byte_size: int
+) -> CheckedMedia:
+    """An image or a GIF, decoded far enough for its size and a preview of its first frame."""
     try:
         with Image.open(source) as opened:
             width, height = opened.size
@@ -138,7 +242,7 @@ def check_image(source: BinaryIO, byte_size: int) -> CheckedMedia:
     ):
         raise media_unreadable() from None
     return CheckedMedia(
-        kind=kind_of(content_type),
+        kind=kind,
         content_type=content_type,
         byte_size=byte_size,
         width=width,

@@ -5,11 +5,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { ALT_TEXT_MAX_CHARS, type Media } from '@/services/mediaService';
 
-const CHIP =
+/** A tile's small label or control in its bottom-left corner: Alt, GIF, a video's length. */
+export const CHIP =
   'inline-flex h-6 items-center rounded-full px-2 font-sans text-xs font-semibold leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card';
 
 /** Solid once the image is described: the fill of the tile's other controls. */
-const SOLID = 'bg-foreground/75 text-background';
+export const SOLID = 'bg-foreground/75 text-background';
 /** Hollow while it isn't: an opaque light pill, so it reads on any image, with a dashed edge. */
 const HOLLOW = 'border border-dashed border-muted-foreground bg-card text-muted-foreground';
 
@@ -22,7 +23,7 @@ export function AltTextMark({ media }: { media: Media }) {
   if (!media.altText) return null;
   // The image's own alt attribute carries the description to screen readers.
   return (
-    <span aria-hidden className={cn(CHIP, SOLID, 'absolute bottom-1.5 left-1.5')}>
+    <span aria-hidden className={cn(CHIP, SOLID)}>
       Alt
     </span>
   );
@@ -31,11 +32,12 @@ export function AltTextMark({ media }: { media: Media }) {
 /** The Alt chip on an image or GIF tile, opening a box to write, change or clear its alt text. */
 export function AltTextChip({
   media,
-  number,
+  name,
   onSave,
 }: {
   media: Media;
-  number: number;
+  /** The tile as its controls name it: "image 2", "GIF 1". */
+  name: string;
   /** Rejects when the server didn't take it; the popover then keeps the draft, even closed. */
   onSave: (altText: string | null) => Promise<void>;
 }) {
@@ -73,10 +75,8 @@ export function AltTextChip({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={
-            described ? `Edit alt text of image ${number}` : `Add alt text to image ${number}`
-          }
-          className={cn(CHIP, described ? SOLID : HOLLOW, 'absolute bottom-1.5 left-1.5')}
+          aria-label={described ? `Edit alt text of ${name}` : `Add alt text to ${name}`}
+          className={cn(CHIP, described ? SOLID : HOLLOW)}
         >
           Alt
         </button>
@@ -84,7 +84,7 @@ export function AltTextChip({
       <PopoverContent
         side="top"
         align="start"
-        aria-label={`Alt text for image ${number}`}
+        aria-label={`Alt text for ${name}`}
         className="w-[min(22rem,calc(100vw-2rem))] space-y-2 p-3"
         onOpenAutoFocus={(e) => {
           e.preventDefault();

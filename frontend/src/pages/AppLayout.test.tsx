@@ -214,6 +214,7 @@ describe('The signed-in shell', () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({
         handle: 'ada',
         charLimit: 280,
+        premium: false,
         needsReconnect: false,
         needsReconnectForMedia: false,
         scheduledPostsWaiting: 0,
@@ -273,6 +274,7 @@ describe('The signed-in shell', () => {
     const NEEDS_RECONNECT = {
       handle: 'ada',
       charLimit: 280,
+      premium: false,
       needsReconnect: true,
       needsReconnectForMedia: false,
       scheduledPostsWaiting: 2,

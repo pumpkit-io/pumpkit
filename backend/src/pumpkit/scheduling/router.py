@@ -245,9 +245,9 @@ async def attach_scheduled_post_media(
     clock: Clock = Depends(get_clock),
 ) -> MediaResponse:
     """
-    Attaches an image, sent as the multipart field `file`, to Part `part_number` (from 1) of a
-    scheduled or Failed Scheduled post, after the Part's other Media. Only the Scheduled post's own
-    copy changes, not the Post's Text. A Part already on X is refused, and so is a Scheduled post
+    Attaches an image, a GIF or a video, sent as `attach_text_media` takes it, to Part
+    `part_number` (from 1) of a scheduled or Failed Scheduled post, after the Part's other Media.
+    Only the Scheduled post's own copy changes, not the Post's Text. A Part already on X is refused, and so is a Scheduled post
     publishing or Published.
     """
     return await mediator.attach_scheduled_post_media(
@@ -256,8 +256,7 @@ async def attach_scheduled_post_media(
         user=current_user,
         scheduled_post_id=scheduled_post_id,
         part_number=part_number,
-        file=received.file,
-        byte_size=received.byte_size,
+        received=received,
         now=clock(),
     )
 
@@ -421,10 +420,11 @@ async def attach_text_media(
     clock: Clock = Depends(get_clock),
 ) -> MediaResponse:
     """
-    Attaches an image, sent as the multipart field `file`, to Part `part_number` (from 1) of the
-    Post's Text, after the Part's other Media. The type is read from the file's bytes, and an
-    upload larger than X takes is refused while it streams. A Scheduled or Published Post is
-    refused.
+    Attaches an image, a GIF or a video, sent as the multipart field `file`, to Part `part_number`
+    (from 1) of the Post's Text, after the Part's other Media. A video may come with the browser's
+    `duration_ms` and its first frame as the image `poster`. The type is read from the file's
+    bytes, and an upload larger than X takes of its kind is refused while it streams. A Scheduled
+    or Published Post is refused.
     """
     return await mediator.attach_text_media(
         db=db,
@@ -432,8 +432,7 @@ async def attach_text_media(
         user=current_user,
         post_id=post_id,
         part_number=part_number,
-        file=received.file,
-        byte_size=received.byte_size,
+        received=received,
         now=clock(),
     )
 
@@ -458,7 +457,7 @@ async def upload_through_link(
     clock: Clock = Depends(get_clock),
 ) -> UploadedMediaResponse:
     """
-    Attaches an image, sent as the multipart field `file`, through a one-time link `attach_media`
+    Attaches an image, a GIF or a video, sent as the multipart field `file`, through a one-time link `attach_media`
     made: to the Part it names, of the Post's Text or its waiting Scheduled post's copy. The link
     is the only credential, and the first upload that starts through it spends it.
     """

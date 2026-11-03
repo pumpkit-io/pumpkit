@@ -13,7 +13,7 @@ from pumpkit.scheduling.models import PUBLISHING, ScheduledPost
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPostRejectedError
-from tests.media_files import gif, png
+from tests.media_files import image, png
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -145,7 +145,7 @@ async def test_a_file_that_isnt_an_image_pumpkit_takes_is_refused(
     post_id = await post_with("One")
     scheduled_post = await _schedule(client, post_id)
 
-    response = await _attach(client, scheduled_post["id"], gif())
+    response = await _attach(client, scheduled_post["id"], image("BMP"))
 
     assert response.status_code == 422, response.text
     assert response.json()["code"] == "MEDIA_TYPE_UNSUPPORTED"

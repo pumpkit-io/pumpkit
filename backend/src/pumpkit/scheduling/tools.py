@@ -55,7 +55,7 @@ from pumpkit.scheduling.schemas import (
 from pumpkit.x_connection.x_publisher import get_x_publisher
 
 # What the `curl` command names the file by, for the app to replace.
-IMAGE_PATH = "IMAGE_PATH"
+FILE_PATH = "FILE_PATH"
 
 
 def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolResponse:
@@ -320,15 +320,16 @@ async def attach_media(
     alt_text: Optional[str] = None,
 ) -> AttachMediaToolResponse:
     """
-    Attach an image to one part of the user's post, last after the media it has: a JPEG, PNG or
-    WEBP image up to 5 MB. X takes up to 4 images per X post. `part` counts from 1; a single X
-    post has only part 1. `alt_text`, up to 1,000 characters, describes the image for people
-    using screen readers. With `url`, a public https URL of the image, Pumpkit downloads and
-    attaches it. Without `url`, the answer is a one-time upload link for this part, when it
-    expires, and the `curl` command that sends a local image to it: run it with IMAGE_PATH
-    replaced by the image's path, written and quoted as your shell takes a path. If you can't run
-    commands, give the user the post's page link to attach the image there. Pumpkit publishes the image as given and its writing never reads
-    it, so write the brief or feedback from what you saw in it. On a draft or a failed post it
+    Attach media to one part of the user's post, last after the media it has: a JPEG, PNG or
+    WEBP image up to 5 MB, a GIF up to 15 MB, or an MP4 or MOV video up to 512 MB. X takes up to
+    4 images, or 1 GIF, or 1 video, per X post. `part` counts from 1; a single X post has only
+    part 1. `alt_text`, up to 1,000 characters, describes an image or GIF for people using screen
+    readers. With `url`, a public https URL of the file, Pumpkit downloads and attaches it.
+    Without `url`, the answer is a one-time upload link for this part, when it expires, and the
+    `curl` command that sends a local file to it: run it with FILE_PATH replaced by the file's
+    path, written and quoted as your shell takes a path. If you can't run commands, give the user
+    the post's page link to attach the file there. Pumpkit publishes media as given and its
+    writing never reads it, so write the brief or feedback from what you saw in it. On a draft or a failed post it
     changes the post's text; on a scheduled post it changes the scheduled post's own copy. A
     published post, or a part already on X, keeps its media.
     """
@@ -347,12 +348,12 @@ async def attach_media(
         upload_url = f"{settings.api_url()}{mediator.UPLOAD_LINKS_PATH}/{link.token}"
         # The shell opens the file, so `~`, `$HOME` and its own quoting work in the path, and
         # curl never parses it, where `-F file=@path` would split it at `;` or `,`.
-        curl = f"curl -F 'file=@-' '{upload_url}' < {IMAGE_PATH}"
+        curl = f"curl -F 'file=@-' '{upload_url}' < {FILE_PATH}"
         minutes = int(UPLOAD_LINK_LIFETIME.total_seconds() // 60)
         return AttachMediaToolResponse(
             message=(
-                f"To attach a local image to part {request.part}, run this once, within "
-                f"{minutes} minutes, with {IMAGE_PATH} replaced by the image's path, quoted as "
+                f"To attach a local file to part {request.part}, run this once, within "
+                f"{minutes} minutes, with {FILE_PATH} replaced by the file's path, quoted as "
                 f"your shell needs: {curl}\nWithout a shell, attach it on the post's page in "
                 f"the Pumpkit web app: {page}"
             ),
@@ -384,7 +385,7 @@ async def remove_media(
     call: ToolCall[User], post_id: str, media_id: str
 ) -> PostMessageToolResponse:
     """
-    Take one image, by the `id` `get_post` lists, off the user's post: off the post's text on
+    Take one image, GIF or video, by the `id` `get_post` lists, off the user's post: off the post's text on
     a draft or a failed post, off the scheduled post's own copy on a scheduled one. A published
     post, or a part already on X, keeps its media.
     """

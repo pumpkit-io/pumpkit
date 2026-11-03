@@ -16,6 +16,7 @@ from pumpkit.core.time import Clock, as_utc
 from pumpkit.scheduling import publish, service
 from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.scheduling.top_up_charges import rebalance_top_ups
+from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPublisher
 
 
@@ -120,6 +121,41 @@ class _Claim:
             raise _ClaimLost()
 
 
+@dataclass
+class _Access:
+    """
+    The access token a publish sends to X, refreshed when near expiry before the call it is for,
+    since a long video upload can outlast it.
+    """
+
+    claim: _Claim
+    publisher: XPublisher
+    connection: XConnection
+    token: str
+
+    @classmethod
+    async def start(
+        cls, db: AsyncSession, publisher: XPublisher, claim: _Claim, *, now: datetime
+    ) -> "_Access":
+        """Flushes rotated tokens; the caller commits them before calling X."""
+        connection = await publish.connection_to_publish_on(db, claim.scheduled_post)
+        token = await publish.fresh_access_token(db, publisher, connection, now=now)
+        return cls(claim, publisher, connection, token)
+
+    async def for_call(self, db: AsyncSession) -> str:
+        """Renews the claim, which commits any rotated tokens, then answers the token to send."""
+        now = self.claim.clock()
+        if as_utc(self.connection.access_token_expires_at) - now <= publish.REFRESH_MARGIN:
+            scheduled_post = self.claim.scheduled_post
+            await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
+            self.connection = await publish.connection_still_publishing_on(db, scheduled_post)
+            self.token = await publish.fresh_access_token(
+                db, self.publisher, self.connection, now=now
+            )
+        await self.claim.renew(db)
+        return self.token
+
+
 async def _publish_claimed(
     db: AsyncSession,
     publisher: XPublisher,
@@ -182,10 +218,12 @@ async def _publish(
     scheduled_post = claim.scheduled_post
     # One lock order everywhere, User then X connection then Scheduled post, so no two deadlock.
     await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
-    connection = await publish.connection_to_publish_on(db, scheduled_post)
-    access_token = await publish.fresh_access_token(db, publisher, connection, now=now)
+    access = await _Access.start(db, publisher, claim, now=now)
     # Commit the rotated tokens, or end the read, before the call to X: it releases the lock.
     await db.commit()
+
+    async def token_for_call() -> str:
+        return await access.for_call(db)
 
     reply_to = None
     for part, media in zip(scheduled_post.parts, service.media_by_part(scheduled_post)):
@@ -193,35 +231,32 @@ async def _publish(
             try:
                 media_ids = []
                 for one in media:
-                    await claim.renew(db)
                     x_media_id = await publish.upload_media(
-                        publisher, storage, scheduled_post, part, one, access_token=access_token
+                        publisher, storage, scheduled_post, part, one, token_for_call=token_for_call
                     )
                     if one.alt_text is not None:
-                        await claim.renew(db)
                         await publish.set_alt_text(
                             publisher,
                             scheduled_post,
                             part,
                             one.alt_text,
                             x_media_id=x_media_id,
-                            access_token=access_token,
+                            access_token=await access.for_call(db),
                         )
                     media_ids.append(x_media_id)
-                await claim.renew(db)
                 x_post_id = await publish.call_x(
                     publisher,
                     scheduled_post,
                     part,
                     reply_to=reply_to,
-                    access_token=access_token,
+                    access_token=await access.for_call(db),
                     media_ids=media_ids,
                 )
             except publish.Failed as failed:
                 if failed.category == "reconnect_needed":
                     await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
                     await x_connections_service.flag_needs_reconnect(
-                        db, connection, now=claim.clock()
+                        db, access.connection, now=claim.clock()
                     )
                 raise
             try:

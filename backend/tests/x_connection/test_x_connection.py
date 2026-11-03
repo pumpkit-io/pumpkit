@@ -58,6 +58,7 @@ async def test_a_subscribed_user_connects_and_then_sees_their_handle(
     expected = {
         "handle": "ada",
         "char_limit": 280,
+        "premium": False,
         "needs_reconnect": False,
         "needs_reconnect_for_media": False,
         "scheduled_posts_waiting": 0,
@@ -72,18 +73,18 @@ async def test_a_subscribed_user_connects_and_then_sees_their_handle(
 
 
 @pytest.mark.parametrize(
-    ("subscription_type", "char_limit"),
+    ("subscription_type", "char_limit", "premium"),
     [
-        ("Premium", 25_000),
-        ("PremiumPlus", 25_000),
-        ("None", 280),
-        ("Basic", 280),
-        ("SomethingNew", 280),
-        (None, 280),
+        ("Premium", 25_000, True),
+        ("PremiumPlus", 25_000, True),
+        ("None", 280, False),
+        ("Basic", 280, False),
+        ("SomethingNew", 280, False),
+        (None, 280, False),
     ],
 )
-async def test_the_x_connection_reports_the_limit_for_the_x_account_s_subscription_type(
-    client, subscribed, fake_x_publisher, clock, subscription_type, char_limit
+async def test_the_x_connection_reports_the_limit_and_premium_for_the_x_account_s_subscription(
+    client, subscribed, fake_x_publisher, clock, subscription_type, char_limit, premium
 ):
     fake_x_publisher.account = XAccount(
         user_id="1001", handle="ada", subscription_type=subscription_type
@@ -91,8 +92,9 @@ async def test_the_x_connection_reports_the_limit_for_the_x_account_s_subscripti
 
     completed = await _connect(client)
 
-    assert completed.json()["char_limit"] == char_limit
-    assert (await client.get(X_CONNECTION)).json()["char_limit"] == char_limit
+    assert (completed.json()["char_limit"], completed.json()["premium"]) == (char_limit, premium)
+    read = (await client.get(X_CONNECTION)).json()
+    assert (read["char_limit"], read["premium"]) == (char_limit, premium)
 
 
 async def test_connecting_stores_the_x_account_s_photo(client, subscribed, fake_x_publisher, clock):

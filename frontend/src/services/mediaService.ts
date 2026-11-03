@@ -7,21 +7,27 @@ export type MediaKind = 'image' | 'gif' | 'video';
 export interface Media {
   id: string;
   kind: MediaKind;
-  /** Under the API's root, served only to its owner, so it is read with the session's token. */
-  previewUrl: string;
+  /**
+   * Under the API's root, served only to its owner, so it is read with the session's token. Null
+   * for a video sent without its first frame, as an AI app sends one.
+   */
+  previewUrl: string | null;
   width: number | null;
   height: number | null;
   /** What an image or GIF shows, for screen readers; null until the User or their AI app writes it. */
   altText: string | null;
+  /** A video's length as the browser read it on upload; null otherwise. */
+  durationMs: number | null;
 }
 
 export interface MediaApi {
   id: string;
   kind: MediaKind;
-  preview_url: string;
+  preview_url: string | null;
   width: number | null;
   height: number | null;
   alt_text: string | null;
+  duration_ms: number | null;
 }
 
 export const toMedia = (m: MediaApi): Media => ({
@@ -31,7 +37,15 @@ export const toMedia = (m: MediaApi): Media => ({
   width: m.width,
   height: m.height,
   altText: m.alt_text,
+  durationMs: m.duration_ms,
 });
+
+/** What the browser read of a video, sent with it, since the server never reads one. */
+export interface VideoFacts {
+  durationMs: number | null;
+  /** Its first frame, as an image. */
+  poster: Blob | null;
+}
 
 /** X's limit on an image or GIF's alt text. */
 export const ALT_TEXT_MAX_CHARS = 1000;
@@ -39,12 +53,21 @@ export const ALT_TEXT_MAX_CHARS = 1000;
 export interface UploadOptions {
   /** Hears the share of the file sent so far, from 0 to 1. */
   onProgress?: (sent: number) => void;
+  video?: VideoFacts | null;
+  signal?: AbortSignal;
 }
 
-async function upload(path: string, file: File, { onProgress }: UploadOptions): Promise<Media> {
+async function upload(
+  path: string,
+  file: File,
+  { onProgress, video, signal }: UploadOptions,
+): Promise<Media> {
   const form = new FormData();
+  if (video?.durationMs != null) form.append('duration_ms', String(Math.round(video.durationMs)));
+  if (video?.poster) form.append('poster', video.poster, 'poster.jpg');
   form.append('file', file);
   const { data } = await apiService.post<MediaApi>(path, form, {
+    signal,
     // The browser fills in the boundary; the JSON default would send the form as JSON.
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: (event: { loaded: number; total?: number }) => {
