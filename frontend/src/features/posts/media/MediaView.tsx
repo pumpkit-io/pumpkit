@@ -1,6 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronLeft, ChevronRight, Film, Image as ImageIcon, X } from 'lucide-react';
-import type { KeyboardEvent, MouseEvent, RefObject } from 'react';
+import type { KeyboardEvent, MouseEvent, RefObject, SyntheticEvent } from 'react';
 import {
   Dialog,
   DialogClose,
@@ -30,7 +30,7 @@ const VIEW_BUTTON =
 const FADE =
   'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:!animate-none';
 
-function Shown({ item }: { item: Viewable }) {
+function FullSizeMedia({ item }: { item: Viewable }) {
   const preview = useMediaPreview(item.localUrl ? null : (item.media?.previewUrl ?? null));
   const src = item.localUrl ?? preview.url;
   const altText = item.media?.altText ?? null;
@@ -89,10 +89,13 @@ export function MediaView({
     if (to) onOpenKeyChange(to.key);
   };
 
-  // A click on the empty screen around the Media closes it, as one on the backdrop would.
+  // A click anywhere but the Media or a control closes it, as one on the backdrop would.
   const onBackgroundClick = (event: MouseEvent) => {
-    if (event.target === event.currentTarget) onOpenKeyChange(null);
+    if (!(event.target as Element).closest('img, [role="img"], button')) onOpenKeyChange(null);
   };
+
+  // React bubbles events through the portal, so a drop here would reach the Part's drop target behind.
+  const keepInside = (event: SyntheticEvent) => event.stopPropagation();
 
   return (
     <Dialog open={item !== undefined} onOpenChange={(open) => !open && onOpenKeyChange(null)}>
@@ -102,6 +105,10 @@ export function MediaView({
           aria-describedby={undefined}
           onKeyDown={onKeyDown}
           onClick={onBackgroundClick}
+          onDragEnter={keepInside}
+          onDragOver={keepInside}
+          onDragLeave={keepInside}
+          onDrop={keepInside}
           // Radix can leave a reopened layer at pointer-events: none; this one covers the screen, so it is always on top.
           style={{ pointerEvents: 'auto' }}
           onCloseAutoFocus={(event) => {
@@ -113,7 +120,7 @@ export function MediaView({
           {item && (
             <>
               <DialogTitle className="sr-only">{item.name}</DialogTitle>
-              <Shown key={item.key} item={item} />
+              <FullSizeMedia key={item.key} item={item} />
               <div className="absolute right-3 top-3 flex items-center gap-3 sm:right-4 sm:top-4">
                 {items.length > 1 && (
                   <span className="font-sans text-[13px] tabular-nums text-background/80">

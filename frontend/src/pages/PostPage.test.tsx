@@ -1628,15 +1628,8 @@ describe('Post page', () => {
         return within(screen.getByRole('dialog'));
       }
 
-      /** The Media id the open view shows, read from the preview it shows. */
-      async function shownId(): Promise<string> {
-        const dialog = screen.getByRole('dialog');
-        await waitFor(() => expect(dialog.querySelector('img')).not.toBeNull());
-        return dialog
-          .querySelector('img')!
-          .getAttribute('src')!
-          .split('/media/')[1]!
-          .split('/')[0]!;
+      function shows(name: string) {
+        return screen.findByRole('dialog', { name });
       }
 
       it("opens the clicked tile and moves through the Part's Media, stopping at the ends", async () => {
@@ -1646,27 +1639,27 @@ describe('Post page', () => {
 
         fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 2' }));
 
-        expect(await shownId()).toBe('m2');
+        await shows('Image 2');
         expect(view().getByText('2 of 3')).toBeInTheDocument();
 
         fireEvent.click(view().getByRole('button', { name: 'Next' }));
-        expect(await shownId()).toBe('m3');
+        await shows('Image 3');
         expect(view().getByText('3 of 3')).toBeInTheDocument();
         expect(view().queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
 
         fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowRight' });
-        expect(await shownId()).toBe('m3');
+        await shows('Image 3');
 
         fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowLeft' });
         fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowLeft' });
-        expect(await shownId()).toBe('m1');
+        await shows('Image 1');
         expect(view().getByText('1 of 3')).toBeInTheDocument();
         expect(view().queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
 
         fireEvent.click(view().getByRole('button', { name: 'Next' }));
-        expect(await shownId()).toBe('m2');
+        await shows('Image 2');
         fireEvent.click(view().getByRole('button', { name: 'Previous' }));
-        expect(await shownId()).toBe('m1');
+        await shows('Image 1');
       });
 
       it.each([
@@ -1680,11 +1673,40 @@ describe('Post page', () => {
         act(() => tile.focus());
 
         fireEvent.click(tile);
-        await shownId();
+        await shows('Image 2');
         close();
 
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         expect(tile).toHaveFocus();
+      });
+
+      it('closes on a click beside the Media under its long caption, but not on the Media', async () => {
+        const altText = 'A red kite over the ridge at dusk, '.repeat(6);
+        renderPost(withMedia(postWith('the final text'), [[{ ...image('m1'), altText }]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
+        const shown = await view().findByRole('img', { name: altText.trim() });
+        fireEvent.click(shown);
+        expect(screen.getByRole('dialog', { name: 'Image 1' })).toBeInTheDocument();
+
+        fireEvent.click(shown.parentElement!);
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      });
+
+      it('keeps a file dropped on it from reaching the Part behind', async () => {
+        renderPost(withMedia(postWith('the final text'), [[image('m1')]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
+        const dataTransfer = { files: [photo('dropped.png')], types: ['Files'] };
+        fireEvent.dragOver(screen.getByRole('dialog'), { dataTransfer });
+        fireEvent.drop(screen.getByRole('dialog'), { dataTransfer });
+        fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+        expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(1);
+        expect(mediaService.attach).not.toHaveBeenCalled();
       });
 
       it('shows a single Media with its alt text under it, and no count or arrows', async () => {
@@ -1695,8 +1717,8 @@ describe('Post page', () => {
 
         fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
 
-        expect(await shownId()).toBe('m1');
-        expect(view().getByRole('img', { name: 'A red kite' })).toBeInTheDocument();
+        await shows('Image 1');
+        expect(await view().findByRole('img', { name: 'A red kite' })).toBeInTheDocument();
         expect(view().getByText('A red kite')).toBeInTheDocument();
         expect(view().queryByText(/ of /)).not.toBeInTheDocument();
         expect(view().queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
@@ -1729,7 +1751,7 @@ describe('Post page', () => {
         const refused = await mediaOn('the post').findByRole('listitem', { name: 'huge.png' });
         expect(within(refused).queryByRole('button', { name: /open/i })).not.toBeInTheDocument();
         fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
-        expect(await shownId()).toBe('m1');
+        await shows('Image 1');
         expect(view().queryByText(/ of /)).not.toBeInTheDocument();
       });
 
@@ -1768,10 +1790,10 @@ describe('Post page', () => {
 
         fireEvent.click(mediaOn('Part 2').getByRole('button', { name: 'Open image 1' }));
 
-        expect(await shownId()).toBe('b1');
+        await shows('Image 1');
         expect(view().getByText('1 of 3')).toBeInTheDocument();
         fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowLeft' });
-        expect(await shownId()).toBe('b1');
+        await shows('Image 1');
       });
 
       it('opens from the tiles of the "Post to…" confirm step', async () => {
