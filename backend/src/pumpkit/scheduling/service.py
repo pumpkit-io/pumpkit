@@ -349,7 +349,13 @@ async def cancel(db: AsyncSession, *, scheduled_post_id: str) -> bool:
         )
         .execution_options(synchronize_session=False)
     )
-    return cast(CursorResult, result).rowcount == 1
+    if cast(CursorResult, result).rowcount != 1:
+        return False
+    # Postgres cascades this from the delete; SQLite skips foreign keys without a pragma.
+    await db.execute(
+        delete(ScheduledPostMedia).where(ScheduledPostMedia.scheduled_post_id == scheduled_post_id)
+    )
+    return True
 
 
 async def stop(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> bool:

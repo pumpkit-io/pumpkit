@@ -366,7 +366,7 @@ Set them in `.env`, then run `docker compose up -d --wait`. Check with a few Mag
 
 These commands back up and restore the bundled Postgres and the `media_data` volume. For an external Postgres, use your provider's backups for the database. Scheduling them (cron, a systemd timer) is up to you; keep copies off the server.
 
-The `media_data` volume holds Media: the images, GIFs and videos Users attach to their posts, kept until each goes out on X. Back it up together with the database, which records which files belong to which post; a database restored without its Media leaves those posts unable to publish their Media.
+The `media_data` volume holds Media: the images, GIFs and videos Users attach to their posts, kept until each goes out on X. The publisher deletes the files of Media no post uses any more, such as an image a User removed. Back it up together with the database, which records which files belong to which post; a database restored without its Media leaves those posts unable to publish their Media.
 
 Back up, from the clone:
 
