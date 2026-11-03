@@ -16,6 +16,7 @@ from pumpkit.core.db.session import _db_session_handler
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, system_clock
+from pumpkit.scheduling.media_sweep import delete_unreferenced_media
 from pumpkit.scheduling.publishing import publish_next_due, recover_stuck
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
@@ -30,14 +31,20 @@ async def run_pass(
     clock: Clock,
     stop: Optional[asyncio.Event] = None,
 ) -> None:
-    """Publish every due Scheduled post. With `stop` set, it returns after the one in hand."""
+    """
+    Publish every due Scheduled post, then delete the Media nothing references any more. With
+    `stop` set, it returns after the Scheduled post in hand.
+    """
     async with session_maker() as db:
         await recover_stuck(db, now=clock())
     while stop is None or not stop.is_set():
         # A session per Scheduled post: `publishing` commits as it goes.
         async with session_maker() as db:
             if not await publish_next_due(db, publisher, storage, clock=clock):
-                return
+                break
+    if stop is None or not stop.is_set():
+        async with session_maker() as db:
+            await delete_unreferenced_media(db, storage, now=clock())
 
 
 async def run(

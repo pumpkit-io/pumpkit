@@ -16,5 +16,6 @@ X keeps an uploaded media id for only about 24 hours, so a Scheduled post can't 
 - X connections ask for `media.write` along with every other scope, so a User grants everything once (ADR 0006). A connection made before this ADR is asked to reconnect only when its User attaches Media.
 - A failed media upload means X published nothing, so it retries like a 429 within the existing retry window, and a lasting refusal makes the Scheduled post Failed with X's reason. ADR 0007's at-most-once rule for `POST /2/tweets` is unchanged.
 - Post now with a video hands the Scheduled post to the publisher instead of publishing inside the request, because uploading and processing a video can outlast the request (amends ADR 0007). Post now with images still publishes inside the request.
+- Media nothing references any more (removed, replaced, or a deleted Post's) is deleted with its files by the publisher's pass, an hour after it was created at the earliest. A Published Post's Media keeps its record and preview while its Scheduled post references it.
 - Self-hosters get a new volume to keep and back up, announced in the Release's Upgrade notes.
 - Attaching Media uses no Generation and no X post of the Allowance.

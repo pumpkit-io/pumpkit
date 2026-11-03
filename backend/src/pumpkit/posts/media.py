@@ -167,6 +167,18 @@ def remove_from_text(post: Post, placed: TextMedia) -> None:
     post.text_media.remove(placed)
 
 
+async def delete(db: AsyncSession, storage: FileStorage, media: Media) -> None:
+    """
+    Delete the Media's files, then its record. Flushes. Raises `OSError` when a file can't be
+    deleted, leaving the record so a later try finds it.
+    """
+    for key in (media.file_key, media.preview_key):
+        if key is not None:
+            await storage.delete(key)
+    await db.delete(media)
+    await db.flush()
+
+
 async def get_user_media(db: AsyncSession, *, user_id: str, media_id: str) -> Optional[Media]:
     """The User's Media, or None when it isn't theirs."""
     result = await db.execute(select(Media).where(Media.id == media_id, Media.user_id == user_id))

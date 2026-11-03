@@ -68,12 +68,21 @@ class LocalDirectoryStorage:
             raise StoredFileNotFoundError(key) from None
 
     async def delete(self, key: str) -> None:
-        await asyncio.to_thread(self._path(key).unlink, missing_ok=True)
+        await asyncio.to_thread(self._delete, self._path(key))
 
     def _path(self, key: str) -> Path:
         if not _KEY_PATTERN.fullmatch(key):
             raise ValueError(f"Not a valid storage key: {key!r}")
         return self.root / key
+
+    def _delete(self, path: Path) -> None:
+        path.unlink(missing_ok=True)
+        # Its own directory goes once empty; shared ones above stay, as a put may be making them.
+        if path.parent != self.root:
+            try:
+                path.parent.rmdir()
+            except OSError:
+                pass
 
     @staticmethod
     def _put(path: Path, source: BinaryIO) -> None:
