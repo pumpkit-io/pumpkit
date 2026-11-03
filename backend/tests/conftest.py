@@ -93,6 +93,7 @@ from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
 from pumpkit.posts.formats import format_of  # noqa: E402
 from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
+from pumpkit.posts.media_fetcher import FakeMediaUrlFetcher, get_media_url_fetcher  # noqa: E402
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa: E402
 from pumpkit.posts.service import set_text_from_version  # noqa: E402
 from pumpkit.x_connection.service import save_connection  # noqa: E402
@@ -178,6 +179,18 @@ def fake_photo_fetcher():
     app.dependency_overrides[get_photo_fetcher] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_photo_fetcher, None)
+
+
+@pytest.fixture(autouse=True)
+def fake_media_url_fetcher():
+    """
+    Every test downloads Media from URLs through a fake. Request it by name to `serve(url, data)`
+    and read `fetched`; any other URL is unreachable.
+    """
+    fake = FakeMediaUrlFetcher()
+    app.dependency_overrides[get_media_url_fetcher] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_media_url_fetcher, None)
 
 
 @pytest.fixture(autouse=True)

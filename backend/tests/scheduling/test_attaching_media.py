@@ -80,6 +80,7 @@ async def test_an_image_attached_to_a_draft_shows_on_its_part(client, subscribed
         "preview_url": f"/media/{media['id']}/preview",
         "width": 40,
         "height": 30,
+        "alt_text": None,
     }
     assert await _media_of(client, post_id) == [[media]]
 

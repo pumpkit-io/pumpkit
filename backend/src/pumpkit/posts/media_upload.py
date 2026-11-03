@@ -36,8 +36,8 @@ class ReceivedMedia:
     byte_size: int
 
 
-class _FilePart:
-    """The upload's one file part, its head sniffed for its kind before the rest is kept."""
+class IncomingMedia:
+    """A Media file as it arrives, its head sniffed for its kind before the rest is kept."""
 
     def __init__(self) -> None:
         self.upload = UploadFile(file=cast(BinaryIO, SpooledTemporaryFile(max_size=_SPOOL_BYTES)))
@@ -78,7 +78,7 @@ async def receive_media(request: Request) -> AsyncIterator[ReceivedMedia]:
     if not boundary:
         raise BadRequestError("Send the file as a multipart upload.")
 
-    part: Optional[_FilePart] = None
+    part: Optional[IncomingMedia] = None
     pending: list[bytes] = []
     disposition = b""
     header_name = b""
@@ -105,7 +105,7 @@ async def receive_media(request: Request) -> AsyncIterator[ReceivedMedia]:
         disposition = b""
         if field.get(b"name") != FILE_FIELD.encode() or part is not None:
             raise BadRequestError(f"Send one file, as the `{FILE_FIELD}` field, and nothing else.")
-        part = _FilePart()
+        part = IncomingMedia()
         in_file = True
 
     def on_part_data(data: bytes, start: int, end: int) -> None:

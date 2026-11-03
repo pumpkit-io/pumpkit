@@ -48,6 +48,7 @@ def media_response(media: Media) -> MediaResponse:
         preview_url=preview_url(media.id),
         width=media.width,
         height=media.height,
+        alt_text=media.alt_text,
     )
 
 
@@ -110,9 +111,12 @@ async def attach_to_text(
     checked: CheckedMedia,
     file: BinaryIO,
     now: datetime,
+    alt_text: Optional[str] = None,
 ) -> Media:
     """Store `checked`'s file and preview, and add it last on the Text's Part. Flushes."""
-    media = await store(db, storage, user_id=post.user_id, checked=checked, file=file, now=now)
+    media = await store(
+        db, storage, user_id=post.user_id, checked=checked, file=file, now=now, alt_text=alt_text
+    )
     on_part = [p.position for p in post.text_media if p.part_index == part_index]
     async with files_deleted_on_failure(storage, media):
         post.text_media.append(
@@ -135,6 +139,7 @@ async def store(
     checked: CheckedMedia,
     file: BinaryIO,
     now: datetime,
+    alt_text: Optional[str] = None,
 ) -> Media:
     """
     A new Media of the User's, with `checked`'s file and preview stored, placed nowhere yet.
@@ -147,6 +152,7 @@ async def store(
         byte_size=checked.byte_size,
         width=checked.width,
         height=checked.height,
+        alt_text=alt_text,
         created_at=now,
     )
     db.add(media)

@@ -66,6 +66,8 @@ class MediaResponse(BaseModel):
     preview_url: str
     width: Optional[int]
     height: Optional[int]
+    # The image described for screen readers; None until the User or their AI app writes it.
+    alt_text: Optional[str]
 
 
 class TextPartResponse(PartResponse):
