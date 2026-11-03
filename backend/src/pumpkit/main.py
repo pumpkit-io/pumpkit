@@ -22,11 +22,12 @@ from pumpkit.connected_apps.router import (
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
-from pumpkit.core.logging import logger
+from pumpkit.core.logging import logger, redact_access_log_paths
 from pumpkit.core.open_cors import OpenCorsMiddleware
 from pumpkit.core.rate_limit import limiter
 from pumpkit.onboarding.router import router as onboarding_router
 from pumpkit.posts.router import router as posts_router
+from pumpkit.scheduling.mediator import UPLOAD_LINKS_PATH
 from pumpkit.support.router import router as support_router
 from pumpkit.x_connection.router import router as x_connection_router
 
@@ -83,3 +84,4 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
 
 register_exception_handlers(app)
+redact_access_log_paths(f"/api/v1{UPLOAD_LINKS_PATH}/")

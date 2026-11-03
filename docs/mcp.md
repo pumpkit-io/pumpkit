@@ -155,12 +155,31 @@ Media is your own content, like a hand edit: Pumpkit publishes it inside the X p
 
 | Tool | What it does |
 | --- | --- |
-| `attach_media` | Downloads an image from a public https URL and attaches it to a Part of a Post, `part` 1 unless you name another, last after the Media it has, with optional alt text of up to 1,000 characters. On a Draft or a Failed Post it changes the Text; on a Scheduled Post it changes the Scheduled post's own copy. It refuses a Published Post and a Part already live on X. Without a URL, it answers with the Post's page in the web app, where you attach it yourself. |
+| `attach_media` | Downloads an image from a public https URL and attaches it to a Part of a Post, `part` 1 unless you name another, last after the Media it has, with optional alt text of up to 1,000 characters. On a Draft or a Failed Post it changes the Text; on a Scheduled Post it changes the Scheduled post's own copy. It refuses a Published Post and a Part already live on X. Without a URL, it answers with a one-time upload link for that Part and the `curl` command that sends a local image to it, as the next section shows. |
 | `remove_media` | Takes one Media, by the id `get_post` lists, off a Post, by the same rule. |
 
 `attach_media` takes what the web app's upload takes: a JPEG, PNG or WEBP image up to 5 MB, up to 4 on a Part. Pumpkit checks the type from the image's own bytes. It downloads only from public hosts on port 443, following up to 3 redirects, stops a download that passes 5 MB, and gives up after 60 seconds. It refuses, with the web app's words, an image too large, a type Pumpkit doesn't take, an image it can't read, a URL it can't download and a Part that holds 4 images. An X connection made before Pumpkit could publish Media is asked to reconnect first, with the link to the Settings page. Neither tool uses a generation, and each allows 10 calls a minute.
 
 Alt text is stored with the image and `get_post` lists it, but Pumpkit doesn't send it to X yet.
+
+### Attaching a local image
+
+An app that can run commands, such as Claude Code, attaches an image from your disk without a public URL. Called without `url`, `attach_media` checks the Post and Part as it would for a URL and answers with:
+
+- `upload_url`: a link under `/api/v1/media-uploads/`, made for that Part of that Post. It works once, for 15 minutes.
+- `upload_expires_at`: when the link stops working.
+- `curl_command`: the command that sends the image, with `IMAGE_PATH` in place of the image's path.
+- `post_url`: the Post's page, for an app that can't run commands, where you attach the image yourself.
+
+The app replaces `IMAGE_PATH` with the image's path, quoted as its shell needs, and runs the command:
+
+```sh
+curl -F 'file=@-' 'https://pumpkit.example.com/api/v1/media-uploads/Xq3…' < ~/"Desktop/Q3 chart.png"
+```
+
+The shell opens the image and passes it to `curl` on its standard input, so `~`, `$HOME` and any character a quoted path may hold work in the path.
+
+The link takes the image as the multipart field `file`, with no other credentials, and attaches it where `attach_media` named, with the alt text given to `attach_media`: to the Post's Text, or to its waiting Scheduled post's own copy. It answers with the attached image as `get_post` lists it. Uploads through links follow the web app's rules: the same checks on the image, the web upload's limit of 60 a minute, and a refusal when your subscription has ended or X needs reconnecting. An upload spends the link once your account and the Part pass these checks, before the image arrives, even when the image is then refused. A second use, or a use after 15 minutes, is refused with a message saying to call `attach_media` again. Disconnecting the app in Settings stops the links it made and hasn't used. The link names no Post or Part: Pumpkit keeps them with a hash of the link's token, so a changed link is unknown.
 
 ## Scheduled post and link tools
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 # Models name `User` by string, so the process needs every model mapped, not just the ones it imports.
 import pumpkit.models  # noqa: F401
+import pumpkit.posts.media_upload_links as media_upload_links
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
@@ -38,7 +39,8 @@ async def run_pass(
     files_swept_at: Optional[datetime] = None,
 ) -> Optional[datetime]:
     """
-    Publish every due Scheduled post (only the one in hand once `stop` is set), then sweep Media.
+    Publish every due Scheduled post (only the one in hand once `stop` is set), then sweep Media
+    and expired upload links.
     Returns when it last swept files, for the next pass; a failed sweep is logged, not raised.
     """
     async with session_maker() as db:
@@ -55,6 +57,12 @@ async def run_pass(
             await delete_unreferenced_media(db, storage, now=clock())
     except Exception:
         logger.exception("Deleting unreferenced Media failed; trying again next pass")
+    try:
+        async with session_maker() as db:
+            await media_upload_links.delete_expired(db, now=clock())
+            await db.commit()
+    except Exception:
+        logger.exception("Deleting expired upload links failed; trying again next pass")
     now = clock()
     if files_swept_at is not None and now - files_swept_at < FILES_SWEPT_EVERY:
         return files_swept_at

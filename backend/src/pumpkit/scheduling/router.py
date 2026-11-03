@@ -37,6 +37,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostResponse,
     ScheduledPostUpdateRequest,
     TextEditRequest,
+    UploadedMediaResponse,
     UsageResponse,
     XConnectionResponse,
 )
@@ -408,6 +409,35 @@ async def attach_text_media(
         file=received.file,
         byte_size=received.byte_size,
         now=clock(),
+    )
+
+
+async def _link_upload(
+    token: str, db: AsyncSession = Depends(get_async_db), clock: Clock = Depends(get_clock)
+) -> mediator.LinkUpload:
+    return await mediator.start_link_upload(db=db, token=token, now=clock())
+
+
+@posts_router.post(
+    f"{mediator.UPLOAD_LINKS_PATH}/{{token}}",
+    response_model=UploadedMediaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_through_link(
+    # Resolved in this order, so the link is spent and the connection freed before the body.
+    upload: mediator.LinkUpload = Depends(_link_upload),
+    received: ReceivedMedia = Depends(receive_media),
+    db: AsyncSession = Depends(get_async_db),
+    storage: FileStorage = Depends(get_file_storage),
+    clock: Clock = Depends(get_clock),
+) -> UploadedMediaResponse:
+    """
+    Attaches an image, sent as the multipart field `file`, through a one-time link `attach_media`
+    made: to the Part it names, of the Post's Text or its waiting Scheduled post's copy. The link
+    is the only credential, and the first upload that starts through it spends it.
+    """
+    return await mediator.attach_through_link(
+        db=db, storage=storage, upload=upload, received=received, now=clock()
     )
 
 

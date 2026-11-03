@@ -237,28 +237,6 @@ async def test_an_x_connection_without_media_write_is_asked_to_reconnect_before_
     assert fake_media_url_fetcher.fetched == []
 
 
-async def test_without_a_url_the_user_is_sent_to_the_posts_page(
-    subscribed, mcp, post_with, fake_media_url_fetcher
-):
-    post_id = await post_with("One")
-
-    result = await mcp.call_tool("attach_media", post_id=post_id)
-
-    assert result["isError"] is False, result
-    page = f"{POSTS_PAGE}/{post_id}"
-    assert result["structuredContent"] == {
-        "message": f"Attach media on the post's page in the Pumpkit web app: {page}",
-        "post_url": page,
-        "media": None,
-    }
-
-
-async def test_without_a_url_a_post_that_isnt_the_users_is_not_found(subscribed, mcp):
-    result = await mcp.call_tool("attach_media", post_id="no-such-post")
-
-    assert error_text(result) == "Post not found."
-
-
 async def test_alt_text_past_x_s_limit_is_refused(
     subscribed, mcp, post_with, fake_media_url_fetcher
 ):
