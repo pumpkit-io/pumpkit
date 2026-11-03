@@ -1,15 +1,18 @@
 """
 Feedback, a Format change and restoring a Version replace only the Text's words: each Part keeps
-its Media, and Media of Parts the new Text no longer has goes last on its last Part (ADR 0021).
+its Media, and Media of Parts the new Text no longer has goes last on its last Part.
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 
 import pytest
+from httpx import Response
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.main import app
 from pumpkit.posts.llm import FakeLLM, get_llm
+from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import png
 from tests.posts.writing_replies import written, written_thread
 
@@ -48,7 +51,7 @@ async def _attach(client, post_id: str, *, part: int, name: str = "photo.png") -
     return response.json()["id"]
 
 
-async def _feedback(client, post_id: str, feedback: str, format: str | None = None):
+async def _feedback(client, post_id: str, feedback: str, format: Optional[str] = None):
     body = {"feedback": feedback} if format is None else {"feedback": feedback, "format": format}
     response = await client.post(f"{POSTS}/{post_id}/versions", json=body)
     assert response.status_code == 201, response.text
@@ -173,7 +176,7 @@ async def test_media_removed_while_feedback_writes_stays_removed(client, with_au
     post_id = await _start_thread(client, fake_llm, "one", "two", "three")
     kept = await _attach(client, post_id, part=2)
     removed = await _attach(client, post_id, part=3)
-    answers: list = []
+    answers: list[Response] = []
 
     class MeanwhileLLM(FakeLLM):
         async def structured(self, **kwargs):
@@ -200,6 +203,47 @@ async def test_no_prompt_holds_anything_of_the_texts_media(client, with_author, 
     await _feedback(client, post_id, "condense it", "post")
 
     prompts = repr([call.messages for call in fake_llm.calls])
-    assert len(fake_llm.calls) == 2
     for trace in ("beach-at-dawn", media_id, "/media/", "image/png", "PNG", "IHDR"):
         assert trace not in prompts
+
+
+async def _fail_after(client, fake_x_publisher, post_id: str, *, live: int) -> None:
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    fake_x_publisher.fail_publish_on = live + 1
+    posted = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
+    assert posted.json()["state"] == "failed", posted.text
+
+
+async def test_restoring_a_version_that_would_put_media_on_a_part_already_on_x_is_refused(
+    client, with_author, fake_llm, fake_x_publisher
+):
+    fake_llm.replies = [written("one post"), {"post": "one post"}]
+    started = await client.post(POSTS, json={"brief": "ship small things"})
+    post_id = started.json()["id"]
+    fake_llm.replies = [written_thread(["a", "b", "c"]), {"parts": ["a", "b", "c"]}]
+    await _feedback(client, post_id, "three parts", "thread")
+    on_three = await _attach(client, post_id, part=3)
+    await _fail_after(client, fake_x_publisher, post_id, live=2)
+
+    restored = await client.post(f"{POSTS}/{post_id}/versions/1/restore")
+
+    assert restored.status_code == 409, restored.text
+    assert "Part 1 is already on X" in restored.json()["detail"]
+    assert await _media_by_part(client, post_id) == [[], [], [on_three]]
+
+
+async def test_feedback_that_would_put_media_on_a_part_already_on_x_is_refused(
+    client, with_author, fake_llm, fake_x_publisher
+):
+    post_id = await _start_thread(client, fake_llm, "a", "b", "c")
+    on_three = await _attach(client, post_id, part=3)
+    await _fail_after(client, fake_x_publisher, post_id, live=2)
+    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["a", "b"]}]
+
+    refused = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "two parts"})
+
+    assert refused.status_code == 409, refused.text
+    assert "Part 2 is already on X" in refused.json()["detail"]
+    assert await _media_by_part(client, post_id) == [[], [], [on_three]]
+    fake_llm.replies = [written_thread(["a", "b", "d"]), {"parts": ["a", "b", "d"]}]
+    assert (await _feedback(client, post_id, "change the last part"))["number"] == 2

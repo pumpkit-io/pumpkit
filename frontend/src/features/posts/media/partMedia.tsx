@@ -23,8 +23,8 @@ export function partMediaOf(
           tiles={media.tilesOf(index)}
           where={where}
           canRetry={media.roomOn(index) > 0}
-          onRemove={(key) => media.remove(index, key)}
-          onRetry={(key) => media.retry(index, key)}
+          onRemove={(key) => media.remove(key)}
+          onRetry={(key) => media.retry(key)}
         />
       ),
       button: (
