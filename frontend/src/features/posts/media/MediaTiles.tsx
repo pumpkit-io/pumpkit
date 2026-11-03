@@ -14,6 +14,7 @@ import type { Media } from '@/services/mediaService';
 import { AltTextChip, AltTextMark, CHIP, SOLID } from './AltText';
 import {
   breaksXMediaRule,
+  capitalized,
   formatDuration,
   LONG_VIDEO,
   mediaNoun,
@@ -24,11 +25,8 @@ import { MediaView, type Viewable } from './MediaView';
 import { useMediaPreview } from './useMediaPreview';
 import { holdsPlace, kindOfTile, type Tile } from './useTextMedia';
 
-/**
- * X's composer shows one Media across the full width at its own shape, cropped from the
- * centre only when it is taller than 3:4. However wide it is, its frame stays tall enough
- * for the × and the Alt chip, cropping a banner wider than that from the centre.
- */
+// X's composer shows one Media full width at its own shape, cropped from the centre past 3:4 tall.
+// However wide, its frame stays tall enough for the × and the Alt chip, cropping a wider banner.
 const SINGLE_RATIO = { min: 3 / 4, unknown: 16 / 9 };
 const SINGLE_MIN_HEIGHT = '5rem';
 
@@ -53,6 +51,13 @@ const CELLS: Record<number, CSSProperties[]> = {
 
 /** Each tile's width over its height, by key, as the browser read it from the file shown. */
 type Ratios = Record<string, number>;
+
+function useMeasured() {
+  const [measured, setMeasured] = useState<Ratios>({});
+  const measure = (key: string) => (ratio: number) =>
+    setMeasured((ratios) => (ratios[key] === ratio ? ratios : { ...ratios, [key]: ratio }));
+  return { measured, measure };
+}
 
 function gridStyle(tiles: Tile[], measured: Ratios = {}): CSSProperties | undefined {
   if (tiles.length > 4) return undefined;
@@ -85,35 +90,48 @@ function tileLayout(count: number, index: number): { className: string; style?: 
 const ROUND_BUTTON =
   'inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground/75 text-background transition-colors hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transition-none';
 
-const capitalized = (name: string) => name[0]!.toUpperCase() + name.slice(1);
-
-/** A tile as the full-size view shows it; `number` counts the Part's Media, refused files left out. */
-function viewableOf(tile: Tile, number: number): Viewable {
-  const media = tile.state === 'ready' ? tile.media : null;
-  const kind = kindOfTile(tile);
-  return {
-    key: tile.key,
-    name: capitalized(`${mediaNoun(kind)} ${number}`),
-    kind,
-    media,
-    localUrl: tile.localUrl,
-    file: tile.file,
-  };
+/** The tiles, refused files already left out, as the full-size view shows them. */
+function viewablesOf(tiles: Tile[], onX: boolean): Viewable[] {
+  return tiles.map((tile, index) => {
+    const kind = kindOfTile(tile);
+    return {
+      key: tile.key,
+      name: `${mediaNoun(kind)} ${index + 1}`,
+      kind,
+      media: tile.state === 'ready' ? tile.media : null,
+      localUrl: tile.localUrl,
+      file: tile.file,
+      onX,
+    };
+  });
 }
 
-/** The full-size view of a Part's Media and how a tile opens it. */
+/** The full-size view of a Part's Media, how a tile opens it, and the list it falls back to. */
 function useMediaView(items: Viewable[]) {
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // A retried upload keeps its key, so a key left behind by a refused Media would reopen the view.
+  if (openKey !== null && !items.some((item) => item.key === openKey)) setOpenKey(null);
   const opener = useRef<HTMLElement | null>(null);
+  const list = useRef<HTMLUListElement | null>(null);
   const open = (key: string) => (element: HTMLElement) => {
     opener.current = element;
     setOpenKey(key);
   };
+  const nameOf = (key: string) => items.find((item) => item.key === key)!.name;
   const view = (
-    <MediaView items={items} openKey={openKey} onOpenKeyChange={setOpenKey} returnFocus={opener} />
+    <MediaView
+      items={items}
+      openKey={openKey}
+      onOpenKeyChange={setOpenKey}
+      returnFocus={opener}
+      fallbackFocus={list}
+    />
   );
-  return { open, view };
+  return { open, view, list, nameOf };
 }
+
+const LIST_FOCUS =
+  'rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card';
 
 /** A video's length as the browser read it, on its tile or its stored Media. */
 function durationOf(tile: Tile): number | null {
@@ -122,7 +140,7 @@ function durationOf(tile: Tile): number | null {
 
 function MediaTile({
   tile,
-  number,
+  name,
   className,
   style,
   onMeasure,
@@ -131,7 +149,8 @@ function MediaTile({
   onDescribe,
 }: {
   tile: Tile;
-  number: number;
+  /** Mid-sentence: "image 2". */
+  name: string;
   className: string;
   style?: CSSProperties;
   /** Called with the width over the height of the file shown, once the browser reads it. */
@@ -145,7 +164,6 @@ function MediaTile({
 }) {
   const media = tile.state === 'ready' ? tile.media : null;
   const kind = kindOfTile(tile);
-  const name = `${mediaNoun(kind)} ${number}`;
   const preview = useMediaPreview(media?.previewUrl ?? null);
   const describable = media !== null && kind !== 'video';
   const src = preview.url ?? tile.localUrl;
@@ -340,20 +358,23 @@ export function MediaTiles({
   onRetry: (key: string) => void;
   onDescribe: (key: string, altText: string | null) => Promise<void>;
 }) {
-  const [measured, setMeasured] = useState<Ratios>({});
-  const measure = (key: string, ratio: number) =>
-    setMeasured((ratios) => (ratios[key] === ratio ? ratios : { ...ratios, [key]: ratio }));
+  const { measured, measure } = useMeasured();
   const shown = tiles.filter((t) => holdsPlace(t) || t.state === 'refused');
-  const viewable = shown.filter((t) => t.state !== 'refused');
-  const { open, view } = useMediaView(viewable.map((tile, index) => viewableOf(tile, index + 1)));
+  const { open, view, list, nameOf } = useMediaView(
+    viewablesOf(
+      shown.filter((t) => t.state !== 'refused'),
+      false,
+    ),
+  );
   if (!shown.length) return null;
   const media = shown.flatMap((t) => (t.state === 'ready' && !t.removing ? [t.media] : []));
-  let images = 0;
   const grid = (
     <ul
+      ref={list}
+      tabIndex={-1}
       aria-label={`Media on ${where}`}
       style={gridStyle(shown, measured)}
-      className={gridClass(shown)}
+      className={cn(gridClass(shown), LIST_FOCUS)}
     >
       {shown.map((tile, index) => {
         const layout = tileLayout(shown.length, index);
@@ -370,9 +391,9 @@ export function MediaTiles({
           <MediaTile
             key={tile.key}
             tile={tile}
-            number={++images}
+            name={nameOf(tile.key)}
             {...layout}
-            onMeasure={(ratio) => measure(tile.key, ratio)}
+            onMeasure={measure(tile.key)}
             onOpen={open(tile.key)}
             onRemove={() => onRemove(tile.key)}
             onDescribe={(altText) => onDescribe(tile.key, altText)}
@@ -395,8 +416,20 @@ export function MediaTiles({
   );
 }
 
-/** Media that can't change any more, such as a Scheduled post's, in the same layout. */
-export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: string }) {
+/**
+ * Media that can't change any more, such as a Scheduled post's, in the same layout. `onX` marks
+ * a Part already on X, which shows only previews.
+ */
+export function ReadOnlyMediaTiles({
+  media,
+  where,
+  onX = false,
+}: {
+  media: Media[];
+  where: string;
+  onX?: boolean;
+}) {
+  const { measured, measure } = useMeasured();
   const shown = media.map((m): Tile => ({
     key: m.id,
     state: 'ready',
@@ -405,17 +438,24 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
     file: null,
     removing: false,
   }));
-  const { open, view } = useMediaView(shown.map((tile, index) => viewableOf(tile, index + 1)));
+  const { open, view, list, nameOf } = useMediaView(viewablesOf(shown, onX));
   if (!shown.length) return null;
   return (
     <>
-      <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
+      <ul
+        ref={list}
+        tabIndex={-1}
+        aria-label={`Media on ${where}`}
+        style={gridStyle(shown, measured)}
+        className={cn(gridClass(shown), LIST_FOCUS)}
+      >
         {shown.map((tile, index) => (
           <MediaTile
             key={tile.key}
             tile={tile}
-            number={index + 1}
+            name={nameOf(tile.key)}
             {...tileLayout(shown.length, index)}
+            onMeasure={measure(tile.key)}
             onOpen={open(tile.key)}
           />
         ))}

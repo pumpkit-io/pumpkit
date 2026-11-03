@@ -52,13 +52,18 @@ export function useMediaFile(mediaId: string | null): Fetched {
   return useObjectUrl(mediaId, mediaService.file);
 }
 
+/** `file` as a local URL, or null where the browser can't make one. */
+export function localUrlOf(file: Blob): string | null {
+  return typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
+}
+
 /** `file` as a local URL, made while it is shown and revoked when it changes or unmounts. */
 export function useFileUrl(file: Blob | null): string | null {
   const [shown, setShown] = useState<{ for: Blob; url: string } | null>(null);
 
   useEffect(() => {
-    if (!file || typeof URL.createObjectURL !== 'function') return;
-    const url = URL.createObjectURL(file);
+    const url = file && localUrlOf(file);
+    if (!url) return;
     setShown({ for: file, url });
     return () => URL.revokeObjectURL(url);
   }, [file]);

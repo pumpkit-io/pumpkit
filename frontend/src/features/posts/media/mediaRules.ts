@@ -57,6 +57,8 @@ export function mediaNoun(kind: MediaKind): string {
   return kind === 'gif' ? 'GIF' : kind;
 }
 
+export const capitalized = (name: string) => name[0]!.toUpperCase() + name.slice(1);
+
 /** Whether one X post holding Media of `holding` kinds takes one of `kind` too. */
 export function takesMore(holding: MediaKind[], kind: MediaKind): boolean {
   return !breaksKindsRule([...holding, kind]);

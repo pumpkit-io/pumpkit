@@ -150,7 +150,11 @@ function PartsToPost({
         part.live ? (
           <>
             <p className={`${PART_TEXT} text-muted-foreground`}>{part.text}</p>
-            <ReadOnlyMediaTiles media={part.media} where={mediaWhere(number - 1, parts.length)} />
+            <ReadOnlyMediaTiles
+              media={part.media}
+              where={mediaWhere(number - 1, parts.length)}
+              onX
+            />
             <p className="font-sans text-xs text-muted-foreground">
               Already on X, so it can’t change.
             </p>
