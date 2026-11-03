@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showToast } from '@/components/Toaster';
 import { track } from '@/lib/analytics';
 import { useConfirmLeaving } from '@/lib/useConfirmLeaving';
 import { errorCode } from '@/services/apiErrors';
-import { mediaService, type Media } from '@/services/mediaService';
-import { postService } from '@/services/postService';
+import type { Media } from '@/services/mediaService';
 import {
   IMAGES_PER_PART,
   X_MEDIA_RULE,
@@ -13,6 +12,7 @@ import {
   type AttachVia,
   type Refusal,
 } from './mediaRules';
+import { textMediaPlace, type MediaPlace } from './mediaPlaces';
 
 /** One file on a Part as the card shows it, from the moment it is chosen. */
 export type Tile =
@@ -85,7 +85,10 @@ export function useTextMedia(
   initial: Media[][],
   /** Called when the server refuses an upload until X is reconnected; the file is dropped. */
   onReconnectNeeded: () => void,
+  /** Where the Media lives instead of the Text, such as a Scheduled post's own copy. */
+  placeInstead?: MediaPlace,
 ): TextMedia {
+  const place = useMemo(() => placeInstead ?? textMediaPlace(postId), [placeInstead, postId]);
   const nextKey = useRef(0);
   const newKey = useCallback(() => `tile-${++nextKey.current}`, []);
   const [parts, setParts] = useState<Tile[][]>(() =>
@@ -135,22 +138,22 @@ export function useTextMedia(
   const discard = useCallback(
     async (media: Media) => {
       discarded.current.add(media.id);
-      await mediaService.remove(postId, media.id).catch(() => {});
+      await place.remove(media.id).catch(() => {});
     },
-    [postId],
+    [place],
   );
 
   /** The Part's Media as the server holds it, or null when it can't be read. */
   const storedOn = useCallback(
     async (partIndex: number): Promise<Media[] | null> => {
       try {
-        const stored = (await postService.get(postId)).textMedia[partIndex] ?? [];
+        const stored = (await place.read())[partIndex] ?? [];
         return stored.filter((media) => !discarded.current.has(media.id));
       } catch {
         return null;
       }
     },
-    [postId],
+    [place],
   );
 
   /** Shows `stored` as the Part's ready tiles, one per Media, keeping the tiles already shown. */
@@ -199,7 +202,7 @@ export function useTextMedia(
       let media: Media | null = null;
       let error: unknown = null;
       try {
-        media = await mediaService.attach(postId, partIndex + 1, file, {
+        media = await place.attach(partIndex + 1, file, {
           onProgress: (sent) => {
             changeTile(partIndex, key, (tile) =>
               tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
@@ -253,7 +256,7 @@ export function useTextMedia(
         via,
       }));
     },
-    [postId, change, changeTile, storedOn, show, settle, discard, onReconnectNeeded],
+    [place, change, changeTile, storedOn, show, settle, discard, onReconnectNeeded],
   );
 
   const upload = useCallback(
@@ -337,7 +340,7 @@ export function useTextMedia(
         return;
       }
       changeTile(partIndex, key, (t) => ({ ...t, removing: true }) as Tile);
-      mediaService.remove(postId, tile.media.id).then(
+      place.remove(tile.media.id).then(
         () => {
           discarded.current.add(tile.media.id);
           drop();
@@ -349,7 +352,7 @@ export function useTextMedia(
         },
       );
     },
-    [postId, change, changeTile],
+    [place, change, changeTile],
   );
 
   const uploading = parts.some((tiles) => tiles.some((tile) => tile.state === 'uploading'));

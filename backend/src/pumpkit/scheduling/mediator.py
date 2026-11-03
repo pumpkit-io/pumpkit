@@ -776,6 +776,82 @@ async def remove_text_media(db: AsyncSession, user: User, post_id: str, media_id
     await db.commit()
 
 
+async def attach_scheduled_post_media(
+    db: AsyncSession,
+    storage: FileStorage,
+    user: User,
+    scheduled_post_id: str,
+    part_number: int,
+    file: BinaryIO,
+    byte_size: int,
+    now: datetime,
+) -> MediaResponse:
+    """
+    Attach the file to Part `part_number` of a scheduled or Failed Scheduled post's own copy, last
+    among its Media, once it is an image Pumpkit takes and the Part has room. The Text keeps its own.
+    """
+    scheduled_post, media = await _scheduled_post_whose_media_changes(
+        db, user=user, scheduled_post_id=scheduled_post_id
+    )
+    part_index = part_number - 1
+    if not 0 <= part_index < len(media):
+        raise NotFoundError(f"This scheduled post has no part {part_number}.")
+    _check_not_live(scheduled_post, part_index=part_index)
+    media_service.check_part_room(media, part_index=part_index)
+    checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
+    attached = await media_service.store(
+        db, storage, user_id=user.id, checked=checked, file=file, now=now
+    )
+    media[part_index].append(attached)
+    await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=media, now=now)
+    return media_service.media_response(attached)
+
+
+async def remove_scheduled_post_media(
+    db: AsyncSession, user: User, scheduled_post_id: str, media_id: str, now: datetime
+) -> None:
+    """Take the Media off a scheduled or Failed Scheduled post's Part not live; the Text keeps its."""
+    scheduled_post, media = await _scheduled_post_whose_media_changes(
+        db, user=user, scheduled_post_id=scheduled_post_id
+    )
+    part_index = next(
+        (i for i, on_part in enumerate(media) if any(m.id == media_id for m in on_part)), None
+    )
+    if part_index is None:
+        raise NotFoundError("This scheduled post has no such media.")
+    _check_not_live(scheduled_post, part_index=part_index)
+    media[part_index] = [m for m in media[part_index] if m.id != media_id]
+    await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=media, now=now)
+
+
+async def _scheduled_post_whose_media_changes(
+    db: AsyncSession, *, user: User, scheduled_post_id: str
+) -> tuple[ScheduledPost, list[list[Media]]]:
+    """The User's Scheduled post with each Part's Media, once its Media may change."""
+    # Serializes with the User's edits, which carry the Media they read over to the new Parts.
+    await users_service.lock_user_id(db, user_id=user.id)
+    scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
+    if scheduled_post.state not in (SCHEDULED, FAILED):
+        raise _publishing_started()
+    return scheduled_post, service.media_by_part(scheduled_post)
+
+
+async def _save_scheduled_post_media(
+    db: AsyncSession, *, scheduled_post_id: str, media: list[list[Media]], now: datetime
+) -> None:
+    # The edit only applies while the publisher hasn't claimed it since it was read.
+    if not await service.edit(
+        db,
+        scheduled_post_id=scheduled_post_id,
+        parts=None,
+        reschedule=None,
+        now=now,
+        media=_ids(media),
+    ):
+        raise _publishing_started()
+    await db.commit()
+
+
 async def _post_whose_media_changes(
     db: AsyncSession, *, user: User, post_id: str
 ) -> tuple[Post, Optional[ScheduledPost]]:

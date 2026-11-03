@@ -54,8 +54,14 @@ def check_text_part_room(post: Post, *, part_index: int) -> None:
     count = len(post.text_parts or [])
     if not 0 <= part_index < count:
         raise NotFoundError(f"This post's text has no part {part_index + 1}.")
-    if len(text_media_by_part(post)[part_index]) >= IMAGES_PER_PART:
-        raise part_full((part_name(part_index + 1, count) or "this post").capitalize())
+    check_part_room(text_media_by_part(post), part_index=part_index)
+
+
+def check_part_room(media_by_part: list[list[Media]], *, part_index: int) -> None:
+    """Refuses Part `part_index` of a Text or Scheduled post when it can't take another image."""
+    if len(media_by_part[part_index]) >= IMAGES_PER_PART:
+        name = part_name(part_index + 1, len(media_by_part)) or "this post"
+        raise part_full(name.capitalize())
 
 
 async def attach_to_text(
@@ -68,12 +74,36 @@ async def attach_to_text(
     file: BinaryIO,
     now: datetime,
 ) -> Media:
+    """Store `checked`'s file and preview, and add it last on the Text's Part. Flushes."""
+    media = await store(db, storage, user_id=post.user_id, checked=checked, file=file, now=now)
+    on_part = [p.position for p in post.text_media if p.part_index == part_index]
+    post.text_media.append(
+        TextMedia(
+            media=media,
+            post_id=post.id,
+            part_index=part_index,
+            position=max(on_part, default=-1) + 1,
+        )
+    )
+    await db.flush()
+    return media
+
+
+async def store(
+    db: AsyncSession,
+    storage: FileStorage,
+    *,
+    user_id: str,
+    checked: CheckedMedia,
+    file: BinaryIO,
+    now: datetime,
+) -> Media:
     """
-    Store `checked`'s file and preview, and add it last on the Text's Part. Flushes. A file
-    stored before a failed commit stays on disk under a key no record names.
+    A new Media of the User's, with `checked`'s file and preview stored, placed nowhere yet.
+    Flushes. A file stored before a failed commit stays on disk under a key no record names.
     """
     media = Media(
-        user_id=post.user_id,
+        user_id=user_id,
         kind=checked.kind,
         content_type=checked.content_type,
         byte_size=checked.byte_size,
@@ -88,15 +118,6 @@ async def attach_to_text(
     await storage.put(preview_key(media.id), io.BytesIO(checked.preview))
     media.file_key = file_key(media.id)
     media.preview_key = preview_key(media.id)
-    on_part = [p.position for p in post.text_media if p.part_index == part_index]
-    post.text_media.append(
-        TextMedia(
-            media=media,
-            post_id=post.id,
-            part_index=part_index,
-            position=max(on_part, default=-1) + 1,
-        )
-    )
     await db.flush()
     return media
 

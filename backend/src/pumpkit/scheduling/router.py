@@ -221,6 +221,70 @@ async def cancel_scheduled_post(
     )
 
 
+async def _uploading_user(
+    current_user: User = Depends(require_subscribed_user), db: AsyncSession = Depends(get_async_db)
+) -> User:
+    await mediator.start_media_upload(db=db, user=current_user)
+    return current_user
+
+
+@router.post(
+    "/scheduled-posts/{scheduled_post_id}/parts/{part_number}/media",
+    response_model=MediaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def attach_scheduled_post_media(
+    scheduled_post_id: str,
+    part_number: Annotated[int, Path(ge=1)],
+    # Resolved in this order, so the User is counted and the connection freed before the body.
+    current_user: User = Depends(_uploading_user),
+    received: ReceivedMedia = Depends(receive_media),
+    db: AsyncSession = Depends(get_async_db),
+    storage: FileStorage = Depends(get_file_storage),
+    clock: Clock = Depends(get_clock),
+) -> MediaResponse:
+    """
+    Attaches an image, sent as the multipart field `file`, to Part `part_number` (from 1) of a
+    scheduled or Failed Scheduled post, after the Part's other Media. Only the Scheduled post's own
+    copy changes, not the Post's Text. A Part already on X is refused, and so is a Scheduled post
+    publishing or Published.
+    """
+    return await mediator.attach_scheduled_post_media(
+        db=db,
+        storage=storage,
+        user=current_user,
+        scheduled_post_id=scheduled_post_id,
+        part_number=part_number,
+        file=received.file,
+        byte_size=received.byte_size,
+        now=clock(),
+    )
+
+
+@router.delete(
+    "/scheduled-posts/{scheduled_post_id}/media/{media_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_scheduled_post_media(
+    scheduled_post_id: str,
+    media_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    """
+    Takes the Media off a scheduled or Failed Scheduled post's own copy; the Post's Text keeps its
+    own. A Part already on X is refused, and so is a Scheduled post publishing or Published.
+    """
+    await mediator.remove_scheduled_post_media(
+        db=db,
+        user=current_user,
+        scheduled_post_id=scheduled_post_id,
+        media_id=media_id,
+        now=clock(),
+    )
+
+
 @posts_router.get("/posts", response_model=PostsPageResponse, status_code=status.HTTP_200_OK)
 async def list_posts(
     page: Annotated[PostsPageRequest, Query()],
@@ -312,13 +376,6 @@ async def edit_text(
     return await mediator.edit_text(
         db=db, user=current_user, post_id=post_id, parts=edit_request.parts, now=clock()
     )
-
-
-async def _uploading_user(
-    current_user: User = Depends(require_subscribed_user), db: AsyncSession = Depends(get_async_db)
-) -> User:
-    await mediator.start_media_upload(db=db, user=current_user)
-    return current_user
 
 
 @posts_router.post(
