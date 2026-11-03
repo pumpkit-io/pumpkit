@@ -14,7 +14,7 @@ from sqlalchemy import select
 import pumpkit.scheduling.publish as publish_module
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.scheduling.publisher import run, run_pass
-from pumpkit.scheduling.publishing import recover_stuck
+from pumpkit.scheduling.publishing import claim_next_due, publish_claimed, recover_stuck
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XMediaRefusedError, XRateLimitedError
 from tests.media_files import animated_gif, mp4
@@ -389,6 +389,45 @@ async def test_a_publisher_stopped_mid_upload_hands_the_post_back_for_the_next_o
 
     assert (await _scheduled_post(client, post_id))["state"] == "published"
     assert fake_x_publisher.uploads[0].data == mp4(total=96)
+
+
+async def test_a_publisher_stopped_before_it_refreshes_the_token_calls_x_for_nothing(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A demo.")
+    await _attach(client, post_id, mp4(), "demo.mp4")
+    await _due(client, post_id, fixed_clock)
+    fixed_clock.advance(timedelta(hours=2))
+    refreshes_before = list(fake_x_publisher.refreshes)
+    stop = asyncio.Event()
+    async with db_session_maker() as db:
+        claimed_at = fixed_clock()
+        scheduled_post_id = await claim_next_due(db, now=claimed_at)
+    assert scheduled_post_id is not None
+    stop.set()
+
+    async with db_session_maker() as db:
+        await publish_claimed(
+            db,
+            fake_x_publisher,
+            file_storage,
+            scheduled_post_id=scheduled_post_id,
+            claimed_at=claimed_at,
+            clock=fixed_clock,
+            stop=stop,
+        )
+
+    assert (await _scheduled_post(client, post_id))["state"] == "scheduled"
+    assert fake_x_publisher.refreshes == refreshes_before
+    assert fake_x_publisher.upload_calls == 0
 
 
 async def test_a_publisher_stopped_while_x_takes_the_post_waits_for_its_answer(

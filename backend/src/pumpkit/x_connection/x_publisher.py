@@ -40,6 +40,9 @@ X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
 _TIMEOUT_SECONDS = 30.0
 # Under X's 5 MB cap on an APPEND segment, with room for the multipart framing around it.
 MEDIA_CHUNK_BYTES = 4 * 1024 * 1024
+# One APPEND's whole time, under the publisher's 3-minute stop grace period: a slow uplink fails
+# the upload, which posted nothing, rather than outlasting a stop.
+_APPEND_LIMIT_SECONDS = 120.0
 # The longest wait between STATUS polls, so each step of an upload stays short.
 _MAX_POLL_WAIT_SECONDS = 60.0
 # X's documented access token lifetime, used when a token response leaves out expires_in.
@@ -327,14 +330,17 @@ class OfficialXPublisher:
                     raise XMediaUnavailableError("X's media initialize answered without an id")
                 segment = 0
                 while chunk := await asyncio.to_thread(source.read, MEDIA_CHUNK_BYTES):
-                    await _media_call(
-                        client.post(
-                            f"{X_MEDIA_UPLOAD_URL}/{media_id}/append",
-                            data={"segment_index": str(segment)},
-                            files={"media": ("media", chunk, "application/octet-stream")},
-                            headers=await headers(),
-                        )
+                    append = client.post(
+                        f"{X_MEDIA_UPLOAD_URL}/{media_id}/append",
+                        data={"segment_index": str(segment)},
+                        files={"media": ("media", chunk, "application/octet-stream")},
+                        headers=await headers(),
                     )
+                    try:
+                        async with asyncio.timeout(_APPEND_LIMIT_SECONDS):
+                            await _media_call(append)
+                    except TimeoutError as error:
+                        raise XMediaUnavailableError("X took too long to take a chunk") from error
                     segment += 1
                 finalized = await _media_call(
                     client.post(

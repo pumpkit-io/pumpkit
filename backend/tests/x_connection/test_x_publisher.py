@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import json
@@ -748,6 +749,21 @@ async def test_an_upload_x_never_answers_publishes_nothing(side_effect, error):
     respx.post(f"{X_MEDIA_UPLOAD_URL}/initialize").mock(side_effect=side_effect)
 
     with pytest.raises(error):
+        await _upload()
+
+
+@respx.mock
+async def test_a_chunk_still_sending_at_its_time_limit_is_a_passing_failure(monkeypatch):
+    monkeypatch.setattr(x_publisher, "_APPEND_LIMIT_SECONDS", 0.05)
+    _, append, _ = _upload_routes()
+
+    async def slow_uplink(request: httpx.Request) -> httpx.Response:
+        await asyncio.Event().wait()
+        return httpx.Response(204)
+
+    append.mock(side_effect=slow_uplink)
+
+    with pytest.raises(XMediaUnavailableError):
         await _upload()
 
 

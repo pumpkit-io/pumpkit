@@ -262,14 +262,14 @@ async def list_posts(
 
 async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     """
-    Read one of the user's posts: its brief, its text (the text meant for X, with
-    `version_number`, the version it came from, and `edited`, whether the user changed it by hand
-    since) and every version in order, each with the feedback that made it, its text, each part's
-    character count, when it was written and its `starting_text`: the text that feedback was
-    given on, with the version it came from, when it wasn't the version before as written. `status` is "draft" with no
-    scheduled post, else "scheduled", "published" or "failed" from its one scheduled post,
-    returned in `scheduled_post` with its own copy of the text, which the user may have edited
-    since. A draft has no scheduled post, so its text can be scheduled.
+    Read one of the user's posts: its brief, its text (the text meant for X, with `version_number`,
+    the version it came from, and `edited`, whether the user changed it by hand since) and every
+    version in order, each with the feedback that made it, its text, each part's character count,
+    when it was written and its `starting_text`: the text that feedback was given on, with the
+    version it came from, when it wasn't the version before as written. `status` is "draft" with no
+    scheduled post, else "scheduled", "published" or "failed" from its one scheduled post, returned
+    in `scheduled_post` with its own copy of the text, which the user may have edited since. A draft
+    has no scheduled post, so its text can be scheduled.
     """
     return await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
 
@@ -302,9 +302,9 @@ async def give_feedback(
 async def restore_version(call: ToolCall[User], post_id: str, version_number: int) -> TextResponse:
     """
     Make an earlier version of one of the user's posts its text again, by its number, without
-    writing a new one: the text is then that version's text as written, and feedback rewrites it from there.
-    Any hand edits to the text are replaced (`get_post` says whether it is `edited`). Every
-    version stays in the post's history. Only a draft or a failed post's text changes. Answers
+    writing a new one: the text is then that version's text as written, and feedback rewrites it
+    from there. Any hand edits to the text are replaced (`get_post` says whether it is `edited`).
+    Every version stays in the post's history. Only a draft or a failed post's text changes. Answers
     with the text.
     """
     return await mediator.restore_version(
@@ -320,19 +320,19 @@ async def attach_media(
     alt_text: Optional[str] = None,
 ) -> AttachMediaToolResponse:
     """
-    Attach media to one part of the user's post, last after the media it has: a JPEG, PNG or
-    WEBP image up to 5 MB, a GIF up to 15 MB, or an MP4 or MOV video up to 512 MB. X takes up to
-    4 images, or 1 GIF, or 1 video, per X post. `part` counts from 1; a single X post has only
-    part 1. `alt_text`, up to 1,000 characters, describes an image or GIF for people using screen
-    readers. With `url`, a public https URL of the media, Pumpkit downloads and attaches it, giving
-    up on a video after 4 minutes: send a large video from a slow host as a local file instead.
-    Without `url`, the answer is a one-time upload link for this part, when it expires, and the
-    `curl` command that sends local media to it: run it with FILE_PATH replaced by its file's
-    path, written and quoted as your shell takes a path. If you can't run commands, give the user
-    the post's page link to attach the media there. Pumpkit publishes media as given and its
-    writing never reads it, so write the brief or feedback from what you saw in it. On a draft or a failed post it
-    changes the post's text; on a scheduled post it changes the scheduled post's own copy. A
-    published post, or a part already on X, keeps its media.
+    Attach media to one part of the user's post, last after the media it has: a JPEG, PNG or WEBP
+    image up to 5 MB, a GIF up to 15 MB, or an MP4 or MOV video up to 512 MB. X takes up to 4
+    images, or 1 GIF, or 1 video, per X post. `part` counts from 1; a single X post has only part 1.
+    `alt_text`, up to 1,000 characters, describes an image or GIF for people using screen readers.
+    With `url`, a public https URL of the media, Pumpkit downloads and attaches it, giving up on a
+    video after 4 minutes: send a large video from a slow host as a local file instead. Without
+    `url`, the answer is a one-time upload link for this part, when it expires, and the `curl`
+    command that sends local media to it: run it with FILE_PATH replaced by its file's path, written
+    and quoted as your shell takes a path. If you can't run commands, give the user the post's page
+    link to attach the media there. Pumpkit publishes media as given and its writing never reads it,
+    so write the brief or feedback from what you saw in it. On a draft or a failed post it changes
+    the post's text; on a scheduled post it changes the scheduled post's own copy. A published post,
+    or a part already on X, keeps its media.
     """
     request = AttachMediaRequest(part=part, url=url, alt_text=alt_text)
     page = mediator.post_url(post_id)
@@ -386,9 +386,9 @@ async def remove_media(
     call: ToolCall[User], post_id: str, media_id: str
 ) -> PostMessageToolResponse:
     """
-    Take one image, GIF or video, by the `id` `get_post` lists, off the user's post: off the post's text on
-    a draft or a failed post, off the scheduled post's own copy on a scheduled one. A published
-    post, or a part already on X, keeps its media.
+    Take one image, GIF or video, by the `id` `get_post` lists, off the user's post: off the post's
+    text on a draft or a failed post, off the scheduled post's own copy on a scheduled one. A
+    published post, or a part already on X, keeps its media.
     """
     on_scheduled_post = await mediator.remove_media(
         db=call.db, user=call.user, post_id=post_id, media_id=media_id, now=call.now

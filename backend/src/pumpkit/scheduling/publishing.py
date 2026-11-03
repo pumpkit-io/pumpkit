@@ -167,7 +167,12 @@ class _Access:
         now: datetime,
         stop: Optional[asyncio.Event],
     ) -> "_Access":
-        """Flushes rotated tokens; the caller commits them before calling X."""
+        """
+        Flushes rotated tokens; the caller commits them before calling X. Raises `_Stopped`
+        once `stop` is set, before the refresh can call X.
+        """
+        if stop is not None and stop.is_set():
+            raise _Stopped()
         connection = await publish.connection_to_publish_on(db, claim.scheduled_post)
         token = await publish.fresh_access_token(db, publisher, connection, now=now)
         return cls(claim, publisher, connection, token, stop)
