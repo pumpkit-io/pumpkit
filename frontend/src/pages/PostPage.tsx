@@ -36,6 +36,7 @@ import { ReconnectXForMediaDialog } from '@/features/xConnection/ReconnectXForMe
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { useXConnectionNotice } from '@/features/xConnection/xConnectionReturn';
 import type { Format, PostDetail } from '@/services/postService';
+import { usePosting } from '@/features/scheduledPosts/usePosting';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
 const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
@@ -169,6 +170,7 @@ function LoadedPost({
     void reloadXConnection();
   }, [askToReconnect, reloadXConnection]);
   const media = useTextMedia(loaded.id, loaded.textMedia, text.storedPartCount, onReconnectNeeded);
+  const posting = usePosting(loaded.id, loaded.scheduledPost, onScheduledPost);
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
@@ -295,7 +297,13 @@ function LoadedPost({
       />
     );
   } else if (post.status === 'scheduled' && scheduledPost) {
-    dock = <ScheduledDock scheduledPost={scheduledPost} onEdit={() => setEditing(true)} />;
+    dock = (
+      <ScheduledDock
+        scheduledPost={scheduledPost}
+        posting={posting}
+        onEdit={() => setEditing(true)}
+      />
+    );
   } else if (post.status === 'published' && scheduledPost) {
     dock = <PublishedDock scheduledPost={scheduledPost} />;
   }

@@ -37,9 +37,6 @@ export const UNREADABLE = "Can't read this image";
 /** X takes longer videos only from Premium accounts. */
 export const PREMIUM_VIDEO_MS = 20 * 60 * 1000;
 export const LONG_VIDEO = 'Over 20 minutes: X takes longer videos only from Premium accounts.';
-/** The server's POST_NOW_VIDEO refusal, shown before Post now is tried. */
-export const POST_NOW_VIDEO =
-  "Post now can't publish a video yet. Schedule the post a minute from now instead.";
 export const UPLOAD_FAILED = 'Upload failed. Try again.';
 /** Why a Part an undo shows before it lands takes no files yet. */
 export const PART_SAVING = "Saving this part. Add media once it's saved.";
@@ -129,4 +126,9 @@ export function refusalOf(error: unknown, file: File): Refusal {
     return { message, retry: message === UPLOAD_FAILED };
   }
   return { message: UPLOAD_FAILED, retry: true };
+}
+
+/** X processes a GIF or a video after its upload, so Post now leaves a Part with one to the publisher. */
+export function processedByX(kind: MediaKind): boolean {
+  return kind !== 'image';
 }

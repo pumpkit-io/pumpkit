@@ -1781,19 +1781,27 @@ describe('Post page', () => {
         expect((await screen.findAllByText('A video is still uploading'))[0]).toBeInTheDocument();
       });
 
-      it('keeps Post now from a Text with a video, saying to schedule it instead', async () => {
-        renderPost(withMedia(threadOfTwo(), [[], [video('media_01')]]));
+      it('hands Post now with a video to the publisher and shows the post as posting', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-10T12:00:20Z'));
+        const handedOff: ScheduledPost = {
+          ...SCHEDULED,
+          publishAt: '2026-10-10T12:00:00Z',
+          parts: [{ ...SCHEDULED.parts[0]!, media: [video('media_01')] }],
+        };
+        vi.mocked(scheduledPostService.postNow).mockReset().mockResolvedValue(handedOff);
+        renderPost(withMedia(postWith('the final text'), [[video('media_01')]]));
         await textCard();
 
         fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
         const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+        fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+        fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
 
-        expect(
-          dialog.getByText(
-            "Post now can't publish a video yet. Schedule the post a minute from now instead.",
-          ),
-        ).toBeInTheDocument();
-        expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();
+        await dialogClosed();
+        expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+        expect(screen.queryByText(/X was busy/)).not.toBeInTheDocument();
+        vi.useRealTimers();
       });
     });
 
@@ -3322,6 +3330,64 @@ describe('Post page', () => {
   });
 
   describe('Scheduled', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('shows Posting… once it is due, and the Published Post once the publisher is through', async () => {
+      vi.useRealTimers();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(postService.get).toHaveBeenCalledTimes(1);
+      vi.mocked(postService.get).mockResolvedValue(
+        withScheduledPost({
+          ...SCHEDULED,
+          state: 'publishing',
+        }),
+      );
+
+      await act(() => vi.advanceTimersByTimeAsync(3_000));
+      expect(postService.get).toHaveBeenCalledTimes(2);
+      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      vi.mocked(postService.get).mockResolvedValue(
+        withScheduledPost({
+          ...SCHEDULED,
+          state: 'published',
+          publishedAt: '2026-10-12T07:01:10Z',
+          xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+        }),
+      );
+      await act(() => vi.advanceTimersByTimeAsync(4_000));
+      expect(postService.get).toHaveBeenCalledTimes(2);
+
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+      expect(await screen.findByRole('region', { name: 'Published' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Published');
+    });
+
+    it('turns to Posting… when its time comes while the page is open', async () => {
+      vi.useRealTimers();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date('2026-10-12T06:59:50Z'));
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+      expect(
+        panel('Scheduled').getByText('Scheduled for Mon, Oct 12, 9:00 AM'),
+      ).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+    });
+
     it('says when and where it goes out, with Edit and no Feedback', async () => {
       renderPost(withScheduledPost(SCHEDULED));
       await textCard();
@@ -3361,7 +3427,14 @@ describe('Post page', () => {
       url: 'https://x.com/i/communities/1493446837214187523',
     };
 
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     beforeEach(() => {
+      // Before SCHEDULED's time, so it isn't posting yet.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
       vi.mocked(scheduledPostService.edit).mockReset();
       vi.mocked(scheduledPostService.cancel).mockReset();
       vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);

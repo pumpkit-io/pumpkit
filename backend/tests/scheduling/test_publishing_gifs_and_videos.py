@@ -2,7 +2,7 @@
 Publishing a GIF or a video (ADR 0021): uploaded to X in chunks with its own media category and
 waited on while X processes it. A video's upload can outlast the stuck threshold and the access
 token's life, so the publish keeps its claim and a fresh token through every call to X.
-Post now refuses a video for now.
+Post now hands a GIF or a video to the publisher, due now.
 """
 
 import asyncio
@@ -21,7 +21,7 @@ from tests.media_files import animated_gif, mp4
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
-POST_NOW_VIDEO = "Post now can't publish a video yet. Schedule the post a minute from now instead."
+USAGE = "/api/v1/usage"
 
 
 async def _attach(
@@ -458,8 +458,15 @@ async def test_a_publisher_stopped_while_x_takes_the_post_waits_for_its_answer(
     assert [text for _, text in fake_x_publisher.published] == ["A demo."]
 
 
-async def test_post_now_refuses_a_video_for_now(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+async def test_post_now_with_a_video_hands_it_to_the_publisher_due_now(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     post_id = await post_with("Right now.", "With a demo.")
@@ -467,14 +474,31 @@ async def test_post_now_refuses_a_video_for_now(
 
     response = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
 
-    assert response.status_code == 422, response.text
-    assert response.json() == {"detail": POST_NOW_VIDEO, "code": "POST_NOW_VIDEO"}
-    assert await _scheduled_post(client, post_id) is None
+    assert response.status_code == 201, response.text
+    handed_off = response.json()
+    assert handed_off["state"] == "scheduled"
+    assert handed_off["publish_at"] == "2026-10-10T12:00:00Z"
     assert fake_x_publisher.uploads == []
+    assert fake_x_publisher.published == []
+    assert (await client.get(USAGE)).json()["allowance"]["x_posts"]["used"] == 2
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    published = await _scheduled_post(client, post_id)
+    assert published["state"] == "published"
+    assert [text for _, text in fake_x_publisher.published] == ["Right now.", "With a demo."]
+    assert [u.category for u in fake_x_publisher.uploads] == ["tweet_video"]
 
 
-async def test_post_now_of_a_scheduled_post_with_a_video_is_refused_and_it_stays_scheduled(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+async def test_post_now_of_a_scheduled_post_with_a_video_hands_it_to_the_publisher(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     post_id = await post_with("Later, with a demo.")
@@ -487,14 +511,25 @@ async def test_post_now_of_a_scheduled_post_with_a_video_is_refused_and_it_stays
         f"{SCHEDULED_POSTS}/{scheduled.json()['id']}", json={"publish_now": True}
     )
 
-    assert response.status_code == 422, response.text
-    assert response.json()["code"] == "POST_NOW_VIDEO"
-    assert (await _scheduled_post(client, post_id))["state"] == "scheduled"
+    assert response.status_code == 200, response.text
+    assert (response.json()["state"], response.json()["publish_at"]) == (
+        "scheduled",
+        "2026-10-10T12:00:00Z",
+    )
     assert fake_x_publisher.uploads == []
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
 
 
-async def test_post_now_with_a_gif_publishes_within_the_request(
-    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+async def test_post_now_with_a_gif_hands_it_to_the_publisher_too(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     post_id = await post_with("A loop, now.")
@@ -502,5 +537,8 @@ async def test_post_now_with_a_gif_publishes_within_the_request(
 
     response = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
 
-    assert response.json()["state"] == "published", response.text
+    assert response.json()["state"] == "scheduled", response.text
+    assert fake_x_publisher.uploads == []
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
     assert [u.category for u in fake_x_publisher.uploads] == ["tweet_gif"]

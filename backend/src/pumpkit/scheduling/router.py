@@ -143,7 +143,10 @@ async def create_scheduled_post(
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
-    """With `publish_now`, publishes on X before answering: it comes back Published or Failed."""
+    """
+    With `publish_now`, publishes on X before answering: it comes back Published or Failed. With
+    a GIF or a video it comes back scheduled, due now, for the publisher.
+    """
     new = NewScheduledPost(
         post_id=create_request.post_id,
         publish_at=create_request.publish_at,
