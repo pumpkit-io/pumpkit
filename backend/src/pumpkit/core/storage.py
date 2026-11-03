@@ -10,6 +10,7 @@ temporary directory, the `file_storage` fixture.
 """
 
 import asyncio
+import contextlib
 import os
 import re
 import shutil
@@ -79,10 +80,8 @@ class LocalDirectoryStorage:
         path.unlink(missing_ok=True)
         # Its own directory goes once empty; shared ones above stay, as a put may be making them.
         if path.parent != self.root:
-            try:
+            with contextlib.suppress(OSError):
                 path.parent.rmdir()
-            except OSError:
-                pass
 
     @staticmethod
     def _put(path: Path, source: BinaryIO) -> None:

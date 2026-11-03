@@ -1,7 +1,8 @@
 """
 Deleting Media nothing references any more: not the Text of a Post, nor a Scheduled post. That is
-Media removed or replaced, left by an upload whose Media was dropped, or the Media of a deleted
-Post. The publisher's pass runs the sweep. A Published Post's Media stays, with its preview, as
+Media removed or replaced, Media a Scheduled post held when it was unscheduled, or the Media of a
+deleted Post. Files stored by a request that then rolled back have no record, so it never sees
+them. The publisher's pass runs the sweep. A Published Post's Media stays, with its preview, as
 long as its Scheduled post references it.
 """
 
