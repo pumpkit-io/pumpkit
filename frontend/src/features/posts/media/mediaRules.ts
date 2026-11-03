@@ -11,6 +11,8 @@ export const TOO_LARGE = 'Larger than 5 MB';
 export const TYPE_REFUSED = 'JPEG, PNG or WEBP only';
 export const UNREADABLE = "Can't read this image";
 export const UPLOAD_FAILED = 'Upload failed. Try again.';
+/** Why a Part an undo shows before it lands takes no files yet. */
+export const PART_SAVING = "Saving this part. Add media once it's saved.";
 
 /** Whether one X post can't carry `media`, as the server checks before scheduling. */
 export function breaksXMediaRule(media: Media[]): boolean {

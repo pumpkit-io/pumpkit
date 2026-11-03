@@ -9,6 +9,7 @@ from pumpkit.authors.models import AuthorPost, InspirationAuthor
 from pumpkit.billing.models import TopUpCharge
 from pumpkit.core.errors import ConflictError
 from pumpkit.core.time import as_utc
+from pumpkit.posts import media
 from pumpkit.posts.formats import Format
 from pumpkit.posts.models import (
     ATTEMPT_FAILED,
@@ -59,7 +60,8 @@ async def get_user_post(
         .options(selectinload(Post.attempts))
     )
     if for_update:
-        query = query.with_for_update(of=Post)
+        # Read afresh: the session may hold the Post from before another request changed it.
+        query = query.with_for_update(of=Post).execution_options(populate_existing=True)
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
@@ -111,7 +113,14 @@ async def create_post(
     db: AsyncSession, *, user_id: str, brief: str, corpus: Corpus, now: datetime
 ) -> Post:
     """Flushes."""
-    post = Post(user_id=user_id, brief=brief, corpus_post_ids=list(corpus.post_ids), created_at=now)
+    post = Post(
+        user_id=user_id,
+        brief=brief,
+        corpus_post_ids=list(corpus.post_ids),
+        created_at=now,
+        # Set empty so the collection never loads lazily, which an async session can't do.
+        text_media=[],
+    )
     db.add(post)
     await db.flush()
     return post
@@ -157,11 +166,15 @@ async def record_version(
 
 
 def set_text_from_version(post: Post, version: VersionAttempt) -> None:
-    """Make the Version the Post's Text, as written. Not flushed."""
+    """
+    Make the Version the Post's words, as written. The Text's Media stays on its Parts, and that of
+    Parts the Version lacks moves onto its last Part. Not flushed.
+    """
     post.text_format = version.format
     post.text_parts = list(version.parts or [])
     post.text_version_number = version.version_number
     post.text_edited = False
+    media.move_dropped_parts_media(post)
 
 
 # Longer than both model calls can take, so only a write whose request died holds the Text past it.

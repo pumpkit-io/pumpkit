@@ -644,9 +644,8 @@ async def give_feedback(
     sent_text: Optional[list[str]] = None,
 ) -> VersionResponse:
     """
-    Write the Post's next Version from Feedback on its Text, which the Version then becomes. Only
-    a Draft or a Failed Post takes Feedback, checked again after the model calls in case the Post
-    was scheduled meanwhile. `sent_text`, the Parts the sender shows, must be the saved Text.
+    Write the Post's next Version from Feedback on its Text; `sent_text` must be the saved Text.
+    Takes-Feedback and Media checks run again after the model calls, under the Post's lock.
     """
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
@@ -667,7 +666,12 @@ async def give_feedback(
             next_version.format,
             next_version.char_limit,
         )
-        await _check_takes_feedback(db, post_id=post_id)
+        # The Post may have been scheduled, or its Media changed, during the calls.
+        post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
+        scheduled_post = await _check_takes_feedback(db, post_id=post_id)
+        media_service.check_dropped_parts_media_movable(
+            post, part_count=len(written.parts), live_count=_live_count(scheduled_post)
+        )
     except Exception as error:
         await version_writing.record_failed_attempt(
             db,
@@ -704,12 +708,15 @@ async def restore_version(
     Make one of the Post's Versions its Text, as written. Only a Draft or a Failed Post's, and not
     while a Version is being written.
     """
-    post, _ = await _post_whose_text_changes(db, user=user, post_id=post_id, now=now)
+    post, scheduled_post = await _post_whose_text_changes(db, user=user, post_id=post_id, now=now)
     version = next(
         (v for v in version_writing.versions_of(post) if v.version_number == version_number), None
     )
     if version is None:
         raise NotFoundError(f"This post has no version {version_number}.")
+    media_service.check_dropped_parts_media_movable(
+        post, part_count=len(version.parts or []), live_count=_live_count(scheduled_post)
+    )
     posts_service.set_text_from_version(post, version)
     return await _commit_text(db, user=user, post=post)
 
@@ -788,11 +795,14 @@ async def _post_whose_media_changes(
 
 def _check_not_live(scheduled_post: Optional[ScheduledPost], *, part_index: int) -> None:
     """On a Failed Post, the Parts already on X went out with the Media they had."""
-    if scheduled_post is None:
-        return
-    live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
-    if part_index < live_count:
+    if part_index < _live_count(scheduled_post):
         raise ConflictError(f"Part {part_index + 1} is already on X, so its media is set.")
+
+
+def _live_count(scheduled_post: Optional[ScheduledPost]) -> int:
+    if scheduled_post is None:
+        return 0
+    return sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
 
 
 async def _post_whose_text_changes(
@@ -816,9 +826,10 @@ async def _commit_text(db: AsyncSession, *, user: User, post: Post) -> TextRespo
     return text
 
 
-async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> None:
+async def _check_takes_feedback(db: AsyncSession, *, post_id: str) -> Optional[ScheduledPost]:
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_takes_feedback(post_status(scheduled_post.state if scheduled_post else None))
+    return scheduled_post
 
 
 async def _x_connection_response(

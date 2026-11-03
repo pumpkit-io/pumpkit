@@ -102,6 +102,7 @@ import {
   textOf,
   type Part,
   type PostDetail,
+  type PostText,
   type Version,
 } from '@/services/postService';
 import {
@@ -1081,6 +1082,17 @@ describe('Post page', () => {
       expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
     });
 
+    it('takes an image off when the server already had', async () => {
+      vi.mocked(mediaService.remove).mockRejectedValue(apiError(404, 'No such media.'));
+      renderPost(withMedia(postWith('the final text'), [[image('media_01'), image('media_02')]]));
+      await textCard();
+
+      fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 1' }));
+
+      await waitFor(() => expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(1));
+      expect(screen.queryByText(/Couldn.t remove the image/)).not.toBeInTheDocument();
+    });
+
     it("refuses a file over 5 MB or of a type X won't take on its tile, without sending it", async () => {
       renderPost(postWith('the final text'));
       await textCard();
@@ -1442,6 +1454,405 @@ describe('Post page', () => {
         screen.getByRole('list', { name: 'Media on the post' }).closest('.opacity-60'),
       ).toBeNull();
       expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    });
+
+    describe('through rewrites', () => {
+      /** Each tile's Media id, read from the preview it shows. */
+      async function mediaIdsOn(where: string): Promise<string[]> {
+        const tiles = mediaOn(where).getAllByRole('listitem');
+        await waitFor(() =>
+          tiles.forEach((tile) => expect(tile.querySelector('img')).not.toBeNull()),
+        );
+        return tiles.map(
+          (tile) => tile.querySelector('img')!.getAttribute('src')!.split('/media/')[1]!,
+        );
+      }
+
+      beforeEach(() => {
+        const previews = new WeakMap<Blob, string>();
+        vi.mocked(mediaService.preview).mockImplementation(async (url) => {
+          const blob = new Blob([url], { type: 'image/webp' });
+          previews.set(blob, url);
+          return blob;
+        });
+        URL.createObjectURL = vi.fn((blob: Blob) => `blob:${previews.get(blob) ?? 'local'}`);
+      });
+
+      async function sendFeedback(feedback: string) {
+        fireEvent.change(panel('Draft').getByRole('textbox', { name: 'Feedback' }), {
+          target: { value: feedback },
+        });
+        const send = panel('Draft').getByRole('button', { name: 'Send feedback' });
+        await waitFor(() => expect(send).toBeEnabled());
+        fireEvent.click(send);
+      }
+
+      const threeParts = () => threadWith([part('one'), part('two'), part('three')]);
+
+      it("keeps each Part's Media where it is through Feedback, and marks only the words", async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(
+          version(2, ['uno', 'dos'], { feedback: 'in Spanish' }),
+        );
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2'), image('m3')]]));
+        await textCard();
+
+        await sendFeedback('in Spanish');
+
+        expect(await card().findByRole('textbox', { name: 'Part 1 text' })).toHaveValue('uno');
+        expect(await mediaIdsOn('Part 1')).toEqual(['m1/preview']);
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview', 'm3/preview']);
+        await waitFor(() =>
+          expect(card().queryAllByText('dos', { selector: '[data-trace]' })).not.toHaveLength(0),
+        );
+        for (const where of ['Part 1', 'Part 2']) {
+          const list = screen.getByRole('list', { name: `Media on ${where}` });
+          expect(list.querySelector('[data-trace]')).toBeNull();
+          expect(list.closest('.opacity-60')).toBeNull();
+        }
+      });
+
+      it('moves the Media of Parts Feedback removed last onto the last Part, in order', async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(
+          withMedia(threeParts(), [[image('m1')], [image('m2')], [image('m3'), image('m4')]]),
+        );
+        await textCard();
+
+        await sendFeedback('two parts');
+
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        expect(await mediaIdsOn('Part 1')).toEqual(['m1/preview']);
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview', 'm3/preview', 'm4/preview']);
+      });
+
+      it("puts every Part's Media on the single post a Thread switches to", async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['one post']));
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        await sendFeedback('condense it');
+
+        expect(await card().findByRole('textbox', { name: 'Post text' })).toHaveValue('one post');
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
+      it("keeps every tile on a Part over X's rule, says so under them, and Post to refuses it", async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['one post']));
+        renderPost(
+          withMedia(threadOfTwo(), [
+            [image('m1'), image('m2'), image('m3')],
+            [image('m4'), image('m5')],
+          ]),
+        );
+        await textCard();
+        expect(card().queryByText(/X takes up to 4 images/)).not.toBeInTheDocument();
+
+        await sendFeedback('condense it');
+
+        expect(
+          await card().findByText(
+            'X takes up to 4 images, or 1 GIF, or 1 video, per post. Remove some media from the post before posting.',
+          ),
+        ).toHaveClass('text-destructive');
+        expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(5);
+        expect(card().getByRole('button', { name: 'Add media to the post' })).toHaveAttribute(
+          'aria-disabled',
+          'true',
+        );
+        fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+        expect(
+          dialog.getByText(
+            'This post has more media than X takes. X takes up to 4 images, or 1 GIF, or 1 video, per post.',
+          ),
+        ).toBeInTheDocument();
+      });
+
+      it('moves the Media of Parts a restored Version lacks onto its last Part', async () => {
+        const versions = [version(1, ['the first']), version(2, ['two a', 'two b'])];
+        vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(versions[0]!));
+        renderPost(withMedia(draft(versions), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        fireEvent.click(card().getByRole('button', { name: 'History' }));
+        const history = within(await screen.findByRole('dialog', { name: 'History' }));
+        fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+        expect(await card().findByRole('textbox', { name: 'Post text' })).toHaveValue('the first');
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
+      it('keeps the tiles at full strength while Pumpkit writes, dimming only the words', async () => {
+        vi.mocked(postService.addVersion).mockReturnValue(new Promise(() => {}));
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        await sendFeedback('in Spanish');
+
+        await waitFor(() =>
+          expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute(
+            'aria-busy',
+            'true',
+          ),
+        );
+        expect(card().getAllByText('one')[0]!.closest('.opacity-60')).not.toBeNull();
+        for (const where of ['Part 1', 'Part 2']) {
+          const list = screen.getByRole('list', { name: `Media on ${where}` });
+          expect(list.closest('.opacity-60')).toBeNull();
+        }
+      });
+
+      it('leaves tiles on their Part when an undo that would drop it fails', async () => {
+        const versions = [version(1, ['a', 'b', 'c']), version(2, ['x', 'y'])];
+        vi.mocked(postService.restoreVersion)
+          .mockResolvedValueOnce(textOf(versions[0]!))
+          .mockRejectedValueOnce(apiError(409, 'Version 2 is gone.'));
+        vi.mocked(mediaService.attach).mockResolvedValue(image('m3'));
+        renderPost(withMedia(draft(versions), [[], [image('m2')]]));
+        await textCard();
+        fireEvent.click(card().getByRole('button', { name: 'History' }));
+        const history = within(await screen.findByRole('dialog', { name: 'History' }));
+        fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+        expect(await card().findByRole('textbox', { name: 'Part 3 text' })).toHaveValue('c');
+        chooseFiles('Part 3', new File([new Uint8Array(8)], 'three.png', { type: 'image/png' }));
+        await waitFor(() => expect(mediaIdsOn('Part 3')).resolves.toEqual(['m3/preview']));
+
+        fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+
+        expect(await screen.findByText('Version 2 is gone.')).toBeInTheDocument();
+        expect(card().getByRole('textbox', { name: 'Part 3 text' })).toHaveValue('c');
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview']);
+        expect(await mediaIdsOn('Part 3')).toEqual(['m3/preview']);
+      });
+
+      it('takes off an image whose removal ends after Feedback moved it to another Part', async () => {
+        let removed: () => void = () => {};
+        vi.mocked(mediaService.remove).mockReturnValue(new Promise((done) => (removed = done)));
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(withMedia(threeParts(), [[image('m1')], [image('m2')], [image('m3')]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('Part 3').getByRole('button', { name: 'Remove image 1' }));
+        await sendFeedback('two parts');
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        await act(async () => removed());
+
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview']);
+        fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+        expect(await screen.findByRole('dialog', { name: 'Post to…' })).toBeInTheDocument();
+      });
+
+      it('shows an upload that landed before Feedback dropped its Part where the server moved it', async () => {
+        let lost: (error: Error) => void = () => {};
+        vi.mocked(mediaService.attach).mockReturnValue(new Promise((_, fail) => (lost = fail)));
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(withMedia(threeParts(), [[], [], []]));
+        await textCard();
+
+        chooseFiles('Part 3', new File([new Uint8Array(8)], 'late.png', { type: 'image/png' }));
+        await sendFeedback('two parts');
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [[], [image('landed')]]),
+        );
+        await act(async () => lost(new Error('Network Error')));
+
+        await waitFor(() => expect(mediaIdsOn('Part 2')).resolves.toEqual(['landed/preview']));
+        expect(card().queryByRole('button', { name: 'Retry late.png' })).not.toBeInTheDocument();
+      });
+
+      it('sends one upload at a time across the Text, onto a Part Feedback merged too', async () => {
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attach)
+          .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+          .mockResolvedValueOnce(image('second'));
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(withMedia(threeParts(), [[], [], []]));
+        await textCard();
+
+        chooseFiles('Part 3', photo('first.png'));
+        await sendFeedback('two parts');
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        chooseFiles('Part 2', photo('second.png'));
+        await act(async () => {});
+        expect(mediaService.attach).toHaveBeenCalledTimes(1);
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [[], [image('first')]]),
+        );
+
+        await act(async () => answer(image('first')));
+
+        await waitFor(() => expect(mediaService.attach).toHaveBeenCalledTimes(2));
+        await waitFor(() =>
+          expect(mediaIdsOn('Part 2')).resolves.toEqual(['first/preview', 'second/preview']),
+        );
+      });
+
+      it('shows an upload Feedback moved in the order the server put it, after Media already there', async () => {
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attach).mockReturnValueOnce(
+          new Promise((resolve) => (answer = resolve)),
+        );
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(withMedia(threeParts(), [[], [], [image('m3')]]));
+        await textCard();
+
+        chooseFiles('Part 2', photo('new.png'));
+        await sendFeedback('two parts');
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [
+            [],
+            [image('m3'), image('new')],
+          ]),
+        );
+        await act(async () => answer(image('new')));
+
+        await waitFor(() =>
+          expect(mediaIdsOn('Part 2')).resolves.toEqual(['m3/preview', 'new/preview']),
+        );
+      });
+
+      it('sends an upload again to the Part its tile moved to when its Part went away on the server', async () => {
+        vi.mocked(mediaService.attach)
+          .mockRejectedValueOnce(apiError(404, "This post's text has no part 3."))
+          .mockResolvedValueOnce(image('moved'));
+        renderPost(withMedia(threeParts(), [[], [], []]));
+        await textCard();
+        // Feedback from another tab left the Text with two Parts.
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [[], []]),
+        );
+
+        chooseFiles('Part 3', photo('late.png'));
+
+        await waitFor(() => expect(mediaIdsOn('Part 2')).resolves.toEqual(['moved/preview']));
+        expect(vi.mocked(mediaService.attach).mock.calls.map((call) => call[1])).toEqual([3, 2]);
+        expect(card().queryByText(/no part 3/)).not.toBeInTheDocument();
+      });
+
+      it('keeps the Media the server moved when a failed upload reads back a Part that went away', async () => {
+        vi.mocked(mediaService.attach).mockRejectedValueOnce(new Error('Network Error'));
+        renderPost(withMedia(threeParts(), [[], [], [image('m3')]]));
+        await textCard();
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [[], [image('m3')]]),
+        );
+
+        chooseFiles('Part 3', photo('late.png'));
+
+        await waitFor(() =>
+          expect(mediaOn('Part 2').getByRole('button', { name: 'Retry late.png' })).toBeTruthy(),
+        );
+        const kept = mediaOn('Part 2').getByRole('listitem', { name: 'Image 1' });
+        await waitFor(() =>
+          expect(kept.querySelector('img')).toHaveAttribute('src', 'blob:/media/m3/preview'),
+        );
+      });
+
+      it('takes no files on a Part an undo shows until the undo lands', async () => {
+        const versions = [version(1, ['a', 'b', 'c']), version(2, ['x', 'y'])];
+        let undone: (text: PostText) => void = () => {};
+        vi.mocked(postService.restoreVersion)
+          .mockResolvedValueOnce(textOf(versions[0]!))
+          .mockResolvedValueOnce(textOf(versions[1]!))
+          .mockReturnValueOnce(new Promise((resolve) => (undone = resolve)));
+        renderPost(withMedia(draft(versions), [[], [image('m2')]]));
+        await textCard();
+        for (const number of [1, 2]) {
+          fireEvent.click(card().getByRole('button', { name: 'History' }));
+          const history = within(await screen.findByRole('dialog', { name: 'History' }));
+          fireEvent.click(history.getByRole('button', { name: new RegExp(`^Version ${number}`) }));
+          await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        }
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+
+        fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+        expect(await card().findByRole('textbox', { name: 'Part 3 text' })).toHaveValue('c');
+        const button = card().getByRole('button', { name: 'Add media to Part 3' });
+        expect(button).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.pointerMove(button, { pointerType: 'mouse' });
+        expect(await screen.findByRole('tooltip')).toHaveTextContent(
+          "Saving this part. Add media once it's saved.",
+        );
+        chooseFiles('Part 3', photo('three.png'));
+        fireEvent.drop(card().getByRole('listitem', { name: 'Part 3 of 3' }), {
+          dataTransfer: { files: [photo('dropped.png')], types: ['Files'] },
+        });
+        await act(async () => {});
+
+        expect(mediaService.attach).not.toHaveBeenCalled();
+        expect(
+          screen.getAllByText("Saving this part. Add media once it's saved.").length,
+        ).toBeGreaterThan(1);
+        expect(screen.queryByRole('list', { name: 'Media on Part 3' })).not.toBeInTheDocument();
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview']);
+
+        await act(async () => undone(textOf(versions[0]!)));
+
+        await waitFor(() =>
+          expect(card().getByRole('button', { name: 'Add media to Part 3' })).not.toHaveAttribute(
+            'aria-disabled',
+          ),
+        );
+      });
+
+      it('keeps tiles on the Parts shown when a read from before Feedback answers after it', async () => {
+        vi.mocked(mediaService.attach).mockRejectedValueOnce(new Error('Network Error'));
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        const before = withMedia(threeParts(), [[], [], [image('m3')]]);
+        renderPost(before);
+        await textCard();
+        let readBack: (post: PostDetail) => void = () => {};
+        vi.mocked(postService.get).mockReturnValueOnce(
+          new Promise((resolve) => (readBack = resolve)),
+        );
+
+        chooseFiles('Part 1', photo('late.png'));
+        await waitFor(() => expect(postService.get).toHaveBeenCalledTimes(2));
+        await sendFeedback('two parts');
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        await act(async () => readBack(before));
+
+        await waitFor(() =>
+          expect(mediaOn('Part 1').getByRole('button', { name: 'Retry late.png' })).toBeTruthy(),
+        );
+        expect(await mediaIdsOn('Part 2')).toEqual(['m3/preview']);
+      });
+
+      it('leaves Media be when a text edit is undone and redone', async () => {
+        vi.mocked(postService.saveText).mockImplementation(async (_postId, texts) => ({
+          format: 'thread',
+          parts: texts.map((text) => part(text)),
+          versionNumber: 1,
+          edited: true,
+        }));
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        const box = (await textCard()).getByRole('textbox', { name: 'Part 2 text' });
+
+        fireEvent.change(box, { target: { value: 'two, edited' } });
+        fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+        expect(box).toHaveValue('two');
+        fireEvent.click(card().getByRole('button', { name: 'Redo' }));
+        expect(box).toHaveValue('two, edited');
+
+        expect(await mediaIdsOn('Part 1')).toEqual(['m1/preview']);
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview']);
+      });
     });
 
     describe('once it goes to X', () => {

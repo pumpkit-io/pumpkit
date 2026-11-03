@@ -61,6 +61,8 @@ export interface TextAbilities {
 
 export interface TextSnapshot {
   text: PostText | null;
+  /** How many Parts the server's Text has; an undo or redo shows its Parts before it lands. */
+  storedPartCount: number;
   versions: Version[];
   /** The Text as the Version it came from, for what reads a Version's shape; else the latest. */
   textVersion: Version | undefined;
@@ -99,6 +101,7 @@ function stepName(step: TextStep): string {
  */
 export class TextController {
   private text: PostText | null;
+  private storedPartCount: number;
   private versions: Version[];
   private readonly history: TextHistory | null;
   private readonly saver: TextSaver;
@@ -119,6 +122,7 @@ export class TextController {
     private readonly deps: { backend: TextBackend; clock: Clock; track: typeof trackEvent },
   ) {
     this.text = post.text;
+    this.storedPartCount = post.text?.parts.length ?? 0;
     this.versions = post.versions;
     this.gate = { status: post.status };
     this.history = this.historyOf(post);
@@ -174,7 +178,7 @@ export class TextController {
     this.restoreOnServer(
       versionNumber,
       (text) => {
-        this.text = text;
+        this.stored(text);
         this.commit(textsOf(text.parts), 'restore', versionNumber);
         this.deps.track('version_restored', { source: 'history' });
       },
@@ -206,7 +210,7 @@ export class TextController {
       try {
         const version = await this.deps.backend.addVersion(feedback, format, parts);
         this.versions = [...this.versions, version];
-        this.text = textOf(version);
+        this.stored(textOf(version));
         this.commit(textsOf(version.parts), 'rewrite', version.number);
         return 'sent';
       } catch (e) {
@@ -267,7 +271,7 @@ export class TextController {
       (text) => {
         this.deps.track('version_restored', { source: 'undo' });
         // The User may have typed while the restore was out.
-        this.text = text;
+        this.stored(text);
         this.show(history.current.parts);
       },
       (e) => {
@@ -311,7 +315,7 @@ export class TextController {
     const text = await this.deps.backend.saveText(parts);
     const onScreen = textsOf(this.text?.parts ?? []);
     if (this.restoring || !sameParts(parts, onScreen)) return;
-    this.text = text;
+    this.stored(text);
     this.emit();
   }
 
@@ -334,6 +338,11 @@ export class TextController {
       })),
       edited: !source || !sameParts(textsOf(source.parts), parts),
     };
+  }
+
+  private stored(text: PostText) {
+    this.text = text;
+    this.storedPartCount = text.parts.length;
   }
 
   private commit(parts: string[], kind: CommitKind, versionNumber: number) {
@@ -380,6 +389,7 @@ export class TextController {
       : latest;
     return {
       text,
+      storedPartCount: this.storedPartCount,
       versions,
       textVersion: text && source ? { ...source, format: text.format, parts: text.parts } : source,
       can: {
