@@ -14,7 +14,7 @@ from sqlalchemy import select
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.core.db.session import _db_session_handler
-from pumpkit.x_connection.x_publisher import XAccount, XTokens
+from pumpkit.x_connection.x_publisher import X_SCOPES, XAccount, XTokens
 
 # X account ids are unique across Users, so each seeded user gets its own X account.
 ACCOUNTS = {
@@ -37,7 +37,7 @@ async def main() -> None:
                 access_token="e2e-access",
                 refresh_token="e2e-refresh",
                 expires_at=now + timedelta(hours=2),
-                scope="tweet.read tweet.write users.read offline.access",
+                scope=X_SCOPES,
             ),
             now=now,
         )

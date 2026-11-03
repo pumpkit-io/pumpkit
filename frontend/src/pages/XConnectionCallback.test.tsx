@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
@@ -21,6 +21,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { OnboardingProvider } from '@/features/onboarding/OnboardingProvider';
+import { xConnectionReturn } from '@/features/xConnection/xConnectionReturn';
 import { track } from '@/lib/analytics';
 import { onboardingService } from '@/services/onboardingService';
 import { xConnectionService } from '@/services/xConnectionService';
@@ -53,6 +54,7 @@ function renderCallback(search: string) {
             <Routes>
               <Route path="/oauth/x/callback" element={<XConnectionCallback />} />
               <Route path="/settings" element={<Destination />} />
+              <Route path="/posts/:id" element={<Destination />} />
               <Route path="/onboarding" element={<OnboardingDestination />} />
             </Routes>
           </OnboardingProvider>
@@ -73,6 +75,7 @@ const ADA = {
   handle: 'ada',
   charLimit: 280,
   needsReconnect: false,
+  needsReconnectForMedia: false,
   scheduledPostsWaiting: 0,
   photoUrl: 'https://pbs.twimg.com/ada.jpg',
   offerPhoto: false,
@@ -90,6 +93,7 @@ describe('the X callback', () => {
       handle: 'ada',
       charLimit: 280,
       needsReconnect: false,
+      needsReconnectForMedia: false,
       scheduledPostsWaiting: 0,
       photoUrl: null,
       offerPhoto: false,
@@ -140,6 +144,48 @@ describe('the X callback', () => {
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();
+  });
+
+  describe('after reconnecting from a Post page', () => {
+    beforeEach(() => {
+      xConnectionReturn.remember('/posts/post_01');
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('returns to the Post with the message', async () => {
+      vi.mocked(xConnectionService.complete).mockResolvedValue(ADA);
+
+      renderCallback('?state=the-state&code=the-code');
+
+      expect(
+        await screen.findByText('at /posts/post_01 via REPLACE: Connected @ada.'),
+      ).toBeInTheDocument();
+    });
+
+    it('returns to the Post when the User cancelled on X', async () => {
+      renderCallback('?error=access_denied&state=the-state');
+
+      expect(
+        await screen.findByText(
+          'at /posts/post_01 via REPLACE: You cancelled connecting X. Connect it again whenever you like.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('returns to Settings once the saved Post page is over 30 minutes old', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(Date.now() + 31 * 60 * 1000);
+      vi.mocked(xConnectionService.complete).mockResolvedValue(ADA);
+
+      renderCallback('?state=the-state&code=the-code');
+
+      expect(
+        await screen.findByText('at /settings via REPLACE: Connected @ada.'),
+      ).toBeInTheDocument();
+    });
   });
 
   describe('during Onboarding', () => {

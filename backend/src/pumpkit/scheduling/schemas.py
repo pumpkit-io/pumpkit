@@ -235,6 +235,8 @@ class XConnectionResponse(BaseModel):
     # The longest Scheduled post X accepts from this account, in X's weighted characters.
     char_limit: int
     needs_reconnect: bool
+    # X's consent predates media.write, so attaching Media first takes reconnecting X.
+    needs_reconnect_for_media: bool
     # Scheduled posts for this X account not yet published; disconnecting makes them fail.
     scheduled_posts_waiting: int
     # X's URL for the X account's photo; None when X gave none.

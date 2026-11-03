@@ -215,6 +215,7 @@ describe('The signed-in shell', () => {
         handle: 'ada',
         charLimit: 280,
         needsReconnect: false,
+        needsReconnectForMedia: false,
         scheduledPostsWaiting: 0,
         photoUrl: null,
         offerPhoto: false,
@@ -273,6 +274,7 @@ describe('The signed-in shell', () => {
       handle: 'ada',
       charLimit: 280,
       needsReconnect: true,
+      needsReconnectForMedia: false,
       scheduledPostsWaiting: 2,
       photoUrl: null,
       offerPhoto: false,
@@ -323,6 +325,7 @@ describe('The signed-in shell', () => {
       vi.mocked(xConnectionService.get).mockResolvedValue({
         ...NEEDS_RECONNECT,
         needsReconnect: false,
+        needsReconnectForMedia: false,
       });
       renderSignedIn('/new');
 

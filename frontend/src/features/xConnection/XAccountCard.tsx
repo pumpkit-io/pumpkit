@@ -71,12 +71,19 @@ export function XAccountCard({ notice }: { notice: string | null }) {
             onCancel={() => setConfirming(false)}
             onConfirm={confirmDisconnect}
           />
-          {connection.needsReconnect && (
+          {(connection.needsReconnect || connection.needsReconnectForMedia) && (
             <div className="flex flex-col gap-3 border-t border-border pt-3 pb-1 sm:flex-row sm:items-center sm:justify-between">
-              <p className="font-sans text-sm text-destructive">
-                X no longer accepts Pumpkit&apos;s access to @{connection.handle}. Reconnect it to
-                keep posting.
-              </p>
+              {connection.needsReconnect ? (
+                <p className="font-sans text-sm text-destructive">
+                  X no longer accepts Pumpkit&apos;s access to @{connection.handle}. Reconnect it to
+                  keep posting.
+                </p>
+              ) : (
+                <p className="font-sans text-sm text-muted-foreground">
+                  Reconnect @{connection.handle} so Pumpkit can post media on it. Posts without
+                  media keep going out as before.
+                </p>
+              )}
               <Button className="h-10 shrink-0" disabled={busy} onClick={() => void connect()}>
                 {busy ? 'Opening X…' : 'Reconnect X'}
               </Button>

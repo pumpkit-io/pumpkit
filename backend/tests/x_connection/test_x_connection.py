@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi import Depends
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
@@ -59,6 +59,7 @@ async def test_a_subscribed_user_connects_and_then_sees_their_handle(
         "handle": "ada",
         "char_limit": 280,
         "needs_reconnect": False,
+        "needs_reconnect_for_media": False,
         "scheduled_posts_waiting": 0,
         "photo_url": None,
         "offer_photo": False,
@@ -396,3 +397,30 @@ async def _sign_in_as_another_subscribed_user(db) -> Callable[[], None]:
         app.dependency_overrides[get_current_user] = previous
 
     return _switch_back
+
+
+async def test_an_x_connection_made_before_media_write_needs_reconnecting_for_media(
+    client, db, subscribed, fake_x_publisher, clock
+):
+    await _connect(client)
+    await db.execute(
+        update(XConnection).values(scopes="tweet.read tweet.write users.read offline.access")
+    )
+    await db.commit()
+
+    before = (await client.get(X_CONNECTION)).json()
+    reconnected = await _connect(client)
+
+    assert before["needs_reconnect_for_media"] is True
+    assert before["needs_reconnect"] is False
+    assert reconnected.json()["needs_reconnect_for_media"] is False
+
+
+async def test_a_code_exchange_answer_without_scopes_means_every_scope_asked_for(
+    client, subscribed, fake_x_publisher, clock
+):
+    fake_x_publisher.exchange_scope = ""
+
+    connected = await _connect(client)
+
+    assert connected.json()["needs_reconnect_for_media"] is False

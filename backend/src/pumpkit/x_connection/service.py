@@ -13,13 +13,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
 from pumpkit.auth.service.users import may_fill_photo
-from pumpkit.core.errors import AppError
+from pumpkit.core.errors import AppError, ConflictError
 from pumpkit.core.security import decrypt, encrypt, generate_token, hash_token
 from pumpkit.core.time import as_utc
 from pumpkit.x_connection.models import PendingXAuthorization, XConnection
-from pumpkit.x_connection.x_publisher import XAccount, XTokens, new_code_verifier
+from pumpkit.x_connection.x_publisher import (
+    X_MEDIA_SCOPE,
+    X_SCOPES,
+    XAccount,
+    XTokens,
+    new_code_verifier,
+)
 
 LIFETIME = timedelta(minutes=10)
+# Where the User connects or reconnects X, which takes a browser.
+X_CONNECTION_PAGE = "/settings"
 
 
 class XConnectionNotFoundError(AppError):
@@ -35,6 +43,25 @@ class XPhotoNotFoundError(AppError):
 class XPhotoUnavailableError(AppError):
     status_code = 502
     public_detail = "Couldn't use your X photo. Try again."
+
+
+def needs_reconnect_for_media(connection: XConnection) -> bool:
+    """Whether X's consent predates `media.write`, so X would refuse this connection's uploads."""
+    return X_MEDIA_SCOPE not in connection.scopes.split()
+
+
+async def check_takes_media(db: AsyncSession, *, user_id: str) -> None:
+    """
+    Refuses Media while the User's X connection lacks `media.write` (ADR 0021). Without an
+    X connection Media is taken: connecting later asks for every scope.
+    """
+    connection = await get_connection(db, user_id=user_id)
+    if connection is not None and needs_reconnect_for_media(connection):
+        raise ConflictError(
+            "Reconnect X so Pumpkit can post media on your X account.",
+            fix_page=X_CONNECTION_PAGE,
+            code="X_RECONNECT_FOR_MEDIA",
+        )
 
 
 async def get_connection(db: AsyncSession, *, user_id: str) -> Optional[XConnection]:
@@ -63,7 +90,8 @@ async def save_connection(
     connection.access_token_encrypted = encrypt(tokens.access_token)
     connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
     connection.access_token_expires_at = tokens.expires_at
-    connection.scopes = tokens.scope
+    # X may leave out `scope` when it grants exactly what was asked for (RFC 6749, 5.1).
+    connection.scopes = tokens.scope or X_SCOPES
     connection.needs_reconnect = False
     connection.updated_at = now
     await db.flush()
@@ -106,7 +134,9 @@ async def save_tokens(
     connection.access_token_encrypted = encrypt(tokens.access_token)
     connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
     connection.access_token_expires_at = tokens.expires_at
-    connection.scopes = tokens.scope
+    # A refresh answer may leave out `scope`, which then means the scopes granted before.
+    if tokens.scope:
+        connection.scopes = tokens.scope
     connection.updated_at = now
     await db.flush()
 

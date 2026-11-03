@@ -6,15 +6,19 @@ import {
   type XConnectionArrival,
 } from '@/features/onboarding/paths';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
+import {
+  xConnectionReturn,
+  type XConnectionNoticeState,
+} from '@/features/xConnection/xConnectionReturn';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { xConnectionService } from '@/services/xConnectionService';
-import type { SettingsLocationState } from './Settings';
 
 /**
  * Where X's consent screen sends the browser back. Completes the authorization with the
- * query's code and state, then returns to the X step while Onboarding isn't finished, and to
- * Settings with a message otherwise, replacing this entry.
+ * query's code and state, then returns to the X step while Onboarding isn't finished, and
+ * otherwise with a message to the Post page that sent the User to X, or to Settings, replacing
+ * this entry.
  */
 export function XConnectionCallback() {
   const navigate = useNavigate();
@@ -28,10 +32,12 @@ export function XConnectionCallback() {
     handled.current = true;
 
     const back = async (arrival: XConnectionArrival, xConnectionNotice: string) => {
-      // A failed check lands on Settings, whose gate sends the User on if Onboarding isn't done.
+      const returnPath = xConnectionReturn.take();
+      // A failed check lands on the saved Post or Settings, whose gate sends the User on if
+      // Onboarding isn't done.
       if ((await refresh()) == null) {
-        const state: SettingsLocationState = { xConnectionNotice };
-        navigate('/settings', { replace: true, state });
+        const state: XConnectionNoticeState = { xConnectionNotice };
+        navigate(returnPath ?? '/settings', { replace: true, state });
       } else {
         const state: OnboardingLocationState = { xConnection: arrival };
         navigate(ONBOARDING_PATH, { replace: true, state });

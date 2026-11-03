@@ -8,6 +8,8 @@ export interface XConnection {
   /** The longest Scheduled post X accepts from this account, in X's weighted characters. */
   charLimit: number;
   needsReconnect: boolean;
+  /** X's consent predates the media permission: attaching Media first takes reconnecting X. */
+  needsReconnectForMedia: boolean;
   /** Scheduled posts for this X account not yet published; disconnecting makes them fail. */
   scheduledPostsWaiting: number;
   /** X's URL for the X account's photo; null when X gave none. */
@@ -20,6 +22,7 @@ interface XConnectionApi {
   handle: string;
   char_limit: number;
   needs_reconnect: boolean;
+  needs_reconnect_for_media: boolean;
   scheduled_posts_waiting: number;
   photo_url: string | null;
   offer_photo: boolean;
@@ -29,6 +32,7 @@ const toXConnection = (c: XConnectionApi): XConnection => ({
   handle: c.handle,
   charLimit: c.char_limit,
   needsReconnect: c.needs_reconnect,
+  needsReconnectForMedia: c.needs_reconnect_for_media,
   scheduledPostsWaiting: c.scheduled_posts_waiting,
   photoUrl: c.photo_url,
   offerPhoto: c.offer_photo,

@@ -55,6 +55,8 @@ function localUrlOf(file: File): string | null {
   return typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
 }
 
+const RECONNECT_FOR_MEDIA = 'X_RECONNECT_FOR_MEDIA';
+
 const LEAVE_WHILE_UPLOADING =
   "An image is still uploading. If you leave, it won't stay on the post. Leave anyway?";
 
@@ -78,7 +80,12 @@ function release(tile: Tile) {
  * Feedback never touch it. Uploads on one Part, and the read after a failed one, go one at a
  * time, so the server keeps the order the card shows and no read races an upload.
  */
-export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
+export function useTextMedia(
+  postId: string,
+  initial: Media[][],
+  /** Called when the server refuses an upload until X is reconnected; the file is dropped. */
+  onReconnectNeeded: () => void,
+): TextMedia {
   const nextKey = useRef(0);
   const newKey = useCallback(() => `tile-${++nextKey.current}`, []);
   const [parts, setParts] = useState<Tile[][]>(() =>
@@ -202,6 +209,14 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
       } catch (caught) {
         error = caught;
       }
+      if (errorCode(error) === RECONNECT_FOR_MEDIA) {
+        if (under.dropped) return;
+        const tile = current.current[partIndex]?.find((t) => t.key === key);
+        if (tile) release(tile);
+        change(partIndex, (tiles) => tiles.filter((t) => t.key !== key));
+        onReconnectNeeded();
+        return;
+      }
       const refusal = media ? null : refusalOf(error);
       if (refusal && (refusal.retry || errorCode(error) === 'MEDIA_PART_FULL')) {
         const stored = await storedOn(partIndex);
@@ -238,7 +253,7 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
         via,
       }));
     },
-    [postId, changeTile, storedOn, show, settle, discard],
+    [postId, change, changeTile, storedOn, show, settle, discard, onReconnectNeeded],
   );
 
   const upload = useCallback(

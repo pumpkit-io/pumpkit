@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,9 @@ import { TextEditor } from '@/features/posts/TextEditor';
 import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import { usePost } from '@/features/posts/usePost';
 import { Topbar } from '@/features/topbar/Topbar';
+import { ReconnectXForMediaDialog } from '@/features/xConnection/ReconnectXForMediaDialog';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
+import { useXConnectionNotice } from '@/features/xConnection/xConnectionReturn';
 import type { Format, PostDetail } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
@@ -120,8 +122,15 @@ function DraftPostTo({
   );
 }
 
-/** Media controls for each Part of the Text not yet live on X. */
-function partMediaOf(media: TextMedia, parts: ShownPart[]) {
+/**
+ * Media controls for each Part of the Text not yet live on X. With `askToReconnect`, the media
+ * button, a drop and a paste each ask to reconnect X instead of taking files.
+ */
+function partMediaOf(
+  media: TextMedia,
+  parts: ShownPart[],
+  askToReconnect: (() => void) | undefined,
+) {
   return (index: number): PartMedia | null => {
     if (parts[index]?.live) return null;
     const where = parts.length > 1 ? `Part ${index + 1}` : 'the post';
@@ -140,9 +149,11 @@ function partMediaOf(media: TextMedia, parts: ShownPart[]) {
           where={where}
           full={media.roomOn(index) <= 0}
           onFiles={(files) => media.attach(index, files, 'button')}
+          onClickInsteadOfPicker={askToReconnect}
         />
       ),
-      onFiles: (files, via) => media.attach(index, files, via),
+      onFiles: (files, via) =>
+        askToReconnect ? askToReconnect() : media.attach(index, files, via),
     };
   };
 }
@@ -164,14 +175,22 @@ function LoadedPost({
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
   const post: PostDetail = { ...loaded, text: text.text, versions: text.versions };
-  const { connection } = useXConnectionContext();
+  const { connection, reload: reloadXConnection } = useXConnectionContext();
   const location = useLocation();
   const opensEditor = opensEditing(location.state);
   const [editing, setEditing] = useState(
     () => opensEditor && post.scheduledPost?.state === 'scheduled',
   );
   const navigate = useNavigate();
-  const media = useTextMedia(loaded.id, loaded.textMedia);
+  const [reconnectingForMedia, setReconnectingForMedia] = useState(false);
+  const askToReconnect = useCallback(() => setReconnectingForMedia(true), []);
+  // The connection on screen said Media was fine; reading it again makes later attempts ask first.
+  const onReconnectNeeded = useCallback(() => {
+    askToReconnect();
+    void reloadXConnection();
+  }, [askToReconnect, reloadXConnection]);
+  const media = useTextMedia(loaded.id, loaded.textMedia, onReconnectNeeded);
+  useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
   useEffect(() => {
@@ -299,8 +318,20 @@ function LoadedPost({
         onRedo={onRedo}
         trace={text.trace}
         busy={text.writing}
-        media={textChanges ? partMediaOf(media, parts) : undefined}
+        media={
+          textChanges
+            ? partMediaOf(
+                media,
+                parts,
+                connection?.needsReconnectForMedia ? askToReconnect : undefined,
+              )
+            : undefined
+        }
         header={<TextHeader origin={origin} tools={tools} action={postTo} />}
+      />
+      <ReconnectXForMediaDialog
+        open={reconnectingForMedia}
+        onClose={() => setReconnectingForMedia(false)}
       />
       <p role="status" className="sr-only">
         {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}

@@ -9,9 +9,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import event
+from sqlalchemy import event, update
 
 from pumpkit.posts import media_files
+from pumpkit.posts.schemas import MEDIA_RATE
+from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import MB, gif, jpeg, padded, png, webp
 
@@ -19,6 +21,7 @@ POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
 BOUNDARY = b"b0undary"
+MEDIA_PER_MINUTE = int(MEDIA_RATE.split("/")[0])
 
 
 async def _attach(
@@ -168,7 +171,7 @@ async def test_uploads_past_the_rate_are_refused_before_the_file_is_read(
     client, subscribed, post_with
 ):
     post_id = await post_with("Busy.")
-    for _ in range(60):
+    for _ in range(MEDIA_PER_MINUTE):
         # A Part the Text doesn't have: refused, but counted.
         assert (await _attach(client, post_id, png(), part=2)).status_code == 404
     sent = 0
@@ -393,3 +396,72 @@ async def test_a_failed_posts_part_already_on_x_keeps_its_media(
     assert remove.status_code == 409, remove.text
     assert on_refused_part.status_code == 201, on_refused_part.text
     assert await _media_of(client, post_id) == [[live], [on_refused_part.json()]]
+
+
+async def _connect_x_before_media(db, connect_x) -> None:
+    """An X connection made before Pumpkit asked X for `media.write`."""
+    await connect_x()
+    await db.execute(
+        update(XConnection).values(scopes="tweet.read tweet.write users.read offline.access")
+    )
+    await db.commit()
+
+
+async def test_an_x_connection_without_media_write_is_asked_to_reconnect_before_the_file_is_read(
+    client, db, subscribed, fixed_clock, connect_x, post_with
+):
+    await _connect_x_before_media(db, connect_x)
+    post_id = await post_with("Old connection.")
+    sent = 0
+
+    async def image() -> AsyncIterator[bytes]:
+        nonlocal sent
+        for chunk in [*_file_head(padded(png(), 4 * MB)), FILE_END]:
+            sent += len(chunk)
+            yield chunk
+
+    response = await _stream(client, post_id, image())
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {
+        "detail": "Reconnect X so Pumpkit can post media on your X account.",
+        "code": "X_RECONNECT_FOR_MEDIA",
+        "url": "http://localhost:5173/settings",
+    }
+    assert sent < MB
+    assert await _media_of(client, post_id) == [[]]
+
+
+async def test_reconnecting_x_lets_media_be_attached(
+    client, db, subscribed, fixed_clock, connect_x, post_with
+):
+    await _connect_x_before_media(db, connect_x)
+    post_id = await post_with("Reconnected.")
+
+    await connect_x()
+    response = await _attach(client, post_id, png())
+
+    assert response.status_code == 201, response.text
+
+
+async def test_uploads_refused_until_x_is_reconnected_leave_the_rate_untouched(
+    client, db, subscribed, fixed_clock, connect_x, post_with
+):
+    await _connect_x_before_media(db, connect_x)
+    post_id = await post_with("Many tries.")
+    for _ in range(MEDIA_PER_MINUTE):
+        assert (await _attach(client, post_id, png())).status_code == 409
+
+    await connect_x()
+    response = await _attach(client, post_id, png())
+
+    assert response.status_code == 201, response.text
+
+
+async def test_without_an_x_connection_media_is_attached(client, subscribed, post_with):
+    post_id = await post_with("Not connected yet.")
+
+    response = await _attach(client, post_id, png())
+
+    assert response.status_code == 201, response.text
+    assert await _media_of(client, post_id) == [[response.json()]]

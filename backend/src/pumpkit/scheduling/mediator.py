@@ -77,8 +77,7 @@ from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
 # Where the User sees their Posts; one Post's page is under it.
 POSTS_PAGE = "/posts"
-# Where the User connects or reconnects X, which takes a browser.
-X_CONNECTION_PAGE = "/settings"
+X_CONNECTION_PAGE = x_connections_service.X_CONNECTION_PAGE
 
 
 def _community_response(community_id: str, name: Optional[str]) -> CommunityResponse:
@@ -691,9 +690,10 @@ async def attach_text_media(
 
 async def start_media_upload(db: AsyncSession, user: User) -> None:
     """
-    Before an upload's body arrives: counts it against the User's rate, and ends the transaction
-    the sign-in checks read in, so no connection stays held while a slow upload streams.
+    Before an upload's body arrives: refuse it, uncounted, if X must be reconnected for Media, then
+    count it against the rate and commit, so no connection stays held while the upload streams.
     """
+    await x_connections_service.check_takes_media(db, user_id=user.id)
     hit_user_limit("attach_text_media", user.id, MEDIA_RATE)
     await db.commit()
 
@@ -759,6 +759,7 @@ async def _x_connection_response(
         handle=connection.handle,
         char_limit=x_post_max_chars(connection.subscription_type),
         needs_reconnect=connection.needs_reconnect,
+        needs_reconnect_for_media=x_connections_service.needs_reconnect_for_media(connection),
         scheduled_posts_waiting=await service.count_waiting(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id
         ),

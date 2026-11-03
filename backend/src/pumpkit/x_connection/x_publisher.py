@@ -14,7 +14,7 @@ Mediators reach X only through `get_x_publisher`; tests override it with `FakeXP
 import base64
 import hashlib
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Literal, Optional, Protocol
@@ -30,7 +30,9 @@ X_TOKEN_URL = "https://api.x.com/2/oauth2/token"
 X_REVOKE_URL = "https://api.x.com/2/oauth2/revoke"
 X_USERS_ME_URL = "https://api.x.com/2/users/me"
 X_TWEETS_URL = "https://api.x.com/2/tweets"
-X_SCOPES = "tweet.read tweet.write users.read offline.access"
+X_MEDIA_SCOPE = "media.write"
+# Every scope Pumpkit uses, asked for at once so a User consents only once (ADR 0006).
+X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
 _TIMEOUT_SECONDS = 30.0
 # X's documented access token lifetime, used when a token response leaves out expires_in.
 _DEFAULT_EXPIRES_IN_SECONDS = 7200
@@ -388,9 +390,10 @@ class FakeXPublisher:
     None for the profile, share with followers) and `replied_to` (the X post id or None) of
     each publish, and `revoked` tokens. Set `fail_exchange`, `fail_refresh`,
     `fail_fetch_account` or `fail_publish` to an error to raise it, `fail_revoke` or
-    `not_configured` to raise. With `fail_publish_on` set to n, only the nth publish call,
-    counting from 1, raises `fail_publish`. Post ids are `1890000000000000000` plus the call's
-    number.
+    `not_configured` to raise. `exchange_scope` and `refresh_scope` are the scope a code
+    exchange and a refresh answer with, "" for none. With `fail_publish_on` set to n, only the
+    nth publish call, counting from 1, raises `fail_publish`. Post ids are
+    `1890000000000000000` plus the call's number.
     """
 
     account: XAccount = field(
@@ -409,6 +412,8 @@ class FakeXPublisher:
     fail_fetch_account: Optional[XPublisherError] = None
     fail_revoke: bool = False
     not_configured: bool = False
+    exchange_scope: str = X_SCOPES
+    refresh_scope: str = X_SCOPES
     issued: int = 0
 
     def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
@@ -421,13 +426,13 @@ class FakeXPublisher:
         self.exchanges.append((code, code_verifier))
         if self.fail_exchange is not None:
             raise self.fail_exchange
-        return self._issue(now)
+        return replace(self._issue(now), scope=self.exchange_scope)
 
     async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
         self.refreshes.append(refresh_token)
         if self.fail_refresh is not None:
             raise self.fail_refresh
-        return self._issue(now)
+        return replace(self._issue(now), scope=self.refresh_scope)
 
     async def fetch_account(self, *, access_token: str) -> XAccount:
         if self.fail_fetch_account is not None:
