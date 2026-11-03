@@ -62,6 +62,12 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 - **Why:** to publish your Scheduled posts on X at the time you choose.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
+### Media {#data-media}
+
+- **What:** the images, GIFs and videos you attach to a Post or a Scheduled post, a small preview of each, the alt text you write for them, and each file's type, size, dimensions and, for a video, its length. When an AI app you connected attaches Media from a web address, Pumpkit downloads the file from that address. When an AI app asks for an upload link, Pumpkit stores a hash of the link with the Post and part it attaches to and the alt text the app gave.
+- **Why:** to show your Media on your Post's page and publish it with your Post on X. Pumpkit's writing never reads your Media or its alt text.
+- **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
+
 ### X connection {#data-x-connection}
 
 - **What:** your X account identifier, handle and the address of its photo, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted. Pumpkit shows your X account's photo by having your browser load it from X. If you choose "Use photo", Pumpkit stores a copy of that photo as your Photo.
@@ -96,18 +102,18 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 The Operator shares personal data only with the providers below, and each receives only what its task needs.
 
-| Recipient                                                        | What it receives                                                                                                 | Where              |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------ |
-| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                             | Frankfurt, Germany |
-| Google (sign-in)                                                 | Your sign-in request when you choose Google                                                                      | United States      |
-| Gravatar, run by Automattic (Photo)                              | A hash of your email address, when you sign in with a Magic link and have no Photo                               | United States      |
-| Resend (email)                                                   | Your email address and the Magic link email                                                                      | United States      |
-| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout               | United States      |
-| X (X connection and publishing)                                  | Your authorization when you connect, and the text of each Scheduled post when it is published                    | United States      |
-| twitterapi.io (reading public posts)                             | The handles of your Inspiration authors                                                                          |                    |
-| OpenRouter (writing)                                             | Your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors | United States      |
-| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                           | United States      |
-| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                     | European Union     |
+| Recipient                                                        | What it receives                                                                                                  | Where              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------ |
+| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                              | Frankfurt, Germany |
+| Google (sign-in)                                                 | Your sign-in request when you choose Google                                                                       | United States      |
+| Gravatar, run by Automattic (Photo)                              | A hash of your email address, when you sign in with a Magic link and have no Photo                                | United States      |
+| Resend (email)                                                   | Your email address and the Magic link email                                                                       | United States      |
+| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout                | United States      |
+| X (X connection and publishing)                                  | Your authorization when you connect, and the text, Media and alt text of each Scheduled post when it is published | United States      |
+| twitterapi.io (reading public posts)                             | The handles of your Inspiration authors                                                                           |                    |
+| OpenRouter (writing)                                             | Your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors  | United States      |
+| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                            | United States      |
+| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                      | European Union     |
 
 The Operator may also disclose personal data to public authorities when the law requires it.
 
@@ -124,6 +130,8 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 ## How long data is kept {#retention}
 
 - **Account content** (your profile, Google identity, Briefs, Feedback, Versions, Inspiration authors, Scheduled posts and X connection): until your account is deleted.
+- **Media:** each file is deleted from the server once the X post that carries it is published; its preview and alt text stay with the Post until your account is deleted. Media that neither a Post's text nor a Scheduled post holds any more, such as Media you remove from both, is deleted with its preview within two hours. Media you remove from a Scheduled post while its Post's text still holds it is deleted once that part is published on X, or once you remove it from the text too.
+- **Upload links:** one day after they expire, which is 15 minutes after an AI app asks for them.
 - **Session and Magic link records:** 90 days after they expire. This includes a Magic link requested by someone who never created an account.
 - **Connected apps:** until you disconnect the app or your account is deleted. A disconnected app's record and its tokens are deleted 90 days after you disconnect it, and an expired token within 90 days of expiring.
 - **Inspiration authors' public posts:** while any User has that author among their Inspiration authors, or until the author objects.

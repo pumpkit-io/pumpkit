@@ -334,19 +334,20 @@ async def attach_media(
     alt_text: Optional[str] = None,
 ) -> AttachMediaToolResponse:
     """
-    Attach media to one part of the user's post, last after the media it has: a JPEG, PNG or WEBP
-    image up to 5 MB, a GIF up to 15 MB, or an MP4 or MOV video up to 512 MB. X takes up to 4
-    images, or 1 GIF, or 1 video, per X post. `part` counts from 1; a single X post has only part 1.
-    `alt_text`, up to 1,000 characters, describes an image or GIF for people using screen readers.
-    With `url`, a public https URL of the media, Pumpkit downloads and attaches it, giving up on a
-    video after 4 minutes: send a large video from a slow host as a local file instead. Without
-    `url`, the answer is a one-time upload link for this part, when it expires, and the `curl`
-    command that sends local media to it: run it with FILE_PATH replaced by its file's path, written
-    and quoted as your shell takes a path. If you can't run commands, give the user the post's page
-    link to attach the media there. Pumpkit publishes media as given and its writing never reads it,
-    so write the brief or feedback from what you saw in it. On a draft or a failed post it changes
-    the post's text; on a scheduled post it changes the scheduled post's own copy. A published post,
-    or a part already on X, keeps its media.
+    Attach media to one part of the user's post, last after the media it has: a JPEG, PNG or
+    WEBP image up to 5 MB, a GIF up to 15 MB, or an MP4 or MOV video up to 512 MB. X takes up to
+    4 images, or 1 GIF, or 1 video, per X post. `part` counts from 1; a single X post has only
+    part 1. `alt_text`, up to 1,000 characters, describes an image or GIF for people using
+    screen readers; a video with alt text is refused. With `url`, a public https URL of the
+    media, Pumpkit downloads and attaches it, giving up on a video after 4 minutes: send a large
+    video from a slow host as a local file instead. Without `url`, the answer is a one-time
+    upload link for this part, when it expires, and the `curl` command that sends local media to
+    it: run it with FILE_PATH replaced by its file's path, written and quoted as your shell
+    takes a path. If you can't run commands, give the user the post's page link to attach the
+    media there. Pumpkit publishes media as given and its writing never reads it, so write the
+    brief or feedback from what you saw in it. On a draft or a failed post it changes the post's
+    text; on a scheduled post it changes the scheduled post's own copy. A published post, or a
+    part already on X, keeps its media.
     """
     request = AttachMediaRequest(part=part, url=url, alt_text=alt_text)
     page = mediator.post_url(post_id)

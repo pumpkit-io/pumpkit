@@ -19,7 +19,7 @@ from pumpkit.posts.models import MEDIA_IMAGE
 from pumpkit.posts.schemas import MEDIA_RATE
 from pumpkit.x_connection.models import XConnection
 from tests.mcp_client import error_text
-from tests.media_files import image, padded, png
+from tests.media_files import image, mp4, padded, png
 
 POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
@@ -82,6 +82,23 @@ async def test_the_link_attaches_the_image_to_the_part_named_with_its_alt_text(
     assert (media["kind"], media["width"], media["height"]) == ("image", 40, 30)
     assert media["alt_text"] == "A rising line."
     assert await _media_of(mcp, post_id) == [[], [media]]
+
+
+async def test_a_video_sent_to_a_link_with_alt_text_is_refused(
+    subscribed, mcp, new_browser, post_with
+):
+    post_id = await post_with("One")
+    link = await _link(mcp, post_id, alt_text="A clip.")
+
+    response = await _upload(new_browser, link, mp4(), "demo.mp4")
+
+    assert response.status_code == 422, response.text
+    assert response.json() == {
+        "detail": "Alt text is for images and GIFs. This upload link is used up: call "
+        "attach_media again, without alt text, for a new one.",
+        "code": "MEDIA_ALT_TEXT_UNSUPPORTED",
+    }
+    assert await _media_of(mcp, post_id) == [[]]
 
 
 async def test_a_second_use_of_the_link_is_refused(subscribed, mcp, new_browser, post_with):

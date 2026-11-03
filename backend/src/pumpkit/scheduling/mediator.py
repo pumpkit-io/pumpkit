@@ -714,7 +714,9 @@ async def give_feedback(
             next_version.format,
             next_version.char_limit,
         )
-        # The Post may have been scheduled, or its Media changed, during the calls.
+        # The Post may have been scheduled, or its Media changed, during the calls. User before
+        # Post, as every path that takes both locks them, since the charge below locks the User.
+        await users_service.lock_user_id(db, user_id=user.id)
         post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
         scheduled_post = await _check_takes_feedback(db, post_id=post_id)
         media_service.check_dropped_parts_media_movable(
@@ -794,10 +796,11 @@ async def attach_text_media(
     received: ReceivedMedia,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of the Post's Text, last among its Media, once it is
-    an image Pumpkit takes and the Part has room. Only a Draft or a Failed Post's, on a Part not
+    media Pumpkit takes and the Part has room. Only a Draft or a Failed Post's, on a Part not
     live on X. Allowed while Feedback writes a Version, which leaves the Text's Media as it is.
     """
     post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
@@ -814,6 +817,7 @@ async def attach_text_media(
         file=received.file,
         now=now,
         alt_text=alt_text,
+        link_used=link_used,
     )
     await db.commit()
     return media_service.media_response(media)
@@ -872,10 +876,11 @@ async def attach_scheduled_post_media(
     received: ReceivedMedia,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of a scheduled or Failed Scheduled post's own copy, last
-    among its Media, once it is an image Pumpkit takes and the Part has room. The Text keeps its own.
+    among its Media, once it is media Pumpkit takes and the Part has room. The Text keeps its own.
     """
     scheduled_post, media = await _scheduled_post_whose_media_changes(
         db, user=user, scheduled_post_id=scheduled_post_id
@@ -892,6 +897,7 @@ async def attach_scheduled_post_media(
         file=received.file,
         now=now,
         alt_text=alt_text,
+        link_used=link_used,
     )
     async with media_service.files_deleted_on_failure(storage, attached):
         media[part_index].append(attached)
@@ -993,6 +999,7 @@ async def _attach_received(
     received: ReceivedMedia,
     alt_text: Optional[str],
     now: datetime,
+    link_used: bool = False,
 ) -> PlacedMediaResponse:
     """Attach a file an AI app sent where the Post's Media changes now, with the upload's checks."""
     _, scheduled_post = await _post_with_scheduled_post(db, user=user, post_id=post_id)
@@ -1007,6 +1014,7 @@ async def _attach_received(
             received,
             now,
             alt_text=alt_text,
+            link_used=link_used,
         )
         return PlacedMediaResponse(media=media, on_scheduled_post=False)
     media = await attach_scheduled_post_media(
@@ -1018,6 +1026,7 @@ async def _attach_received(
         received,
         now,
         alt_text=alt_text,
+        link_used=link_used,
     )
     return PlacedMediaResponse(media=media, on_scheduled_post=True)
 
@@ -1122,6 +1131,7 @@ async def attach_through_link(
         received=received,
         alt_text=upload.alt_text,
         now=now,
+        link_used=True,
     )
     return UploadedMediaResponse(
         message=attached_message(upload.part_number, on_scheduled_post=placed.on_scheduled_post),
@@ -1241,6 +1251,9 @@ async def _post_whose_media_changes(
     db: AsyncSession, *, user: User, post_id: str
 ) -> tuple[Post, Optional[ScheduledPost]]:
     """The User's Post, locked, with its Scheduled post, once its Text's Media may change."""
+    # User before Post, as scheduling locks them: a new Media row's key share on the User would
+    # otherwise deadlock with a Scheduled post's insert waiting on the Post.
+    await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_text_changes(post_status(scheduled_post.state if scheduled_post else None))

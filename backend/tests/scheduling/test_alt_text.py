@@ -338,6 +338,33 @@ async def test_media_without_alt_text_sends_none_to_x(
     assert fake_x_publisher.alt_texts == []
 
 
+async def test_a_video_holding_alt_text_sends_none_to_x(
+    client,
+    db,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("One")
+    media = await _attach(client, post_id)
+    # No request stores alt text on a video; a record written before that rule could hold one.
+    await db.execute(
+        update(Media).where(Media.id == media["id"]).values(kind="video", alt_text="A clip.")
+    )
+    await db.commit()
+    await _due(client, post_id, fixed_clock)
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
+    assert fake_x_publisher.alt_texts == []
+
+
 async def _due_with_alt_text(client, post_id: str, fixed_clock, *, part: int = 1) -> None:
     media = await _attach(client, post_id, part=part)
     await _describe(client, post_id, media["id"], "A rising line.")

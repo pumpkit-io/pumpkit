@@ -62,6 +62,12 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 - **Perché:** per pubblicare i tuoi Scheduled post su X all'orario che scegli.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
+### Media {#data-media}
+
+- **Quali dati:** le immagini, le GIF e i video che alleghi a un Post o a uno Scheduled post, una piccola anteprima di ciascuno, il testo alternativo che scrivi per descriverli e, per ogni file, il tipo, le dimensioni in byte e in pixel e, per un video, la durata. Quando un'app di intelligenza artificiale che hai collegato allega Media da un indirizzo web, Pumpkit scarica il file da quell'indirizzo. Quando un'app di intelligenza artificiale chiede un link di caricamento, Pumpkit conserva un hash del link insieme al Post e alla parte a cui allegare il file e al testo alternativo indicato dall'app.
+- **Perché:** per mostrare i tuoi Media nella pagina del Post e pubblicarli su X insieme al Post. La scrittura di Pumpkit non legge mai i tuoi Media né il loro testo alternativo.
+- **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
+
 ### X connection {#data-x-connection}
 
 - **Quali dati:** l'identificativo, l'handle e l'indirizzo della foto del tuo account X, le autorizzazioni che hai concesso, il tipo di abbonamento X e i token di accesso rilasciati da X, conservati in forma cifrata. Pumpkit mostra la foto del tuo account X facendola caricare al tuo browser direttamente da X. Se scegli "Use photo", Pumpkit conserva una copia di quella foto come tua foto.
@@ -96,18 +102,18 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 
 Il Gestore condivide i dati personali solo con i fornitori indicati qui sotto, e ciascuno riceve solo ciò che serve al suo compito.
 
-| Destinatario                                                               | Cosa riceve                                                                                                          | Dove                  |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| DigitalOcean (hosting)                                                     | Tutti i dati sopra indicati, sul server su cui girano Pumpkit e il suo database                                      | Francoforte, Germania |
-| Google (accesso)                                                           | La tua richiesta di accesso quando scegli Google                                                                     | Stati Uniti           |
-| Gravatar, gestito da Automattic (foto)                                     | Un hash del tuo indirizzo email, quando accedi con un Magic link e non hai una foto                                  | Stati Uniti           |
-| Resend (email)                                                             | Il tuo indirizzo email e l'email con il Magic link                                                                   | Stati Uniti           |
-| Stripe (fatturazione)                                                      | Il tuo nome, indirizzo email e identificativo utente, e i dati di pagamento che inserisci su Stripe Checkout         | Stati Uniti           |
-| X (X connection e pubblicazione)                                           | La tua autorizzazione quando colleghi l'account e il testo di ogni Scheduled post quando viene pubblicato            | Stati Uniti           |
-| twitterapi.io (lettura dei post pubblici)                                  | Gli handle dei tuoi Inspiration author                                                                               |                       |
-| OpenRouter (scrittura)                                                     | Il tuo Brief, i tuoi Feedback, le Versioni precedenti del Post e i post pubblici recenti dei tuoi Inspiration author | Stati Uniti           |
-| Il fornitore del modello dietro OpenRouter, attualmente OpenAI (scrittura) | Gli stessi dati di OpenRouter                                                                                        | Stati Uniti           |
-| PostHog (analisi)                                                          | L'analisi nel tuo browser, solo dopo il Consenso analitico, e gli eventi del server e le segnalazioni di errore      | Unione europea        |
+| Destinatario                                                               | Cosa riceve                                                                                                                               | Dove                  |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| DigitalOcean (hosting)                                                     | Tutti i dati sopra indicati, sul server su cui girano Pumpkit e il suo database                                                           | Francoforte, Germania |
+| Google (accesso)                                                           | La tua richiesta di accesso quando scegli Google                                                                                          | Stati Uniti           |
+| Gravatar, gestito da Automattic (foto)                                     | Un hash del tuo indirizzo email, quando accedi con un Magic link e non hai una foto                                                       | Stati Uniti           |
+| Resend (email)                                                             | Il tuo indirizzo email e l'email con il Magic link                                                                                        | Stati Uniti           |
+| Stripe (fatturazione)                                                      | Il tuo nome, indirizzo email e identificativo utente, e i dati di pagamento che inserisci su Stripe Checkout                              | Stati Uniti           |
+| X (X connection e pubblicazione)                                           | La tua autorizzazione quando colleghi l'account e il testo, i Media e il testo alternativo di ogni Scheduled post quando viene pubblicato | Stati Uniti           |
+| twitterapi.io (lettura dei post pubblici)                                  | Gli handle dei tuoi Inspiration author                                                                                                    |                       |
+| OpenRouter (scrittura)                                                     | Il tuo Brief, i tuoi Feedback, le Versioni precedenti del Post e i post pubblici recenti dei tuoi Inspiration author                      | Stati Uniti           |
+| Il fornitore del modello dietro OpenRouter, attualmente OpenAI (scrittura) | Gli stessi dati di OpenRouter                                                                                                             | Stati Uniti           |
+| PostHog (analisi)                                                          | L'analisi nel tuo browser, solo dopo il Consenso analitico, e gli eventi del server e le segnalazioni di errore                           | Unione europea        |
 
 Il Gestore può inoltre comunicare dati personali alle autorità pubbliche quando la legge lo richiede.
 
@@ -124,6 +130,8 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 ## Per quanto tempo vengono conservati i dati {#retention}
 
 - **Contenuti dell'account** (il tuo profilo, l'identità Google, i Brief, i Feedback, le Versioni, gli Inspiration author, gli Scheduled post e la X connection): fino all'eliminazione del tuo account.
+- **Media:** ogni file viene eliminato dal server non appena il post X che lo contiene è pubblicato; l'anteprima e il testo alternativo restano con il Post fino all'eliminazione del tuo account. I Media che né il testo di un Post né uno Scheduled post contengono più, come quelli che rimuovi da entrambi, vengono eliminati insieme all'anteprima entro due ore. I Media che rimuovi da uno Scheduled post mentre il testo del Post li contiene ancora vengono eliminati quando quella parte è pubblicata su X, oppure quando li rimuovi anche dal testo.
+- **Link di caricamento:** un giorno dopo la scadenza, che arriva 15 minuti dopo che un'app di intelligenza artificiale li ha chiesti.
 - **Registrazioni delle Sessioni e dei Magic link:** 90 giorni dalla scadenza. Ciò include un Magic link richiesto da chi non ha mai creato un account.
 - **Connected app:** finché non scolleghi l'app o il tuo account non viene eliminato. I dati di un'app scollegata e i suoi token vengono eliminati 90 giorni dopo che l'hai scollegata, e un token scaduto entro 90 giorni dalla scadenza.
 - **Post pubblici degli Inspiration author:** finché almeno un Utente ha quell'autore tra i propri Inspiration author, oppure finché l'autore non si oppone.

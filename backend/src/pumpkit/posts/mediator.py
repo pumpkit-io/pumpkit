@@ -4,6 +4,7 @@ from typing import BinaryIO, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
 from pumpkit.core.errors import NotFoundError, RefusedError
 from pumpkit.core.storage import FileStorage
@@ -59,6 +60,8 @@ async def start_post(
         await db.commit()
         raise
 
+    # Before the insert: its key share on the User deadlocks two requests upgrading it to charge.
+    await users_service.lock_user_id(db, user_id=user_id)
     post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
     version = await service.record_version(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now

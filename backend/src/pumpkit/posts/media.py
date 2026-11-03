@@ -9,7 +9,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import BinaryIO, Optional
 
-from sqlalchemy import select
+import sqlalchemy as sa
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.core.errors import ConflictError, NotFoundError
@@ -128,10 +129,18 @@ async def attach_to_text(
     file: BinaryIO,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> Media:
     """Store `checked`'s file and preview, and add it last on the Text's Part. Flushes."""
     media = await store(
-        db, storage, user_id=post.user_id, checked=checked, file=file, now=now, alt_text=alt_text
+        db,
+        storage,
+        user_id=post.user_id,
+        checked=checked,
+        file=file,
+        now=now,
+        alt_text=alt_text,
+        link_used=link_used,
     )
     on_part = [p.position for p in post.text_media if p.part_index == part_index]
     async with files_deleted_on_failure(storage, media):
@@ -156,11 +165,15 @@ async def store(
     file: BinaryIO,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> Media:
     """
     A new Media of the User's, with `checked`'s file and preview stored, placed nowhere yet.
-    Flushes. Wrap the work up to the last flush before the commit in `files_deleted_on_failure`.
+    Refuses alt text on a video, saying so when an upload link brought it. Flushes. Wrap the work up to the last flush before the commit in
+    `files_deleted_on_failure`.
     """
+    if alt_text is not None and checked.kind == MEDIA_VIDEO:
+        raise alt_text_unsupported(link_used=link_used)
     media = Media(
         user_id=user_id,
         kind=checked.kind,
@@ -215,6 +228,28 @@ def text_media_on(post: Post, *, media_id: str) -> TextMedia:
 def remove_from_text(post: Post, placed: TextMedia) -> None:
     """Take the Media off the Text. The record and its file stay until nothing references them."""
     post.text_media.remove(placed)
+
+
+async def keep_only_published_text_media(
+    db: AsyncSession, *, post_id: str, published: list[list[str]], complete: bool
+) -> None:
+    """
+    Drop from the Text's first Parts the Media `published` (each live Part's Media ids, in order)
+    doesn't hold there, and once `complete`, past them the Media no Part published. Flushes.
+    """
+    dropped: list[ColumnElement[bool]] = [
+        and_(TextMedia.part_index == index, TextMedia.media_id.not_in(ids))
+        for index, ids in enumerate(published)
+    ]
+    if complete:
+        anywhere = [media_id for ids in published for media_id in ids]
+        dropped.append(
+            and_(TextMedia.part_index >= len(published), TextMedia.media_id.not_in(anywhere))
+        )
+    if not dropped:
+        return
+    await db.execute(sa.delete(TextMedia).where(TextMedia.post_id == post_id, or_(*dropped)))
+    await db.flush()
 
 
 def set_alt_text(media: Media, alt_text: Optional[str]) -> None:

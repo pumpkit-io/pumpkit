@@ -1,12 +1,13 @@
 """
-Deleting Media nothing references any more, with its files, and stored files no Media record
-names. The publisher's pass runs it; `docs/development.md` says what that covers.
+Deleting Media nothing references any more, with its files, the files of Media already published,
+and stored files no Media record names. The publisher's pass runs it and it commits as it goes;
+`docs/development.md` says what that covers.
 """
 
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import Select, exists, select
+from sqlalchemy import ColumnElement, Select, and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
@@ -14,7 +15,15 @@ import pumpkit.posts.media as media_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.models import Media, TextMedia
-from pumpkit.scheduling.models import ScheduledPostMedia
+from pumpkit.scheduling import publish, service
+from pumpkit.scheduling.models import (
+    FAILED,
+    PUBLISHED,
+    PUBLISHING,
+    ScheduledPost,
+    ScheduledPostMedia,
+    ScheduledPostPart,
+)
 
 # Longer than any request or publish step that holds a Media before referencing it.
 UNREFERENCED_GRACE = timedelta(hours=1)
@@ -22,6 +31,69 @@ UNREFERENCED_GRACE = timedelta(hours=1)
 FILES_SWEPT_EVERY = timedelta(hours=1)
 _USERS_PER_PAGE = 100
 _IDS_PER_QUERY = 500
+
+
+async def drop_unpublished_text_media(db: AsyncSession) -> None:
+    """
+    Drop from each Published or Failed post's Text the Media its live Parts didn't publish, which
+    the publish drops itself unless it crashed first or the drop failed, so the unreferenced
+    Media's sweep deletes it. Commits once per Post; one failure is logged and the next goes on.
+    """
+    after = ""
+    while True:
+        page = await db.execute(
+            select(ScheduledPost.id, ScheduledPost.user_id)
+            .where(
+                ScheduledPost.state.in_([PUBLISHED, FAILED]),
+                ScheduledPost.id > after,
+                _texts_unpublished(),
+            )
+            .order_by(ScheduledPost.id)
+            .limit(_IDS_PER_QUERY)
+        )
+        found = list(page.tuples().all())
+        if not found:
+            return
+        for scheduled_post_id, user_id in found:
+            try:
+                await users_service.lock_user_id(db, user_id=user_id)
+                scheduled_post = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
+                await publish.drop_unpublished_text_media(db, scheduled_post)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception("Dropping unpublished Text media of %s failed", scheduled_post_id)
+        after = found[-1][0]
+
+
+def _texts_unpublished() -> ColumnElement[bool]:
+    """
+    The Post's Text holds Media on a live Part that didn't publish it there, or once published,
+    past the last Part, Media no Part published.
+    """
+    on_live_part = exists().where(
+        ScheduledPostPart.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostPart.position == TextMedia.part_index,
+        ScheduledPostPart.x_post_id.is_not(None),
+    )
+    on_a_part = exists().where(
+        ScheduledPostPart.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostPart.position == TextMedia.part_index,
+    )
+    published_there = exists().where(
+        ScheduledPostMedia.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostMedia.media_id == TextMedia.media_id,
+        ScheduledPostMedia.part_position == TextMedia.part_index,
+    )
+    published_anywhere = exists().where(
+        ScheduledPostMedia.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostMedia.media_id == TextMedia.media_id,
+    )
+    past_the_last = and_(ScheduledPost.state == PUBLISHED, ~on_a_part, ~published_anywhere)
+    return exists().where(
+        TextMedia.post_id == ScheduledPost.post_id,
+        or_(and_(on_live_part, ~published_there), past_the_last),
+    )
 
 
 async def delete_unreferenced_media(
@@ -48,6 +120,43 @@ async def delete_unreferenced_media(
                 await db.rollback()
                 logger.exception("Deleting unreferenced Media of %s failed", user_id)
         after = user_ids[-1]
+
+
+async def delete_published_files(db: AsyncSession, storage: FileStorage) -> None:
+    """
+    Delete the files of Media whose every place is a live Part, keeping their previews: the
+    publish deletes them itself, unless it crashed first or the delete failed. Commits per page.
+    """
+    after = ""
+    while True:
+        page = await db.execute(
+            select(Media)
+            .where(Media.file_key.is_not(None), Media.id > after, _published_only())
+            .order_by(Media.id)
+            .limit(_IDS_PER_QUERY)
+        )
+        published = list(page.scalars().all())
+        if not published:
+            return
+        await publish.delete_published_files(storage, published)
+        await db.commit()
+        after = published[-1].id
+
+
+def _published_only() -> ColumnElement[bool]:
+    """On a live Part of a Scheduled post no publish holds, and on no Part not live."""
+    part_live = exists().where(
+        ScheduledPostPart.scheduled_post_id == ScheduledPostMedia.scheduled_post_id,
+        ScheduledPostPart.position == ScheduledPostMedia.part_position,
+        ScheduledPostPart.x_post_id.is_not(None),
+    )
+    settled = exists().where(
+        ScheduledPost.id == ScheduledPostMedia.scheduled_post_id,
+        ScheduledPost.state != PUBLISHING,
+    )
+    on_live_part = exists().where(ScheduledPostMedia.media_id == Media.id, part_live, settled)
+    on_part_not_live = exists().where(ScheduledPostMedia.media_id == Media.id, ~part_live)
+    return and_(on_live_part, ~on_part_not_live)
 
 
 async def delete_unnamed_files(db: AsyncSession, storage: FileStorage, *, now: datetime) -> None:

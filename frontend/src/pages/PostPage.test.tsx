@@ -1066,6 +1066,7 @@ describe('Post page', () => {
       expect(track).toHaveBeenCalledWith('media_attached', {
         kind: 'image',
         via: 'button',
+        on: 'text',
         source: 'web',
       });
     });
@@ -1103,7 +1104,11 @@ describe('Post page', () => {
 
       await waitFor(() => expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(1));
       expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_01');
-      expect(track).toHaveBeenCalledWith('media_removed', { kind: 'image', source: 'web' });
+      expect(track).toHaveBeenCalledWith('media_removed', {
+        kind: 'image',
+        on: 'text',
+        source: 'web',
+      });
     });
 
     it('puts a removed image back when the server keeps it', async () => {
@@ -1361,6 +1366,7 @@ describe('Post page', () => {
       expect(track).toHaveBeenCalledWith('media_attached', {
         kind: 'image',
         via: 'button',
+        on: 'text',
         source: 'web',
       });
 
@@ -1452,11 +1458,13 @@ describe('Post page', () => {
       expect(track).toHaveBeenCalledWith('media_attached', {
         kind: 'image',
         via: 'drop',
+        on: 'text',
         source: 'web',
       });
       expect(track).toHaveBeenCalledWith('media_attached', {
         kind: 'image',
         via: 'paste',
+        on: 'text',
         source: 'web',
       });
     });
@@ -1537,6 +1545,7 @@ describe('Post page', () => {
         expect(track).toHaveBeenCalledWith('media_attached', {
           kind: 'gif',
           via: 'button',
+          on: 'text',
           source: 'web',
         });
       });
@@ -1899,6 +1908,7 @@ describe('Post page', () => {
         expect(track).toHaveBeenCalledWith('media_alt_text_set', {
           kind: 'image',
           cleared: false,
+          on: 'text',
           source: 'web',
         });
       });
@@ -1920,6 +1930,7 @@ describe('Post page', () => {
         expect(track).toHaveBeenCalledWith('media_alt_text_set', {
           kind: 'image',
           cleared: true,
+          on: 'text',
           source: 'web',
         });
       });
@@ -2761,6 +2772,12 @@ describe('Post page', () => {
           expect.anything(),
         );
         expect(mediaService.attach).not.toHaveBeenCalled();
+        expect(track).toHaveBeenCalledWith('media_attached', {
+          kind: 'image',
+          via: 'button',
+          on: 'scheduled_post',
+          source: 'web',
+        });
       });
 
       it("writes alt text on the scheduled post's own copy", async () => {

@@ -14,11 +14,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 
 import pumpkit.scheduling.publish as publish_module
 import pumpkit.scheduling.service as scheduled_posts_service
@@ -370,26 +366,6 @@ async def test_one_pass_publishes_every_due_scheduled_post(
     assert (await _listed(client))["Later"]["state"] == "scheduled"
 
 
-@pytest_asyncio.fixture
-async def writing_session_maker(db_engine):
-    """
-    Sessions on the test database whose transactions start as writes. A SQLite read can't turn
-    into a write once another connection committed, where Postgres's row locks just wait.
-    """
-    engine = create_async_engine(db_engine.url, poolclass=NullPool)
-
-    @event.listens_for(engine.sync_engine, "connect")
-    def _configure_connection(dbapi_connection, connection_record):
-        dbapi_connection.isolation_level = None
-
-    @event.listens_for(engine.sync_engine, "begin")
-    def _emit_begin(conn):
-        conn.exec_driver_sql("BEGIN IMMEDIATE")
-
-    yield async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    await engine.dispose()
-
-
 async def test_two_passes_at_once_publish_each_scheduled_post_once(
     file_storage,
     post_with,
@@ -716,7 +692,7 @@ async def test_the_loop_runs_passes_until_it_is_stopped(
     file_storage,
     post_with,
     client,
-    db_session_maker,
+    writing_session_maker,
     subscribed,
     fake_x_publisher,
     fixed_clock,
@@ -729,7 +705,7 @@ async def test_the_loop_runs_passes_until_it_is_stopped(
 
     looping = asyncio.create_task(
         run(
-            db_session_maker,
+            writing_session_maker,
             fake_x_publisher,
             file_storage,
             fixed_clock,

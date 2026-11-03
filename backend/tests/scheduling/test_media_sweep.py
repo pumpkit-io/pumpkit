@@ -7,21 +7,28 @@ shows what stays.
 
 import asyncio
 import io
+import logging
 import os
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import BinaryIO
 
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import event, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.scheduling.publisher as publisher
 import pumpkit.scheduling.service as scheduling_service
+from pumpkit.core.logging import logger
 from pumpkit.core.storage import LocalDirectoryStorage, StoredFile, get_file_storage
 from pumpkit.main import app
 from pumpkit.posts.models import Media, Post
 from pumpkit.scheduling.media_sweep import FILES_SWEPT_EVERY, UNREFERENCED_GRACE
+from pumpkit.scheduling.publish import STUCK_AFTER
+from pumpkit.x_connection.x_publisher import XPostRejectedError, XRateLimitedError
 from tests.media_files import png
 
 API = "/api/v1"
@@ -75,11 +82,13 @@ class FailingStorage(LocalDirectoryStorage):
         fail_put: str | None = None,
         fail_delete_of: frozenset[str] = frozenset(),
         fail_list: asyncio.Event | None = None,
+        delete_error: Exception = RuntimeError("storage answered nonsense"),
     ) -> None:
         super().__init__(root)
         self.fail_put = fail_put
         self.fail_delete_of = fail_delete_of
         self.fail_list = fail_list
+        self.delete_error = delete_error
 
     async def put(self, key: str, source: BinaryIO) -> None:
         if self.fail_put is not None and key.endswith(self.fail_put):
@@ -88,7 +97,7 @@ class FailingStorage(LocalDirectoryStorage):
 
     async def delete(self, key: str) -> None:
         if any(media_id in key for media_id in self.fail_delete_of):
-            raise RuntimeError("storage answered nonsense")
+            raise self.delete_error
         await super().delete(key)
 
     async def list_files(self, prefix: str) -> list[StoredFile]:
@@ -258,6 +267,323 @@ async def test_a_published_posts_media_keeps_its_record_and_preview(
     assert _stored(file_storage) == _files_of(media_id) - {f"media/{media_id}/file"}
     preview = await client.get(f"{API}/media/{media_id}/preview")
     assert preview.status_code == 200, preview.text
+
+
+async def _replace_on_scheduled_post(client: AsyncClient, scheduled_post_id: str, media_id: str):
+    """Removes `media_id` from the Scheduled post's own copy and attaches another to its Part 1."""
+    removed = await client.delete(f"{SCHEDULED_POSTS}/{scheduled_post_id}/media/{media_id}")
+    assert removed.status_code == 204, removed.text
+    attached = await client.post(
+        f"{SCHEDULED_POSTS}/{scheduled_post_id}/parts/1/media",
+        files={"file": ("photo.png", png(), "image/png")},
+    )
+    assert attached.status_code == 201, attached.text
+    return attached.json()["id"]
+
+
+async def _due(client: AsyncClient, post_id: str, fixed_clock) -> dict:
+    scheduled = await _schedule(client, post_id, publish_at="2026-10-10T12:05:00Z")
+    fixed_clock.advance(timedelta(minutes=5))
+    return scheduled
+
+
+async def test_the_texts_media_replaced_on_the_scheduled_post_is_deleted_once_published(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One")
+    replaced = await _attach_to_text(client, post_id)
+    scheduled = await _due(client, post_id, fixed_clock)
+    published = await _replace_on_scheduled_post(client, scheduled["id"], replaced)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    fixed_clock.advance(PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert _stored(file_storage) == _files_of(published) - {f"media/{published}/file"}
+    assert await _text_media(client, post_id) == []
+
+
+async def test_the_texts_media_replaced_on_a_failed_threads_live_part_is_deleted(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    replaced = await _attach_to_text(client, post_id)
+    on_failed_part = await _attach_to_text(client, post_id, part=2)
+    scheduled = await _due(client, post_id, fixed_clock)
+    published = await _replace_on_scheduled_post(client, scheduled["id"], replaced)
+    fake_x_publisher.fail_publish = XPostRejectedError(403, "Not allowed.")
+    fake_x_publisher.fail_publish_on = 2
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    fixed_clock.advance(PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert await _text_media(client, post_id) == [on_failed_part]
+    assert _stored(file_storage) == (
+        _files_of(published) - {f"media/{published}/file"} | _files_of(on_failed_part)
+    )
+
+
+async def test_the_texts_media_on_a_part_the_scheduled_post_dropped_is_deleted_once_published(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    await _attach_to_text(client, post_id, part=2)
+    scheduled = await _due(client, post_id, fixed_clock)
+    for media_id in await _text_media(client, post_id):
+        removed = await client.delete(f"{SCHEDULED_POSTS}/{scheduled['id']}/media/{media_id}")
+        assert removed.status_code == 204, removed.text
+    edited = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["One"]})
+    assert edited.status_code == 200, edited.text
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    fixed_clock.advance(PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert await _text_media(client, post_id) == []
+    assert _stored(file_storage) == {"media"}
+
+
+@asynccontextmanager
+async def _text_media_drops_fail(db_session_maker) -> AsyncIterator[None]:
+    """Every delete of a Text's Media fails in the database, like a lock wait timing out."""
+    async with db_session_maker() as session:
+        await session.execute(
+            text(
+                "CREATE TRIGGER text_media_locked BEFORE DELETE ON text_media "
+                "BEGIN SELECT RAISE(ABORT, 'lock wait timed out'); END"
+            )
+        )
+        await session.commit()
+    try:
+        yield
+    finally:
+        async with db_session_maker() as session:
+            await session.execute(text("DROP TRIGGER text_media_locked"))
+            await session.commit()
+
+
+async def test_the_texts_media_a_failed_drop_kept_is_deleted_by_the_sweep_once_published(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One")
+    replaced = await _attach_to_text(client, post_id)
+    scheduled = await _due(client, post_id, fixed_clock)
+    published = await _replace_on_scheduled_post(client, scheduled["id"], replaced)
+    async with _text_media_drops_fail(db_session_maker):
+        await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    post = await client.get(f"{POSTS}/{post_id}")
+    assert post.json()["status"] == "published", post.text
+    assert await _text_media(client, post_id) == [replaced]
+    fixed_clock.advance(PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert await _text_media(client, post_id) == []
+    assert _stored(file_storage) == _files_of(published) - {f"media/{published}/file"}
+
+
+async def test_the_texts_media_a_failed_drop_kept_on_a_failed_threads_live_part_is_deleted(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    replaced = await _attach_to_text(client, post_id)
+    on_failed_part = await _attach_to_text(client, post_id, part=2)
+    scheduled = await _due(client, post_id, fixed_clock)
+    await _replace_on_scheduled_post(client, scheduled["id"], replaced)
+    fake_x_publisher.fail_publish = XPostRejectedError(403, "Not allowed.")
+    fake_x_publisher.fail_publish_on = 2
+    async with _text_media_drops_fail(db_session_maker):
+        await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    assert await _text_media(client, post_id) == [replaced, on_failed_part]
+    fixed_clock.advance(PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert await _text_media(client, post_id) == [on_failed_part]
+
+
+async def test_the_texts_media_a_crashed_publish_kept_is_deleted_once_recovery_publishes(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One")
+    replaced = await _attach_to_text(client, post_id)
+    scheduled = await _due(client, post_id, fixed_clock)
+    published = await _replace_on_scheduled_post(client, scheduled["id"], replaced)
+    async with db_session_maker() as session:
+        assert await scheduling_service.claim(
+            session, scheduled_post_id=scheduled["id"], now=fixed_clock()
+        )
+        crashed = await scheduling_service.get_existing(session, scheduled_post_id=scheduled["id"])
+        await scheduling_service.record_part_live(
+            session, crashed.parts[0], x_post_id="1890000000000000777"
+        )
+        await session.commit()
+    fixed_clock.advance(STUCK_AFTER + PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    post = await client.get(f"{POSTS}/{post_id}")
+    assert post.json()["status"] == "published", post.text
+    assert await _text_media(client, post_id) == []
+    assert _stored(file_storage) == _files_of(published) - {f"media/{published}/file"}
+
+
+@contextmanager
+def _commit_fails_after_a_text_media_drop(db_engine) -> Iterator[None]:
+    """The first commit after a delete of a Text's Media fails in the database."""
+    dropped: list[bool] = []
+
+    def seen(conn, cursor, statement, *args) -> None:
+        if statement.startswith("DELETE FROM text_media") and not dropped:
+            dropped.append(True)
+
+    def commit(conn) -> None:
+        if dropped == [True]:
+            dropped.append(False)
+            raise OperationalError("COMMIT", {}, Exception("database is locked"))
+
+    event.listen(db_engine.sync_engine, "before_cursor_execute", seen)
+    event.listen(db_engine.sync_engine, "commit", commit)
+    try:
+        yield
+    finally:
+        event.remove(db_engine.sync_engine, "before_cursor_execute", seen)
+        event.remove(db_engine.sync_engine, "commit", commit)
+
+
+async def test_a_thread_goes_on_publishing_when_the_texts_media_drop_fails_to_commit(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_engine,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    replaced = await _attach_to_text(client, post_id)
+    scheduled = await _due(client, post_id, fixed_clock)
+    await _replace_on_scheduled_post(client, scheduled["id"], replaced)
+
+    with _commit_fails_after_a_text_media_drop(db_engine):
+        await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    post = await client.get(f"{POSTS}/{post_id}")
+    assert post.json()["status"] == "published", post.text
+    assert len(fake_x_publisher.published) == 2
+
+
+async def test_a_published_file_left_behind_is_deleted_and_its_preview_kept(
+    caplog,
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One")
+    media_id = await _attach_to_text(client, post_id)
+    await _due(client, post_id, fixed_clock)
+    undeletable = FailingStorage(
+        file_storage.root, fail_delete_of=frozenset({media_id}), delete_error=OSError("busy")
+    )
+    caplog.set_level(logging.DEBUG, logger=logger.name)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, undeletable, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, undeletable, fixed_clock)
+    assert _stored(file_storage) == _files_of(media_id)
+    failures = [r for r in caplog.records if r.getMessage().startswith("Deleting the published")]
+    assert [r.levelno for r in failures] == [logging.ERROR, logging.DEBUG, logging.DEBUG]
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert _stored(file_storage) == _files_of(media_id) - {f"media/{media_id}/file"}
+    preview = await client.get(f"{API}/media/{media_id}/preview")
+    assert preview.status_code == 200, preview.text
+
+
+async def test_the_file_of_media_a_waiting_part_still_holds_is_kept(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    on_live = await _attach_to_text(client, post_id)
+    on_waiting = await _attach_to_text(client, post_id, part=2)
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.fail_publish = XRateLimitedError("429")
+    fake_x_publisher.fail_publish_on = 2
+    undeletable = FailingStorage(
+        file_storage.root, fail_delete_of=frozenset({on_live}), delete_error=OSError("busy")
+    )
+    await publisher.run_pass(db_session_maker, fake_x_publisher, undeletable, fixed_clock)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert _stored(file_storage) == _files_of(on_live) - {f"media/{on_live}/file"} | _files_of(
+        on_waiting
+    )
 
 
 async def test_a_deleted_posts_media_is_deleted_with_its_files(
