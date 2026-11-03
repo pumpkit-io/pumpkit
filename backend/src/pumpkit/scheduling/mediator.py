@@ -1241,6 +1241,9 @@ async def _post_whose_media_changes(
     db: AsyncSession, *, user: User, post_id: str
 ) -> tuple[Post, Optional[ScheduledPost]]:
     """The User's Post, locked, with its Scheduled post, once its Text's Media may change."""
+    # User before Post, as scheduling locks them: a new Media row's key share on the User would
+    # otherwise deadlock with a Scheduled post's insert waiting on the Post.
+    await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
