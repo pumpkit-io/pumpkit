@@ -11,15 +11,13 @@ Mediators reach the network only through `get_client_metadata_fetcher`; tests ov
 """
 
 import asyncio
-import ipaddress
 import json
 import re
-import socket
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterable, Optional, Protocol, cast
+from typing import Any, Optional, Protocol
 from urllib.parse import urlsplit
 
 import httpcore
@@ -30,20 +28,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.connected_apps.models import OAuthClient
 from pumpkit.connected_apps.schemas import ClientMetadataDocument
-from pumpkit.core.config import settings
 from pumpkit.core.logging import logger
+from pumpkit.core.public_http import (
+    PublicFetchError,
+    Resolver,
+    anyio_network,
+    fetch_public,
+    resolve_with_getaddrinfo,
+)
 from pumpkit.core.time import as_utc
 
 _TIMEOUT_SECONDS = 5.0
 _MAX_DOCUMENT_BYTES = 8 * 1024
 _MIN_FRESHNESS = timedelta(minutes=5)
 _MAX_FRESHNESS = timedelta(hours=24)
-# NAT64 prefixes embed an IPv4 address, which may be private, behind an address `is_global` passes.
-_NAT64_NETWORKS = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("64:ff9b:1::/48"))
 _MAX_AGE = re.compile(r"(?:^|,)\s*max-age\s*=\s*(\d+)\s*(?:,|$)", re.IGNORECASE)
 _KNOWN_DOCUMENTS_PATH = Path(__file__).with_name("known_client_documents.json")
-
-Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 
 class ClientMetadataFetchError(Exception):
@@ -81,65 +81,6 @@ def is_metadata_document_url(client_id: str) -> bool:
     )
 
 
-async def _resolve_with_getaddrinfo(host: str, port: int) -> list[str]:
-    infos = await asyncio.get_running_loop().getaddrinfo(
-        host, port, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP
-    )
-    return [str(info[4][0]) for info in infos]
-
-
-@dataclass(frozen=True)
-class _PinnedNetwork(httpcore.AsyncNetworkBackend):
-    """
-    Connects to `address` whatever host the URL names, so a host can't answer the destination
-    check with one address and the connection with another. TLS still verifies the URL's host.
-    """
-
-    address: str
-    inner: httpcore.AsyncNetworkBackend
-
-    async def connect_tcp(
-        self,
-        host: str,
-        port: int,
-        timeout: Optional[float] = None,
-        local_address: Optional[str] = None,
-        socket_options: Optional[Iterable[Any]] = None,
-    ) -> httpcore.AsyncNetworkStream:
-        return await self.inner.connect_tcp(
-            self.address,
-            port,
-            timeout=timeout,
-            local_address=local_address,
-            socket_options=socket_options,
-        )
-
-    async def connect_unix_socket(
-        self,
-        path: str,
-        timeout: Optional[float] = None,
-        socket_options: Optional[Iterable[Any]] = None,
-    ) -> httpcore.AsyncNetworkStream:
-        raise httpcore.ConnectError("unix sockets are never used")
-
-    async def sleep(self, seconds: float) -> None:
-        await self.inner.sleep(seconds)
-
-
-class _PinnedTransport(httpx.AsyncHTTPTransport):
-    def __init__(self, network: httpcore.AsyncNetworkBackend) -> None:
-        super().__init__(trust_env=False)
-        # httpx takes no network backend, so its pool is rebuilt with one.
-        self._pool = httpcore.AsyncConnectionPool(
-            ssl_context=httpx.create_ssl_context(trust_env=False), network_backend=network
-        )
-
-
-def _anyio_network() -> httpcore.AsyncNetworkBackend:
-    # httpcore declares `AnyIOBackend` conditionally, so its base class is invisible to pyright.
-    return cast(httpcore.AsyncNetworkBackend, httpcore.AnyIOBackend())
-
-
 @dataclass(frozen=True)
 class HttpClientMetadataFetcher:
     """
@@ -148,8 +89,8 @@ class HttpClientMetadataFetcher:
     hosts, ports other than 443 and any host resolving to a non-global address.
     """
 
-    resolve: Resolver = _resolve_with_getaddrinfo
-    network: httpcore.AsyncNetworkBackend = field(default_factory=_anyio_network)
+    resolve: Resolver = resolve_with_getaddrinfo
+    network: httpcore.AsyncNetworkBackend = field(default_factory=anyio_network)
     deadline_seconds: float = _TIMEOUT_SECONDS
 
     async def fetch(self, url: str) -> FetchedClientMetadata:
@@ -166,26 +107,7 @@ class HttpClientMetadataFetcher:
         return FetchedClientMetadata(document, _max_age(cache_control))
 
     async def _download(self, url: str) -> tuple[bytes, str]:
-        addresses = await self._check_destination(url)
-        try:
-            for address in addresses[:-1]:
-                try:
-                    return await self._download_from(address, url)
-                except (httpx.ConnectError, httpx.ConnectTimeout):
-                    continue
-            return await self._download_from(addresses[-1], url)
-        # InvalidURL isn't an HTTPError: httpx raises it for a URL it refuses to send.
-        except (httpx.HTTPError, httpx.InvalidURL) as error:
-            raise ClientMetadataFetchError(f"unreachable: {type(error).__name__}") from error
-
-    async def _download_from(self, address: str, url: str) -> tuple[bytes, str]:
-        transport = _PinnedTransport(_PinnedNetwork(address, self.network))
-        async with httpx.AsyncClient(
-            transport=transport,
-            timeout=self.deadline_seconds,
-            follow_redirects=False,
-            trust_env=False,
-        ) as http:
+        async def attempt(http: httpx.AsyncClient) -> tuple[bytes, str]:
             async with http.stream(
                 "GET",
                 url,
@@ -199,39 +121,16 @@ class HttpClientMetadataFetcher:
                 body = await _read_capped(response)
                 return body, response.headers.get("cache-control", "")
 
-    async def _check_destination(self, url: str) -> list[str]:
-        """The addresses to try in order, once every address the host resolves to is allowed."""
-        parts = urlsplit(url)
-        host = parts.hostname or ""
-        local = settings.ENV == "local"
-        if not local:
-            if _is_ip_literal(host):
-                raise ClientMetadataFetchError("names an IP address instead of a host")
-            if parts.port not in (None, 443):
-                raise ClientMetadataFetchError("names a port other than 443")
         try:
-            addresses = await self.resolve(host, parts.port or 443)
-        # IDNA encoding raises UnicodeError for a label that is empty or over 63 characters.
-        except (OSError, UnicodeError) as error:
-            raise ClientMetadataFetchError(f"host unresolvable: {type(error).__name__}") from error
-        if not addresses:
-            raise ClientMetadataFetchError("host resolves to no address")
-        for address in addresses:
-            ip = ipaddress.ip_address(address.split("%", 1)[0])
-            # The dev stack and tests serve documents from this computer.
-            if not (ip.is_global or (local and ip.is_loopback)) or any(
-                ip in network for network in _NAT64_NETWORKS
-            ):
-                raise ClientMetadataFetchError("host resolves to a non-global address")
-        return addresses
-
-
-def _is_ip_literal(host: str) -> bool:
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return True
+            return await fetch_public(
+                url,
+                attempt,
+                resolve=self.resolve,
+                network=self.network,
+                timeout_seconds=self.deadline_seconds,
+            )
+        except PublicFetchError as error:
+            raise ClientMetadataFetchError(str(error)) from error
 
 
 async def _read_capped(response: httpx.Response) -> bytes:

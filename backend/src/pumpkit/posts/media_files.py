@@ -18,6 +18,8 @@ IMAGE_MAX_BYTES = 5 * 1024 * 1024
 # The most X takes of each kind, which an upload is refused past while it streams.
 MAX_BYTES: dict[MediaKind, int] = {MEDIA_IMAGE: IMAGE_MAX_BYTES}
 IMAGES_PER_PART = 4
+# X's limit on an image or GIF's alt text.
+ALT_TEXT_MAX_CHARS = 1000
 # Shown on the web app's tiles too, so they name X's rule the same way.
 X_MEDIA_RULE = "X takes up to 4 images, or 1 GIF, or 1 video, per post."
 

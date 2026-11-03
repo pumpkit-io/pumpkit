@@ -5,6 +5,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 
 from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format, part_name
+from pumpkit.posts.media_files import ALT_TEXT_MAX_CHARS
 from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.scheduling.models import ScheduledPostState
@@ -181,6 +182,37 @@ class PostNowToolResponse(ScheduledPostToolResponse):
 class PostMessageToolResponse(BaseModel):
     message: str
     post_url: str
+
+
+# Longer URLs are rare enough that browsers and CDNs refuse them too.
+URL_MAX_CHARS = 2048
+
+
+class AttachMediaRequest(BaseModel):
+    """What `attach_media` takes, checked before anything downloads."""
+
+    part: int = Field(1, ge=1)
+    url: Optional[str] = Field(None, max_length=URL_MAX_CHARS)
+    alt_text: Optional[str] = Field(None, max_length=ALT_TEXT_MAX_CHARS)
+
+    @field_validator("alt_text")
+    @classmethod
+    def _strip(cls, value: Optional[str]) -> Optional[str]:
+        stripped = value.strip() if value is not None else ""
+        return stripped or None
+
+
+class PlacedMediaResponse(BaseModel):
+    media: MediaResponse
+    # Whether the Post's waiting Scheduled post took it, rather than its Text.
+    on_scheduled_post: bool
+
+
+class AttachMediaToolResponse(BaseModel):
+    message: str
+    post_url: str
+    # None when the User attaches the file on the Post's page instead.
+    media: Optional[MediaResponse]
 
 
 class ScheduledPostUpdateRequest(BaseModel):

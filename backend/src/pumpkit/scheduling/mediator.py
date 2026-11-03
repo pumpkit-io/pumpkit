@@ -29,6 +29,7 @@ from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import Clock, as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
+from pumpkit.posts.media_fetcher import MediaUrlFetcher
 from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
@@ -58,6 +59,7 @@ from pumpkit.scheduling.schemas import (
     AllowanceUsageResponse,
     CommunityResponse,
     PastCommunitiesResponse,
+    PlacedMediaResponse,
     PostCountsResponse,
     PostDetailResponse,
     PostListItemResponse,
@@ -746,6 +748,7 @@ async def attach_text_media(
     file: BinaryIO,
     byte_size: int,
     now: datetime,
+    alt_text: Optional[str] = None,
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of the Post's Text, last among its Media, once it is
@@ -758,7 +761,14 @@ async def attach_text_media(
     media_service.check_text_part_room(post, part_index=part_index)
     checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
     media = await media_service.attach_to_text(
-        db, storage, post=post, part_index=part_index, checked=checked, file=file, now=now
+        db,
+        storage,
+        post=post,
+        part_index=part_index,
+        checked=checked,
+        file=file,
+        now=now,
+        alt_text=alt_text,
     )
     await db.commit()
     return media_service.media_response(media)
@@ -792,6 +802,7 @@ async def attach_scheduled_post_media(
     file: BinaryIO,
     byte_size: int,
     now: datetime,
+    alt_text: Optional[str] = None,
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of a scheduled or Failed Scheduled post's own copy, last
@@ -807,7 +818,7 @@ async def attach_scheduled_post_media(
     media_service.check_part_room(media, part_index=part_index)
     checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
     attached = await media_service.store(
-        db, storage, user_id=user.id, checked=checked, file=file, now=now
+        db, storage, user_id=user.id, checked=checked, file=file, now=now, alt_text=alt_text
     )
     media[part_index].append(attached)
     await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=media, now=now)
@@ -829,6 +840,84 @@ async def remove_scheduled_post_media(
     _check_not_live(scheduled_post, part_index=part_index)
     media[part_index] = [m for m in media[part_index] if m.id != media_id]
     await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=media, now=now)
+
+
+async def attach_media_from_url(
+    db: AsyncSession,
+    storage: FileStorage,
+    fetcher: MediaUrlFetcher,
+    user: User,
+    post_id: str,
+    part_number: int,
+    url: str,
+    alt_text: Optional[str],
+    now: datetime,
+) -> PlacedMediaResponse:
+    """
+    For AI apps: download the file at `url` and attach it to Part `part_number` where the Post's
+    Media changes now: its waiting Scheduled post's own copy, else its Text, with the upload's
+    checks. Refused on a Published Post and on a live Part.
+    """
+    await x_connections_service.check_takes_media(db, user_id=user.id)
+    await _scheduled_post_taking_media(db, user=user, post_id=post_id)
+    # No transaction stays open while the file downloads.
+    await db.commit()
+    async with fetcher.fetch(url) as received:
+        scheduled_post_id = await _scheduled_post_taking_media(db, user=user, post_id=post_id)
+        if scheduled_post_id is None:
+            media = await attach_text_media(
+                db,
+                storage,
+                user,
+                post_id,
+                part_number,
+                received.file,
+                received.byte_size,
+                now,
+                alt_text=alt_text,
+            )
+            return PlacedMediaResponse(media=media, on_scheduled_post=False)
+        media = await attach_scheduled_post_media(
+            db,
+            storage,
+            user,
+            scheduled_post_id,
+            part_number,
+            received.file,
+            received.byte_size,
+            now,
+            alt_text=alt_text,
+        )
+        return PlacedMediaResponse(media=media, on_scheduled_post=True)
+
+
+async def remove_media(
+    db: AsyncSession, user: User, post_id: str, media_id: str, now: datetime
+) -> bool:
+    """
+    For AI apps: take the Media off where the Post's Media changes now, as `attach_media_from_url`
+    picks it. Answers whether that was its Scheduled post.
+    """
+    scheduled_post_id = await _scheduled_post_taking_media(db, user=user, post_id=post_id)
+    if scheduled_post_id is None:
+        await remove_text_media(db, user, post_id, media_id)
+        return False
+    await remove_scheduled_post_media(db, user, scheduled_post_id, media_id, now)
+    return True
+
+
+async def _scheduled_post_taking_media(
+    db: AsyncSession, *, user: User, post_id: str
+) -> Optional[str]:
+    """
+    The id of the User's Post's Scheduled post while it waits, or publishes, which then refuses:
+    its own copy is what goes out. None when the Text's Media changes, or the Text refuses.
+    """
+    await version_writing.user_post(db, user=user, post_id=post_id)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    if scheduled_post is None or scheduled_post.state in (FAILED, PUBLISHED):
+        return None
+    return scheduled_post.id
 
 
 async def _scheduled_post_whose_media_changes(

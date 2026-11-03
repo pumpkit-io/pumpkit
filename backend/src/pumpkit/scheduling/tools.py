@@ -19,6 +19,7 @@ from pumpkit.core.storage import get_file_storage
 from pumpkit.core.time import get_clock
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import get_llm
+from pumpkit.posts.media_fetcher import get_media_url_fetcher
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
@@ -35,6 +36,8 @@ from pumpkit.scheduling.rules import (
 )
 from pumpkit.scheduling.schemas import (
     WRITE_RATE,
+    AttachMediaRequest,
+    AttachMediaToolResponse,
     FeedbackRequest,
     PastCommunitiesResponse,
     PostDetailResponse,
@@ -310,6 +313,70 @@ async def restore_version(call: ToolCall[User], post_id: str, version_number: in
     )
 
 
+def _where(on_scheduled_post: bool) -> str:
+    return "its scheduled post" if on_scheduled_post else "the post's text"
+
+
+async def attach_media(
+    call: ToolCall[User],
+    post_id: str,
+    part: int = 1,
+    url: Optional[str] = None,
+    alt_text: Optional[str] = None,
+) -> AttachMediaToolResponse:
+    """
+    Attach an image to one part of the user's post, last after the media it has: Pumpkit
+    downloads it from `url`, a public https URL of a JPEG, PNG or WEBP image up to 5 MB. X takes
+    up to 4 images per X post. `part` counts from 1; a single X post has only part 1. `alt_text`,
+    up to 1,000 characters, describes the image for people using screen readers. Pumpkit
+    publishes the image as given and its writing never reads it, so write the brief or feedback
+    from what you saw in it. On a draft or a failed post it changes the post's text; on a
+    scheduled post it changes the scheduled post's own copy. A published post, or a part already
+    on X, keeps its media. Without `url`, give the user the post's page link to attach the file
+    there.
+    """
+    request = AttachMediaRequest(part=part, url=url, alt_text=alt_text)
+    page = post_url(post_id)
+    if request.url is None:
+        return AttachMediaToolResponse(
+            message=f"Attach the file on the post's page in the Pumpkit web app: {page}",
+            post_url=page,
+            media=None,
+        )
+    placed = await mediator.attach_media_from_url(
+        db=call.db,
+        storage=await call.provide(get_file_storage),
+        fetcher=await call.provide(get_media_url_fetcher),
+        user=call.user,
+        post_id=post_id,
+        part_number=request.part,
+        url=request.url,
+        alt_text=request.alt_text,
+        now=call.now,
+    )
+    return AttachMediaToolResponse(
+        message=f"Attached to part {request.part} of {_where(placed.on_scheduled_post)}.",
+        post_url=page,
+        media=placed.media,
+    )
+
+
+async def remove_media(
+    call: ToolCall[User], post_id: str, media_id: str
+) -> PostMessageToolResponse:
+    """
+    Take one media file, by the `id` `get_post` lists, off the user's post: off the post's text on
+    a draft or a failed post, off the scheduled post's own copy on a scheduled one. A published
+    post, or a part already on X, keeps its media.
+    """
+    on_scheduled_post = await mediator.remove_media(
+        db=call.db, user=call.user, post_id=post_id, media_id=media_id, now=call.now
+    )
+    return PostMessageToolResponse(
+        message=f"Removed from {_where(on_scheduled_post)}.", post_url=post_url(post_id)
+    )
+
+
 async def get_usage(call: ToolCall[User]) -> UsageResponse:
     """
     What the user has left of their allowance this period. It counts generations: each post
@@ -350,6 +417,9 @@ TOOLS = [
     # The web edit and delete routes have no limit; these take the create route's.
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
+    # The web Media routes count against MEDIA_RATE; these take the other writing tools' rate.
+    McpTool(attach_media, rate=WRITE_RATE, annotations=ADDITIVE),
+    McpTool(remove_media, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     McpTool(get_usage, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY),
