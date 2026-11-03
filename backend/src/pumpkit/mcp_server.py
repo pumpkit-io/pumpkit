@@ -30,6 +30,7 @@ import pumpkit.posts.tools as posts_tools
 import pumpkit.scheduling.tools as scheduling_tools
 from pumpkit.auth.dependencies import CREDENTIALS_INVALID
 from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
+from pumpkit.connected_apps.models import AppConnection
 from pumpkit.connected_apps.service.tokens import SCOPE
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import get_async_db
@@ -73,8 +74,8 @@ failed post takes feedback: a scheduled or published one doesn't.
 - Each post started and each feedback uses one generation of the user's allowance, \
 and each X post published uses one X post, each part of a thread counting as one. Write a new \
 version only when the user asks for one. `get_usage` says what is left and when it resets.
-- `attach_media` attaches an image to a part from a public URL, or, without one, answers a \
-one-time upload link and the `curl` command that sends a local image to it. `remove_media` \
+- `attach_media` attaches an image to a part from a public URL, or, without one, answers \
+with a one-time upload link and the `curl` command that sends a local image to it. `remove_media` \
 takes one off. On a draft or a failed post they change the post's text, and on a scheduled \
 post the scheduled post's own copy. \
 Pumpkit publishes media exactly as given, and its writing never reads it, not even its alt \
@@ -98,6 +99,7 @@ class _Caller:
     app: FastAPI
     request: Request
     user_id: str
+    app_connection_id: str
 
 
 # Set for the length of one authenticated request, read by each tool that request calls.
@@ -132,7 +134,14 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
                     return tool_error(CREDENTIALS_INVALID)
                 if not await billing_service.has_access(db, user_id=user.id):
                     return _subscription_needed()
-                call = ToolCall(user=user, db=db, now=clock(), app=caller.app, stack=stack)
+                call = ToolCall(
+                    user=user,
+                    db=db,
+                    now=clock(),
+                    app_connection_id=caller.app_connection_id,
+                    app=caller.app,
+                    stack=stack,
+                )
                 return await run(call, **arguments)
         except Exception as exc:
             return error_result(exc, caller.request)
@@ -172,8 +181,8 @@ class McpEndpoint:
         if secret is None:
             await _unauthorized("Not authenticated", refused=False)(scope, receive, send)
             return
-        user_id = await _authenticate(app, secret)
-        if user_id is None:
+        connection = await _authenticate(app, secret)
+        if connection is None:
             await _unauthorized(CREDENTIALS_INVALID, refused=True)(scope, receive, send)
             return
         if scope["method"] != "POST":
@@ -181,7 +190,14 @@ class McpEndpoint:
             await Response(status_code=405, headers={"Allow": "POST"})(scope, receive, send)
             return
 
-        token = _caller.set(_Caller(app=app, request=Request(scope), user_id=user_id))
+        token = _caller.set(
+            _Caller(
+                app=app,
+                request=Request(scope),
+                user_id=connection.user_id,
+                app_connection_id=connection.id,
+            )
+        )
         try:
             manager = StreamableHTTPSessionManager(
                 app=self._server._lowlevel_server,
@@ -202,9 +218,9 @@ def _bearer_secret(scope: Scope) -> Optional[str]:
     return secret
 
 
-async def _authenticate(app: FastAPI, secret: str) -> Optional[str]:
+async def _authenticate(app: FastAPI, secret: str) -> Optional[AppConnection]:
     """
-    The id of the User the access token acts for, or None to refuse it. A web Session's
+    The app connection the access token belongs to, or None to refuse it. A web Session's
     access token is not one, so it is refused.
     """
     async with AsyncExitStack() as stack:

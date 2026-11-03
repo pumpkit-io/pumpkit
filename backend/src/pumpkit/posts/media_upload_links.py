@@ -6,9 +6,9 @@ upload that starts through it.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, cast
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import CursorResult, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.core.errors import GoneError, NotFoundError
@@ -35,12 +35,10 @@ async def create(
     post_id: str,
     part_index: int,
     alt_text: Optional[str],
+    app_connection_id: str,
     now: datetime,
 ) -> NewUploadLink:
-    """Store a new link for the Part, dropping links long expired. Flushes."""
-    await db.execute(
-        delete(MediaUploadLink).where(MediaUploadLink.expires_at <= now - _KEPT_AFTER_EXPIRY)
-    )
+    """Store a new link for the Part, for the app connection that asked for it. Flushes."""
     link = NewUploadLink(token=generate_token(32), expires_at=now + LIFETIME)
     db.add(
         MediaUploadLink(
@@ -49,6 +47,7 @@ async def create(
             post_id=post_id,
             part_index=part_index,
             alt_text=alt_text,
+            app_connection_id=app_connection_id,
             created_at=now,
             expires_at=link.expires_at,
         )
@@ -90,5 +89,12 @@ async def spend(db: AsyncSession, *, link: MediaUploadLink, now: datetime) -> No
         .values(used_at=now)
         .execution_options(synchronize_session=False)
     )
-    if spent.rowcount != 1:  # pyright: ignore[reportAttributeAccessIssue]
+    if cast(CursorResult, spent).rowcount != 1:
         raise _used()
+
+
+async def delete_expired(db: AsyncSession, *, now: datetime) -> None:
+    """Delete links expired more than a day before `now`. Flushes."""
+    await db.execute(
+        delete(MediaUploadLink).where(MediaUploadLink.expires_at <= now - _KEPT_AFTER_EXPIRY)
+    )

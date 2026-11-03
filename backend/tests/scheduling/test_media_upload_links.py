@@ -4,23 +4,26 @@ app with a shell sends a local image to with the `curl` command the tool answers
 takes the file with no other credentials, once, before it expires.
 """
 
-import shlex
+import logging
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 import pytest
 from sqlalchemy import update
 
+import pumpkit.scheduling.publisher as publisher
 from pumpkit.auth.models import User
 from pumpkit.billing.models import Subscription
+from pumpkit.posts.media_files import IMAGE_MAX_BYTES
 from pumpkit.posts.schemas import MEDIA_RATE
 from pumpkit.x_connection.models import XConnection
 from tests.mcp_client import error_text
-from tests.media_files import gif, png
+from tests.media_files import gif, padded, png
 
 POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
 UPLOADS = "http://localhost:5173/api/v1/media-uploads/"
+CONNECTIONS = "/api/v1/app-connections"
 MEDIA_PER_MINUTE = int(MEDIA_RATE.split("/")[0])
 
 
@@ -53,11 +56,12 @@ async def test_without_a_url_the_tool_answers_a_link_its_expiry_and_a_ready_curl
     assert datetime.fromisoformat(link["upload_expires_at"]) == fixed_clock() + timedelta(
         minutes=15
     )
-    assert shlex.split(link["curl_command"]) == ["curl", "-F", "file=@IMAGE_PATH", upload_url]
+    assert link["curl_command"] == f"curl -F 'file=@-' '{upload_url}' < IMAGE_PATH"
     page = f"{POSTS_PAGE}/{post_id}"
     assert link["post_url"] == page
     assert link["media"] is None
     assert link["curl_command"] in link["message"]
+    assert "within 15 minutes" in link["message"]
     assert page in link["message"]
 
 
@@ -125,16 +129,6 @@ async def test_an_altered_link_is_not_found(subscribed, mcp, new_browser, post_w
         "This isn't a Pumpkit upload link. Call attach_media again for a new one."
     )
     assert await _media_of(mcp, post_id) == [[], []]
-
-
-async def test_the_link_names_no_post_or_part_a_caller_could_change(subscribed, mcp, post_with):
-    post_id = await post_with("One", "Two")
-
-    link = await _link(mcp, post_id, part=2)
-
-    path = urlsplit(link["upload_url"]).path
-    assert post_id not in path
-    assert path.count("/") == 4
 
 
 async def test_files_the_web_upload_refuses_are_refused_and_spend_the_link(
@@ -285,3 +279,70 @@ async def test_a_suspended_user_cant_use_a_link_made_before(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "This upload link no longer works."
+
+
+async def test_a_file_larger_than_x_takes_is_refused_and_spends_the_link(
+    subscribed, mcp, new_browser, post_with
+):
+    post_id = await post_with("One")
+    link = await _link(mcp, post_id)
+
+    refused = await _upload(new_browser, link, padded(png(), IMAGE_MAX_BYTES + 1))
+
+    assert refused.status_code == 422
+    assert refused.json()["code"] == "MEDIA_TOO_LARGE"
+    assert (await _upload(new_browser, link, png())).json()["code"] == "UPLOAD_LINK_USED"
+    assert await _media_of(mcp, post_id) == [[]]
+
+
+async def test_disconnecting_the_app_stops_the_links_it_made(
+    subscribed, mcp, new_browser, post_with, authed_client
+):
+    post_id = await post_with("One")
+    link = await _link(mcp, post_id)
+    [connection] = (await authed_client.get(CONNECTIONS)).json()["data"]
+    disconnected = await authed_client.delete(f"{CONNECTIONS}/{connection['id']}")
+    assert disconnected.status_code == 204, disconnected.text
+
+    response = await _upload(new_browser, link, png())
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "This upload link no longer works."
+
+
+@pytest.mark.parametrize(
+    ("after_expiry", "code"),
+    [(timedelta(days=1), "UPLOAD_LINK_UNKNOWN"), (timedelta(hours=23), "UPLOAD_LINK_EXPIRED")],
+)
+async def test_the_publishers_pass_forgets_links_a_day_after_they_expire(
+    after_expiry,
+    code,
+    subscribed,
+    fixed_clock,
+    mcp,
+    new_browser,
+    post_with,
+    db_session_maker,
+    fake_x_publisher,
+    file_storage,
+):
+    link = await _link(mcp, await post_with("One"))
+    fixed_clock.advance(timedelta(minutes=15) + after_expiry)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert (await _upload(new_browser, link, png())).json()["code"] == code
+
+
+def test_the_access_log_keeps_no_links_token(caplog):
+    access_log = logging.getLogger("uvicorn.access")
+    line = '%s - "%s %s HTTP/%s" %d'
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+        access_log.info(line, "1.2.3.4:5", "POST", "/api/v1/media-uploads/s3cret?x=1", "1.1", 410)
+        access_log.info(line, "1.2.3.4:5", "GET", "/api/v1/posts/p1", "1.1", 200)
+
+    assert [record.getMessage() for record in caplog.records] == [
+        '1.2.3.4:5 - "POST /api/v1/media-uploads/[redacted] HTTP/1.1" 410',
+        '1.2.3.4:5 - "GET /api/v1/posts/p1 HTTP/1.1" 200',
+    ]

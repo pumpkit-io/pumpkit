@@ -620,9 +620,11 @@ async def revoke(
     return Response(status_code=200, headers=NO_STORE)
 
 
-async def authenticate_mcp_token(db: AsyncSession, secret: str, *, now: datetime) -> Optional[str]:
+async def authenticate_mcp_token(
+    db: AsyncSession, secret: str, *, now: datetime
+) -> Optional[AppConnection]:
     """
-    The id of the User an access token acts for, recording that their app used it; None for a
+    The connection an access token belongs to, recording that its app used it; None for a
     token that is unknown, expired or revoked, whose app is disconnected, that was issued for
     another resource, or whose User is gone or Suspended.
     """
@@ -639,7 +641,7 @@ async def authenticate_mcp_token(db: AsyncSession, secret: str, *, now: datetime
         return None
     await connections.record_use(db, connection, now=now)
     await db.commit()
-    return connection.user_id
+    return connection
 
 
 async def _may_connect(db: AsyncSession, user_id: str) -> bool:

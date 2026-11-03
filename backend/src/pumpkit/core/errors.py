@@ -138,6 +138,17 @@ def _redact_query(params: Mapping[str, str]) -> dict[str, str]:
     return {k: (_REDACTED if _SENSITIVE_QUERY_KEY.search(k) else v) for k, v in params.items()}
 
 
+def _redact_path(request: Request) -> tuple[str, dict[str, Any]]:
+    """The request's path and path parameters, with any parameter named like a credential hidden."""
+    path = request.url.path
+    params = dict(request.path_params)
+    for key, value in request.path_params.items():
+        if _SENSITIVE_QUERY_KEY.search(key):
+            path = path.replace(f"/{value}", f"/{_REDACTED}")
+            params[key] = _REDACTED
+    return path, params
+
+
 def report_unexpected_exception(request: Request, exc: Exception) -> str:
     """
     Log and capture an unexpected exception; return the error ID a User reports to support.
@@ -147,19 +158,20 @@ def report_unexpected_exception(request: Request, exc: Exception) -> str:
 
     # Short, so a User can read it out to support.
     error_id = uuid4().hex[:8]
+    path, path_params = _redact_path(request)
 
     logger.error(
         "Unhandled exception [%s]: %s %s",
         error_id,
         request.method,
-        request.url.path,
+        path,
         extra={
             "error_id": error_id,
             "method": request.method,
-            "path": request.url.path,
+            "path": path,
             "client": request.client.host if request.client else None,
             "headers": _redact_headers(request.headers),
-            "path_params": request.path_params,
+            "path_params": path_params,
             "query_params": _redact_query(request.query_params),
         },
         exc_info=exc,
@@ -170,7 +182,7 @@ def report_unexpected_exception(request: Request, exc: Exception) -> str:
         exc,
         properties={
             "error_id": error_id,
-            "path": request.url.path,
+            "path": path,
             "method": request.method,
         },
     )

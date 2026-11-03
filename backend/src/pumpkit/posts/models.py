@@ -202,6 +202,10 @@ class MediaUploadLink(Base):
     # Counted from 0, as the Text's Parts are stored.
     part_index: Mapped[int] = mapped_column(Integer)
     alt_text: Mapped[Optional[str]] = mapped_column(Text)
+    # The app that asked for it: disconnecting the app stops the link.
+    app_connection_id: Mapped[str] = mapped_column(
+        ForeignKey("app_connections.id", ondelete="CASCADE"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     # Set when an upload starts through it, whatever comes of that upload.

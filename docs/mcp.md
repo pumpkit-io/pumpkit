@@ -171,13 +171,15 @@ An app that can run commands, such as Claude Code, attaches an image from your d
 - `curl_command`: the command that sends the image, with `IMAGE_PATH` in place of the image's path.
 - `post_url`: the Post's page, for an app that can't run commands, where you attach the image yourself.
 
-The app replaces `IMAGE_PATH` and runs the command:
+The app replaces `IMAGE_PATH` with the image's path, quoted as its shell needs, and runs the command:
 
 ```sh
-curl -F 'file=@/Users/me/Desktop/chart.png' 'https://pumpkit.example.com/api/v1/media-uploads/Xq3…'
+curl -F 'file=@-' 'https://pumpkit.example.com/api/v1/media-uploads/Xq3…' < ~/"Desktop/Q3 chart.png"
 ```
 
-The link takes the image as the multipart field `file`, with no other credentials, and attaches it where `attach_media` named, with the alt text given to `attach_media`: to the Post's Text, or to its waiting Scheduled post's own copy. It answers with the attached image as `get_post` lists it. Uploads through links follow the web app's rules: the same checks on the image, the web upload's limit of 60 a minute, and a refusal when your subscription has ended or X needs reconnecting. An upload spends the link once your account and the Part pass these checks, before the image arrives, even when the image is then refused. A second use, or a use after 15 minutes, is refused with a message saying to call `attach_media` again. The link names no Post or Part: Pumpkit keeps them with a hash of the link's token, so a changed link is unknown.
+The shell opens the image and passes it to `curl` on its standard input, so `~`, `$HOME` and any character a quoted path may hold work in the path.
+
+The link takes the image as the multipart field `file`, with no other credentials, and attaches it where `attach_media` named, with the alt text given to `attach_media`: to the Post's Text, or to its waiting Scheduled post's own copy. It answers with the attached image as `get_post` lists it. Uploads through links follow the web app's rules: the same checks on the image, the web upload's limit of 60 a minute, and a refusal when your subscription has ended or X needs reconnecting. An upload spends the link once your account and the Part pass these checks, before the image arrives, even when the image is then refused. A second use, or a use after 15 minutes, is refused with a message saying to call `attach_media` again. Disconnecting the app in Settings stops the links it made and hasn't used. The link names no Post or Part: Pumpkit keeps them with a hash of the link's token, so a changed link is unknown.
 
 ## Scheduled post and link tools
 

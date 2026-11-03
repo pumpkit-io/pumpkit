@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
+import pumpkit.connected_apps.service.connections as app_connections_service
 import pumpkit.posts.media as media_service
 import pumpkit.posts.media_files as media_files
 import pumpkit.posts.media_upload_links as media_upload_links
@@ -86,6 +87,8 @@ from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
 
 # Where the User sees their Posts; one Post's page is under it.
 POSTS_PAGE = "/posts"
+# Under the API URL; what follows it is a one-time upload link's token.
+UPLOAD_LINKS_PATH = "/media-uploads"
 X_CONNECTION_PAGE = x_connections_service.X_CONNECTION_PAGE
 
 
@@ -943,11 +946,13 @@ async def create_media_upload_link(
     post_id: str,
     part_number: int,
     alt_text: Optional[str],
+    app_connection_id: str,
     now: datetime,
 ) -> NewUploadLink:
     """
     For AI apps with a shell: a one-time link that attaches the file sent to it to Part
     `part_number`, as `attach_media_from_url` would, refused now for what attaching would refuse.
+    It works only while the app connection that asked for it stays connected.
     """
     await x_connections_service.check_takes_media(db, user_id=user.id)
     await _check_part_takes_media(db, user=user, post_id=post_id, part_number=part_number)
@@ -957,6 +962,7 @@ async def create_media_upload_link(
         post_id=post_id,
         part_index=part_number - 1,
         alt_text=alt_text,
+        app_connection_id=app_connection_id,
         now=now,
     )
     await db.commit()
@@ -981,7 +987,10 @@ async def start_link_upload(db: AsyncSession, token: str, now: datetime) -> Link
     """
     link = await media_upload_links.find_usable(db, token=token, now=now)
     user = await users_service.get_user_by_id(db=db, user_id=link.user_id)
-    if user is None or not may_hold_session(user):
+    app_connection = await app_connections_service.get_unrevoked(
+        db, user_id=link.user_id, connection_id=link.app_connection_id
+    )
+    if user is None or not may_hold_session(user) or app_connection is None:
         raise ForbiddenError("This upload link no longer works.", code="UPLOAD_LINK_REFUSED")
     if not await billing_service.has_access(db, user_id=user.id):
         raise ForbiddenError(SUBSCRIPTION_NEEDED)

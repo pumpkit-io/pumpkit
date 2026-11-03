@@ -419,7 +419,7 @@ async def _link_upload(
 
 
 @posts_router.post(
-    "/media-uploads/{token}",
+    f"{mediator.UPLOAD_LINKS_PATH}/{{token}}",
     response_model=UploadedMediaResponse,
     status_code=status.HTTP_201_CREATED,
 )

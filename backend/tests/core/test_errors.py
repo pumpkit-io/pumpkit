@@ -251,3 +251,28 @@ async def test_exception_log_redacts_credentials(monkeypatch, caplog):
         assert record.headers["cookie"] == "[redacted]"
         assert record.query_params["token"] == "[redacted]"
         assert record.query_params["page"] == "2"
+
+
+async def test_exception_reports_redact_a_token_in_the_path(monkeypatch, caplog):
+    fake_posthog = MagicMock()
+    monkeypatch.setattr(errors_module, "posthog_client", fake_posthog)
+
+    test_app = FastAPI()
+    errors_module.register_exception_handlers(test_app)
+
+    @test_app.post("/uploads/{token}/parts/{part}")
+    async def boom(token: str, part: str):
+        raise RuntimeError("kaboom")
+
+    transport = ASGITransport(app=test_app, raise_app_exceptions=False)
+    with caplog.at_level(logging.ERROR):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/uploads/supersecret/parts/2")
+
+    assert response.status_code == 500
+    [record] = [r for r in caplog.records if hasattr(r, "error_id")]
+    assert "supersecret" not in record.getMessage() + repr(record.__dict__)
+    assert record.path == "/uploads/[redacted]/parts/2"
+    assert record.path_params == {"token": "[redacted]", "part": "2"}
+    _, kwargs = fake_posthog.capture_exception.call_args
+    assert kwargs["properties"]["path"] == "/uploads/[redacted]/parts/2"

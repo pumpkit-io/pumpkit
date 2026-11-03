@@ -20,6 +20,7 @@ from pumpkit.core.time import get_clock
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import get_llm
 from pumpkit.posts.media_fetcher import get_media_url_fetcher
+from pumpkit.posts.media_upload_links import LIFETIME as UPLOAD_LINK_LIFETIME
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.posts.schemas import TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
@@ -323,10 +324,10 @@ async def attach_media(
     WEBP image up to 5 MB. X takes up to 4 images per X post. `part` counts from 1; a single X
     post has only part 1. `alt_text`, up to 1,000 characters, describes the image for people
     using screen readers. With `url`, a public https URL of the image, Pumpkit downloads and
-    attaches it. Without `url`, the answer is a one-time upload link for this part, valid for 15
-    minutes, and the `curl` command that sends a local image to it: run it with IMAGE_PATH
-    replaced by the image's path. If you can't run commands, give the user the post's page link
-    to attach the image there. Pumpkit publishes the image as given and its writing never reads
+    attaches it. Without `url`, the answer is a one-time upload link for this part, when it
+    expires, and the `curl` command that sends a local image to it: run it with IMAGE_PATH
+    replaced by the image's path, written and quoted as your shell takes a path. If you can't run
+    commands, give the user the post's page link to attach the image there. Pumpkit publishes the image as given and its writing never reads
     it, so write the brief or feedback from what you saw in it. On a draft or a failed post it
     changes the post's text; on a scheduled post it changes the scheduled post's own copy. A
     published post, or a part already on X, keeps its media.
@@ -340,15 +341,20 @@ async def attach_media(
             post_id=post_id,
             part_number=request.part,
             alt_text=request.alt_text,
+            app_connection_id=call.app_connection_id,
             now=call.now,
         )
-        upload_url = f"{settings.api_url()}/media-uploads/{link.token}"
-        curl = f"curl -F 'file=@{IMAGE_PATH}' '{upload_url}'"
+        upload_url = f"{settings.api_url()}{mediator.UPLOAD_LINKS_PATH}/{link.token}"
+        # The shell opens the file, so `~`, `$HOME` and its own quoting work in the path, and
+        # curl never parses it, where `-F file=@path` would split it at `;` or `,`.
+        curl = f"curl -F 'file=@-' '{upload_url}' < {IMAGE_PATH}"
+        minutes = int(UPLOAD_LINK_LIFETIME.total_seconds() // 60)
         return AttachMediaToolResponse(
             message=(
-                f"To attach a local image to part {request.part}, run this once, with "
-                f"{IMAGE_PATH} replaced by the image's path, within 15 minutes: {curl} . "
-                f"Without a shell, attach it on the post's page in the Pumpkit web app: {page}"
+                f"To attach a local image to part {request.part}, run this once, within "
+                f"{minutes} minutes, with {IMAGE_PATH} replaced by the image's path, quoted as "
+                f"your shell needs: {curl}\nWithout a shell, attach it on the post's page in "
+                f"the Pumpkit web app: {page}"
             ),
             post_url=page,
             media=None,

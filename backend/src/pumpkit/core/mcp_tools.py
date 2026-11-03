@@ -52,6 +52,8 @@ class ToolCall(Generic[UserT]):
     user: UserT
     db: AsyncSession
     now: datetime
+    # The Connected app's connection the access token belongs to.
+    app_connection_id: str
     app: FastAPI = field(repr=False)
     stack: AsyncExitStack = field(repr=False)
 
