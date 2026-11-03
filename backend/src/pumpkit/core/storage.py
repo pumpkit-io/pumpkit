@@ -15,9 +15,10 @@ import os
 import re
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import BinaryIO, Protocol
+from typing import BinaryIO, NamedTuple, Protocol
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError
@@ -38,6 +39,11 @@ class StoredFileNotFoundError(AppError):
         self.key = key
 
 
+class StoredFile(NamedTuple):
+    key: str
+    modified_at: datetime
+
+
 class FileStorage(Protocol):
     async def put(self, key: str, source: BinaryIO) -> None:
         """Store everything `source` reads under `key`, replacing any file already there."""
@@ -49,6 +55,10 @@ class FileStorage(Protocol):
 
     async def delete(self, key: str) -> None:
         """Remove the file under `key`; a key with no file is already gone."""
+        ...
+
+    async def list_files(self, prefix: str) -> list[StoredFile]:
+        """Every file whose key starts with `prefix`, with when it was last written."""
         ...
 
 
@@ -70,6 +80,22 @@ class LocalDirectoryStorage:
 
     async def delete(self, key: str) -> None:
         await asyncio.to_thread(self._delete, self._path(key))
+
+    async def list_files(self, prefix: str) -> list[StoredFile]:
+        return await asyncio.to_thread(self._list_files, prefix)
+
+    def _list_files(self, prefix: str) -> list[StoredFile]:
+        found = []
+        for path in self.root.rglob("*"):
+            key = path.relative_to(self.root).as_posix()
+            # A partial write's name is no valid key, so only stored files are listed.
+            if key.startswith(prefix) and _KEY_PATTERN.fullmatch(key) and path.is_file():
+                try:
+                    modified = path.stat().st_mtime
+                except FileNotFoundError:
+                    continue
+                found.append(StoredFile(key, datetime.fromtimestamp(modified, timezone.utc)))
+        return found
 
     def _path(self, key: str) -> Path:
         if not _KEY_PATTERN.fullmatch(key):

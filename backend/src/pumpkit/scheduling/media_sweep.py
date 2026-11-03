@@ -1,12 +1,10 @@
 """
-Deleting Media nothing references any more: not the Text of a Post, nor a Scheduled post. That is
-Media removed or replaced, Media a Scheduled post held when it was unscheduled, or the Media of a
-deleted Post. Files stored by a request that then rolled back have no record, so it never sees
-them. The publisher's pass runs the sweep. A Published Post's Media stays, with its preview, as
-long as its Scheduled post references it.
+Deleting Media nothing references any more, with its files, and stored files no Media record
+names. The publisher's pass runs it; `docs/development.md` says what that covers.
 """
 
 from datetime import datetime, timedelta
+from typing import Optional
 
 from sqlalchemy import Select, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +18,11 @@ from pumpkit.scheduling.models import ScheduledPostMedia
 
 # Longer than any request or publish step that holds a Media before referencing it.
 UNREFERENCED_GRACE = timedelta(hours=1)
-_USERS_PER_SWEEP = 100
+# Listing every stored file costs a walk of the storage and a query per 500 files.
+FILES_SWEPT_EVERY = timedelta(hours=1)
+_USERS_PER_PAGE = 100
+_IDS_PER_QUERY = 500
+_MEDIA_PREFIX = "media/"
 
 
 async def delete_unreferenced_media(
@@ -28,25 +30,64 @@ async def delete_unreferenced_media(
 ) -> None:
     """
     Delete each Media nothing references, created more than `UNREFERENCED_GRACE` before `now`,
-    with its files. Commits once per User.
+    with its files. Commits once per User; one User's failure is logged and the next goes on.
     """
     cutoff = now - UNREFERENCED_GRACE
-    users = await db.execute(
-        _unreferenced(select(Media.user_id).distinct(), cutoff=cutoff).limit(_USERS_PER_SWEEP)
-    )
-    await db.commit()
-    for user_id in users.scalars().all():
-        # Scheduling a Post copies the Text's references under this lock, so none lands mid-sweep.
-        await users_service.lock_user_id(db, user_id=user_id)
-        found = await db.execute(
-            _unreferenced(select(Media), cutoff=cutoff).where(Media.user_id == user_id)
-        )
-        for media in found.scalars().all():
+    after: Optional[str] = None
+    while True:
+        query = _unreferenced(select(Media.user_id).distinct(), cutoff=cutoff)
+        if after is not None:
+            query = query.where(Media.user_id > after)
+        page = await db.execute(query.order_by(Media.user_id).limit(_USERS_PER_PAGE))
+        user_ids = list(page.scalars().all())
+        if not user_ids:
+            return
+        for user_id in user_ids:
             try:
-                await media_service.delete(db, storage, media)
-            except (OSError, ValueError):
-                logger.exception("Deleting the files of unreferenced %s failed", media.id)
-        await db.commit()
+                await _delete_users_unreferenced(db, storage, user_id=user_id, cutoff=cutoff)
+            except Exception:
+                await db.rollback()
+                logger.exception("Deleting unreferenced Media of %s failed", user_id)
+        after = user_ids[-1]
+
+
+async def delete_unnamed_files(db: AsyncSession, storage: FileStorage, *, now: datetime) -> None:
+    """
+    Delete stored Media files written more than `UNREFERENCED_GRACE` before `now` whose Media
+    record doesn't exist: left by an attach that never committed.
+    """
+    cutoff = now - UNREFERENCED_GRACE
+    keys_by_id: dict[str, list[str]] = {}
+    for stored in await storage.list_files(_MEDIA_PREFIX):
+        media_id = stored.key.removeprefix(_MEDIA_PREFIX).split("/", 1)[0]
+        if stored.modified_at < cutoff:
+            keys_by_id.setdefault(media_id, []).append(stored.key)
+    ids = list(keys_by_id)
+    for start in range(0, len(ids), _IDS_PER_QUERY):
+        chunk = ids[start : start + _IDS_PER_QUERY]
+        named = set((await db.execute(select(Media.id).where(Media.id.in_(chunk)))).scalars())
+        for media_id in set(chunk) - named:
+            for key in keys_by_id[media_id]:
+                try:
+                    await storage.delete(key)
+                except (OSError, ValueError):
+                    logger.exception("Deleting the unnamed file %s failed", key)
+
+
+async def _delete_users_unreferenced(
+    db: AsyncSession, storage: FileStorage, *, user_id: str, cutoff: datetime
+) -> None:
+    # Scheduling a Post copies the Text's references under this lock, so none lands mid-sweep.
+    await users_service.lock_user_id(db, user_id=user_id)
+    found = await db.execute(
+        _unreferenced(select(Media), cutoff=cutoff).where(Media.user_id == user_id)
+    )
+    for media in found.scalars().all():
+        try:
+            await media_service.delete(db, storage, media)
+        except (OSError, ValueError):
+            logger.exception("Deleting the files of unreferenced %s failed", media.id)
+    await db.commit()
 
 
 def _unreferenced[T: tuple](query: Select[T], *, cutoff: datetime) -> Select[T]:

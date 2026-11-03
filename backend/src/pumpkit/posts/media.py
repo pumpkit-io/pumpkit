@@ -4,6 +4,8 @@ Text. Flush-only; the mediators commit. `scheduling` imports it to copy, publish
 """
 
 import io
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import BinaryIO, Optional
 
@@ -11,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.core.errors import ConflictError, NotFoundError
+from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.formats import part_name
 from pumpkit.posts.media_files import IMAGES_PER_PART, CheckedMedia, part_full
@@ -107,15 +110,16 @@ async def attach_to_text(
         db, storage, user_id=post.user_id, checked=checked, file=file, now=now, alt_text=alt_text
     )
     on_part = [p.position for p in post.text_media if p.part_index == part_index]
-    post.text_media.append(
-        TextMedia(
-            media=media,
-            post_id=post.id,
-            part_index=part_index,
-            position=max(on_part, default=-1) + 1,
+    async with files_deleted_on_failure(storage, media):
+        post.text_media.append(
+            TextMedia(
+                media=media,
+                post_id=post.id,
+                part_index=part_index,
+                position=max(on_part, default=-1) + 1,
+            )
         )
-    )
-    await db.flush()
+        await db.flush()
     return media
 
 
@@ -131,7 +135,7 @@ async def store(
 ) -> Media:
     """
     A new Media of the User's, with `checked`'s file and preview stored, placed nowhere yet.
-    Flushes. A file stored before a failed commit stays on disk under a key no record names.
+    Flushes. Wrap the work up to the commit in `files_deleted_on_failure`.
     """
     media = Media(
         user_id=user_id,
@@ -146,12 +150,30 @@ async def store(
     db.add(media)
     await db.flush()
     file.seek(0)
-    await storage.put(file_key(media.id), file)
-    await storage.put(preview_key(media.id), io.BytesIO(checked.preview))
+    async with files_deleted_on_failure(storage, media):
+        await storage.put(file_key(media.id), file)
+        await storage.put(preview_key(media.id), io.BytesIO(checked.preview))
     media.file_key = file_key(media.id)
     media.preview_key = preview_key(media.id)
     await db.flush()
     return media
+
+
+@asynccontextmanager
+async def files_deleted_on_failure(storage: FileStorage, media: Media) -> AsyncIterator[None]:
+    """
+    Deletes the files `store` stored for `media` when the block raises, since its record then
+    never commits. Best effort: the publisher's sweep deletes what this misses.
+    """
+    try:
+        yield
+    except BaseException:
+        for key in (file_key(media.id), preview_key(media.id)):
+            try:
+                await storage.delete(key)
+            except Exception:
+                logger.exception("Deleting %s after a failed attach failed", key)
+        raise
 
 
 def text_media_on(post: Post, *, media_id: str) -> TextMedia:
