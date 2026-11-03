@@ -3,6 +3,7 @@ Publishing a Scheduled post on X, for Post now and the publisher (ADR 0007). Own
 of a publish: the claim and any rotated tokens are committed before X is called.
 """
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -61,10 +62,20 @@ async def publish_claimed(
     scheduled_post_id: str,
     claimed_at: datetime,
     clock: Clock,
+    stop: Optional[asyncio.Event] = None,
 ) -> None:
-    """Publish what `claim_next_due` claimed at `claimed_at`, its claim renewed by `clock`."""
+    """
+    Publish what `claim_next_due` claimed at `claimed_at`, its claim renewed by `clock`. Once
+    `stop` is set, it starts no more calls to X and hands back the Parts not yet live.
+    """
     await _publish_claimed(
-        db, publisher, storage, scheduled_post_id=scheduled_post_id, now=claimed_at, clock=clock
+        db,
+        publisher,
+        storage,
+        scheduled_post_id=scheduled_post_id,
+        now=claimed_at,
+        clock=clock,
+        stop=stop,
     )
 
 
@@ -92,6 +103,10 @@ async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
 
 
 class _ClaimLost(Exception):
+    pass
+
+
+class _Stopped(Exception):
     pass
 
 
@@ -140,18 +155,30 @@ class _Access:
     publisher: XPublisher
     connection: XConnection
     token: str
+    stop: Optional[asyncio.Event]
 
     @classmethod
     async def start(
-        cls, db: AsyncSession, publisher: XPublisher, claim: _Claim, *, now: datetime
+        cls,
+        db: AsyncSession,
+        publisher: XPublisher,
+        claim: _Claim,
+        *,
+        now: datetime,
+        stop: Optional[asyncio.Event],
     ) -> "_Access":
         """Flushes rotated tokens; the caller commits them before calling X."""
         connection = await publish.connection_to_publish_on(db, claim.scheduled_post)
         token = await publish.fresh_access_token(db, publisher, connection, now=now)
-        return cls(claim, publisher, connection, token)
+        return cls(claim, publisher, connection, token, stop)
 
     async def for_call(self, db: AsyncSession) -> str:
-        """Renews the claim, which commits any rotated tokens, then answers the token to send."""
+        """
+        Renews the claim, which commits any rotated tokens, then answers the token to send.
+        Raises `_Stopped` instead once `stop` is set: X has not been called for this call yet.
+        """
+        if self.stop is not None and self.stop.is_set():
+            raise _Stopped()
         now = self.claim.clock()
         if as_utc(self.connection.access_token_expires_at) - now <= publish.REFRESH_MARGIN:
             scheduled_post = self.claim.scheduled_post
@@ -172,11 +199,12 @@ async def _publish_claimed(
     scheduled_post_id: str,
     now: datetime,
     clock: Clock,
+    stop: Optional[asyncio.Event] = None,
 ) -> None:
     scheduled_post = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
     claim = _Claim(scheduled_post=scheduled_post, held_since=now, clock=clock)
     try:
-        await _settle(db, publisher, storage, claim, now=now)
+        await _settle(db, publisher, storage, claim, now=now, stop=stop)
     except _ClaimLost:
         await db.commit()
         logger.warning(
@@ -186,11 +214,24 @@ async def _publish_claimed(
 
 
 async def _settle(
-    db: AsyncSession, publisher: XPublisher, storage: FileStorage, claim: _Claim, *, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    storage: FileStorage,
+    claim: _Claim,
+    *,
+    now: datetime,
+    stop: Optional[asyncio.Event],
 ) -> None:
     scheduled_post = claim.scheduled_post
     try:
-        await _publish(db, publisher, storage, claim, now=now)
+        await _publish(db, publisher, storage, claim, now=now, stop=stop)
+    except _Stopped:
+        # No POST /2/tweets was in flight, so X surely holds nothing unrecorded: safe to retry.
+        await claim.check(db)
+        await service.release_claim(db, scheduled_post, now=claim.clock())
+        await db.commit()
+        logger.info("Publisher stopping: Scheduled post %s handed back", scheduled_post.id)
+        return
     except publish.Failed as failed:
         await claim.check(db)
         failed_for_good = await publish.record_failure(
@@ -218,6 +259,7 @@ async def _publish(
     claim: _Claim,
     *,
     now: datetime,
+    stop: Optional[asyncio.Event],
 ) -> None:
     """
     Every Part not yet live, in order, each with its Media uploaded just before it and as a reply
@@ -226,7 +268,7 @@ async def _publish(
     scheduled_post = claim.scheduled_post
     # One lock order everywhere, User then X connection then Scheduled post, so no two deadlock.
     await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
-    access = await _Access.start(db, publisher, claim, now=now)
+    access = await _Access.start(db, publisher, claim, now=now, stop=stop)
     # Commit the rotated tokens, or end the read, before the call to X: it releases the lock.
     await db.commit()
 

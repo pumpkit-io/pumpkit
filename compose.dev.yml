@@ -80,6 +80,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: python -m pumpkit.scheduling.publisher
+    # On stop, a post X is being sent gets its answer (2 min at most); any other is handed back.
+    stop_grace_period: 3m
     env_file: .env
     environment: *dev-backend-environment
     volumes:

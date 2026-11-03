@@ -37,7 +37,7 @@ from pumpkit.posts.llm import LLM
 from pumpkit.posts.media_fetcher import MediaUrlFetcher
 from pumpkit.posts.media_upload import ReceivedMedia
 from pumpkit.posts.media_upload_links import NewUploadLink
-from pumpkit.posts.models import Media, MediaKind, Post
+from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service, top_up_charges
@@ -316,7 +316,7 @@ async def create_scheduled_post(
     media = media_service.text_media_by_part(post)
     await _check_media(db, media, user_id=user.id)
     if new.publish_now:
-        rules.check_post_now_media(_kinds(media), live_count=0)
+        rules.check_post_now_media(media_service.kinds_by_part(media), live_count=0)
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_x_posts_room(db, user_id=user.id, publish_at=publish_at, parts=parts)
     community = await _community(reader, new.community) if new.community is not None else None
@@ -352,17 +352,13 @@ async def _check_media(
     db: AsyncSession, media: list[list[Media]], *, user_id: str, live_count: int = 0
 ) -> None:
     """The Media the Parts not live will go out with fits X, is still stored, and can go out."""
-    rules.check_media(_kinds(media))
+    rules.check_media(media_service.kinds_by_part(media))
     rules.check_media_kept(
         [[m.file_key is not None for m in part] for part in media], live_count=live_count
     )
     rules.check_media_once(_ids(media))
     if any(media[live_count:]):
         await x_connections_service.check_takes_media(db, user_id=user_id)
-
-
-def _kinds(media: list[list[Media]]) -> list[list[MediaKind]]:
-    return [[m.kind for m in part] for part in media]
 
 
 def _ids(media: list[list[Media]]) -> list[list[str]]:
@@ -475,7 +471,9 @@ async def edit_scheduled_post(
         )
     if edit.publish_now:
         rules.check_post_now_media(
-            _kinds(media if media is not None else service.media_by_part(scheduled_post)),
+            media_service.kinds_by_part(
+                media if media is not None else service.media_by_part(scheduled_post)
+            ),
             live_count=len(live),
         )
     reschedule = None

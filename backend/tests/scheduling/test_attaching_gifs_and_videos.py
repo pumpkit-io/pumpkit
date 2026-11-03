@@ -6,6 +6,7 @@ up to 4 images, or 1 GIF, or 1 video. The web app sends a video's length and fir
 
 from collections.abc import AsyncIterator
 from io import BytesIO
+from typing import Optional
 
 import pytest
 from httpx import AsyncClient
@@ -27,8 +28,8 @@ async def _attach(
     part: int = 1,
     name: str = "clip.mp4",
     content_type: str = "video/mp4",
-    duration_ms: str | None = None,
-    poster: bytes | None = None,
+    duration_ms: Optional[str] = None,
+    poster: Optional[bytes] = None,
 ):
     files = {"file": (name, data, content_type)}
     if poster is not None:
@@ -40,7 +41,7 @@ async def _attach(
     )
 
 
-async def _gif(client: AsyncClient, post_id: str, data: bytes | None = None, *, part: int = 1):
+async def _gif(client: AsyncClient, post_id: str, data: Optional[bytes] = None, *, part: int = 1):
     return await _attach(
         client,
         post_id,

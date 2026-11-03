@@ -340,6 +340,85 @@ async def test_a_post_due_while_a_video_uploads_goes_out_on_the_next_pass(
     assert [text for _, text in fake_x_publisher.published] == ["Due later.", "A long demo."]
 
 
+async def _run_until_stopped(db_session_maker, fake_x_publisher, file_storage, fixed_clock, stop):
+    await asyncio.wait_for(
+        run(
+            db_session_maker,
+            fake_x_publisher,
+            file_storage,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+        ),
+        timeout=5,
+    )
+
+
+async def test_a_publisher_stopped_mid_upload_hands_the_post_back_for_the_next_one(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A long demo.")
+    await _attach(client, post_id, mp4(total=96), "demo.mp4")
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.chunk_bytes = 32
+    stop = asyncio.Event()
+
+    async def deploy_starts() -> None:
+        stop.set()
+
+    fake_x_publisher.while_calling_x_to_upload = deploy_starts
+
+    await _run_until_stopped(db_session_maker, fake_x_publisher, file_storage, fixed_clock, stop)
+
+    handed_back = await _scheduled_post(client, post_id)
+    assert handed_back["state"] == "scheduled"
+    assert handed_back["failed_reason"] is None
+    assert fake_x_publisher.upload_calls == 1
+    assert fake_x_publisher.published == []
+
+    fake_x_publisher.while_calling_x_to_upload = None
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
+    assert fake_x_publisher.uploads[0].data == mp4(total=96)
+
+
+async def test_a_publisher_stopped_while_x_takes_the_post_waits_for_its_answer(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A demo.")
+    await _attach(client, post_id, mp4(), "demo.mp4")
+    await _due(client, post_id, fixed_clock)
+    stop = asyncio.Event()
+
+    async def deploy_starts() -> None:
+        stop.set()
+        await asyncio.sleep(0.05)
+
+    fake_x_publisher.while_publishing = deploy_starts
+
+    await _run_until_stopped(db_session_maker, fake_x_publisher, file_storage, fixed_clock, stop)
+
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
+    assert [text for _, text in fake_x_publisher.published] == ["A demo."]
+
+
 async def test_post_now_refuses_a_video_for_now(
     client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
 ):

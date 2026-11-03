@@ -2,6 +2,7 @@ import base64
 import io
 import json
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -549,7 +550,7 @@ def _upload_routes(finalized: dict = FINALIZED) -> tuple[respx.Route, respx.Rout
     )
 
 
-async def _upload(data: bytes = b"png", tokens: list[str] | None = None, **fields) -> str:
+async def _upload(data: bytes = b"png", tokens: Optional[list[str]] = None, **fields) -> str:
     sent = iter(tokens) if tokens is not None else None
 
     async def token_for_call() -> str:

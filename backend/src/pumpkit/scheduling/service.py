@@ -676,6 +676,14 @@ async def release_for_retry(
     await db.flush()
 
 
+async def release_claim(db: AsyncSession, scheduled_post: ScheduledPost, *, now: datetime) -> None:
+    """Back from publishing to scheduled, as it was before the claim. Flushes."""
+    scheduled_post.state = SCHEDULED
+    scheduled_post.publishing_started_at = None
+    scheduled_post.updated_at = now
+    await db.flush()
+
+
 async def record_part_live(db: AsyncSession, part: ScheduledPostPart, *, x_post_id: str) -> None:
     """The Part is live as X's post `x_post_id`. Flushes."""
     part.x_post_id = x_post_id

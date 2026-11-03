@@ -32,6 +32,8 @@ export type Tile =
       localUrl: string | null;
       /** A video's length, once the browser read it. */
       durationMs: number | null;
+      /** A video whose length and first frame the browser is still reading. */
+      reading: boolean;
       /** The share sent so far, from 0 to 1. */
       progress: number;
       via: AttachVia;
@@ -82,17 +84,19 @@ export function aMedia(kind: MediaKind): string {
   return kind === 'image' ? 'An image' : `A ${mediaNoun(kind)}`;
 }
 
+/** Progress events lag the bytes sent: only this much left proves the server lacks the file. */
+const ABORTABLE_BYTES_LEFT = 32 * 1024 * 1024;
+
 /**
- * An upload, queued or under way. Once all of an image or GIF is sent it is never aborted: an
- * abort can't tell whether the server already took the file, so a stopped upload finishes and
- * its Media is taken off. A video still sending is aborted, as finishing could take many minutes.
+ * An upload, queued or under way. A stopped one finishes and its Media is taken off, unless it
+ * is a video known to have far to go: aborting it can't leave a Media behind.
  */
 interface Upload {
   kind: MediaKind;
   /** Stopped by the User or by leaving the page. */
   dropped: boolean;
-  /** The share of the file sent so far. */
-  sent: number;
+  /** Null until the browser reports progress. */
+  bytesLeft: number | null;
   controller: AbortController;
 }
 
@@ -110,10 +114,16 @@ function readyTile(
   return { key, state: 'ready', media, localUrl, removing: false };
 }
 
-/** Drops an upload; a video still sending stops at once. */
+/** Drops an upload; a video with far to go stops at once. */
 function stop(under: Upload) {
   under.dropped = true;
-  if (under.kind === 'video' && under.sent < 1) under.controller.abort();
+  if (
+    under.kind === 'video' &&
+    under.bytesLeft !== null &&
+    under.bytesLeft >= ABORTABLE_BYTES_LEFT
+  ) {
+    under.controller.abort();
+  }
 }
 
 /** `parts` with every Part from `count` on appended to the last one, as the server moves Media. */
@@ -296,8 +306,8 @@ export function useTextMedia(
         let error: unknown = null;
         try {
           media = await place.attach(sentTo + 1, file, {
-            onProgress: (sent) => {
-              under.sent = sent;
+            onProgress: (sent, bytesLeft) => {
+              under.bytesLeft = bytesLeft;
               changeTile(key, (tile) =>
                 tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
               );
@@ -309,7 +319,7 @@ export function useTextMedia(
           error = caught;
         }
         if (under.dropped && axios.isCancel(error)) {
-          // Aborted before all of it was sent, so the server can't have attached it. Media the
+          // Aborted far from the end, so the server can't have attached it. Media the
           // read finds that the page didn't know of came from elsewhere, such as an AI app: shown.
           const server = await read();
           if (server) reconcile(server, null);
@@ -393,7 +403,12 @@ export function useTextMedia(
 
   const upload = useCallback(
     (key: string, file: File, kind: MediaKind, via: AttachVia) => {
-      const under: Upload = { kind, dropped: false, sent: 0, controller: new AbortController() };
+      const under: Upload = {
+        kind,
+        dropped: false,
+        bytesLeft: null,
+        controller: new AbortController(),
+      };
       uploads.current.set(key, under);
       enqueue(async () => {
         try {
@@ -432,7 +447,11 @@ export function useTextMedia(
           return;
         }
         changeTile(key, (tile) =>
-          tile.state === 'ready' ? { ...tile, localUrl } : { ...tile, localUrl, durationMs },
+          tile.state === 'ready'
+            ? { ...tile, localUrl }
+            : tile.state === 'uploading'
+              ? { ...tile, localUrl, durationMs, reading: false }
+              : { ...tile, localUrl, durationMs },
         );
       });
     },
@@ -460,7 +479,10 @@ export function useTextMedia(
           change(partIndex, (tiles) => [...tiles, { ...shown, state: 'refused', refusal }]);
           continue;
         }
-        change(partIndex, (tiles) => [...tiles, { ...shown, state: 'uploading', progress: 0 }]);
+        change(partIndex, (tiles) => [
+          ...tiles,
+          { ...shown, state: 'uploading', reading: video, progress: 0 },
+        ]);
         if (video) readVideoOf(key, file);
         upload(key, file, kind, via);
       }
@@ -480,6 +502,7 @@ export function useTextMedia(
         kind: tile.kind,
         localUrl: tile.localUrl,
         durationMs: tile.durationMs,
+        reading: false,
         progress: 0,
         via: tile.via,
       }));

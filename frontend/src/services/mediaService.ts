@@ -51,8 +51,8 @@ export interface VideoFacts {
 export const ALT_TEXT_MAX_CHARS = 1000;
 
 export interface UploadOptions {
-  /** Hears the share of the file sent so far, from 0 to 1. */
-  onProgress?: (sent: number) => void;
+  /** Hears the share of the upload sent so far, from 0 to 1, and how many bytes are left. */
+  onProgress?: (sent: number, bytesLeft: number) => void;
   video?: VideoFacts | null;
   signal?: AbortSignal;
 }
@@ -71,7 +71,7 @@ async function upload(
     // The browser fills in the boundary; the JSON default would send the form as JSON.
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: (event: { loaded: number; total?: number }) => {
-      if (event.total) onProgress?.(event.loaded / event.total);
+      if (event.total) onProgress?.(event.loaded / event.total, event.total - event.loaded);
     },
   });
   return toMedia(data);

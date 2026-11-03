@@ -324,12 +324,12 @@ async def attach_media(
     WEBP image up to 5 MB, a GIF up to 15 MB, or an MP4 or MOV video up to 512 MB. X takes up to
     4 images, or 1 GIF, or 1 video, per X post. `part` counts from 1; a single X post has only
     part 1. `alt_text`, up to 1,000 characters, describes an image or GIF for people using screen
-    readers. With `url`, a public https URL of the file, Pumpkit downloads and attaches it, giving
+    readers. With `url`, a public https URL of the media, Pumpkit downloads and attaches it, giving
     up on a video after 4 minutes: send a large video from a slow host as a local file instead.
     Without `url`, the answer is a one-time upload link for this part, when it expires, and the
-    `curl` command that sends a local file to it: run it with FILE_PATH replaced by the file's
+    `curl` command that sends local media to it: run it with FILE_PATH replaced by its file's
     path, written and quoted as your shell takes a path. If you can't run commands, give the user
-    the post's page link to attach the file there. Pumpkit publishes media as given and its
+    the post's page link to attach the media there. Pumpkit publishes media as given and its
     writing never reads it, so write the brief or feedback from what you saw in it. On a draft or a failed post it
     changes the post's text; on a scheduled post it changes the scheduled post's own copy. A
     published post, or a part already on X, keeps its media.
@@ -353,7 +353,7 @@ async def attach_media(
         minutes = int(UPLOAD_LINK_LIFETIME.total_seconds() // 60)
         return AttachMediaToolResponse(
             message=(
-                f"To attach a local file to part {request.part}, run this once, within "
+                f"To attach local media to part {request.part}, run this once, within "
                 f"{minutes} minutes, with {FILE_PATH} replaced by the file's path, quoted as "
                 f"your shell needs: {curl}\nWithout a shell, attach it on the post's page in "
                 f"the Pumpkit web app: {page}"

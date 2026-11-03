@@ -1,4 +1,12 @@
-import { Film, Image as ImageIcon, Play, RotateCw, TriangleAlert, X } from 'lucide-react';
+import {
+  Film,
+  Image as ImageIcon,
+  LoaderCircle,
+  Play,
+  RotateCw,
+  TriangleAlert,
+  X,
+} from 'lucide-react';
 import { useContext, type CSSProperties } from 'react';
 import { XConnectionContext } from '@/features/xConnection/XConnectionProvider';
 import { cn } from '@/lib/utils';
@@ -80,12 +88,21 @@ function MediaTile({
   const progress = tile.state === 'uploading' ? Math.round(tile.progress * 100) : null;
   const duration = durationOf(tile);
   const KindIcon = kind === 'video' ? Film : ImageIcon;
+  const reading = tile.state === 'uploading' && tile.reading;
   return (
     <li
       aria-label={name[0]!.toUpperCase() + name.slice(1)}
       className={cn('relative overflow-hidden bg-muted', className)}
     >
-      {src ? (
+      {reading ? (
+        <div
+          role="status"
+          className="absolute inset-0 flex items-center justify-center text-muted-foreground"
+        >
+          <LoaderCircle aria-hidden className="h-6 w-6 animate-spin motion-reduce:animate-none" />
+          <span className="sr-only">Reading {name}</span>
+        </div>
+      ) : src ? (
         <img
           src={src}
           alt={media?.altText ?? ''}
@@ -300,17 +317,15 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
   if (!shown.length) return null;
   const cells = CELLS[shown.length] ?? [];
   return (
-    <div className="space-y-1.5">
-      <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
-        {shown.map((tile, index) => (
-          <MediaTile
-            key={tile.key}
-            tile={tile}
-            number={index + 1}
-            className={shown.length > 4 ? 'aspect-video' : (cells[index] ?? '')}
-          />
-        ))}
-      </ul>
-    </div>
+    <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
+      {shown.map((tile, index) => (
+        <MediaTile
+          key={tile.key}
+          tile={tile}
+          number={index + 1}
+          className={shown.length > 4 ? 'aspect-video' : (cells[index] ?? '')}
+        />
+      ))}
+    </ul>
   );
 }

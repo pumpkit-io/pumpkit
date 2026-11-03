@@ -1,7 +1,6 @@
 """The publisher (ADR 0007): a process of its own. Run it with `python -m pumpkit.scheduling.publisher`."""
 
 import asyncio
-import contextlib
 import signal
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -34,10 +33,14 @@ PUBLISHES_AT_ONCE = 4
 
 
 class Publishes:
-    """The publishes under way, at most `at_once`; a publish outlives the pass that claimed it."""
+    """
+    The publishes under way, at most `at_once`; a publish outlives the pass that claimed it.
+    Each failure is logged; with `raises`, `all_finished` raises the first since it last ran.
+    """
 
-    def __init__(self, at_once: int = PUBLISHES_AT_ONCE) -> None:
+    def __init__(self, at_once: int = PUBLISHES_AT_ONCE, *, raises: bool = False) -> None:
         self._at_once = at_once
+        self._raises = raises
         self._under_way: set[asyncio.Task[None]] = set()
         self._finished = asyncio.Event()
         self._failure: Optional[BaseException] = None
@@ -54,6 +57,7 @@ class Publishes:
         *,
         scheduled_post_id: str,
         claimed_at: datetime,
+        stop: Optional[asyncio.Event] = None,
     ) -> None:
         async def publishing() -> None:
             async with session_maker() as db:
@@ -64,6 +68,7 @@ class Publishes:
                     scheduled_post_id=scheduled_post_id,
                     claimed_at=claimed_at,
                     clock=clock,
+                    stop=stop,
                 )
 
         task = asyncio.create_task(publishing(), name=scheduled_post_id)
@@ -77,7 +82,8 @@ class Publishes:
         if failure is not None:
             # Left in publishing, recovery settles it once its claim goes unrenewed.
             logger.error("Publishing Scheduled post %s failed", task.get_name(), exc_info=failure)
-            self._failure = self._failure or failure
+            if self._raises:
+                self._failure = self._failure or failure
 
     async def one_finished(self) -> None:
         self._finished.clear()
@@ -85,11 +91,11 @@ class Publishes:
             await self._finished.wait()
 
     async def all_finished(self) -> None:
-        """Waits for every publish under way, then raises the first that raised, if any."""
         while self._under_way:
             await asyncio.wait(self._under_way)
-        if self._failure is not None:
-            raise self._failure
+        failure, self._failure = self._failure, None
+        if failure is not None:
+            raise failure
 
 
 async def run_pass(
@@ -107,7 +113,7 @@ async def run_pass(
     leave them under way; without, publish one at a time. Returns when files were last swept.
     """
     waits = publishes is None
-    under_way = publishes if publishes is not None else Publishes(at_once=1)
+    under_way = publishes if publishes is not None else Publishes(at_once=1, raises=True)
     async with session_maker() as db:
         await recover_stuck(db, now=clock())
     while stop is None or not stop.is_set():
@@ -129,6 +135,7 @@ async def run_pass(
             clock,
             scheduled_post_id=scheduled_post_id,
             claimed_at=claimed_at,
+            stop=stop,
         )
     if waits:
         await under_way.all_finished()
@@ -197,15 +204,13 @@ async def run(
             except TimeoutError:
                 pass
     finally:
-        # Each failure was logged as it happened.
-        with contextlib.suppress(Exception):
-            await publishes.all_finished()
+        await publishes.all_finished()
 
 
 async def main() -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-    # Finish the Scheduled posts in hand, then exit: killing mid-call would leave them to recovery.
+    # Stop calling X, wait for the posts X is being sent, then exit: compose allows 3 minutes.
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
 

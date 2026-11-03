@@ -108,10 +108,14 @@ def check_part_room(
     Refuses Part `part_index` of a Text or Scheduled post when its X post can't take Media of
     `kind` too. With no `kind`, before the file is read, only when it can't take any more.
     """
-    holds: list[MediaKind] = [m.kind for m in media_by_part[part_index]]
+    holds = kinds_by_part(media_by_part)[part_index]
     if not takes_more(holds, kind):
         name = part_name(part_index + 1, len(media_by_part)) or "this post"
         raise part_full(name.capitalize(), holds)
+
+
+def kinds_by_part(media_by_part: list[list[Media]]) -> list[list[MediaKind]]:
+    return [[m.kind for m in part] for part in media_by_part]
 
 
 async def attach_to_text(

@@ -1019,7 +1019,7 @@ describe('Post page', () => {
     });
 
     it('shows a chosen image uploading with its progress, then its stored preview', async () => {
-      let progress: (sent: number) => void = () => {};
+      let progress: (sent: number, bytesLeft: number) => void = () => {};
       let answer: (media: Media) => void = () => {};
       vi.mocked(mediaService.attach).mockImplementation((_post, _part, _file, options) => {
         progress = options?.onProgress ?? progress;
@@ -1036,7 +1036,7 @@ describe('Post page', () => {
       const bar = within(tile).getByRole('progressbar', { name: 'Uploading image 1' });
       expect(mediaService.attach).toHaveBeenCalledWith('post_01', 2, file, expect.anything());
 
-      act(() => progress(0.5));
+      act(() => progress(0.5, 1024));
       expect(bar).toHaveAttribute('aria-valuenow', '50');
 
       await act(async () => answer(image('media_01')));
@@ -1557,6 +1557,24 @@ describe('Post page', () => {
         expect(tile.queryByRole('button', { name: /alt text/i })).not.toBeInTheDocument();
       });
 
+      it('shows a video as loading while the browser reads its first frame and length', async () => {
+        let read: (facts: { durationMs: number; poster: Blob }) => void = () => {};
+        vi.mocked(readVideo).mockReturnValue(new Promise((resolve) => (read = resolve)));
+        vi.mocked(mediaService.attach).mockReturnValue(new Promise(() => {}));
+        renderPost(postWith('the final text'));
+        await textCard();
+
+        chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+
+        const tile = within(await mediaOn('the post').findByRole('listitem', { name: 'Video 1' }));
+        expect(tile.getByRole('status')).toHaveTextContent('Reading video 1');
+
+        await act(async () => read({ durationMs: 42_000, poster: new Blob(['frame']) }));
+
+        expect(tile.queryByRole('status')).not.toBeInTheDocument();
+        expect(tile.getByText('0:42')).toBeInTheDocument();
+      });
+
       it('takes a MOV whose type the browser leaves out', async () => {
         vi.mocked(mediaService.attach).mockResolvedValue(video('media_01'));
         renderPost(postWith('the final text'));
@@ -1670,17 +1688,50 @@ describe('Post page', () => {
         expect(screen.queryByText(/Over 20 minutes/)).not.toBeInTheDocument();
       });
 
-      function sendingUntilAborted(): { signal: () => AbortSignal | undefined } {
+      /** A video upload that has sent `sent` of its bytes, with `bytesLeft` to go, or no news. */
+      function sendingUntilAborted(
+        progress: { sent: number; bytesLeft: number } | null = {
+          sent: 0.1,
+          bytesLeft: 400 * MB,
+        },
+      ): {
+        signal: () => AbortSignal | undefined;
+        answer: (media: Media) => void;
+      } {
         let signal: AbortSignal | undefined;
+        let answer: (media: Media) => void = () => {};
         vi.mocked(mediaService.attach).mockImplementation(
           (_post, _part, _file, options) =>
-            new Promise((_resolve, reject) => {
+            new Promise((resolve, reject) => {
               signal = options?.signal;
+              answer = resolve;
+              if (progress) options?.onProgress?.(progress.sent, progress.bytesLeft);
               options?.signal?.addEventListener('abort', () => reject(new CanceledError()));
             }),
         );
-        return { signal: () => signal };
+        return { signal: () => signal, answer: (media) => answer(media) };
       }
+
+      it.each([
+        ['almost all sent', { sent: 0.99, bytesLeft: 4 * MB }],
+        ['sent without news of its progress', null],
+      ])(
+        'lets a video %s finish when its tile is removed, then takes it off the server',
+        async (_case, progress) => {
+          const sending = sendingUntilAborted(progress);
+          renderPost(postWith('the final text'));
+          await textCard();
+          chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+          await waitFor(() => expect(sending.signal()).toBeDefined());
+
+          fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove video 1' }));
+          expect(sending.signal()?.aborted).toBe(false);
+          await act(async () => sending.answer(video('media_09')));
+
+          expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_09');
+          expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();
+        },
+      );
 
       it('shows, and keeps, media an app attached while a stopped video was sending', async () => {
         const sending = sendingUntilAborted();
