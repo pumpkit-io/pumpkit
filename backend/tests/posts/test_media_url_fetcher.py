@@ -129,8 +129,8 @@ async def test_an_answer_other_than_200_is_refused(production, fetcher):
     refusal = await _refusal(fetcher, URL)
 
     assert refusal.detail == (
-        "Pumpkit couldn't download the file at this URL (answered HTTP 404). Give a public https"
-        " URL of the file itself."
+        "Pumpkit couldn't download media from this URL (answered HTTP 404). Give a public https"
+        " URL that serves the media itself."
     )
 
 

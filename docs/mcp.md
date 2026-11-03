@@ -151,14 +151,14 @@ On an Instance that sells Plans, each post you start and each round of feedback 
 
 ## Media tools
 
-Media is your own content, like a hand edit: Pumpkit publishes it inside the X post exactly as you gave it, and its writing never reads it, not its file, its name or its alt text. When an image should shape the post, the app looks at it itself and writes what it shows into the Brief or the Feedback. Pumpkit's instructions tell the app so.
+Media is your own content, like a hand edit: Pumpkit publishes it inside the X post exactly as you gave it, and its writing never reads it: not the image, its name or its alt text. When an image should shape the post, the app looks at it itself and writes what it shows into the Brief or the Feedback. Pumpkit's instructions tell the app so.
 
 | Tool | What it does |
 | --- | --- |
-| `attach_media` | Downloads an image from a public https URL and attaches it to a Part of a Post, `part` 1 unless you name another, last after the Media it has, with optional alt text of up to 1,000 characters. On a Draft or a Failed Post it changes the Text; on a Scheduled Post it changes the Scheduled post's own copy. It refuses a Published Post and a Part already live on X. Without a URL, it answers with the Post's page in the web app, where you attach the file yourself. |
+| `attach_media` | Downloads an image from a public https URL and attaches it to a Part of a Post, `part` 1 unless you name another, last after the Media it has, with optional alt text of up to 1,000 characters. On a Draft or a Failed Post it changes the Text; on a Scheduled Post it changes the Scheduled post's own copy. It refuses a Published Post and a Part already live on X. Without a URL, it answers with the Post's page in the web app, where you attach it yourself. |
 | `remove_media` | Takes one Media, by the id `get_post` lists, off a Post, by the same rule. |
 
-`attach_media` takes what the web app's upload takes: a JPEG, PNG or WEBP image up to 5 MB, up to 4 on a Part. Pumpkit checks the type from the file's own bytes. It downloads only from public hosts on port 443, following up to 3 redirects, stops a download that passes 5 MB, and gives up after 60 seconds. It refuses, with the web app's words, a file too large, a type Pumpkit doesn't take, a file it can't read, a URL it can't download and a Part that holds 4 images. An X connection made before Pumpkit could publish Media is asked to reconnect first, with the link to the Settings page. Neither tool uses a generation, and each allows 10 calls a minute.
+`attach_media` takes what the web app's upload takes: a JPEG, PNG or WEBP image up to 5 MB, up to 4 on a Part. Pumpkit checks the type from the image's own bytes. It downloads only from public hosts on port 443, following up to 3 redirects, stops a download that passes 5 MB, and gives up after 60 seconds. It refuses, with the web app's words, an image too large, a type Pumpkit doesn't take, an image it can't read, a URL it can't download and a Part that holds 4 images. An X connection made before Pumpkit could publish Media is asked to reconnect first, with the link to the Settings page. Neither tool uses a generation, and each allows 10 calls a minute.
 
 Alt text is stored with the image and `get_post` lists it, but Pumpkit doesn't send it to X yet.
 

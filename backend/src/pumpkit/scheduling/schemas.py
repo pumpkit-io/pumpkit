@@ -184,7 +184,6 @@ class PostMessageToolResponse(BaseModel):
     post_url: str
 
 
-# Longer URLs are rare enough that browsers and CDNs refuse them too.
 URL_MAX_CHARS = 2048
 
 
@@ -193,12 +192,14 @@ class AttachMediaRequest(BaseModel):
 
     part: int = Field(1, ge=1)
     url: Optional[str] = Field(None, max_length=URL_MAX_CHARS)
-    alt_text: Optional[str] = Field(None, max_length=ALT_TEXT_MAX_CHARS)
+    alt_text: Optional[str] = None
 
     @field_validator("alt_text")
     @classmethod
     def _strip(cls, value: Optional[str]) -> Optional[str]:
         stripped = value.strip() if value is not None else ""
+        if len(stripped) > ALT_TEXT_MAX_CHARS:
+            raise ValueError(f"Alt text can be up to {ALT_TEXT_MAX_CHARS:,} characters.")
         return stripped or None
 
 

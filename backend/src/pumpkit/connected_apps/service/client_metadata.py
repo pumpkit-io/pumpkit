@@ -33,6 +33,7 @@ from pumpkit.core.public_http import (
     PublicFetchError,
     Resolver,
     anyio_network,
+    check_answer,
     fetch_public,
     resolve_with_getaddrinfo,
 )
@@ -113,11 +114,7 @@ class HttpClientMetadataFetcher:
                 url,
                 headers={"Accept": "application/json", "Accept-Encoding": "identity"},
             ) as response:
-                if response.status_code != 200:
-                    raise ClientMetadataFetchError(f"answered HTTP {response.status_code}")
-                # A compressed body would be expanded before the size cap could stop it.
-                if response.headers.get("content-encoding", "identity").lower() != "identity":
-                    raise ClientMetadataFetchError("answered a compressed document")
+                check_answer(response)
                 body = await _read_capped(response)
                 return body, response.headers.get("cache-control", "")
 

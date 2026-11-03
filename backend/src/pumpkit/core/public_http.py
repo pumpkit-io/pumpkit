@@ -99,7 +99,7 @@ async def fetch_public(
     What `attempt` makes of a client connected to `url`'s host, tried on each address the host
     resolves to in order, once every one of them is allowed. The client follows no redirects.
     """
-    addresses = await check_destination(url, resolve)
+    addresses = await _check_destination(url, resolve)
     try:
         for address in addresses[:-1]:
             try:
@@ -110,6 +110,15 @@ async def fetch_public(
     # InvalidURL isn't an HTTPError: httpx raises it for a URL it refuses to send.
     except (httpx.HTTPError, httpx.InvalidURL) as error:
         raise PublicFetchError(f"unreachable: {type(error).__name__}") from error
+
+
+def check_answer(response: httpx.Response) -> None:
+    """Refuses an answer other than 200, and a compressed one."""
+    if response.status_code != 200:
+        raise PublicFetchError(f"answered HTTP {response.status_code}")
+    # A compressed body would be expanded before a size cap could stop it.
+    if response.headers.get("content-encoding", "identity").lower() != "identity":
+        raise PublicFetchError("answered a compressed body")
 
 
 async def _attempt_on(
@@ -125,7 +134,7 @@ async def _attempt_on(
         return await attempt(http)
 
 
-async def check_destination(url: str, resolve: Resolver) -> list[str]:
+async def _check_destination(url: str, resolve: Resolver) -> list[str]:
     """
     The addresses to try in order, once every address the host resolves to is global. Outside
     `ENV=local` the URL must be https, on port 443, naming a host rather than an IP address.

@@ -757,8 +757,7 @@ async def attach_text_media(
     """
     post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
     part_index = part_number - 1
-    _check_not_live(scheduled_post, part_index=part_index)
-    media_service.check_text_part_room(post, part_index=part_index)
+    _check_text_part_takes_media(post, scheduled_post, part_index=part_index)
     checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
     media = await media_service.attach_to_text(
         db,
@@ -812,10 +811,7 @@ async def attach_scheduled_post_media(
         db, user=user, scheduled_post_id=scheduled_post_id
     )
     part_index = part_number - 1
-    if not 0 <= part_index < len(media):
-        raise NotFoundError(f"This scheduled post has no part {part_number}.")
-    _check_not_live(scheduled_post, part_index=part_index)
-    media_service.check_part_room(media, part_index=part_index)
+    _check_scheduled_post_part_takes_media(scheduled_post, media, part_index=part_index)
     checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
     attached = await media_service.store(
         db, storage, user_id=user.id, checked=checked, file=file, now=now, alt_text=alt_text
@@ -859,12 +855,13 @@ async def attach_media_from_url(
     checks. Refused on a Published Post and on a live Part.
     """
     await x_connections_service.check_takes_media(db, user_id=user.id)
-    await _scheduled_post_taking_media(db, user=user, post_id=post_id)
+    await _check_part_takes_media(db, user=user, post_id=post_id, part_number=part_number)
     # No transaction stays open while the file downloads.
     await db.commit()
     async with fetcher.fetch(url) as received:
-        scheduled_post_id = await _scheduled_post_taking_media(db, user=user, post_id=post_id)
-        if scheduled_post_id is None:
+        _, scheduled_post = await _post_with_scheduled_post(db, user=user, post_id=post_id)
+        taking = _scheduled_post_taking_media(scheduled_post)
+        if taking is None:
             media = await attach_text_media(
                 db,
                 storage,
@@ -881,7 +878,7 @@ async def attach_media_from_url(
             db,
             storage,
             user,
-            scheduled_post_id,
+            taking.id,
             part_number,
             received.file,
             received.byte_size,
@@ -891,6 +888,11 @@ async def attach_media_from_url(
         return PlacedMediaResponse(media=media, on_scheduled_post=True)
 
 
+async def check_post_found(db: AsyncSession, user: User, post_id: str) -> None:
+    """Refuses a Post that isn't the User's."""
+    await version_writing.user_post(db, user=user, post_id=post_id)
+
+
 async def remove_media(
     db: AsyncSession, user: User, post_id: str, media_id: str, now: datetime
 ) -> bool:
@@ -898,26 +900,69 @@ async def remove_media(
     For AI apps: take the Media off where the Post's Media changes now, as `attach_media_from_url`
     picks it. Answers whether that was its Scheduled post.
     """
-    scheduled_post_id = await _scheduled_post_taking_media(db, user=user, post_id=post_id)
-    if scheduled_post_id is None:
+    _, scheduled_post = await _post_with_scheduled_post(db, user=user, post_id=post_id)
+    taking = _scheduled_post_taking_media(scheduled_post)
+    if taking is None:
         await remove_text_media(db, user, post_id, media_id)
         return False
-    await remove_scheduled_post_media(db, user, scheduled_post_id, media_id, now)
+    await remove_scheduled_post_media(db, user, taking.id, media_id, now)
     return True
 
 
-async def _scheduled_post_taking_media(
+async def _post_with_scheduled_post(
     db: AsyncSession, *, user: User, post_id: str
-) -> Optional[str]:
+) -> tuple[Post, Optional[ScheduledPost]]:
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    return post, await service.get_for_post(db, post_id=post_id)
+
+
+def _scheduled_post_taking_media(
+    scheduled_post: Optional[ScheduledPost],
+) -> Optional[ScheduledPost]:
     """
-    The id of the User's Post's Scheduled post while it waits, or publishes, which then refuses:
-    its own copy is what goes out. None when the Text's Media changes, or the Text refuses.
+    The Scheduled post whose own copy's Media changes: one waiting, or publishing, which then
+    refuses. None when the Text's Media changes, or the Text refuses.
     """
-    await version_writing.user_post(db, user=user, post_id=post_id)
-    scheduled_post = await service.get_for_post(db, post_id=post_id)
     if scheduled_post is None or scheduled_post.state in (FAILED, PUBLISHED):
         return None
-    return scheduled_post.id
+    return scheduled_post
+
+
+async def _check_part_takes_media(
+    db: AsyncSession, *, user: User, post_id: str, part_number: int
+) -> None:
+    """
+    Refuses, without locking, what attaching to Part `part_number` would refuse before checking
+    the file, so a refusal doesn't wait on a download. Attaching checks again under its locks.
+    """
+    post, scheduled_post = await _post_with_scheduled_post(db, user=user, post_id=post_id)
+    part_index = part_number - 1
+    taking = _scheduled_post_taking_media(scheduled_post)
+    if taking is not None:
+        if taking.state != SCHEDULED:
+            raise _publishing_started()
+        _check_scheduled_post_part_takes_media(
+            taking, service.media_by_part(taking), part_index=part_index
+        )
+        return
+    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    _check_text_part_takes_media(post, scheduled_post, part_index=part_index)
+
+
+def _check_text_part_takes_media(
+    post: Post, scheduled_post: Optional[ScheduledPost], *, part_index: int
+) -> None:
+    _check_not_live(scheduled_post, part_index=part_index)
+    media_service.check_text_part_room(post, part_index=part_index)
+
+
+def _check_scheduled_post_part_takes_media(
+    scheduled_post: ScheduledPost, media: list[list[Media]], *, part_index: int
+) -> None:
+    if not 0 <= part_index < len(media):
+        raise NotFoundError(f"This scheduled post has no part {part_index + 1}.")
+    _check_not_live(scheduled_post, part_index=part_index)
+    media_service.check_part_room(media, part_index=part_index)
 
 
 async def _scheduled_post_whose_media_changes(

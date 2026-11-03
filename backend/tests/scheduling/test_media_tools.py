@@ -1,6 +1,6 @@
 """
 The `attach_media` and `remove_media` MCP tools and the Media `get_post` lists: an AI app
-attaches a file from a public URL to the Post's Text, or to its waiting Scheduled post's own
+attaches an image from a public URL to the Post's Text, or to its waiting Scheduled post's own
 copy, with the web upload's checks and refusals.
 """
 
@@ -137,9 +137,10 @@ async def test_on_a_failed_post_media_changes_the_text_but_not_a_part_already_on
     assert failed["structuredContent"]["state"] == "failed", failed
 
     on_live = await _attach(mcp, fake_media_url_fetcher, post_id, png(), part=1)
+    assert error_text(on_live) == "Part 1 is already on X, so its media is set."
+    assert fake_media_url_fetcher.fetched == []
     attached = await _attach(mcp, fake_media_url_fetcher, post_id, png(), part=2)
 
-    assert error_text(on_live) == "Part 1 is already on X, so its media is set."
     assert attached["isError"] is False, attached
     assert attached["structuredContent"]["message"] == "Attached to part 2 of the post's text."
     assert await _media_through_mcp(mcp, post_id) == [[], [attached["structuredContent"]["media"]]]
@@ -150,6 +151,7 @@ async def test_a_published_post_keeps_its_media(connected, mcp, post_with, fake_
     on_text = await _attached(mcp, fake_media_url_fetcher, post_id)
     published = await mcp.call_tool("post_now", post_id=post_id)
     assert published["structuredContent"]["state"] == "published", published
+    downloaded = len(fake_media_url_fetcher.fetched)
 
     attached = await _attach(mcp, fake_media_url_fetcher, post_id, png())
     removed = await mcp.call_tool("remove_media", post_id=post_id, media_id=on_text["id"])
@@ -157,6 +159,7 @@ async def test_a_published_post_keeps_its_media(connected, mcp, post_with, fake_
     refusal = "This post is published, so its text is set. Start a new post to write another."
     assert error_text(attached) == refusal
     assert error_text(removed) == refusal
+    assert len(fake_media_url_fetcher.fetched) == downloaded
 
 
 async def test_files_the_web_upload_refuses_are_refused_in_its_words(
@@ -182,6 +185,7 @@ async def test_a_part_holding_four_images_is_refused_another(
     post_id = await post_with("Four already.")
     for _ in range(4):
         await _attached(mcp, fake_media_url_fetcher, post_id)
+    downloaded = len(fake_media_url_fetcher.fetched)
 
     full = await _attach(mcp, fake_media_url_fetcher, post_id, png())
 
@@ -189,6 +193,18 @@ async def test_a_part_holding_four_images_is_refused_another(
         "This post holds 4 images already. X takes up to 4 images, or 1 GIF, or 1 video, per post."
     )
     assert full["structuredContent"]["code"] == "MEDIA_PART_FULL"
+    assert len(fake_media_url_fetcher.fetched) == downloaded
+
+
+async def test_a_part_the_post_doesnt_have_is_refused_before_downloading(
+    subscribed, mcp, post_with, fake_media_url_fetcher
+):
+    post_id = await post_with("One")
+
+    result = await _attach(mcp, fake_media_url_fetcher, post_id, png(), part=2)
+
+    assert error_text(result) == "This post's text has no part 2."
+    assert fake_media_url_fetcher.fetched == []
 
 
 async def test_an_x_connection_without_media_write_is_asked_to_reconnect_before_downloading(
@@ -220,10 +236,16 @@ async def test_without_a_url_the_user_is_sent_to_the_posts_page(
     assert result["isError"] is False, result
     page = f"{POSTS_PAGE}/{post_id}"
     assert result["structuredContent"] == {
-        "message": f"Attach the file on the post's page in the Pumpkit web app: {page}",
+        "message": f"Attach media on the post's page in the Pumpkit web app: {page}",
         "post_url": page,
         "media": None,
     }
+
+
+async def test_without_a_url_a_post_that_isnt_the_users_is_not_found(subscribed, mcp):
+    result = await mcp.call_tool("attach_media", post_id="no-such-post")
+
+    assert error_text(result) == "Post not found."
 
 
 async def test_alt_text_past_x_s_limit_is_refused(
@@ -233,8 +255,18 @@ async def test_alt_text_past_x_s_limit_is_refused(
 
     result = await _attach(mcp, fake_media_url_fetcher, post_id, png(), alt_text="a" * 1001)
 
-    assert result["isError"] is True, result
+    assert error_text(result) == "Alt text can be up to 1,000 characters."
     assert fake_media_url_fetcher.fetched == []
+
+
+async def test_alt_text_is_stripped_before_its_length_is_checked(
+    subscribed, mcp, post_with, fake_media_url_fetcher
+):
+    post_id = await post_with("One")
+
+    media = await _attached(mcp, fake_media_url_fetcher, post_id, alt_text=f"  {'a' * 1000}\n")
+
+    assert media["alt_text"] == "a" * 1000
 
 
 async def test_attaching_and_removing_media_use_no_generation(

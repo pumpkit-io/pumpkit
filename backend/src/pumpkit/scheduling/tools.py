@@ -332,14 +332,15 @@ async def attach_media(
     publishes the image as given and its writing never reads it, so write the brief or feedback
     from what you saw in it. On a draft or a failed post it changes the post's text; on a
     scheduled post it changes the scheduled post's own copy. A published post, or a part already
-    on X, keeps its media. Without `url`, give the user the post's page link to attach the file
+    on X, keeps its media. Without `url`, give the user the post's page link to attach media
     there.
     """
     request = AttachMediaRequest(part=part, url=url, alt_text=alt_text)
     page = post_url(post_id)
     if request.url is None:
+        await mediator.check_post_found(db=call.db, user=call.user, post_id=post_id)
         return AttachMediaToolResponse(
-            message=f"Attach the file on the post's page in the Pumpkit web app: {page}",
+            message=f"Attach media on the post's page in the Pumpkit web app: {page}",
             post_url=page,
             media=None,
         )
@@ -365,7 +366,7 @@ async def remove_media(
     call: ToolCall[User], post_id: str, media_id: str
 ) -> PostMessageToolResponse:
     """
-    Take one media file, by the `id` `get_post` lists, off the user's post: off the post's text on
+    Take one image, by the `id` `get_post` lists, off the user's post: off the post's text on
     a draft or a failed post, off the scheduled post's own copy on a scheduled one. A published
     post, or a part already on X, keeps its media.
     """

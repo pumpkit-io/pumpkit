@@ -22,6 +22,7 @@ from pumpkit.core.public_http import (
     PublicFetchError,
     Resolver,
     anyio_network,
+    check_answer,
     fetch_public,
     resolve_with_getaddrinfo,
 )
@@ -35,8 +36,8 @@ _MAX_REDIRECTS = 3
 
 def media_url_unreachable(reason: str) -> MediaRefused:
     return MediaRefused(
-        f"Pumpkit couldn't download the file at this URL ({reason}). Give a public https URL of"
-        " the file itself.",
+        f"Pumpkit couldn't download media from this URL ({reason}). Give a public https URL that"
+        " serves the media itself.",
         code="MEDIA_URL_UNREACHABLE",
     )
 
@@ -112,11 +113,7 @@ async def _get(http: httpx.AsyncClient, url: str, incoming: IncomingMedia) -> Op
     async with http.stream("GET", url, headers={"Accept-Encoding": "identity"}) as response:
         if response.is_redirect and "location" in response.headers:
             return urljoin(url, response.headers["location"])
-        if response.status_code != 200:
-            raise media_url_unreachable(f"answered HTTP {response.status_code}")
-        # A compressed body would be expanded before the size cap could stop it.
-        if response.headers.get("content-encoding", "identity").lower() != "identity":
-            raise media_url_unreachable("answered a compressed file")
+        check_answer(response)
         async for chunk in response.aiter_raw():
             await incoming.take(chunk)
         incoming.end()
