@@ -682,6 +682,8 @@ async def give_feedback(
         await db.commit()
         raise
 
+    # The Text's Media may have changed during the calls.
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     version = await posts_service.record_version(
         db,
         post=post,

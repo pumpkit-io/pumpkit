@@ -59,6 +59,7 @@ export function ScheduledPostEditor({
   const media = useTextMedia(
     postId,
     scheduledPost.parts.map((part) => part.media),
+    total,
     onReconnectNeeded,
     place,
   );

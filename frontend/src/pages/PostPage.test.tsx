@@ -1450,6 +1450,153 @@ describe('Post page', () => {
       expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
     });
 
+    describe('through rewrites', () => {
+      /** Each tile's Media id, read from the preview it shows. */
+      async function mediaIdsOn(where: string): Promise<string[]> {
+        const tiles = mediaOn(where).getAllByRole('listitem');
+        await waitFor(() =>
+          tiles.forEach((tile) => expect(tile.querySelector('img')).not.toBeNull()),
+        );
+        return tiles.map(
+          (tile) => tile.querySelector('img')!.getAttribute('src')!.split('/media/')[1]!,
+        );
+      }
+
+      beforeEach(() => {
+        const previews = new WeakMap<Blob, string>();
+        vi.mocked(mediaService.preview).mockImplementation(async (url) => {
+          const blob = new Blob([url], { type: 'image/webp' });
+          previews.set(blob, url);
+          return blob;
+        });
+        URL.createObjectURL = vi.fn((blob: Blob) => `blob:${previews.get(blob) ?? 'local'}`);
+      });
+
+      async function sendFeedback(feedback: string) {
+        fireEvent.change(panel('Draft').getByRole('textbox', { name: 'Feedback' }), {
+          target: { value: feedback },
+        });
+        const send = panel('Draft').getByRole('button', { name: 'Send feedback' });
+        await waitFor(() => expect(send).toBeEnabled());
+        fireEvent.click(send);
+      }
+
+      const threeParts = () => threadWith([part('one'), part('two'), part('three')]);
+
+      it("keeps each Part's Media where it is through Feedback, and marks only the words", async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(
+          version(2, ['uno', 'dos'], { feedback: 'in Spanish' }),
+        );
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2'), image('m3')]]));
+        await textCard();
+
+        await sendFeedback('in Spanish');
+
+        expect(await card().findByRole('textbox', { name: 'Part 1 text' })).toHaveValue('uno');
+        expect(await mediaIdsOn('Part 1')).toEqual(['m1/preview']);
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview', 'm3/preview']);
+        await waitFor(() =>
+          expect(card().queryAllByText('dos', { selector: '[data-trace]' })).not.toHaveLength(0),
+        );
+        for (const where of ['Part 1', 'Part 2']) {
+          const list = screen.getByRole('list', { name: `Media on ${where}` });
+          expect(list.querySelector('[data-trace]')).toBeNull();
+          expect(list.closest('.opacity-60')).toBeNull();
+        }
+      });
+
+      it('moves the Media of Parts Feedback removed last onto the last Part, in order', async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(
+          withMedia(threeParts(), [[image('m1')], [image('m2')], [image('m3'), image('m4')]]),
+        );
+        await textCard();
+
+        await sendFeedback('two parts');
+
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        expect(await mediaIdsOn('Part 1')).toEqual(['m1/preview']);
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview', 'm3/preview', 'm4/preview']);
+      });
+
+      it("puts every Part's Media on the single post a Thread switches to", async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['one post']));
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        await sendFeedback('condense it');
+
+        expect(await card().findByRole('textbox', { name: 'Post text' })).toHaveValue('one post');
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
+      it("keeps every tile on a Part over X's rule, says so under them, and Post to refuses it", async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['one post']));
+        renderPost(
+          withMedia(threadOfTwo(), [
+            [image('m1'), image('m2'), image('m3')],
+            [image('m4'), image('m5')],
+          ]),
+        );
+        await textCard();
+        expect(card().queryByText(/X takes up to 4 images/)).not.toBeInTheDocument();
+
+        await sendFeedback('condense it');
+
+        expect(
+          await card().findByText('X takes up to 4 images, or 1 GIF, or 1 video, per post.'),
+        ).toHaveClass('text-destructive');
+        expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(5);
+        expect(card().getByRole('button', { name: 'Add media to the post' })).toHaveAttribute(
+          'aria-disabled',
+          'true',
+        );
+        fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+        expect(
+          dialog.getByText(
+            'This post has more media than X takes. X takes up to 4 images, or 1 GIF, or 1 video, per post.',
+          ),
+        ).toBeInTheDocument();
+      });
+
+      it('moves the Media of Parts a restored Version lacks onto its last Part', async () => {
+        const versions = [version(1, ['the first']), version(2, ['two a', 'two b'])];
+        vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(versions[0]!));
+        renderPost(withMedia(draft(versions), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        fireEvent.click(card().getByRole('button', { name: 'History' }));
+        const history = within(await screen.findByRole('dialog', { name: 'History' }));
+        fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+        expect(await card().findByRole('textbox', { name: 'Post text' })).toHaveValue('the first');
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
+      it('leaves Media be when a text edit is undone and redone', async () => {
+        vi.mocked(postService.saveText).mockImplementation(async (_postId, texts) => ({
+          format: 'thread',
+          parts: texts.map((text) => part(text)),
+          versionNumber: 1,
+          edited: true,
+        }));
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        const box = (await textCard()).getByRole('textbox', { name: 'Part 2 text' });
+
+        fireEvent.change(box, { target: { value: 'two, edited' } });
+        fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+        expect(box).toHaveValue('two');
+        fireEvent.click(card().getByRole('button', { name: 'Redo' }));
+        expect(box).toHaveValue('two, edited');
+
+        expect(await mediaIdsOn('Part 1')).toEqual(['m1/preview']);
+        expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview']);
+      });
+    });
+
     describe('once it goes to X', () => {
       async function openPostTo(post: PostDetail): Promise<Dialog> {
         renderPost(post);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { showToast } from '@/components/Toaster';
 import { track } from '@/lib/analytics';
 import { useConfirmLeaving } from '@/lib/useConfirmLeaving';
@@ -77,12 +77,16 @@ function release(tile: Tile) {
 
 /**
  * The Media on each Part of a Post's Text, kept apart from its words: undo, redo, restoring and
- * Feedback never touch it. Uploads on one Part, and the read after a failed one, go one at a
- * time, so the server keeps the order the card shows and no read races an upload.
+ * Feedback never touch it, except that a Text with fewer Parts takes the tiles of the Parts it
+ * lost last onto its last Part, as the server does. Uploads on one Part, and the read after a
+ * failed one, go one at a time, so the server keeps the order the card shows and no read races
+ * an upload.
  */
 export function useTextMedia(
   postId: string,
   initial: Media[][],
+  /** How many Parts the Text on screen has. */
+  partCount: number,
   /** Called when the server refuses an upload until X is reconnected; the file is dropped. */
   onReconnectNeeded: () => void,
   /** Where the Media lives instead of the Text, such as a Scheduled post's own copy. */
@@ -115,11 +119,28 @@ export function useTextMedia(
     setParts(next);
   }, []);
 
+  /** The Part a tile is on now, which a rewrite may have moved it to since it was chosen. */
+  const partOf = useCallback((key: string, chosenOn: number) => {
+    const index = current.current.findIndex((tiles) => tiles.some((t) => t.key === key));
+    return index === -1 ? chosenOn : index;
+  }, []);
+
   const changeTile = useCallback(
     (partIndex: number, key: string, edit: (tile: Tile) => Tile) =>
-      change(partIndex, (tiles) => tiles.map((tile) => (tile.key === key ? edit(tile) : tile))),
-    [change],
+      change(partOf(key, partIndex), (tiles) =>
+        tiles.map((tile) => (tile.key === key ? edit(tile) : tile)),
+      ),
+    [change, partOf],
   );
+
+  useLayoutEffect(() => {
+    const last = partCount - 1;
+    if (last < 0 || current.current.length <= partCount) return;
+    const kept = current.current.slice(0, last);
+    const moved = current.current.slice(last).flat();
+    current.current = [...kept, moved];
+    setParts(current.current);
+  }, [partCount]);
 
   const readyTile = useCallback(
     (media: Media): Tile => ({
@@ -177,7 +198,7 @@ export function useTextMedia(
   /** Turns an upload's tile into its Media's, unless another tile shows that Media already. */
   const settle = useCallback(
     (partIndex: number, key: string, media: Media) =>
-      change(partIndex, (tiles) => {
+      change(partOf(key, partIndex), (tiles) => {
         const shown = tiles.some((t) => t.state === 'ready' && t.media.id === media.id);
         return tiles.flatMap((tile) => {
           if (tile.key !== key) return [tile];
@@ -190,7 +211,7 @@ export function useTextMedia(
           ];
         });
       }),
-    [change],
+    [change, partOf],
   );
 
   /**
@@ -214,9 +235,10 @@ export function useTextMedia(
       }
       if (errorCode(error) === RECONNECT_FOR_MEDIA) {
         if (under.dropped) return;
-        const tile = current.current[partIndex]?.find((t) => t.key === key);
+        const on = partOf(key, partIndex);
+        const tile = current.current[on]?.find((t) => t.key === key);
         if (tile) release(tile);
-        change(partIndex, (tiles) => tiles.filter((t) => t.key !== key));
+        change(on, (tiles) => tiles.filter((t) => t.key !== key));
         onReconnectNeeded();
         return;
       }
@@ -256,7 +278,7 @@ export function useTextMedia(
         via,
       }));
     },
-    [place, change, changeTile, storedOn, show, settle, discard, onReconnectNeeded],
+    [place, change, changeTile, partOf, storedOn, show, settle, discard, onReconnectNeeded],
   );
 
   const upload = useCallback(

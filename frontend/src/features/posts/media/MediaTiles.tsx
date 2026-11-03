@@ -2,6 +2,7 @@ import { Image as ImageIcon, RotateCw, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import type { Media } from '@/services/mediaService';
+import { breaksXMediaRule, X_MEDIA_RULE } from './mediaRules';
 import { useMediaPreview } from './useMediaPreview';
 import { holdsPlace, type Tile } from './useTextMedia';
 
@@ -157,7 +158,8 @@ function RefusedTile({
 /**
  * A Part's Media under its text, in X's layout for one to four images, files that couldn't go
  * on it among them, with why. `where` names the Part: "Part 2", or "the post". `canRetry` is
- * false while the Part has no room for a retried file.
+ * false while the Part has no room for a retried file. Media past X's rule, which a rewrite
+ * with fewer Parts can leave on a Part, all stays, with the rule under it.
  */
 export function MediaTiles({
   tiles,
@@ -176,8 +178,9 @@ export function MediaTiles({
   if (!shown.length) return null;
   const many = shown.length > 4;
   const cells = CELLS[shown.length] ?? [];
+  const media = shown.flatMap((t) => (t.state === 'ready' && !t.removing ? [t.media] : []));
   let images = 0;
-  return (
+  const grid = (
     <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
       {shown.map((tile, index) => {
         const className = many ? 'aspect-video' : (cells[index] ?? '');
@@ -201,6 +204,13 @@ export function MediaTiles({
         );
       })}
     </ul>
+  );
+  if (!breaksXMediaRule(media)) return grid;
+  return (
+    <div className="space-y-1.5">
+      {grid}
+      <p className="font-sans text-[13px] font-medium text-destructive">{X_MEDIA_RULE}.</p>
+    </div>
   );
 }
 
