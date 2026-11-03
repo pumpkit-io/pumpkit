@@ -11,6 +11,8 @@ export interface Media {
   previewUrl: string;
   width: number | null;
   height: number | null;
+  /** What an image or GIF shows, for screen readers; null until the User or their AI app writes it. */
+  altText: string | null;
 }
 
 export interface MediaApi {
@@ -19,6 +21,7 @@ export interface MediaApi {
   preview_url: string;
   width: number | null;
   height: number | null;
+  alt_text: string | null;
 }
 
 export const toMedia = (m: MediaApi): Media => ({
@@ -27,7 +30,11 @@ export const toMedia = (m: MediaApi): Media => ({
   previewUrl: m.preview_url,
   width: m.width,
   height: m.height,
+  altText: m.alt_text,
 });
+
+/** X's limit on an image or GIF's alt text. */
+export const ALT_TEXT_MAX_CHARS = 1000;
 
 export interface UploadOptions {
   /** Hears the share of the file sent so far, from 0 to 1. */
@@ -80,6 +87,26 @@ export const mediaService = {
     await apiService.delete(
       `/scheduled-posts/${encodeURIComponent(scheduledPostId)}/media/${encodeURIComponent(mediaId)}`,
     );
+  },
+  /** Sets an image or GIF's alt text on the Post's Text; empty or null clears it. */
+  setAltText: async (postId: string, mediaId: string, altText: string | null): Promise<Media> => {
+    const { data } = await apiService.put<MediaApi>(
+      `/posts/${encodeURIComponent(postId)}/text/media/${encodeURIComponent(mediaId)}/alt-text`,
+      { alt_text: altText },
+    );
+    return toMedia(data);
+  },
+  /** Sets an image or GIF's alt text on a waiting Scheduled post; empty or null clears it. */
+  setScheduledPostAltText: async (
+    scheduledPostId: string,
+    mediaId: string,
+    altText: string | null,
+  ): Promise<Media> => {
+    const { data } = await apiService.put<MediaApi>(
+      `/scheduled-posts/${encodeURIComponent(scheduledPostId)}/media/${encodeURIComponent(mediaId)}/alt-text`,
+      { alt_text: altText },
+    );
+    return toMedia(data);
   },
   /** The preview's image, fetched with the session's token, which an `<img>` can't send. */
   preview: async (previewUrl: string, signal?: AbortSignal): Promise<Blob> => {

@@ -160,7 +160,7 @@ Media is your own content, like a hand edit: Pumpkit publishes it inside the X p
 
 `attach_media` takes what the web app's upload takes: a JPEG, PNG or WEBP image up to 5 MB, up to 4 on a Part. Pumpkit checks the type from the image's own bytes. It downloads only from public hosts on port 443, following up to 3 redirects, stops a download that passes 5 MB, and gives up after 60 seconds. It refuses, with the web app's words, an image too large, a type Pumpkit doesn't take, an image it can't read, a URL it can't download and a Part that holds 4 images. An X connection made before Pumpkit could publish Media is asked to reconnect first, with the link to the Settings page. Neither tool uses a generation, and each allows 10 calls a minute.
 
-Alt text is stored with the image and `get_post` lists it, but Pumpkit doesn't send it to X yet.
+Alt text is stored with the image, `get_post` lists it, and Pumpkit sets it on X when the image goes out, for people using screen readers. You can also change or clear it on the Post's page in the web app.
 
 ### Attaching a local image
 

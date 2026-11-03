@@ -16,8 +16,13 @@ from pumpkit.core.errors import ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.formats import part_name
-from pumpkit.posts.media_files import IMAGES_PER_PART, CheckedMedia, part_full
-from pumpkit.posts.models import Media, Post, TextMedia
+from pumpkit.posts.media_files import (
+    IMAGES_PER_PART,
+    CheckedMedia,
+    alt_text_unsupported,
+    part_full,
+)
+from pumpkit.posts.models import MEDIA_VIDEO, Media, Post, TextMedia
 from pumpkit.posts.schemas import MediaResponse
 
 # Every key of a Media's files starts with this, then the Media's id.
@@ -197,6 +202,16 @@ def text_media_on(post: Post, *, media_id: str) -> TextMedia:
 def remove_from_text(post: Post, placed: TextMedia) -> None:
     """Take the Media off the Text. The record and its file stay until nothing references them."""
     post.text_media.remove(placed)
+
+
+def set_alt_text(media: Media, alt_text: Optional[str]) -> None:
+    """
+    Describe an image or GIF for screen readers, or clear it with None. The description belongs to
+    the Media, so it shows wherever the Media is placed and goes to X with it.
+    """
+    if media.kind == MEDIA_VIDEO:
+        raise alt_text_unsupported()
+    media.alt_text = alt_text
 
 
 async def delete(db: AsyncSession, storage: FileStorage, media: Media) -> None:

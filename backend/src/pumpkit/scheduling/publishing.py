@@ -194,11 +194,20 @@ async def _publish(
                 media_ids = []
                 for one in media:
                     await claim.renew(db)
-                    media_ids.append(
-                        await publish.upload_media(
-                            publisher, storage, scheduled_post, part, one, access_token=access_token
-                        )
+                    x_media_id = await publish.upload_media(
+                        publisher, storage, scheduled_post, part, one, access_token=access_token
                     )
+                    if one.alt_text is not None:
+                        await claim.renew(db)
+                        await publish.set_alt_text(
+                            publisher,
+                            scheduled_post,
+                            part,
+                            one.alt_text,
+                            x_media_id=x_media_id,
+                            access_token=access_token,
+                        )
+                    media_ids.append(x_media_id)
                 await claim.renew(db)
                 x_post_id = await publish.call_x(
                     publisher,

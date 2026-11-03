@@ -802,6 +802,21 @@ async def remove_text_media(db: AsyncSession, user: User, post_id: str, media_id
     await db.commit()
 
 
+async def set_text_media_alt_text(
+    db: AsyncSession, user: User, post_id: str, media_id: str, alt_text: Optional[str]
+) -> MediaResponse:
+    """
+    Describe an image or GIF on the Post's Text, or clear it with None. Only a Draft or a Failed
+    Post's, on a Part not live. The Scheduled post the Text becomes carries it with the Media.
+    """
+    post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
+    placed = media_service.text_media_on(post, media_id=media_id)
+    _check_not_live(scheduled_post, part_index=placed.part_index)
+    media_service.set_alt_text(placed.media, alt_text)
+    await db.commit()
+    return media_service.media_response(placed.media)
+
+
 async def attach_scheduled_post_media(
     db: AsyncSession,
     storage: FileStorage,
@@ -851,6 +866,36 @@ async def remove_scheduled_post_media(
     media[part_index] = [m for m in media[part_index] if m.id != media_id]
     await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=media, now=now)
     await db.commit()
+
+
+async def set_scheduled_post_media_alt_text(
+    db: AsyncSession,
+    user: User,
+    scheduled_post_id: str,
+    media_id: str,
+    alt_text: Optional[str],
+    now: datetime,
+) -> MediaResponse:
+    """
+    Describe an image or GIF on a waiting Scheduled post's Part not live, or clear it. A Failed
+    Post's alt text changes on its Text, which the Scheduled post shares its Media with.
+    """
+    scheduled_post, media = await _scheduled_post_whose_media_changes(
+        db, user=user, scheduled_post_id=scheduled_post_id
+    )
+    if scheduled_post.state == FAILED:
+        raise ConflictError(
+            "This scheduled post failed, so its alt text changes on the post's text."
+        )
+    found = [(i, m) for i, on_part in enumerate(media) for m in on_part if m.id == media_id]
+    if not found:
+        raise NotFoundError("This scheduled post has no such media.")
+    part_index, described = found[0]
+    _check_not_live(scheduled_post, part_index=part_index)
+    media_service.set_alt_text(described, alt_text)
+    await _check_not_claimed(db, scheduled_post_id=scheduled_post_id, now=now)
+    await db.commit()
+    return media_service.media_response(described)
 
 
 async def attach_media_from_url(
@@ -1130,6 +1175,14 @@ async def _save_scheduled_post_media(
         reschedule=None,
         now=now,
         media=_ids(media),
+    ):
+        raise _publishing_started()
+
+
+async def _check_not_claimed(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> None:
+    """Refuses a change to the Scheduled post once the publisher has claimed it since it was read."""
+    if not await service.edit(
+        db, scheduled_post_id=scheduled_post_id, parts=None, reschedule=None, now=now, media=None
     ):
         raise _publishing_started()
 

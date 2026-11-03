@@ -25,6 +25,7 @@ export function partMediaOf(
           canRetry={media.roomOn(index) > 0}
           onRemove={media.remove}
           onRetry={media.retry}
+          onDescribe={media.describe}
         />
       ),
       button: (

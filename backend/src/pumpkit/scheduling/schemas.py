@@ -5,7 +5,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 
 from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format, part_name
-from pumpkit.posts.media_files import ALT_TEXT_MAX_CHARS
+from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.scheduling.models import ScheduledPostState
@@ -197,10 +197,7 @@ class AttachMediaRequest(BaseModel):
     @field_validator("alt_text")
     @classmethod
     def _strip_and_limit(cls, value: Optional[str]) -> Optional[str]:
-        stripped = value.strip() if value is not None else ""
-        if len(stripped) > ALT_TEXT_MAX_CHARS:
-            raise ValueError(f"Alt text can be up to {ALT_TEXT_MAX_CHARS:,} characters.")
-        return stripped or None
+        return cleaned_alt_text(value)
 
 
 class PlacedMediaResponse(BaseModel):

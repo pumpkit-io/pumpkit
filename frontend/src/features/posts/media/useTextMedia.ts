@@ -48,6 +48,8 @@ export interface TextMedia {
   attach: (partIndex: number, files: File[], via: AttachVia) => void;
   remove: (key: string) => void;
   retry: (key: string) => void;
+  /** Sets a ready image's alt text, null clearing it; rejects when the server didn't take it. */
+  describe: (key: string, altText: string | null) => Promise<void>;
 }
 
 /** Whether a tile counts toward what X takes on one X post. */
@@ -442,6 +444,17 @@ export function useTextMedia(
     [place, tileWith, changeTile, dropTile, enqueue],
   );
 
+  const describe = useCallback(
+    async (key: string, altText: string | null) => {
+      const tile = tileWith(key);
+      if (tile?.state !== 'ready') return;
+      const media = await place.setAltText(tile.media.id, altText);
+      changeTile(key, (t) => (t.state === 'ready' ? { ...t, media } : t));
+      track('media_alt_text_set', { kind: media.kind, cleared: altText === null, source: 'web' });
+    },
+    [place, tileWith, changeTile],
+  );
+
   const uploading = parts.some((tiles) => tiles.some((tile) => tile.state === 'uploading'));
   useConfirmLeaving(uploading, LEAVE_WHILE_UPLOADING);
 
@@ -460,5 +473,6 @@ export function useTextMedia(
     attach,
     remove,
     retry,
+    describe,
   };
 }

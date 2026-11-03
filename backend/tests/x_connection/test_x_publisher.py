@@ -12,6 +12,7 @@ from pumpkit.core.config import settings
 from pumpkit.x_connection import x_publisher
 from pumpkit.x_connection.x_publisher import (
     X_AUTHORIZE_URL,
+    X_MEDIA_METADATA_URL,
     X_MEDIA_UPLOAD_URL,
     X_REVOKE_URL,
     X_TOKEN_URL,
@@ -702,3 +703,63 @@ async def test_publishing_with_media_sends_their_ids_under_the_text():
         "text": "Look",
         "media": {"media_ids": ["1880", "1881"]},
     }
+
+
+async def _set_alt_text(alt_text: str = "Gulls over the harbour.") -> None:
+    await OfficialXPublisher().set_alt_text(
+        access_token="access-1", media_id=MEDIA_ID, alt_text=alt_text
+    )
+
+
+@respx.mock
+async def test_alt_text_is_sent_as_the_uploads_metadata():
+    route = respx.post(X_MEDIA_METADATA_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"data": {"id": MEDIA_ID, "associated_metadata": {}}},
+        )
+    )
+
+    await _set_alt_text()
+
+    sent = route.calls.last.request
+    assert sent.headers["Authorization"] == "Bearer access-1"
+    assert json.loads(sent.content) == {
+        "id": MEDIA_ID,
+        "metadata": {"alt_text": {"text": "Gulls over the harbour."}},
+    }
+
+
+@pytest.mark.parametrize(
+    ("response", "error"),
+    [
+        (httpx.Response(401, json={"title": "Unauthorized"}), XReconnectNeededError),
+        (httpx.Response(429, json={"title": "Too Many Requests"}), XRateLimitedError),
+        (httpx.Response(503, json={"title": "Service Unavailable"}), XMediaUnavailableError),
+        (
+            httpx.Response(400, json={"errors": [{"message": "alt text too long."}]}),
+            XMediaRefusedError,
+        ),
+    ],
+)
+@respx.mock
+async def test_alt_text_x_answers_with_an_error_status_says_what_kind(response, error):
+    respx.post(X_MEDIA_METADATA_URL).mock(return_value=response)
+
+    with pytest.raises(error):
+        await _set_alt_text()
+
+
+@pytest.mark.parametrize(
+    ("side_effect", "error"),
+    [
+        (httpx.ConnectError("refused"), XNotReceivedError),
+        (httpx.ReadTimeout("slow"), XMediaUnavailableError),
+    ],
+)
+@respx.mock
+async def test_alt_text_x_never_answers_is_a_passing_failure(side_effect, error):
+    respx.post(X_MEDIA_METADATA_URL).mock(side_effect=side_effect)
+
+    with pytest.raises(error):
+        await _set_alt_text()

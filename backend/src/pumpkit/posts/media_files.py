@@ -40,6 +40,18 @@ class MediaRefused(RefusedError):
     pass
 
 
+def cleaned_alt_text(value: Optional[str]) -> Optional[str]:
+    """Alt text as stored: stripped, and None when nothing is left. Raises ValueError past X's limit."""
+    stripped = value.strip() if value is not None else ""
+    if len(stripped) > ALT_TEXT_MAX_CHARS:
+        raise ValueError(f"Alt text can be up to {ALT_TEXT_MAX_CHARS:,} characters.")
+    return stripped or None
+
+
+def alt_text_unsupported() -> MediaRefused:
+    return MediaRefused("Alt text is for images and GIFs.", code="MEDIA_ALT_TEXT_UNSUPPORTED")
+
+
 def media_type_refused() -> MediaRefused:
     return MediaRefused("Pumpkit takes JPEG, PNG or WEBP images.", code="MEDIA_TYPE_UNSUPPORTED")
 

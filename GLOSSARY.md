@@ -171,7 +171,7 @@ One X post within a Thread, in its place in the order.
 _Avoid_: tweet, segment, item
 
 **Media**:
-The images, animated GIF or video a User attaches to a Post's Text, on its single X post or on one Part of a Thread, to be published with that X post on X. It is the User's own content, like a hand edit: Pumpkit's writing never sees it, Feedback and restoring a Version keep it on its Part, or move it to the last Part when that Part is gone, and only the User, or the AI app they ask, writes an image's alt text: Pumpkit's writing never does. One X post carries up to four images, or one GIF, or one video.
+The images, animated GIF or video a User attaches to a Post's Text, on its single X post or on one Part of a Thread, to be published with that X post on X. It is the User's own content, like a hand edit: Pumpkit's writing never sees it, Feedback and restoring a Version keep it on its Part, or move it to the last Part when that Part is gone, and only the User, or the AI app they ask, writes an image's alt text: Pumpkit's writing never does. Alt text belongs to the Media, so a Scheduled post's copy and the Text show the same alt text. One X post carries up to four images, or one GIF, or one video.
 _Avoid_: attachment, file, asset, upload
 
 **Sketch**:
