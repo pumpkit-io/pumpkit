@@ -210,7 +210,7 @@ export function MediaTiles({
     <div className="space-y-1.5">
       {grid}
       <p className="font-sans text-[13px] font-medium text-destructive">
-        {X_MEDIA_RULE}. Remove some to post it.
+        {X_MEDIA_RULE}. Remove some from {where} before posting.
       </p>
     </div>
   );
