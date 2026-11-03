@@ -136,4 +136,15 @@ export const mediaService = {
     const { data } = await apiService.get<Blob>(previewUrl, { responseType: 'blob', signal });
     return data;
   },
+  /**
+   * The Media's whole file, fetched with the session's token. Gone once its Post is published,
+   * and downloaded in full before a video can play.
+   */
+  file: async (mediaId: string, signal?: AbortSignal): Promise<Blob> => {
+    const { data } = await apiService.get<Blob>(`/media/${encodeURIComponent(mediaId)}/file`, {
+      responseType: 'blob',
+      signal,
+    });
+    return data;
+  },
 };
