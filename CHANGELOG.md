@@ -14,6 +14,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 - Editing a scheduled post now lets you add and remove images on each part not yet on X, with the same media button, drop and paste as a draft's page; they change only the scheduled post, not the post's text. Parts already on X show theirs as they went out. Copying the post's text onto the scheduled post again copies its images too.
 - Your media stays when Pumpkit rewrites your post, with feedback, a format change or a restored version. Media on parts the new text drops moves to its last part, in order. A part left with more media than X takes says so under its images, and "Post to…" waits until you remove some. On a failed thread, Pumpkit refuses a rewrite that would move media onto a part already on X. While Pumpkit writes, only the words dim.
 - Connecting X now also asks X for permission to post media. If you connected X before, attaching media asks you to reconnect X first, then brings you back to your post, and Settings offers Reconnect X too. Without an X connection you can still attach media to a draft. `GET /api/v1/x-connection` reports `needs_reconnect_for_media`.
+- Media you remove or replace, from a post's text or a scheduled post, is deleted from the Instance along with its files. The publisher deletes it on its next pass once it is an hour old, so the `media_data` volume doesn't keep files nothing uses. Unscheduling a post keeps its text's media.
 
 ### Fixed
 
