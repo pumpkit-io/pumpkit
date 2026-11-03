@@ -65,6 +65,7 @@ describe('postService', () => {
           community: null,
           share_with_followers: false,
           created_at: '2026-10-10T12:00:00Z',
+          posting: false,
         },
       },
     } as never);
@@ -93,6 +94,7 @@ describe('postService', () => {
       community: null,
       shareWithFollowers: false,
       createdAt: '2026-10-10T12:00:00Z',
+      posting: false,
     });
   });
 

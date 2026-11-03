@@ -14,6 +14,7 @@ const SCHEDULED = {
   community: null,
   share_with_followers: false,
   created_at: '2026-10-10T12:00:00Z',
+  posting: false,
 };
 
 describe('scheduledPostService', () => {

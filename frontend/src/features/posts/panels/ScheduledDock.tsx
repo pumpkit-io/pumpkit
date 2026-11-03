@@ -1,4 +1,5 @@
 import { Loader2 } from 'lucide-react';
+import { LimitNotice } from '@/components/LimitNotice';
 import { Button } from '@/components/ui/button';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { DOCK_CARD, Dock } from './Dock';
@@ -7,19 +8,23 @@ import { DestinationName } from './panelParts';
 
 /**
  * A Scheduled Post takes no Feedback: its text is set to go, and is edited instead, until it is
- * being published. Once it is `posting` it says so, with no Edit, until it is Published or Failed.
+ * being published. Once it is `posting` it says so, with no Edit, until it is Published or Failed;
+ * the Post page announces it, since this dock may mount already posting.
  */
 export function ScheduledDock({
   scheduledPost,
   posting,
+  notice,
   onEdit,
 }: {
   scheduledPost: ScheduledPost;
   posting: boolean;
+  /** Under the card, such as why the editor closed. */
+  notice: string | null;
   onEdit: () => void;
 }) {
   return (
-    <Dock name="Scheduled">
+    <Dock name="Scheduled" notes={notice && <LimitNotice message={notice} />}>
       <div className={DOCK_CARD}>
         <div className="flex min-h-10 items-center gap-3 px-4 py-3">
           {posting && (
@@ -29,8 +34,7 @@ export function ScheduledDock({
             />
           )}
           <p className="min-w-0 flex-1 font-sans text-sm text-foreground">
-            {/* Mounted before posting starts, so screen readers announce the change. */}
-            <span role="status">
+            <span>
               {posting ? 'Posting…' : `Scheduled for ${formatWhen(scheduledPost.publishAt)}`}
             </span>
             {' · '}

@@ -213,6 +213,7 @@ const SCHEDULED: ScheduledPost = {
   community: null,
   shareWithFollowers: false,
   createdAt: '2026-10-10T12:00:00Z',
+  posting: false,
 };
 
 /** A Post with two Versions and `scheduledPost`, in the status it gives. */
@@ -244,6 +245,11 @@ function card() {
 
 function panel(name: string) {
   return within(screen.getByRole('region', { name }));
+}
+
+/** "Posting…" in the Post page's live region, there before any dock, so the change is announced. */
+function announcedPosting() {
+  return screen.queryByText('Posting…', { selector: '[role="status"] > span' });
 }
 
 type Dialog = BoundFunctions<typeof queries>;
@@ -1785,26 +1791,42 @@ describe('Post page', () => {
         expect((await screen.findAllByText('A video is still uploading'))[0]).toBeInTheDocument();
       });
 
-      it('hands Post now with a video to the publisher and shows the post as posting', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(new Date('2026-10-10T12:00:20Z'));
-        const handedOff: ScheduledPost = {
-          ...SCHEDULED,
-          publishAt: '2026-10-10T12:00:00Z',
-          parts: [{ ...SCHEDULED.parts[0]!, media: [video('media_01')] }],
-        };
-        vi.mocked(scheduledPostService.postNow).mockReset().mockResolvedValue(handedOff);
+      async function postNowWithVideo(answer: ScheduledPost) {
+        vi.mocked(scheduledPostService.postNow).mockReset().mockResolvedValue(answer);
         renderPost(withMedia(postWith('the final text'), [[video('media_01')]]));
         await textCard();
-
         fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
         const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
         fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
         fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+        return dialog;
+      }
+
+      it('shows the post as posting, and says so, when Post now hands it to the publisher', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        // The browser's clock runs behind the server's: the answer still says it is posting.
+        vi.setSystemTime(new Date('2026-10-10T11:58:00Z'));
+
+        await postNowWithVideo({
+          ...SCHEDULED,
+          publishAt: '2026-10-10T12:00:00Z',
+          parts: [{ ...SCHEDULED.parts[0]!, media: [video('media_01')] }],
+          posting: true,
+        });
 
         await dialogClosed();
-        expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+        expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
+        expect(announcedPosting()).toBeInTheDocument();
         expect(screen.queryByText(/X was busy/)).not.toBeInTheDocument();
+      });
+
+      it('says X was busy when Post now with a video comes back scheduled but not posting', async () => {
+        const dialog = await postNowWithVideo({
+          ...SCHEDULED,
+          parts: [{ ...SCHEDULED.parts[0]!, media: [video('media_01')] }],
+        });
+
+        expect(await dialog.findByText(/X was busy/)).toBeInTheDocument();
       });
     });
 
@@ -3359,11 +3381,11 @@ describe('Post page', () => {
       vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
       renderPost(withScheduledPost(SCHEDULED));
       await textCard();
-      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
       readsBack({ ...SCHEDULED, state: 'publishing' });
 
       await act(() => vi.advanceTimersByTimeAsync(5_000));
-      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
       readsBack({
         ...SCHEDULED,
         state: 'published',
@@ -3380,7 +3402,7 @@ describe('Post page', () => {
       vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
       renderPost(withScheduledPost({ ...SCHEDULED, state: 'publishing' }));
       await textCard();
-      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
       readsBack({
         ...SCHEDULED,
         state: 'failed',
@@ -3398,17 +3420,18 @@ describe('Post page', () => {
       vi.setSystemTime(new Date('2026-10-12T06:59:50Z'));
       renderPost(withScheduledPost(SCHEDULED));
       await textCard();
-      const status = panel('Scheduled').getByRole('status');
-      expect(status).toHaveTextContent('Scheduled for Mon, Oct 12, 9:00 AM');
+      expect(
+        panel('Scheduled').getByText('Scheduled for Mon, Oct 12, 9:00 AM'),
+      ).toBeInTheDocument();
+      expect(announcedPosting()).not.toBeInTheDocument();
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));
 
-      // The same live region, so the change is announced.
-      expect(status).toHaveTextContent('Posting…');
-      expect(panel('Scheduled').getByRole('status')).toBe(status);
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
+      expect(announcedPosting()).toBeInTheDocument();
     });
 
-    it('offers no Edit while posting, and closes the editor once publishing starts', async () => {
+    it('offers no Edit while posting, and closes the editor saying why once posting starts', async () => {
       vi.setSystemTime(new Date('2026-10-12T06:59:50Z'));
       renderPost(withScheduledPost(SCHEDULED));
       await textCard();
@@ -3423,7 +3446,12 @@ describe('Post page', () => {
       expect(
         screen.queryByRole('region', { name: 'Edit the scheduled post' }),
       ).not.toBeInTheDocument();
-      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
+      expect(
+        panel('Scheduled').getByText(
+          "Posting started while you were editing, so your changes weren't saved.",
+        ),
+      ).toBeInTheDocument();
       expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
 
       // X was busy: back in scheduled, still due, and the publisher retries it.
@@ -3433,6 +3461,24 @@ describe('Post page', () => {
         screen.queryByRole('region', { name: 'Edit the scheduled post' }),
       ).not.toBeInTheDocument();
       expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    });
+
+    it('stops reading the Post once it is gone, and keeps reading after other failures', async () => {
+      vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+      vi.mocked(postService.get)
+        .mockClear()
+        .mockRejectedValue(apiError(500, 'Internal Server Error'));
+
+      await act(() => vi.advanceTimersByTimeAsync(3_000));
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(postService.get).toHaveBeenCalledTimes(2);
+      vi.mocked(postService.get).mockRejectedValue(apiError(404, 'Post not found.'));
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(postService.get).toHaveBeenCalledTimes(3);
     });
 
     it('says when and where it goes out, with Edit and no Feedback', async () => {
@@ -3715,6 +3761,19 @@ describe('Post page', () => {
       expect((await textCard()).getByRole('textbox', { name: 'Post text' })).toHaveValue(
         'the final text',
       );
+    });
+
+    it('opens on the Post, not the editor, when Edit on the Posts page meets it posting', async () => {
+      vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
+      vi.mocked(postService.get).mockResolvedValue(withScheduledPost(SCHEDULED));
+      renderSignedIn('/posts/post_01', { state: { edit: true } });
+
+      await textCard();
+
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('region', { name: 'Edit the scheduled post' }),
+      ).not.toBeInTheDocument();
     });
 
     it('clears the request to edit once the editor is open, so a reload shows the Post', async () => {
@@ -4492,6 +4551,7 @@ describe('Post page', () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
         publishAt: '2026-10-10T10:00:00Z',
+        posting: true,
         parts: [
           {
             text: 'the second text',
@@ -4523,7 +4583,7 @@ describe('Post page', () => {
         shareWithFollowers: false,
         publishNow: true,
       });
-      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
       expect(screen.queryByText(/X was busy/)).not.toBeInTheDocument();
     });
 

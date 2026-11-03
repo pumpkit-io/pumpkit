@@ -42,7 +42,7 @@ async def _due(client: AsyncClient, post_id: str, fixed_clock) -> None:
     response = await client.post(
         SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": "2026-10-10T12:05:00Z"}
     )
-    assert response.status_code == 201, response.text
+    assert (response.status_code, response.json()["posting"]) == (201, False), response.text
     fixed_clock.advance(timedelta(minutes=5))
 
 
@@ -480,7 +480,7 @@ async def test_post_now_with_a_video_hands_it_to_the_publisher_due_now(
 
     assert response.status_code == 201, response.text
     handed_off = response.json()
-    assert handed_off["state"] == "scheduled"
+    assert (handed_off["state"], handed_off["posting"]) == ("scheduled", True)
     assert handed_off["publish_at"] == "2026-10-10T12:00:00Z"
     assert fake_x_publisher.uploads == []
     assert fake_x_publisher.published == []
@@ -516,9 +516,11 @@ async def test_post_now_of_a_scheduled_post_with_a_video_hands_it_to_the_publish
     )
 
     assert response.status_code == 200, response.text
-    assert (response.json()["state"], response.json()["publish_at"]) == (
+    handed_off = response.json()
+    assert (handed_off["state"], handed_off["publish_at"], handed_off["posting"]) == (
         "scheduled",
         "2026-10-10T12:00:00Z",
+        True,
     )
     assert fake_x_publisher.uploads == []
     await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
@@ -541,7 +543,7 @@ async def test_post_now_with_a_gif_hands_it_to_the_publisher_too(
 
     response = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
 
-    assert response.json()["state"] == "scheduled", response.text
+    assert (response.json()["state"], response.json()["posting"]) == ("scheduled", True)
     assert fake_x_publisher.uploads == []
     await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert (await _scheduled_post(client, post_id))["state"] == "published"
@@ -573,5 +575,5 @@ async def test_post_now_of_a_thread_whose_video_is_live_publishes_the_rest_withi
     retried = await client.patch(f"{SCHEDULED_POSTS}/{failed['id']}", json={"publish_now": True})
 
     assert retried.status_code == 200, retried.text
-    assert retried.json()["state"] == "published"
+    assert (retried.json()["state"], retried.json()["posting"]) == ("published", False)
     assert fake_x_publisher.published[-1][1] == "A chart."

@@ -31,12 +31,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
-import {
-  X_MEDIA_RULE,
-  breaksXMediaRule,
-  mediaWhere,
-  postNowLeavesToPublisher,
-} from '../media/mediaRules';
+import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
@@ -252,8 +247,8 @@ export function PostToDialog({
       onClose();
     } else if (outcome.kind === 'created') {
       const { scheduledPost } = outcome;
-      // Posted now but still waiting, and not left to the publisher: X was busy, and the publisher retries.
-      if (when.now && scheduledPost.state === 'scheduled' && !leftToPublisher(scheduledPost))
+      // Posted now but still waiting, and not handed to the publisher: X was busy, and the publisher retries.
+      if (when.now && scheduledPost.state === 'scheduled' && !scheduledPost.posting)
         setStep({ kind: 'busy', scheduledPost });
       else onDone(scheduledPost);
     }
@@ -380,12 +375,5 @@ export function PostToDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** Whether a Post now that came back scheduled was left to the publisher, not refused by X. */
-function leftToPublisher(scheduledPost: ScheduledPost): boolean {
-  return scheduledPost.parts.some(
-    (part) => !part.live && part.media.some((m) => postNowLeavesToPublisher(m.kind)),
   );
 }

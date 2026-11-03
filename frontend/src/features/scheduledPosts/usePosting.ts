@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { errorStatus } from '@/services/apiErrors';
 import { postService } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
@@ -11,25 +12,17 @@ function sameScheduledPost(a: ScheduledPost | null, b: ScheduledPost | null): bo
   return a?.id === b?.id && a?.state === b?.state && a?.publishAt === b?.publishAt;
 }
 
+/** A Scheduled post as far as whether it is posting goes; a listed one has no `posting`. */
+type Waiting = Pick<ScheduledPost, 'state' | 'publishAt'> & { posting?: boolean };
+
 /**
- * Whether the Scheduled post is posting: claimed by a publish, or due and waiting for the
- * publisher, as Post now with a GIF or a video leaves it. While it is, reads the Post again,
- * less and less often and only while the tab is visible, and passes on each change of its
- * Scheduled post to `onChange`, until it is Published or Failed.
+ * Whether the Scheduled post is posting: claimed by a publish, handed to the publisher by Post
+ * now, or due and waiting for the publisher. A timer flips it when its time comes.
  */
-export function usePosting(
-  postId: string,
-  scheduledPost: ScheduledPost | null,
-  onChange: (scheduledPost: ScheduledPost | null) => void,
-): boolean {
+export function useIsPosting(scheduledPost: Waiting | null): boolean {
   const [now, setNow] = useState(() => Date.now());
   const state = scheduledPost?.state ?? null;
   const publishAt = scheduledPost ? Date.parse(scheduledPost.publishAt) : null;
-  const posting =
-    state === 'publishing' || (state === 'scheduled' && publishAt !== null && publishAt <= now);
-
-  const latest = useRef({ scheduledPost, onChange });
-  latest.current = { scheduledPost, onChange };
 
   useEffect(() => {
     if (state !== 'scheduled' || publishAt === null) return;
@@ -42,6 +35,29 @@ export function usePosting(
     const timer = setTimeout(() => setNow(Date.now()), wait);
     return () => clearTimeout(timer);
   }, [state, publishAt]);
+
+  // A hand-off answer is posting whatever the browser's clock says.
+  return (
+    state === 'publishing' ||
+    (state === 'scheduled' &&
+      (scheduledPost?.posting === true || (publishAt !== null && publishAt <= now)))
+  );
+}
+
+/**
+ * Whether the Scheduled post is posting, as `useIsPosting` says. While it is, reads the Post
+ * again, less and less often and only while the tab is visible, and passes on each change of
+ * its Scheduled post to `onChange`, until it is Published or Failed or the Post is gone.
+ */
+export function usePosting(
+  postId: string,
+  scheduledPost: ScheduledPost | null,
+  onChange: (scheduledPost: ScheduledPost | null) => void,
+): boolean {
+  const posting = useIsPosting(scheduledPost);
+
+  const latest = useRef({ scheduledPost, onChange });
+  latest.current = { scheduledPost, onChange };
 
   useEffect(() => {
     if (!posting) return;
@@ -59,8 +75,9 @@ export function usePosting(
         if (stopped) return;
         if (!sameScheduledPost(current, latest.current.scheduledPost))
           latest.current.onChange(current);
-      } catch {
-        // A failed read is tried again at the next wait.
+      } catch (e) {
+        // The Post was deleted; any other failed read is tried again at the next wait.
+        if (errorStatus(e) === 404) return;
       }
       if (stopped) return;
       reads += 1;

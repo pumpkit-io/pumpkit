@@ -126,12 +126,12 @@ async def schedule_post(
 
 
 def _post_now_message(posted: ScheduledPostToolResponse) -> str:
-    """The web app's words for how Post now ended."""
+    """What the web app tells the User after Post now: published, failed, posting, or X was busy."""
     if posted.state == PUBLISHED:
         return f"Published on X: {posted.x_post_url}"
     if posted.state == FAILED:
         return f"Failed. {posted.failed_reason}"
-    if mediator.left_to_publisher(posted):
+    if posted.posting:
         return (
             "Being published: Pumpkit uploads the media to X and waits while X processes it, "
             "which can take up to an hour for a video. Call get_post to see when it's published."

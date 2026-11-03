@@ -127,8 +127,3 @@ export function refusalOf(error: unknown, file: File): Refusal {
   }
   return { message: UPLOAD_FAILED, retry: true };
 }
-
-/** X processes a GIF or a video after its upload, so Post now leaves a Part with one to the publisher. */
-export function postNowLeavesToPublisher(kind: MediaKind): boolean {
-  return kind !== 'image';
-}

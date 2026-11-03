@@ -99,6 +99,8 @@ class ScheduledPostResponse(BaseModel):
     community: Optional[CommunityResponse]
     share_with_followers: bool
     created_at: datetime
+    # Set only in the answer to a Post now that handed it to the publisher, due now, to publish.
+    posting: bool
 
 
 class PostDetailResponse(BaseModel):

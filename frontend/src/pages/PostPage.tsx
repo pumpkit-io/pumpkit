@@ -39,6 +39,8 @@ import type { Format, PostDetail } from '@/services/postService';
 import { usePosting } from '@/features/scheduledPosts/usePosting';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
+const EDIT_CLOSED_BY_POSTING =
+  "Posting started while you were editing, so your changes weren't saved.";
 const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
 
 /**
@@ -158,9 +160,16 @@ function LoadedPost({
   const { connection, reload: reloadXConnection } = useXConnectionContext();
   const location = useLocation();
   const opensEditor = opensEditing(location.state);
+  const posting = usePosting(loaded.id, loaded.scheduledPost, onScheduledPost);
   const [editing, setEditing] = useState(
-    () => opensEditor && post.scheduledPost?.state === 'scheduled',
+    () => opensEditor && post.scheduledPost?.state === 'scheduled' && !posting,
   );
+  const [editClosedByPosting, setEditClosedByPosting] = useState(false);
+  // No editor while posting, even if X was busy and it comes back scheduled.
+  if (editing && (posting || loaded.scheduledPost?.state !== 'scheduled')) {
+    setEditing(false);
+    setEditClosedByPosting(true);
+  }
   const navigate = useNavigate();
   const [reconnectingForMedia, setReconnectingForMedia] = useState(false);
   const askToReconnect = useCallback(() => setReconnectingForMedia(true), []);
@@ -170,9 +179,6 @@ function LoadedPost({
     void reloadXConnection();
   }, [askToReconnect, reloadXConnection]);
   const media = useTextMedia(loaded.id, loaded.textMedia, text.storedPartCount, onReconnectNeeded);
-  const posting = usePosting(loaded.id, loaded.scheduledPost, onScheduledPost);
-  // Once publishing starts the editor closes for good, even if X was busy and it comes back scheduled.
-  if (editing && loaded.scheduledPost?.state !== 'scheduled') setEditing(false);
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
@@ -303,6 +309,7 @@ function LoadedPost({
       <ScheduledDock
         scheduledPost={scheduledPost}
         posting={posting}
+        notice={editClosedByPosting && posting ? EDIT_CLOSED_BY_POSTING : null}
         onEdit={() => setEditing(true)}
       />
     );
@@ -338,6 +345,7 @@ function LoadedPost({
       />
       <p role="status" className="sr-only">
         {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}
+        {posting && <span>Posting…</span>}
       </p>
     </Page>
   );

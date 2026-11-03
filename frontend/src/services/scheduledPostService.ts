@@ -65,6 +65,8 @@ export interface ScheduledPost {
   community: Community | null;
   shareWithFollowers: boolean;
   createdAt: string;
+  /** Only in the answer to a Post now that handed it to the publisher, due now, to publish. */
+  posting: boolean;
 }
 
 export interface ScheduledPostApi {
@@ -78,6 +80,7 @@ export interface ScheduledPostApi {
   community: Community | null;
   share_with_followers: boolean;
   created_at: string;
+  posting: boolean;
 }
 
 export const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
@@ -96,6 +99,7 @@ export const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   community: p.community,
   shareWithFollowers: p.share_with_followers,
   createdAt: p.created_at,
+  posting: p.posting,
 });
 
 const postTextBody = (post: ScheduledPostSource) => ({ post_id: post.postId });

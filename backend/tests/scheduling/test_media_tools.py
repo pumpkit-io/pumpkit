@@ -319,6 +319,6 @@ async def test_post_now_with_a_video_says_it_is_being_published_and_how_to_check
 
     assert result["isError"] is False, result
     posting = result["structuredContent"]
-    assert posting["state"] == "scheduled"
+    assert (posting["state"], posting["posting"]) == ("scheduled", True)
     assert posting["message"] == POSTING
     assert fake_x_publisher.published == []

@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
+import { useIsPosting } from '@/features/scheduledPosts/usePosting';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import { cn } from '@/lib/utils';
@@ -60,11 +61,12 @@ function When({ iso }: { iso: string }) {
 
 /**
  * Every Part with its length, then where and when it goes; the moment is in `TIME_ZONE`. Edit
- * opens the Post page on the inline edit while the Scheduled post still waits.
+ * opens the Post page on the inline edit while the Scheduled post still waits, not yet posting.
  */
 function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; charLimit: number }) {
   const navigate = useNavigate();
   const scheduled = post.scheduledPost;
+  const posting = useIsPosting(scheduled);
   const thread = post.parts.length > 1;
   return (
     <div id={id} className="space-y-3 pt-2">
@@ -90,7 +92,7 @@ function Expanded({ post, id, charLimit }: { post: PostListItem; id: string; cha
           ]}
         />
       )}
-      {post.status === 'scheduled' && scheduled?.state === 'scheduled' && (
+      {post.status === 'scheduled' && scheduled?.state === 'scheduled' && !posting && (
         <Button
           type="button"
           variant="outline"

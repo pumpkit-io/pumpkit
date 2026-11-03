@@ -103,7 +103,9 @@ def _x_post_url(x_post_id: Optional[str]) -> Optional[str]:
     return f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None
 
 
-def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostResponse:
+def scheduled_post_response(
+    scheduled_post: ScheduledPost, *, posting: bool = False
+) -> ScheduledPostResponse:
     published_at = scheduled_post.published_at
     community_id = scheduled_post.community_id
     return ScheduledPostResponse(
@@ -130,6 +132,7 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
         else None,
         share_with_followers=scheduled_post.share_with_followers,
         created_at=as_utc(scheduled_post.created_at),
+        posting=posting,
     )
 
 
@@ -302,7 +305,7 @@ async def create_scheduled_post(
 ) -> ScheduledPostResponse:
     """
     With `publish_now`, published within the request: Published, Failed, or back in scheduled.
-    With a GIF or a video it comes back scheduled, due now, for the publisher.
+    With a GIF or a video it comes back scheduled and `posting`, due now, for the publisher.
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     now = clock()
@@ -339,14 +342,15 @@ async def create_scheduled_post(
         # Another request scheduled the same Post between the check and the insert.
         raise _already_scheduled()
     await rebalance_top_ups(db, user_id=user.id, moments=[as_utc(scheduled_post.publish_at)])
-    if new.publish_now and not rules.hands_post_now_to_publisher(
+    posting = new.publish_now and rules.hands_post_now_to_publisher(
         media_service.kinds_by_part(media), live_count=0
-    ):
+    )
+    if new.publish_now and not posting:
         return await _post_now(
             db, publisher, storage, scheduled_post_id=scheduled_post.id, now=now, clock=clock
         )
     await db.commit()
-    return scheduled_post_response(scheduled_post)
+    return scheduled_post_response(scheduled_post, posting=posting)
 
 
 async def _check_media(
@@ -422,14 +426,6 @@ async def _post_now(
     return scheduled_post_response(published)
 
 
-def left_to_publisher(posted: ScheduledPostResponse) -> bool:
-    """Whether a Post now that came back scheduled was handed to the publisher, not refused by X."""
-    return posted.state == SCHEDULED and rules.hands_post_now_to_publisher(
-        [[media.kind for media in part.media] for part in posted.parts],
-        live_count=sum(1 for part in posted.parts if part.live),
-    )
-
-
 async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> ScheduledPost:
     scheduled_post = await service.get(db, scheduled_post_id=scheduled_post_id)
     if scheduled_post is None or scheduled_post.user_id != user.id:
@@ -478,7 +474,7 @@ async def edit_scheduled_post(
         await _check_media(
             db, service.media_by_part(scheduled_post), user_id=user.id, live_count=len(live)
         )
-    publishes_within_request = edit.publish_now and not rules.hands_post_now_to_publisher(
+    posting = edit.publish_now and rules.hands_post_now_to_publisher(
         media_service.kinds_by_part(
             media if media is not None else service.media_by_part(scheduled_post)
         ),
@@ -531,12 +527,14 @@ async def edit_scheduled_post(
         raise _publishing_started()
     moments = [publish_at_before, reschedule.publish_at] if reschedule else [publish_at_before]
     await rebalance_top_ups(db, user_id=user.id, moments=moments)
-    if publishes_within_request:
+    if edit.publish_now and not posting:
         return await _post_now(
             db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
         )
     await db.commit()
-    return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
+    return scheduled_post_response(
+        await _owned(db, user=user, scheduled_post_id=scheduled_post_id), posting=posting
+    )
 
 
 async def _destination_after_edit(

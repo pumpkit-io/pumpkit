@@ -256,7 +256,7 @@ async def test_a_post_now_x_never_took_goes_back_to_scheduled_for_the_publisher_
 
     assert response.status_code == 201
     body = response.json()
-    assert body["state"] == "scheduled"
+    assert (body["state"], body["posting"]) == ("scheduled", False)
     assert body["failed_reason"] is None
     fake_x_publisher.fail_publish = None
     clock.advance(timedelta(minutes=1))

@@ -145,7 +145,7 @@ async def create_scheduled_post(
 ) -> ScheduledPostResponse:
     """
     With `publish_now`, publishes on X before answering: it comes back Published or Failed. With
-    a GIF or a video it comes back scheduled, due now, for the publisher.
+    a GIF or a video it comes back scheduled and `posting`, due now, for the publisher.
     """
     new = NewScheduledPost(
         post_id=create_request.post_id,
