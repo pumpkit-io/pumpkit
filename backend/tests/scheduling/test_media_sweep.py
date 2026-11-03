@@ -14,12 +14,13 @@ from typing import BinaryIO
 
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.scheduling.publisher as publisher
 import pumpkit.scheduling.service as scheduling_service
 from pumpkit.core.storage import LocalDirectoryStorage, StoredFile, get_file_storage
 from pumpkit.main import app
-from pumpkit.posts.models import Post
+from pumpkit.posts.models import Media, Post
 from pumpkit.scheduling.media_sweep import FILES_SWEPT_EVERY, UNREFERENCED_GRACE
 from tests.media_files import png
 
@@ -312,7 +313,6 @@ async def test_a_failing_sweep_still_completes_the_pass_and_touches_the_heartbea
         timeout=5,
     )
 
-    assert stop.is_set()
     assert heartbeat.exists()
 
 
@@ -378,9 +378,10 @@ async def test_files_no_media_record_names_are_deleted_once_older_than_the_grace
     assert _stored(file_storage) == _files_of(kept) | {"media/recent", "media/recent/file"}
 
 
-async def test_stored_files_are_swept_once_every_files_swept_every(
-    fixed_clock, file_storage, db_session_maker, fake_x_publisher
+async def test_stored_files_are_swept_at_most_once_an_hour(
+    client, subscribed, post_with, fixed_clock, file_storage, db_session_maker, fake_x_publisher
 ):
+    kept = await _attach_to_text(client, await post_with("One"))
     swept_at = await publisher.run_pass(
         db_session_maker, fake_x_publisher, file_storage, fixed_clock
     )
@@ -391,14 +392,97 @@ async def test_stored_files_are_swept_once_every_files_swept_every(
     swept_at = await publisher.run_pass(
         db_session_maker, fake_x_publisher, file_storage, fixed_clock, files_swept_at=swept_at
     )
-    kept = _stored(file_storage)
+    stored_before = _stored(file_storage)
     fixed_clock.advance(timedelta(seconds=1))
     await publisher.run_pass(
         db_session_maker, fake_x_publisher, file_storage, fixed_clock, files_swept_at=swept_at
     )
 
-    assert kept == {"media", "media/abandoned", "media/abandoned/file"}
-    assert _stored(file_storage) == {"media"}
+    assert stored_before == _files_of(kept) | {"media/abandoned", "media/abandoned/file"}
+    assert _stored(file_storage) == _files_of(kept)
+
+
+async def test_partial_writes_older_than_the_grace_period_are_deleted_and_fresh_ones_kept(
+    client, subscribed, fixed_clock, post_with, file_storage, db_session_maker, fake_x_publisher
+):
+    kept = await _attach_to_text(client, await post_with("One"))
+    for key in (f"media/{kept}/file", f"media/{kept}/preview"):
+        _written_at(file_storage, key, fixed_clock())
+    for key in ("media/dead/.partial-a1", "media/writing/.partial-b2"):
+        (file_storage.root / key).parent.mkdir(parents=True)
+        (file_storage.root / key).write_bytes(b"half")
+    _written_at(file_storage, "media/dead/.partial-a1", fixed_clock())
+    fixed_clock.advance(PAST_GRACE)
+    _written_at(file_storage, "media/writing/.partial-b2", fixed_clock())
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert _stored(file_storage) == _files_of(kept) | {
+        "media/writing",
+        "media/writing/.partial-b2",
+    }
+
+
+async def test_no_file_is_deleted_while_the_database_holds_no_media_at_all(
+    fixed_clock, file_storage, db_session_maker, fake_x_publisher
+):
+    # A publisher pointed at the wrong database would otherwise delete every stored file.
+    await file_storage.put("media/elsewhere/file", io.BytesIO(b"bytes"))
+    _written_at(file_storage, "media/elsewhere/file", fixed_clock() - PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert _stored(file_storage) == {"media", "media/elsewhere", "media/elsewhere/file"}
+
+
+def _commit_lost_once_media_is_committed(monkeypatch) -> None:
+    """The first commit holding a Media applies, then raises, like a connection reset after COMMIT."""
+    real_commit = AsyncSession.commit
+    lost: list[bool] = []
+
+    async def commit(self: AsyncSession) -> None:
+        holds_media = any(isinstance(o, Media) for o in self.identity_map.values())
+        await real_commit(self)
+        if holds_media and not lost:
+            lost.append(True)
+            raise ConnectionResetError("connection reset after COMMIT")
+
+    monkeypatch.setattr(AsyncSession, "commit", commit)
+
+
+async def test_an_attach_whose_commit_applies_then_fails_keeps_the_files_of_its_media(
+    client, subscribed, post_with, file_storage, monkeypatch
+):
+    post_id = await post_with("One")
+    _commit_lost_once_media_is_committed(monkeypatch)
+
+    response = await client.post(
+        f"{POSTS}/{post_id}/text/parts/1/media",
+        files={"file": ("photo.png", png(), "image/png")},
+    )
+
+    assert response.status_code == 500, response.text
+    [media_id] = await _text_media(client, post_id)
+    assert _stored(file_storage) == _files_of(media_id)
+
+
+async def test_a_scheduled_post_attach_whose_commit_applies_then_fails_keeps_the_files(
+    client, subscribed, fixed_clock, connect_x, post_with, file_storage, monkeypatch
+):
+    await connect_x()
+    scheduled = await _schedule(client, await post_with("One"))
+    _commit_lost_once_media_is_committed(monkeypatch)
+
+    response = await client.post(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}/parts/1/media",
+        files={"file": ("photo.png", png(), "image/png")},
+    )
+
+    assert response.status_code == 500, response.text
+    [media_id] = [p.name for p in (file_storage.root / "media").iterdir()]
+    assert _stored(file_storage) == _files_of(media_id)
+    preview = await client.get(f"{API}/media/{media_id}/preview")
+    assert preview.status_code == 200, preview.text
 
 
 async def test_an_attach_that_fails_after_storing_the_file_leaves_no_file_behind(

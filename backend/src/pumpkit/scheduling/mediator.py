@@ -769,8 +769,7 @@ async def attach_text_media(
         now=now,
         alt_text=alt_text,
     )
-    async with media_service.files_deleted_on_failure(storage, media):
-        await db.commit()
+    await db.commit()
     return media_service.media_response(media)
 
 
@@ -822,6 +821,7 @@ async def attach_scheduled_post_media(
         await _save_scheduled_post_media(
             db, scheduled_post_id=scheduled_post_id, media=media, now=now
         )
+    await db.commit()
     return media_service.media_response(attached)
 
 
@@ -840,6 +840,7 @@ async def remove_scheduled_post_media(
     _check_not_live(scheduled_post, part_index=part_index)
     media[part_index] = [m for m in media[part_index] if m.id != media_id]
     await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=media, now=now)
+    await db.commit()
 
 
 async def attach_media_from_url(
@@ -994,7 +995,6 @@ async def _save_scheduled_post_media(
         media=_ids(media),
     ):
         raise _publishing_started()
-    await db.commit()
 
 
 async def _post_whose_media_changes(
