@@ -22,6 +22,7 @@ from pumpkit.scheduling.media_sweep import (
     delete_published_files,
     delete_unnamed_files,
     delete_unreferenced_media,
+    drop_unpublished_text_media,
 )
 from pumpkit.scheduling.publishing import claim_next_due, publish_claimed, recover_stuck
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
@@ -142,6 +143,11 @@ async def run_pass(
         await under_way.all_finished()
     if stop is not None and stop.is_set():
         return files_swept_at
+    try:
+        async with session_maker() as db:
+            await drop_unpublished_text_media(db)
+    except Exception:
+        logger.exception("Dropping unpublished Text media failed; trying again next pass")
     try:
         async with session_maker() as db:
             await delete_unreferenced_media(db, storage, now=clock())

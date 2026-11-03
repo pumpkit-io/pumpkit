@@ -12,6 +12,7 @@ from typing import Literal, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.billing.service as subscriptions_service
+import pumpkit.posts.media as media_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.logging import logger
@@ -313,12 +314,29 @@ async def set_alt_text(
         raise Failed("x_unavailable", _not_published(subject, X_UNAVAILABLE))
 
 
-async def delete_published_files(
-    storage: FileStorage, media: list[Media], *, failure_level: int = logging.ERROR
-) -> None:
+async def drop_unpublished_text_media(db: AsyncSession, scheduled_post: ScheduledPost) -> None:
     """
-    Delete the files of a live Part's Media, keeping their previews. A failed delete is logged at
-    `failure_level` and left for the sweep. Flushes nothing.
+    Drop from the Post's Text the Media the Scheduled post's live Parts didn't publish there, and
+    once every Part is live, past its last Part too, so the sweep deletes it. Flushes.
+    """
+    by_part = service.media_by_part(scheduled_post)
+    live = [media for part, media in zip(scheduled_post.parts, by_part) if part.x_post_id]
+    await media_service.keep_only_published_text_media(
+        db,
+        post_id=scheduled_post.post_id,
+        published=[[one.id for one in media] for media in live],
+        complete=len(live) == len(scheduled_post.parts),
+    )
+
+
+# Media whose failed file delete was logged as an error, so the sweep's retries log it once.
+_FAILED_DELETES_LOGGED: set[str] = set()
+
+
+async def delete_published_files(storage: FileStorage, media: list[Media]) -> None:
+    """
+    Delete the files of a live Part's Media, keeping their previews. A failed delete is logged,
+    as an error once per Media, and left for the sweep. Flushes nothing.
     """
     for one in media:
         if one.file_key is None:
@@ -327,10 +345,11 @@ async def delete_published_files(
             await storage.delete(one.file_key)
         except (OSError, ValueError):
             # Left on disk: the Part is live, so its file is never read again.
-            logger.log(
-                failure_level, "Deleting the published file of %s failed", one.id, exc_info=True
-            )
+            level = logging.DEBUG if one.id in _FAILED_DELETES_LOGGED else logging.ERROR
+            logger.log(level, "Deleting the published file of %s failed", one.id, exc_info=True)
+            _FAILED_DELETES_LOGGED.add(one.id)
             continue
+        _FAILED_DELETES_LOGGED.discard(one.id)
         one.file_key = None
 
 

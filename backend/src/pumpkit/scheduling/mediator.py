@@ -796,6 +796,7 @@ async def attach_text_media(
     received: ReceivedMedia,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of the Post's Text, last among its Media, once it is
@@ -816,6 +817,7 @@ async def attach_text_media(
         file=received.file,
         now=now,
         alt_text=alt_text,
+        link_used=link_used,
     )
     await db.commit()
     return media_service.media_response(media)
@@ -874,6 +876,7 @@ async def attach_scheduled_post_media(
     received: ReceivedMedia,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of a scheduled or Failed Scheduled post's own copy, last
@@ -894,6 +897,7 @@ async def attach_scheduled_post_media(
         file=received.file,
         now=now,
         alt_text=alt_text,
+        link_used=link_used,
     )
     async with media_service.files_deleted_on_failure(storage, attached):
         media[part_index].append(attached)
@@ -995,6 +999,7 @@ async def _attach_received(
     received: ReceivedMedia,
     alt_text: Optional[str],
     now: datetime,
+    link_used: bool = False,
 ) -> PlacedMediaResponse:
     """Attach a file an AI app sent where the Post's Media changes now, with the upload's checks."""
     _, scheduled_post = await _post_with_scheduled_post(db, user=user, post_id=post_id)
@@ -1009,6 +1014,7 @@ async def _attach_received(
             received,
             now,
             alt_text=alt_text,
+            link_used=link_used,
         )
         return PlacedMediaResponse(media=media, on_scheduled_post=False)
     media = await attach_scheduled_post_media(
@@ -1020,6 +1026,7 @@ async def _attach_received(
         received,
         now,
         alt_text=alt_text,
+        link_used=link_used,
     )
     return PlacedMediaResponse(media=media, on_scheduled_post=True)
 
@@ -1115,21 +1122,17 @@ async def attach_through_link(
     now: datetime,
 ) -> UploadedMediaResponse:
     """Attach the file a one-time link took where `attach_media_from_url` would."""
-    try:
-        placed = await _attach_received(
-            db,
-            storage,
-            user=upload.user,
-            post_id=upload.post_id,
-            part_number=upload.part_number,
-            received=received,
-            alt_text=upload.alt_text,
-            now=now,
-        )
-    except media_files.MediaRefused as refused:
-        if refused.code == media_files.ALT_TEXT_UNSUPPORTED:
-            raise media_files.alt_text_unsupported(link_used=True) from refused
-        raise
+    placed = await _attach_received(
+        db,
+        storage,
+        user=upload.user,
+        post_id=upload.post_id,
+        part_number=upload.part_number,
+        received=received,
+        alt_text=upload.alt_text,
+        now=now,
+        link_used=True,
+    )
     return UploadedMediaResponse(
         message=attached_message(upload.part_number, on_scheduled_post=placed.on_scheduled_post),
         post_url=post_url(upload.post_id),

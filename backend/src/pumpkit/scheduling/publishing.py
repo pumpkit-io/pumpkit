@@ -11,7 +11,6 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
-import pumpkit.posts.media as media_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
@@ -261,23 +260,16 @@ async def _settle(
 
 async def _drop_unpublished_text_media(db: AsyncSession, scheduled_post: ScheduledPost) -> None:
     """
-    Drop from the Text the Media the live Parts didn't publish, in a transaction of its own after
-    the live record's, so a failure here loses nothing X took. Each later Part tries again.
+    Drop from the Text the Media the live Parts didn't publish, in a session of its own so a failure
+    leaves the publish's session untouched. Later Parts and the sweep retry it.
     """
-    by_part = service.media_by_part(scheduled_post)
-    live = [media for part, media in zip(scheduled_post.parts, by_part) if part.x_post_id]
-    try:
-        # A savepoint, so a failure rolls back only this and leaves the loaded rows unexpired.
-        async with db.begin_nested():
-            await media_service.keep_only_published_text_media(
-                db,
-                post_id=scheduled_post.post_id,
-                published=[[one.id for one in media] for media in live],
-                complete=len(live) == len(scheduled_post.parts),
-            )
-        await db.commit()
-    except Exception:
-        logger.exception("Dropping unpublished Text media of %s failed", scheduled_post.id)
+    async with AsyncSession(db.bind, expire_on_commit=False) as own:
+        try:
+            await publish.drop_unpublished_text_media(own, scheduled_post)
+            await own.commit()
+        except Exception:
+            logger.exception("Dropping unpublished Text media of %s failed", scheduled_post.id)
+            await own.rollback()
 
 
 async def _publish(

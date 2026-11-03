@@ -4,11 +4,10 @@ and stored files no Media record names. The publisher's pass runs it and it comm
 `docs/development.md` says what that covers.
 """
 
-import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import ColumnElement, Select, and_, exists, select
+from sqlalchemy import ColumnElement, Select, and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
@@ -16,8 +15,10 @@ import pumpkit.posts.media as media_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.models import Media, TextMedia
-from pumpkit.scheduling import publish
+from pumpkit.scheduling import publish, service
 from pumpkit.scheduling.models import (
+    FAILED,
+    PUBLISHED,
     PUBLISHING,
     ScheduledPost,
     ScheduledPostMedia,
@@ -30,6 +31,69 @@ UNREFERENCED_GRACE = timedelta(hours=1)
 FILES_SWEPT_EVERY = timedelta(hours=1)
 _USERS_PER_PAGE = 100
 _IDS_PER_QUERY = 500
+
+
+async def drop_unpublished_text_media(db: AsyncSession) -> None:
+    """
+    Drop from each Published or Failed post's Text the Media its live Parts didn't publish, which
+    the publish drops itself unless it crashed first or the drop failed, so the unreferenced
+    Media's sweep deletes it. Commits once per Post; one failure is logged and the next goes on.
+    """
+    after = ""
+    while True:
+        page = await db.execute(
+            select(ScheduledPost.id, ScheduledPost.user_id)
+            .where(
+                ScheduledPost.state.in_([PUBLISHED, FAILED]),
+                ScheduledPost.id > after,
+                _texts_unpublished(),
+            )
+            .order_by(ScheduledPost.id)
+            .limit(_IDS_PER_QUERY)
+        )
+        found = list(page.tuples().all())
+        if not found:
+            return
+        for scheduled_post_id, user_id in found:
+            try:
+                await users_service.lock_user_id(db, user_id=user_id)
+                scheduled_post = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
+                await publish.drop_unpublished_text_media(db, scheduled_post)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception("Dropping unpublished Text media of %s failed", scheduled_post_id)
+        after = found[-1][0]
+
+
+def _texts_unpublished() -> ColumnElement[bool]:
+    """
+    The Post's Text holds Media on a live Part that didn't publish it there, or once published,
+    past the last Part, Media no Part published.
+    """
+    on_live_part = exists().where(
+        ScheduledPostPart.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostPart.position == TextMedia.part_index,
+        ScheduledPostPart.x_post_id.is_not(None),
+    )
+    on_a_part = exists().where(
+        ScheduledPostPart.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostPart.position == TextMedia.part_index,
+    )
+    published_there = exists().where(
+        ScheduledPostMedia.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostMedia.media_id == TextMedia.media_id,
+        ScheduledPostMedia.part_position == TextMedia.part_index,
+    )
+    published_anywhere = exists().where(
+        ScheduledPostMedia.scheduled_post_id == ScheduledPost.id,
+        ScheduledPostMedia.media_id == TextMedia.media_id,
+    )
+    past_the_last = and_(ScheduledPost.state == PUBLISHED, ~on_a_part, ~published_anywhere)
+    return exists().where(
+        TextMedia.post_id == ScheduledPost.post_id,
+        or_(and_(on_live_part, ~published_there), past_the_last),
+    )
 
 
 async def delete_unreferenced_media(
@@ -74,8 +138,7 @@ async def delete_published_files(db: AsyncSession, storage: FileStorage) -> None
         published = list(page.scalars().all())
         if not published:
             return
-        # The publish logged a failure already, and this retries every pass.
-        await publish.delete_published_files(storage, published, failure_level=logging.DEBUG)
+        await publish.delete_published_files(storage, published)
         await db.commit()
         after = published[-1].id
 

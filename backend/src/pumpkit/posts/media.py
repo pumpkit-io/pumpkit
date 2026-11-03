@@ -129,10 +129,18 @@ async def attach_to_text(
     file: BinaryIO,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> Media:
     """Store `checked`'s file and preview, and add it last on the Text's Part. Flushes."""
     media = await store(
-        db, storage, user_id=post.user_id, checked=checked, file=file, now=now, alt_text=alt_text
+        db,
+        storage,
+        user_id=post.user_id,
+        checked=checked,
+        file=file,
+        now=now,
+        alt_text=alt_text,
+        link_used=link_used,
     )
     on_part = [p.position for p in post.text_media if p.part_index == part_index]
     async with files_deleted_on_failure(storage, media):
@@ -157,14 +165,15 @@ async def store(
     file: BinaryIO,
     now: datetime,
     alt_text: Optional[str] = None,
+    link_used: bool = False,
 ) -> Media:
     """
     A new Media of the User's, with `checked`'s file and preview stored, placed nowhere yet.
-    Refuses alt text on a video. Flushes. Wrap the work up to the last flush before the commit in
+    Refuses alt text on a video, saying so when an upload link brought it. Flushes. Wrap the work up to the last flush before the commit in
     `files_deleted_on_failure`.
     """
     if alt_text is not None and checked.kind == MEDIA_VIDEO:
-        raise alt_text_unsupported()
+        raise alt_text_unsupported(link_used=link_used)
     media = Media(
         user_id=user_id,
         kind=checked.kind,
@@ -225,10 +234,8 @@ async def keep_only_published_text_media(
     db: AsyncSession, *, post_id: str, published: list[list[str]], complete: bool
 ) -> None:
     """
-    Drop from each of the Text's first Parts the Media its live Part didn't publish, `published`
-    holding each live Part's Media ids in order, and once `complete`, from every Part past them
-    the Media no Part published. Media replaced on a Scheduled post's copy then goes unreferenced,
-    so the sweep deletes it. Flushes.
+    Drop from the Text's first Parts the Media `published` (each live Part's Media ids, in order)
+    doesn't hold there, and once `complete`, past them the Media no Part published. Flushes.
     """
     dropped: list[ColumnElement[bool]] = [
         and_(TextMedia.part_index == index, TextMedia.media_id.not_in(ids))
