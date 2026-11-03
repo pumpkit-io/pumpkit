@@ -7,7 +7,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { useContext, useState, type CSSProperties } from 'react';
+import { useContext, useRef, useState, type CSSProperties } from 'react';
 import { XConnectionContext } from '@/features/xConnection/XConnectionProvider';
 import { cn } from '@/lib/utils';
 import type { Media } from '@/services/mediaService';
@@ -20,6 +20,7 @@ import {
   PREMIUM_VIDEO_MS,
   X_MEDIA_RULE,
 } from './mediaRules';
+import { MediaView, type Viewable } from './MediaView';
 import { useMediaPreview } from './useMediaPreview';
 import { holdsPlace, kindOfTile, type Tile } from './useTextMedia';
 
@@ -84,6 +85,35 @@ function tileLayout(count: number, index: number): { className: string; style?: 
 const ROUND_BUTTON =
   'inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground/75 text-background transition-colors hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transition-none';
 
+const capitalized = (name: string) => name[0]!.toUpperCase() + name.slice(1);
+
+/** A tile as the full-size view shows it; `number` counts the Part's Media, refused files left out. */
+function viewableOf(tile: Tile, number: number): Viewable {
+  const media = tile.state === 'ready' ? tile.media : null;
+  const kind = kindOfTile(tile);
+  return {
+    key: tile.key,
+    name: capitalized(`${mediaNoun(kind)} ${number}`),
+    kind,
+    media,
+    localUrl: tile.localUrl,
+  };
+}
+
+/** The full-size view of a Part's Media and how a tile opens it. */
+function useMediaView(items: Viewable[]) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const open = (key: string) => (element: HTMLElement) => {
+    opener.current = element;
+    setOpenKey(key);
+  };
+  const view = (
+    <MediaView items={items} openKey={openKey} onOpenKeyChange={setOpenKey} returnFocus={opener} />
+  );
+  return { open, view };
+}
+
 /** A video's length as the browser read it, on its tile or its stored Media. */
 function durationOf(tile: Tile): number | null {
   return tile.state === 'ready' ? tile.media.durationMs : tile.durationMs;
@@ -95,6 +125,7 @@ function MediaTile({
   className,
   style,
   onMeasure,
+  onOpen,
   onRemove,
   onDescribe,
 }: {
@@ -104,6 +135,8 @@ function MediaTile({
   style?: CSSProperties;
   /** Called with the width over the height of the file shown, once the browser reads it. */
   onMeasure?: (ratio: number) => void;
+  /** Opens the tile full size; given the element to focus again once that closes. */
+  onOpen: (opener: HTMLElement) => void;
   /** Left out, the tile can't be removed: the Part is set to go, or went, to X. */
   onRemove?: () => void;
   /** Left out, its alt text can't change either. */
@@ -121,7 +154,7 @@ function MediaTile({
   const reading = tile.state === 'uploading' && tile.reading;
   return (
     <li
-      aria-label={name[0]!.toUpperCase() + name.slice(1)}
+      aria-label={capitalized(name)}
       style={style}
       className={cn('relative overflow-hidden bg-muted', className)}
     >
@@ -150,6 +183,12 @@ function MediaTile({
           </div>
         )
       )}
+      <button
+        type="button"
+        aria-label={`Open ${name}`}
+        onClick={(event) => onOpen(event.currentTarget)}
+        className="absolute inset-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      />
       <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
         {kind === 'gif' && (
           <span aria-hidden className={cn(CHIP, SOLID)}>
@@ -304,6 +343,8 @@ export function MediaTiles({
   const measure = (key: string, ratio: number) =>
     setMeasured((ratios) => (ratios[key] === ratio ? ratios : { ...ratios, [key]: ratio }));
   const shown = tiles.filter((t) => holdsPlace(t) || t.state === 'refused');
+  const viewable = shown.filter((t) => t.state !== 'refused');
+  const { open, view } = useMediaView(viewable.map((tile, index) => viewableOf(tile, index + 1)));
   if (!shown.length) return null;
   const media = shown.flatMap((t) => (t.state === 'ready' && !t.removing ? [t.media] : []));
   let images = 0;
@@ -331,6 +372,7 @@ export function MediaTiles({
             number={++images}
             {...layout}
             onMeasure={(ratio) => measure(tile.key, ratio)}
+            onOpen={open(tile.key)}
             onRemove={() => onRemove(tile.key)}
             onDescribe={(altText) => onDescribe(tile.key, altText)}
           />
@@ -341,6 +383,7 @@ export function MediaTiles({
   return (
     <div className="space-y-1.5">
       {grid}
+      {view}
       {breaksXMediaRule(media) && (
         <p className="font-sans text-[13px] font-medium text-destructive">
           {X_MEDIA_RULE}. Remove some media from {where} before posting.
@@ -360,17 +403,22 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
     localUrl: null,
     removing: false,
   }));
+  const { open, view } = useMediaView(shown.map((tile, index) => viewableOf(tile, index + 1)));
   if (!shown.length) return null;
   return (
-    <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
-      {shown.map((tile, index) => (
-        <MediaTile
-          key={tile.key}
-          tile={tile}
-          number={index + 1}
-          {...tileLayout(shown.length, index)}
-        />
-      ))}
-    </ul>
+    <>
+      <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
+        {shown.map((tile, index) => (
+          <MediaTile
+            key={tile.key}
+            tile={tile}
+            number={index + 1}
+            {...tileLayout(shown.length, index)}
+            onOpen={open(tile.key)}
+          />
+        ))}
+      </ul>
+      {view}
+    </>
   );
 }
