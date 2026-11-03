@@ -118,7 +118,7 @@ async def create_post(
         brief=brief,
         corpus_post_ids=list(corpus.post_ids),
         created_at=now,
-        # A new Post has no Media; set, the collection never loads lazily, which async can't.
+        # Set empty so the collection never loads lazily, which an async session can't do.
         text_media=[],
     )
     db.add(post)
@@ -167,14 +167,14 @@ async def record_version(
 
 def set_text_from_version(post: Post, version: VersionAttempt) -> None:
     """
-    Make the Version the Post's words, as written; the Text's Media stays, Media of Parts it no
-    longer has going onto its last Part. Not flushed.
+    Make the Version the Post's words, as written. The Text's Media stays on its Parts, and that of
+    Parts the Version lacks moves onto its last Part. Not flushed.
     """
     post.text_format = version.format
     post.text_parts = list(version.parts or [])
     post.text_version_number = version.version_number
     post.text_edited = False
-    media.keep_on_text_parts(post)
+    media.move_dropped_parts_media(post)
 
 
 # Longer than both model calls can take, so only a write whose request died holds the Text past it.

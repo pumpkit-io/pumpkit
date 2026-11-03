@@ -10,7 +10,7 @@ from typing import BinaryIO, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.core.errors import NotFoundError
+from pumpkit.core.errors import ConflictError, NotFoundError
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.formats import part_name
 from pumpkit.posts.media_files import IMAGES_PER_PART, CheckedMedia, part_full
@@ -49,19 +49,30 @@ def text_media_by_part(post: Post) -> list[list[Media]]:
     return by_part
 
 
-def keep_on_text_parts(post: Post) -> None:
+def move_dropped_parts_media(post: Post) -> None:
     """
-    Puts Media of Parts the Text no longer has last on its last Part, in their order, once a
-    Version replaced its words. Not flushed.
+    Moves the Media of Parts the Text no longer has onto its last Part, after that Part's own, in
+    order. The Post page's `useTextMedia` moves tiles the same way. Not flushed.
     """
     last = len(post.text_parts or []) - 1
-    if last < 0:
-        return
     position = max((p.position for p in post.text_media if p.part_index == last), default=-1)
-    removed = [p for p in post.text_media if p.part_index > last]
-    for placed in sorted(removed, key=lambda p: (p.part_index, p.position)):
+    dropped = [p for p in post.text_media if p.part_index > last]
+    for placed in sorted(dropped, key=lambda p: (p.part_index, p.position)):
         position += 1
         placed.part_index, placed.position = last, position
+
+
+def check_dropped_parts_media_movable(post: Post, *, part_count: int, live_count: int) -> None:
+    """
+    Refuses a Text of `part_count` Parts whose last Part is already on X while a Part it drops
+    holds Media: a live Part's Media is set, so the moved Media would be stuck there unseen.
+    """
+    if part_count > live_count or all(p.part_index < part_count for p in post.text_media):
+        return
+    raise ConflictError(
+        f"Part {part_count} is already on X, so it can't take the media of the parts this "
+        "version drops."
+    )
 
 
 def check_text_part_room(post: Post, *, part_index: int) -> None:

@@ -144,8 +144,8 @@ function partMediaOf(
           tiles={media.tilesOf(index)}
           where={where}
           canRetry={media.roomOn(index) > 0}
-          onRemove={(key) => media.remove(index, key)}
-          onRetry={(key) => media.retry(index, key)}
+          onRemove={(key) => media.remove(key)}
+          onRetry={(key) => media.retry(key)}
         />
       ),
       button: (
@@ -226,12 +226,7 @@ function LoadedPost({
     askToReconnect();
     void reloadXConnection();
   }, [askToReconnect, reloadXConnection]);
-  const media = useTextMedia(
-    loaded.id,
-    loaded.textMedia,
-    text.text?.parts.length ?? 0,
-    onReconnectNeeded,
-  );
+  const media = useTextMedia(loaded.id, loaded.textMedia, text.storedPartCount, onReconnectNeeded);
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
