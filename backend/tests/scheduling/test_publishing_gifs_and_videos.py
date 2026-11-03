@@ -16,8 +16,12 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.scheduling.publisher import run, run_pass
 from pumpkit.scheduling.publishing import claim_next_due, publish_claimed, recover_stuck
 from pumpkit.x_connection.models import XConnection
-from pumpkit.x_connection.x_publisher import XMediaRefusedError, XRateLimitedError
-from tests.media_files import animated_gif, mp4
+from pumpkit.x_connection.x_publisher import (
+    XMediaRefusedError,
+    XPostRejectedError,
+    XRateLimitedError,
+)
+from tests.media_files import animated_gif, mp4, png
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -542,3 +546,32 @@ async def test_post_now_with_a_gif_hands_it_to_the_publisher_too(
     await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert (await _scheduled_post(client, post_id))["state"] == "published"
     assert [u.category for u in fake_x_publisher.uploads] == ["tweet_gif"]
+
+
+async def test_post_now_of_a_thread_whose_video_is_live_publishes_the_rest_within_the_request(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A demo.", "A chart.")
+    await _attach(client, post_id, mp4(), "demo.mp4")
+    await _attach(client, post_id, png(), "chart.png", part=2)
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Try again.")
+    fake_x_publisher.fail_publish_on = 2
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    failed = await _scheduled_post(client, post_id)
+    assert [part["live"] for part in failed["parts"]] == [True, False]
+    fake_x_publisher.fail_publish = None
+
+    retried = await client.patch(f"{SCHEDULED_POSTS}/{failed['id']}", json={"publish_now": True})
+
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["state"] == "published"
+    assert fake_x_publisher.published[-1][1] == "A chart."

@@ -14,7 +14,7 @@ import {
 import { PROFILE } from './communities';
 import { pastCommunitiesChanged } from './usePastCommunities';
 
-/** What a Post now that comes back scheduled means: the publisher retries it. */
+/** Why Post now comes back scheduled when it isn't left to the publisher: X was busy. */
 export const X_BUSY_NOTICE = 'X was busy. Pumpkit will keep trying for the next 15 minutes.';
 
 export type NewScheduledPost = ScheduledPostSource & {

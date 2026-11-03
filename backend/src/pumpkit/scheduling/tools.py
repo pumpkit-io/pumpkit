@@ -133,8 +133,8 @@ def _post_now_message(posted: ScheduledPostToolResponse) -> str:
         return f"Failed. {posted.failed_reason}"
     if mediator.left_to_publisher(posted):
         return (
-            "Being published: X processes the media first, which can take a few minutes. "
-            "Call get_post to see when it's published."
+            "Being published: Pumpkit uploads the media to X and waits while X processes it, "
+            "which can take up to an hour for a video. Call get_post to see when it's published."
         )
     # Back in scheduled: X never took it, so the publisher retries it.
     minutes = int(RETRY_WINDOW.total_seconds() // 60)
@@ -153,8 +153,9 @@ async def post_now(
     replying to the one before. A post goes out once: one that already has a scheduled post is
     refused. The post goes to the user's profile, or to the community whose URL or ID is in
     `community`. In a community, `share_with_followers` also shows it to the user's followers.
-    A post with a GIF or a video comes back scheduled while X processes the media: `get_post`
-    shows when it's published.
+    A post with a GIF or a video comes back scheduled before its media is uploaded: Pumpkit then
+    uploads it and waits while X processes it, up to an hour for a video, and `get_post` shows
+    when it's published.
     """
     posted = await _create_scheduled_post(
         call,

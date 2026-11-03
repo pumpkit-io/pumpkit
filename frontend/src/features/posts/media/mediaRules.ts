@@ -129,6 +129,6 @@ export function refusalOf(error: unknown, file: File): Refusal {
 }
 
 /** X processes a GIF or a video after its upload, so Post now leaves a Part with one to the publisher. */
-export function processedByX(kind: MediaKind): boolean {
+export function postNowLeavesToPublisher(kind: MediaKind): boolean {
   return kind !== 'image';
 }

@@ -16,8 +16,8 @@ POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
 IMAGE_URL = "https://images.example.com/chart.png"
 POSTING = (
-    "Being published: X processes the media first, which can take a few minutes. "
-    "Call get_post to see when it's published."
+    "Being published: Pumpkit uploads the media to X and waits while X processes it, which can "
+    "take up to an hour for a video. Call get_post to see when it's published."
 )
 
 

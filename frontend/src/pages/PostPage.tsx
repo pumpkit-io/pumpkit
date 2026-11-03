@@ -171,6 +171,8 @@ function LoadedPost({
   }, [askToReconnect, reloadXConnection]);
   const media = useTextMedia(loaded.id, loaded.textMedia, text.storedPartCount, onReconnectNeeded);
   const posting = usePosting(loaded.id, loaded.scheduledPost, onScheduledPost);
+  // Once publishing starts the editor closes for good, even if X was busy and it comes back scheduled.
+  if (editing && loaded.scheduledPost?.state !== 'scheduled') setEditing(false);
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.

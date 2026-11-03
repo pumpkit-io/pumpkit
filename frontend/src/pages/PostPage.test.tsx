@@ -1501,6 +1501,10 @@ describe('Post page', () => {
           .mockResolvedValue({ durationMs: 42_000, poster: new Blob(['frame']) });
       });
 
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
       it('shows a GIF with its GIF chip and its Alt chip once it is on', async () => {
         vi.mocked(mediaService.attach).mockResolvedValue(gif('media_01'));
         renderPost(postWith('the final text'));
@@ -1801,7 +1805,6 @@ describe('Post page', () => {
         await dialogClosed();
         expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
         expect(screen.queryByText(/X was busy/)).not.toBeInTheDocument();
-        vi.useRealTimers();
       });
     });
 
@@ -2693,9 +2696,16 @@ describe('Post page', () => {
       };
 
       beforeEach(() => {
+        // Before SCHEDULED's time: a posting Scheduled post offers no Edit.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
         vi.mocked(mediaService.attachToScheduledPost).mockReset();
         vi.mocked(mediaService.removeFromScheduledPost).mockReset().mockResolvedValue();
         vi.mocked(scheduledPostService.edit).mockReset();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
       });
 
       async function startEditing(scheduledPost: ScheduledPost) {
@@ -3331,7 +3341,8 @@ describe('Post page', () => {
 
   describe('Scheduled', () => {
     beforeEach(() => {
-      vi.useFakeTimers({ toFake: ['Date'] });
+      // Before SCHEDULED's time, so it isn't posting yet; timers run on so reads come back.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
     });
 
@@ -3339,53 +3350,89 @@ describe('Post page', () => {
       vi.useRealTimers();
     });
 
+    /** What the publisher's work shows on the next reads of the Post. */
+    function readsBack(scheduledPost: ScheduledPost) {
+      vi.mocked(postService.get).mockResolvedValue(withScheduledPost(scheduledPost));
+    }
+
     it('shows Posting… once it is due, and the Published Post once the publisher is through', async () => {
-      vi.useRealTimers();
-      vi.useFakeTimers({ shouldAdvanceTime: true });
       vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
       renderPost(withScheduledPost(SCHEDULED));
       await textCard();
       expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
-      expect(postService.get).toHaveBeenCalledTimes(1);
-      vi.mocked(postService.get).mockResolvedValue(
-        withScheduledPost({
-          ...SCHEDULED,
-          state: 'publishing',
-        }),
-      );
+      readsBack({ ...SCHEDULED, state: 'publishing' });
 
-      await act(() => vi.advanceTimersByTimeAsync(3_000));
-      expect(postService.get).toHaveBeenCalledTimes(2);
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
       expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
-      vi.mocked(postService.get).mockResolvedValue(
-        withScheduledPost({
-          ...SCHEDULED,
-          state: 'published',
-          publishedAt: '2026-10-12T07:01:10Z',
-          xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
-        }),
-      );
-      await act(() => vi.advanceTimersByTimeAsync(4_000));
-      expect(postService.get).toHaveBeenCalledTimes(2);
+      readsBack({
+        ...SCHEDULED,
+        state: 'published',
+        publishedAt: '2026-10-12T07:01:10Z',
+        xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+      });
 
-      await act(() => vi.advanceTimersByTimeAsync(1_000));
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
       expect(await screen.findByRole('region', { name: 'Published' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Published');
     });
 
+    it('shows Posting…, then the Failed Post with its reason once the publish fails', async () => {
+      vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
+      renderPost(withScheduledPost({ ...SCHEDULED, state: 'publishing' }));
+      await textCard();
+      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      readsBack({
+        ...SCHEDULED,
+        state: 'failed',
+        failedReason: 'X refused the post: duplicate content.',
+      });
+
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(
+        await panel('Failed').findByText('X refused the post: duplicate content.'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Posts / Failed');
+    });
+
     it('turns to Posting… when its time comes while the page is open', async () => {
-      vi.useRealTimers();
-      vi.useFakeTimers({ shouldAdvanceTime: true });
       vi.setSystemTime(new Date('2026-10-12T06:59:50Z'));
       renderPost(withScheduledPost(SCHEDULED));
       await textCard();
-      expect(
-        panel('Scheduled').getByText('Scheduled for Mon, Oct 12, 9:00 AM'),
-      ).toBeInTheDocument();
+      const status = panel('Scheduled').getByRole('status');
+      expect(status).toHaveTextContent('Scheduled for Mon, Oct 12, 9:00 AM');
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));
 
+      // The same live region, so the change is announced.
+      expect(status).toHaveTextContent('Posting…');
+      expect(panel('Scheduled').getByRole('status')).toBe(status);
+    });
+
+    it('offers no Edit while posting, and closes the editor once publishing starts', async () => {
+      vi.setSystemTime(new Date('2026-10-12T06:59:50Z'));
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+      fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
+      expect(
+        await screen.findByRole('region', { name: 'Edit the scheduled post' }),
+      ).toBeInTheDocument();
+      readsBack({ ...SCHEDULED, state: 'publishing' });
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(
+        screen.queryByRole('region', { name: 'Edit the scheduled post' }),
+      ).not.toBeInTheDocument();
       expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+
+      // X was busy: back in scheduled, still due, and the publisher retries it.
+      readsBack(SCHEDULED);
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(
+        screen.queryByRole('region', { name: 'Edit the scheduled post' }),
+      ).not.toBeInTheDocument();
+      expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     });
 
     it('says when and where it goes out, with Edit and no Feedback', async () => {
@@ -4439,6 +4486,45 @@ describe('Post page', () => {
         'href',
         'https://x.com/i/web/status/1890000000000000002',
       );
+    });
+
+    it('shows the post as posting when Post now leaves its video to the publisher', async () => {
+      vi.mocked(scheduledPostService.edit).mockResolvedValue({
+        ...SCHEDULED,
+        publishAt: '2026-10-10T10:00:00Z',
+        parts: [
+          {
+            text: 'the second text',
+            live: false,
+            xPostUrl: null,
+            media: [
+              {
+                id: 'media_01',
+                kind: 'video',
+                previewUrl: '/media/media_01/preview',
+                width: 1280,
+                height: 720,
+                altText: null,
+                durationMs: 42_000,
+              },
+            ],
+          },
+        ],
+      });
+      const dialog = await openRetry();
+
+      fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Post now' }));
+
+      await dialogClosed();
+      expect(scheduledPostService.edit).toHaveBeenCalledWith('scheduled_post_01', {
+        copyText: true,
+        community: null,
+        shareWithFollowers: false,
+        publishNow: true,
+      });
+      expect(panel('Scheduled').getByRole('status')).toHaveTextContent('Posting…');
+      expect(screen.queryByText(/X was busy/)).not.toBeInTheDocument();
     });
 
     it("copies the Post's Text even when it is the text that failed", async () => {

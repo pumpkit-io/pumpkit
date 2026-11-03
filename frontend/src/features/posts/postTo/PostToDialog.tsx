@@ -31,7 +31,12 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
-import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere, processedByX } from '../media/mediaRules';
+import {
+  X_MEDIA_RULE,
+  breaksXMediaRule,
+  mediaWhere,
+  postNowLeavesToPublisher,
+} from '../media/mediaRules';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
@@ -206,9 +211,6 @@ export function PostToDialog({
   const destination = destinationFrom(where);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
-  const leftToPublisher = parts.some(
-    (part) => !part.live && part.media.some((m) => processedByX(m.kind)),
-  );
   const unpostable = ready
     ? [...overLimit(parts, lengths, connection.charLimit, thread), ...overMediaRule(parts, thread)]
     : [];
@@ -251,7 +253,7 @@ export function PostToDialog({
     } else if (outcome.kind === 'created') {
       const { scheduledPost } = outcome;
       // Posted now but still waiting, and not left to the publisher: X was busy, and the publisher retries.
-      if (when.now && scheduledPost.state === 'scheduled' && !leftToPublisher)
+      if (when.now && scheduledPost.state === 'scheduled' && !leftToPublisher(scheduledPost))
         setStep({ kind: 'busy', scheduledPost });
       else onDone(scheduledPost);
     }
@@ -378,5 +380,12 @@ export function PostToDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Whether a Post now that came back scheduled was left to the publisher, not refused by X. */
+function leftToPublisher(scheduledPost: ScheduledPost): boolean {
+  return scheduledPost.parts.some(
+    (part) => !part.live && part.media.some((m) => postNowLeavesToPublisher(m.kind)),
   );
 }

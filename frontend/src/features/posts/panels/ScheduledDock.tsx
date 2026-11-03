@@ -7,7 +7,7 @@ import { DestinationName } from './panelParts';
 
 /**
  * A Scheduled Post takes no Feedback: its text is set to go, and is edited instead, until it is
- * being published. Once it is `posting` it says so until it is Published or Failed.
+ * being published. Once it is `posting` it says so, with no Edit, until it is Published or Failed.
  */
 export function ScheduledDock({
   scheduledPost,
@@ -28,11 +28,9 @@ export function ScheduledDock({
               className="h-4 w-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"
             />
           )}
-          <p
-            role={posting ? 'status' : undefined}
-            className="min-w-0 flex-1 font-sans text-sm text-foreground"
-          >
-            <span>
+          <p className="min-w-0 flex-1 font-sans text-sm text-foreground">
+            {/* Mounted before posting starts, so screen readers announce the change. */}
+            <span role="status">
               {posting ? 'Posting…' : `Scheduled for ${formatWhen(scheduledPost.publishAt)}`}
             </span>
             {' · '}
@@ -40,7 +38,7 @@ export function ScheduledDock({
               <DestinationName scheduledPost={scheduledPost} />
             </span>
           </p>
-          {scheduledPost.state === 'scheduled' && (
+          {scheduledPost.state === 'scheduled' && !posting && (
             <Button type="button" variant="outline" className="h-10 shrink-0" onClick={onEdit}>
               Edit
             </Button>

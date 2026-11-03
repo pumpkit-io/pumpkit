@@ -4,7 +4,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 
 /** The waits between reads of a posting Post, the last one repeating for as long as it posts. */
 export const POSTING_READS_MS = [3_000, 5_000, 10_000, 20_000, 30_000];
-// setTimeout fires at once past about 24.8 days, so a time further off is never waited for here.
+// A day covers any open page; setTimeout itself would fire at once past about 24.8 days.
 const LONGEST_WAIT_MS = 24 * 60 * 60 * 1000;
 
 function sameScheduledPost(a: ScheduledPost | null, b: ScheduledPost | null): boolean {
