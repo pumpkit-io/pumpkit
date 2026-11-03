@@ -6,6 +6,7 @@ import { errorCode, errorStatus } from '@/services/apiErrors';
 import type { Media } from '@/services/mediaService';
 import {
   IMAGES_PER_PART,
+  PART_SAVING,
   UPLOAD_FAILED,
   X_MEDIA_RULE,
   refusalBeforeUpload,
@@ -42,6 +43,8 @@ export interface TextMedia {
   tilesOf: (partIndex: number) => Tile[];
   /** How many more images the Part takes. */
   roomOn: (partIndex: number) => number;
+  /** Whether the Part is one an undo shows before it lands, which takes no files yet. */
+  saving: (partIndex: number) => boolean;
   attach: (partIndex: number, files: File[], via: AttachVia) => void;
   remove: (key: string) => void;
   retry: (key: string) => void;
@@ -254,6 +257,7 @@ export function useTextMedia(
   const send = useCallback(
     async (key: string, file: File, via: AttachVia, under: Upload) => {
       for (let attempt = 0; ; attempt++) {
+        const changesBefore = partCountChanges.current;
         const sentTo = partWith(key);
         if (sentTo === -1) return;
         let media: Media | null = null;
@@ -270,12 +274,23 @@ export function useTextMedia(
           error = caught;
         }
         if (media) {
-          if (under.dropped) return discard(media);
           const landed = media;
+          // A fold while it was sent may have put the tile ahead of Media the server put first.
+          const server =
+            under.dropped || changesBefore === partCountChanges.current ? null : await read();
+          if (under.dropped) {
+            if (server)
+              reconcile(
+                server.map((on) => on.filter((m) => m.id !== landed.id)),
+                null,
+              );
+            return discard(landed);
+          }
           const elsewhere = current.current
             .flat()
             .some((t) => t.state === 'ready' && t.media.id === landed.id);
-          if (elsewhere) dropTile(key);
+          if (server) reconcile(server, { key, media: landed });
+          else if (elsewhere) dropTile(key);
           else changeTile(key, (tile) => readyTile(key, landed, tile.localUrl));
           track('media_attached', { kind: landed.kind, via, source: 'web' });
           return;
@@ -353,7 +368,10 @@ export function useTextMedia(
 
   const attach = useCallback(
     (partIndex: number, files: File[], via: AttachVia) => {
-      if (!isStored(partIndex)) return;
+      if (!isStored(partIndex)) {
+        showToast(PART_SAVING);
+        return;
+      }
       for (const file of files) {
         const key = newKey();
         const localUrl = localUrlOf(file);
@@ -438,6 +456,7 @@ export function useTextMedia(
   return {
     tilesOf: (partIndex) => parts[partIndex] ?? [],
     roomOn,
+    saving: (partIndex) => !isStored(partIndex),
     attach,
     remove,
     retry,
