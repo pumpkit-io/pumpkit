@@ -226,7 +226,12 @@ function LoadedPost({
     askToReconnect();
     void reloadXConnection();
   }, [askToReconnect, reloadXConnection]);
-  const media = useTextMedia(loaded.id, loaded.textMedia, onReconnectNeeded);
+  const media = useTextMedia(
+    loaded.id,
+    loaded.textMedia,
+    text.text?.parts.length ?? 0,
+    onReconnectNeeded,
+  );
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.

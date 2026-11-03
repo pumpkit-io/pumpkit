@@ -539,7 +539,9 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
 
     async def _post_with(*parts: str) -> str:
         now = datetime.now(timezone.utc)
-        post = Post(user_id=user.id, brief="Seeded", corpus_post_ids=[], created_at=now)
+        post = Post(
+            user_id=user.id, brief="Seeded", corpus_post_ids=[], created_at=now, text_media=[]
+        )
         version = VersionAttempt(
             post=post,
             sequence=1,

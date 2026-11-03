@@ -49,6 +49,21 @@ def text_media_by_part(post: Post) -> list[list[Media]]:
     return by_part
 
 
+def keep_on_text_parts(post: Post) -> None:
+    """
+    Puts Media of Parts the Text no longer has last on its last Part, in their order, once a
+    Version replaced its words. Not flushed.
+    """
+    last = len(post.text_parts or []) - 1
+    if last < 0:
+        return
+    position = max((p.position for p in post.text_media if p.part_index == last), default=-1)
+    removed = [p for p in post.text_media if p.part_index > last]
+    for placed in sorted(removed, key=lambda p: (p.part_index, p.position)):
+        position += 1
+        placed.part_index, placed.position = last, position
+
+
 def check_text_part_room(post: Post, *, part_index: int) -> None:
     """Refuses a Part of the Text that holds as many images as X takes on one X post."""
     count = len(post.text_parts or [])
