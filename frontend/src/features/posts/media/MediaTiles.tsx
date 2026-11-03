@@ -7,7 +7,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { useContext, type CSSProperties } from 'react';
+import { useContext, useState, type CSSProperties } from 'react';
 import { XConnectionContext } from '@/features/xConnection/XConnectionProvider';
 import { cn } from '@/lib/utils';
 import type { Media } from '@/services/mediaService';
@@ -23,37 +23,62 @@ import {
 import { useMediaPreview } from './useMediaPreview';
 import { holdsPlace, kindOfTile, type Tile } from './useTextMedia';
 
-/** X shows one image at about its own shape, within these bounds, and crops the rest. */
-const SINGLE_RATIO = { min: 0.8, max: 1.91, unknown: 16 / 9 };
+/**
+ * X's composer shows one Media across the full width at its own shape, cropped from the
+ * centre only when it is taller than 3:4. However wide it is, its frame stays tall enough
+ * for the × and the Alt chip, cropping a banner wider than that from the centre.
+ */
+const SINGLE_RATIO = { min: 3 / 4, unknown: 16 / 9 };
+const SINGLE_MIN_HEIGHT = '5rem';
 
-/** Where each of n tiles sits in X's layout for one, two, three or four images. */
-const CELLS: Record<number, string[]> = {
-  1: [''],
-  2: ['', ''],
-  3: ['row-span-2', '', ''],
-  4: ['', '', '', ''],
+/** Where each of two, three or four tiles sits in the 16:9 frame of X's composer. */
+const CELLS: Record<number, CSSProperties[]> = {
+  2: [
+    { gridColumn: '1', gridRow: '1' },
+    { gridColumn: '2', gridRow: '1' },
+  ],
+  3: [
+    { gridColumn: '1', gridRow: '1 / span 2' },
+    { gridColumn: '2', gridRow: '1' },
+    { gridColumn: '2', gridRow: '2' },
+  ],
+  4: [
+    { gridColumn: '1', gridRow: '1' },
+    { gridColumn: '2', gridRow: '1' },
+    { gridColumn: '1', gridRow: '2' },
+    { gridColumn: '2', gridRow: '2' },
+  ],
 };
 
-function gridStyle(tiles: Tile[]): CSSProperties | undefined {
+/** Each tile's width over its height, by key, as the browser read it from the file shown. */
+type Ratios = Record<string, number>;
+
+function gridStyle(tiles: Tile[], measured: Ratios = {}): CSSProperties | undefined {
   if (tiles.length > 4) return undefined;
   if (tiles.length > 1) return { aspectRatio: '16 / 9' };
-  const tile = tiles[0];
-  const media = tile?.state === 'ready' ? tile.media : null;
-  const ratio =
-    media?.width && media.height
-      ? Math.min(SINGLE_RATIO.max, Math.max(SINGLE_RATIO.min, media.width / media.height))
-      : SINGLE_RATIO.unknown;
-  return { aspectRatio: String(ratio) };
+  const tile = tiles[0]!;
+  const media = tile.state === 'ready' ? tile.media : null;
+  const ratio = media?.width && media.height ? media.width / media.height : measured[tile.key];
+  return {
+    aspectRatio: String(ratio ? Math.max(SINGLE_RATIO.min, ratio) : SINGLE_RATIO.unknown),
+    minHeight: SINGLE_MIN_HEIGHT,
+  };
 }
 
 function gridClass(tiles: Tile[]): string {
-  const many = tiles.length > 4;
+  if (tiles.length > 4) {
+    return 'grid w-full grid-cols-2 gap-0.5 overflow-hidden rounded-2xl border border-border bg-card';
+  }
   return cn(
-    'grid w-full gap-0.5 overflow-hidden rounded-2xl border border-border bg-card',
-    !many && 'max-h-[32rem]',
+    'grid w-full gap-3',
     tiles.length > 1 && 'grid-cols-2',
-    tiles.length > 2 && !many && 'grid-rows-2',
+    tiles.length > 2 && 'grid-rows-2',
   );
+}
+
+function tileLayout(count: number, index: number): { className: string; style?: CSSProperties } {
+  if (count > 4) return { className: 'aspect-video' };
+  return { className: 'rounded-2xl', style: CELLS[count]?.[index] };
 }
 
 const ROUND_BUTTON =
@@ -68,12 +93,17 @@ function MediaTile({
   tile,
   number,
   className,
+  style,
+  onMeasure,
   onRemove,
   onDescribe,
 }: {
   tile: Tile;
   number: number;
   className: string;
+  style?: CSSProperties;
+  /** Called with the width over the height of the file shown, once the browser reads it. */
+  onMeasure?: (ratio: number) => void;
   /** Left out, the tile can't be removed: the Part is set to go, or went, to X. */
   onRemove?: () => void;
   /** Left out, its alt text can't change either. */
@@ -92,6 +122,7 @@ function MediaTile({
   return (
     <li
       aria-label={name[0]!.toUpperCase() + name.slice(1)}
+      style={style}
       className={cn('relative overflow-hidden bg-muted', className)}
     >
       {reading ? (
@@ -106,6 +137,9 @@ function MediaTile({
         <img
           src={src}
           alt={media?.altText ?? ''}
+          onLoad={({ currentTarget: { naturalWidth, naturalHeight } }) => {
+            if (naturalWidth && naturalHeight) onMeasure?.(naturalWidth / naturalHeight);
+          }}
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (
@@ -172,19 +206,25 @@ function MediaTile({
 function RefusedTile({
   tile,
   className,
+  style,
   canRetry,
   onRemove,
   onRetry,
 }: {
   tile: Extract<Tile, { state: 'refused' }>;
   className: string;
+  style?: CSSProperties;
   canRetry: boolean;
   onRemove: () => void;
   onRetry: () => void;
 }) {
   const name = tile.file.name;
   return (
-    <li aria-label={name} className={cn('relative overflow-hidden bg-muted', className)}>
+    <li
+      aria-label={name}
+      style={style}
+      className={cn('relative overflow-hidden bg-muted', className)}
+    >
       {tile.localUrl && tile.file.type.startsWith('image/') && (
         <img
           src={tile.localUrl}
@@ -260,21 +300,26 @@ export function MediaTiles({
   onRetry: (key: string) => void;
   onDescribe: (key: string, altText: string | null) => Promise<void>;
 }) {
+  const [measured, setMeasured] = useState<Ratios>({});
+  const measure = (key: string, ratio: number) =>
+    setMeasured((ratios) => (ratios[key] === ratio ? ratios : { ...ratios, [key]: ratio }));
   const shown = tiles.filter((t) => holdsPlace(t) || t.state === 'refused');
   if (!shown.length) return null;
-  const many = shown.length > 4;
-  const cells = CELLS[shown.length] ?? [];
   const media = shown.flatMap((t) => (t.state === 'ready' && !t.removing ? [t.media] : []));
   let images = 0;
   const grid = (
-    <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
+    <ul
+      aria-label={`Media on ${where}`}
+      style={gridStyle(shown, measured)}
+      className={gridClass(shown)}
+    >
       {shown.map((tile, index) => {
-        const className = many ? 'aspect-video' : (cells[index] ?? '');
+        const layout = tileLayout(shown.length, index);
         return tile.state === 'refused' ? (
           <RefusedTile
             key={tile.key}
             tile={tile}
-            className={className}
+            {...layout}
             canRetry={canRetry}
             onRemove={() => onRemove(tile.key)}
             onRetry={() => onRetry(tile.key)}
@@ -284,7 +329,8 @@ export function MediaTiles({
             key={tile.key}
             tile={tile}
             number={++images}
-            className={className}
+            {...layout}
+            onMeasure={(ratio) => measure(tile.key, ratio)}
             onRemove={() => onRemove(tile.key)}
             onDescribe={(altText) => onDescribe(tile.key, altText)}
           />
@@ -315,7 +361,6 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
     removing: false,
   }));
   if (!shown.length) return null;
-  const cells = CELLS[shown.length] ?? [];
   return (
     <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
       {shown.map((tile, index) => (
@@ -323,7 +368,7 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
           key={tile.key}
           tile={tile}
           number={index + 1}
-          className={shown.length > 4 ? 'aspect-video' : (cells[index] ?? '')}
+          {...tileLayout(shown.length, index)}
         />
       ))}
     </ul>

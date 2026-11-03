@@ -1502,6 +1502,115 @@ describe('Post page', () => {
       expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
     });
 
+    describe("in X's composer layout", () => {
+      function sizedImage(id: string, width: number, height: number): Media {
+        return { ...image(id), width, height };
+      }
+
+      function frameOf(list: HTMLElement): string {
+        return list.style.aspectRatio;
+      }
+
+      function cellsOf(list: HTMLElement): string[] {
+        return within(list)
+          .getAllByRole('listitem')
+          .map((tile) => `${tile.style.gridColumn} | ${tile.style.gridRow}`);
+      }
+
+      it('shows a single wide image whole, in a frame of its own shape', async () => {
+        renderPost(withMedia(postWith('the final text'), [[sizedImage('m1', 1500, 500)]]));
+        await textCard();
+
+        expect(frameOf(screen.getByRole('list', { name: 'Media on the post' }))).toBe('3');
+      });
+
+      it('keeps a very wide single image tall enough for its Remove button and Alt chip', async () => {
+        renderPost(withMedia(postWith('the final text'), [[sizedImage('m1', 3000, 20)]]));
+        await textCard();
+
+        const list = screen.getByRole('list', { name: 'Media on the post' });
+        expect(frameOf(list)).toBe('150');
+        expect(list.style.minHeight).toBe('5rem');
+        const tile = within(list).getByRole('listitem', { name: 'Image 1' });
+        expect(within(tile).getByRole('button', { name: 'Remove image 1' })).toBeInTheDocument();
+        expect(within(tile).getByRole('button', { name: /alt/i })).toBeInTheDocument();
+      });
+
+      it.each([
+        ['image', 'image'],
+        ['GIF', 'gif'],
+        ['video', 'video'],
+      ] as const)('crops a single tall %s to 3:4', async (_name, kind) => {
+        const tall = { ...sizedImage('m1', 1080, 1920), kind };
+        renderPost(withMedia(postWith('the final text'), [[tall]]));
+        await textCard();
+
+        expect(frameOf(screen.getByRole('list', { name: 'Media on the post' }))).toBe('0.75');
+      });
+
+      it.each([
+        [2, ['1 | 1', '2 | 1']],
+        [3, ['1 | 1 / span 2', '2 | 1', '2 | 2']],
+        [4, ['1 | 1', '2 | 1', '1 | 2', '2 | 2']],
+      ])("puts %i media in X's cells of a 16:9 frame", async (count, cells) => {
+        const media = Array.from({ length: count }, (_, n) => image(`m${n + 1}`));
+        renderPost(withMedia(postWith('the final text'), [media]));
+        await textCard();
+
+        const list = screen.getByRole('list', { name: 'Media on the post' });
+        expect(frameOf(list)).toBe('16 / 9');
+        expect(cellsOf(list)).toEqual(cells);
+      });
+
+      it('lays more than four media out in two columns, with no frame shape', async () => {
+        const five = [1, 2, 3, 4, 5].map((n) => image(`m${n}`));
+        renderPost(withMedia(threadOfTwo(), [five, []]));
+        await textCard();
+
+        const list = screen.getByRole('list', { name: 'Media on Part 1' });
+        expect(frameOf(list)).toBe('');
+        expect(cellsOf(list)).toEqual(Array(5).fill(' | '));
+        expect(
+          screen.getByText(/X takes up to 4 images, or 1 GIF, or 1 video, per post\. Remove/),
+        ).toBeInTheDocument();
+      });
+
+      it('gives an uploading image its own shape as soon as the browser reads it', async () => {
+        vi.mocked(mediaService.attach).mockReturnValue(new Promise(() => {}));
+        renderPost(postWith('the final text'));
+        await textCard();
+
+        chooseFiles('the post', photo('banner.png'));
+
+        const tile = await mediaOn('the post').findByRole('listitem', { name: 'Image 1' });
+        const img = tile.querySelector('img')!;
+        Object.defineProperty(img, 'naturalWidth', { value: 1500 });
+        Object.defineProperty(img, 'naturalHeight', { value: 500 });
+        fireEvent.load(img);
+
+        expect(frameOf(screen.getByRole('list', { name: 'Media on the post' }))).toBe('3');
+      });
+
+      it('lays the media out the same way in the "Post to…" confirm step', async () => {
+        renderPost(
+          withMedia(threadOfTwo(), [
+            [sizedImage('m1', 1500, 500)],
+            [1, 2, 3].map((n) => image(`m${n + 1}`)),
+          ]),
+        );
+        await textCard();
+        fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+        fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+
+        expect(frameOf(dialog.getByRole('list', { name: 'Media on Part 1' }))).toBe('3');
+        const two = dialog.getByRole('list', { name: 'Media on Part 2' });
+        expect(frameOf(two)).toBe('16 / 9');
+        expect(cellsOf(two)).toEqual(['1 | 1 / span 2', '2 | 1', '2 | 2']);
+      });
+    });
+
     describe('GIFs and videos', () => {
       const MINUTE = 60 * 1000;
 
