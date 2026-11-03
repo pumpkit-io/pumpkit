@@ -13,8 +13,8 @@ from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.media_upload import ReceivedMedia, receive_media
-from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
+from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -305,17 +305,23 @@ async def edit_text(
     )
 
 
+async def _uploading_user(
+    current_user: User = Depends(require_subscribed_user), db: AsyncSession = Depends(get_async_db)
+) -> User:
+    await mediator.start_media_upload(db=db, user=current_user)
+    return current_user
+
+
 @posts_router.post(
     "/posts/{post_id}/text/parts/{part_number}/media",
     response_model=MediaResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@limiter.limit(MEDIA_RATE)
 async def attach_text_media(
-    request: Request,
     post_id: str,
     part_number: Annotated[int, Path(ge=1)],
-    current_user: User = Depends(require_subscribed_user),
+    # Resolved in this order, so the User is counted and the connection freed before the body.
+    current_user: User = Depends(_uploading_user),
     received: ReceivedMedia = Depends(receive_media),
     db: AsyncSession = Depends(get_async_db),
     storage: FileStorage = Depends(get_file_storage),

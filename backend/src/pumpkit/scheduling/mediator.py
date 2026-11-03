@@ -24,12 +24,13 @@ from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
+from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import Post
-from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
+from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
@@ -686,6 +687,15 @@ async def attach_text_media(
     )
     await db.commit()
     return media_service.media_response(media)
+
+
+async def start_media_upload(db: AsyncSession, user: User) -> None:
+    """
+    Before an upload's body arrives: counts it against the User's rate, and ends the transaction
+    the sign-in checks read in, so no connection stays held while a slow upload streams.
+    """
+    hit_user_limit("attach_text_media", user.id, MEDIA_RATE)
+    await db.commit()
 
 
 async def remove_text_media(db: AsyncSession, user: User, post_id: str, media_id: str) -> None:

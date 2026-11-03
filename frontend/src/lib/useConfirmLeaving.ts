@@ -1,39 +1,36 @@
 import { useEffect } from 'react';
 
-/** Whether a click follows a link to another page of the app in this tab. */
-function inAppLink(event: MouseEvent): boolean {
-  if (event.defaultPrevented || event.button !== 0) return false;
-  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
-  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
-  if (!(link instanceof HTMLAnchorElement)) return false;
-  if ((link.target && link.target !== '_self') || link.hasAttribute('download')) return false;
-  return link.origin === window.location.origin;
+/** What each page that asks before leaving says, latest last. */
+const asking: { message: string }[] = [];
+
+/**
+ * Whether to go ahead and leave the page: at once when no page asks first, else the User's
+ * answer to the latest page's question. Every in-app way of leaving goes through it.
+ */
+export function confirmLeaving(): boolean {
+  const latest = asking.at(-1);
+  return latest === undefined || window.confirm(latest.message);
 }
 
 /**
  * While `active`, leaving the page asks first: closing or reloading the tab through the
- * browser's own prompt, and following a link in the app through `message`. The app's
- * BrowserRouter has no navigation blocker, so the browser's back and forward go unasked.
+ * browser's own prompt, and leaving within the app (a link, a shortcut, back or forward)
+ * through `message`, once `ConfirmLeavingNavigation` is around the page.
  */
 export function useConfirmLeaving(active: boolean, message: string) {
   useEffect(() => {
     if (!active) return;
+    const entry = { message };
+    asking.push(entry);
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       // Older browsers ask only when this is set.
       event.returnValue = '';
     };
-    // Capturing on the document runs before React Router's own click handlers on the link.
-    const onClick = (event: MouseEvent) => {
-      if (!inAppLink(event) || window.confirm(message)) return;
-      event.preventDefault();
-      event.stopPropagation();
-    };
     window.addEventListener('beforeunload', onBeforeUnload);
-    document.addEventListener('click', onClick, true);
     return () => {
+      asking.splice(asking.indexOf(entry), 1);
       window.removeEventListener('beforeunload', onBeforeUnload);
-      document.removeEventListener('click', onClick, true);
     };
   }, [active, message]);
 }

@@ -4,6 +4,7 @@ the preview the web app shows of each file. Pure: no database, no storage.
 """
 
 import io
+import struct
 from dataclasses import dataclass
 from typing import BinaryIO, Optional
 
@@ -100,12 +101,18 @@ def check_image(source: BinaryIO, byte_size: int) -> CheckedMedia:
             upright = ImageOps.exif_transpose(opened)
             width, height = upright.size
             preview = _preview(upright)
+    # Pillow raises more than its own errors on broken headers and metadata, such as EXIF.
     except (
         UnidentifiedImageError,
         OSError,
+        EOFError,
         Image.DecompressionBombError,
         SyntaxError,
         ValueError,
+        struct.error,
+        KeyError,
+        TypeError,
+        IndexError,
     ):
         raise media_unreadable() from None
     return CheckedMedia(

@@ -56,20 +56,15 @@ function localUrlOf(file: File): string | null {
 }
 
 const LEAVE_WHILE_UPLOADING =
-  "An image is still uploading and won't be attached if you leave. Leave anyway?";
+  "An image is still uploading. If you leave, it won't stay on the post. Leave anyway?";
 
-/** An upload under way. Once its file is sent, aborting can't keep the server from attaching it. */
+/**
+ * An upload, queued or under way. One under way is never aborted: an abort can't tell whether
+ * the server already took the file, so a stopped upload finishes and its Media is taken off.
+ */
 interface Upload {
-  controller: AbortController;
-  sent: boolean;
-  /** Stopped after its file was sent: the Media it answers with is taken off again. */
+  /** Stopped by the User or by leaving the page. */
   dropped: boolean;
-}
-
-/** Stops an upload; one whose file was sent finishes, and its Media is then taken off again. */
-function stop(upload: Upload) {
-  if (upload.sent) upload.dropped = true;
-  else upload.controller.abort();
 }
 
 function release(tile: Tile) {
@@ -127,7 +122,7 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
     [newKey],
   );
 
-  /** Shows the Part's Media as the server holds it, catching any an upload stopped too late put there. */
+  /** Shows the Part's Media as the server holds it, catching any a failed upload left there. */
   const reload = useCallback(
     async (partIndex: number) => {
       let stored: Media[];
@@ -154,16 +149,16 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
 
   const upload = useCallback(
     (partIndex: number, key: string, file: File, via: AttachVia) => {
-      const controller = new AbortController();
-      const under: Upload = { controller, sent: false, dropped: false };
+      const under: Upload = { dropped: false };
       uploads.current.set(key, under);
       const run = async () => {
-        if (controller.signal.aborted) return;
+        if (under.dropped) {
+          uploads.current.delete(key);
+          return;
+        }
         try {
           const media = await mediaService.attach(postId, partIndex + 1, file, {
-            signal: controller.signal,
             onProgress: (sent) => {
-              if (sent >= 1) under.sent = true;
               changeTile(partIndex, key, (tile) =>
                 tile.state === 'uploading' ? { ...tile, progress: sent } : tile,
               );
@@ -182,14 +177,16 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
           }));
           track('media_attached', { kind: media.kind, via, source: 'web' });
         } catch (error) {
-          if (controller.signal.aborted || under.dropped) return;
-          if (errorCode(error) === 'MEDIA_PART_FULL') void reload(partIndex);
+          if (under.dropped) return;
+          const refusal = refusalOf(error);
+          // A full Part, or a failure that may have come after the server took the file.
+          if (refusal.retry || errorCode(error) === 'MEDIA_PART_FULL') void reload(partIndex);
           changeTile(partIndex, key, (tile) => ({
             key,
             state: 'refused',
             file,
             localUrl: tile.localUrl,
-            refusal: refusalOf(error),
+            refusal,
             via,
           }));
         } finally {
@@ -261,7 +258,7 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
       };
       if (tile.state !== 'ready') {
         const under = uploads.current.get(key);
-        if (under) stop(under);
+        if (under) under.dropped = true;
         drop();
         return;
       }
@@ -285,7 +282,7 @@ export function useTextMedia(postId: string, initial: Media[][]): TextMedia {
 
   useEffect(
     () => () => {
-      uploads.current.forEach(stop);
+      uploads.current.forEach((under) => (under.dropped = true));
       current.current.flat().forEach(release);
     },
     [],

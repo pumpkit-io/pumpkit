@@ -38,7 +38,7 @@ export const mediaService = {
     postId: string,
     partNumber: number,
     file: File,
-    { onProgress, signal }: { onProgress?: (sent: number) => void; signal?: AbortSignal } = {},
+    { onProgress }: { onProgress?: (sent: number) => void } = {},
   ): Promise<Media> => {
     const form = new FormData();
     form.append('file', file);
@@ -48,7 +48,6 @@ export const mediaService = {
       {
         // The browser fills in the boundary; the JSON default would send the form as JSON.
         headers: { 'Content-Type': 'multipart/form-data' },
-        signal,
         onUploadProgress: (event: { loaded: number; total?: number }) => {
           if (event.total) onProgress?.(event.loaded / event.total);
         },

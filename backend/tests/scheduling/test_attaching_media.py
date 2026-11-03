@@ -4,13 +4,21 @@ Attaching Media to a Post's Text and removing it, through
 reading it back on `GET /posts/{id}` (ADR 0021). Only a Draft or a Failed Post's Text takes it.
 """
 
+import struct
 from collections.abc import AsyncIterator
 
+import pytest
 from httpx import AsyncClient
+from sqlalchemy import event
 
+from pumpkit.posts import media_files
+from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import MB, gif, jpeg, padded, png, webp
 
 POSTS = "/api/v1/posts"
+SCHEDULED_POSTS = "/api/v1/scheduled-posts"
+LATER = "2026-10-10T14:00:00Z"
+BOUNDARY = b"b0undary"
 
 
 async def _attach(
@@ -26,6 +34,27 @@ async def _attach(
         f"{POSTS}/{post_id}/text/parts/{part}/media",
         files={"file": (name, data, content_type)},
     )
+
+
+async def _stream(client: AsyncClient, post_id: str, body: AsyncIterator[bytes], *, part: int = 1):
+    """Uploads `body`, a multipart form sent as it is made, with no Content-Length."""
+    return await client.post(
+        f"{POSTS}/{post_id}/text/parts/{part}/media",
+        content=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={BOUNDARY.decode()}"},
+    )
+
+
+def _file_head(data: bytes) -> list[bytes]:
+    return [
+        b"--" + BOUNDARY + b"\r\n",
+        b'Content-Disposition: form-data; name="file"; filename="photo.png"\r\n',
+        b"Content-Type: image/png\r\n\r\n",
+        data,
+    ]
+
+
+FILE_END = b"\r\n--" + BOUNDARY + b"--\r\n"
 
 
 async def _media_of(client: AsyncClient, post_id: str) -> list[list[dict]]:
@@ -118,32 +147,75 @@ async def test_an_oversize_upload_is_refused_while_it_streams(client, subscribed
 
     async def endless_image() -> AsyncIterator[bytes]:
         nonlocal sent
-        boundary = b"--b0undary"
-        chunks = [
-            boundary + b"\r\n",
-            b'Content-Disposition: form-data; name="file"; filename="huge.png"\r\n',
-            b"Content-Type: image/png\r\n\r\n",
-            png(),
-        ]
-        for chunk in chunks:
+        for chunk in _file_head(png()):
             sent += len(chunk)
             yield chunk
         # With no Content-Length, nothing says how large the file is until it ends.
         while sent < 50 * MB:
             sent += 64 * 1024
             yield b"\0" * (64 * 1024)
-        yield b"\r\n" + boundary + b"--\r\n"
+        yield FILE_END
 
-    response = await client.post(
-        f"{POSTS}/{post_id}/text/parts/1/media",
-        content=endless_image(),
-        headers={"Content-Type": "multipart/form-data; boundary=b0undary"},
-    )
+    response = await _stream(client, post_id, endless_image())
 
     assert response.status_code == 422, response.text
     assert response.json()["code"] == "MEDIA_TOO_LARGE"
     assert sent < 6 * MB
     assert await _media_of(client, post_id) == [[]]
+
+
+async def test_uploads_past_the_rate_are_refused_before_the_file_is_read(
+    client, subscribed, post_with
+):
+    post_id = await post_with("Busy.")
+    for _ in range(60):
+        # A Part the Text doesn't have: refused, but counted.
+        assert (await _attach(client, post_id, png(), part=2)).status_code == 404
+    sent = 0
+
+    async def image() -> AsyncIterator[bytes]:
+        nonlocal sent
+        for chunk in [*_file_head(padded(png(), 4 * MB)), FILE_END]:
+            sent += len(chunk)
+            yield chunk
+
+    response = await _stream(client, post_id, image())
+
+    assert response.status_code == 429, response.text
+    assert sent < MB
+    assert await _media_of(client, post_id) == [[]]
+
+
+async def test_no_database_connection_is_held_while_the_file_arrives(
+    client, subscribed, post_with, db_engine
+):
+    post_id = await post_with("Slow.")
+    held = 0
+
+    def checked_out(*_args) -> None:
+        nonlocal held
+        held += 1
+
+    def checked_in(*_args) -> None:
+        nonlocal held
+        held -= 1
+
+    event.listen(db_engine.sync_engine, "checkout", checked_out)
+    event.listen(db_engine.sync_engine, "checkin", checked_in)
+    held_before = held
+    held_while_streaming: list[int] = []
+
+    async def slow_image() -> AsyncIterator[bytes]:
+        for chunk in _file_head(png()):
+            yield chunk
+            held_while_streaming.append(held)
+        yield FILE_END
+
+    response = await _stream(client, post_id, slow_image())
+
+    assert response.status_code == 201, response.text
+    assert held_while_streaming
+    assert set(held_while_streaming) == {held_before}
 
 
 async def test_an_upload_without_a_file_is_refused(client, subscribed, post_with):
@@ -172,6 +244,27 @@ async def test_a_file_that_only_starts_like_an_image_is_refused(client, subscrib
 
     assert response.status_code == 422, response.text
     assert response.json()["code"] == "MEDIA_UNREADABLE"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [struct.error("bad EXIF"), KeyError(274), TypeError("bad tag"), IndexError(), EOFError()],
+)
+async def test_an_image_whose_metadata_breaks_the_reader_is_unreadable(
+    client, subscribed, post_with, monkeypatch, error
+):
+    post_id = await post_with("Odd EXIF.")
+
+    def broken_metadata(image):
+        raise error
+
+    monkeypatch.setattr(media_files.ImageOps, "exif_transpose", broken_metadata)
+
+    response = await _attach(client, post_id, png())
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "MEDIA_UNREADABLE"
+    assert await _media_of(client, post_id) == [[]]
 
 
 async def test_a_fifth_image_on_a_part_is_refused_naming_the_part(client, subscribed, post_with):
@@ -264,13 +357,13 @@ async def test_another_users_post_takes_no_media(
     assert remove.status_code == 404, remove.text
 
 
-async def test_a_scheduled_posts_text_takes_no_media(client, subscribed, post_with, connect_x):
+async def test_a_scheduled_posts_text_takes_no_media(
+    client, subscribed, fixed_clock, post_with, connect_x
+):
     await connect_x()
     post_id = await post_with("Set to go.")
     attached = (await _attach(client, post_id, png())).json()
-    scheduled = await client.post(
-        "/api/v1/scheduled-posts", json={"post_id": post_id, "publish_at": "2026-12-10T14:00:00Z"}
-    )
+    scheduled = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
     assert scheduled.status_code == 201, scheduled.text
 
     attach = await _attach(client, post_id, png())
@@ -278,3 +371,25 @@ async def test_a_scheduled_posts_text_takes_no_media(client, subscribed, post_wi
 
     assert attach.status_code == 409, attach.text
     assert remove.status_code == 409, remove.text
+
+
+async def test_a_failed_posts_part_already_on_x_keeps_its_media(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("Live one.", "Refused two.")
+    live = (await _attach(client, post_id, png(), part=1)).json()
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    fake_x_publisher.fail_publish_on = 2
+    scheduled = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
+    assert scheduled.json()["state"] == "failed", scheduled.text
+
+    attach = await _attach(client, post_id, png(), part=1)
+    remove = await client.delete(f"{POSTS}/{post_id}/text/media/{live['id']}")
+    on_refused_part = await _attach(client, post_id, png(), part=2)
+
+    assert attach.status_code == 409, attach.text
+    assert attach.json()["detail"] == "Part 1 is already on X, so its media is set."
+    assert remove.status_code == 409, remove.text
+    assert on_refused_part.status_code == 201, on_refused_part.text
+    assert await _media_of(client, post_id) == [[live], [on_refused_part.json()]]
