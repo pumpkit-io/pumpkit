@@ -14,6 +14,7 @@ from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.core.logging import logger
+from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, system_clock
 from pumpkit.scheduling.publishing import publish_next_due, recover_stuck
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
@@ -25,6 +26,7 @@ HEARTBEAT_FILE = Path("/tmp/pumpkit-publisher-heartbeat")
 async def run_pass(
     session_maker: async_sessionmaker[AsyncSession],
     publisher: XPublisher,
+    storage: FileStorage,
     clock: Clock,
     stop: Optional[asyncio.Event] = None,
 ) -> None:
@@ -34,13 +36,14 @@ async def run_pass(
     while stop is None or not stop.is_set():
         # A session per Scheduled post: `publishing` commits as it goes.
         async with session_maker() as db:
-            if not await publish_next_due(db, publisher, now=clock()):
+            if not await publish_next_due(db, publisher, storage, clock=clock):
                 return
 
 
 async def run(
     session_maker: async_sessionmaker[AsyncSession],
     publisher: XPublisher,
+    storage: FileStorage,
     clock: Clock,
     *,
     poll_interval: timedelta,
@@ -56,7 +59,7 @@ async def run(
     while not stop.is_set():
         try:
             if enabled:
-                await run_pass(session_maker, publisher, clock, stop)
+                await run_pass(session_maker, publisher, storage, clock, stop)
         except Exception:
             logger.exception("Publisher pass failed; trying again next interval")
         else:
@@ -84,6 +87,7 @@ async def main() -> None:
         await run(
             _db_session_handler.async_session_maker,
             get_x_publisher(),
+            get_file_storage(),
             system_clock,
             poll_interval=interval,
             stop=stop,

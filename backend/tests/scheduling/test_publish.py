@@ -34,20 +34,38 @@ async def _waiting(
     return scheduled_post.id
 
 
-async def _publish(db_session_maker, fake_x_publisher, scheduled_post_id: str, clock) -> bool:
+async def _publish(
+    db_session_maker, fake_x_publisher, file_storage, scheduled_post_id: str, clock
+) -> bool:
     async with db_session_maker() as session:
         return await publish_scheduled_post(
-            session, fake_x_publisher, scheduled_post_id=scheduled_post_id, now=clock()
+            session,
+            fake_x_publisher,
+            file_storage,
+            scheduled_post_id=scheduled_post_id,
+            now=clock(),
+            clock=clock,
         )
 
 
 async def test_a_waiting_scheduled_post_is_published(
-    post_with, client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db,
+    db_session_maker,
+    user,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _waiting(db, user, clock, post_with)
 
-    assert await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    assert await _publish(
+        db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock
+    )
 
     [listed] = await scheduled_posts(client)
     assert listed["id"] == scheduled_post_id
@@ -56,40 +74,71 @@ async def test_a_waiting_scheduled_post_is_published(
 
 
 async def test_x_is_called_at_most_once_per_scheduled_post(
-    post_with, client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db,
+    db_session_maker,
+    user,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _waiting(db, user, clock, post_with)
-    await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    await _publish(db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock)
 
-    published_again = await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    published_again = await _publish(
+        db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock
+    )
 
     assert published_again is False
     assert len(fake_x_publisher.published) == 1
 
 
 async def test_x_is_called_at_most_once_per_part_of_a_thread(
-    post_with, client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db,
+    db_session_maker,
+    user,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _waiting(db, user, clock, post_with, parts=("One", "Two", "Three"))
-    await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    await _publish(db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock)
 
-    published_again = await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    published_again = await _publish(
+        db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock
+    )
 
     assert published_again is False
     assert [text for _, text in fake_x_publisher.published] == ["One", "Two", "Three"]
 
 
 async def test_a_user_who_is_no_longer_subscribed_gets_a_failed_post_and_nothing_on_x(
-    post_with, client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db,
+    db_session_maker,
+    user,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _waiting(db, user, clock, post_with)
     subscribed.status = "canceled"
     await db.commit()
 
-    await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    await _publish(db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock)
 
     subscribed.status = "active"
     await db.commit()
@@ -102,14 +151,23 @@ async def test_a_user_who_is_no_longer_subscribed_gets_a_failed_post_and_nothing
 
 
 async def test_a_post_for_another_x_account_fails_instead_of_going_out_on_the_new_one(
-    post_with, client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db,
+    db_session_maker,
+    user,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _waiting(db, user, clock, post_with)
     fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
     await connect_x()
 
-    await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    await _publish(db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock)
 
     [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"
@@ -120,13 +178,22 @@ async def test_a_post_for_another_x_account_fails_instead_of_going_out_on_the_ne
 
 
 async def test_a_post_whose_x_connection_is_gone_fails(
-    post_with, client, db, db_session_maker, user, subscribed, fake_x_publisher, clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db,
+    db_session_maker,
+    user,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _waiting(db, user, clock, post_with)
     assert (await client.delete("/api/v1/x-connection")).status_code == 204
 
-    await _publish(db_session_maker, fake_x_publisher, scheduled_post_id, clock)
+    await _publish(db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock)
 
     [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"

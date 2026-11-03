@@ -104,8 +104,8 @@ async def test_scheduling_a_thread_answers_with_each_part_in_order_and_none_live
 
     assert result["isError"] is False, result
     assert result["structuredContent"]["parts"] == [
-        {"text": "The first Part.", "live": False, "x_post_url": None},
-        {"text": "The second Part.", "live": False, "x_post_url": None},
+        {"text": "The first Part.", "live": False, "x_post_url": None, "media": []},
+        {"text": "The second Part.", "live": False, "x_post_url": None, "media": []},
     ]
 
 
@@ -282,7 +282,7 @@ async def test_editing_the_text_and_time_of_a_waiting_scheduled_post_saves_both(
     assert result["isError"] is False, result
     assert result["structuredContent"] == {
         **scheduled,
-        "parts": [{"text": "Launch day.", "live": False, "x_post_url": None}],
+        "parts": [{"text": "Launch day.", "live": False, "x_post_url": None, "media": []}],
         "publish_at": "2026-10-11T09:30:00Z",
     }
 

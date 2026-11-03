@@ -127,13 +127,20 @@ async def test_an_edit_needs_something_to_change(
 
 
 async def test_a_failed_post_moves_into_a_community_and_is_rescheduled_there(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     scheduled = await _schedule(client, post_with, publish_at="2026-10-10T12:02:00Z")
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Forbidden.")
     fixed_clock.advance(timedelta(minutes=2))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert (await _listed(client))[0]["state"] == "failed"
     fake_x_publisher.fail_publish = None
 
@@ -146,7 +153,7 @@ async def test_a_failed_post_moves_into_a_community_and_is_rescheduled_there(
         },
     )
     fixed_clock.advance(timedelta(minutes=3))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert response.status_code == 200, response.text
     assert (await _listed(client))[0]["state"] == "published"
@@ -154,7 +161,14 @@ async def test_a_failed_post_moves_into_a_community_and_is_rescheduled_there(
 
 
 async def test_a_failed_post_s_community_changes_without_rescheduling_it(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     scheduled = await _schedule(
@@ -162,7 +176,7 @@ async def test_a_failed_post_s_community_changes_without_rescheduling_it(
     )
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Forbidden.")
     fixed_clock.advance(timedelta(minutes=2))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     failed = (await _listed(client))[0]
 
     response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"community": None})

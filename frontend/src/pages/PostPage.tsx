@@ -8,7 +8,8 @@ import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
 import { MediaButton } from '@/features/posts/media/MediaButton';
-import { MediaTiles } from '@/features/posts/media/MediaTiles';
+import { MediaTiles, ReadOnlyMediaTiles } from '@/features/posts/media/MediaTiles';
+import { mediaWhere } from '@/features/posts/media/mediaRules';
 import { useTextMedia, type TextMedia } from '@/features/posts/media/useTextMedia';
 import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import {
@@ -98,6 +99,7 @@ function DraftPostTo({
   format,
   parts,
   disabled,
+  waitingFor,
   prepare,
   onScheduled,
 }: {
@@ -105,6 +107,7 @@ function DraftPostTo({
   format: Format;
   parts: ShownPart[];
   disabled: boolean;
+  waitingFor: string | null;
   /** Saves the User's last edit before "Post to…" opens. */
   prepare: () => Promise<boolean>;
   onScheduled: (scheduledPost: ScheduledPost) => void;
@@ -116,6 +119,7 @@ function DraftPostTo({
       parts={parts}
       sender={sender}
       disabled={disabled}
+      waitingFor={waitingFor}
       prepare={prepare}
       onDone={onScheduled}
     />
@@ -132,8 +136,8 @@ function partMediaOf(
   askToReconnect: (() => void) | undefined,
 ) {
   return (index: number): PartMedia | null => {
-    if (parts[index]?.live) return null;
-    const where = parts.length > 1 ? `Part ${index + 1}` : 'the post';
+    if (parts[index]?.live) return readOnlyMediaOf(parts)(index);
+    const where = mediaWhere(index, parts.length);
     return {
       tiles: (
         <MediaTiles
@@ -156,6 +160,39 @@ function partMediaOf(
         askToReconnect ? askToReconnect() : media.attach(index, files, via),
     };
   };
+}
+
+/** The Media each Part goes, or went, to X with, shown as it is. */
+function readOnlyMediaOf(parts: ShownPart[]) {
+  return (index: number): PartMedia | null => {
+    const shown = parts[index]?.media ?? [];
+    if (!shown.length) return null;
+    return { tiles: <ReadOnlyMediaTiles media={shown} where={mediaWhere(index, parts.length)} /> };
+  };
+}
+
+/** The Text's Parts with the Media now on them, for "Post to…" to check and show. */
+function withTextMedia(parts: ShownPart[], media: TextMedia): ShownPart[] {
+  return parts.map((part, index) =>
+    part.live
+      ? part
+      : {
+          ...part,
+          media: media
+            .tilesOf(index)
+            .flatMap((tile) => (tile.state === 'ready' && !tile.removing ? [tile.media] : [])),
+        },
+  );
+}
+
+/** Why "Post to…" waits for the Text's Media, or null when none is uploading or being removed. */
+function mediaWait(parts: ShownPart[], media: TextMedia): string | null {
+  const tiles = parts.flatMap((part, index) => (part.live ? [] : media.tilesOf(index)));
+  if (tiles.some((tile) => tile.state === 'uploading')) return 'An image is still uploading';
+  if (tiles.some((tile) => tile.state === 'ready' && tile.removing)) {
+    return 'An image is still being removed';
+  }
+  return null;
 }
 
 function LoadedPost({
@@ -242,6 +279,8 @@ function LoadedPost({
   );
 
   const textChanges = post.status === 'draft' || post.status === 'failed';
+  const partsToPost = textChanges ? withTextMedia(parts, media) : parts;
+  const waitingFor = textChanges ? mediaWait(parts, media) : null;
   const onUndo = can.undo ? () => controller.undo() : undefined;
   const onRedo = can.redo ? () => controller.redo() : undefined;
   const settle = () => controller.settle();
@@ -276,8 +315,9 @@ function LoadedPost({
       <DraftPostTo
         postId={post.id}
         format={textVersion.format}
-        parts={parts}
+        parts={partsToPost}
         disabled={!can.postTo}
+        waitingFor={waitingFor}
         prepare={settle}
         onScheduled={onScheduledPost}
       />
@@ -295,8 +335,9 @@ function LoadedPost({
       <FailedPostTo
         scheduledPost={scheduledPost}
         textVersion={textVersion}
-        retryParts={parts}
+        retryParts={partsToPost}
         disabled={!can.postTo}
+        waitingFor={waitingFor}
         prepare={settle}
         onRetried={onScheduledPost}
       />
@@ -325,7 +366,7 @@ function LoadedPost({
                 parts,
                 connection?.needsReconnectForMedia ? askToReconnect : undefined,
               )
-            : undefined
+            : readOnlyMediaOf(parts)
         }
         header={<TextHeader origin={origin} tools={tools} action={postTo} />}
       />

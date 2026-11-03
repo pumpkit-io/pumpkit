@@ -30,6 +30,8 @@ import { FORMAT_THREAD, type Format } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
+import { ReadOnlyMediaTiles } from '../media/MediaTiles';
+import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
@@ -84,6 +86,15 @@ function overLimit(
   });
 }
 
+/** Each Part not yet live holding more Media than one X post takes, as a sentence naming it. */
+function overMediaRule(parts: ShownPart[], thread: boolean): string[] {
+  return parts.flatMap((part, i) => {
+    if (part.live || !breaksXMediaRule(part.media)) return [];
+    const what = thread ? `Part ${i + 1}` : 'This post';
+    return [`${what} has more media than X takes. ${X_MEDIA_RULE}.`];
+  });
+}
+
 /**
  * What the Parts about to go out with a link use of the link posts left, in the period and in
  * Top-ups; null without a link, or without a cap on them.
@@ -120,6 +131,7 @@ function PartsToPost({
         {parts.map((part, i) => (
           <div key={i} className="space-y-1.5">
             <p className={PART_TEXT}>{part.text}</p>
+            <ReadOnlyMediaTiles media={part.media} where={mediaWhere(0, 1)} />
             <XLengthCounter length={lengths[i] ?? 0} limit={limit} />
           </div>
         ))}
@@ -138,6 +150,7 @@ function PartsToPost({
         part.live ? (
           <>
             <p className={`${PART_TEXT} text-muted-foreground`}>{part.text}</p>
+            <ReadOnlyMediaTiles media={part.media} where={mediaWhere(number - 1, parts.length)} />
             <p className="font-sans text-xs text-muted-foreground">
               Already on X, so it can’t change.
             </p>
@@ -145,6 +158,7 @@ function PartsToPost({
         ) : (
           <>
             <p className={PART_TEXT}>{part.text}</p>
+            <ReadOnlyMediaTiles media={part.media} where={mediaWhere(number - 1, parts.length)} />
             <XLengthCounter length={lengths[number - 1] ?? 0} limit={limit} />
           </>
         )
@@ -192,7 +206,9 @@ export function PostToDialog({
   const destination = destinationFrom(where);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
-  const tooLong = ready ? overLimit(parts, lengths, connection.charLimit, thread) : [];
+  const unpostable = ready
+    ? [...overLimit(parts, lengths, connection.charLimit, thread), ...overMediaRule(parts, thread)]
+    : [];
   const links = linkNote(
     parts.filter((part) => !part.live && hasLink(part.text)).length,
     usage?.allowance,
@@ -310,7 +326,7 @@ export function PostToDialog({
   } else {
     const unsendable =
       sending ||
-      tooLong.length > 0 ||
+      unpostable.length > 0 ||
       Boolean(live?.blocks) ||
       destination === null ||
       (!when.now && !publishAt);
@@ -319,7 +335,7 @@ export function PostToDialog({
         {liveLine}
         <WhereField value={where} onChange={setWhere} disabled={sending} />
         <WhenField value={when} onChange={setWhen} disabled={sending} />
-        {tooLong.map((problem) => (
+        {unpostable.map((problem) => (
           <p key={problem} className="font-sans text-sm font-medium text-destructive">
             {problem}
           </p>

@@ -217,11 +217,11 @@ export const EVENTS = {
   // Tracked by the backend, which alone sees the outcome; listed here to keep one catalog.
   scheduled_post_published: {
     description:
-      'Publisher or Post now: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (always final: copied from the Text), destination (profile | community), share_with_followers (boolean, only for a Community).',
+      'Publisher or Post now: X published every Part of a Scheduled post. Props: format (post | thread), part_count (number), source (always final: copied from the Text), destination (profile | community), share_with_followers (boolean, only for a Community), has_media (boolean).',
   },
   scheduled_post_failed: {
     description:
-      'Publisher or Post now: a Scheduled post Failed. Props: format (post | thread), part_count (number), reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown).',
+      'Publisher or Post now: a Scheduled post Failed. Props: format (post | thread), part_count (number), reason (not_subscribed | x_account_changed | reconnect_needed | x_unavailable | refused_by_x | outcome_unknown | media_missing | media_not_sent), has_media (boolean).',
   },
 
   // Connecting AI apps: the consent page (/oauth/consent) and Settings

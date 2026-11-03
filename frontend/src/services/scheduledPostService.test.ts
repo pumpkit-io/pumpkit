@@ -5,7 +5,7 @@ import { scheduledPostService } from './scheduledPostService';
 const COMMUNITY = { id: '1493446837214187523', name: 'Build in Public' };
 const SCHEDULED = {
   id: 'scheduled_post_1',
-  parts: [{ text: 'The final.', live: false, x_post_url: null }],
+  parts: [{ text: 'The final.', live: false, x_post_url: null, media: [] }],
   state: 'scheduled',
   publish_at: '2026-10-12T07:00:00Z',
   published_at: null,
@@ -81,8 +81,21 @@ describe('scheduledPostService', () => {
       data: {
         ...SCHEDULED,
         parts: [
-          { text: 'First.', live: true, x_post_url: link },
-          { text: 'Second.', live: false, x_post_url: null },
+          {
+            text: 'First.',
+            live: true,
+            x_post_url: link,
+            media: [
+              {
+                id: 'media_1',
+                kind: 'image',
+                preview_url: '/media/media_1/preview',
+                width: 40,
+                height: 30,
+              },
+            ],
+          },
+          { text: 'Second.', live: false, x_post_url: null, media: [] },
         ],
       },
     } as never);
@@ -94,8 +107,21 @@ describe('scheduledPostService', () => {
     );
 
     expect(scheduled.parts).toEqual([
-      { text: 'First.', live: true, xPostUrl: link },
-      { text: 'Second.', live: false, xPostUrl: null },
+      {
+        text: 'First.',
+        live: true,
+        xPostUrl: link,
+        media: [
+          {
+            id: 'media_1',
+            kind: 'image',
+            previewUrl: '/media/media_1/preview',
+            width: 40,
+            height: 30,
+          },
+        ],
+      },
+      { text: 'Second.', live: false, xPostUrl: null, media: [] },
     ]);
   });
 });

@@ -1,4 +1,5 @@
 import { errorCode, errorMessage, errorStatus } from '@/services/apiErrors';
+import type { Media } from '@/services/mediaService';
 
 /** The types the file picker offers; the backend checks each file's bytes again. */
 export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -10,6 +11,17 @@ export const TOO_LARGE = 'Larger than 5 MB';
 export const TYPE_REFUSED = 'JPEG, PNG or WEBP only';
 export const UNREADABLE = "Can't read this image";
 export const UPLOAD_FAILED = 'Upload failed. Try again.';
+
+/** Whether one X post can't carry `media`, as the server checks before scheduling. */
+export function breaksXMediaRule(media: Media[]): boolean {
+  if (media.some((m) => m.kind !== 'image')) return media.length > 1;
+  return media.length > IMAGES_PER_PART;
+}
+
+/** Where Media goes, as its tiles' labels name it: "Part 2", or "the post" for a single post. */
+export function mediaWhere(index: number, count: number): string {
+  return count > 1 ? `Part ${index + 1}` : 'the post';
+}
 
 /** How the User attached a file, for analytics. */
 export type AttachVia = 'button' | 'drop' | 'paste';

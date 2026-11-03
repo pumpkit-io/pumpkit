@@ -49,7 +49,14 @@ describe('postService', () => {
         status: 'failed',
         scheduled_post: {
           id: 'scheduled_post_01',
-          parts: [{ text: 'the final', live: true, x_post_url: 'https://x.com/i/web/status/1' }],
+          parts: [
+            {
+              text: 'the final',
+              live: true,
+              x_post_url: 'https://x.com/i/web/status/1',
+              media: [],
+            },
+          ],
           state: 'failed',
           publish_at: '2026-10-12T07:00:00Z',
           published_at: null,
@@ -75,7 +82,9 @@ describe('postService', () => {
     expect(post.versions[0].parts).toEqual([{ text: 'the final', charCount: 9, charLimit: 280 }]);
     expect(post.scheduledPost).toEqual({
       id: 'scheduled_post_01',
-      parts: [{ text: 'the final', live: true, xPostUrl: 'https://x.com/i/web/status/1' }],
+      parts: [
+        { text: 'the final', live: true, xPostUrl: 'https://x.com/i/web/status/1', media: [] },
+      ],
       state: 'failed',
       publishAt: '2026-10-12T07:00:00Z',
       publishedAt: null,

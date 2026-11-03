@@ -3,7 +3,7 @@ Scheduled posts and their moves between states.
 Flushes and never commits: the caller (the mediator or `publishing`) owns the transaction.
 """
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, cast
@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Subquery
 
 from pumpkit.billing.models import TopUpCharge
-from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Media, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
@@ -35,6 +35,7 @@ from pumpkit.scheduling.models import (
     PUBLISHING,
     SCHEDULED,
     ScheduledPost,
+    ScheduledPostMedia,
     ScheduledPostPart,
     UnscheduledLiveParts,
 )
@@ -62,15 +63,17 @@ async def create(
     publish_at: datetime,
     now: datetime,
     destination: Destination = Destination(),
+    media: Sequence[Sequence[str]] = (),
 ) -> ScheduledPost:
     """
-    A new Scheduled post in scheduled, copied from the Text of the Post `post_id`. Flushes,
-    raising IntegrityError when the Post already has one.
+    A new Scheduled post in scheduled, copied from the Text of the Post `post_id`, with `media`,
+    each Part's Media ids in order. Flushes, raising IntegrityError when the Post already has one.
     """
     scheduled_post = ScheduledPost(
         user_id=user_id,
         x_user_id=x_user_id,
         parts=_parts(parts),
+        media=[ScheduledPostMedia(**row) for row in _media_rows(media)],
         **_destination_columns(destination),
         community_set_at=now if destination.community else None,
         publish_at=publish_at,
@@ -87,6 +90,24 @@ async def create(
 
 def _parts(parts: list[str]) -> list[ScheduledPostPart]:
     return [ScheduledPostPart(position=position, text=text) for position, text in enumerate(parts)]
+
+
+def media_by_part(scheduled_post: ScheduledPost) -> list[list[Media]]:
+    """Each of the Scheduled post's Parts' Media in order, one list per Part."""
+    by_part: list[list[Media]] = [[] for _ in scheduled_post.parts]
+    for placed in scheduled_post.media:
+        if placed.part_position < len(by_part):
+            by_part[placed.part_position].append(placed.media)
+    return by_part
+
+
+def _media_rows(media: Sequence[Sequence[str]], *, from_part: int = 0) -> list[dict[str, Any]]:
+    return [
+        {"media_id": media_id, "part_position": part_position, "position": position}
+        for part_position, ids in enumerate(media)
+        if part_position >= from_part
+        for position, media_id in enumerate(ids)
+    ]
 
 
 def _destination_columns(destination: Destination) -> dict[str, Any]:
@@ -221,6 +242,7 @@ async def edit(
     reschedule: Optional[Reschedule],
     now: datetime,
     destination: Optional[Destination] = None,
+    media: Optional[Sequence[Sequence[str]]] = None,
 ) -> bool:
     """
     Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
@@ -228,7 +250,8 @@ async def edit(
     check in the update keeps a claim by the publisher between the User's read and this write safe.
     A `destination` of None leaves it where it goes; moving it into another Community is a use.
     New `parts` replace every Part not live; the live ones, which open the list, stay as they
-    are with their X post ids.
+    are with their X post ids. New `media`, each Part's Media ids in order, likewise replaces the
+    Media of every Part not live.
     """
     values: dict[str, object] = {"updated_at": now}
     if destination is not None:
@@ -284,7 +307,36 @@ async def edit(
         ]
         if new_parts:
             await db.execute(insert(ScheduledPostPart), new_parts)
+    if media is not None:
+        await _replace_media_not_live(db, scheduled_post_id=scheduled_post_id, media=media)
     return True
+
+
+async def _replace_media_not_live(
+    db: AsyncSession, *, scheduled_post_id: str, media: Sequence[Sequence[str]]
+) -> None:
+    live_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(ScheduledPostPart)
+            .where(
+                ScheduledPostPart.scheduled_post_id == scheduled_post_id,
+                ScheduledPostPart.x_post_id.is_not(None),
+            )
+        )
+    ).scalar_one()
+    await db.execute(
+        delete(ScheduledPostMedia).where(
+            ScheduledPostMedia.scheduled_post_id == scheduled_post_id,
+            ScheduledPostMedia.part_position >= live_count,
+        )
+    )
+    rows = _media_rows(media, from_part=live_count)
+    if rows:
+        await db.execute(
+            insert(ScheduledPostMedia),
+            [{"scheduled_post_id": scheduled_post_id, **row} for row in rows],
+        )
 
 
 async def cancel(db: AsyncSession, *, scheduled_post_id: str) -> bool:
@@ -371,6 +423,36 @@ async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
         .execution_options(synchronize_session=False)
     )
     return result.scalar_one_or_none()
+
+
+async def renew_claim(
+    db: AsyncSession, *, scheduled_post_id: str, held_since: datetime, now: datetime
+) -> bool:
+    """
+    Move the claim made or renewed at `held_since` to `now`; False when recovery or a retry
+    took the Scheduled post since. The conditional update decides against a concurrent recovery.
+    """
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(_held(scheduled_post_id, held_since))
+        .values(publishing_started_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    return cast(CursorResult, result).rowcount == 1
+
+
+async def holds_claim(db: AsyncSession, *, scheduled_post_id: str, held_since: datetime) -> bool:
+    """Whether the claim made or renewed at `held_since` still holds; lock the User first."""
+    result = await db.execute(select(ScheduledPost.id).where(_held(scheduled_post_id, held_since)))
+    return result.scalar_one_or_none() is not None
+
+
+def _held(scheduled_post_id: str, held_since: datetime) -> ColumnElement[bool]:
+    return and_(
+        ScheduledPost.id == scheduled_post_id,
+        ScheduledPost.state == PUBLISHING,
+        ScheduledPost.publishing_started_at == held_since,
+    )
 
 
 async def stuck_user_ids(db: AsyncSession, *, publishing_since: datetime) -> list[str]:

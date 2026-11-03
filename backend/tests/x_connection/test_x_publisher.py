@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
@@ -8,14 +9,18 @@ import pytest
 import respx
 
 from pumpkit.core.config import settings
+from pumpkit.x_connection import x_publisher
 from pumpkit.x_connection.x_publisher import (
     X_AUTHORIZE_URL,
+    X_MEDIA_UPLOAD_URL,
     X_REVOKE_URL,
     X_TOKEN_URL,
     X_TWEETS_URL,
     X_USERS_ME_URL,
     OfficialXPublisher,
     XAccount,
+    XMediaRefusedError,
+    XMediaUnavailableError,
     XNotReceivedError,
     XOutcomeUnknownError,
     XPostRejectedError,
@@ -505,3 +510,195 @@ async def test_a_post_x_may_have_taken_is_reported_as_outcome_unknown(mock):
 
     with pytest.raises(XOutcomeUnknownError):
         await OfficialXPublisher().publish(access_token="access-1", text="Hello X")
+
+
+# X's answers as its media upload guide shows them (docs.x.com, Nov 2026).
+MEDIA_ID = "1880028106020515840"
+INITIALIZED = {"data": {"id": MEDIA_ID, "media_key": f"3_{MEDIA_ID}", "expires_after_secs": 86400}}
+FINALIZED = {
+    "data": {
+        "id": MEDIA_ID,
+        "media_key": f"3_{MEDIA_ID}",
+        "size": 3,
+        "expires_after_secs": 86400,
+    }
+}
+
+
+def _processing(state: str, **info) -> dict:
+    return {
+        "data": {
+            **FINALIZED["data"],
+            "processing_info": {"state": state, "check_after_secs": 1, **info},
+        }
+    }
+
+
+def _upload_routes(finalized: dict = FINALIZED) -> tuple[respx.Route, respx.Route, respx.Route]:
+    return (
+        respx.post(f"{X_MEDIA_UPLOAD_URL}/initialize").mock(
+            return_value=httpx.Response(200, json=INITIALIZED)
+        ),
+        respx.post(f"{X_MEDIA_UPLOAD_URL}/{MEDIA_ID}/append").mock(
+            return_value=httpx.Response(204)
+        ),
+        respx.post(f"{X_MEDIA_UPLOAD_URL}/{MEDIA_ID}/finalize").mock(
+            return_value=httpx.Response(200, json=finalized)
+        ),
+    )
+
+
+async def _upload(data: bytes = b"png", **fields) -> str:
+    return await OfficialXPublisher().upload_media(
+        access_token="access-1",
+        source=io.BytesIO(data),
+        byte_size=len(data),
+        content_type=fields.get("content_type", "image/png"),
+        category=fields.get("category", "tweet_image"),
+    )
+
+
+@pytest.fixture
+def no_waiting(monkeypatch) -> list[float]:
+    waits: list[float] = []
+
+    async def _sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr(x_publisher.asyncio, "sleep", _sleep)
+    return waits
+
+
+@respx.mock
+async def test_an_image_is_uploaded_in_chunks_and_its_media_id_returned():
+    initialize, append, finalize = _upload_routes()
+
+    media_id = await _upload(b"png")
+
+    assert media_id == MEDIA_ID
+    started = initialize.calls.last.request
+    assert started.headers["Authorization"] == "Bearer access-1"
+    assert json.loads(started.content) == {
+        "media_type": "image/png",
+        "total_bytes": 3,
+        "media_category": "tweet_image",
+    }
+    sent = append.calls.last.request
+    assert sent.headers["Authorization"] == "Bearer access-1"
+    assert b'name="segment_index"\r\n\r\n0\r\n' in sent.content
+    assert b'name="media"' in sent.content and b"\r\n\r\npng\r\n" in sent.content
+    assert finalize.calls.last.request.headers["Authorization"] == "Bearer access-1"
+
+
+@respx.mock
+async def test_a_file_over_one_chunk_goes_in_numbered_segments():
+    _, append, _ = _upload_routes()
+
+    await _upload(b"x" * (5 * 1024 * 1024))
+
+    segments = [call.request.content for call in append.calls]
+    assert len(segments) == 2
+    assert b'name="segment_index"\r\n\r\n0\r\n' in segments[0]
+    assert b'name="segment_index"\r\n\r\n1\r\n' in segments[1]
+
+
+@respx.mock
+async def test_an_upload_x_processes_is_polled_until_it_succeeds(no_waiting):
+    _upload_routes(_processing("pending"))
+    status = respx.get(X_MEDIA_UPLOAD_URL).mock(
+        side_effect=[
+            httpx.Response(200, json=_processing("in_progress", progress_percent=40)),
+            httpx.Response(200, json=_processing("succeeded", progress_percent=100)),
+        ]
+    )
+
+    assert await _upload(category="tweet_video", content_type="video/mp4") == MEDIA_ID
+
+    assert [dict(call.request.url.params) for call in status.calls] == [
+        {"command": "STATUS", "media_id": MEDIA_ID}
+    ] * 2
+    assert no_waiting == [1.0, 1.0]
+
+
+@respx.mock
+async def test_processing_x_fails_is_a_refusal_with_its_reason(no_waiting):
+    _upload_routes(_processing("pending"))
+    respx.get(X_MEDIA_UPLOAD_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=_processing("failed", error={"code": 1, "message": "Unsupported video."}),
+        )
+    )
+
+    with pytest.raises(XMediaRefusedError) as refused:
+        await _upload(category="tweet_video", content_type="video/mp4")
+
+    assert refused.value.message == "Unsupported video."
+
+
+@pytest.mark.parametrize(
+    ("response", "error"),
+    [
+        (httpx.Response(401, json={"title": "Unauthorized"}), XReconnectNeededError),
+        (httpx.Response(429, json={"title": "Too Many Requests"}), XRateLimitedError),
+        (httpx.Response(503, json={"title": "Service Unavailable"}), XMediaUnavailableError),
+    ],
+)
+@respx.mock
+async def test_an_upload_x_answers_with_an_error_status_says_what_kind(response, error):
+    respx.post(f"{X_MEDIA_UPLOAD_URL}/initialize").mock(return_value=response)
+
+    with pytest.raises(error):
+        await _upload()
+
+
+@respx.mock
+async def test_an_upload_x_refuses_carries_xs_own_words():
+    _, append, _ = _upload_routes()
+    append.mock(
+        return_value=httpx.Response(
+            400,
+            json={
+                "errors": [{"message": "media type unrecognized."}],
+                "title": "Invalid Request",
+                "type": "https://api.x.com/2/problems/invalid-request",
+            },
+        )
+    )
+
+    with pytest.raises(XMediaRefusedError) as refused:
+        await _upload()
+
+    assert refused.value.x_status == 400
+    assert refused.value.message == "media type unrecognized."
+
+
+@pytest.mark.parametrize(
+    ("side_effect", "error"),
+    [
+        (httpx.ConnectError("refused"), XNotReceivedError),
+        (httpx.ReadTimeout("slow"), XMediaUnavailableError),
+    ],
+)
+@respx.mock
+async def test_an_upload_x_never_answers_publishes_nothing(side_effect, error):
+    respx.post(f"{X_MEDIA_UPLOAD_URL}/initialize").mock(side_effect=side_effect)
+
+    with pytest.raises(error):
+        await _upload()
+
+
+@respx.mock
+async def test_publishing_with_media_sends_their_ids_under_the_text():
+    route = respx.post(X_TWEETS_URL).mock(
+        return_value=httpx.Response(201, json={"data": {"id": "1890", "text": "Look"}})
+    )
+
+    await OfficialXPublisher().publish(
+        access_token="access-1", text="Look", media_ids=["1880", "1881"]
+    )
+
+    assert json.loads(route.calls.last.request.content) == {
+        "text": "Look",
+        "media": {"media_ids": ["1880", "1881"]},
+    }

@@ -138,6 +138,7 @@ async def create_scheduled_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
+    storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
@@ -150,7 +151,13 @@ async def create_scheduled_post(
         share_with_followers=create_request.share_with_followers,
     )
     return await mediator.create_scheduled_post(
-        db=db, publisher=publisher, reader=reader, user=current_user, new=new, now=clock()
+        db=db,
+        publisher=publisher,
+        storage=storage,
+        reader=reader,
+        user=current_user,
+        new=new,
+        clock=clock,
     )
 
 
@@ -174,6 +181,7 @@ async def edit_scheduled_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
+    storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
 ) -> ScheduledPostResponse:
@@ -189,11 +197,12 @@ async def edit_scheduled_post(
     return await mediator.edit_scheduled_post(
         db=db,
         publisher=publisher,
+        storage=storage,
         reader=reader,
         user=current_user,
         scheduled_post_id=scheduled_post_id,
         edit=edit,
-        now=clock(),
+        clock=clock,
     )
 
 

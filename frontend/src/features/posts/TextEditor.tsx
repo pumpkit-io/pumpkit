@@ -239,7 +239,7 @@ export function TextEditor({
                   onUndo={onUndo}
                   onRedo={onRedo}
                   onPasteFiles={
-                    media ? (files) => media(index)?.onFiles(files, 'paste') : undefined
+                    media ? (files) => media(index)?.onFiles?.(files, 'paste') : undefined
                   }
                   trace={
                     shownTrace?.changes[index]

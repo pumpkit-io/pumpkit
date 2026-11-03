@@ -26,10 +26,10 @@ from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
-from pumpkit.core.time import as_utc
+from pumpkit.core.time import Clock, as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
-from pumpkit.posts.models import Post
+from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service, top_up_charges
@@ -101,8 +101,9 @@ def scheduled_post_response(scheduled_post: ScheduledPost) -> ScheduledPostRespo
                 text=part.text,
                 live=part.x_post_id is not None,
                 x_post_url=_x_post_url(part.x_post_id),
+                media=[media_service.media_response(m) for m in media],
             )
-            for part in scheduled_post.parts
+            for part, media in zip(scheduled_post.parts, service.media_by_part(scheduled_post))
         ],
         state=scheduled_post.state,
         publish_at=as_utc(scheduled_post.publish_at),
@@ -281,15 +282,17 @@ async def get_usage(db: AsyncSession, user: User, at: datetime) -> UsageResponse
 async def create_scheduled_post(
     db: AsyncSession,
     publisher: XPublisher,
+    storage: FileStorage,
     reader: XReader,
     user: User,
     new: NewScheduledPost,
-    now: datetime,
+    clock: Clock,
 ) -> ScheduledPostResponse:
     """
     With `publish_now`, published within the request: Published, Failed, or back in scheduled.
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
+    now = clock()
     connection = await connection_to_publish_on(db, user_id=user.id)
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
@@ -298,6 +301,8 @@ async def create_scheduled_post(
         raise _already_scheduled()
     parts = _text_of(post)
     rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
+    media = media_service.text_media_by_part(post)
+    await _check_media(db, media, user_id=user.id)
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_x_posts_room(db, user_id=user.id, publish_at=publish_at, parts=parts)
     community = await _community(reader, new.community) if new.community is not None else None
@@ -315,15 +320,53 @@ async def create_scheduled_post(
             destination=Destination(
                 community=community, share_with_followers=new.share_with_followers
             ),
+            media=_ids(media),
         )
     except IntegrityError:
         # Another request scheduled the same Post between the check and the insert.
         raise _already_scheduled()
     await rebalance_top_ups(db, user_id=user.id, moments=[as_utc(scheduled_post.publish_at)])
     if new.publish_now:
-        return await _post_now(db, publisher, scheduled_post_id=scheduled_post.id, now=now)
+        return await _post_now(
+            db, publisher, storage, scheduled_post_id=scheduled_post.id, now=now, clock=clock
+        )
     await db.commit()
     return scheduled_post_response(scheduled_post)
+
+
+async def _check_media(
+    db: AsyncSession, media: list[list[Media]], *, user_id: str, live_count: int = 0
+) -> None:
+    """The Media the Parts not live will go out with fits X, is still stored, and can go out."""
+    rules.check_media([[m.kind for m in part] for part in media])
+    rules.check_media_kept(
+        [[m.file_key is not None for m in part] for part in media], live_count=live_count
+    )
+    rules.check_media_once(_ids(media))
+    if any(media[live_count:]):
+        await x_connections_service.check_takes_media(db, user_id=user_id)
+
+
+def _ids(media: list[list[Media]]) -> list[list[str]]:
+    return [[m.id for m in part] for part in media]
+
+
+def _media_after_edit(
+    scheduled_post: ScheduledPost, post: Optional[Post], part_count: int
+) -> list[list[Media]]:
+    """
+    Each Part's Media once the edit's Parts replace the ones not live: the Text's from the Post
+    `post` copied, else the Scheduled post's own, each staying with the Part in its place.
+    """
+    current = service.media_by_part(scheduled_post)
+    live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
+    if post is not None:
+        text = media_service.text_media_by_part(post)
+        return current[:live_count] + text[live_count:part_count]
+    rules.check_part_count_kept_with_media(
+        [bool(part) for part in current], live_count=live_count, part_count=part_count
+    )
+    return current[:part_count] + [[] for _ in range(part_count - len(current))]
 
 
 def _already_scheduled() -> ConflictError:
@@ -343,10 +386,23 @@ def _text_of(post: Post) -> list[str]:
 
 
 async def _post_now(
-    db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    storage: FileStorage,
+    *,
+    scheduled_post_id: str,
+    now: datetime,
+    clock: Clock,
 ) -> ScheduledPostResponse:
     # No commit here: publishing commits the new row along with its claim.
-    await publish_scheduled_post(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
+    await publish_scheduled_post(
+        db,
+        publisher,
+        storage,
+        scheduled_post_id=scheduled_post_id,
+        now=now,
+        clock=clock,
+    )
     published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
     return scheduled_post_response(published)
 
@@ -365,17 +421,19 @@ def _publishing_started() -> ConflictError:
 async def edit_scheduled_post(
     db: AsyncSession,
     publisher: XPublisher,
+    storage: FileStorage,
     reader: XReader,
     user: User,
     scheduled_post_id: str,
     edit: ScheduledPostEdit,
-    now: datetime,
+    clock: Clock,
 ) -> ScheduledPostResponse:
     """
     New Parts or the Post's Text, time, Community or share with followers for a scheduled or Failed
     Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
     so a Failed one gets another try. With publish now it answers like Post now.
     """
+    now = clock()
     await users_service.lock_user_id(db, user_id=user.id)
     scheduled_post = await _owned(db, user=user, scheduled_post_id=scheduled_post_id)
     if scheduled_post.state not in (SCHEDULED, FAILED):
@@ -383,12 +441,20 @@ async def edit_scheduled_post(
     publish_at_before = as_utc(scheduled_post.publish_at)
     live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
     parts = edit.parts
+    post = None
     if edit.copy_text:
         post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
         # The Text's Parts in the places of the live ones are already on X as they were.
         parts = live + _text_of(post)[len(live) :]
+    media = None
     if parts is not None:
         rules.check_live_parts_kept(live, parts)
+        media = _media_after_edit(scheduled_post, post, len(parts))
+        await _check_media(db, media, user_id=user.id, live_count=len(live))
+    elif edit.reschedules:
+        await _check_media(
+            db, service.media_by_part(scheduled_post), user_id=user.id, live_count=len(live)
+        )
     reschedule = None
     connection = (
         await connection_to_publish_on(db, user_id=user.id)
@@ -431,12 +497,15 @@ async def edit_scheduled_post(
         reschedule=reschedule,
         destination=destination,
         now=now,
+        media=_ids(media) if media is not None else None,
     ):
         raise _publishing_started()
     moments = [publish_at_before, reschedule.publish_at] if reschedule else [publish_at_before]
     await rebalance_top_ups(db, user_id=user.id, moments=moments)
     if edit.publish_now:
-        return await _post_now(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
+        return await _post_now(
+            db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
+        )
     await db.commit()
     return scheduled_post_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id))
 

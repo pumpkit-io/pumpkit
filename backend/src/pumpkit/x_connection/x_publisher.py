@@ -11,13 +11,15 @@ tell apart (ADR 0007): rate limited, not received, outcome unknown, and rejected
 Mediators reach X only through `get_x_publisher`; tests override it with `FakeXPublisher`.
 """
 
+import asyncio
 import base64
 import hashlib
 import secrets
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Any, Literal, Optional, Protocol
+from typing import Any, BinaryIO, Literal, Optional, Protocol
 from urllib.parse import urlencode
 
 import httpx
@@ -30,10 +32,15 @@ X_TOKEN_URL = "https://api.x.com/2/oauth2/token"
 X_REVOKE_URL = "https://api.x.com/2/oauth2/revoke"
 X_USERS_ME_URL = "https://api.x.com/2/users/me"
 X_TWEETS_URL = "https://api.x.com/2/tweets"
+X_MEDIA_UPLOAD_URL = "https://api.x.com/2/media/upload"
 X_MEDIA_SCOPE = "media.write"
 # Every scope Pumpkit uses, asked for at once so a User consents only once (ADR 0006).
 X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
 _TIMEOUT_SECONDS = 30.0
+# Under X's 5 MB cap on an APPEND segment, with room for the multipart framing around it.
+_MEDIA_CHUNK_BYTES = 4 * 1024 * 1024
+# Kept under the publish's own limit per Media, so this cap ends a slow upload with its own error.
+_MEDIA_PROCESSING_SECONDS = 3 * 60
 # X's documented access token lifetime, used when a token response leaves out expires_in.
 _DEFAULT_EXPIRES_IN_SECONDS = 7200
 # X's refusals are shown to the User; this keeps a runaway body readable.
@@ -89,6 +96,23 @@ class XPostRejectedError(XPublisherError):
         self.message = message
 
 
+class XMediaUnavailableError(XPublisherError):
+    """A media upload failed for a passing reason; no X post was created with it."""
+
+
+class XMediaRefusedError(XPublisherError):
+    """X refused a media upload or failed to process it; `message` is X's own words."""
+
+    def __init__(self, x_status: Optional[int], message: str) -> None:
+        super().__init__(f"X refused the media with HTTP {x_status}")
+        self.x_status = x_status
+        self.message = message
+
+
+# X's media_category for what the upload is for, which sets its limits and processing.
+MediaCategory = Literal["tweet_image", "tweet_gif", "tweet_video"]
+
+
 @dataclass(frozen=True)
 class XTokens:
     access_token: str
@@ -142,6 +166,21 @@ class XPublisher(Protocol):
         """The X account the token acts for; a refused token raises `XReconnectNeededError`."""
         ...
 
+    async def upload_media(
+        self,
+        *,
+        access_token: str,
+        source: BinaryIO,
+        byte_size: int,
+        content_type: str,
+        category: MediaCategory,
+    ) -> str:
+        """
+        X's media id for the `byte_size` bytes of `source`, once X has processed them. It
+        publishes nothing, so a failed upload may be tried again.
+        """
+        ...
+
     async def publish(
         self,
         *,
@@ -150,12 +189,12 @@ class XPublisher(Protocol):
         community_id: Optional[str] = None,
         share_with_followers: bool = False,
         reply_to: Optional[str] = None,
+        media_ids: Sequence[str] = (),
     ) -> str:
         """
-        Publish `text` on the account's profile, or in the Community `community_id`, and return
-        X's post id; with `reply_to`, as a reply to that X post. Never retried: a retry could
-        post it twice. A reply lands in its parent's Community, so it is sent without
-        `community_id` and `share_with_followers` (confirmed live, Oct 2026).
+        X's post id for `text` with `media_ids`, on the profile, in the Community `community_id`,
+        or as a reply to `reply_to`. Never retried: a retry could post it twice. A reply lands in
+        its parent's Community, so it goes without `community_id` (confirmed live, Oct 2026).
         """
         ...
 
@@ -242,6 +281,55 @@ class OfficialXPublisher:
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
         await _token_call(X_REVOKE_URL, {"token": token, "token_type_hint": token_type_hint})
 
+    async def upload_media(
+        self,
+        *,
+        access_token: str,
+        source: BinaryIO,
+        byte_size: int,
+        content_type: str,
+        category: MediaCategory,
+    ) -> str:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+                initialized = await _media_call(
+                    client.post(
+                        f"{X_MEDIA_UPLOAD_URL}/initialize",
+                        json={
+                            "media_type": content_type,
+                            "total_bytes": byte_size,
+                            "media_category": category,
+                        },
+                        headers=headers,
+                    )
+                )
+                media_id = _media_data(initialized).get("id")
+                if not isinstance(media_id, str) or not media_id:
+                    raise XMediaUnavailableError("X's media initialize answered without an id")
+                segment = 0
+                while chunk := await asyncio.to_thread(source.read, _MEDIA_CHUNK_BYTES):
+                    await _media_call(
+                        client.post(
+                            f"{X_MEDIA_UPLOAD_URL}/{media_id}/append",
+                            data={"segment_index": str(segment)},
+                            files={"media": ("media", chunk, "application/octet-stream")},
+                            headers=headers,
+                        )
+                    )
+                    segment += 1
+                finalized = await _media_call(
+                    client.post(f"{X_MEDIA_UPLOAD_URL}/{media_id}/finalize", headers=headers)
+                )
+                await _await_processing(client, media_id, _media_data(finalized), headers)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as error:
+            raise XNotReceivedError(f"X unreachable: {type(error).__name__}") from error
+        except httpx.HTTPError as error:
+            raise XMediaUnavailableError(
+                f"X didn't answer uploading media: {type(error).__name__}"
+            ) from error
+        return media_id
+
     async def publish(
         self,
         *,
@@ -250,8 +338,11 @@ class OfficialXPublisher:
         community_id: Optional[str] = None,
         share_with_followers: bool = False,
         reply_to: Optional[str] = None,
+        media_ids: Sequence[str] = (),
     ) -> str:
         body: dict[str, Any] = {"text": text}
+        if media_ids:
+            body["media"] = {"media_ids": list(media_ids)}
         if reply_to is not None:
             body["reply"] = {"in_reply_to_tweet_id": reply_to}
         elif community_id is not None:
@@ -287,6 +378,61 @@ class OfficialXPublisher:
         if status >= 500:
             raise XOutcomeUnknownError(f"X answered HTTP {status} publishing a post")
         raise XPostRejectedError(status, _detail(response))
+
+
+async def _media_call(request: Awaitable[httpx.Response]) -> httpx.Response:
+    """One call of a media upload, its failures mapped as `upload_media` says."""
+    response = await request
+    status = response.status_code
+    if status in (200, 201, 202, 204):
+        return response
+    if status == 401:
+        raise XReconnectNeededError("X refused the access token uploading media")
+    if status == 429:
+        raise XRateLimitedError("X rate limited uploading media")
+    if status >= 500:
+        raise XMediaUnavailableError(f"X answered HTTP {status} uploading media")
+    raise XMediaRefusedError(status, _detail(response))
+
+
+def _media_data(response: httpx.Response) -> dict[str, Any]:
+    body = _json_or_none(response)
+    data = body.get("data") if isinstance(body, dict) else None
+    return data if isinstance(data, dict) else {}
+
+
+async def _await_processing(
+    client: httpx.AsyncClient, media_id: str, data: dict[str, Any], headers: dict[str, str]
+) -> None:
+    """Polls STATUS until X has processed the upload; no `processing_info` means it is ready."""
+    waited = 0.0
+    while True:
+        info = data.get("processing_info")
+        if not isinstance(info, dict):
+            return
+        state = info.get("state")
+        if state == "succeeded":
+            return
+        if state == "failed":
+            error = info.get("error")
+            message = error.get("message") if isinstance(error, dict) else None
+            raise XMediaRefusedError(
+                None, message if isinstance(message, str) and message else "Processing failed."
+            )
+        wait = info.get("check_after_secs")
+        wait = float(wait) if isinstance(wait, int) and wait > 0 else 1.0
+        if waited + wait > _MEDIA_PROCESSING_SECONDS:
+            raise XMediaUnavailableError("X took too long to process media")
+        await asyncio.sleep(wait)
+        waited += wait
+        status = await _media_call(
+            client.get(
+                X_MEDIA_UPLOAD_URL,
+                params={"command": "STATUS", "media_id": media_id},
+                headers=headers,
+            )
+        )
+        data = _media_data(status)
 
 
 def _larger_photo(url: str) -> str:
@@ -380,6 +526,15 @@ def _json_or_none(response: httpx.Response) -> Any:
         return None
 
 
+@dataclass(frozen=True)
+class FakeUpload:
+    access_token: str
+    data: bytes
+    content_type: str
+    category: MediaCategory
+    media_id: str
+
+
 @dataclass
 class FakeXPublisher:
     """
@@ -393,7 +548,10 @@ class FakeXPublisher:
     `not_configured` to raise. `exchange_scope` and `refresh_scope` are the scope a code
     exchange and a refresh answer with, "" for none. With `fail_publish_on` set to n, only the
     nth publish call, counting from 1, raises `fail_publish`. Post ids are
-    `1890000000000000000` plus the call's number.
+    `1890000000000000000` plus the call's number. Records `uploads` and the `published_media`
+    ids sent with each publish; `fail_upload` makes uploads raise it, and with `fail_upload_on`
+    only the nth. Media ids are `1880000000000000000` plus the upload's number. `while_uploading`
+    and `while_publishing`, when set, are awaited inside each upload and publish call.
     """
 
     account: XAccount = field(
@@ -404,17 +562,24 @@ class FakeXPublisher:
     published: list[tuple[str, str]] = field(default_factory=list)
     published_to: list[tuple[Optional[str], bool]] = field(default_factory=list)
     replied_to: list[Optional[str]] = field(default_factory=list)
+    published_media: list[list[str]] = field(default_factory=list)
+    uploads: list[FakeUpload] = field(default_factory=list)
     revoked: list[str] = field(default_factory=list)
     fail_exchange: Optional[XPublisherError] = None
     fail_refresh: Optional[XPublisherError] = None
     fail_publish: Optional[XPublisherError] = None
     fail_publish_on: Optional[int] = None
+    fail_upload: Optional[XPublisherError] = None
+    fail_upload_on: Optional[int] = None
     fail_fetch_account: Optional[XPublisherError] = None
+    while_uploading: Optional[Callable[[], Awaitable[None]]] = None
+    while_publishing: Optional[Callable[[], Awaitable[None]]] = None
     fail_revoke: bool = False
     not_configured: bool = False
     exchange_scope: str = X_SCOPES
     refresh_scope: str = X_SCOPES
     issued: int = 0
+    upload_attempts: int = 0
 
     def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
         if self.not_configured:
@@ -447,13 +612,43 @@ class FakeXPublisher:
         community_id: Optional[str] = None,
         share_with_followers: bool = False,
         reply_to: Optional[str] = None,
+        media_ids: Sequence[str] = (),
     ) -> str:
+        if self.while_publishing is not None:
+            await self.while_publishing()
         self.published.append((access_token, text))
         self.published_to.append((community_id, share_with_followers))
         self.replied_to.append(reply_to)
+        self.published_media.append(list(media_ids))
         if self.fail_publish is not None and self.fail_publish_on in (None, len(self.published)):
             raise self.fail_publish
         return str(1_890_000_000_000_000_000 + len(self.published))
+
+    async def upload_media(
+        self,
+        *,
+        access_token: str,
+        source: BinaryIO,
+        byte_size: int,
+        content_type: str,
+        category: MediaCategory,
+    ) -> str:
+        self.upload_attempts += 1
+        if self.while_uploading is not None:
+            await self.while_uploading()
+        if self.fail_upload is not None and self.fail_upload_on in (None, self.upload_attempts):
+            raise self.fail_upload
+        media_id = str(1_880_000_000_000_000_000 + len(self.uploads) + 1)
+        self.uploads.append(
+            FakeUpload(
+                access_token=access_token,
+                data=source.read(),
+                content_type=content_type,
+                category=category,
+                media_id=media_id,
+            )
+        )
+        return media_id
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
         self.revoked.append(token)

@@ -7,11 +7,14 @@ import { cn } from '@/lib/utils';
 import { useProfile } from '@/pages/layout/ProfileContext';
 import type { ShownPart } from './shownText';
 
-/** What a Part that takes Media shows of it, and where files dropped or pasted on it go. */
+/**
+ * What a Part shows of its Media, and, on a Part that takes more, its media button and where
+ * files dropped or pasted on it go.
+ */
 export interface PartMedia {
   tiles: ReactNode;
-  button: ReactNode;
-  onFiles: (files: File[], via: 'drop' | 'paste') => void;
+  button?: ReactNode;
+  onFiles?: (files: File[], via: 'drop' | 'paste') => void;
 }
 
 function carriesFiles(event: DragEvent) {
@@ -63,7 +66,8 @@ function XPart({
   const inThread = total > 1;
   const [dropping, setDropping] = useState(false);
   const dim = cn('transition-opacity motion-reduce:transition-none', busy && 'opacity-60');
-  const dropTarget = media
+  const onFiles = media?.onFiles;
+  const dropTarget = onFiles
     ? {
         onDragOver: (e: DragEvent) => {
           if (!carriesFiles(e)) return;
@@ -78,7 +82,7 @@ function XPart({
           e.preventDefault();
           setDropping(false);
           const files = Array.from(e.dataTransfer.files ?? []);
-          if (files.length) media.onFiles(files, 'drop');
+          if (files.length) onFiles(files, 'drop');
         },
       }
     : {};
