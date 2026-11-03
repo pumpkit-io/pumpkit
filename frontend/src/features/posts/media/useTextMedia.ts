@@ -19,6 +19,7 @@ import {
   type Refusal,
 } from './mediaRules';
 import { textMediaPlace, type MediaPlace } from './mediaPlaces';
+import { localUrlOf } from './useMediaPreview';
 import { readVideo } from './videoFile';
 
 /** One file on a Part as the card shows it, from the moment it is chosen. */
@@ -43,7 +44,7 @@ export type Tile =
       state: 'ready';
       media: Media;
       localUrl: string | null;
-      /** The file picked in this session, which the full-size view plays a video from. */
+      /** The file picked in this session. */
       file: File | null;
       removing: boolean;
     }
@@ -79,10 +80,6 @@ export function holdsPlace(tile: Tile): boolean {
 
 export function kindOfTile(tile: Tile): MediaKind {
   return tile.state === 'ready' ? tile.media.kind : tile.kind;
-}
-
-function localUrlOf(file: Blob): string | null {
-  return typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
 }
 
 const RECONNECT_FOR_MEDIA = 'X_RECONNECT_FOR_MEDIA';

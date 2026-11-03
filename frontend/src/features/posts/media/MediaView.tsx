@@ -2,10 +2,10 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronLeft, ChevronRight, Film, Image as ImageIcon, Loader2, X } from 'lucide-react';
 import {
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
   type RefObject,
-  type SyntheticEvent,
 } from 'react';
 import {
   Dialog,
@@ -16,13 +16,13 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { Media, MediaKind } from '@/services/mediaService';
-import { mediaNoun } from './mediaRules';
+import { capitalized } from './mediaRules';
 import { useFileUrl, useMediaFile, useMediaPreview } from './useMediaPreview';
 
 /** One Media the view can show, as its tile has it. */
 export interface Viewable {
   key: string;
-  /** As the tile is named: "Image 2", "GIF 1". */
+  /** As the tile is named, mid-sentence: "image 2", "GIF 1". */
   name: string;
   kind: MediaKind;
   /** Null while it is still uploading. */
@@ -31,6 +31,8 @@ export interface Viewable {
   localUrl: string | null;
   /** The file picked in this session, if it was. */
   file: File | null;
+  /** On a Part already on X, whose files are deleted and only previews kept. */
+  onX: boolean;
 }
 
 const VIEW_BUTTON =
@@ -39,18 +41,19 @@ const VIEW_BUTTON =
 const FADE =
   'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:!animate-none';
 
-function FullSizeMedia({ item, number }: { item: Viewable; number: number }) {
+function FullSizeMedia({ item }: { item: Viewable }) {
   // A video's localUrl is only its first frame, so it plays from the picked file instead.
   const localVideo = item.kind === 'video' ? item.file : null;
   const hasLocal = item.kind === 'video' ? localVideo !== null : item.localUrl !== null;
+  const fetches = !hasLocal && !item.onX && item.media !== null;
   const localVideoUrl = useFileUrl(localVideo);
-  const file = useMediaFile(hasLocal ? null : (item.media?.id ?? null));
+  const file = useMediaFile(fetches ? item.media!.id : null);
   const [unplayable, setUnplayable] = useState(false);
   const local = item.kind === 'video' ? localVideoUrl : item.localUrl;
   const full = unplayable ? null : (local ?? file.url);
   const preview = useMediaPreview(full || item.localUrl ? null : (item.media?.previewUrl ?? null));
   const still = item.localUrl ?? preview.url;
-  const downloading = !hasLocal && item.media !== null && file.url === null && !file.failed;
+  const downloading = fetches && file.url === null && !file.failed;
   const altText = item.media?.altText ?? null;
   const KindIcon = item.kind === 'video' ? Film : ImageIcon;
   return (
@@ -62,7 +65,7 @@ function FullSizeMedia({ item, number }: { item: Viewable; number: number }) {
             controls
             playsInline
             onError={() => setUnplayable(true)}
-            aria-label={item.name}
+            aria-label={capitalized(item.name)}
             className="max-h-[80vh] max-w-[90vw]"
           />
         ) : (full ?? still) ? (
@@ -75,7 +78,7 @@ function FullSizeMedia({ item, number }: { item: Viewable; number: number }) {
           (preview.failed || !item.media?.previewUrl) && (
             <div
               role="img"
-              aria-label={item.name}
+              aria-label={capitalized(item.name)}
               className="flex aspect-video w-[min(90vw,32rem)] items-center justify-center rounded-2xl bg-muted text-muted-foreground"
             >
               <KindIcon aria-hidden className="h-8 w-8" />
@@ -85,7 +88,7 @@ function FullSizeMedia({ item, number }: { item: Viewable; number: number }) {
         {downloading && item.kind !== 'image' && (
           <div
             role="status"
-            aria-label={`Loading ${mediaNoun(item.kind)} ${number}`}
+            aria-label={`Loading ${item.name}`}
             className="absolute inset-0 flex items-center justify-center"
           >
             <span className={VIEW_BUTTON}>
@@ -115,6 +118,7 @@ export function MediaView({
   openKey,
   onOpenKeyChange,
   returnFocus,
+  fallbackFocus,
 }: {
   items: Viewable[];
   /** The key of the Media shown, or null while closed. */
@@ -122,6 +126,8 @@ export function MediaView({
   onOpenKeyChange: (key: string | null) => void;
   /** The tile the view opened from, focused again once it closes. */
   returnFocus: RefObject<HTMLElement | null>;
+  /** Focused instead when that tile is gone, as when its file was refused while open. */
+  fallbackFocus: RefObject<HTMLElement | null>;
 }) {
   const index = items.findIndex((item) => item.key === openKey);
   const item = index >= 0 ? items[index] : undefined;
@@ -137,12 +143,17 @@ export function MediaView({
 
   // A click anywhere but the Media or a control closes it, as one on the backdrop would.
   const onBackgroundClick = (event: MouseEvent) => {
-    if (!(event.target as Element).closest('img, video, [role="img"], button'))
+    if (!(event.target as Element).closest('img, video, [role="img"], [role="status"], button'))
       onOpenKeyChange(null);
   };
 
-  // React bubbles events through the portal, so a drop here would reach the Part's drop target behind.
-  const keepInside = (event: SyntheticEvent) => event.stopPropagation();
+  // React bubbles events through the portal, so a drop here would reach the Part's drop target
+  // behind; left to the browser, it would open the file in place of the page.
+  const keepInside = (event: DragEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    if (event.type === 'dragover' && event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+  };
 
   return (
     <Dialog open={item !== undefined} onOpenChange={(open) => !open && onOpenKeyChange(null)}>
@@ -160,14 +171,15 @@ export function MediaView({
           style={{ pointerEvents: 'auto' }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            returnFocus.current?.focus();
+            const opener = returnFocus.current;
+            (opener?.isConnected ? opener : fallbackFocus.current)?.focus();
           }}
           className={cn('fixed inset-0 z-50 flex items-center justify-center', FADE)}
         >
           {item && (
             <>
-              <DialogTitle className="sr-only">{item.name}</DialogTitle>
-              <FullSizeMedia key={item.key} item={item} number={index + 1} />
+              <DialogTitle className="sr-only">{capitalized(item.name)}</DialogTitle>
+              <FullSizeMedia key={item.key} item={item} />
               <div className="absolute right-3 top-3 flex items-center gap-3 sm:right-4 sm:top-4">
                 {items.length > 1 && (
                   <span className="font-sans text-[13px] tabular-nums text-background/80">

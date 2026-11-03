@@ -46,9 +46,17 @@ export function partMediaOf(
 /** The Media each Part goes, or went, to X with, shown as it is. */
 export function readOnlyMediaOf(parts: ShownPart[]) {
   return (index: number): PartMedia | null => {
-    const shown = parts[index]?.media ?? [];
-    if (!shown.length) return null;
-    return { tiles: <ReadOnlyMediaTiles media={shown} where={mediaWhere(index, parts.length)} /> };
+    const part = parts[index];
+    if (!part?.media.length) return null;
+    return {
+      tiles: (
+        <ReadOnlyMediaTiles
+          media={part.media}
+          where={mediaWhere(index, parts.length)}
+          onX={part.xPostUrl !== null}
+        />
+      ),
+    };
   };
 }
 

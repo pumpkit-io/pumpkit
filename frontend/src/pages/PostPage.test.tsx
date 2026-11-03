@@ -1594,6 +1594,25 @@ describe('Post page', () => {
         expect(frameOf(screen.getByRole('list', { name: 'Media on the post' }))).toBe('3');
       });
 
+      it('gives a single Media of unknown size the same shape in "Post to…" as on the card', async () => {
+        const unsized = { ...image('m1'), width: null, height: null };
+        renderPost(withMedia(postWith('the final text'), [[unsized]]));
+        await textCard();
+        fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+        fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+
+        const list = dialog.getByRole('list', { name: 'Media on the post' });
+        expect(frameOf(list)).toBe(String(16 / 9));
+        await waitFor(() => expect(list.querySelector('img')).not.toBeNull());
+        const img = list.querySelector('img')!;
+        Object.defineProperty(img, 'naturalWidth', { value: 1500 });
+        Object.defineProperty(img, 'naturalHeight', { value: 500 });
+        fireEvent.load(img);
+
+        expect(frameOf(list)).toBe('3');
+      });
+
       it('lays the media out the same way in the "Post to…" confirm step', async () => {
         renderPost(
           withMedia(threadOfTwo(), [
@@ -1705,6 +1724,61 @@ describe('Post page', () => {
         expect(view().queryByRole('status')).not.toBeInTheDocument();
       });
 
+      it('stays open on a click on a GIF still loading', async () => {
+        vi.mocked(mediaService.file).mockReturnValue(new Promise(() => {}));
+        renderPost(withMedia(postWith('the final text'), [[{ ...image('m1'), kind: 'gif' }]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open GIF 1' }));
+        fireEvent.click(await view().findByRole('status', { name: 'Loading GIF 1' }));
+
+        expect(screen.getByRole('dialog', { name: 'GIF 1' })).toBeInTheDocument();
+      });
+
+      it('shows the preview of a published Part without asking for its file, deleted once on X', async () => {
+        renderPost(
+          withScheduledPost({
+            ...SCHEDULED,
+            state: 'published',
+            parts: [
+              {
+                text: 'the final text',
+                live: true,
+                xPostUrl: 'https://x.com/i/web/status/1',
+                media: [{ ...image('m1'), kind: 'gif' }],
+              },
+            ],
+          }),
+        );
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open GIF 1' }));
+
+        await waitFor(() => expect(shown()).toHaveAttribute('src', 'blob:/media/m1/preview'));
+        expect(view().queryByRole('status')).not.toBeInTheDocument();
+        expect(mediaService.file).not.toHaveBeenCalled();
+      });
+
+      it("puts focus on the Part's media when the Media shown is refused", async () => {
+        let refuse: (error: Error) => void = () => {};
+        vi.mocked(mediaService.attach).mockReturnValue(
+          new Promise((_resolve, reject) => (refuse = reject)),
+        );
+        renderPost(postWith('the final text'));
+        await textCard();
+        chooseFiles('the post', photo('lost.png'));
+        fireEvent.click(await mediaOn('the post').findByRole('button', { name: 'Open image 1' }));
+        await shows('Image 1');
+
+        await act(async () => refuse(new Error('Network Error')));
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(
+          mediaOn('the post').getByRole('button', { name: 'Retry lost.png' }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('list', { name: 'Media on the post' })).toHaveFocus();
+      });
+
       it('keeps the preview, with no message, when the file is gone', async () => {
         vi.mocked(mediaService.file).mockRejectedValue(apiError(404, 'Media not found.'));
         const video = { ...image('m1'), kind: 'video' as const };
@@ -1808,14 +1882,19 @@ describe('Post page', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       });
 
-      it('keeps a file dropped on it from reaching the Part behind', async () => {
+      it('keeps a file dropped on it from reaching the Part behind or opening in the tab', async () => {
         renderPost(withMedia(postWith('the final text'), [[image('m1')]]));
         await textCard();
 
         fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
-        const dataTransfer = { files: [photo('dropped.png')], types: ['Files'] };
-        fireEvent.dragOver(screen.getByRole('dialog'), { dataTransfer });
-        fireEvent.drop(screen.getByRole('dialog'), { dataTransfer });
+        const dataTransfer = {
+          files: [photo('dropped.png')],
+          types: ['Files'],
+          dropEffect: 'copy',
+        };
+        expect(fireEvent.dragOver(screen.getByRole('dialog'), { dataTransfer })).toBe(false);
+        expect(dataTransfer.dropEffect).toBe('none');
+        expect(fireEvent.drop(screen.getByRole('dialog'), { dataTransfer })).toBe(false);
         fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
