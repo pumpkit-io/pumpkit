@@ -264,6 +264,20 @@ async def test_alt_text_is_stripped_before_its_length_is_checked(
     assert media["alt_text"] == "a" * 1000
 
 
+async def test_a_video_with_alt_text_is_refused_and_nothing_is_attached(
+    subscribed, mcp, post_with, fake_media_url_fetcher
+):
+    post_id = await post_with("One")
+    video_url = "https://videos.example.com/demo.mp4"
+    fake_media_url_fetcher.serve(video_url, mp4())
+
+    result = await mcp.call_tool("attach_media", post_id=post_id, url=video_url, alt_text="A clip.")
+
+    assert error_text(result) == "Alt text is for images and GIFs."
+    assert result["structuredContent"]["code"] == "MEDIA_ALT_TEXT_UNSUPPORTED"
+    assert await _media_through_mcp(mcp, post_id) == [[]]
+
+
 async def test_attaching_and_removing_media_use_no_generation(
     subscribed, mcp, post_with, fake_media_url_fetcher
 ):

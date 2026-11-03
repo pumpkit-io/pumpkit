@@ -15,6 +15,7 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import Clock, as_utc
+from pumpkit.posts.models import MEDIA_VIDEO
 from pumpkit.scheduling import publish, service
 from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.scheduling.top_up_charges import rebalance_top_ups
@@ -289,7 +290,7 @@ async def _publish(
                     x_media_id = await publish.upload_media(
                         publisher, storage, scheduled_post, part, one, token_for_call=token_for_call
                     )
-                    if one.alt_text is not None:
+                    if one.alt_text is not None and one.kind != MEDIA_VIDEO:
                         await publish.set_alt_text(
                             publisher,
                             scheduled_post,
@@ -323,7 +324,7 @@ async def _publish(
                     x_post_id,
                 )
                 raise
-            await service.record_part_live(db, part, x_post_id=x_post_id)
+            await service.record_part_live(db, scheduled_post, part, x_post_id=x_post_id)
             # Commit before the next Part, so a crash leaves a true record of what is live.
             await db.commit()
             # The next renewal or outcome commits the deleted files; a failed delete is only logged.

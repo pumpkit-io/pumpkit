@@ -183,15 +183,15 @@ export const EVENTS = {
   },
   media_attached: {
     description:
-      "Post page: attached Media to a Part of the Post's Text and its upload finished. Props: kind (image), via (button | drop | paste), source (web).",
+      "Post page: attached Media to a Part of the Post's Text, or of its Scheduled post's own copy, and its upload finished. Props: kind (image | gif | video), via (button | drop | paste), on (text | scheduled_post), source (web).",
   },
   media_removed: {
     description:
-      "Post page: removed Media from a Part of the Post's Text. Props: kind (image), source (web).",
+      "Post page: removed Media from a Part of the Post's Text, or of its Scheduled post's own copy. Props: kind (image | gif | video), on (text | scheduled_post), source (web).",
   },
   media_alt_text_set: {
     description:
-      "Post page: saved the alt text of an image on a Part of the Post's Text or its scheduled post. Props: kind (image | gif), cleared (boolean: saved empty), source (web).",
+      "Post page: saved the alt text of an image or GIF on a Part of the Post's Text, or of its Scheduled post's own copy. Props: kind (image | gif), cleared (boolean: saved empty), on (text | scheduled_post), source (web).",
   },
   post_final_copied: {
     description:

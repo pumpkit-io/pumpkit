@@ -797,7 +797,7 @@ async def attach_text_media(
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of the Post's Text, last among its Media, once it is
-    an image Pumpkit takes and the Part has room. Only a Draft or a Failed Post's, on a Part not
+    media Pumpkit takes and the Part has room. Only a Draft or a Failed Post's, on a Part not
     live on X. Allowed while Feedback writes a Version, which leaves the Text's Media as it is.
     """
     post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
@@ -875,7 +875,7 @@ async def attach_scheduled_post_media(
 ) -> MediaResponse:
     """
     Attach the file to Part `part_number` of a scheduled or Failed Scheduled post's own copy, last
-    among its Media, once it is an image Pumpkit takes and the Part has room. The Text keeps its own.
+    among its Media, once it is media Pumpkit takes and the Part has room. The Text keeps its own.
     """
     scheduled_post, media = await _scheduled_post_whose_media_changes(
         db, user=user, scheduled_post_id=scheduled_post_id

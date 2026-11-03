@@ -1,12 +1,13 @@
 """
-Deleting Media nothing references any more, with its files, and stored files no Media record
-names. The publisher's pass runs it; `docs/development.md` says what that covers.
+Deleting Media nothing references any more, with its files, the files of Media already published,
+and stored files no Media record names. The publisher's pass runs it and it commits as it goes;
+`docs/development.md` says what that covers.
 """
 
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import Select, exists, select
+from sqlalchemy import ColumnElement, Select, and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
@@ -14,7 +15,12 @@ import pumpkit.posts.media as media_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.models import Media, TextMedia
-from pumpkit.scheduling.models import ScheduledPostMedia
+from pumpkit.scheduling.models import (
+    PUBLISHING,
+    ScheduledPost,
+    ScheduledPostMedia,
+    ScheduledPostPart,
+)
 
 # Longer than any request or publish step that holds a Media before referencing it.
 UNREFERENCED_GRACE = timedelta(hours=1)
@@ -48,6 +54,51 @@ async def delete_unreferenced_media(
                 await db.rollback()
                 logger.exception("Deleting unreferenced Media of %s failed", user_id)
         after = user_ids[-1]
+
+
+async def delete_published_files(db: AsyncSession, storage: FileStorage) -> None:
+    """
+    Delete the files of Media whose every place is a live Part, keeping their previews: the
+    publish deletes them itself, unless it crashed first or the delete failed. Commits per page.
+    """
+    after = ""
+    while True:
+        page = await db.execute(
+            select(Media)
+            .where(Media.file_key.is_not(None), Media.id > after, _published_only())
+            .order_by(Media.id)
+            .limit(_IDS_PER_QUERY)
+        )
+        published = list(page.scalars().all())
+        if not published:
+            return
+        for media in published:
+            if media.file_key is None:
+                continue
+            try:
+                await storage.delete(media.file_key)
+            except (OSError, ValueError):
+                logger.exception("Deleting the published file of %s failed", media.id)
+                continue
+            media.file_key = None
+        await db.commit()
+        after = published[-1].id
+
+
+def _published_only() -> ColumnElement[bool]:
+    """On a live Part of a Scheduled post no publish holds, and on no Part not live."""
+    part_live = exists().where(
+        ScheduledPostPart.scheduled_post_id == ScheduledPostMedia.scheduled_post_id,
+        ScheduledPostPart.position == ScheduledPostMedia.part_position,
+        ScheduledPostPart.x_post_id.is_not(None),
+    )
+    settled = exists().where(
+        ScheduledPost.id == ScheduledPostMedia.scheduled_post_id,
+        ScheduledPost.state != PUBLISHING,
+    )
+    on_live_part = exists().where(ScheduledPostMedia.media_id == Media.id, part_live, settled)
+    on_part_not_live = exists().where(ScheduledPostMedia.media_id == Media.id, ~part_live)
+    return and_(on_live_part, ~on_part_not_live)
 
 
 async def delete_unnamed_files(db: AsyncSession, storage: FileStorage, *, now: datetime) -> None:

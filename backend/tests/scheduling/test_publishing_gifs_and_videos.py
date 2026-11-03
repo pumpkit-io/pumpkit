@@ -269,13 +269,16 @@ def _upload_waits_for_another_post(fake_x_publisher, *, then_due: timedelta = ti
 
 
 async def _run_until_published(
-    count: int, db_session_maker, fake_x_publisher, file_storage, fixed_clock
+    count: int, writing_session_maker, fake_x_publisher, file_storage, fixed_clock
 ) -> None:
-    """The publisher's loop, stopped once `count` posts are published or after 5 seconds."""
+    """
+    The publisher's loop, stopped once `count` posts are published or after 5 seconds. Its
+    publishes run side by side, so its sessions must start as writes on SQLite.
+    """
     stop = asyncio.Event()
     looping = asyncio.create_task(
         run(
-            db_session_maker,
+            writing_session_maker,
             fake_x_publisher,
             file_storage,
             fixed_clock,
@@ -294,7 +297,7 @@ async def _run_until_published(
 async def test_a_video_upload_in_flight_doesnt_hold_up_another_due_post(
     client,
     subscribed,
-    db_session_maker,
+    writing_session_maker,
     file_storage,
     fake_x_publisher,
     fixed_clock,
@@ -312,7 +315,9 @@ async def test_a_video_upload_in_flight_doesnt_hold_up_another_due_post(
     waiting = _upload_waits_for_another_post(fake_x_publisher)
     fake_x_publisher.while_uploading = lambda: waiting(fixed_clock)
 
-    await _run_until_published(2, db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await _run_until_published(
+        2, writing_session_maker, fake_x_publisher, file_storage, fixed_clock
+    )
 
     assert [text for _, text in fake_x_publisher.published] == ["Just words.", "A long demo."]
     assert (await _scheduled_post(client, video_post_id))["state"] == "published"
@@ -322,7 +327,7 @@ async def test_a_video_upload_in_flight_doesnt_hold_up_another_due_post(
 async def test_a_post_due_while_a_video_uploads_goes_out_on_the_next_pass(
     client,
     subscribed,
-    db_session_maker,
+    writing_session_maker,
     file_storage,
     fake_x_publisher,
     fixed_clock,
@@ -340,15 +345,20 @@ async def test_a_post_due_while_a_video_uploads_goes_out_on_the_next_pass(
     waiting = _upload_waits_for_another_post(fake_x_publisher, then_due=timedelta(minutes=7))
     fake_x_publisher.while_uploading = lambda: waiting(fixed_clock)
 
-    await _run_until_published(2, db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await _run_until_published(
+        2, writing_session_maker, fake_x_publisher, file_storage, fixed_clock
+    )
 
     assert [text for _, text in fake_x_publisher.published] == ["Due later.", "A long demo."]
 
 
-async def _run_until_stopped(db_session_maker, fake_x_publisher, file_storage, fixed_clock, stop):
+async def _run_until_stopped(
+    writing_session_maker, fake_x_publisher, file_storage, fixed_clock, stop
+):
+    """The publisher's loop until `stop` is set; a pass's sessions run beside the publish's."""
     await asyncio.wait_for(
         run(
-            db_session_maker,
+            writing_session_maker,
             fake_x_publisher,
             file_storage,
             fixed_clock,
@@ -363,6 +373,7 @@ async def test_a_publisher_stopped_mid_upload_hands_the_post_back_for_the_next_o
     client,
     subscribed,
     db_session_maker,
+    writing_session_maker,
     file_storage,
     fake_x_publisher,
     fixed_clock,
@@ -381,7 +392,9 @@ async def test_a_publisher_stopped_mid_upload_hands_the_post_back_for_the_next_o
 
     fake_x_publisher.while_calling_x_to_upload = deploy_starts
 
-    await _run_until_stopped(db_session_maker, fake_x_publisher, file_storage, fixed_clock, stop)
+    await _run_until_stopped(
+        writing_session_maker, fake_x_publisher, file_storage, fixed_clock, stop
+    )
 
     handed_back = await _scheduled_post(client, post_id)
     assert handed_back["state"] == "scheduled"
@@ -439,6 +452,7 @@ async def test_a_publisher_stopped_while_x_takes_the_post_waits_for_its_answer(
     client,
     subscribed,
     db_session_maker,
+    writing_session_maker,
     file_storage,
     fake_x_publisher,
     fixed_clock,
@@ -457,7 +471,9 @@ async def test_a_publisher_stopped_while_x_takes_the_post_waits_for_its_answer(
 
     fake_x_publisher.while_publishing = deploy_starts
 
-    await _run_until_stopped(db_session_maker, fake_x_publisher, file_storage, fixed_clock, stop)
+    await _run_until_stopped(
+        writing_session_maker, fake_x_publisher, file_storage, fixed_clock, stop
+    )
 
     assert (await _scheduled_post(client, post_id))["state"] == "published"
     assert [text for _, text in fake_x_publisher.published] == ["A demo."]

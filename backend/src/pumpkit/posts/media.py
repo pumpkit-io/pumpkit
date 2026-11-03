@@ -159,8 +159,11 @@ async def store(
 ) -> Media:
     """
     A new Media of the User's, with `checked`'s file and preview stored, placed nowhere yet.
-    Flushes. Wrap the work up to the last flush before the commit in `files_deleted_on_failure`.
+    Refuses alt text on a video. Flushes. Wrap the work up to the last flush before the commit in
+    `files_deleted_on_failure`.
     """
+    if alt_text is not None and checked.kind == MEDIA_VIDEO:
+        raise alt_text_unsupported()
     media = Media(
         user_id=user_id,
         kind=checked.kind,

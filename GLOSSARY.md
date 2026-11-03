@@ -174,6 +174,10 @@ _Avoid_: tweet, segment, item
 The images, animated GIF or video a User attaches to a Post's Text, on its single X post or on one Part of a Thread, to be published with that X post on X. It is the User's own content, like a hand edit: Pumpkit's writing never sees it, Feedback and restoring a Version keep it on its Part, or move it to the last Part when that Part is gone, and only the User, or the AI app they ask, writes an image's alt text: Pumpkit's writing never does. Alt text belongs to the Media, so a Scheduled post's copy and the Text show the same alt text. One X post carries up to four images, or one GIF, or one video.
 _Avoid_: attachment, file, asset, upload
 
+**Upload link**:
+A one-time link an AI app asks for to send a Media file from the User's computer to one Part of a Post, with no other credentials. It expires 15 minutes after it is made.
+_Avoid_: upload URL, presigned URL, drop link
+
 **Sketch**:
 The text Pumpkit writes first in a Version, Hook included, before it is rewritten to sound like a person typed it. Users never see it.
 _Avoid_: draft, first pass, raw output
@@ -203,6 +207,10 @@ _Avoid_: target, location, channel
 **Scheduled post**:
 A Post's Text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is always copied from the Post's Text, Media included, and a Post has at most one. One Scheduled post is one X post, or one Thread published at one time; posting the same text in two places takes two Posts. It keeps its own copy of the text, which the User may edit, and stays a Scheduled post after it is Published or Failed. Unscheduling a waiting one deletes it and makes its Post a Draft again.
 _Avoid_: queued tweet, publication, scheduled tweet
+
+**Posting**:
+A Scheduled post being published, or whose time has come while it waits for its turn, until it is Published or Failed. Its Post stays Scheduled meanwhile: posting is not a status of its own.
+_Avoid_: publishing, sending, in progress
 
 **Published**:
 A Scheduled post that X has accepted and shows on the User's X account, or in its Community; for a Thread, every Part has been accepted. It can no longer change.

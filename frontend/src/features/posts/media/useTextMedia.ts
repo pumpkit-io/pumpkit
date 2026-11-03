@@ -344,7 +344,7 @@ export function useTextMedia(
           if (server) reconcile(server, { key, media: landed });
           else if (elsewhere) dropTile(key);
           else changeTile(key, (tile) => readyTile(key, landed, tile.localUrl));
-          track('media_attached', { kind: landed.kind, via, source: 'web' });
+          track('media_attached', { kind: landed.kind, via, on: place.holder, source: 'web' });
           return;
         }
         if (errorCode(error) === RECONNECT_FOR_MEDIA) {
@@ -375,7 +375,7 @@ export function useTextMedia(
           }
           reconcile(server, landed && { key, media: landed });
           if (landed) {
-            track('media_attached', { kind: landed.kind, via, source: 'web' });
+            track('media_attached', { kind: landed.kind, via, on: place.holder, source: 'web' });
             return;
           }
           if (partGone && attempt === 0 && !under.dropped) continue;
@@ -527,7 +527,7 @@ export function useTextMedia(
       const removed = () => {
         discarded.current.add(tile.media.id);
         dropTile(key);
-        track('media_removed', { kind: tile.media.kind, source: 'web' });
+        track('media_removed', { kind: tile.media.kind, on: place.holder, source: 'web' });
       };
       enqueue(() =>
         place.remove(tile.media.id).then(removed, (error: unknown) => {
@@ -547,7 +547,12 @@ export function useTextMedia(
       if (tile?.state !== 'ready') return;
       const media = await place.setAltText(tile.media.id, altText);
       changeTile(key, (t) => (t.state === 'ready' ? { ...t, media } : t));
-      track('media_alt_text_set', { kind: media.kind, cleared: altText === null, source: 'web' });
+      track('media_alt_text_set', {
+        kind: media.kind,
+        cleared: altText === null,
+        on: place.holder,
+        source: 'web',
+      });
     },
     [place, tileWith, changeTile],
   );

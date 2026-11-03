@@ -318,6 +318,26 @@ async def db_session_maker(db_engine):
 
 
 @pytest_asyncio.fixture
+async def writing_session_maker(db_engine):
+    """
+    Sessions on the test database whose transactions start as writes. A SQLite read can't turn
+    into a write once another connection committed, where Postgres's row locks just wait.
+    """
+    engine = create_async_engine(db_engine.url, poolclass=NullPool)
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _configure_connection(dbapi_connection, connection_record):
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine.sync_engine, "begin")
+    def _emit_begin(conn):
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
+
+    yield async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
 async def db(db_session_maker):
     async with db_session_maker() as session:
         yield session

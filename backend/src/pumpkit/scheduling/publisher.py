@@ -19,6 +19,7 @@ from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, system_clock
 from pumpkit.scheduling.media_sweep import (
     FILES_SWEPT_EVERY,
+    delete_published_files,
     delete_unnamed_files,
     delete_unreferenced_media,
 )
@@ -146,6 +147,11 @@ async def run_pass(
             await delete_unreferenced_media(db, storage, now=clock())
     except Exception:
         logger.exception("Deleting unreferenced Media failed; trying again next pass")
+    try:
+        async with session_maker() as db:
+            await delete_published_files(db, storage)
+    except Exception:
+        logger.exception("Deleting published files failed; trying again next pass")
     try:
         async with session_maker() as db:
             await media_upload_links.delete_expired(db, now=clock())
