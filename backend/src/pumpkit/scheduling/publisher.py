@@ -2,7 +2,7 @@
 
 import asyncio
 import signal
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -16,7 +16,11 @@ from pumpkit.core.db.session import _db_session_handler
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, system_clock
-from pumpkit.scheduling.media_sweep import delete_unreferenced_media
+from pumpkit.scheduling.media_sweep import (
+    FILES_SWEPT_EVERY,
+    delete_unnamed_files,
+    delete_unreferenced_media,
+)
 from pumpkit.scheduling.publishing import publish_next_due, recover_stuck
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
@@ -30,11 +34,14 @@ async def run_pass(
     storage: FileStorage,
     clock: Clock,
     stop: Optional[asyncio.Event] = None,
-) -> None:
+    *,
+    files_swept_at: Optional[datetime] = None,
+) -> Optional[datetime]:
     """
-    Publish every due Scheduled post, then delete the Media nothing references any more; a failed
-    deletion is logged and leaves the pass complete. With `stop` set, it returns after the
-    Scheduled post in hand.
+    Publish every due Scheduled post, then delete the Media nothing references any more, and,
+    `FILES_SWEPT_EVERY` after `files_swept_at`, the stored files no Media names. A failed deletion
+    is logged and leaves the pass complete. With `stop` set, it returns after the Scheduled post in
+    hand. Returns when it last swept files, for the next pass.
     """
     async with session_maker() as db:
         await recover_stuck(db, now=clock())
@@ -43,12 +50,22 @@ async def run_pass(
         async with session_maker() as db:
             if not await publish_next_due(db, publisher, storage, clock=clock):
                 break
-    if stop is None or not stop.is_set():
-        try:
-            async with session_maker() as db:
-                await delete_unreferenced_media(db, storage, now=clock())
-        except Exception:
-            logger.exception("Deleting unreferenced Media failed; trying again next pass")
+    if stop is not None and stop.is_set():
+        return files_swept_at
+    try:
+        async with session_maker() as db:
+            await delete_unreferenced_media(db, storage, now=clock())
+    except Exception:
+        logger.exception("Deleting unreferenced Media failed; trying again next pass")
+    now = clock()
+    if files_swept_at is not None and now - files_swept_at < FILES_SWEPT_EVERY:
+        return files_swept_at
+    try:
+        async with session_maker() as db:
+            await delete_unnamed_files(db, storage, now=now)
+    except Exception:
+        logger.exception("Deleting stored files no Media names failed; trying again later")
+    return now
 
 
 async def run(
@@ -67,10 +84,13 @@ async def run(
     Each pass that completes touches `heartbeat`, which the container healthcheck reads.
     With `enabled` false it skips the passes but keeps the heartbeat, so the container stays healthy.
     """
+    files_swept_at: Optional[datetime] = None
     while not stop.is_set():
         try:
             if enabled:
-                await run_pass(session_maker, publisher, storage, clock, stop)
+                files_swept_at = await run_pass(
+                    session_maker, publisher, storage, clock, stop, files_swept_at=files_swept_at
+                )
         except Exception:
             logger.exception("Publisher pass failed; trying again next interval")
         else:

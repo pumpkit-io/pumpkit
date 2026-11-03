@@ -760,7 +760,8 @@ async def attach_text_media(
     media = await media_service.attach_to_text(
         db, storage, post=post, part_index=part_index, checked=checked, file=file, now=now
     )
-    await db.commit()
+    async with media_service.files_deleted_on_failure(storage, media):
+        await db.commit()
     return media_service.media_response(media)
 
 
@@ -809,8 +810,11 @@ async def attach_scheduled_post_media(
     attached = await media_service.store(
         db, storage, user_id=user.id, checked=checked, file=file, now=now
     )
-    media[part_index].append(attached)
-    await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=media, now=now)
+    async with media_service.files_deleted_on_failure(storage, attached):
+        media[part_index].append(attached)
+        await _save_scheduled_post_media(
+            db, scheduled_post_id=scheduled_post_id, media=media, now=now
+        )
     return media_service.media_response(attached)
 
 
