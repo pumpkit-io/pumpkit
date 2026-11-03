@@ -147,6 +147,7 @@ function LoadedPost({
   feedback,
   rewritesDropped,
   onScheduledPost,
+  onGone,
 }: {
   post: PostDetail;
   text: TextSnapshot;
@@ -155,12 +156,13 @@ function LoadedPost({
   /** An edit just dropped rewrites from redo, which History still holds. */
   rewritesDropped: boolean;
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
+  onGone: () => void;
 }) {
   const post: PostDetail = { ...loaded, text: text.text, versions: text.versions };
   const { connection, reload: reloadXConnection } = useXConnectionContext();
   const location = useLocation();
   const opensEditor = opensEditing(location.state);
-  const posting = usePosting(loaded.id, loaded.scheduledPost, onScheduledPost);
+  const posting = usePosting(loaded.id, loaded.scheduledPost, onScheduledPost, onGone);
   const [editing, setEditing] = useState(
     () => opensEditor && post.scheduledPost?.state === 'scheduled' && !posting,
   );
@@ -170,6 +172,7 @@ function LoadedPost({
     setEditing(false);
     setEditClosedByPosting(true);
   }
+  if (editClosedByPosting && !posting) setEditClosedByPosting(false);
   const navigate = useNavigate();
   const [reconnectingForMedia, setReconnectingForMedia] = useState(false);
   const askToReconnect = useCallback(() => setReconnectingForMedia(true), []);
@@ -198,34 +201,44 @@ function LoadedPost({
   const parts = cardParts(post, textVersion, charLimit);
   const title = postTitle(parts[0]?.text ?? post.brief);
   const breadcrumb = <PostBreadcrumb status={post.status} title={title} />;
+  // One region across the editor and the Post, so a change of its text is announced.
+  const announcements = (
+    <p role="status" className="sr-only">
+      {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}
+      {posting && <span>Posting…</span>}
+    </p>
+  );
 
   if (editing && scheduledPost?.state === 'scheduled') {
     return (
-      <Page title={breadcrumb}>
-        <ScheduledPostEditor
-          postId={post.id}
-          scheduledPost={scheduledPost}
-          charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
-          askToReconnect={connection?.needsReconnectForMedia ? askToReconnect : undefined}
-          onReconnectNeeded={onReconnectNeeded}
-          onSaved={(saved) => {
-            onScheduledPost(saved);
-            setEditing(false);
-          }}
-          onUnscheduled={() => {
-            onScheduledPost(null);
-            setEditing(false);
-          }}
-          onCancel={(current) => {
-            onScheduledPost(current);
-            setEditing(false);
-          }}
-        />
-        <ReconnectXForMediaDialog
-          open={reconnectingForMedia}
-          onClose={() => setReconnectingForMedia(false)}
-        />
-      </Page>
+      <>
+        <Page title={breadcrumb}>
+          <ScheduledPostEditor
+            postId={post.id}
+            scheduledPost={scheduledPost}
+            charLimit={charLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS}
+            askToReconnect={connection?.needsReconnectForMedia ? askToReconnect : undefined}
+            onReconnectNeeded={onReconnectNeeded}
+            onSaved={(saved) => {
+              onScheduledPost(saved);
+              setEditing(false);
+            }}
+            onUnscheduled={() => {
+              onScheduledPost(null);
+              setEditing(false);
+            }}
+            onCancel={(current) => {
+              onScheduledPost(current);
+              setEditing(false);
+            }}
+          />
+          <ReconnectXForMediaDialog
+            open={reconnectingForMedia}
+            onClose={() => setReconnectingForMedia(false)}
+          />
+        </Page>
+        {announcements}
+      </>
     );
   }
 
@@ -318,36 +331,35 @@ function LoadedPost({
   }
 
   return (
-    <Page title={breadcrumb} dock={dock} pinned>
-      <TextEditor
-        parts={parts}
-        texts={post.text?.parts.map((p) => p.text) ?? []}
-        editable={can.edit}
-        onEdit={(texts, change) => controller.edit(texts, change.cause)}
-        onUndo={onUndo}
-        onRedo={onRedo}
-        trace={text.trace}
-        busy={text.writing}
-        media={
-          textChanges
-            ? partMediaOf(
-                media,
-                parts,
-                connection?.needsReconnectForMedia ? askToReconnect : undefined,
-              )
-            : readOnlyMediaOf(parts)
-        }
-        header={<TextHeader origin={origin} tools={tools} action={postTo} />}
-      />
-      <ReconnectXForMediaDialog
-        open={reconnectingForMedia}
-        onClose={() => setReconnectingForMedia(false)}
-      />
-      <p role="status" className="sr-only">
-        {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}
-        {posting && <span>Posting…</span>}
-      </p>
-    </Page>
+    <>
+      <Page title={breadcrumb} dock={dock} pinned>
+        <TextEditor
+          parts={parts}
+          texts={post.text?.parts.map((p) => p.text) ?? []}
+          editable={can.edit}
+          onEdit={(texts, change) => controller.edit(texts, change.cause)}
+          onUndo={onUndo}
+          onRedo={onRedo}
+          trace={text.trace}
+          busy={text.writing}
+          media={
+            textChanges
+              ? partMediaOf(
+                  media,
+                  parts,
+                  connection?.needsReconnectForMedia ? askToReconnect : undefined,
+                )
+              : readOnlyMediaOf(parts)
+          }
+          header={<TextHeader origin={origin} tools={tools} action={postTo} />}
+        />
+        <ReconnectXForMediaDialog
+          open={reconnectingForMedia}
+          onClose={() => setReconnectingForMedia(false)}
+        />
+      </Page>
+      {announcements}
+    </>
   );
 }
 
@@ -358,6 +370,7 @@ export function PostPage() {
     load,
     reload,
     setScheduledPost,
+    gone,
     text,
     sendFeedback,
     rewritesDropped,
@@ -376,6 +389,7 @@ export function PostPage() {
         feedback={{ isWriting: text.writing, error, notice, allowanceUsedUp, onSend: sendFeedback }}
         rewritesDropped={rewritesDropped}
         onScheduledPost={setScheduledPost}
+        onGone={gone}
       />
     );
   }

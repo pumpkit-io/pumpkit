@@ -2,7 +2,8 @@
 Publishing a GIF or a video (ADR 0021): uploaded to X in chunks with its own media category and
 waited on while X processes it. A video's upload can outlast the stuck threshold and the access
 token's life, so the publish keeps its claim and a fresh token through every call to X.
-Post now hands a GIF or a video to the publisher, due now.
+Post now hands a GIF or a video to the publisher, due now, and every reading of the Scheduled post
+says `posting` until it is Published or Failed.
 """
 
 import asyncio
@@ -42,7 +43,7 @@ async def _due(client: AsyncClient, post_id: str, fixed_clock) -> None:
     response = await client.post(
         SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": "2026-10-10T12:05:00Z"}
     )
-    assert (response.status_code, response.json()["posting"]) == (201, False), response.text
+    assert response.status_code == 201, response.text
     fixed_clock.advance(timedelta(minutes=5))
 
 
@@ -492,6 +493,103 @@ async def test_post_now_with_a_video_hands_it_to_the_publisher_due_now(
     assert published["state"] == "published"
     assert [text for _, text in fake_x_publisher.published] == ["Right now.", "With a demo."]
     assert [u.category for u in fake_x_publisher.uploads] == ["tweet_video"]
+
+
+async def test_a_handed_off_post_reads_posting_until_it_is_published(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("Right now, with a demo.")
+    await _attach(client, post_id, mp4(), "demo.mp4")
+    await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
+
+    handed_off = await _scheduled_post(client, post_id)
+    [listed] = (await client.get(POSTS)).json()["data"]
+    async with db_session_maker() as db:
+        await claim_next_due(db, now=fixed_clock())
+    claimed = await _scheduled_post(client, post_id)
+
+    assert (handed_off["state"], handed_off["posting"]) == ("scheduled", True)
+    assert listed["scheduled_post"]["posting"] is True
+    assert (claimed["state"], claimed["posting"]) == ("publishing", True)
+
+
+async def test_a_scheduled_post_reads_posting_once_it_is_due(
+    client, subscribed, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("Later.")
+    response = await client.post(
+        SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": "2026-10-10T12:05:00Z"}
+    )
+
+    waiting = response.json()["posting"]
+    fixed_clock.advance(timedelta(minutes=5))
+    due = await _scheduled_post(client, post_id)
+
+    assert waiting is False
+    assert (due["state"], due["posting"]) == ("scheduled", True)
+
+
+async def test_a_post_x_was_busy_for_reads_posting_again_only_when_its_retry_is_due(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A demo.")
+    await _attach(client, post_id, mp4(), "demo.mp4")
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.fail_publish = XRateLimitedError("429")
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    busy = await _scheduled_post(client, post_id)
+    fixed_clock.advance(timedelta(minutes=1))
+    retry_due = await _scheduled_post(client, post_id)
+
+    assert (busy["state"], busy["posting"]) == ("scheduled", False)
+    assert retry_due["posting"] is True
+
+
+async def test_published_and_failed_posts_read_not_posting(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    published_id = await post_with("Out.")
+    failed_id = await post_with("Refused.")
+    await _due(client, published_id, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await client.post(
+        SCHEDULED_POSTS, json={"post_id": failed_id, "publish_at": "2026-10-10T12:10:00Z"}
+    )
+    fixed_clock.advance(timedelta(minutes=5))
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "No.")
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    published = await _scheduled_post(client, published_id)
+    failed = await _scheduled_post(client, failed_id)
+
+    assert (published["state"], published["posting"]) == ("published", False)
+    assert (failed["state"], failed["posting"]) == ("failed", False)
 
 
 async def test_post_now_of_a_scheduled_post_with_a_video_hands_it_to_the_publisher(

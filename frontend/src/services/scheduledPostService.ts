@@ -65,7 +65,7 @@ export interface ScheduledPost {
   community: Community | null;
   shareWithFollowers: boolean;
   createdAt: string;
-  /** Only in the answer to a Post now that handed it to the publisher, due now, to publish. */
+  /** Being published, or due and waiting for the publisher, by the server's clock. */
   posting: boolean;
 }
 

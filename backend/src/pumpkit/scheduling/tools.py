@@ -264,7 +264,12 @@ async def list_posts(
     """
     page = PostsPageRequest(status=status, limit=limit, offset=offset)
     return await mediator.list_posts(
-        db=call.db, user=call.user, status=page.status, limit=page.limit, offset=page.offset
+        db=call.db,
+        user=call.user,
+        status=page.status,
+        limit=page.limit,
+        offset=page.offset,
+        now=call.now,
     )
 
 
@@ -276,10 +281,11 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     when it was written and its `starting_text`: the text that feedback was given on, with the
     version it came from, when it wasn't the version before as written. `status` is "draft" with no
     scheduled post, else "scheduled", "published" or "failed" from its one scheduled post, returned
-    in `scheduled_post` with its own copy of the text, which the user may have edited since. A draft
-    has no scheduled post, so its text can be scheduled.
+    in `scheduled_post` with its own copy of the text, which the user may have edited since, and
+    `posting`, true while it is being published or due. A draft has no scheduled post, so its text
+    can be scheduled.
     """
-    return await mediator.get_post(db=call.db, user=call.user, post_id=post_id)
+    return await mediator.get_post(db=call.db, user=call.user, post_id=post_id, now=call.now)
 
 
 async def give_feedback(

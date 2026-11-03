@@ -99,7 +99,7 @@ class ScheduledPostResponse(BaseModel):
     community: Optional[CommunityResponse]
     share_with_followers: bool
     created_at: datetime
-    # Set only in the answer to a Post now that handed it to the publisher, due now, to publish.
+    # Being published, or due and waiting for the publisher.
     posting: bool
 
 
@@ -139,6 +139,8 @@ class ScheduledPostSummaryResponse(BaseModel):
     failed_reason: Optional[str]
     # The first Part on X, once it is live.
     x_post_url: Optional[str]
+    # As on `ScheduledPostResponse`.
+    posting: bool
 
 
 class PostListItemResponse(BaseModel):

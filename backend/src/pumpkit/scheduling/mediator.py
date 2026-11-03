@@ -52,6 +52,7 @@ from pumpkit.scheduling.post_status import (
     PostStatus,
     check_takes_feedback,
     check_text_changes,
+    is_posting,
     post_status,
 )
 from pumpkit.scheduling.publishing import publish_scheduled_post
@@ -103,8 +104,17 @@ def _x_post_url(x_post_id: Optional[str]) -> Optional[str]:
     return f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None
 
 
+def _posting(scheduled_post: ScheduledPost, now: datetime) -> bool:
+    return is_posting(
+        scheduled_post.state,
+        publish_at=scheduled_post.publish_at,
+        next_attempt_at=scheduled_post.next_attempt_at,
+        now=now,
+    )
+
+
 def scheduled_post_response(
-    scheduled_post: ScheduledPost, *, posting: bool = False
+    scheduled_post: ScheduledPost, *, now: datetime
 ) -> ScheduledPostResponse:
     published_at = scheduled_post.published_at
     community_id = scheduled_post.community_id
@@ -132,7 +142,7 @@ def scheduled_post_response(
         else None,
         share_with_followers=scheduled_post.share_with_followers,
         created_at=as_utc(scheduled_post.created_at),
-        posting=posting,
+        posting=_posting(scheduled_post, now),
     )
 
 
@@ -342,15 +352,15 @@ async def create_scheduled_post(
         # Another request scheduled the same Post between the check and the insert.
         raise _already_scheduled()
     await rebalance_top_ups(db, user_id=user.id, moments=[as_utc(scheduled_post.publish_at)])
-    posting = new.publish_now and rules.hands_post_now_to_publisher(
+    hand_off = new.publish_now and rules.hands_post_now_to_publisher(
         media_service.kinds_by_part(media), live_count=0
     )
-    if new.publish_now and not posting:
+    if new.publish_now and not hand_off:
         return await _post_now(
             db, publisher, storage, scheduled_post_id=scheduled_post.id, now=now, clock=clock
         )
     await db.commit()
-    return scheduled_post_response(scheduled_post, posting=posting)
+    return scheduled_post_response(scheduled_post, now=now)
 
 
 async def _check_media(
@@ -423,7 +433,7 @@ async def _post_now(
         clock=clock,
     )
     published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
-    return scheduled_post_response(published)
+    return scheduled_post_response(published, now=clock())
 
 
 async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> ScheduledPost:
@@ -474,7 +484,7 @@ async def edit_scheduled_post(
         await _check_media(
             db, service.media_by_part(scheduled_post), user_id=user.id, live_count=len(live)
         )
-    posting = edit.publish_now and rules.hands_post_now_to_publisher(
+    hand_off = edit.publish_now and rules.hands_post_now_to_publisher(
         media_service.kinds_by_part(
             media if media is not None else service.media_by_part(scheduled_post)
         ),
@@ -527,13 +537,13 @@ async def edit_scheduled_post(
         raise _publishing_started()
     moments = [publish_at_before, reschedule.publish_at] if reschedule else [publish_at_before]
     await rebalance_top_ups(db, user_id=user.id, moments=moments)
-    if edit.publish_now and not posting:
+    if edit.publish_now and not hand_off:
         return await _post_now(
             db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
         )
     await db.commit()
     return scheduled_post_response(
-        await _owned(db, user=user, scheduled_post_id=scheduled_post_id), posting=posting
+        await _owned(db, user=user, scheduled_post_id=scheduled_post_id), now=now
     )
 
 
@@ -587,7 +597,7 @@ async def cancel_scheduled_post(
     return post_id
 
 
-async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResponse:
+async def get_post(db: AsyncSession, user: User, post_id: str, now: datetime) -> PostDetailResponse:
     """The User's Post with its Text, every Version in order, its status and Scheduled post."""
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
@@ -601,11 +611,13 @@ async def get_post(db: AsyncSession, user: User, post_id: str) -> PostDetailResp
             for v in version_writing.versions_of(post)
         ],
         status=post_status(scheduled_post.state if scheduled_post else None),
-        scheduled_post=scheduled_post_response(scheduled_post) if scheduled_post else None,
+        scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
     )
 
 
-def _scheduled_post_summary(scheduled_post: ScheduledPost) -> ScheduledPostSummaryResponse:
+def _scheduled_post_summary(
+    scheduled_post: ScheduledPost, now: datetime
+) -> ScheduledPostSummaryResponse:
     published_at = scheduled_post.published_at
     community_id = scheduled_post.community_id
     return ScheduledPostSummaryResponse(
@@ -619,10 +631,11 @@ def _scheduled_post_summary(scheduled_post: ScheduledPost) -> ScheduledPostSumma
         share_with_followers=scheduled_post.share_with_followers,
         failed_reason=scheduled_post.failed_reason,
         x_post_url=_x_post_url(scheduled_post.parts[0].x_post_id),
+        posting=_posting(scheduled_post, now),
     )
 
 
-def _post_list_item(listed: service.ListedPost) -> PostListItemResponse:
+def _post_list_item(listed: service.ListedPost, now: datetime) -> PostListItemResponse:
     post, scheduled_post = listed.post, listed.scheduled_post
     versions = version_writing.versions_of(post)
     latest = versions[-1]
@@ -640,12 +653,17 @@ def _post_list_item(listed: service.ListedPost) -> PostListItemResponse:
         format=format,
         version_count=len(versions),
         latest_version_at=as_utc(latest.created_at),
-        scheduled_post=_scheduled_post_summary(scheduled_post) if scheduled_post else None,
+        scheduled_post=_scheduled_post_summary(scheduled_post, now) if scheduled_post else None,
     )
 
 
 async def list_posts(
-    db: AsyncSession, user: User, status: Optional[PostStatus], limit: int, offset: int
+    db: AsyncSession,
+    user: User,
+    status: Optional[PostStatus],
+    limit: int,
+    offset: int,
+    now: datetime,
 ) -> PostsPageResponse:
     """A page of the User's Posts in `status`, or every one, with how many each status holds."""
     # One past the page tells whether another page follows.
@@ -654,7 +672,7 @@ async def list_posts(
     )
     counts = await service.count_posts(db, user_id=user.id)
     return PostsPageResponse(
-        data=[_post_list_item(item) for item in listed[:limit]],
+        data=[_post_list_item(item, now) for item in listed[:limit]],
         counts=PostCountsResponse(**counts),
         next_offset=offset + limit if len(listed) > limit else None,
     )

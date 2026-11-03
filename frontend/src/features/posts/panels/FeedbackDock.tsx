@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { LimitNotice } from '@/components/LimitNotice';
+import { Notice } from '@/components/Notice';
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
 import { useUsage } from '@/features/billing/useUsage';
@@ -74,7 +74,7 @@ export function FeedbackDock({
             {error && (
               <ErrorBanner message={error} onRetry={typed ? () => void send() : undefined} />
             )}
-            {notice && <LimitNotice message={notice} />}
+            {notice && <Notice message={notice} />}
             {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
           </div>
         )

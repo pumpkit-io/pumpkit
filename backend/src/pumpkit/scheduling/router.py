@@ -319,9 +319,15 @@ async def list_posts(
     page: Annotated[PostsPageRequest, Query()],
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
 ) -> PostsPageResponse:
     return await mediator.list_posts(
-        db=db, user=current_user, status=page.status, limit=page.limit, offset=page.offset
+        db=db,
+        user=current_user,
+        status=page.status,
+        limit=page.limit,
+        offset=page.offset,
+        now=clock(),
     )
 
 
@@ -332,8 +338,9 @@ async def get_post(
     post_id: str,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
 ) -> PostDetailResponse:
-    return await mediator.get_post(db=db, user=current_user, post_id=post_id)
+    return await mediator.get_post(db=db, user=current_user, post_id=post_id, now=clock())
 
 
 @posts_router.post(

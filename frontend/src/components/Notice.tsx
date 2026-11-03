@@ -1,4 +1,4 @@
-export function LimitNotice({ message }: { message: string }) {
+export function Notice({ message }: { message: string }) {
   return (
     <p
       role="status"

@@ -276,7 +276,7 @@ async def test_a_draft_carries_its_latest_versions_text_and_no_scheduled_post(cl
 
 
 async def test_a_scheduled_post_carries_its_own_text_and_a_summary_of_its_scheduled_post(
-    client, seed_post
+    client, seed_post, fixed_clock
 ):
     post_id = await seed_post(
         ["The version's text."],
@@ -303,6 +303,7 @@ async def test_a_scheduled_post_carries_its_own_text_and_a_summary_of_its_schedu
         "share_with_followers": True,
         "failed_reason": None,
         "x_post_url": None,
+        "posting": True,
     }
     assert item["id"] == post_id
 

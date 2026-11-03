@@ -101,6 +101,12 @@ export function usePost(postId: string) {
     [postId, refreshCounts],
   );
 
+  /** The Post was deleted while the page was open. */
+  const gone = useCallback(() => {
+    setLoad({ kind: 'notFound' });
+    refreshCounts();
+  }, [refreshCounts]);
+
   /** Resolves true once the new Version is the Post's Text, so the caller can clear its box. */
   const sendFeedback = useCallback(
     async (feedback: string, format: Format): Promise<boolean> => {
@@ -118,6 +124,7 @@ export function usePost(postId: string) {
     load,
     reload,
     setScheduledPost,
+    gone,
     text,
     sendFeedback,
     rewritesDropped: dropped !== null && dropped !== dismissedDrop,
