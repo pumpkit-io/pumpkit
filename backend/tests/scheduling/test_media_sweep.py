@@ -16,6 +16,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.posts.media as media_service
 import pumpkit.scheduling.publisher as publisher
 import pumpkit.scheduling.service as scheduling_service
 from pumpkit.core.storage import LocalDirectoryStorage, StoredFile, get_file_storage
@@ -332,6 +333,64 @@ async def test_the_texts_media_replaced_on_a_failed_threads_live_part_is_deleted
     assert _stored(file_storage) == (
         _files_of(published) - {f"media/{published}/file"} | _files_of(on_failed_part)
     )
+
+
+async def test_the_texts_media_on_a_part_the_scheduled_post_dropped_is_deleted_once_published(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    await _attach_to_text(client, post_id, part=2)
+    scheduled = await _due(client, post_id, fixed_clock)
+    for media_id in await _text_media(client, post_id):
+        removed = await client.delete(f"{SCHEDULED_POSTS}/{scheduled['id']}/media/{media_id}")
+        assert removed.status_code == 204, removed.text
+    edited = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"parts": ["One"]})
+    assert edited.status_code == 200, edited.text
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    fixed_clock.advance(PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert await _text_media(client, post_id) == []
+    assert _stored(file_storage) == {"media"}
+
+
+async def test_a_failed_drop_of_the_texts_media_keeps_the_part_live_and_the_post_published(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+    monkeypatch,
+):
+    await connect_x()
+    post_id = await post_with("One")
+    replaced = await _attach_to_text(client, post_id)
+    scheduled = await _due(client, post_id, fixed_clock)
+    await _replace_on_scheduled_post(client, scheduled["id"], replaced)
+
+    async def failing_drop(*args, **kwargs):
+        raise RuntimeError("lock wait timed out")
+
+    monkeypatch.setattr(media_service, "keep_only_published_text_media", failing_drop)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    post = await client.get(f"{POSTS}/{post_id}")
+    assert post.json()["status"] == "published", post.text
+    assert post.json()["scheduled_post"]["x_post_url"] is not None
+    assert await _text_media(client, post_id) == [replaced]
 
 
 async def test_a_published_file_left_behind_is_deleted_and_its_preview_kept(

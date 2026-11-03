@@ -93,7 +93,11 @@ async def test_a_video_sent_to_a_link_with_alt_text_is_refused(
     response = await _upload(new_browser, link, mp4(), "demo.mp4")
 
     assert response.status_code == 422, response.text
-    assert response.json()["code"] == "MEDIA_ALT_TEXT_UNSUPPORTED"
+    assert response.json() == {
+        "detail": "Alt text is for images and GIFs. This upload link is used up: call "
+        "attach_media again, without alt text, for a new one.",
+        "code": "MEDIA_ALT_TEXT_UNSUPPORTED",
+    }
     assert await _media_of(mcp, post_id) == [[]]
 
 

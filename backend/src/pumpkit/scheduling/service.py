@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Subquery
 
 from pumpkit.billing.models import TopUpCharge
-from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Media, Post, TextMedia, VersionAttempt
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Media, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
@@ -684,22 +684,9 @@ async def release_claim(db: AsyncSession, scheduled_post: ScheduledPost, *, now:
     await db.flush()
 
 
-async def record_part_live(
-    db: AsyncSession, scheduled_post: ScheduledPost, part: ScheduledPostPart, *, x_post_id: str
-) -> None:
-    """
-    The Part is live as X's post `x_post_id`. The Text's same Part, and once the last Part is
-    live every Part past it, drops the Media this Scheduled post didn't publish there, so the
-    sweep deletes Media replaced on the Scheduled post's copy. Flushes.
-    """
+async def record_part_live(db: AsyncSession, part: ScheduledPostPart, *, x_post_id: str) -> None:
+    """The Part is live as X's post `x_post_id`. Flushes."""
     part.x_post_id = x_post_id
-    published = [m.media_id for m in scheduled_post.media if m.part_position == part.position]
-    dropped = and_(TextMedia.part_index == part.position, TextMedia.media_id.not_in(published))
-    if part.position == len(scheduled_post.parts) - 1:
-        carried = [m.media_id for m in scheduled_post.media]
-        past_last = and_(TextMedia.part_index > part.position, TextMedia.media_id.not_in(carried))
-        dropped = or_(dropped, past_last)
-    await db.execute(delete(TextMedia).where(TextMedia.post_id == scheduled_post.post_id, dropped))
     await db.flush()
 
 

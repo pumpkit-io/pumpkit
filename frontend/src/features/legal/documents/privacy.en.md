@@ -130,7 +130,7 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 ## How long data is kept {#retention}
 
 - **Account content** (your profile, Google identity, Briefs, Feedback, Versions, Inspiration authors, Scheduled posts and X connection): until your account is deleted.
-- **Media:** each file is deleted from the server once the X post that carries it is published; its preview and alt text stay with the Post until your account is deleted. Media you remove, or that no Post or Scheduled post holds any more, is deleted with its preview within two hours.
+- **Media:** each file is deleted from the server once the X post that carries it is published; its preview and alt text stay with the Post until your account is deleted. Media that neither a Post's text nor a Scheduled post holds any more, such as Media you remove from both, is deleted with its preview within two hours. Media you remove from a Scheduled post while its Post's text still holds it is deleted once that part is published on X, or once you remove it from the text too.
 - **Upload links:** one day after they expire, which is 15 minutes after an AI app asks for them.
 - **Session and Magic link records:** 90 days after they expire. This includes a Magic link requested by someone who never created an account.
 - **Connected apps:** until you disconnect the app or your account is deleted. A disconnected app's record and its tokens are deleted 90 days after you disconnect it, and an expired token within 90 days of expiring.

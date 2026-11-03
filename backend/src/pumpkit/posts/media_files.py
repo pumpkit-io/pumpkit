@@ -75,8 +75,20 @@ def cleaned_alt_text(value: Optional[str]) -> Optional[str]:
     return stripped or None
 
 
-def alt_text_unsupported() -> MediaRefused:
-    return MediaRefused("Alt text is for images and GIFs.", code="MEDIA_ALT_TEXT_UNSUPPORTED")
+ALT_TEXT_UNSUPPORTED = "MEDIA_ALT_TEXT_UNSUPPORTED"
+
+
+def alt_text_unsupported(*, link_used: bool = False) -> MediaRefused:
+    """
+    `link_used` when an upload link brought the file: the refusal comes after the link is spent,
+    since the file's kind is known only once its body arrives.
+    """
+    hint = (
+        " This upload link is used up: call attach_media again, without alt text, for a new one."
+        if link_used
+        else ""
+    )
+    return MediaRefused(f"Alt text is for images and GIFs.{hint}", code=ALT_TEXT_UNSUPPORTED)
 
 
 def media_type_refused() -> MediaRefused:

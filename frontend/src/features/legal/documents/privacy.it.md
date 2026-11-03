@@ -130,7 +130,7 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 ## Per quanto tempo vengono conservati i dati {#retention}
 
 - **Contenuti dell'account** (il tuo profilo, l'identità Google, i Brief, i Feedback, le Versioni, gli Inspiration author, gli Scheduled post e la X connection): fino all'eliminazione del tuo account.
-- **Media:** ogni file viene eliminato dal server non appena il post X che lo contiene è pubblicato; l'anteprima e il testo alternativo restano con il Post fino all'eliminazione del tuo account. I Media che rimuovi, o che nessun Post o Scheduled post contiene più, vengono eliminati insieme all'anteprima entro due ore.
+- **Media:** ogni file viene eliminato dal server non appena il post X che lo contiene è pubblicato; l'anteprima e il testo alternativo restano con il Post fino all'eliminazione del tuo account. I Media che né il testo di un Post né uno Scheduled post contengono più, come quelli che rimuovi da entrambi, vengono eliminati insieme all'anteprima entro due ore. I Media che rimuovi da uno Scheduled post mentre il testo del Post li contiene ancora vengono eliminati quando quella parte è pubblicata su X, oppure quando li rimuovi anche dal testo.
 - **Link di caricamento:** un giorno dopo la scadenza, che arriva 15 minuti dopo che un'app di intelligenza artificiale li ha chiesti.
 - **Registrazioni delle Sessioni e dei Magic link:** 90 giorni dalla scadenza. Ciò include un Magic link richiesto da chi non ha mai creato un account.
 - **Connected app:** finché non scolleghi l'app o il tuo account non viene eliminato. I dati di un'app scollegata e i suoi token vengono eliminati 90 giorni dopo che l'hai scollegata, e un token scaduto entro 90 giorni dalla scadenza.

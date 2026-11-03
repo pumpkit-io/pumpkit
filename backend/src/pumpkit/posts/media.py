@@ -9,7 +9,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import BinaryIO, Optional
 
-from sqlalchemy import select
+import sqlalchemy as sa
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.core.errors import ConflictError, NotFoundError
@@ -218,6 +219,30 @@ def text_media_on(post: Post, *, media_id: str) -> TextMedia:
 def remove_from_text(post: Post, placed: TextMedia) -> None:
     """Take the Media off the Text. The record and its file stay until nothing references them."""
     post.text_media.remove(placed)
+
+
+async def keep_only_published_text_media(
+    db: AsyncSession, *, post_id: str, published: list[list[str]], complete: bool
+) -> None:
+    """
+    Drop from each of the Text's first Parts the Media its live Part didn't publish, `published`
+    holding each live Part's Media ids in order, and once `complete`, from every Part past them
+    the Media no Part published. Media replaced on a Scheduled post's copy then goes unreferenced,
+    so the sweep deletes it. Flushes.
+    """
+    dropped: list[ColumnElement[bool]] = [
+        and_(TextMedia.part_index == index, TextMedia.media_id.not_in(ids))
+        for index, ids in enumerate(published)
+    ]
+    if complete:
+        anywhere = [media_id for ids in published for media_id in ids]
+        dropped.append(
+            and_(TextMedia.part_index >= len(published), TextMedia.media_id.not_in(anywhere))
+        )
+    if not dropped:
+        return
+    await db.execute(sa.delete(TextMedia).where(TextMedia.post_id == post_id, or_(*dropped)))
+    await db.flush()
 
 
 def set_alt_text(media: Media, alt_text: Optional[str]) -> None:

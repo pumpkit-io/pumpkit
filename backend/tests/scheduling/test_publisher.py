@@ -539,7 +539,7 @@ async def _crashed_mid_publish(
         assert scheduled_post is not None
         for part in scheduled_post.parts[:live_parts]:
             await scheduled_posts_service.record_part_live(
-                session, scheduled_post, part, x_post_id="1890000000000000777"
+                session, part, x_post_id="1890000000000000777"
             )
         await session.commit()
 

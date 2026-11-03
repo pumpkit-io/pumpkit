@@ -4,6 +4,7 @@ Flushes and never commits: `publishing` commits the claim and any rotated tokens
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal, Optional
@@ -312,8 +313,13 @@ async def set_alt_text(
         raise Failed("x_unavailable", _not_published(subject, X_UNAVAILABLE))
 
 
-async def delete_published_files(storage: FileStorage, media: list[Media]) -> None:
-    """Delete the files of a live Part's Media, keeping their previews. Flushes nothing."""
+async def delete_published_files(
+    storage: FileStorage, media: list[Media], *, failure_level: int = logging.ERROR
+) -> None:
+    """
+    Delete the files of a live Part's Media, keeping their previews. A failed delete is logged at
+    `failure_level` and left for the sweep. Flushes nothing.
+    """
     for one in media:
         if one.file_key is None:
             continue
@@ -321,7 +327,9 @@ async def delete_published_files(storage: FileStorage, media: list[Media]) -> No
             await storage.delete(one.file_key)
         except (OSError, ValueError):
             # Left on disk: the Part is live, so its file is never read again.
-            logger.exception("Deleting the published file of %s failed", one.id)
+            logger.log(
+                failure_level, "Deleting the published file of %s failed", one.id, exc_info=True
+            )
             continue
         one.file_key = None
 

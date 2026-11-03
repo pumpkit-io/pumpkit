@@ -4,6 +4,7 @@ and stored files no Media record names. The publisher's pass runs it and it comm
 `docs/development.md` says what that covers.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -15,6 +16,7 @@ import pumpkit.posts.media as media_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts.models import Media, TextMedia
+from pumpkit.scheduling import publish
 from pumpkit.scheduling.models import (
     PUBLISHING,
     ScheduledPost,
@@ -72,15 +74,8 @@ async def delete_published_files(db: AsyncSession, storage: FileStorage) -> None
         published = list(page.scalars().all())
         if not published:
             return
-        for media in published:
-            if media.file_key is None:
-                continue
-            try:
-                await storage.delete(media.file_key)
-            except (OSError, ValueError):
-                logger.exception("Deleting the published file of %s failed", media.id)
-                continue
-            media.file_key = None
+        # The publish logged a failure already, and this retries every pass.
+        await publish.delete_published_files(storage, published, failure_level=logging.DEBUG)
         await db.commit()
         after = published[-1].id
 

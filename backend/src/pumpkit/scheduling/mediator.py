@@ -714,7 +714,9 @@ async def give_feedback(
             next_version.format,
             next_version.char_limit,
         )
-        # The Post may have been scheduled, or its Media changed, during the calls.
+        # The Post may have been scheduled, or its Media changed, during the calls. User before
+        # Post, as every path that takes both locks them, since the charge below locks the User.
+        await users_service.lock_user_id(db, user_id=user.id)
         post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
         scheduled_post = await _check_takes_feedback(db, post_id=post_id)
         media_service.check_dropped_parts_media_movable(
@@ -1113,16 +1115,21 @@ async def attach_through_link(
     now: datetime,
 ) -> UploadedMediaResponse:
     """Attach the file a one-time link took where `attach_media_from_url` would."""
-    placed = await _attach_received(
-        db,
-        storage,
-        user=upload.user,
-        post_id=upload.post_id,
-        part_number=upload.part_number,
-        received=received,
-        alt_text=upload.alt_text,
-        now=now,
-    )
+    try:
+        placed = await _attach_received(
+            db,
+            storage,
+            user=upload.user,
+            post_id=upload.post_id,
+            part_number=upload.part_number,
+            received=received,
+            alt_text=upload.alt_text,
+            now=now,
+        )
+    except media_files.MediaRefused as refused:
+        if refused.code == media_files.ALT_TEXT_UNSUPPORTED:
+            raise media_files.alt_text_unsupported(link_used=True) from refused
+        raise
     return UploadedMediaResponse(
         message=attached_message(upload.part_number, on_scheduled_post=placed.on_scheduled_post),
         post_url=post_url(upload.post_id),

@@ -11,6 +11,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
+import pumpkit.posts.media as media_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
@@ -258,6 +259,27 @@ async def _settle(
     publish.capture_published(scheduled_post)
 
 
+async def _drop_unpublished_text_media(db: AsyncSession, scheduled_post: ScheduledPost) -> None:
+    """
+    Drop from the Text the Media the live Parts didn't publish, in a transaction of its own after
+    the live record's, so a failure here loses nothing X took. Each later Part tries again.
+    """
+    by_part = service.media_by_part(scheduled_post)
+    live = [media for part, media in zip(scheduled_post.parts, by_part) if part.x_post_id]
+    try:
+        # A savepoint, so a failure rolls back only this and leaves the loaded rows unexpired.
+        async with db.begin_nested():
+            await media_service.keep_only_published_text_media(
+                db,
+                post_id=scheduled_post.post_id,
+                published=[[one.id for one in media] for media in live],
+                complete=len(live) == len(scheduled_post.parts),
+            )
+        await db.commit()
+    except Exception:
+        logger.exception("Dropping unpublished Text media of %s failed", scheduled_post.id)
+
+
 async def _publish(
     db: AsyncSession,
     publisher: XPublisher,
@@ -324,9 +346,10 @@ async def _publish(
                     x_post_id,
                 )
                 raise
-            await service.record_part_live(db, scheduled_post, part, x_post_id=x_post_id)
+            await service.record_part_live(db, part, x_post_id=x_post_id)
             # Commit before the next Part, so a crash leaves a true record of what is live.
             await db.commit()
+            await _drop_unpublished_text_media(db, scheduled_post)
             # The next renewal or outcome commits the deleted files; a failed delete is only logged.
             await publish.delete_published_files(storage, media)
         reply_to = part.x_post_id
