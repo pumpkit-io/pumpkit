@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { showToast } from '@/components/Toaster';
 import { savedReturn } from '@/lib/savedReturn';
 
-/** Only a Post's page. */
 function isPostPage(path: string): boolean {
   return /^\/posts\/[\w-]+$/.test(path);
 }

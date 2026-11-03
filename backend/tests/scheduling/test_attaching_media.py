@@ -12,6 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import event, update
 
 from pumpkit.posts import media_files
+from pumpkit.posts.schemas import MEDIA_RATE
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import MB, gif, jpeg, padded, png, webp
@@ -20,6 +21,7 @@ POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
 BOUNDARY = b"b0undary"
+MEDIA_PER_MINUTE = int(MEDIA_RATE.split("/")[0])
 
 
 async def _attach(
@@ -169,7 +171,7 @@ async def test_uploads_past_the_rate_are_refused_before_the_file_is_read(
     client, subscribed, post_with
 ):
     post_id = await post_with("Busy.")
-    for _ in range(60):
+    for _ in range(MEDIA_PER_MINUTE):
         # A Part the Text doesn't have: refused, but counted.
         assert (await _attach(client, post_id, png(), part=2)).status_code == 404
     sent = 0
@@ -447,7 +449,7 @@ async def test_uploads_refused_until_x_is_reconnected_leave_the_rate_untouched(
 ):
     await _connect_x_before_media(db, connect_x)
     post_id = await post_with("Many tries.")
-    for _ in range(60):
+    for _ in range(MEDIA_PER_MINUTE):
         assert (await _attach(client, post_id, png())).status_code == 409
 
     await connect_x()

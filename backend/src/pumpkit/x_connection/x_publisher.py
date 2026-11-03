@@ -390,9 +390,10 @@ class FakeXPublisher:
     None for the profile, share with followers) and `replied_to` (the X post id or None) of
     each publish, and `revoked` tokens. Set `fail_exchange`, `fail_refresh`,
     `fail_fetch_account` or `fail_publish` to an error to raise it, `fail_revoke` or
-    `not_configured` to raise. `refresh_scope` is the scope a refresh answers with, "" for none. With `fail_publish_on` set to n, only the nth publish call,
-    counting from 1, raises `fail_publish`. Post ids are `1890000000000000000` plus the call's
-    number.
+    `not_configured` to raise. `exchange_scope` and `refresh_scope` are the scope a code
+    exchange and a refresh answer with, "" for none. With `fail_publish_on` set to n, only the
+    nth publish call, counting from 1, raises `fail_publish`. Post ids are
+    `1890000000000000000` plus the call's number.
     """
 
     account: XAccount = field(
@@ -411,6 +412,7 @@ class FakeXPublisher:
     fail_fetch_account: Optional[XPublisherError] = None
     fail_revoke: bool = False
     not_configured: bool = False
+    exchange_scope: str = X_SCOPES
     refresh_scope: str = X_SCOPES
     issued: int = 0
 
@@ -424,7 +426,7 @@ class FakeXPublisher:
         self.exchanges.append((code, code_verifier))
         if self.fail_exchange is not None:
             raise self.fail_exchange
-        return self._issue(now)
+        return replace(self._issue(now), scope=self.exchange_scope)
 
     async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
         self.refreshes.append(refresh_token)

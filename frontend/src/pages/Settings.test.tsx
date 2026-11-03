@@ -510,6 +510,39 @@ describe('Settings', () => {
       expect(within(x).getByText('A')).toBeInTheDocument();
     });
 
+    it('offers to reconnect X when the connection predates media', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...CONNECTED,
+        needsReconnectForMedia: true,
+      });
+      vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
+        'https://x.com/i/oauth2/authorize?state=s',
+      );
+      renderSettings();
+
+      const x = await card('X account');
+      expect(await x.findByText(/so Pumpkit can post media/)).toBeInTheDocument();
+      fireEvent.click(x.getByRole('button', { name: 'Reconnect X' }));
+
+      await waitFor(() =>
+        expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
+      );
+    });
+
+    it('asks to reconnect X once when its access is gone and it predates media', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue({
+        ...CONNECTED,
+        needsReconnect: true,
+        needsReconnectForMedia: true,
+      });
+      renderSettings();
+
+      const x = await card('X account');
+      expect(await x.findByText(/no longer accepts/)).toBeInTheDocument();
+      expect(x.queryByText(/so Pumpkit can post media/)).not.toBeInTheDocument();
+      expect(x.getAllByRole('button', { name: 'Reconnect X' })).toHaveLength(1);
+    });
+
     it('shows the message the X callback left behind', async () => {
       renderSettings({ state: { xConnectionNotice: 'Connected @ada.' } });
 

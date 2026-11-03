@@ -414,3 +414,13 @@ async def test_an_x_connection_made_before_media_write_needs_reconnecting_for_me
     assert before["needs_reconnect_for_media"] is True
     assert before["needs_reconnect"] is False
     assert reconnected.json()["needs_reconnect_for_media"] is False
+
+
+async def test_a_code_exchange_answer_without_scopes_means_every_scope_asked_for(
+    client, subscribed, fake_x_publisher, clock
+):
+    fake_x_publisher.exchange_scope = ""
+
+    connected = await _connect(client)
+
+    assert connected.json()["needs_reconnect_for_media"] is False

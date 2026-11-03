@@ -1535,12 +1535,15 @@ describe('Post page', () => {
         chooseFiles('the post', photo());
         fireEvent.click(await screen.findByRole('button', { name: 'Not now' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalledTimes(2));
+        await act(async () => {});
         picker.mockClear();
 
-        await waitFor(() => {
-          fireEvent.click(card().getByRole('button', { name: 'Add media to the post' }));
-          expect(screen.getByRole('dialog', { name: 'Reconnect X to add media' })).toBeTruthy();
-        });
+        fireEvent.click(card().getByRole('button', { name: 'Add media to the post' }));
+
+        expect(
+          await screen.findByRole('dialog', { name: 'Reconnect X to add media' }),
+        ).toBeInTheDocument();
         expect(picker).not.toHaveBeenCalled();
         expect(mediaService.attach).toHaveBeenCalledTimes(1);
       });

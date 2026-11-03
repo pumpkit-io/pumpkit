@@ -10,7 +10,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - A new `media_data` volume, mounted in the `backend` and `publisher` services, will keep the images and videos Users attach to their posts until each goes out on X. `MEDIA_STORAGE_DIR` names the directory and defaults to where the compose files mount it. **Upgrade notes:** `docker compose up` creates the volume; add it to your backups with the database, as the self-hosting guide's "Backups and restore" shows. If you run the backend and publisher outside the bundled compose files, give both the same persistent directory at `MEDIA_STORAGE_DIR`.
 - On a draft's page you can attach up to four images (JPEG, PNG or WEBP, up to 5 MB each) to the post, or to any part of a thread, with the media button under its text, by dropping a file on it or by pasting a screenshot into it. They show under the part's text the way X lays them out, and stay when you rewrite the text. Pumpkit doesn't publish them yet.
-- Connecting X now also asks X for permission to post media. If you connected X before, attaching media asks you to reconnect X first, then brings you back to your post. Without an X connection you can still attach media to a draft. `GET /api/v1/x-connection` reports `needs_reconnect_for_media`.
+- Connecting X now also asks X for permission to post media. If you connected X before, attaching media asks you to reconnect X first, then brings you back to your post, and Settings offers Reconnect X too. Without an X connection you can still attach media to a draft. `GET /api/v1/x-connection` reports `needs_reconnect_for_media`.
 
 ### Fixed
 

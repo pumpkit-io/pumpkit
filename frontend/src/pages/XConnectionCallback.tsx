@@ -33,7 +33,8 @@ export function XConnectionCallback() {
 
     const back = async (arrival: XConnectionArrival, xConnectionNotice: string) => {
       const returnPath = xConnectionReturn.take();
-      // A failed check lands on Settings, whose gate sends the User on if Onboarding isn't done.
+      // A failed check lands on the saved Post or Settings, whose gate sends the User on if
+      // Onboarding isn't done.
       if ((await refresh()) == null) {
         const state: XConnectionNoticeState = { xConnectionNotice };
         navigate(returnPath ?? '/settings', { replace: true, state });

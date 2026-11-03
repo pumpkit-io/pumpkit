@@ -17,7 +17,13 @@ from pumpkit.core.errors import AppError, ConflictError
 from pumpkit.core.security import decrypt, encrypt, generate_token, hash_token
 from pumpkit.core.time import as_utc
 from pumpkit.x_connection.models import PendingXAuthorization, XConnection
-from pumpkit.x_connection.x_publisher import X_MEDIA_SCOPE, XAccount, XTokens, new_code_verifier
+from pumpkit.x_connection.x_publisher import (
+    X_MEDIA_SCOPE,
+    X_SCOPES,
+    XAccount,
+    XTokens,
+    new_code_verifier,
+)
 
 LIFETIME = timedelta(minutes=10)
 # Where the User connects or reconnects X, which takes a browser.
@@ -84,7 +90,8 @@ async def save_connection(
     connection.access_token_encrypted = encrypt(tokens.access_token)
     connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
     connection.access_token_expires_at = tokens.expires_at
-    connection.scopes = tokens.scope
+    # X may leave out `scope` when it grants exactly what was asked for (RFC 6749, 5.1).
+    connection.scopes = tokens.scope or X_SCOPES
     connection.needs_reconnect = False
     connection.updated_at = now
     await db.flush()
