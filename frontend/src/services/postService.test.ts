@@ -41,7 +41,7 @@ describe('postService', () => {
         brief: 'ship',
         text: {
           format: 'post',
-          parts: [{ text: 'the final', char_count: 9, char_limit: 280 }],
+          parts: [{ text: 'the final', char_count: 9, char_limit: 280, media: [] }],
           version_number: 1,
           edited: false,
         },
@@ -87,7 +87,7 @@ describe('postService', () => {
     });
   });
 
-  it("reads a Post's Text with the Version it came from and whether it was edited", async () => {
+  it("reads a Post's Text with the Version it came from and whether it was edited, and its Media", async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {
         id: 'post_01',
@@ -95,8 +95,21 @@ describe('postService', () => {
         text: {
           format: 'thread',
           parts: [
-            { text: 'one', char_count: 3, char_limit: 280 },
-            { text: 'two', char_count: 3, char_limit: 280 },
+            { text: 'one', char_count: 3, char_limit: 280, media: [] },
+            {
+              text: 'two',
+              char_count: 3,
+              char_limit: 280,
+              media: [
+                {
+                  id: 'media_01',
+                  kind: 'image',
+                  preview_url: '/media/media_01/preview',
+                  width: 40,
+                  height: 30,
+                },
+              ],
+            },
           ],
           version_number: 2,
           edited: true,
@@ -118,6 +131,18 @@ describe('postService', () => {
       versionNumber: 2,
       edited: true,
     });
+    expect(post.textMedia).toEqual([
+      [],
+      [
+        {
+          id: 'media_01',
+          kind: 'image',
+          previewUrl: '/media/media_01/preview',
+          width: 40,
+          height: 30,
+        },
+      ],
+    ]);
   });
 
   it('reads a Draft with no Scheduled post', async () => {

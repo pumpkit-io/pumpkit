@@ -114,8 +114,8 @@ async def test_the_migration_sets_each_posts_text_to_its_latest_version(
     expected = {
         "format": "thread",
         "parts": [
-            {"text": "Two a.", "char_count": 6, "char_limit": X_POST_MAX_CHARS},
-            {"text": "Two b.", "char_count": 6, "char_limit": X_POST_MAX_CHARS},
+            {"text": "Two a.", "char_count": 6, "char_limit": X_POST_MAX_CHARS, "media": []},
+            {"text": "Two b.", "char_count": 6, "char_limit": X_POST_MAX_CHARS, "media": []},
         ],
         "version_number": 2,
         "edited": False,

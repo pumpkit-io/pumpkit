@@ -67,7 +67,12 @@ async def test_restoring_a_version_makes_it_the_text(client, post):
     response = await _restore(client, post["id"], 1)
 
     assert response.status_code == 200, response.text
-    restored = {"format": "post", "parts": [ONE], "version_number": 1, "edited": False}
+    restored = {
+        "format": "post",
+        "parts": [{**ONE, "media": []}],
+        "version_number": 1,
+        "edited": False,
+    }
     assert response.json() == restored
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
     assert read["text"] == restored
@@ -147,7 +152,7 @@ async def test_the_restore_version_tool_answers_with_the_text(client, post, mcp)
     assert result["isError"] is False, result
     assert result["structuredContent"] == {
         "format": "post",
-        "parts": [ONE],
+        "parts": [{**ONE, "media": []}],
         "version_number": 1,
         "edited": False,
     }

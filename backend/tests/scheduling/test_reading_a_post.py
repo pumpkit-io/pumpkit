@@ -60,7 +60,12 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
     assert response.json() == {
         "id": post["id"],
         "brief": "ship small things",
-        "text": {"format": "post", "parts": [one], "version_number": 1, "edited": False},
+        "text": {
+            "format": "post",
+            "parts": [{**one, "media": []}],
+            "version_number": 1,
+            "edited": False,
+        },
         "versions": [
             {
                 "id": post["versions"][0]["id"],
@@ -89,8 +94,8 @@ async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
     assert read["text"] == {
         "format": "thread",
         "parts": [
-            {"text": "Part one.", "char_count": 9, "char_limit": X_POST_MAX_CHARS},
-            {"text": "Part two.", "char_count": 9, "char_limit": X_POST_MAX_CHARS},
+            {"text": "Part one.", "char_count": 9, "char_limit": X_POST_MAX_CHARS, "media": []},
+            {"text": "Part two.", "char_count": 9, "char_limit": X_POST_MAX_CHARS, "media": []},
         ],
         "version_number": 2,
         "edited": False,
@@ -204,7 +209,12 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
     assert read == {
         "id": post["id"],
         "brief": "ship small things",
-        "text": {"format": "post", "parts": [one], "version_number": 1, "edited": False},
+        "text": {
+            "format": "post",
+            "parts": [{**one, "media": []}],
+            "version_number": 1,
+            "edited": False,
+        },
         "versions": [
             {
                 "id": post["versions"][0]["id"],

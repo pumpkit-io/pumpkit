@@ -305,6 +305,7 @@ describe('Posts page', () => {
         id: 'post_01',
         brief: 'ship small things',
         status: 'scheduled',
+        textMedia: [],
         text: {
           format: 'post',
           parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
@@ -519,6 +520,7 @@ describe('Posts page', () => {
         })),
         status: 'draft',
         scheduledPost: null,
+        textMedia: [],
         ...extra,
       };
     }

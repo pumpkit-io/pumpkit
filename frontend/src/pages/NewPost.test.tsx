@@ -139,6 +139,7 @@ function postWith(final: string): PostDetail {
     ],
     status: 'draft',
     scheduledPost: null,
+    textMedia: [],
   };
 }
 
@@ -204,6 +205,13 @@ describe('New post', () => {
     expect(area.queryByText('Format')).not.toBeInTheDocument();
     expect(area.queryByText(/rambling is fine/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'How your posts sound' })).not.toBeInTheDocument();
+  });
+
+  it('takes the Brief in words only, with no way to attach media', async () => {
+    const area = await readyToWrite();
+
+    expect(area.queryByRole('button', { name: /media/i })).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeNull();
   });
 
   describe('Persona chip', () => {

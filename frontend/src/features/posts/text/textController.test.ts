@@ -23,6 +23,7 @@ function draft(versions: Version[]): PostDetail {
     text: textOf(versions[versions.length - 1]!),
     status: 'draft',
     scheduledPost: null,
+    textMedia: [],
   };
 }
 

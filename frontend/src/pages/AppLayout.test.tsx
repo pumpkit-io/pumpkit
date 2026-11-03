@@ -101,6 +101,7 @@ const POST: PostDetail = {
   ],
   status: 'draft',
   scheduledPost: null,
+  textMedia: [],
 };
 
 async function sidebar() {
