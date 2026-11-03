@@ -4,15 +4,17 @@ Post's Text nor a Scheduled post holds, once older than `UNREFERENCED_GRACE`, wi
 Media changes through the HTTP API; the storage directory shows what stays.
 """
 
+import asyncio
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 from sqlalchemy import select
 
+import pumpkit.scheduling.publisher as publisher
 from pumpkit.posts.models import Post
 from pumpkit.scheduling.media_sweep import UNREFERENCED_GRACE
-from pumpkit.scheduling.publisher import run_pass
 from tests.media_files import png
 
 API = "/api/v1"
@@ -60,10 +62,6 @@ def _files_of(media_id: str) -> set[str]:
     return {"media", f"media/{media_id}", f"media/{media_id}/file", f"media/{media_id}/preview"}
 
 
-async def _pass(db_session_maker, fake_x_publisher, file_storage, clock) -> None:
-    await run_pass(db_session_maker, fake_x_publisher, file_storage, clock)
-
-
 async def test_media_removed_from_the_text_is_deleted_with_its_files_after_the_grace_period(
     client, subscribed, fixed_clock, post_with, file_storage, db_session_maker, fake_x_publisher
 ):
@@ -72,7 +70,7 @@ async def test_media_removed_from_the_text_is_deleted_with_its_files_after_the_g
     await _remove_from_text(client, post_id, media_id)
     fixed_clock.advance(PAST_GRACE)
 
-    await _pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert _stored(file_storage) == {"media"}
     preview = await client.get(f"{API}/media/{media_id}/preview")
@@ -87,7 +85,7 @@ async def test_media_removed_within_the_grace_period_is_kept(
     await _remove_from_text(client, post_id, media_id)
     fixed_clock.advance(UNREFERENCED_GRACE - timedelta(seconds=1))
 
-    await _pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert _stored(file_storage) == _files_of(media_id)
     preview = await client.get(f"{API}/media/{media_id}/preview")
@@ -103,7 +101,7 @@ async def test_media_on_the_text_is_never_deleted_however_old(
     await _remove_from_text(client, post_id, removed)
     fixed_clock.advance(timedelta(days=30))
 
-    await _pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert _stored(file_storage) == _files_of(kept)
     assert await _text_media(client, post_id) == [kept]
@@ -133,10 +131,39 @@ async def test_media_removed_from_a_scheduled_post_is_deleted_and_the_texts_stay
         assert removed.status_code == 204, removed.text
     fixed_clock.advance(PAST_GRACE)
 
-    await _pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert _stored(file_storage) == _files_of(on_text)
     assert await _text_media(client, post_id) == [on_text]
+
+
+async def test_media_only_a_waiting_scheduled_post_holds_is_never_deleted_however_old(
+    client,
+    subscribed,
+    fixed_clock,
+    connect_x,
+    post_with,
+    file_storage,
+    db_session_maker,
+    fake_x_publisher,
+):
+    await connect_x()
+    post_id = await post_with("One")
+    scheduled = await _schedule(client, post_id)
+    attached = await client.post(
+        f"{SCHEDULED_POSTS}/{scheduled['id']}/parts/1/media",
+        files={"file": ("photo.png", png(), "image/png")},
+    )
+    assert attached.status_code == 201, attached.text
+    media_id = attached.json()["id"]
+    fixed_clock.advance(PAST_GRACE)
+
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert await _text_media(client, post_id) == []
+    assert _stored(file_storage) == _files_of(media_id)
+    preview = await client.get(f"{API}/media/{media_id}/preview")
+    assert preview.status_code == 200, preview.text
 
 
 async def test_unscheduling_keeps_the_texts_media_and_deletes_the_scheduled_posts_own(
@@ -162,7 +189,7 @@ async def test_unscheduling_keeps_the_texts_media_and_deletes_the_scheduled_post
     assert unscheduled.status_code == 204, unscheduled.text
     fixed_clock.advance(PAST_GRACE)
 
-    await _pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert _stored(file_storage) == _files_of(on_text)
     assert await _text_media(client, post_id) == [on_text]
@@ -185,14 +212,14 @@ async def test_a_published_posts_media_keeps_its_record_and_preview(
     assert published.json()["state"] == "published", published.text
     fixed_clock.advance(timedelta(days=30))
 
-    await _pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert _stored(file_storage) == _files_of(media_id) - {f"media/{media_id}/file"}
     preview = await client.get(f"{API}/media/{media_id}/preview")
     assert preview.status_code == 200, preview.text
 
 
-async def test_deleting_a_draft_deletes_its_media_and_files(
+async def test_a_deleted_posts_media_is_deleted_with_its_files(
     client,
     subscribed,
     fixed_clock,
@@ -217,9 +244,36 @@ async def test_deleting_a_draft_deletes_its_media_and_files(
     await db.commit()
     fixed_clock.advance(PAST_GRACE)
 
-    await _pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    await publisher.run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert _stored(file_storage) == _files_of(kept)
     for media_id in (first, second):
         preview = await client.get(f"{API}/media/{media_id}/preview")
         assert preview.status_code == 404, preview.text
+
+
+async def test_a_failing_sweep_still_completes_the_pass_and_touches_the_heartbeat(
+    monkeypatch, file_storage, db_session_maker, fake_x_publisher, fixed_clock, tmp_path
+):
+    monkeypatch.setattr(
+        publisher, "delete_unreferenced_media", AsyncMock(side_effect=RuntimeError("db gone"))
+    )
+    heartbeat = tmp_path / "heartbeat"
+    stop = asyncio.Event()
+
+    looping = asyncio.create_task(
+        publisher.run(
+            db_session_maker,
+            fake_x_publisher,
+            file_storage,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+            heartbeat=heartbeat,
+        )
+    )
+    await asyncio.sleep(0.2)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=1)
+
+    assert heartbeat.exists()

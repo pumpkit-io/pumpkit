@@ -32,8 +32,9 @@ async def run_pass(
     stop: Optional[asyncio.Event] = None,
 ) -> None:
     """
-    Publish every due Scheduled post, then delete the Media nothing references any more. With
-    `stop` set, it returns after the Scheduled post in hand.
+    Publish every due Scheduled post, then delete the Media nothing references any more; a failed
+    deletion is logged and leaves the pass complete. With `stop` set, it returns after the
+    Scheduled post in hand.
     """
     async with session_maker() as db:
         await recover_stuck(db, now=clock())
@@ -43,8 +44,11 @@ async def run_pass(
             if not await publish_next_due(db, publisher, storage, clock=clock):
                 break
     if stop is None or not stop.is_set():
-        async with session_maker() as db:
-            await delete_unreferenced_media(db, storage, now=clock())
+        try:
+            async with session_maker() as db:
+                await delete_unreferenced_media(db, storage, now=clock())
+        except Exception:
+            logger.exception("Deleting unreferenced Media failed; trying again next pass")
 
 
 async def run(
