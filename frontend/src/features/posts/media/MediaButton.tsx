@@ -13,11 +13,14 @@ export function MediaButton({
   where,
   full,
   onFiles,
+  instead,
 }: {
   /** "Part 2", or "the post". */
   where: string;
   full: boolean;
   onFiles: (files: File[]) => void;
+  /** Runs in place of the file picker, such as asking to reconnect X first. */
+  instead?: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -28,7 +31,9 @@ export function MediaButton({
           aria-label={`Add media to ${where}`}
           aria-disabled={full || undefined}
           onClick={() => {
-            if (!full) input.current?.click();
+            if (full) return;
+            if (instead) instead();
+            else input.current?.click();
           }}
           className={cn(ICON_BUTTON, '-my-1.5 shrink-0', full && 'cursor-not-allowed opacity-50')}
         >

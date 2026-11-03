@@ -82,6 +82,7 @@ const CONNECTED: XConnection = {
   handle: 'ada',
   charLimit: 280,
   needsReconnect: false,
+  needsReconnectForMedia: false,
   scheduledPostsWaiting: 0,
   photoUrl: null,
   offerPhoto: false,

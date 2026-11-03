@@ -30,7 +30,9 @@ X_TOKEN_URL = "https://api.x.com/2/oauth2/token"
 X_REVOKE_URL = "https://api.x.com/2/oauth2/revoke"
 X_USERS_ME_URL = "https://api.x.com/2/users/me"
 X_TWEETS_URL = "https://api.x.com/2/tweets"
-X_SCOPES = "tweet.read tweet.write users.read offline.access"
+X_MEDIA_SCOPE = "media.write"
+# Every scope Pumpkit uses, asked for at once so a User consents only once (ADR 0006).
+X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
 _TIMEOUT_SECONDS = 30.0
 # X's documented access token lifetime, used when a token response leaves out expires_in.
 _DEFAULT_EXPIRES_IN_SECONDS = 7200

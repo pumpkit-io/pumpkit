@@ -5,6 +5,7 @@ import { redirectTo } from '@/lib/navigation';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import type { UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
+import { xConnectionReturn } from './xConnectionReturn';
 
 /** Shown wherever `acceptPhoto` rejects. */
 export const USE_X_PHOTO_FAILED = "Couldn't use your X photo. Try again.";
@@ -42,17 +43,26 @@ export function useXConnection() {
     [refreshSubscribed],
   );
 
-  /** Leaves for X's consent screen, which comes back through /oauth/x/callback. */
-  const connect = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      redirectTo(await xConnectionService.startAuthorization());
-    } catch (e) {
-      fail(e, "Couldn't start connecting X. Try again.");
-      setBusy(false);
-    }
-  }, [fail]);
+  /**
+   * Leaves for X's consent screen, which comes back through /oauth/x/callback, then to
+   * `returnPath`, a Post's page, or else to Settings.
+   */
+  const connect = useCallback(
+    async (returnPath?: string) => {
+      setBusy(true);
+      setError(null);
+      if (returnPath) xConnectionReturn.remember(returnPath);
+      else xConnectionReturn.forget();
+      try {
+        redirectTo(await xConnectionService.startAuthorization());
+      } catch (e) {
+        xConnectionReturn.forget();
+        fail(e, "Couldn't start connecting X. Try again.");
+        setBusy(false);
+      }
+    },
+    [fail],
+  );
 
   const disconnect = useCallback(async () => {
     setBusy(true);

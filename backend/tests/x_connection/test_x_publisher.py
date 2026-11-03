@@ -61,7 +61,7 @@ def test_the_authorize_url_asks_for_the_publishing_scopes_with_an_s256_challenge
         "response_type": "code",
         "client_id": "x-client-id",
         "redirect_uri": "http://localhost:5173/oauth/x/callback",
-        "scope": "tweet.read tweet.write users.read offline.access",
+        "scope": "tweet.read tweet.write users.read offline.access media.write",
         "state": "the-state",
         "code_challenge": "chal",
         "code_challenge_method": "S256",

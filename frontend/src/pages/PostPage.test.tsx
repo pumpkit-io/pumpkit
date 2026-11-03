@@ -112,6 +112,7 @@ import {
 import { mediaService, type Media } from '@/services/mediaService';
 import { usageService, type Usage } from '@/services/usageService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
+import { xConnectionReturn } from '@/features/xConnection/xConnectionReturn';
 import {
   LEVELSIO,
   NOT_SUBSCRIBED,
@@ -129,6 +130,7 @@ const CONNECTED: XConnection = {
   handle: 'ada',
   charLimit: 280,
   needsReconnect: false,
+  needsReconnectForMedia: false,
   scheduledPostsWaiting: 0,
   photoUrl: null,
   offerPhoto: false,
@@ -1434,6 +1436,102 @@ describe('Post page', () => {
         screen.getByRole('list', { name: 'Media on the post' }).closest('.opacity-60'),
       ).toBeNull();
       expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    });
+
+    describe('on an X connection made before X allowed media', () => {
+      const BEFORE_MEDIA: XConnection = { ...CONNECTED, needsReconnectForMedia: true };
+
+      it('opens the reconnect X dialog instead of the file picker', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(BEFORE_MEDIA);
+        vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
+          'https://x.com/i/oauth2/authorize?state=s',
+        );
+        const picker = vi.spyOn(HTMLInputElement.prototype, 'click');
+        renderPost(postWith('the final text'));
+        await textCard();
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        fireEvent.click(card().getByRole('button', { name: 'Add media to the post' }));
+
+        const dialog = within(
+          await screen.findByRole('dialog', { name: 'Reconnect X to add media' }),
+        );
+        expect(picker).not.toHaveBeenCalled();
+        expect(dialog.getByText(/@ada/)).toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Reconnect X' }));
+        await waitFor(() =>
+          expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
+        );
+        expect(xConnectionReturn.take()).toBe('/posts/post_01');
+        picker.mockRestore();
+      });
+
+      it('closes the dialog with Not now, sending nothing', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(BEFORE_MEDIA);
+        vi.mocked(xConnectionService.startAuthorization).mockClear();
+        renderPost(postWith('the final text'));
+        await textCard();
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        fireEvent.click(card().getByRole('button', { name: 'Add media to the post' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(xConnectionService.startAuthorization).not.toHaveBeenCalled();
+      });
+
+      it('opens the dialog for an image dropped on a Part, sending nothing', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(BEFORE_MEDIA);
+        renderPost(postWith('the final text'));
+        await textCard();
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        fireEvent.drop(card().getByRole('listitem', { name: 'Post' }), {
+          dataTransfer: { files: [photo()], types: ['Files'] },
+        });
+
+        expect(
+          await screen.findByRole('dialog', { name: 'Reconnect X to add media' }),
+        ).toBeInTheDocument();
+        expect(mediaService.attach).not.toHaveBeenCalled();
+      });
+
+      it('opens the dialog when the server asks to reconnect, leaving no tile', async () => {
+        vi.mocked(mediaService.attach).mockRejectedValue(
+          apiError(409, 'Reconnect X so Pumpkit can post media on your X account.', {
+            code: 'X_RECONNECT_FOR_MEDIA',
+          }),
+        );
+        renderPost(postWith('the final text'));
+        await textCard();
+
+        chooseFiles('the post', photo());
+
+        expect(
+          await screen.findByRole('dialog', { name: 'Reconnect X to add media' }),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();
+      });
+    });
+
+    it("shows the X callback's message on arriving back from reconnecting", async () => {
+      vi.mocked(postService.get).mockResolvedValue(postWith('the final text'));
+      renderSignedIn('/posts/post_01', { state: { xConnectionNotice: 'Connected @ada.' } });
+
+      expect(await screen.findByText('Connected @ada.')).toBeInTheDocument();
+    });
+
+    it('attaches media without an X connection', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(null);
+      vi.mocked(mediaService.attach).mockResolvedValue(image('media_01'));
+      renderPost(postWith('the final text'));
+      await textCard();
+      await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+      chooseFiles('the post', photo());
+
+      expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('shows no media controls once the Post is scheduled', async () => {
