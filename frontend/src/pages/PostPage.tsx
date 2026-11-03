@@ -9,6 +9,7 @@ import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
 import { MediaButton } from '@/features/posts/media/MediaButton';
 import { MediaTiles, ReadOnlyMediaTiles } from '@/features/posts/media/MediaTiles';
+import { mediaWhere } from '@/features/posts/media/mediaRules';
 import { useTextMedia, type TextMedia } from '@/features/posts/media/useTextMedia';
 import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import {
@@ -133,7 +134,7 @@ function partMediaOf(
 ) {
   return (index: number): PartMedia | null => {
     if (parts[index]?.live) return readOnlyMediaOf(parts)(index);
-    const where = whereOf(index, parts.length);
+    const where = mediaWhere(index, parts.length);
     return {
       tiles: (
         <MediaTiles
@@ -158,16 +159,12 @@ function partMediaOf(
   };
 }
 
-function whereOf(index: number, count: number): string {
-  return count > 1 ? `Part ${index + 1}` : 'the post';
-}
-
 /** The Media each Part goes, or went, to X with, shown as it is. */
 function readOnlyMediaOf(parts: ShownPart[]) {
   return (index: number): PartMedia | null => {
     const shown = parts[index]?.media ?? [];
     if (!shown.length) return null;
-    return { tiles: <ReadOnlyMediaTiles media={shown} where={whereOf(index, parts.length)} /> };
+    return { tiles: <ReadOnlyMediaTiles media={shown} where={mediaWhere(index, parts.length)} /> };
   };
 }
 

@@ -18,6 +18,11 @@ export function breaksXMediaRule(media: Media[]): boolean {
   return media.length > IMAGES_PER_PART;
 }
 
+/** Where Media goes, as its tiles' labels name it: "Part 2", or "the post" for a single post. */
+export function mediaWhere(index: number, count: number): string {
+  return count > 1 ? `Part ${index + 1}` : 'the post';
+}
+
 /** How the User attached a file, for analytics. */
 export type AttachVia = 'button' | 'drop' | 'paste';
 

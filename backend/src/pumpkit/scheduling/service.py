@@ -425,6 +425,36 @@ async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
     return result.scalar_one_or_none()
 
 
+async def renew_claim(
+    db: AsyncSession, *, scheduled_post_id: str, held_since: datetime, now: datetime
+) -> bool:
+    """
+    Move the claim made or renewed at `held_since` to `now`; False when recovery or a retry
+    took the Scheduled post since. The conditional update decides against a concurrent recovery.
+    """
+    result = await db.execute(
+        update(ScheduledPost)
+        .where(_held(scheduled_post_id, held_since))
+        .values(publishing_started_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    return cast(CursorResult, result).rowcount == 1
+
+
+async def holds_claim(db: AsyncSession, *, scheduled_post_id: str, held_since: datetime) -> bool:
+    """Whether the claim made or renewed at `held_since` still holds; lock the User first."""
+    result = await db.execute(select(ScheduledPost.id).where(_held(scheduled_post_id, held_since)))
+    return result.scalar_one_or_none() is not None
+
+
+def _held(scheduled_post_id: str, held_since: datetime) -> ColumnElement[bool]:
+    return and_(
+        ScheduledPost.id == scheduled_post_id,
+        ScheduledPost.state == PUBLISHING,
+        ScheduledPost.publishing_started_at == held_since,
+    )
+
+
 async def stuck_user_ids(db: AsyncSession, *, publishing_since: datetime) -> list[str]:
     """The Users with a Scheduled post in publishing since before `publishing_since`, in id order."""
     result = await db.execute(

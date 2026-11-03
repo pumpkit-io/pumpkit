@@ -3,6 +3,7 @@ Scheduling and publishing a Text with images (ADR 0021): each Part's Media is co
 Scheduled post, uploaded to X just before that Part's X post, and deleted once it is live.
 """
 
+import asyncio
 from datetime import timedelta
 from unittest.mock import MagicMock
 
@@ -15,6 +16,8 @@ from pumpkit.core.storage import StoredFileNotFoundError
 from pumpkit.posts.media import file_key, preview_key
 from pumpkit.posts.models import TextMedia
 from pumpkit.scheduling.publisher import run_pass
+from pumpkit.scheduling.publishing import recover_stuck
+from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
     XMediaRefusedError,
     XMediaUnavailableError,
@@ -332,26 +335,58 @@ async def test_publish_events_say_whether_the_post_carried_media(
     assert failed.kwargs["properties"]["has_media"] is False
 
 
-async def test_editing_a_scheduled_post_down_to_fewer_parts_moves_their_media_onto_the_last(
+async def test_editing_the_parts_of_a_scheduled_post_keeps_each_parts_media_in_place(
+    client, subscribed, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    first = await _attach(client, post_id, png())
+    second = await _attach(client, post_id, png(), part=2)
+    scheduled_post = (await _schedule(client, post_id)).json()
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled_post['id']}", json={"parts": ["One", "Two, again"]}
+    )
+
+    assert response.status_code == 200, response.text
+    assert _media(response.json()) == [[first["id"]], [second["id"]]]
+
+
+@pytest.mark.parametrize("parts", [["One", "Three"], ["One", "Two", "Three", "Four"]])
+async def test_an_edit_adding_or_removing_parts_is_refused_while_a_part_has_media(
+    parts, client, subscribed, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("One", "Two", "Three")
+    on_two = await _attach(client, post_id, png(), part=2)
+    scheduled_post = (await _schedule(client, post_id)).json()
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled_post['id']}", json={"parts": parts}
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "MEDIA_PART_COUNT"
+    assert response.json()["detail"] == (
+        "Part 2 has media, so this edit can't add or remove parts. Remove the media first, or "
+        "change the post's text and copy it onto the scheduled post."
+    )
+    assert _media(await _scheduled_post(client, post_id)) == [[], [on_two["id"]], []]
+
+
+async def test_an_edit_adding_or_removing_parts_goes_through_without_media(
     client, subscribed, fixed_clock, connect_x, post_with
 ):
     await connect_x()
     post_id = await post_with("One", "Two", "Three")
-    first = await _attach(client, post_id, png())
-    second = await _attach(client, post_id, png(), part=2)
-    third = await _attach(client, post_id, png(), part=3)
     scheduled_post = (await _schedule(client, post_id)).json()
 
     response = await client.patch(
-        f"{SCHEDULED_POSTS}/{scheduled_post['id']}", json={"parts": ["One", "Two and three"]}
+        f"{SCHEDULED_POSTS}/{scheduled_post['id']}", json={"parts": ["One", "Three"]}
     )
 
     assert response.status_code == 200, response.text
-    assert _media(response.json()) == [[first["id"]], [second["id"], third["id"]]]
-    edited = await client.patch(
-        f"{SCHEDULED_POSTS}/{scheduled_post['id']}", json={"parts": ["One", "Two, again"]}
-    )
-    assert _media(edited.json()) == [[first["id"]], [second["id"], third["id"]]]
+    assert _media(response.json()) == [[], []]
 
 
 async def test_media_that_already_went_out_is_refused_when_scheduling_again(
@@ -380,4 +415,234 @@ async def test_media_that_already_went_out_is_refused_when_scheduling_again(
     assert response.json()["detail"] == (
         "Part 1 has media that already went out on X, so Pumpkit no longer keeps it. "
         "Remove it and attach the file again."
+    )
+
+
+def _recovering_after(fake_x_publisher, db_session_maker, fixed_clock, wait: timedelta):
+    """A call to X during which `wait` passes and another publisher pass recovers stuck posts."""
+
+    async def recover() -> None:
+        fixed_clock.advance(wait)
+        async with db_session_maker() as session:
+            await recover_stuck(session, now=fixed_clock())
+
+    return recover
+
+
+async def test_a_publish_renews_its_claim_before_each_upload_so_recovery_leaves_it_be(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("Two pictures")
+    await _attach(client, post_id, png())
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.while_uploading = _recovering_after(
+        fake_x_publisher, db_session_maker, fixed_clock, timedelta(minutes=6)
+    )
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    published = await _scheduled_post(client, post_id)
+    assert published["state"] == "published"
+    assert published["failed_reason"] is None
+    assert len(fake_x_publisher.published_media[0]) == 2
+
+
+async def test_a_publish_recovery_failed_meanwhile_sends_nothing_more_and_stays_failed(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.while_uploading = _recovering_after(
+        fake_x_publisher, db_session_maker, fixed_clock, timedelta(minutes=11)
+    )
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    failed = await _scheduled_post(client, post_id)
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == publish_module.OUTCOME_UNKNOWN_REASON
+    assert fake_x_publisher.published == []
+
+
+async def test_a_part_x_took_after_recovery_failed_the_post_leaves_the_failure_as_it_was(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.while_publishing = _recovering_after(
+        fake_x_publisher, db_session_maker, fixed_clock, timedelta(minutes=11)
+    )
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    failed = await _scheduled_post(client, post_id)
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == (
+        "X didn't confirm part 1. It may have been published. Check your X profile."
+    )
+    assert [p["live"] for p in failed["parts"]] == [False, False]
+    assert len(fake_x_publisher.published) == 1
+
+
+async def test_an_upload_outlasting_its_limit_retries_like_one_x_didnt_take(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+    monkeypatch,
+):
+    monkeypatch.setattr(publish_module, "UPLOAD_LIMIT", timedelta(milliseconds=10))
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _due(client, post_id, fixed_clock)
+
+    async def stall() -> None:
+        await asyncio.sleep(1)
+
+    fake_x_publisher.while_uploading = stall
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert (await _scheduled_post(client, post_id))["state"] == "scheduled"
+    assert fake_x_publisher.published == []
+
+
+async def test_a_stored_file_that_cant_be_read_fails_the_post_with_nothing_published(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+    monkeypatch,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    await _attach(client, post_id, png(), part=2)
+    await _due(client, post_id, fixed_clock)
+
+    async def unreadable(key: str):
+        raise OSError("disk unplugged")
+
+    monkeypatch.setattr(file_storage, "open", unreadable)
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    failed = await _scheduled_post(client, post_id)
+    assert failed["state"] == "failed"
+    assert failed["failed_reason"] == (
+        "Part 2 not published: Pumpkit couldn't send its media to X. Reschedule it to try again."
+    )
+    assert [p["live"] for p in failed["parts"]] == [True, False]
+
+
+async def _connect_x_before_media(db) -> None:
+    await db.execute(
+        update(XConnection).values(scopes="tweet.read tweet.write users.read offline.access")
+    )
+    await db.commit()
+
+
+async def test_scheduling_media_on_an_x_connection_without_media_write_asks_to_reconnect(
+    client, db, subscribed, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    await _connect_x_before_media(db)
+
+    response = await _schedule(client, post_id)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "X_RECONNECT_FOR_MEDIA"
+    assert (await client.get(f"{POSTS}/{post_id}")).json()["scheduled_post"] is None
+
+
+async def test_rescheduling_media_on_an_x_connection_without_media_write_asks_to_reconnect(
+    client, db, subscribed, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("A picture")
+    await _attach(client, post_id, png())
+    scheduled_post = (await _schedule(client, post_id)).json()
+    await _connect_x_before_media(db)
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled_post['id']}", json={"publish_at": "2026-10-11T14:00:00Z"}
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "X_RECONNECT_FOR_MEDIA"
+
+
+async def test_media_a_live_part_kept_is_refused_on_a_later_part(
+    client,
+    db,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+    monkeypatch,
+):
+    await connect_x()
+    post_id = await post_with("One", "Two")
+    kept = await _attach(client, post_id, png())
+    scheduled_post = await _due(client, post_id, fixed_clock)
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "No.")
+    fake_x_publisher.fail_publish_on = 2
+
+    async def undeletable(key: str) -> None:
+        raise OSError("read-only disk")
+
+    monkeypatch.setattr(file_storage, "delete", undeletable)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    # No request moves Media between Parts yet; feedback that drops a Part can.
+    await db.execute(update(TextMedia).where(TextMedia.media_id == kept["id"]).values(part_index=1))
+    await db.commit()
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled_post['id']}", json={"copy_text": True}
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "MEDIA_ON_TWO_PARTS"
+    assert response.json()["detail"] == (
+        "Part 2 has media that's already on an earlier part. Remove it and attach the file again."
     )

@@ -192,7 +192,9 @@ async def edit_scheduled_post(
     profile instead. Leave out what stays the same. Live parts of a thread that failed partway
     are on X and locked: keep them first in `parts`, unchanged; the text's parts in their
     places are skipped. A new time publishes only the parts not live, as replies to the last
-    live one.
+    live one. Media stays with the part in its place, so while a part not live has media,
+    `parts` keeps the number of parts: to add or remove one, change the post's text and use
+    `copy_text`.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
         {

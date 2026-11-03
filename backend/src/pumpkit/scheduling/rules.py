@@ -40,6 +40,12 @@ def x_posts_in(parts: list[str]) -> XPosts:
     return XPosts(x_posts=len(parts), link_x_posts=sum(1 for part in parts if has_link(part)))
 
 
+def _subject(number: int, count: int) -> str:
+    """Part `number` of `count` as a sentence's subject: "Part 2", or "This post" for one."""
+    name = part_name(number, count)
+    return name.capitalize() if name else "This post"
+
+
 def check_parts_written(parts: list[str]) -> None:
     """Every Part has some text: the User may have left one blank mid-edit."""
     for number, part in enumerate(parts, start=1):
@@ -53,10 +59,8 @@ def check_length(parts: list[str], *, limit: int) -> None:
     for number, text in enumerate(parts, start=1):
         length = x_weighted_length(text)
         if length > limit:
-            name = part_name(number, len(parts))
-            subject = name.capitalize() if name else "This post"
             raise RuleBroken(
-                f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
+                f"{_subject(number, len(parts))} is {length:,} characters by X's count, over the {limit:,} limit."
             )
 
 
@@ -64,10 +68,9 @@ def check_media(kinds_by_part: Sequence[Sequence[MediaKind]]) -> None:
     """Each Part's Media fits on one X post; the refusal names the first Part that doesn't."""
     for number, kinds in enumerate(kinds_by_part, start=1):
         if over_x_rule(kinds):
-            name = part_name(number, len(kinds_by_part))
-            subject = name.capitalize() if name else "This post"
             raise RuleBroken(
-                f"{subject} has more media than X takes. {X_MEDIA_RULE}", code="MEDIA_OVER_X_RULE"
+                f"{_subject(number, len(kinds_by_part))} has more media than X takes. {X_MEDIA_RULE}",
+                code="MEDIA_OVER_X_RULE",
             )
 
 
@@ -78,12 +81,45 @@ def check_media_kept(kept_by_part: Sequence[Sequence[bool]], *, live_count: int 
     """
     for number, kept in enumerate(kept_by_part, start=1):
         if number > live_count and not all(kept):
-            name = part_name(number, len(kept_by_part))
-            subject = name.capitalize() if name else "This post"
             raise RuleBroken(
-                f"{subject} has media that already went out on X, so Pumpkit no longer keeps it. "
+                f"{_subject(number, len(kept_by_part))} has media that already went out on X, so Pumpkit no longer keeps it. "
                 "Remove it and attach the file again.",
                 code="MEDIA_GONE",
+            )
+
+
+def check_media_once(ids_by_part: Sequence[Sequence[str]]) -> None:
+    """
+    No Media is on two Parts: a live Part whose file couldn't be deleted keeps it, and the Text
+    may have moved it onto a later Part since.
+    """
+    seen: set[str] = set()
+    for number, ids in enumerate(ids_by_part, start=1):
+        if seen.intersection(ids):
+            raise RuleBroken(
+                f"{_subject(number, len(ids_by_part))} has media that's already on an earlier "
+                "part. Remove it and attach the file again.",
+                code="MEDIA_ON_TWO_PARTS",
+            )
+        seen.update(ids)
+
+
+def check_part_count_kept_with_media(
+    has_media_by_part: Sequence[bool], *, live_count: int, part_count: int
+) -> None:
+    """
+    An edit's Parts give no sign of which Part is which, so Media stays with the Part in its
+    place, and an edit that adds or removes Parts is refused while a Part not live has Media.
+    """
+    if part_count == len(has_media_by_part):
+        return
+    for number, has_media in enumerate(has_media_by_part, start=1):
+        if number > live_count and has_media:
+            raise RuleBroken(
+                f"{_subject(number, len(has_media_by_part))} has media, so this edit can't add or "
+                "remove parts. Remove the media first, or change the post's text and copy it "
+                "onto the scheduled post.",
+                code="MEDIA_PART_COUNT",
             )
 
 

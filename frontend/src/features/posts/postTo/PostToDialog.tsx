@@ -31,7 +31,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
-import { X_MEDIA_RULE, breaksXMediaRule } from '../media/mediaRules';
+import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
@@ -131,7 +131,7 @@ function PartsToPost({
         {parts.map((part, i) => (
           <div key={i} className="space-y-1.5">
             <p className={PART_TEXT}>{part.text}</p>
-            <ReadOnlyMediaTiles media={part.media} where="the post" />
+            <ReadOnlyMediaTiles media={part.media} where={mediaWhere(0, 1)} />
             <XLengthCounter length={lengths[i] ?? 0} limit={limit} />
           </div>
         ))}
@@ -150,7 +150,7 @@ function PartsToPost({
         part.live ? (
           <>
             <p className={`${PART_TEXT} text-muted-foreground`}>{part.text}</p>
-            <ReadOnlyMediaTiles media={part.media} where={`Part ${number}`} />
+            <ReadOnlyMediaTiles media={part.media} where={mediaWhere(number - 1, parts.length)} />
             <p className="font-sans text-xs text-muted-foreground">
               Already on X, so it can’t change.
             </p>
@@ -158,7 +158,7 @@ function PartsToPost({
         ) : (
           <>
             <p className={PART_TEXT}>{part.text}</p>
-            <ReadOnlyMediaTiles media={part.media} where={`Part ${number}`} />
+            <ReadOnlyMediaTiles media={part.media} where={mediaWhere(number - 1, parts.length)} />
             <XLengthCounter length={lengths[number - 1] ?? 0} limit={limit} />
           </>
         )
@@ -206,7 +206,7 @@ export function PostToDialog({
   const destination = destinationFrom(where);
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
-  const tooLong = ready
+  const unpostable = ready
     ? [...overLimit(parts, lengths, connection.charLimit, thread), ...overMediaRule(parts, thread)]
     : [];
   const links = linkNote(
@@ -326,7 +326,7 @@ export function PostToDialog({
   } else {
     const unsendable =
       sending ||
-      tooLong.length > 0 ||
+      unpostable.length > 0 ||
       Boolean(live?.blocks) ||
       destination === null ||
       (!when.now && !publishAt);
@@ -335,7 +335,7 @@ export function PostToDialog({
         {liveLine}
         <WhereField value={where} onChange={setWhere} disabled={sending} />
         <WhenField value={when} onChange={setWhen} disabled={sending} />
-        {tooLong.map((problem) => (
+        {unpostable.map((problem) => (
           <p key={problem} className="font-sans text-sm font-medium text-destructive">
             {problem}
           </p>

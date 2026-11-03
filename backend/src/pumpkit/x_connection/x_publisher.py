@@ -15,7 +15,7 @@ import asyncio
 import base64
 import hashlib
 import secrets
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
@@ -37,10 +37,10 @@ X_MEDIA_SCOPE = "media.write"
 # Every scope Pumpkit uses, asked for at once so a User consents only once (ADR 0006).
 X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
 _TIMEOUT_SECONDS = 30.0
-# X asks for APPEND segments of at most 5 MB.
+# Under X's 5 MB cap on an APPEND segment, with room for the multipart framing around it.
 _MEDIA_CHUNK_BYTES = 4 * 1024 * 1024
-# How long X may take to process an upload before Pumpkit gives up on it for now.
-_MEDIA_PROCESSING_SECONDS = 10 * 60
+# Kept under the publish's own limit per Media, so this cap ends a slow upload with its own error.
+_MEDIA_PROCESSING_SECONDS = 3 * 60
 # X's documented access token lifetime, used when a token response leaves out expires_in.
 _DEFAULT_EXPIRES_IN_SECONDS = 7200
 # X's refusals are shown to the User; this keeps a runaway body readable.
@@ -176,10 +176,9 @@ class XPublisher(Protocol):
         category: MediaCategory,
     ) -> str:
         """
-        Upload the `byte_size` bytes `source` holds in chunks, wait until X has processed them,
-        and return X's media id, which X keeps for about 24 hours. Nothing is published, so a
-        failure can be retried: a refused token raises `XReconnectNeededError`, a 429
-        `XRateLimitedError`, a refusal or failed processing `XMediaRefusedError`, and anything
+        X's media id for the `byte_size` bytes of `source`, once X has processed them. Nothing is
+        published, so any failure may be retried: a refused token raises `XReconnectNeededError`,
+        a 429 `XRateLimitedError`, a refusal or failed processing `XMediaRefusedError`, anything
         else `XMediaUnavailableError` or `XNotReceivedError`.
         """
         ...
@@ -195,11 +194,9 @@ class XPublisher(Protocol):
         media_ids: Sequence[str] = (),
     ) -> str:
         """
-        Publish `text` on the account's profile, or in the Community `community_id`, with the
-        uploaded `media_ids` under it, and return X's post id; with `reply_to`, as a reply to that
-        X post. Never retried: a retry could post it twice. A reply lands in its parent's
-        Community, so it is sent without `community_id` and `share_with_followers` (confirmed
-        live, Oct 2026).
+        X's post id for `text` with `media_ids`, on the profile, in the Community `community_id`,
+        or as a reply to `reply_to`. Never retried: a retry could post it twice. A reply lands in
+        its parent's Community, so it goes without `community_id` (confirmed live, Oct 2026).
         """
         ...
 
@@ -555,7 +552,8 @@ class FakeXPublisher:
     nth publish call, counting from 1, raises `fail_publish`. Post ids are
     `1890000000000000000` plus the call's number. Records `uploads` and the `published_media`
     ids sent with each publish; `fail_upload` makes uploads raise it, and with `fail_upload_on`
-    only the nth. Media ids are `1880000000000000000` plus the upload's number.
+    only the nth. Media ids are `1880000000000000000` plus the upload's number. `while_uploading`
+    and `while_publishing`, when set, are awaited inside each upload and publish call.
     """
 
     account: XAccount = field(
@@ -576,6 +574,8 @@ class FakeXPublisher:
     fail_upload: Optional[XPublisherError] = None
     fail_upload_on: Optional[int] = None
     fail_fetch_account: Optional[XPublisherError] = None
+    while_uploading: Optional[Callable[[], Awaitable[None]]] = None
+    while_publishing: Optional[Callable[[], Awaitable[None]]] = None
     fail_revoke: bool = False
     not_configured: bool = False
     exchange_scope: str = X_SCOPES
@@ -616,6 +616,8 @@ class FakeXPublisher:
         reply_to: Optional[str] = None,
         media_ids: Sequence[str] = (),
     ) -> str:
+        if self.while_publishing is not None:
+            await self.while_publishing()
         self.published.append((access_token, text))
         self.published_to.append((community_id, share_with_followers))
         self.replied_to.append(reply_to)
@@ -634,6 +636,8 @@ class FakeXPublisher:
         category: MediaCategory,
     ) -> str:
         self.upload_attempts += 1
+        if self.while_uploading is not None:
+            await self.while_uploading()
         if self.fail_upload is not None and self.fail_upload_on in (None, self.upload_attempts):
             raise self.fail_upload
         media_id = str(1_880_000_000_000_000_000 + len(self.uploads) + 1)

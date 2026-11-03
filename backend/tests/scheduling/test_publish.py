@@ -44,6 +44,7 @@ async def _publish(
             file_storage,
             scheduled_post_id=scheduled_post_id,
             now=clock(),
+            clock=clock,
         )
 
 

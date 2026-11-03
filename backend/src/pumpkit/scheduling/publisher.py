@@ -36,7 +36,7 @@ async def run_pass(
     while stop is None or not stop.is_set():
         # A session per Scheduled post: `publishing` commits as it goes.
         async with session_maker() as db:
-            if not await publish_next_due(db, publisher, storage, now=clock()):
+            if not await publish_next_due(db, publisher, storage, clock=clock):
                 return
 
 

@@ -137,7 +137,6 @@ class ScheduledPostMedia(Base):
     )
     # The position of its Part, from 0.
     part_position: Mapped[int] = mapped_column(Integer)
-    # Orders the Part's Media.
     position: Mapped[int] = mapped_column(Integer)
 
     media: Mapped[Media] = relationship(lazy="joined")

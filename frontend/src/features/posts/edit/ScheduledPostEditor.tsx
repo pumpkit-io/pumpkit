@@ -6,6 +6,7 @@ import { destinationDraftOf } from '@/features/scheduledPosts/communities';
 import { xWeightedLength } from '@/lib/xLength';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
+import { mediaWhere } from '../media/mediaRules';
 import { Panel } from '../panels/panelParts';
 import { DateTimeFields, dateTimeOf } from '../postTo/WhenField';
 import { WhereField } from '../postTo/WhereField';
@@ -73,9 +74,8 @@ export function ScheduledPostEditor({
         parts={parts}
         media={(index) => {
           const media = parts[index]?.media ?? [];
-          const where = total > 1 ? `Part ${index + 1}` : 'the post';
           return media.length
-            ? { tiles: <ReadOnlyMediaTiles media={media} where={where} /> }
+            ? { tiles: <ReadOnlyMediaTiles media={media} where={mediaWhere(index, total)} /> }
             : null;
         }}
         renderText={(part, index) =>
