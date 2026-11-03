@@ -14,7 +14,7 @@ from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.media_upload import ReceivedMedia, receive_media
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
+from pumpkit.posts.schemas import AltTextRequest, MediaResponse, TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -286,6 +286,32 @@ async def remove_scheduled_post_media(
     )
 
 
+@router.put(
+    "/scheduled-posts/{scheduled_post_id}/media/{media_id}/alt-text", response_model=MediaResponse
+)
+async def set_scheduled_post_media_alt_text(
+    scheduled_post_id: str,
+    media_id: str,
+    alt_text_request: AltTextRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> MediaResponse:
+    """
+    Sets the alt text of an image or GIF on a scheduled or Failed Scheduled post, up to 1,000
+    characters; empty or null clears it. A Part already on X is refused, and so is a Scheduled post
+    publishing or Published.
+    """
+    return await mediator.set_scheduled_post_media_alt_text(
+        db=db,
+        user=current_user,
+        scheduled_post_id=scheduled_post_id,
+        media_id=media_id,
+        alt_text=alt_text_request.alt_text,
+        now=clock(),
+    )
+
+
 @posts_router.get("/posts", response_model=PostsPageResponse, status_code=status.HTTP_200_OK)
 async def list_posts(
     page: Annotated[PostsPageRequest, Query()],
@@ -452,3 +478,24 @@ async def remove_text_media(
 ) -> None:
     """Takes the Media off the Post's Text. A Scheduled or Published Post is refused."""
     await mediator.remove_text_media(db=db, user=current_user, post_id=post_id, media_id=media_id)
+
+
+@posts_router.put("/posts/{post_id}/text/media/{media_id}/alt-text", response_model=MediaResponse)
+async def set_text_media_alt_text(
+    post_id: str,
+    media_id: str,
+    alt_text_request: AltTextRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> MediaResponse:
+    """
+    Sets the alt text of an image or GIF on the Post's Text, up to 1,000 characters; empty or null
+    clears it. A Scheduled or Published Post is refused, and so is a Part already on X.
+    """
+    return await mediator.set_text_media_alt_text(
+        db=db,
+        user=current_user,
+        post_id=post_id,
+        media_id=media_id,
+        alt_text=alt_text_request.alt_text,
+    )

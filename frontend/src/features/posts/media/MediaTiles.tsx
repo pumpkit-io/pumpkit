@@ -2,6 +2,7 @@ import { Image as ImageIcon, RotateCw, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import type { Media } from '@/services/mediaService';
+import { AltTextChip, AltTextMark } from './AltText';
 import { breaksXMediaRule, X_MEDIA_RULE } from './mediaRules';
 import { useMediaPreview } from './useMediaPreview';
 import { holdsPlace, type Tile } from './useTextMedia';
@@ -47,14 +48,19 @@ function MediaTile({
   number,
   className,
   onRemove,
+  onDescribe,
 }: {
   tile: Tile;
   number: number;
   className: string;
   /** Left out, the tile can't be removed: the Part is set to go, or went, to X. */
   onRemove?: () => void;
+  /** Left out, its alt text can't change either. */
+  onDescribe?: (altText: string | null) => Promise<void>;
 }) {
-  const preview = useMediaPreview(tile.state === 'ready' ? tile.media.previewUrl : null);
+  const media = tile.state === 'ready' ? tile.media : null;
+  const preview = useMediaPreview(media?.previewUrl ?? null);
+  const describable = media !== null && media.kind !== 'video';
   const src = preview.url ?? tile.localUrl;
   const progress = tile.state === 'uploading' ? Math.round(tile.progress * 100) : null;
   return (
@@ -63,7 +69,11 @@ function MediaTile({
       className={cn('relative overflow-hidden bg-muted', className)}
     >
       {src ? (
-        <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img
+          src={src}
+          alt={media?.altText ?? ''}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
       ) : (
         preview.failed && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
@@ -72,6 +82,12 @@ function MediaTile({
           </div>
         )
       )}
+      {describable &&
+        (onDescribe ? (
+          <AltTextChip media={media} number={number} onSave={onDescribe} />
+        ) : (
+          <AltTextMark media={media} />
+        ))}
       {onRemove && (
         <button
           type="button"
@@ -165,12 +181,14 @@ export function MediaTiles({
   canRetry,
   onRemove,
   onRetry,
+  onDescribe,
 }: {
   tiles: Tile[];
   where: string;
   canRetry: boolean;
   onRemove: (key: string) => void;
   onRetry: (key: string) => void;
+  onDescribe: (key: string, altText: string | null) => Promise<void>;
 }) {
   const shown = tiles.filter((t) => holdsPlace(t) || t.state === 'refused');
   if (!shown.length) return null;
@@ -198,6 +216,7 @@ export function MediaTiles({
             number={++images}
             className={className}
             onRemove={() => onRemove(tile.key)}
+            onDescribe={(altText) => onDescribe(tile.key, altText)}
           />
         );
       })}

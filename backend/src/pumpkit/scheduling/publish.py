@@ -267,6 +267,33 @@ async def upload_media(
         raise Failed("media_not_sent", _not_published(subject, MEDIA_NOT_SENT))
 
 
+async def set_alt_text(
+    publisher: XPublisher,
+    scheduled_post: ScheduledPost,
+    part: ScheduledPostPart,
+    media: Media,
+    *,
+    x_media_id: str,
+    access_token: str,
+) -> None:
+    """Set the Media's alt text on X's upload `x_media_id`, or `Failed` as an upload would be."""
+    if media.alt_text is None:
+        return
+    subject = _subject(scheduled_post, part)
+    try:
+        async with asyncio.timeout(X_CALL_LIMIT.total_seconds()):
+            await publisher.set_alt_text(
+                access_token=access_token, media_id=x_media_id, alt_text=media.alt_text
+            )
+    except XReconnectNeededError:
+        raise Failed("reconnect_needed", _not_published(subject, RECONNECT_NEEDED))
+    except XMediaRefusedError as refused:
+        where = f"the media on {subject}" if subject else "the post's media"
+        raise Failed("refused_by_x", f"X refused the alt text of {where}: {refused.message}")
+    except (XPublisherError, TimeoutError):
+        raise Failed("x_unavailable", _not_published(subject, X_UNAVAILABLE))
+
+
 async def delete_published_files(storage: FileStorage, media: list[Media]) -> None:
     """Delete the files of a live Part's Media, keeping their previews. Flushes nothing."""
     for one in media:

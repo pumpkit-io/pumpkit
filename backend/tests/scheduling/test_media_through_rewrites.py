@@ -8,12 +8,10 @@ from typing import Optional
 
 import pytest
 from httpx import Response
-from sqlalchemy import update
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.main import app
 from pumpkit.posts.llm import FakeLLM, get_llm
-from pumpkit.posts.models import Media
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import png
 from tests.posts.writing_replies import written, written_thread
@@ -196,14 +194,14 @@ async def test_media_removed_while_feedback_writes_stays_removed(client, with_au
     assert await _media_by_part(client, post_id) == [[], [kept]]
 
 
-async def test_no_prompt_holds_anything_of_the_texts_media(client, db, with_author, fake_llm):
+async def test_no_prompt_holds_anything_of_the_texts_media(client, with_author, fake_llm):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     media_id = await _attach(client, post_id, part=1, name="beach-at-dawn.png")
-    # No endpoint sets alt text yet, so it is written straight to the Media.
-    await db.execute(
-        update(Media).where(Media.id == media_id).values(alt_text="gulls over the harbour")
+    described = await client.put(
+        f"{POSTS}/{post_id}/text/media/{media_id}/alt-text",
+        json={"alt_text": "gulls over the harbour"},
     )
-    await db.commit()
+    assert described.status_code == 200, described.text
     fake_llm.calls.clear()
     fake_llm.replies = [written("one post"), {"post": "one post"}]
 

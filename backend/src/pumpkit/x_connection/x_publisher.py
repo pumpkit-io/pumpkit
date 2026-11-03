@@ -33,6 +33,7 @@ X_REVOKE_URL = "https://api.x.com/2/oauth2/revoke"
 X_USERS_ME_URL = "https://api.x.com/2/users/me"
 X_TWEETS_URL = "https://api.x.com/2/tweets"
 X_MEDIA_UPLOAD_URL = "https://api.x.com/2/media/upload"
+X_MEDIA_METADATA_URL = "https://api.x.com/2/media/metadata"
 X_MEDIA_SCOPE = "media.write"
 # Every scope Pumpkit uses, asked for at once so a User consents only once (ADR 0006).
 X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
@@ -178,6 +179,13 @@ class XPublisher(Protocol):
         """
         X's media id for the `byte_size` bytes of `source`, once X has processed them. It
         publishes nothing, so a failed upload may be tried again.
+        """
+        ...
+
+    async def set_alt_text(self, *, access_token: str, media_id: str, alt_text: str) -> None:
+        """
+        Describe an uploaded image or GIF for screen readers, before the X post that carries it.
+        Failures raise as `upload_media`'s do, and it too may be tried again.
         """
         ...
 
@@ -329,6 +337,23 @@ class OfficialXPublisher:
                 f"X didn't answer uploading media: {type(error).__name__}"
             ) from error
         return media_id
+
+    async def set_alt_text(self, *, access_token: str, media_id: str, alt_text: str) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+                await _media_call(
+                    client.post(
+                        X_MEDIA_METADATA_URL,
+                        json={"id": media_id, "metadata": {"alt_text": {"text": alt_text}}},
+                        headers={"Authorization": f"Bearer {access_token}"},
+                    )
+                )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as error:
+            raise XNotReceivedError(f"X unreachable: {type(error).__name__}") from error
+        except httpx.HTTPError as error:
+            raise XMediaUnavailableError(
+                f"X didn't answer setting alt text: {type(error).__name__}"
+            ) from error
 
     async def publish(
         self,
@@ -535,6 +560,13 @@ class FakeUpload:
     media_id: str
 
 
+@dataclass(frozen=True)
+class FakeAltText:
+    access_token: str
+    media_id: str
+    text: str
+
+
 @dataclass
 class FakeXPublisher:
     """
@@ -550,8 +582,9 @@ class FakeXPublisher:
     nth publish call, counting from 1, raises `fail_publish`. Post ids are
     `1890000000000000000` plus the call's number. Records `uploads` and the `published_media`
     ids sent with each publish; `fail_upload` makes uploads raise it, and with `fail_upload_on`
-    only the nth. Media ids are `1880000000000000000` plus the upload's number. `while_uploading`
-    and `while_publishing`, when set, are awaited inside each upload and publish call.
+    only the nth. Media ids are `1880000000000000000` plus the upload's number. Records
+    `alt_texts` set, and `fail_alt_text` makes setting one raise it. `while_uploading`,
+    `while_setting_alt_text` and `while_publishing`, when set, are awaited inside each such call.
     """
 
     account: XAccount = field(
@@ -564,6 +597,7 @@ class FakeXPublisher:
     replied_to: list[Optional[str]] = field(default_factory=list)
     published_media: list[list[str]] = field(default_factory=list)
     uploads: list[FakeUpload] = field(default_factory=list)
+    alt_texts: list[FakeAltText] = field(default_factory=list)
     revoked: list[str] = field(default_factory=list)
     fail_exchange: Optional[XPublisherError] = None
     fail_refresh: Optional[XPublisherError] = None
@@ -571,8 +605,10 @@ class FakeXPublisher:
     fail_publish_on: Optional[int] = None
     fail_upload: Optional[XPublisherError] = None
     fail_upload_on: Optional[int] = None
+    fail_alt_text: Optional[XPublisherError] = None
     fail_fetch_account: Optional[XPublisherError] = None
     while_uploading: Optional[Callable[[], Awaitable[None]]] = None
+    while_setting_alt_text: Optional[Callable[[], Awaitable[None]]] = None
     while_publishing: Optional[Callable[[], Awaitable[None]]] = None
     fail_revoke: bool = False
     not_configured: bool = False
@@ -649,6 +685,15 @@ class FakeXPublisher:
             )
         )
         return media_id
+
+    async def set_alt_text(self, *, access_token: str, media_id: str, alt_text: str) -> None:
+        if self.while_setting_alt_text is not None:
+            await self.while_setting_alt_text()
+        if self.fail_alt_text is not None:
+            raise self.fail_alt_text
+        self.alt_texts.append(
+            FakeAltText(access_token=access_token, media_id=media_id, text=alt_text)
+        )
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:
         self.revoked.append(token)

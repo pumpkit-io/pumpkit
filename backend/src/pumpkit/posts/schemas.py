@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pumpkit.posts.formats import FORMAT_POST, Format
+from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.models import MediaKind
 from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS
 
@@ -68,6 +69,17 @@ class MediaResponse(BaseModel):
     height: Optional[int]
     # The image described for screen readers; None until the User or their AI app writes it.
     alt_text: Optional[str]
+
+
+class AltTextRequest(BaseModel):
+    """Alt text for one image or GIF; empty or null clears it."""
+
+    alt_text: Optional[str]
+
+    @field_validator("alt_text")
+    @classmethod
+    def _strip_and_limit(cls, value: Optional[str]) -> Optional[str]:
+        return cleaned_alt_text(value)
 
 
 class TextPartResponse(PartResponse):

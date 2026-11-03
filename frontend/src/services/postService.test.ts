@@ -116,6 +116,7 @@ describe('postService', () => {
                   preview_url: '/media/media_01/preview',
                   width: 40,
                   height: 30,
+                  alt_text: 'A rising line.',
                 },
               ],
             },
@@ -149,6 +150,7 @@ describe('postService', () => {
           previewUrl: '/media/media_01/preview',
           width: 40,
           height: 30,
+          altText: 'A rising line.',
         },
       ],
     ]);

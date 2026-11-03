@@ -189,6 +189,10 @@ export const EVENTS = {
     description:
       "Post page: removed Media from a Part of the Post's Text. Props: kind (image), source (web).",
   },
+  media_alt_text_set: {
+    description:
+      "Post page: saved the alt text of an image on a Part of the Post's Text or its scheduled post. Props: kind (image | gif), cleared (boolean: saved empty), source (web).",
+  },
   post_final_copied: {
     description:
       "Post page: copied the text on screen with the card's copy icon, every Part of it.",
