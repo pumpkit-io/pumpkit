@@ -93,6 +93,19 @@ async def test_a_token_near_expiry_is_refreshed_and_the_rotated_refresh_token_ke
     assert fake_x_publisher.published == [("access-1001-2", "First"), ("access-1001-3", "Second")]
 
 
+async def test_a_refresh_answer_without_scopes_keeps_the_scopes_x_granted(
+    client, subscribed, fake_x_publisher, clock, connect_x, post_with
+):
+    await connect_x()
+    fake_x_publisher.refresh_scope = ""
+    clock.advance(timedelta(hours=1, minutes=56))
+
+    await _post_now(client, post_with)
+
+    assert fake_x_publisher.refreshes == ["refresh-1001-1"]
+    assert (await client.get(X_CONNECTION)).json()["needs_reconnect_for_media"] is False
+
+
 @pytest.mark.parametrize(
     ("before", "after", "char_limit"),
     [("None", "Premium", 25_000), ("PremiumPlus", "None", 280)],

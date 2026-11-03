@@ -15,12 +15,12 @@ import { AppearanceCard } from '@/features/theme/AppearanceCard';
 import { Topbar } from '@/features/topbar/Topbar';
 import { XAccountCard } from '@/features/xConnection/XAccountCard';
 import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
+import type { XConnectionNoticeState } from '@/features/xConnection/xConnectionReturn';
 import { track } from '@/lib/analytics';
 import type { TopUpOffer } from '@/services/billingService';
 
 /** What the X callback and the Top-up return route leave in the location state for Settings. */
-export interface SettingsLocationState {
-  xConnectionNotice?: string;
+export interface SettingsLocationState extends XConnectionNoticeState {
   /** Set by the Top-up return route. */
   checkoutStatus?: 'top_up_bought';
 }

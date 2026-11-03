@@ -149,7 +149,7 @@ function partMediaOf(
           where={where}
           full={media.roomOn(index) <= 0}
           onFiles={(files) => media.attach(index, files, 'button')}
-          instead={askToReconnect}
+          onClickInsteadOfPicker={askToReconnect}
         />
       ),
       onFiles: (files, via) =>
@@ -175,7 +175,7 @@ function LoadedPost({
   onScheduledPost: (scheduledPost: ScheduledPost | null) => void;
 }) {
   const post: PostDetail = { ...loaded, text: text.text, versions: text.versions };
-  const { connection } = useXConnectionContext();
+  const { connection, reload: reloadXConnection } = useXConnectionContext();
   const location = useLocation();
   const opensEditor = opensEditing(location.state);
   const [editing, setEditing] = useState(
@@ -184,7 +184,12 @@ function LoadedPost({
   const navigate = useNavigate();
   const [reconnectingForMedia, setReconnectingForMedia] = useState(false);
   const askToReconnect = useCallback(() => setReconnectingForMedia(true), []);
-  const media = useTextMedia(loaded.id, loaded.textMedia, askToReconnect);
+  // The connection on screen said Media was fine; reading it again makes later attempts ask first.
+  const onReconnectNeeded = useCallback(() => {
+    askToReconnect();
+    void reloadXConnection();
+  }, [askToReconnect, reloadXConnection]);
+  const media = useTextMedia(loaded.id, loaded.textMedia, onReconnectNeeded);
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.

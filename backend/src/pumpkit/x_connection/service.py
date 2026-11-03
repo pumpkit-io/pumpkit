@@ -127,7 +127,9 @@ async def save_tokens(
     connection.access_token_encrypted = encrypt(tokens.access_token)
     connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
     connection.access_token_expires_at = tokens.expires_at
-    connection.scopes = tokens.scope
+    # A refresh answer may leave out `scope`, which then means the scopes granted before.
+    if tokens.scope:
+        connection.scopes = tokens.scope
     connection.updated_at = now
     await db.flush()
 

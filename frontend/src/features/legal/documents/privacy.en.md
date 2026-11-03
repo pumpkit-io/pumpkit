@@ -181,6 +181,7 @@ Pumpkit stores a few things in your browser. Some are strictly necessary for Pum
 | `pumpkit:theme`                                                                  | Local storage | Remembers whether you chose the light, dark or system theme                         | Until you clear it                     |
 | `pumpkit:analytics-consent`                                                      | Local storage | Remembers whether you gave Analytics consent                                        | Until you clear it                     |
 | `pumpkit:return-to`                                                              | Local storage | Remembers the app connection you were signing in to approve, so you land back on it | Until your next sign-in                |
+| `pumpkit:x-connection-return`                                                    | Local storage | Remembers the post you left to reconnect X, so you land back on it                  | Until you come back from X             |
 
 ### Analytics, only with Analytics consent {#cookies-analytics}
 

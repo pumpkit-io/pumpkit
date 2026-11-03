@@ -14,7 +14,7 @@ Mediators reach X only through `get_x_publisher`; tests override it with `FakeXP
 import base64
 import hashlib
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Literal, Optional, Protocol
@@ -390,7 +390,7 @@ class FakeXPublisher:
     None for the profile, share with followers) and `replied_to` (the X post id or None) of
     each publish, and `revoked` tokens. Set `fail_exchange`, `fail_refresh`,
     `fail_fetch_account` or `fail_publish` to an error to raise it, `fail_revoke` or
-    `not_configured` to raise. With `fail_publish_on` set to n, only the nth publish call,
+    `not_configured` to raise. `refresh_scope` is the scope a refresh answers with, "" for none. With `fail_publish_on` set to n, only the nth publish call,
     counting from 1, raises `fail_publish`. Post ids are `1890000000000000000` plus the call's
     number.
     """
@@ -411,6 +411,7 @@ class FakeXPublisher:
     fail_fetch_account: Optional[XPublisherError] = None
     fail_revoke: bool = False
     not_configured: bool = False
+    refresh_scope: str = X_SCOPES
     issued: int = 0
 
     def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
@@ -429,7 +430,7 @@ class FakeXPublisher:
         self.refreshes.append(refresh_token)
         if self.fail_refresh is not None:
             raise self.fail_refresh
-        return self._issue(now)
+        return replace(self._issue(now), scope=self.refresh_scope)
 
     async def fetch_account(self, *, access_token: str) -> XAccount:
         if self.fail_fetch_account is not None:

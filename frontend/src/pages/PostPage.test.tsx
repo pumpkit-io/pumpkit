@@ -7,7 +7,7 @@ import {
   type BoundFunctions,
   type queries,
 } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -1441,12 +1441,21 @@ describe('Post page', () => {
     describe('on an X connection made before X allowed media', () => {
       const BEFORE_MEDIA: XConnection = { ...CONNECTED, needsReconnectForMedia: true };
 
+      let picker: MockInstance<HTMLInputElement['click']>;
+
+      beforeEach(() => {
+        picker = vi.spyOn(HTMLInputElement.prototype, 'click');
+      });
+
+      afterEach(() => {
+        picker.mockRestore();
+      });
+
       it('opens the reconnect X dialog instead of the file picker', async () => {
         vi.mocked(xConnectionService.get).mockResolvedValue(BEFORE_MEDIA);
         vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
           'https://x.com/i/oauth2/authorize?state=s',
         );
-        const picker = vi.spyOn(HTMLInputElement.prototype, 'click');
         renderPost(postWith('the final text'));
         await textCard();
         await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
@@ -1463,7 +1472,6 @@ describe('Post page', () => {
           expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
         );
         expect(xConnectionReturn.take()).toBe('/posts/post_01');
-        picker.mockRestore();
       });
 
       it('closes the dialog with Not now, sending nothing', async () => {
@@ -1511,6 +1519,30 @@ describe('Post page', () => {
           await screen.findByRole('dialog', { name: 'Reconnect X to add media' }),
         ).toBeInTheDocument();
         expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();
+      });
+
+      it('asks to reconnect on later clicks once the server has refused an upload', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+        vi.mocked(mediaService.attach).mockRejectedValue(
+          apiError(409, 'Reconnect X so Pumpkit can post media on your X account.', {
+            code: 'X_RECONNECT_FOR_MEDIA',
+          }),
+        );
+        renderPost(postWith('the final text'));
+        await textCard();
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+        vi.mocked(xConnectionService.get).mockResolvedValue(BEFORE_MEDIA);
+        chooseFiles('the post', photo());
+        fireEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        picker.mockClear();
+
+        await waitFor(() => {
+          fireEvent.click(card().getByRole('button', { name: 'Add media to the post' }));
+          expect(screen.getByRole('dialog', { name: 'Reconnect X to add media' })).toBeTruthy();
+        });
+        expect(picker).not.toHaveBeenCalled();
+        expect(mediaService.attach).toHaveBeenCalledTimes(1);
       });
     });
 

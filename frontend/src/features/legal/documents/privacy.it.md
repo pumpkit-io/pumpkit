@@ -181,6 +181,7 @@ Pumpkit salva alcune informazioni nel tuo browser. Alcune sono strettamente nece
 | `pumpkit:theme`                                                                  | Local storage | Ricorda se hai scelto il tema chiaro, scuro o di sistema                                                 | Finché non lo cancelli                    |
 | `pumpkit:analytics-consent`                                                      | Local storage | Ricorda se hai prestato il Consenso analitico                                                            | Finché non lo cancelli                    |
 | `pumpkit:return-to`                                                              | Local storage | Ricorda il collegamento di un'app che stavi per approvare quando hai effettuato l'accesso, così ci torni | Fino al tuo prossimo accesso              |
+| `pumpkit:x-connection-return`                                                    | Local storage | Ricorda il post da cui sei uscito per ricollegare X, così ci torni                                       | Fino al tuo ritorno da X                  |
 
 ### Analisi, solo con il Consenso analitico {#cookies-analytics}
 

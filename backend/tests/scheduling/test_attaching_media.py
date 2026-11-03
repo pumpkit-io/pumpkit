@@ -442,6 +442,20 @@ async def test_reconnecting_x_lets_media_be_attached(
     assert response.status_code == 201, response.text
 
 
+async def test_uploads_refused_until_x_is_reconnected_leave_the_rate_untouched(
+    client, db, subscribed, fixed_clock, connect_x, post_with
+):
+    await _connect_x_before_media(db, connect_x)
+    post_id = await post_with("Many tries.")
+    for _ in range(60):
+        assert (await _attach(client, post_id, png())).status_code == 409
+
+    await connect_x()
+    response = await _attach(client, post_id, png())
+
+    assert response.status_code == 201, response.text
+
+
 async def test_without_an_x_connection_media_is_attached(client, subscribed, post_with):
     post_id = await post_with("Not connected yet.")
 

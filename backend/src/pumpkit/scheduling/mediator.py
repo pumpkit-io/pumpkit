@@ -690,12 +690,12 @@ async def attach_text_media(
 
 async def start_media_upload(db: AsyncSession, user: User) -> None:
     """
-    Before an upload's body arrives: counts it against the User's rate, refuses it when the X
-    connection must be reconnected for Media, and ends the transaction the checks read in, so no
-    connection stays held while a slow upload streams.
+    Before an upload's body arrives: refuses it when the X connection must be reconnected for
+    Media, uncounted, then counts it against the User's rate, and ends the transaction the checks
+    read in, so no connection stays held while a slow upload streams.
     """
-    hit_user_limit("attach_text_media", user.id, MEDIA_RATE)
     await x_connections_service.check_takes_media(db, user_id=user.id)
+    hit_user_limit("attach_text_media", user.id, MEDIA_RATE)
     await db.commit()
 
 

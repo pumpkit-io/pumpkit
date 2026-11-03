@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
@@ -151,6 +151,10 @@ describe('the X callback', () => {
       xConnectionReturn.remember('/posts/post_01');
     });
 
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('returns to the Post with the message', async () => {
       vi.mocked(xConnectionService.complete).mockResolvedValue(ADA);
 
@@ -181,7 +185,6 @@ describe('the X callback', () => {
       expect(
         await screen.findByText('at /settings via REPLACE: Connected @ada.'),
       ).toBeInTheDocument();
-      vi.useRealTimers();
     });
   });
 

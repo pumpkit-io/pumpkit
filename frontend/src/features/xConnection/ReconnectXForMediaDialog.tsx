@@ -33,7 +33,7 @@ export function ReconnectXForMediaDialog({
             Reconnect X to add media
           </DialogTitle>
           <DialogDescription className="font-sans">
-            X needs your permission before Pumpkit can post images on {account}. Reconnect to give
+            X needs your permission before Pumpkit can post media on {account}. Reconnect to give
             it, and you&apos;ll come back to this post.
           </DialogDescription>
         </DialogHeader>
