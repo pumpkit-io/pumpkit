@@ -1524,6 +1524,18 @@ describe('Post page', () => {
         expect(frameOf(screen.getByRole('list', { name: 'Media on the post' }))).toBe('3');
       });
 
+      it('keeps a very wide single image tall enough for its Remove button and Alt chip', async () => {
+        renderPost(withMedia(postWith('the final text'), [[sizedImage('m1', 3000, 20)]]));
+        await textCard();
+
+        const list = screen.getByRole('list', { name: 'Media on the post' });
+        expect(frameOf(list)).toBe('150');
+        expect(list.style.minHeight).toBe('5rem');
+        const tile = within(list).getByRole('listitem', { name: 'Image 1' });
+        expect(within(tile).getByRole('button', { name: 'Remove image 1' })).toBeInTheDocument();
+        expect(within(tile).getByRole('button', { name: /alt/i })).toBeInTheDocument();
+      });
+
       it.each([
         ['image', 'image'],
         ['GIF', 'gif'],

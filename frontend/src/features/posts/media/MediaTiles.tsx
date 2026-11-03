@@ -7,7 +7,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { useCallback, useContext, useState, type CSSProperties } from 'react';
+import { useContext, useState, type CSSProperties } from 'react';
 import { XConnectionContext } from '@/features/xConnection/XConnectionProvider';
 import { cn } from '@/lib/utils';
 import type { Media } from '@/services/mediaService';
@@ -25,9 +25,11 @@ import { holdsPlace, kindOfTile, type Tile } from './useTextMedia';
 
 /**
  * X's composer shows one Media across the full width at its own shape, cropped from the
- * centre only when it is taller than 3:4.
+ * centre only when it is taller than 3:4. However wide it is, its frame stays tall enough
+ * for the × and the Alt chip, cropping a banner wider than that from the centre.
  */
 const SINGLE_RATIO = { min: 3 / 4, unknown: 16 / 9 };
+const SINGLE_MIN_HEIGHT = '5rem';
 
 /** Where each of two, three or four tiles sits in the 16:9 frame of X's composer. */
 const CELLS: Record<number, CSSProperties[]> = {
@@ -57,7 +59,10 @@ function gridStyle(tiles: Tile[], measured: Ratios = {}): CSSProperties | undefi
   const tile = tiles[0]!;
   const media = tile.state === 'ready' ? tile.media : null;
   const ratio = media?.width && media.height ? media.width / media.height : measured[tile.key];
-  return { aspectRatio: String(ratio ? Math.max(SINGLE_RATIO.min, ratio) : SINGLE_RATIO.unknown) };
+  return {
+    aspectRatio: String(ratio ? Math.max(SINGLE_RATIO.min, ratio) : SINGLE_RATIO.unknown),
+    minHeight: SINGLE_MIN_HEIGHT,
+  };
 }
 
 function gridClass(tiles: Tile[]): string {
@@ -296,11 +301,8 @@ export function MediaTiles({
   onDescribe: (key: string, altText: string | null) => Promise<void>;
 }) {
   const [measured, setMeasured] = useState<Ratios>({});
-  const measure = useCallback(
-    (key: string, ratio: number) =>
-      setMeasured((ratios) => (ratios[key] === ratio ? ratios : { ...ratios, [key]: ratio })),
-    [],
-  );
+  const measure = (key: string, ratio: number) =>
+    setMeasured((ratios) => (ratios[key] === ratio ? ratios : { ...ratios, [key]: ratio }));
   const shown = tiles.filter((t) => holdsPlace(t) || t.state === 'refused');
   if (!shown.length) return null;
   const media = shown.flatMap((t) => (t.state === 'ready' && !t.removing ? [t.media] : []));
