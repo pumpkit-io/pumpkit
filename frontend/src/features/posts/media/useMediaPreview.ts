@@ -7,12 +7,12 @@ interface Fetched {
 }
 
 /**
- * What `fetch` gives for `source` as a local URL, or whether it failed. A new source, or
+ * What `load` gives for `source` as a local URL, or whether it failed. A new source, or
  * unmounting, aborts the fetch and revokes the URL.
  */
 function useObjectUrl(
   source: string | null,
-  fetch: (source: string, signal: AbortSignal) => Promise<Blob>,
+  load: (source: string, signal: AbortSignal) => Promise<Blob>,
 ): Fetched {
   const [shown, setShown] = useState<{ for: string; url: string | null; failed: boolean } | null>(
     null,
@@ -22,7 +22,7 @@ function useObjectUrl(
     if (!source) return;
     const controller = new AbortController();
     let objectUrl: string | null = null;
-    fetch(source, controller.signal).then(
+    load(source, controller.signal).then(
       (blob) => {
         if (controller.signal.aborted) return;
         objectUrl = URL.createObjectURL(blob);
@@ -36,7 +36,7 @@ function useObjectUrl(
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [source, fetch]);
+  }, [source, load]);
 
   if (!source || shown?.for !== source) return { url: null, failed: false };
   return { url: shown.url, failed: shown.failed };
@@ -50,4 +50,18 @@ export function useMediaPreview(previewUrl: string | null): Fetched {
 /** The whole file of the Media `mediaId` as a local URL, or whether it failed. */
 export function useMediaFile(mediaId: string | null): Fetched {
   return useObjectUrl(mediaId, mediaService.file);
+}
+
+/** `file` as a local URL, made while it is shown and revoked when it changes or unmounts. */
+export function useFileUrl(file: Blob | null): string | null {
+  const [shown, setShown] = useState<{ for: Blob; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!file || typeof URL.createObjectURL !== 'function') return;
+    const url = URL.createObjectURL(file);
+    setShown({ for: file, url });
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return file && shown?.for === file ? shown.url : null;
 }

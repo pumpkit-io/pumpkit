@@ -97,6 +97,7 @@ function viewableOf(tile: Tile, number: number): Viewable {
     kind,
     media,
     localUrl: tile.localUrl,
+    file: tile.file,
   };
 }
 
@@ -401,6 +402,7 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
     state: 'ready',
     media: m,
     localUrl: null,
+    file: null,
     removing: false,
   }));
   const { open, view } = useMediaView(shown.map((tile, index) => viewableOf(tile, index + 1)));

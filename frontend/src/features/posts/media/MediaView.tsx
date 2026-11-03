@@ -1,6 +1,12 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronLeft, ChevronRight, Film, Image as ImageIcon, Loader2, X } from 'lucide-react';
-import type { KeyboardEvent, MouseEvent, RefObject, SyntheticEvent } from 'react';
+import {
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type RefObject,
+  type SyntheticEvent,
+} from 'react';
 import {
   Dialog,
   DialogClose,
@@ -11,7 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { Media, MediaKind } from '@/services/mediaService';
 import { mediaNoun } from './mediaRules';
-import { useMediaFile, useMediaPreview } from './useMediaPreview';
+import { useFileUrl, useMediaFile, useMediaPreview } from './useMediaPreview';
 
 /** One Media the view can show, as its tile has it. */
 export interface Viewable {
@@ -23,6 +29,8 @@ export interface Viewable {
   media: Media | null;
   /** The file already in the browser, or a video's first frame, from an upload in this session. */
   localUrl: string | null;
+  /** The file picked in this session, if it was. */
+  file: File | null;
 }
 
 const VIEW_BUTTON =
@@ -32,13 +40,17 @@ const FADE =
   'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:!animate-none';
 
 function FullSizeMedia({ item, number }: { item: Viewable; number: number }) {
-  // A video's copy in the browser is only its first frame, so its file still comes from the server.
-  const localFile = item.kind === 'video' ? null : item.localUrl;
-  const file = useMediaFile(localFile ? null : (item.media?.id ?? null));
-  const full = localFile ?? file.url;
+  // A video's localUrl is only its first frame, so it plays from the picked file instead.
+  const localVideo = item.kind === 'video' ? item.file : null;
+  const hasLocal = item.kind === 'video' ? localVideo !== null : item.localUrl !== null;
+  const localVideoUrl = useFileUrl(localVideo);
+  const file = useMediaFile(hasLocal ? null : (item.media?.id ?? null));
+  const [unplayable, setUnplayable] = useState(false);
+  const local = item.kind === 'video' ? localVideoUrl : item.localUrl;
+  const full = unplayable ? null : (local ?? file.url);
   const preview = useMediaPreview(full || item.localUrl ? null : (item.media?.previewUrl ?? null));
   const still = item.localUrl ?? preview.url;
-  const downloading = full === null && item.media !== null && !file.failed;
+  const downloading = !hasLocal && item.media !== null && file.url === null && !file.failed;
   const altText = item.media?.altText ?? null;
   const KindIcon = item.kind === 'video' ? Film : ImageIcon;
   return (
@@ -49,6 +61,7 @@ function FullSizeMedia({ item, number }: { item: Viewable; number: number }) {
             src={full}
             controls
             playsInline
+            onError={() => setUnplayable(true)}
             aria-label={item.name}
             className="max-h-[80vh] max-w-[90vw]"
           />
@@ -116,6 +129,8 @@ export function MediaView({
   const next = index >= 0 ? items[index + 1] : undefined;
 
   const onKeyDown = (event: KeyboardEvent) => {
+    // The video's own controls seek with the arrow keys.
+    if (event.target instanceof HTMLVideoElement) return;
     const to = event.key === 'ArrowLeft' ? previous : event.key === 'ArrowRight' ? next : undefined;
     if (to) onOpenKeyChange(to.key);
   };
