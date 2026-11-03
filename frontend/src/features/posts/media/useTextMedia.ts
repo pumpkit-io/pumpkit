@@ -38,7 +38,15 @@ export type Tile =
       progress: number;
       via: AttachVia;
     }
-  | { key: string; state: 'ready'; media: Media; localUrl: string | null; removing: boolean }
+  | {
+      key: string;
+      state: 'ready';
+      media: Media;
+      localUrl: string | null;
+      /** The file picked in this session, which the full-size view plays a video from. */
+      file: File | null;
+      removing: boolean;
+    }
   | {
       key: string;
       state: 'refused';
@@ -110,8 +118,9 @@ function readyTile(
   key: string,
   media: Media,
   localUrl: string | null,
+  file: File | null,
 ): Extract<Tile, { state: 'ready' }> {
-  return { key, state: 'ready', media, localUrl, removing: false };
+  return { key, state: 'ready', media, localUrl, file, removing: false };
 }
 
 /** Drops an upload; a video with far to go stops at once. */
@@ -150,7 +159,7 @@ export function useTextMedia(
   const nextKey = useRef(0);
   const newKey = useCallback(() => `tile-${++nextKey.current}`, []);
   const [parts, setParts] = useState<Tile[][]>(() =>
-    initial.map((onPart) => onPart.map((media) => readyTile(newKey(), media, null))),
+    initial.map((onPart) => onPart.map((media) => readyTile(newKey(), media, null, null))),
   );
   // Read synchronously, so files chosen together each see the room the ones before took.
   const current = useRef(parts);
@@ -270,7 +279,10 @@ export function useTextMedia(
       );
       const claimedTile = claimed ? tiles.find((t) => t.key === claimed.key) : undefined;
       if (claimed && claimedTile) {
-        shown.set(claimed.media.id, readyTile(claimed.key, claimed.media, claimedTile.localUrl));
+        shown.set(
+          claimed.media.id,
+          readyTile(claimed.key, claimed.media, claimedTile.localUrl, claimedTile.file),
+        );
       }
       const onServer = new Set(server.flat().map((m) => m.id));
       tiles.filter((t) => t.state === 'ready' && !onServer.has(t.media.id)).forEach(release);
@@ -279,7 +291,7 @@ export function useTextMedia(
       );
       set(
         server.map((onPart, index) => [
-          ...onPart.map((media) => shown.get(media.id) ?? readyTile(newKey(), media, null)),
+          ...onPart.map((media) => shown.get(media.id) ?? readyTile(newKey(), media, null, null)),
           ...(pending[index] ?? []),
         ]),
       );
@@ -343,7 +355,7 @@ export function useTextMedia(
             .some((t) => t.state === 'ready' && t.media.id === landed.id);
           if (server) reconcile(server, { key, media: landed });
           else if (elsewhere) dropTile(key);
-          else changeTile(key, (tile) => readyTile(key, landed, tile.localUrl));
+          else changeTile(key, (tile) => readyTile(key, landed, tile.localUrl, tile.file));
           track('media_attached', { kind: landed.kind, via, on: place.holder, source: 'web' });
           return;
         }

@@ -85,6 +85,7 @@ vi.mock('@/services/mediaService', async (importOriginal) => ({
     setAltText: vi.fn(),
     setScheduledPostAltText: vi.fn(),
     preview: vi.fn(),
+    file: vi.fn(),
   },
 }));
 vi.mock('@/features/posts/media/videoFile', () => ({ readVideo: vi.fn() }));
@@ -1621,7 +1622,39 @@ describe('Post page', () => {
           previews.set(blob, url);
           return blob;
         });
+        vi.mocked(mediaService.file)
+          .mockReset()
+          .mockImplementation(async (id) => {
+            const blob = new Blob([id]);
+            previews.set(blob, `/media/${id}/file`);
+            return blob;
+          });
         URL.createObjectURL = vi.fn((blob: Blob) => `blob:${previews.get(blob) ?? 'local'}`);
+        URL.revokeObjectURL = vi.fn();
+      });
+
+      function shown() {
+        return screen.getByRole('dialog').querySelector('img, video');
+      }
+
+      it('shows the preview at once, then the full file once it arrives', async () => {
+        let arrive: (blob: Blob) => void = () => {};
+        vi.mocked(mediaService.file).mockReturnValue(new Promise((resolve) => (arrive = resolve)));
+        renderPost(withMedia(postWith('the final text'), [[image('m1')]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
+
+        await waitFor(() => expect(shown()).toHaveAttribute('src', 'blob:/media/m1/preview'));
+        expect(mediaService.file).toHaveBeenCalledWith('m1', expect.any(AbortSignal));
+
+        const full = new Blob(['m1']);
+        vi.mocked(URL.createObjectURL).mockImplementation((blob) =>
+          blob === full ? 'blob:/media/m1/file' : 'blob:local',
+        );
+        await act(async () => arrive(full));
+        expect(shown()).toHaveAttribute('src', 'blob:/media/m1/file');
+        expect(shown()?.tagName).toBe('IMG');
       });
 
       function view() {
@@ -1631,6 +1664,87 @@ describe('Post page', () => {
       function shows(name: string) {
         return screen.findByRole('dialog', { name });
       }
+
+      it('plays a video from its file, with a spinner over its first frame until the file arrives', async () => {
+        let arrive: (blob: Blob) => void = () => {};
+        vi.mocked(mediaService.file).mockReturnValue(new Promise((resolve) => (arrive = resolve)));
+        const video = { ...image('m1'), kind: 'video' as const, durationMs: 42_000 };
+        renderPost(withMedia(postWith('the final text'), [[video]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open video 1' }));
+
+        await waitFor(() => expect(shown()).toHaveAttribute('src', 'blob:/media/m1/preview'));
+        expect(view().getByRole('status', { name: 'Loading video 1' })).toBeInTheDocument();
+
+        vi.mocked(URL.createObjectURL).mockReturnValue('blob:/media/m1/file');
+        await act(async () => arrive(new Blob(['m1'])));
+
+        expect(shown()?.tagName).toBe('VIDEO');
+        expect(shown()).toHaveAttribute('src', 'blob:/media/m1/file');
+        expect(shown()).toHaveAttribute('controls');
+        expect(view().queryByRole('status')).not.toBeInTheDocument();
+        fireEvent.click(shown()!);
+        expect(screen.getByRole('dialog', { name: 'Video 1' })).toBeInTheDocument();
+      });
+
+      it('plays a GIF from its file, with a spinner until it arrives', async () => {
+        let arrive: (blob: Blob) => void = () => {};
+        vi.mocked(mediaService.file).mockReturnValue(new Promise((resolve) => (arrive = resolve)));
+        renderPost(withMedia(postWith('the final text'), [[{ ...image('m1'), kind: 'gif' }]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open GIF 1' }));
+
+        expect(await view().findByRole('status', { name: 'Loading GIF 1' })).toBeInTheDocument();
+        vi.mocked(URL.createObjectURL).mockReturnValue('blob:/media/m1/file');
+        await act(async () => arrive(new Blob(['m1'])));
+
+        expect(shown()?.tagName).toBe('IMG');
+        expect(shown()).toHaveAttribute('src', 'blob:/media/m1/file');
+        expect(view().queryByRole('status')).not.toBeInTheDocument();
+      });
+
+      it('keeps the preview, with no message, when the file is gone', async () => {
+        vi.mocked(mediaService.file).mockRejectedValue(apiError(404, 'Media not found.'));
+        const video = { ...image('m1'), kind: 'video' as const };
+        renderPost(withMedia(postWith('the final text'), [[image('m0'), video]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
+        await waitFor(() =>
+          expect(mediaService.file).toHaveBeenCalledWith('m0', expect.anything()),
+        );
+        await waitFor(() => expect(shown()).toHaveAttribute('src', 'blob:/media/m0/preview'));
+
+        fireEvent.click(view().getByRole('button', { name: 'Next' }));
+        await waitFor(() => expect(shown()).toHaveAttribute('src', 'blob:/media/m1/preview'));
+        await waitFor(() => expect(view().queryByRole('status')).not.toBeInTheDocument());
+        expect(shown()?.tagName).toBe('IMG');
+        expect(view().queryByText(/not found|couldn/i)).not.toBeInTheDocument();
+      });
+
+      it('stops fetching a file and lets go of it on moving on or closing', async () => {
+        const signals: AbortSignal[] = [];
+        vi.mocked(mediaService.file).mockImplementation((id, signal) => {
+          signals.push(signal!);
+          return id === 'm1' ? Promise.resolve(new Blob([id])) : new Promise(() => {});
+        });
+        vi.mocked(URL.createObjectURL).mockImplementation(() => 'blob:the-file');
+        renderPost(withMedia(postWith('the final text'), [[image('m1'), image('m2')]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
+        await waitFor(() => expect(shown()).toHaveAttribute('src', 'blob:the-file'));
+
+        fireEvent.click(view().getByRole('button', { name: 'Next' }));
+        await shows('Image 2');
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:the-file');
+
+        fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
+      });
 
       it("opens the clicked tile and moves through the Part's Media, stopping at the ends", async () => {
         const three = ['m1', 'm2', 'm3'].map(image);
@@ -1767,6 +1881,88 @@ describe('Post page', () => {
           'src',
           'blob:local',
         );
+        expect(mediaService.file).not.toHaveBeenCalled();
+      });
+
+      it('shows an image uploaded in this session from the copy in the browser', async () => {
+        vi.mocked(mediaService.attach).mockResolvedValue(image('m1'));
+        renderPost(postWith('the final text'));
+        await textCard();
+
+        chooseFiles('the post', photo());
+        await waitFor(() => expect(mediaService.attach).toHaveBeenCalled());
+        await waitFor(() =>
+          expect(mediaOn('the post').queryByRole('progressbar')).not.toBeInTheDocument(),
+        );
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open image 1' }));
+
+        await shows('Image 1');
+        expect(shown()).toHaveAttribute('src', 'blob:local');
+        expect(mediaService.file).not.toHaveBeenCalled();
+      });
+
+      function uploadedVideo() {
+        const file = photo('demo.mp4', 'video/mp4');
+        const poster = new Blob(['frame'], { type: 'image/jpeg' });
+        vi.mocked(readVideo).mockResolvedValue({ durationMs: 42_000, poster });
+        vi.mocked(URL.createObjectURL).mockImplementation((blob) =>
+          blob === file ? 'blob:picked-file' : blob === poster ? 'blob:first-frame' : 'blob:local',
+        );
+        vi.mocked(mediaService.attach).mockResolvedValue({
+          ...image('m1'),
+          kind: 'video',
+          durationMs: 42_000,
+        });
+        return file;
+      }
+
+      async function openUploadedVideo() {
+        renderPost(postWith('the final text'));
+        await textCard();
+        chooseFiles('the post', uploadedVideo());
+        await waitFor(() => expect(mediaService.attach).toHaveBeenCalled());
+        await waitFor(() =>
+          expect(mediaOn('the post').queryByRole('progressbar')).not.toBeInTheDocument(),
+        );
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open video 1' }));
+        await shows('Video 1');
+      }
+
+      it('plays a video uploaded in this session from the file picked, and lets go of it on closing', async () => {
+        await openUploadedVideo();
+
+        expect(shown()?.tagName).toBe('VIDEO');
+        expect(shown()).toHaveAttribute('src', 'blob:picked-file');
+        expect(view().queryByRole('status')).not.toBeInTheDocument();
+        expect(mediaService.file).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:picked-file');
+      });
+
+      it('shows the first frame when the browser cannot play the video', async () => {
+        await openUploadedVideo();
+
+        fireEvent.error(shown()!);
+
+        expect(shown()?.tagName).toBe('IMG');
+        expect(shown()).toHaveAttribute('src', 'blob:first-frame');
+      });
+
+      it('leaves the arrow keys to the video while it has focus', async () => {
+        const video = { ...image('m2'), kind: 'video' as const, durationMs: 42_000 };
+        vi.mocked(URL.createObjectURL).mockImplementation(() => 'blob:the-file');
+        renderPost(withMedia(postWith('the final text'), [[image('m1'), video]]));
+        await textCard();
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Open video 2' }));
+        await waitFor(() => expect(shown()?.tagName).toBe('VIDEO'));
+        fireEvent.keyDown(shown()!, { key: 'ArrowLeft' });
+
+        expect(screen.getByRole('dialog', { name: 'Video 2' })).toBeInTheDocument();
+        fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowLeft' });
+        await shows('Image 1');
       });
 
       it('shows the kind of a Media with no preview', async () => {
