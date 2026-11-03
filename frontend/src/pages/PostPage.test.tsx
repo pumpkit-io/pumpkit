@@ -108,6 +108,7 @@ import {
   scheduledPostService,
   type Community,
   type ScheduledPost,
+  type ScheduledPostPart,
 } from '@/services/scheduledPostService';
 import { mediaService, type Media } from '@/services/mediaService';
 import { usageService, type Usage } from '@/services/usageService';
@@ -190,7 +191,7 @@ function threadWith(parts: Part[]): PostDetail {
 // The tests run in Europe/Rome (vitest.config.ts), two hours ahead of UTC in October.
 const SCHEDULED: ScheduledPost = {
   id: 'scheduled_post_01',
-  parts: [{ text: 'the final text', live: false, xPostUrl: null }],
+  parts: [{ text: 'the final text', live: false, xPostUrl: null, media: [] }],
   state: 'scheduled',
   publishAt: '2026-10-12T07:00:00Z',
   publishedAt: null,
@@ -435,7 +436,7 @@ describe('Post page', () => {
       renderPost(
         withScheduledPost({
           ...SCHEDULED,
-          parts: [{ text: 'the final text, edited', live: false, xPostUrl: null }],
+          parts: [{ text: 'the final text, edited', live: false, xPostUrl: null, media: [] }],
         }),
       );
 
@@ -492,7 +493,7 @@ describe('Post page', () => {
       renderPost(
         withScheduledPost({
           ...SCHEDULED,
-          parts: [{ text: 'the final text, edited', live: false, xPostUrl: null }],
+          parts: [{ text: 'the final text, edited', live: false, xPostUrl: null, media: [] }],
         }),
       );
       const card = await textCard();
@@ -837,8 +838,13 @@ describe('Post page', () => {
             ...SCHEDULED,
             state: 'failed',
             parts: [
-              { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
-              { text: 'Refused two.', live: false, xPostUrl: null },
+              {
+                text: 'Live one.',
+                live: true,
+                xPostUrl: 'https://x.com/i/web/status/1',
+                media: [],
+              },
+              { text: 'Refused two.', live: false, xPostUrl: null, media: [] },
             ],
           }),
           [version(1, ['Live one.', 'Refused two.']), version(2, ['Rewritten one.', 'New two.'])],
@@ -1436,6 +1442,109 @@ describe('Post page', () => {
         screen.getByRole('list', { name: 'Media on the post' }).closest('.opacity-60'),
       ).toBeNull();
       expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    });
+
+    describe('once it goes to X', () => {
+      async function openPostTo(post: PostDetail): Promise<Dialog> {
+        renderPost(post);
+        await textCard();
+        fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
+        return within(await screen.findByRole('dialog', { name: 'Post to…' }));
+      }
+
+      function scheduledWith(state: ScheduledPost['state'], media: Media[]): PostDetail {
+        return withScheduledPost({
+          ...SCHEDULED,
+          state,
+          parts: [{ ...SCHEDULED.parts[0]!, live: state === 'published', media }],
+        });
+      }
+
+      it("shows each Part's media read-only under its text in the confirm step", async () => {
+        const dialog = await openPostTo(withMedia(threadOfTwo(), [[], [image('m1'), image('m2')]]));
+
+        fireEvent.click(dialog.getByRole('button', { name: 'Review and post' }));
+
+        const two = within(dialog.getByRole('listitem', { name: 'Part 2' }));
+        const tiles = within(two.getByRole('list', { name: 'Media on Part 2' }));
+        expect(
+          tiles.getAllByRole('listitem').map((tile) => tile.getAttribute('aria-label')),
+        ).toEqual(['Image 1', 'Image 2']);
+        expect(tiles.queryByRole('button')).not.toBeInTheDocument();
+        expect(dialog.queryByRole('list', { name: 'Media on Part 1' })).not.toBeInTheDocument();
+      });
+
+      it("won't post a Part holding more media than X takes, and names the Part", async () => {
+        const five = ['a', 'b', 'c', 'd', 'e'].map(image);
+        const dialog = await openPostTo(withMedia(threadOfTwo(), [five, []]));
+
+        expect(
+          dialog.getByText(
+            'Part 1 has more media than X takes. X takes up to 4 images, or 1 GIF, or 1 video, per post.',
+          ),
+        ).toBeInTheDocument();
+        expect(dialog.getByRole('button', { name: 'Review and post' })).toBeDisabled();
+      });
+
+      it("shows a scheduled post's media read-only on the card", async () => {
+        renderPost(scheduledWith('scheduled', [image('m1')]));
+        await textCard();
+
+        const tiles = mediaOn('the post');
+        expect(await tiles.findByRole('listitem', { name: 'Image 1' })).toBeInTheDocument();
+        expect(tiles.queryByRole('button')).not.toBeInTheDocument();
+        expect(card().queryByRole('button', { name: /add media/i })).not.toBeInTheDocument();
+        await waitFor(() =>
+          expect(mediaService.preview).toHaveBeenCalledWith('/media/m1/preview', expect.anything()),
+        );
+      });
+
+      it('keeps showing the preview of the media a published post went out with', async () => {
+        renderPost(scheduledWith('published', [image('m1')]));
+        await textCard();
+
+        const tile = await mediaOn('the post').findByRole('listitem', { name: 'Image 1' });
+        await waitFor(() =>
+          expect(tile.querySelector('img')).toHaveAttribute('src', 'blob:local-1'),
+        );
+        expect(within(tile).queryByRole('button')).not.toBeInTheDocument();
+      });
+
+      it("shows a failed thread's live Part media read-only and lets the rest change", async () => {
+        renderPost({
+          ...withMedia(threadOfTwo(), [[image('t1')], []]),
+          status: 'failed',
+          scheduledPost: {
+            ...SCHEDULED,
+            state: 'failed',
+            failedReason: 'X refused part 2: Nope',
+            parts: [
+              {
+                text: 'one',
+                live: true,
+                xPostUrl: 'https://x.com/i/web/status/1',
+                media: [image('live1')],
+              },
+              { text: 'two', live: false, xPostUrl: null, media: [] },
+            ],
+          },
+        });
+        await textCard();
+
+        const one = mediaOn('Part 1');
+        expect(await one.findByRole('listitem', { name: 'Image 1' })).toBeInTheDocument();
+        expect(one.queryByRole('button')).not.toBeInTheDocument();
+        await waitFor(() =>
+          expect(mediaService.preview).toHaveBeenCalledWith(
+            '/media/live1/preview',
+            expect.anything(),
+          ),
+        );
+        expect(
+          card().queryByRole('button', { name: 'Add media to Part 1' }),
+        ).not.toBeInTheDocument();
+        expect(card().getByRole('button', { name: 'Add media to Part 2' })).toBeInTheDocument();
+      });
     });
 
     describe('on an X connection made before X allowed media', () => {
@@ -2113,7 +2222,7 @@ describe('Post page', () => {
     it('turns the Parts into text boxes and saves the edited text', async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
-        parts: [{ text: 'the edited text', live: false, xPostUrl: null }],
+        parts: [{ text: 'the edited text', live: false, xPostUrl: null, media: [] }],
       });
       const editor = await startEditing();
 
@@ -2138,8 +2247,8 @@ describe('Post page', () => {
       const thread: ScheduledPost = {
         ...SCHEDULED,
         parts: [
-          { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
-          { text: 'Two.', live: false, xPostUrl: null },
+          { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1', media: [] },
+          { text: 'Two.', live: false, xPostUrl: null, media: [] },
         ],
       };
       vi.mocked(scheduledPostService.edit).mockResolvedValue(thread);
@@ -2359,6 +2468,7 @@ describe('Post page', () => {
           text: 'the final text',
           live: true,
           xPostUrl: 'https://x.com/i/web/status/1890000000000000001',
+          media: [],
         },
       ],
     };
@@ -2434,8 +2544,13 @@ describe('Post page', () => {
           withScheduledPost({
             ...FAILED,
             parts: [
-              { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
-              { text: 'Refused two.', live: false, xPostUrl: null },
+              {
+                text: 'Live one.',
+                live: true,
+                xPostUrl: 'https://x.com/i/web/status/1',
+                media: [],
+              },
+              { text: 'Refused two.', live: false, xPostUrl: null, media: [] },
             ],
           }),
           [version(1, ['Live one.', 'Refused two.']), version(2, ['Rewritten one.', 'New two.'])],
@@ -2776,8 +2891,18 @@ describe('Post page', () => {
       vi.mocked(scheduledPostService.postNow).mockResolvedValue({
         ...PUBLISHED,
         parts: [
-          { text: 'the first part', live: true, xPostUrl: 'https://x.com/i/web/status/1' },
-          { text: 'the second part', live: true, xPostUrl: 'https://x.com/i/web/status/2' },
+          {
+            text: 'the first part',
+            live: true,
+            xPostUrl: 'https://x.com/i/web/status/1',
+            media: [],
+          },
+          {
+            text: 'the second part',
+            live: true,
+            xPostUrl: 'https://x.com/i/web/status/2',
+            media: [],
+          },
         ],
       });
       const dialog = await openPostTo(
@@ -2980,11 +3105,16 @@ describe('Post page', () => {
       failedReason: 'X refused the post: duplicate content.',
     };
     const COMMUNITY_ID = '1493446837214187523';
-    const LIVE_ONE = { text: 'Live one.', live: true, xPostUrl: 'https://x.com/i/web/status/1' };
+    const LIVE_ONE: ScheduledPostPart = {
+      text: 'Live one.',
+      live: true,
+      xPostUrl: 'https://x.com/i/web/status/1',
+      media: [],
+    };
     /** A Thread whose Part 1 went out from Version 1 and whose Part 2 X refused. */
     const FAILED_PARTWAY: ScheduledPost = {
       ...FAILED,
-      parts: [LIVE_ONE, { text: 'Refused two.', live: false, xPostUrl: null }],
+      parts: [LIVE_ONE, { text: 'Refused two.', live: false, xPostUrl: null, media: [] }],
       failedReason: 'X refused part 2: Nope',
     };
 
@@ -3026,7 +3156,7 @@ describe('Post page', () => {
     it("reschedules the Failed one with the Post's Text", async () => {
       vi.mocked(scheduledPostService.edit).mockResolvedValue({
         ...SCHEDULED,
-        parts: [{ text: 'the second text', live: false, xPostUrl: null }],
+        parts: [{ text: 'the second text', live: false, xPostUrl: null, media: [] }],
       });
       const dialog = await openRetry();
 
@@ -3054,7 +3184,14 @@ describe('Post page', () => {
         state: 'published',
         publishedAt: '2026-10-10T12:00:14Z',
         xPostUrl: 'https://x.com/i/web/status/1890000000000000002',
-        parts: [{ text: 'the second text', live: true, xPostUrl: 'https://x.com/i/web/status/2' }],
+        parts: [
+          {
+            text: 'the second text',
+            live: true,
+            xPostUrl: 'https://x.com/i/web/status/2',
+            media: [],
+          },
+        ],
       });
       const dialog = await openRetry();
 
@@ -3121,8 +3258,8 @@ describe('Post page', () => {
         xPostUrl: 'https://x.com/i/web/status/1',
         parts: [
           LIVE_ONE,
-          { text: 'Fixed two.', live: true, xPostUrl: 'https://x.com/i/web/status/3' },
-          { text: 'New three.', live: true, xPostUrl: 'https://x.com/i/web/status/4' },
+          { text: 'Fixed two.', live: true, xPostUrl: 'https://x.com/i/web/status/3', media: [] },
+          { text: 'New three.', live: true, xPostUrl: 'https://x.com/i/web/status/4', media: [] },
         ],
       });
       const dialog = await openRetry(

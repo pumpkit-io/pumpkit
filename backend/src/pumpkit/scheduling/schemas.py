@@ -5,7 +5,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 
 from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format, part_name
-from pumpkit.posts.schemas import TextResponse, VersionResponse
+from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
@@ -77,6 +77,8 @@ class ScheduledPostPartResponse(BaseModel):
     live: bool
     # This Part on X, once live.
     x_post_url: Optional[str]
+    # Published with this Part, in order; a live Part's keeps only its preview.
+    media: list[MediaResponse]
 
 
 class ScheduledPostResponse(BaseModel):

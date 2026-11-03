@@ -5,6 +5,7 @@ the preview the web app shows of each file. Pure: no database, no storage.
 
 import io
 import struct
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import BinaryIO, Optional
 
@@ -54,6 +55,13 @@ def media_unreadable() -> MediaRefused:
 def part_full(where: str) -> MediaRefused:
     """`where` names the Part as a sentence starts: "Part 2", or "This post"."""
     return MediaRefused(f"{where} holds 4 images already. {X_MEDIA_RULE}", code="MEDIA_PART_FULL")
+
+
+def over_x_rule(kinds: Sequence[MediaKind]) -> bool:
+    """Whether one X post can't carry Media of these kinds."""
+    if any(kind != MEDIA_IMAGE for kind in kinds):
+        return len(kinds) > 1
+    return len(kinds) > IMAGES_PER_PART
 
 
 def content_type_of(head: bytes) -> Optional[str]:

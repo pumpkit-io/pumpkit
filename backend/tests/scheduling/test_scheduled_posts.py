@@ -239,7 +239,15 @@ async def test_a_post_whose_outcome_is_unknown_fails_telling_the_user_to_check_x
 
 @pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
 async def test_a_post_now_x_never_took_goes_back_to_scheduled_for_the_publisher_to_retry(
-    client, db_session_maker, subscribed, fake_x_publisher, clock, error, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    error,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     fake_x_publisher.fail_publish = error
@@ -252,14 +260,21 @@ async def test_a_post_now_x_never_took_goes_back_to_scheduled_for_the_publisher_
     assert body["failed_reason"] is None
     fake_x_publisher.fail_publish = None
     clock.advance(timedelta(minutes=1))
-    await run_pass(db_session_maker, fake_x_publisher, clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, clock)
     [listed] = await scheduled_posts(client)
     assert listed["state"] == "published"
     assert len(fake_x_publisher.published) == 2
 
 
 async def test_a_post_now_x_keeps_refusing_fails_15_minutes_after_it_was_asked_for(
-    client, db_session_maker, subscribed, fake_x_publisher, clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XRateLimitedError("429")
@@ -267,7 +282,7 @@ async def test_a_post_now_x_keeps_refusing_fails_15_minutes_after_it_was_asked_f
 
     for _ in range(32):
         clock.advance(timedelta(seconds=30))
-        await run_pass(db_session_maker, fake_x_publisher, clock)
+        await run_pass(db_session_maker, fake_x_publisher, file_storage, clock)
 
     [listed] = await scheduled_posts(client)
     assert listed["state"] == "failed"
@@ -346,11 +361,13 @@ async def test_published_and_failed_are_tracked_for_analytics(
         "destination": "profile",
         "format": "post",
         "part_count": 1,
+        "has_media": False,
     }
     assert failed.kwargs["properties"] == {
         "reason": "outcome_unknown",
         "format": "post",
         "part_count": 1,
+        "has_media": False,
     }
 
 
@@ -367,7 +384,12 @@ async def test_a_post_x_refuses_is_tracked_as_refused_by_x(
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "refused_by_x", "format": "post", "part_count": 1},
+        properties={
+            "reason": "refused_by_x",
+            "format": "post",
+            "part_count": 1,
+            "has_media": False,
+        },
     )
 
 
@@ -534,6 +556,7 @@ async def test_post_now_on_a_post_publishes_its_text_and_tracks_its_source(
         "destination": "profile",
         "format": "post",
         "part_count": 1,
+        "has_media": False,
     }
 
 
@@ -561,7 +584,7 @@ async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
 
 
 async def test_scheduling_a_thread_copies_its_parts_in_order_and_publishes_a_chain(
-    client, db_session_maker, thread_post, fake_x_publisher, fixed_clock, connect_x
+    file_storage, client, db_session_maker, thread_post, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
 
@@ -573,7 +596,7 @@ async def test_scheduling_a_thread_copies_its_parts_in_order_and_publishes_a_cha
     assert response.status_code == 201, response.text
     assert _texts(response.json()) == THREAD_VERSION
     fixed_clock.advance(timedelta(minutes=5))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     [listed] = await scheduled_posts(client)
     assert listed["state"] == "published"
     assert [part["live"] for part in listed["parts"]] == [True, True, True]
@@ -733,8 +756,8 @@ async def test_a_thread_scheduled_keeps_its_parts_in_order_with_none_live(
 
     assert response.status_code == 201, response.text
     assert response.json()["parts"] == [
-        {"text": "The first Part.", "live": False, "x_post_url": None},
-        {"text": "The second Part.", "live": False, "x_post_url": None},
+        {"text": "The first Part.", "live": False, "x_post_url": None, "media": []},
+        {"text": "The second Part.", "live": False, "x_post_url": None, "media": []},
     ]
     assert (await scheduled_posts(client)) == [response.json()]
 
@@ -747,7 +770,7 @@ async def test_post_now_makes_its_one_part_live_with_its_link_on_x(
     response = await _post_now(client, post_with, "Out now.")
 
     assert response.json()["parts"] == [
-        {"text": "Out now.", "live": True, "x_post_url": FIRST_X_POST_URL}
+        {"text": "Out now.", "live": True, "x_post_url": FIRST_X_POST_URL, "media": []}
     ]
 
 

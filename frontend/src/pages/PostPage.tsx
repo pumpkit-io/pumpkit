@@ -8,7 +8,7 @@ import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
 import { MediaButton } from '@/features/posts/media/MediaButton';
-import { MediaTiles } from '@/features/posts/media/MediaTiles';
+import { MediaTiles, ReadOnlyMediaTiles } from '@/features/posts/media/MediaTiles';
 import { useTextMedia, type TextMedia } from '@/features/posts/media/useTextMedia';
 import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import {
@@ -132,8 +132,8 @@ function partMediaOf(
   askToReconnect: (() => void) | undefined,
 ) {
   return (index: number): PartMedia | null => {
-    if (parts[index]?.live) return null;
-    const where = parts.length > 1 ? `Part ${index + 1}` : 'the post';
+    if (parts[index]?.live) return readOnlyMediaOf(parts)(index);
+    const where = whereOf(index, parts.length);
     return {
       tiles: (
         <MediaTiles
@@ -156,6 +156,33 @@ function partMediaOf(
         askToReconnect ? askToReconnect() : media.attach(index, files, via),
     };
   };
+}
+
+function whereOf(index: number, count: number): string {
+  return count > 1 ? `Part ${index + 1}` : 'the post';
+}
+
+/** The Media each Part goes, or went, to X with, shown as it is. */
+function readOnlyMediaOf(parts: ShownPart[]) {
+  return (index: number): PartMedia | null => {
+    const shown = parts[index]?.media ?? [];
+    if (!shown.length) return null;
+    return { tiles: <ReadOnlyMediaTiles media={shown} where={whereOf(index, parts.length)} /> };
+  };
+}
+
+/** The Text's Parts with the Media now on them, for "Post to…" to check and show. */
+function withTextMedia(parts: ShownPart[], media: TextMedia): ShownPart[] {
+  return parts.map((part, index) =>
+    part.live
+      ? part
+      : {
+          ...part,
+          media: media
+            .tilesOf(index)
+            .flatMap((tile) => (tile.state === 'ready' && !tile.removing ? [tile.media] : [])),
+        },
+  );
 }
 
 function LoadedPost({
@@ -242,6 +269,7 @@ function LoadedPost({
   );
 
   const textChanges = post.status === 'draft' || post.status === 'failed';
+  const partsToPost = textChanges ? withTextMedia(parts, media) : parts;
   const onUndo = can.undo ? () => controller.undo() : undefined;
   const onRedo = can.redo ? () => controller.redo() : undefined;
   const settle = () => controller.settle();
@@ -276,7 +304,7 @@ function LoadedPost({
       <DraftPostTo
         postId={post.id}
         format={textVersion.format}
-        parts={parts}
+        parts={partsToPost}
         disabled={!can.postTo}
         prepare={settle}
         onScheduled={onScheduledPost}
@@ -295,7 +323,7 @@ function LoadedPost({
       <FailedPostTo
         scheduledPost={scheduledPost}
         textVersion={textVersion}
-        retryParts={parts}
+        retryParts={partsToPost}
         disabled={!can.postTo}
         prepare={settle}
         onRetried={onScheduledPost}
@@ -325,7 +353,7 @@ function LoadedPost({
                 parts,
                 connection?.needsReconnectForMedia ? askToReconnect : undefined,
               )
-            : undefined
+            : readOnlyMediaOf(parts)
         }
         header={<TextHeader origin={origin} tools={tools} action={postTo} />}
       />

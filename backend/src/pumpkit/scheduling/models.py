@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from pumpkit.core.db.base import Base
 from pumpkit.core.ids import ulid_with_prefix
+from pumpkit.posts.models import Media
 
 if TYPE_CHECKING:
     from pumpkit.auth.models import User
@@ -84,6 +85,13 @@ class ScheduledPost(Base):
         order_by="ScheduledPostPart.position",
         lazy="selectin",
     )
+    # Every Part's Media references, its own copy of the Text's: they go out with the Parts.
+    media: Mapped[list["ScheduledPostMedia"]] = relationship(
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="(ScheduledPostMedia.part_position, ScheduledPostMedia.position)",
+        lazy="selectin",
+    )
 
     # The publisher looks up due Scheduled posts by state and time.
     __table_args__ = (Index("ix_scheduled_posts_state_publish_at", "state", "publish_at"),)
@@ -110,6 +118,29 @@ class ScheduledPostPart(Base):
 
     # The unique index also serves the lookup of a Scheduled post's Parts.
     __table_args__ = (UniqueConstraint("scheduled_post_id", "position"),)
+
+
+class ScheduledPostMedia(Base):
+    """
+    One Media's place on a Scheduled post: its Part, by position, and its order among that Part's
+    Media. Keyed by the Part's position, not its row, since editing the text replaces the rows.
+    """
+
+    __tablename__ = "scheduled_post_media"
+
+    scheduled_post_id: Mapped[str] = mapped_column(
+        ForeignKey("scheduled_posts.id", ondelete="CASCADE"), primary_key=True
+    )
+    # A Media sits on a Scheduled post once.
+    media_id: Mapped[str] = mapped_column(
+        ForeignKey("media.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    # The position of its Part, from 0.
+    part_position: Mapped[int] = mapped_column(Integer)
+    # Orders the Part's Media.
+    position: Mapped[int] = mapped_column(Integer)
+
+    media: Mapped[Media] = relationship(lazy="joined")
 
 
 class UnscheduledLiveParts(Base):

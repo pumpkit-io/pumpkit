@@ -325,7 +325,7 @@ describe('Posts page', () => {
         ],
         scheduledPost: {
           id: 'scheduled_post_01',
-          parts: [{ text: 'Ship small.', live: false, xPostUrl: null }],
+          parts: [{ text: 'Ship small.', live: false, xPostUrl: null, media: [] }],
           state: 'scheduled',
           publishAt: at(1, 9),
           publishedAt: null,

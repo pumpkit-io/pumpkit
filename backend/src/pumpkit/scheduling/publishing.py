@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
 import pumpkit.x_connection.service as x_connections_service
+from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import as_utc
 from pumpkit.scheduling import publish, service
 from pumpkit.scheduling.models import ScheduledPost
@@ -17,7 +18,12 @@ from pumpkit.x_connection.x_publisher import XPublisher
 
 
 async def publish_scheduled_post(
-    db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    storage: FileStorage,
+    *,
+    scheduled_post_id: str,
+    now: datetime,
 ) -> bool:
     """Post now. False when it wasn't scheduled, for instance because another caller claimed it."""
     claimed = await service.claim(db, scheduled_post_id=scheduled_post_id, now=now)
@@ -25,18 +31,20 @@ async def publish_scheduled_post(
     await db.commit()
     if not claimed:
         return False
-    await _publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
+    await _publish_claimed(db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now)
     return True
 
 
-async def publish_next_due(db: AsyncSession, publisher: XPublisher, *, now: datetime) -> bool:
+async def publish_next_due(
+    db: AsyncSession, publisher: XPublisher, storage: FileStorage, *, now: datetime
+) -> bool:
     """The publisher's step. False when nothing is due."""
     scheduled_post_id = await service.claim_next_due(db, now=now)
     # Commit the claim before calling X: from here on, no other pass can publish it.
     await db.commit()
     if scheduled_post_id is None:
         return False
-    await _publish_claimed(db, publisher, scheduled_post_id=scheduled_post_id, now=now)
+    await _publish_claimed(db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now)
     return True
 
 
@@ -64,12 +72,17 @@ async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
 
 
 async def _publish_claimed(
-    db: AsyncSession, publisher: XPublisher, *, scheduled_post_id: str, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    storage: FileStorage,
+    *,
+    scheduled_post_id: str,
+    now: datetime,
 ) -> None:
     scheduled_post = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
 
     try:
-        await _publish(db, publisher, scheduled_post, now=now)
+        await _publish(db, publisher, storage, scheduled_post, now=now)
     except publish.Failed as failed:
         # Still held when the failure came before the call to X; taken again after one.
         await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
@@ -89,11 +102,16 @@ async def _publish_claimed(
 
 
 async def _publish(
-    db: AsyncSession, publisher: XPublisher, scheduled_post: ScheduledPost, *, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    storage: FileStorage,
+    scheduled_post: ScheduledPost,
+    *,
+    now: datetime,
 ) -> None:
     """
-    Every Part not yet live, in order, each as a reply to the one before (ADR 0014), or
-    `publish.Failed`. The caller commits whatever it flushed, either way.
+    Every Part not yet live, in order, each with its Media uploaded just before it and as a reply
+    to the one before (ADR 0014), or `publish.Failed`. The caller commits whatever it flushed.
     """
     # One lock order everywhere, User then X connection then Scheduled post, so no two deadlock.
     await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
@@ -103,11 +121,19 @@ async def _publish(
     await db.commit()
 
     reply_to = None
-    for part in scheduled_post.parts:
+    for part, media in zip(scheduled_post.parts, service.media_by_part(scheduled_post)):
         if part.x_post_id is None:
             try:
+                media_ids = await publish.upload_media(
+                    publisher, storage, scheduled_post, part, media, access_token=access_token
+                )
                 x_post_id = await publish.call_x(
-                    publisher, scheduled_post, part, reply_to=reply_to, access_token=access_token
+                    publisher,
+                    scheduled_post,
+                    part,
+                    reply_to=reply_to,
+                    access_token=access_token,
+                    media_ids=media_ids,
                 )
             except publish.Failed as failed:
                 if failed.category == "reconnect_needed":
@@ -116,5 +142,8 @@ async def _publish(
                 raise
             await service.record_part_live(db, part, x_post_id=x_post_id)
             # Commit before the next Part, so a crash leaves a true record of what is live.
+            await db.commit()
+            await publish.delete_published_files(storage, media)
+            # Record the deleted files now: the next Part's upload may take long or fail.
             await db.commit()
         reply_to = part.x_post_id

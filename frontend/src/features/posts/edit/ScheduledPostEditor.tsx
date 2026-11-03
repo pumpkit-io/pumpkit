@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { destinationDraftOf } from '@/features/scheduledPosts/communities';
 import { xWeightedLength } from '@/lib/xLength';
 import type { ScheduledPost } from '@/services/scheduledPostService';
+import { ReadOnlyMediaTiles } from '../media/MediaTiles';
 import { Panel } from '../panels/panelParts';
 import { DateTimeFields, dateTimeOf } from '../postTo/WhenField';
 import { WhereField } from '../postTo/WhereField';
@@ -44,6 +45,7 @@ export function ScheduledPostEditor({
       charLimit,
       live: part.live,
       xPostUrl: part.xPostUrl,
+      media: part.media,
     };
   });
 
@@ -69,6 +71,13 @@ export function ScheduledPostEditor({
     <form noValidate onSubmit={(e) => void submit(e)} className="space-y-6">
       <TextCard
         parts={parts}
+        media={(index) => {
+          const media = parts[index]?.media ?? [];
+          const where = total > 1 ? `Part ${index + 1}` : 'the post';
+          return media.length
+            ? { tiles: <ReadOnlyMediaTiles media={media} where={where} /> }
+            : null;
+        }}
         renderText={(part, index) =>
           part.live ? undefined : (
             <Textarea

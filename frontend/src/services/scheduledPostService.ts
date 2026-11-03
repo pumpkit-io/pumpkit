@@ -1,4 +1,5 @@
 import { apiService } from './apiService';
+import { toMedia, type Media, type MediaApi } from './mediaService';
 
 export type ScheduledPostState = 'scheduled' | 'publishing' | 'published' | 'failed';
 
@@ -44,6 +45,8 @@ export interface ScheduledPostPart {
   live: boolean;
   /** This Part on X, once live. */
   xPostUrl: string | null;
+  /** Published with this Part, in order; once live only its preview is kept. */
+  media: Media[];
 }
 
 /** A text set to be published on the User's X account, with its own copy of the text. */
@@ -66,7 +69,7 @@ export interface ScheduledPost {
 
 export interface ScheduledPostApi {
   id: string;
-  parts: { text: string; live: boolean; x_post_url: string | null }[];
+  parts: { text: string; live: boolean; x_post_url: string | null; media: MediaApi[] }[];
   state: ScheduledPostState;
   publish_at: string;
   published_at: string | null;
@@ -79,7 +82,12 @@ export interface ScheduledPostApi {
 
 export const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
   id: p.id,
-  parts: p.parts.map((part) => ({ text: part.text, live: part.live, xPostUrl: part.x_post_url })),
+  parts: p.parts.map((part) => ({
+    text: part.text,
+    live: part.live,
+    xPostUrl: part.x_post_url,
+    media: part.media.map(toMedia),
+  })),
   state: p.state,
   publishAt: p.publish_at,
   publishedAt: p.published_at,

@@ -40,7 +40,9 @@ def _at(iso: str) -> datetime:
 
 
 @pytest.fixture
-def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, post_with):
+def create(
+    db, user, subscribed, fake_x_publisher, file_storage, fake_x_reader, fixed_clock, post_with
+):
     """
     A new Scheduled post for `user` for 14:00 UTC unless the fields say otherwise, copied from a
     new Post's Text of `parts` unless `post_id` names one.
@@ -54,6 +56,7 @@ def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, p
         return await mediator.create_scheduled_post(
             db=db,
             publisher=fake_x_publisher,
+            storage=file_storage,
             reader=fake_x_reader,
             user=user,
             new=NewScheduledPost(**fields),
@@ -64,11 +67,12 @@ def create(db, user, subscribed, fake_x_publisher, fake_x_reader, fixed_clock, p
 
 
 @pytest.fixture
-def edit(db, user, fake_x_publisher, fake_x_reader, fixed_clock):
+def edit(db, user, fake_x_publisher, file_storage, fake_x_reader, fixed_clock):
     async def _edit(scheduled_post_id: str, **fields) -> ScheduledPostResponse:
         return await mediator.edit_scheduled_post(
             db=db,
             publisher=fake_x_publisher,
+            storage=file_storage,
             reader=fake_x_reader,
             user=user,
             scheduled_post_id=scheduled_post_id,

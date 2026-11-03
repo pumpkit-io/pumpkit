@@ -103,7 +103,12 @@ async def test_a_community_post_x_refuses_for_a_non_member_fails_with_a_membersh
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "refused_by_x", "format": "post", "part_count": 1},
+        properties={
+            "reason": "refused_by_x",
+            "format": "post",
+            "part_count": 1,
+            "has_media": False,
+        },
     )
 
 
@@ -168,6 +173,7 @@ async def test_a_community_post_is_tracked_with_where_it_went(
             "share_with_followers": True,
             "format": "post",
             "part_count": 1,
+            "has_media": False,
         },
         {
             "source": "final",
@@ -175,8 +181,15 @@ async def test_a_community_post_is_tracked_with_where_it_went(
             "share_with_followers": False,
             "format": "post",
             "part_count": 1,
+            "has_media": False,
         },
-        {"source": "final", "destination": "profile", "format": "post", "part_count": 1},
+        {
+            "source": "final",
+            "destination": "profile",
+            "format": "post",
+            "part_count": 1,
+            "has_media": False,
+        },
     ]
 
 

@@ -47,7 +47,7 @@ async def test_editing_the_text_of_a_scheduled_post_saves_it(
     edited = response.json()
     assert edited == {
         **scheduled,
-        "parts": [{"text": "Launch day.", "live": False, "x_post_url": None}],
+        "parts": [{"text": "Launch day.", "live": False, "x_post_url": None, "media": []}],
     }
     assert await _listed(client) == [edited]
 
@@ -67,7 +67,7 @@ async def test_editing_the_parts_of_a_scheduled_post_replaces_them_all_in_order(
 
     assert [part["text"] for part in response.json()["parts"]] == ["Now two.", "The second."]
     assert shortened.json()["parts"] == [
-        {"text": "Back to one.", "live": False, "x_post_url": None}
+        {"text": "Back to one.", "live": False, "x_post_url": None, "media": []}
     ]
     assert await _listed(client) == [shortened.json()]
 
@@ -147,16 +147,23 @@ async def test_the_parts_after_the_live_ones_can_be_edited_added_removed_and_reo
     assert response.status_code == 200, response.text
     assert response.json()["parts"] == [
         failed["parts"][0],
-        {"text": "Four.", "live": False, "x_post_url": None},
-        {"text": "Fixed two.", "live": False, "x_post_url": None},
-        {"text": "New five.", "live": False, "x_post_url": None},
+        {"text": "Four.", "live": False, "x_post_url": None, "media": []},
+        {"text": "Fixed two.", "live": False, "x_post_url": None, "media": []},
+        {"text": "New five.", "live": False, "x_post_url": None, "media": []},
     ]
     assert failed["parts"][0]["live"] is True
     assert await _listed(client) == [response.json()]
 
 
 async def test_rescheduling_a_thread_failed_partway_publishes_only_the_parts_not_live(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     failed = await _failed_after_part_one(
@@ -168,7 +175,7 @@ async def test_rescheduling_a_thread_failed_partway_publishes_only_the_parts_not
     )
     fixed_clock.advance(timedelta(hours=1))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     [published] = await _listed(client)
     assert published["state"] == "published"
@@ -178,7 +185,14 @@ async def test_rescheduling_a_thread_failed_partway_publishes_only_the_parts_not
 
 
 async def test_rescheduling_a_thread_that_failed_on_part_1_publishes_it_from_the_start(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
@@ -195,7 +209,7 @@ async def test_rescheduling_a_thread_that_failed_on_part_1_publishes_it_from_the
     )
     fixed_clock.advance(timedelta(hours=1))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert [text for _, text in fake_x_publisher.published[1:]] == ["One.", "Two."]
     assert fake_x_publisher.replied_to[1:] == [None, "1890000000000000002"]
@@ -299,14 +313,21 @@ async def test_a_published_scheduled_post_cannot_be_edited(
 
 
 async def test_rescheduling_a_failed_post_sends_it_to_the_x_account_connected_now(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     scheduled = await _schedule(client, post_with, "2026-10-10T12:02:00Z", "For Ada")
     fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
     await connect_x()
     fixed_clock.advance(timedelta(minutes=2))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert (await _listed(client))[0]["failed_reason"] == X_ACCOUNT_CHANGED_REASON
 
     response = await client.patch(
@@ -320,13 +341,20 @@ async def test_rescheduling_a_failed_post_sends_it_to_the_x_account_connected_no
     assert rescheduled["failed_reason"] is None
     assert rescheduled["publish_at"] == "2026-10-10T12:05:00Z"
     fixed_clock.advance(timedelta(minutes=3))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert (await _listed(client))[0]["state"] == "published"
     assert fake_x_publisher.published == [("access-2002-2", "For Grace")]
 
 
 async def test_rescheduling_a_post_waiting_to_retry_drops_its_backoff(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     scheduled = await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Busy X")
@@ -334,14 +362,14 @@ async def test_rescheduling_a_post_waiting_to_retry_drops_its_backoff(
     # Tried at 12:02:30 and 12:03:30; without the reset the next try would wait for 12:05:30.
     for minutes in (2, 1):
         fixed_clock.advance(timedelta(minutes=minutes))
-        await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+        await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     fake_x_publisher.fail_publish = None
 
     response = await client.patch(
         f"{SCHEDULED_POSTS}/{scheduled['id']}", json={"publish_at": "2026-10-10T12:05:00Z"}
     )
     fixed_clock.advance(timedelta(minutes=1, seconds=30))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert response.status_code == 200, response.text
     assert (await _listed(client))[0]["state"] == "published"
@@ -349,7 +377,14 @@ async def test_rescheduling_a_post_waiting_to_retry_drops_its_backoff(
 
 
 async def test_cancelling_a_scheduled_post_removes_it(
-    client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+    file_storage,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
 ):
     await connect_x()
     cancelled = await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Cancelled")
@@ -360,7 +395,7 @@ async def test_cancelling_a_scheduled_post_removes_it(
     assert response.status_code == 204
     assert await _listed(client) == [kept]
     fixed_clock.advance(timedelta(minutes=5))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert [text for _, text in fake_x_publisher.published] == ["Kept"]
 
 

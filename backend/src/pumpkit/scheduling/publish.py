@@ -12,12 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.billing.service as subscriptions_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.analytics import posthog_client
+from pumpkit.core.logging import logger
+from pumpkit.core.storage import FileStorage, StoredFileNotFoundError
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import format_of, part_name
+from pumpkit.posts.models import MEDIA_GIF, MEDIA_IMAGE, MEDIA_VIDEO, Media, MediaKind
 from pumpkit.scheduling import service
 from pumpkit.scheduling.models import ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import (
+    MediaCategory,
+    XMediaRefusedError,
     XNotReceivedError,
     XPostRejectedError,
     XPublisher,
@@ -43,7 +48,15 @@ FailureCategory = Literal[
     "x_unavailable",
     "refused_by_x",
     "outcome_unknown",
+    "media_missing",
 ]
+
+# What X calls each kind of Media on upload.
+_CATEGORIES: dict[MediaKind, MediaCategory] = {
+    MEDIA_IMAGE: "tweet_image",
+    MEDIA_GIF: "tweet_gif",
+    MEDIA_VIDEO: "tweet_video",
+}
 
 NOT_SUBSCRIBED_REASON = "Not published: your subscription had ended. Subscribe, then reschedule it."
 X_ACCOUNT_CHANGED_REASON = (
@@ -58,6 +71,7 @@ X_UNAVAILABLE_REASON = f"Not published: {X_UNAVAILABLE}"
 OUTCOME_UNKNOWN_REASON = (
     "X didn't confirm this post. It may have been published. Check your X profile."
 )
+MEDIA_MISSING = "its media is no longer stored. Remove it, attach it again, then reschedule."
 # X answers a Community post from a non-member with a 403, and can't be asked about membership.
 COMMUNITY_MEMBERSHIP_HINT = (
     "Check that your X account is a member of this community and allowed to post in it."
@@ -170,10 +184,12 @@ async def call_x(
     *,
     reply_to: Optional[str],
     access_token: str,
+    media_ids: list[str],
 ) -> str:
     """
-    X's post id for `part`, sent as a reply to `reply_to` when given, or `Failed`, whose reason
-    names the Part in a Thread. A "reconnect_needed" one means X refused the access token.
+    X's post id for `part`, sent with the uploaded `media_ids` as a reply to `reply_to` when
+    given, or `Failed`, whose reason names the Part in a Thread. A "reconnect_needed" one means
+    X refused the access token.
     """
     subject = _subject(scheduled_post, part)
     try:
@@ -183,6 +199,7 @@ async def call_x(
             community_id=scheduled_post.community_id,
             share_with_followers=scheduled_post.share_with_followers,
             reply_to=reply_to,
+            media_ids=media_ids,
         )
     except XReconnectNeededError:
         raise Failed("reconnect_needed", _not_published(subject, RECONNECT_NEEDED))
@@ -195,6 +212,61 @@ async def call_x(
         raise Failed("refused_by_x", reason)
     except XPublisherError:
         raise Failed("outcome_unknown", _outcome_unknown(subject))
+
+
+async def upload_media(
+    publisher: XPublisher,
+    storage: FileStorage,
+    scheduled_post: ScheduledPost,
+    part: ScheduledPostPart,
+    media: list[Media],
+    *,
+    access_token: str,
+) -> list[str]:
+    """
+    X's media ids for `media`, the Part's, uploaded in order, or `Failed`. X has published
+    nothing for the Part yet, so any upload X didn't take may be tried again.
+    """
+    subject = _subject(scheduled_post, part)
+    media_ids = []
+    for one in media:
+        try:
+            if one.file_key is None:
+                raise StoredFileNotFoundError(f"media/{one.id}")
+            with await storage.open(one.file_key) as source:
+                media_ids.append(
+                    await publisher.upload_media(
+                        access_token=access_token,
+                        source=source,
+                        byte_size=one.byte_size,
+                        content_type=one.content_type,
+                        category=_CATEGORIES[one.kind],
+                    )
+                )
+        except StoredFileNotFoundError:
+            raise Failed("media_missing", _not_published(subject, MEDIA_MISSING))
+        except XReconnectNeededError:
+            raise Failed("reconnect_needed", _not_published(subject, RECONNECT_NEEDED))
+        except XMediaRefusedError as refused:
+            where = f"the media on {subject}" if subject else "the post's media"
+            raise Failed("refused_by_x", f"X refused {where}: {refused.message}")
+        except XPublisherError:
+            raise Failed("x_unavailable", _not_published(subject, X_UNAVAILABLE))
+    return media_ids
+
+
+async def delete_published_files(storage: FileStorage, media: list[Media]) -> None:
+    """Delete the files of a live Part's Media, keeping their previews. Flushes nothing."""
+    for one in media:
+        if one.file_key is None:
+            continue
+        try:
+            await storage.delete(one.file_key)
+        except OSError:
+            # Left on disk: the Part is live, so its file is never read again.
+            logger.exception("Deleting the published file of %s failed", one.id)
+            continue
+        one.file_key = None
 
 
 def _subject(scheduled_post: ScheduledPost, part: ScheduledPostPart) -> Optional[str]:
@@ -237,7 +309,11 @@ def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optiona
 
 
 def _shape(scheduled_post: ScheduledPost) -> dict[str, object]:
-    return {"format": format_of(scheduled_post.parts), "part_count": len(scheduled_post.parts)}
+    return {
+        "format": format_of(scheduled_post.parts),
+        "part_count": len(scheduled_post.parts),
+        "has_media": bool(scheduled_post.media),
+    }
 
 
 def capture_published(scheduled_post: ScheduledPost) -> None:

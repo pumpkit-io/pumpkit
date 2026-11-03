@@ -1,4 +1,5 @@
 import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
+import type { Media } from '@/services/mediaService';
 import type { PostDetail, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
@@ -10,6 +11,8 @@ export interface ShownPart {
   /** Live on X in a Thread that failed partway, and so locked; marked only on a Failed Post. */
   live: boolean;
   xPostUrl: string | null;
+  /** What goes out with it; the Text's Media is filled in by the page that holds it. */
+  media: Media[];
 }
 
 /**
@@ -30,10 +33,11 @@ export function retryParts(
       charLimit,
       live: true,
       xPostUrl: part.xPostUrl,
+      media: part.media,
     }));
   const rest = text.parts
     .slice(live.length)
-    .map((part) => ({ ...part, live: false, xPostUrl: null }));
+    .map((part) => ({ ...part, live: false, xPostUrl: null, media: [] }));
   return [...live, ...rest];
 }
 
@@ -47,7 +51,9 @@ export function cardParts(
   xCharLimit: number | null,
 ): ShownPart[] {
   const { scheduledPost } = post;
-  if (!scheduledPost) return textVersion.parts.map((p) => ({ ...p, live: false, xPostUrl: null }));
+  if (!scheduledPost) {
+    return textVersion.parts.map((p) => ({ ...p, live: false, xPostUrl: null, media: [] }));
+  }
   if (scheduledPost.state === 'failed') return retryParts(textVersion, scheduledPost, xCharLimit);
   const charLimit = xCharLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS;
   return scheduledPost.parts.map((part) => ({
@@ -56,6 +62,7 @@ export function cardParts(
     charLimit,
     live: false,
     xPostUrl: part.xPostUrl,
+    media: part.media,
   }));
 }
 

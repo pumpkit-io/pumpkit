@@ -211,7 +211,14 @@ async def test_a_post_that_fails_before_x_accepts_anything_gives_back_every_x_po
 
 
 async def test_a_post_a_crash_left_publishing_gives_back_the_x_posts_x_never_accepted(
-    client, ready, post_with, fake_billing, fake_x_publisher, db_session_maker, fixed_clock
+    file_storage,
+    client,
+    ready,
+    post_with,
+    fake_billing,
+    fake_x_publisher,
+    db_session_maker,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _schedule(client, post_with, "2026-10-11T09:00:00Z", "Earlier")
@@ -224,7 +231,7 @@ async def test_a_post_a_crash_left_publishing_gives_back_the_x_posts_x_never_acc
         await session.commit()
     fixed_clock.advance(timedelta(minutes=10, seconds=30))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert await _x_posts_left(client) == (3, [2])
 
@@ -359,7 +366,14 @@ async def test_an_edit_dropping_parts_moves_a_later_post_onto_the_allowance(
 
 
 async def test_a_post_failing_at_the_publisher_moves_a_later_one_onto_the_allowance(
-    client, ready, post_with, fake_billing, fake_x_publisher, db_session_maker, fixed_clock
+    file_storage,
+    client,
+    ready,
+    post_with,
+    fake_billing,
+    fake_x_publisher,
+    db_session_maker,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _schedule(client, post_with, "2026-10-10T12:02:00Z", *["Part"] * 4)
@@ -367,7 +381,7 @@ async def test_a_post_failing_at_the_publisher_moves_a_later_one_onto_the_allowa
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
     fixed_clock.advance(timedelta(minutes=3))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert await _x_posts_left(client) == (3, [2])
 

@@ -48,19 +48,26 @@ async def _listed(client: AsyncClient) -> dict[str, dict]:
 
 
 async def test_a_scheduled_post_is_published_once_due_and_never_before(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule(client, post_with, "2026-10-10T12:05:00Z", "At five past")
     fixed_clock.advance(timedelta(minutes=4, seconds=29))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert (await _listed(client))["At five past"]["state"] == "scheduled"
     assert fake_x_publisher.published == []
 
     fixed_clock.advance(timedelta(seconds=1))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     published = (await _listed(client))["At five past"]
     assert published["state"] == "published"
@@ -81,7 +88,14 @@ async def _schedule_thread(
 
 
 async def test_a_due_thread_goes_out_as_a_chain_each_part_replying_to_the_one_before(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule_thread(
@@ -89,7 +103,7 @@ async def test_a_due_thread_goes_out_as_a_chain_each_part_replying_to_the_one_be
     )
     fixed_clock.advance(timedelta(minutes=5))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert [text for _, text in fake_x_publisher.published] == [
         "Part one",
@@ -112,7 +126,14 @@ async def test_a_due_thread_goes_out_as_a_chain_each_part_replying_to_the_one_be
 
 
 async def test_a_thread_x_rate_limits_partway_goes_on_from_that_part_after_a_backoff(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["One", "Two", "Three"])
@@ -120,14 +141,14 @@ async def test_a_thread_x_rate_limits_partway_goes_on_from_that_part_after_a_bac
     fake_x_publisher.fail_publish = XRateLimitedError("429")
     fake_x_publisher.fail_publish_on = 2
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     waiting = (await _listed(client))["One"]
     assert waiting["state"] == "scheduled"
     assert [p["live"] for p in waiting["parts"]] == [True, False, False]
 
     fixed_clock.advance(timedelta(minutes=1))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert [text for _, text in fake_x_publisher.published] == ["One", "Two", "Two", "Three"]
     assert fake_x_publisher.replied_to == [
@@ -144,7 +165,14 @@ async def test_a_thread_x_rate_limits_partway_goes_on_from_that_part_after_a_bac
 
 
 async def test_a_thread_is_not_published_while_a_part_is_not_live(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["First", "Second"])
@@ -152,7 +180,7 @@ async def test_a_thread_is_not_published_while_a_part_is_not_live(
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
     fake_x_publisher.fail_publish_on = 2
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     failed = (await _listed(client))["First"]
     assert failed["state"] == "failed"
@@ -163,7 +191,14 @@ async def test_a_thread_is_not_published_while_a_part_is_not_live(
 
 
 async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_live(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
@@ -171,7 +206,7 @@ async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_
     fake_x_publisher.fail_publish = XPostRejectedError(400, "Duplicate content.")
     fake_x_publisher.fail_publish_on = 3
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     failed = (await _listed(client))["A"]
     assert failed["state"] == "failed"
@@ -187,7 +222,14 @@ async def test_a_thread_whose_part_3_of_5_x_refuses_fails_keeping_parts_1_and_2_
 
 
 async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_check_the_profile(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["A", "B", "C", "D", "E"])
@@ -195,9 +237,9 @@ async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_chec
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
     fake_x_publisher.fail_publish_on = 3
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     fixed_clock.advance(timedelta(minutes=5))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     failed = (await _listed(client))["A"]
     assert failed["state"] == "failed"
@@ -209,6 +251,7 @@ async def test_a_thread_whose_part_3_has_an_unknown_outcome_fails_saying_to_chec
 
 
 async def test_a_due_community_post_goes_out_in_its_community(
+    file_storage,
     post_with,
     client,
     db_session_maker,
@@ -237,7 +280,7 @@ async def test_a_due_community_post_goes_out_in_its_community(
     }
     fixed_clock.advance(timedelta(minutes=5))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert (await _listed(client))["For the Community"]["state"] == "published"
     assert fake_x_publisher.published == [("access-1001-1", "For the Community")]
@@ -245,6 +288,7 @@ async def test_a_due_community_post_goes_out_in_its_community(
 
 
 async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_membership_hint(
+    file_storage,
     post_with,
     client,
     db_session_maker,
@@ -270,7 +314,7 @@ async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_memb
     )
     fixed_clock.advance(timedelta(minutes=5))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     failed = (await _listed(client))["Not a member"]
     assert failed["state"] == "failed"
@@ -281,20 +325,34 @@ async def test_a_due_community_post_x_refuses_for_a_non_member_fails_with_a_memb
 
 
 async def test_a_due_scheduled_post_publishes_without_a_subscription_where_no_plans_are_sold(
-    post_with, client, db_session_maker, sells_no_plans, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    sells_no_plans,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule(client, post_with, "2026-10-10T12:05:00Z", "No Plans here")
     fixed_clock.advance(timedelta(minutes=5))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert (await _listed(client))["No Plans here"]["state"] == "published"
     assert fake_x_publisher.published == [("access-1001-1", "No Plans here")]
 
 
 async def test_one_pass_publishes_every_due_scheduled_post(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule(client, post_with, "2026-10-10T12:03:00Z", "First")
@@ -302,14 +360,21 @@ async def test_one_pass_publishes_every_due_scheduled_post(
     await _schedule(client, post_with, "2026-10-10T13:00:00Z", "Later")
     fixed_clock.advance(timedelta(minutes=5))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert [text for _, text in fake_x_publisher.published] == ["Second", "First"]
     assert (await _listed(client))["Later"]["state"] == "scheduled"
 
 
 async def test_two_passes_at_once_publish_each_scheduled_post_once(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     for minute in (2, 3, 4):
@@ -330,8 +395,8 @@ async def test_two_passes_at_once_publish_each_scheduled_post_once(
     fake_x_publisher.publish = overlapping_publish
 
     await asyncio.gather(
-        run_pass(db_session_maker, fake_x_publisher, fixed_clock),
-        run_pass(db_session_maker, fake_x_publisher, fixed_clock),
+        run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock),
+        run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock),
     )
 
     assert sorted(text for _, text in fake_x_publisher.published) == ["Post 2", "Post 3", "Post 4"]
@@ -340,6 +405,7 @@ async def test_two_passes_at_once_publish_each_scheduled_post_once(
 
 @pytest.mark.parametrize("error", [XRateLimitedError("429"), XNotReceivedError("ConnectError")])
 async def test_a_post_x_never_took_is_retried_after_a_backoff(
+    file_storage,
     post_with,
     client,
     db_session_maker,
@@ -354,7 +420,7 @@ async def test_a_post_x_never_took_is_retried_after_a_backoff(
     fixed_clock.advance(timedelta(minutes=1, seconds=30))
     fake_x_publisher.fail_publish = error
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     waiting = (await _listed(client))["Busy X"]
     assert waiting["state"] == "scheduled"
@@ -362,36 +428,50 @@ async def test_a_post_x_never_took_is_retried_after_a_backoff(
 
     fake_x_publisher.fail_publish = None
     fixed_clock.advance(timedelta(seconds=30))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert len(fake_x_publisher.published) == 1
 
     fixed_clock.advance(timedelta(seconds=30))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert (await _listed(client))["Busy X"]["state"] == "published"
     assert len(fake_x_publisher.published) == 2
 
 
 async def test_a_refresh_x_never_took_is_retried_too(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule(client, post_with, "2026-10-10T14:00:00Z", "Needs a fresh token")
     fixed_clock.advance(timedelta(hours=2))
     fake_x_publisher.fail_refresh = XNotReceivedError("ConnectError")
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert (await _listed(client))["Needs a fresh token"]["state"] == "scheduled"
     fake_x_publisher.fail_refresh = None
     fixed_clock.advance(timedelta(minutes=1))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert (await _listed(client))["Needs a fresh token"]["state"] == "published"
 
 
 async def test_a_rate_limited_post_gives_up_as_failed_15_minutes_after_its_publish_time(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Never goes out")
@@ -400,13 +480,13 @@ async def test_a_rate_limited_post_gives_up_as_failed_15_minutes_after_its_publi
 
     # Every 30 seconds, like the publisher, up to a minute before giving up.
     for _ in range(28):
-        await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+        await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
         fixed_clock.advance(timedelta(seconds=30))
     assert (await _listed(client))["Never goes out"]["state"] == "scheduled"
     tries_before_the_deadline = len(fake_x_publisher.published)
 
     for _ in range(4):
-        await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+        await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
         fixed_clock.advance(timedelta(seconds=30))
 
     failed = (await _listed(client))["Never goes out"]
@@ -418,16 +498,23 @@ async def test_a_rate_limited_post_gives_up_as_failed_15_minutes_after_its_publi
 
 
 async def test_a_post_whose_outcome_is_unknown_fails_without_a_retry(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule(client, post_with, "2026-10-10T12:02:00Z", "Timed out")
     fixed_clock.advance(timedelta(minutes=2))
     fake_x_publisher.fail_publish = XOutcomeUnknownError("timeout")
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     fixed_clock.advance(timedelta(minutes=5))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     failed = (await _listed(client))["Timed out"]
     assert failed["state"] == "failed"
@@ -458,6 +545,7 @@ async def _crashed_mid_publish(
 
 
 async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
+    file_storage,
     post_with,
     client,
     db_session_maker,
@@ -475,12 +563,12 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock)
     fixed_clock.advance(timedelta(minutes=10))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     assert (await _listed(client))["Stuck"]["state"] == "publishing"
 
     fixed_clock.advance(timedelta(seconds=30))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     stuck = (await _listed(client))["Stuck"]
     assert stuck["state"] == "failed"
@@ -489,12 +577,24 @@ async def test_a_post_stuck_in_publishing_for_over_10_minutes_becomes_failed(
     captured.capture.assert_called_once_with(
         "scheduled_post_failed",
         distinct_id=subscribed.user_id,
-        properties={"reason": "outcome_unknown", "format": "post", "part_count": 1},
+        properties={
+            "reason": "outcome_unknown",
+            "format": "post",
+            "part_count": 1,
+            "has_media": False,
+        },
     )
 
 
 async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_live(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _schedule_thread(
@@ -504,7 +604,7 @@ async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_li
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=1)
     fixed_clock.advance(timedelta(minutes=10, seconds=30))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     stuck = (await _listed(client))["Went out"]
     assert stuck["state"] == "failed"
@@ -520,6 +620,7 @@ async def test_a_thread_stuck_in_publishing_after_part_1_fails_keeping_part_1_li
 
 
 async def test_a_post_stuck_in_publishing_with_its_part_live_becomes_published(
+    file_storage,
     post_with,
     client,
     db_session_maker,
@@ -537,7 +638,7 @@ async def test_a_post_stuck_in_publishing_with_its_part_live_becomes_published(
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=1)
     fixed_clock.advance(timedelta(minutes=10, seconds=30))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     published = (await _listed(client))["Went out"]
     assert published["state"] == "published"
@@ -549,12 +650,25 @@ async def test_a_post_stuck_in_publishing_with_its_part_live_becomes_published(
     captured.capture.assert_called_once_with(
         "scheduled_post_published",
         distinct_id=subscribed.user_id,
-        properties={"source": "final", "destination": "profile", "format": "post", "part_count": 1},
+        properties={
+            "source": "final",
+            "destination": "profile",
+            "format": "post",
+            "part_count": 1,
+            "has_media": False,
+        },
     )
 
 
 async def test_a_thread_stuck_in_publishing_with_every_part_live_becomes_published(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     scheduled_post_id = await _schedule_thread(
@@ -564,7 +678,7 @@ async def test_a_thread_stuck_in_publishing_with_every_part_live_becomes_publish
     await _crashed_mid_publish(db_session_maker, scheduled_post_id, fixed_clock, live_parts=2)
     fixed_clock.advance(timedelta(minutes=10, seconds=30))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     published = (await _listed(client))["All out"]
     assert published["state"] == "published"
@@ -575,7 +689,14 @@ async def test_a_thread_stuck_in_publishing_with_every_part_live_becomes_publish
 
 
 async def test_the_loop_runs_passes_until_it_is_stopped(
-    post_with, client, db_session_maker, subscribed, fake_x_publisher, fixed_clock, connect_x
+    file_storage,
+    post_with,
+    client,
+    db_session_maker,
+    subscribed,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
 ):
     await connect_x()
     await _schedule(client, post_with, "2026-10-10T12:02:00Z", "From the loop")
@@ -586,6 +707,7 @@ async def test_the_loop_runs_passes_until_it_is_stopped(
         run(
             db_session_maker,
             fake_x_publisher,
+            file_storage,
             fixed_clock,
             poll_interval=timedelta(milliseconds=10),
             stop=stop,
@@ -599,7 +721,7 @@ async def test_the_loop_runs_passes_until_it_is_stopped(
 
 
 async def test_the_loop_touches_its_heartbeat_after_each_pass_that_completes(
-    db_session_maker, fake_x_publisher, fixed_clock, tmp_path
+    file_storage, db_session_maker, fake_x_publisher, fixed_clock, tmp_path
 ):
     heartbeat = tmp_path / "heartbeat"
     stop = asyncio.Event()
@@ -608,6 +730,7 @@ async def test_the_loop_touches_its_heartbeat_after_each_pass_that_completes(
         run(
             db_session_maker,
             fake_x_publisher,
+            file_storage,
             fixed_clock,
             poll_interval=timedelta(milliseconds=10),
             stop=stop,
@@ -621,7 +744,9 @@ async def test_the_loop_touches_its_heartbeat_after_each_pass_that_completes(
     assert heartbeat.exists()
 
 
-async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed_clock, tmp_path):
+async def test_a_failing_pass_leaves_the_heartbeat_alone(
+    file_storage, fake_x_publisher, fixed_clock, tmp_path
+):
     heartbeat = tmp_path / "heartbeat"
     broken_session_maker = MagicMock(side_effect=RuntimeError("database unreachable"))
     stop = asyncio.Event()
@@ -630,6 +755,7 @@ async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed
         run(
             broken_session_maker,
             fake_x_publisher,
+            file_storage,
             fixed_clock,
             poll_interval=timedelta(milliseconds=10),
             stop=stop,
@@ -644,6 +770,7 @@ async def test_a_failing_pass_leaves_the_heartbeat_alone(fake_x_publisher, fixed
 
 
 async def test_a_loop_turned_off_publishes_nothing_and_keeps_its_heartbeat(
+    file_storage,
     post_with,
     client,
     db_session_maker,
@@ -663,6 +790,7 @@ async def test_a_loop_turned_off_publishes_nothing_and_keeps_its_heartbeat(
         run(
             db_session_maker,
             fake_x_publisher,
+            file_storage,
             fixed_clock,
             poll_interval=timedelta(milliseconds=10),
             stop=stop,
@@ -686,6 +814,7 @@ def test_the_compose_healthcheck_reads_the_heartbeat_the_publisher_touches():
 
 
 async def test_the_pass_tracks_what_it_publishes(
+    file_storage,
     post_with,
     client,
     db_session_maker,
@@ -701,7 +830,7 @@ async def test_the_pass_tracks_what_it_publishes(
     await _schedule_thread(client, post_with, "2026-10-10T12:02:00Z", ["One", "Two"])
     fixed_clock.advance(timedelta(minutes=2))
 
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
 
     captured.capture.assert_called_once_with(
         "scheduled_post_published",
@@ -711,6 +840,7 @@ async def test_the_pass_tracks_what_it_publishes(
             "destination": "profile",
             "format": "thread",
             "part_count": 2,
+            "has_media": False,
         },
     )
 

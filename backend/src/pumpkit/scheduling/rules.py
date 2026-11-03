@@ -1,11 +1,14 @@
 """The rules a new or moved Scheduled post meets, each refusal in words for the User."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
 from pumpkit.core.errors import ConflictError, RefusedError
 from pumpkit.posts.formats import part_name
+from pumpkit.posts.media_files import X_MEDIA_RULE, over_x_rule
+from pumpkit.posts.models import MediaKind
 from pumpkit.x_connection.x_length import has_link, x_weighted_length
 
 # A publish time is at least this far ahead, so the User can't schedule one by mistake for now.
@@ -54,6 +57,33 @@ def check_length(parts: list[str], *, limit: int) -> None:
             subject = name.capitalize() if name else "This post"
             raise RuleBroken(
                 f"{subject} is {length:,} characters by X's count, over the {limit:,} limit."
+            )
+
+
+def check_media(kinds_by_part: Sequence[Sequence[MediaKind]]) -> None:
+    """Each Part's Media fits on one X post; the refusal names the first Part that doesn't."""
+    for number, kinds in enumerate(kinds_by_part, start=1):
+        if over_x_rule(kinds):
+            name = part_name(number, len(kinds_by_part))
+            subject = name.capitalize() if name else "This post"
+            raise RuleBroken(
+                f"{subject} has more media than X takes. {X_MEDIA_RULE}", code="MEDIA_OVER_X_RULE"
+            )
+
+
+def check_media_kept(kept_by_part: Sequence[Sequence[bool]], *, live_count: int = 0) -> None:
+    """
+    Every Media of the Parts not live still has its file: one already published on X was
+    deleted, and only its preview stays.
+    """
+    for number, kept in enumerate(kept_by_part, start=1):
+        if number > live_count and not all(kept):
+            name = part_name(number, len(kept_by_part))
+            subject = name.capitalize() if name else "This post"
+            raise RuleBroken(
+                f"{subject} has media that already went out on X, so Pumpkit no longer keeps it. "
+                "Remove it and attach the file again.",
+                code="MEDIA_GONE",
             )
 
 

@@ -15,6 +15,7 @@ from pumpkit.core.mcp_tools import (
     ToolCall,
 )
 from pumpkit.core.schemas import LinkToolResponse
+from pumpkit.core.storage import get_file_storage
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
@@ -88,6 +89,7 @@ async def _create_scheduled_post(
     scheduled_post = await mediator.create_scheduled_post(
         db=call.db,
         publisher=await call.provide(get_x_publisher),
+        storage=await call.provide(get_file_storage),
         reader=await call.provide(get_x_reader),
         user=call.user,
         new=new,
@@ -210,6 +212,7 @@ async def edit_scheduled_post(
     scheduled_post = await mediator.edit_scheduled_post(
         db=call.db,
         publisher=await call.provide(get_x_publisher),
+        storage=await call.provide(get_file_storage),
         reader=await call.provide(get_x_reader),
         user=call.user,
         scheduled_post_id=scheduled_post_id,

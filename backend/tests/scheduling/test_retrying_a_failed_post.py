@@ -30,6 +30,7 @@ async def _status_of(client: AsyncClient, post_id: str) -> str:
 
 
 async def test_rescheduling_a_failed_post_with_its_text_schedules_that_text(
+    file_storage,
     client,
     db_session_maker,
     subscribed,
@@ -52,10 +53,12 @@ async def test_rescheduling_a_failed_post_with_its_text_schedules_that_text(
     assert response.status_code == 200, response.text
     rescheduled = response.json()
     assert rescheduled["state"] == "scheduled"
-    assert rescheduled["parts"] == [{"text": "Accepted.", "live": False, "x_post_url": None}]
+    assert rescheduled["parts"] == [
+        {"text": "Accepted.", "live": False, "x_post_url": None, "media": []}
+    ]
     assert await _status_of(client, post_id) == "scheduled"
     fixed_clock.advance(timedelta(hours=1))
-    await run_pass(db_session_maker, fake_x_publisher, fixed_clock)
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert [text for _, text in fake_x_publisher.published[1:]] == ["Accepted."]
 
 

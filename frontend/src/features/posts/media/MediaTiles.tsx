@@ -1,6 +1,7 @@
 import { Image as ImageIcon, RotateCw, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
+import type { Media } from '@/services/mediaService';
 import { useMediaPreview } from './useMediaPreview';
 import { holdsPlace, type Tile } from './useTextMedia';
 
@@ -27,6 +28,16 @@ function gridStyle(tiles: Tile[]): CSSProperties | undefined {
   return { aspectRatio: String(ratio) };
 }
 
+function gridClass(tiles: Tile[]): string {
+  const many = tiles.length > 4;
+  return cn(
+    'grid w-full gap-0.5 overflow-hidden rounded-2xl border border-border bg-card',
+    !many && 'max-h-[32rem]',
+    tiles.length > 1 && 'grid-cols-2',
+    tiles.length > 2 && !many && 'grid-rows-2',
+  );
+}
+
 const ROUND_BUTTON =
   'inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground/75 text-background transition-colors hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card motion-reduce:transition-none';
 
@@ -39,7 +50,8 @@ function MediaTile({
   tile: Tile;
   number: number;
   className: string;
-  onRemove: () => void;
+  /** Left out, the tile can't be removed: the Part is set to go, or went, to X. */
+  onRemove?: () => void;
 }) {
   const preview = useMediaPreview(tile.state === 'ready' ? tile.media.previewUrl : null);
   const src = preview.url ?? tile.localUrl;
@@ -59,14 +71,16 @@ function MediaTile({
           </div>
         )
       )}
-      <button
-        type="button"
-        aria-label={`Remove image ${number}`}
-        onClick={onRemove}
-        className={cn(ROUND_BUTTON, 'absolute right-1.5 top-1.5')}
-      >
-        <X aria-hidden className="h-4 w-4" />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={`Remove image ${number}`}
+          onClick={onRemove}
+          className={cn(ROUND_BUTTON, 'absolute right-1.5 top-1.5')}
+        >
+          <X aria-hidden className="h-4 w-4" />
+        </button>
+      )}
       {progress !== null && (
         <div
           role="progressbar"
@@ -164,16 +178,7 @@ export function MediaTiles({
   const cells = CELLS[shown.length] ?? [];
   let images = 0;
   return (
-    <ul
-      aria-label={`Media on ${where}`}
-      style={gridStyle(shown)}
-      className={cn(
-        'grid w-full gap-0.5 overflow-hidden rounded-2xl border border-border bg-card',
-        !many && 'max-h-[32rem]',
-        shown.length > 1 && 'grid-cols-2',
-        shown.length > 2 && !many && 'grid-rows-2',
-      )}
-    >
+    <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
       {shown.map((tile, index) => {
         const className = many ? 'aspect-video' : (cells[index] ?? '');
         return tile.state === 'refused' ? (
@@ -195,6 +200,31 @@ export function MediaTiles({
           />
         );
       })}
+    </ul>
+  );
+}
+
+/** Media that can't change any more, such as a Scheduled post's, in the same layout. */
+export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: string }) {
+  const shown = media.map((m): Tile => ({
+    key: m.id,
+    state: 'ready',
+    media: m,
+    localUrl: null,
+    removing: false,
+  }));
+  if (!shown.length) return null;
+  const cells = CELLS[shown.length] ?? [];
+  return (
+    <ul aria-label={`Media on ${where}`} style={gridStyle(shown)} className={gridClass(shown)}>
+      {shown.map((tile, index) => (
+        <MediaTile
+          key={tile.key}
+          tile={tile}
+          number={index + 1}
+          className={shown.length > 4 ? 'aspect-video' : (cells[index] ?? '')}
+        />
+      ))}
     </ul>
   );
 }
