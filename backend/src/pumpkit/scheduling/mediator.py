@@ -924,8 +924,8 @@ def _scheduled_post_taking_media(
     scheduled_post: Optional[ScheduledPost],
 ) -> Optional[ScheduledPost]:
     """
-    The Scheduled post whose own copy's Media changes: one waiting, or publishing, which then
-    refuses. None when the Text's Media changes, or the Text refuses.
+    The Scheduled post to attach to or remove from while it is waiting or publishing (publishing
+    then refuses). None once it failed or published, or with none: the Text takes the change.
     """
     if scheduled_post is None or scheduled_post.state in (FAILED, PUBLISHED):
         return None

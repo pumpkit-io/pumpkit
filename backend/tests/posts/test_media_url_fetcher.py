@@ -4,6 +4,7 @@ redirect checked again, capped by the file's kind while it downloads, and within
 """
 
 import asyncio
+import socket
 
 import httpx
 import pytest
@@ -129,9 +130,21 @@ async def test_an_answer_other_than_200_is_refused(production, fetcher):
     refusal = await _refusal(fetcher, URL)
 
     assert refusal.detail == (
-        "Pumpkit couldn't download media from this URL (answered HTTP 404). Give a public https"
-        " URL that serves the media itself."
+        "Pumpkit couldn't download media from this URL. Give a public https URL that serves the"
+        " media itself."
     )
+
+
+async def test_an_unresolvable_host_and_a_private_one_are_refused_alike(production):
+    async def unresolvable(host: str, port: int) -> list[str]:
+        raise socket.gaierror("Name or service not known")
+
+    private = HttpMediaUrlFetcher(resolve=resolving({"images.example.com": "10.0.0.5"}))
+
+    unknown = await _refusal(HttpMediaUrlFetcher(resolve=unresolvable), URL)
+    inside = await _refusal(private, URL)
+
+    assert unknown.detail == inside.detail
 
 
 @respx.mock

@@ -86,7 +86,7 @@ async def connected(subscribed, fixed_clock, connect_x) -> None:
     await connect_x()
 
 
-async def test_on_a_scheduled_post_media_changes_the_scheduled_posts_copy_not_the_text(
+async def test_attaching_on_a_scheduled_post_changes_the_scheduled_posts_copy_not_the_text(
     connected, mcp, post_with, fake_media_url_fetcher
 ):
     post_id = await post_with("One", "Two")
@@ -94,18 +94,29 @@ async def test_on_a_scheduled_post_media_changes_the_scheduled_posts_copy_not_th
     await _schedule(mcp, post_id)
 
     attached = await _attach(mcp, fake_media_url_fetcher, post_id, png(), part=2)
+
     assert attached["isError"] is False, attached
     added = attached["structuredContent"]["media"]
-    assert attached["structuredContent"]["message"] == "Attached to part 2 of its scheduled post."
+    assert attached["structuredContent"]["message"] == (
+        "Attached to part 2 of the post's scheduled post."
+    )
     assert await _scheduled_post_media(mcp, post_id) == [[on_text], [added]]
     assert await _media_through_mcp(mcp, post_id) == [[on_text], []]
+
+
+async def test_removing_on_a_scheduled_post_changes_the_scheduled_posts_copy_not_the_text(
+    connected, mcp, post_with, fake_media_url_fetcher
+):
+    post_id = await post_with("One")
+    on_text = await _attached(mcp, fake_media_url_fetcher, post_id)
+    await _schedule(mcp, post_id)
 
     removed = await mcp.call_tool("remove_media", post_id=post_id, media_id=on_text["id"])
 
     assert removed["isError"] is False, removed
-    assert removed["structuredContent"]["message"] == "Removed from its scheduled post."
-    assert await _scheduled_post_media(mcp, post_id) == [[], [added]]
-    assert await _media_through_mcp(mcp, post_id) == [[on_text], []]
+    assert removed["structuredContent"]["message"] == "Removed from the post's scheduled post."
+    assert await _scheduled_post_media(mcp, post_id) == [[]]
+    assert await _media_through_mcp(mcp, post_id) == [[on_text]]
 
 
 async def test_remove_media_takes_media_off_a_drafts_text(

@@ -313,8 +313,8 @@ async def restore_version(call: ToolCall[User], post_id: str, version_number: in
     )
 
 
-def _where(on_scheduled_post: bool) -> str:
-    return "its scheduled post" if on_scheduled_post else "the post's text"
+def _media_holder(on_scheduled_post: bool) -> str:
+    return "the post's scheduled post" if on_scheduled_post else "the post's text"
 
 
 async def attach_media(
@@ -356,7 +356,7 @@ async def attach_media(
         now=call.now,
     )
     return AttachMediaToolResponse(
-        message=f"Attached to part {request.part} of {_where(placed.on_scheduled_post)}.",
+        message=f"Attached to part {request.part} of {_media_holder(placed.on_scheduled_post)}.",
         post_url=page,
         media=placed.media,
     )
@@ -374,7 +374,7 @@ async def remove_media(
         db=call.db, user=call.user, post_id=post_id, media_id=media_id, now=call.now
     )
     return PostMessageToolResponse(
-        message=f"Removed from {_where(on_scheduled_post)}.", post_url=post_url(post_id)
+        message=f"Removed from {_media_holder(on_scheduled_post)}.", post_url=post_url(post_id)
     )
 
 

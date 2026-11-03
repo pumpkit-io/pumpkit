@@ -196,7 +196,7 @@ class AttachMediaRequest(BaseModel):
 
     @field_validator("alt_text")
     @classmethod
-    def _strip(cls, value: Optional[str]) -> Optional[str]:
+    def _strip_and_limit(cls, value: Optional[str]) -> Optional[str]:
         stripped = value.strip() if value is not None else ""
         if len(stripped) > ALT_TEXT_MAX_CHARS:
             raise ValueError(f"Alt text can be up to {ALT_TEXT_MAX_CHARS:,} characters.")
@@ -212,7 +212,7 @@ class PlacedMediaResponse(BaseModel):
 class AttachMediaToolResponse(BaseModel):
     message: str
     post_url: str
-    # None when the User attaches the file on the Post's page instead.
+    # None when the User attaches the media on the Post's page instead.
     media: Optional[MediaResponse]
 
 

@@ -8,12 +8,13 @@ Mediators reach the network only through `get_media_url_fetcher`; tests override
 """
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Optional, Protocol
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpcore
 import httpx
@@ -33,11 +34,18 @@ from pumpkit.posts.media_upload import IncomingMedia, ReceivedMedia
 _DEADLINE_SECONDS = 60.0
 _MAX_REDIRECTS = 3
 
+logger = logging.getLogger(__name__)
 
-def media_url_unreachable(reason: str) -> MediaRefused:
+
+def media_url_unreachable(url: str, reason: str) -> MediaRefused:
+    """
+    One answer for every reason, logged here instead: telling them apart would let a caller probe
+    which internal hosts resolve or answer.
+    """
+    logger.info("Media download from %s refused: %s", urlsplit(url).hostname, reason)
     return MediaRefused(
-        f"Pumpkit couldn't download media from this URL ({reason}). Give a public https URL that"
-        " serves the media itself.",
+        "Pumpkit couldn't download media from this URL. Give a public https URL that serves the"
+        " media itself.",
         code="MEDIA_URL_UNREACHABLE",
     )
 
@@ -63,7 +71,7 @@ async def _received(incoming: IncomingMedia) -> AsyncIterator[ReceivedMedia]:
 @dataclass(frozen=True)
 class HttpMediaUrlFetcher:
     """
-    Downloads with no proxy or compression, 60 seconds in all, following up to 3 redirects, each
+    Downloads with no proxy or compression, within one deadline, following a few redirects, each
     to a destination the guard checks again.
     """
 
@@ -79,7 +87,7 @@ class HttpMediaUrlFetcher:
                 async with asyncio.timeout(self.deadline_seconds):
                     await self._download(url, incoming)
             except TimeoutError:
-                raise media_url_unreachable("took too long") from None
+                raise media_url_unreachable(url, "took too long") from None
         except BaseException:
             await incoming.upload.close()
             raise
@@ -101,11 +109,11 @@ class HttpMediaUrlFetcher:
                     timeout_seconds=self.deadline_seconds,
                 )
             except PublicFetchError as error:
-                raise media_url_unreachable(str(error)) from error
+                raise media_url_unreachable(url, str(error)) from error
             if location is None:
                 return
             url = location
-        raise media_url_unreachable(f"redirects more than {_MAX_REDIRECTS} times")
+        raise media_url_unreachable(url, f"redirects more than {_MAX_REDIRECTS} times")
 
 
 async def _get(http: httpx.AsyncClient, url: str, incoming: IncomingMedia) -> Optional[str]:
@@ -137,7 +145,7 @@ class FakeMediaUrlFetcher:
     async def fetch(self, url: str) -> AsyncIterator[ReceivedMedia]:
         self.fetched.append(url)
         if url not in self.files:
-            raise media_url_unreachable("answered HTTP 404")
+            raise media_url_unreachable(url, "answered HTTP 404")
         incoming = IncomingMedia()
         try:
             await incoming.take(self.files[url])

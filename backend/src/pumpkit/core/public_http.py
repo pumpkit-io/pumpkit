@@ -163,7 +163,7 @@ async def _check_destination(url: str, resolve: Resolver) -> list[str]:
         raise PublicFetchError("host resolves to no address")
     for address in addresses:
         ip = ipaddress.ip_address(address.split("%", 1)[0])
-        # The dev stack and tests serve documents from this computer.
+        # The dev stack and tests serve files from this computer.
         if not (ip.is_global or (local and ip.is_loopback)) or any(
             ip in network for network in _NAT64_NETWORKS
         ):
