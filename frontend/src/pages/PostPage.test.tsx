@@ -1777,6 +1777,15 @@ describe('Post page', () => {
           mediaOn('the post').getByRole('button', { name: 'Retry lost.png' }),
         ).toBeInTheDocument();
         expect(screen.getByRole('list', { name: 'Media on the post' })).toHaveFocus();
+
+        vi.mocked(mediaService.attach).mockReturnValue(new Promise(() => {}));
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Retry lost.png' }));
+
+        await waitFor(() => expect(mediaService.attach).toHaveBeenCalledTimes(2));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(
+          mediaOn('the post').getByRole('button', { name: 'Open image 1' }),
+        ).toBeInTheDocument();
       });
 
       it('keeps the preview, with no message, when the file is gone', async () => {

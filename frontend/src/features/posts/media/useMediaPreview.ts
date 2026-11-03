@@ -63,7 +63,7 @@ export function useFileUrl(file: Blob | null): string | null {
 
   useEffect(() => {
     const url = file && localUrlOf(file);
-    if (!file || !url) return;
+    if (!url) return;
     setShown({ for: file, url });
     return () => URL.revokeObjectURL(url);
   }, [file]);

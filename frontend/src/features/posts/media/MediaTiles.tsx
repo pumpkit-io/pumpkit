@@ -109,6 +109,8 @@ function viewablesOf(tiles: Tile[], onX: boolean): Viewable[] {
 /** The full-size view of a Part's Media, how a tile opens it, and the list it falls back to. */
 function useMediaView(items: Viewable[]) {
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // A retried upload keeps its key, so a key left behind by a refused Media would reopen the view.
+  if (openKey !== null && !items.some((item) => item.key === openKey)) setOpenKey(null);
   const opener = useRef<HTMLElement | null>(null);
   const list = useRef<HTMLUListElement | null>(null);
   const open = (key: string) => (element: HTMLElement) => {
@@ -128,7 +130,8 @@ function useMediaView(items: Viewable[]) {
   return { open, view, list, nameOf };
 }
 
-const LIST_FOCUS = 'focus-visible:outline-none';
+const LIST_FOCUS =
+  'rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card';
 
 /** A video's length as the browser read it, on its tile or its stored Media. */
 function durationOf(tile: Tile): number | null {
