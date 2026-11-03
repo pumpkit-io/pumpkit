@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { errorStatus } from '@/services/apiErrors';
 import { postService } from '@/services/postService';
@@ -9,46 +9,51 @@ export const POSTING_READS_MS = [3_000, 5_000, 10_000, 20_000, 30_000];
 // A day covers any open page; setTimeout itself would fire at once past about 24.8 days.
 const LONGEST_WAIT_MS = 24 * 60 * 60 * 1000;
 
-/** Whether a read shows what the page shows, posting as the page has it, flipped or not. */
-function showsTheSame(read: ScheduledPost | null, shown: ScheduledPost | null, posting: boolean) {
+/** Whether a read says what the shown Scheduled post says. */
+function readsTheSame(read: ScheduledPost | null, shown: ScheduledPost | null) {
   return (
     read?.id === shown?.id &&
     read?.state === shown?.state &&
     read?.publishAt === shown?.publishAt &&
-    (read?.posting ?? false) === posting
+    read?.posting === shown?.posting
   );
 }
 
-type Waiting = Pick<ScheduledPost, 'state' | 'publishAt' | 'posting'>;
+type Waiting = Pick<ScheduledPost, 'id' | 'state' | 'publishAt' | 'posting'>;
 
 /**
- * Whether the Scheduled post is posting, as the server answered it, or since its time came while
- * the page sat open: the server's `posting` holds again once the Scheduled post is read anew.
+ * Posting as the server answered, or since its time came while the page sat open, for as long as
+ * the same Scheduled post keeps the same time; `forget` drops that flip once a read answers anew.
  */
-export function useIsPosting(scheduledPost: Waiting | null): boolean {
-  const [cameDue, setCameDue] = useState<Waiting | null>(null);
+function useCameDue(scheduledPost: Waiting | null) {
+  const [cameDue, setCameDue] = useState<string | null>(null);
+  const id = scheduledPost?.id;
   const state = scheduledPost?.state;
   const publishAt = scheduledPost?.publishAt;
+  const moment = id === undefined ? null : `${id} ${publishAt}`;
 
   useEffect(() => {
     if (state !== 'scheduled' || publishAt === undefined) return;
     const wait = Date.parse(publishAt) - Date.now();
     if (wait <= 0 || wait > LONGEST_WAIT_MS) return;
-    const timer = setTimeout(() => setCameDue(scheduledPost), wait);
+    const timer = setTimeout(() => setCameDue(moment), wait);
     return () => clearTimeout(timer);
-    // The timer belongs to the moment, not to each copy of the same Scheduled post.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, publishAt]);
+  }, [moment, state, publishAt]);
 
-  if (!scheduledPost) return false;
-  return scheduledPost.posting || (cameDue === scheduledPost && state === 'scheduled');
+  const forget = useCallback(() => setCameDue(null), []);
+  const posting =
+    !!scheduledPost && (scheduledPost.posting || (state === 'scheduled' && cameDue === moment));
+  return { posting, forget };
+}
+
+/** Whether the Scheduled post is posting, by the server or since its time came on this page. */
+export function useIsPosting(scheduledPost: Waiting | null): boolean {
+  return useCameDue(scheduledPost).posting;
 }
 
 /**
- * Whether the Scheduled post is posting, as `useIsPosting` says. While it is, or while it waits
- * for a retry after X was busy, reads the Post again, less and less often and only while the tab
- * is visible, and passes on each change of its Scheduled post to `onChange` until it is Published
- * or Failed. A Failed one reloads the X connection, which it may have flagged for reconnecting.
+ * `useIsPosting`, reading the Post while posting or waiting for a retry, less often over time and
+ * only while the tab is visible; passes changes to `onChange`, reloading X's connection on Failed.
  */
 export function usePosting(
   postId: string,
@@ -56,7 +61,7 @@ export function usePosting(
   onChange: (scheduledPost: ScheduledPost | null) => void,
   onGone: () => void,
 ): boolean {
-  const posting = useIsPosting(scheduledPost);
+  const { posting, forget } = useCameDue(scheduledPost);
   const { reload: reloadXConnection } = useXConnectionContext();
   const retrying =
     scheduledPost?.state === 'scheduled' &&
@@ -64,8 +69,8 @@ export function usePosting(
     Date.parse(scheduledPost.publishAt) <= Date.now();
   const reading = posting || retrying;
 
-  const latest = useRef({ scheduledPost, posting, onChange, onGone, reloadXConnection });
-  latest.current = { scheduledPost, posting, onChange, onGone, reloadXConnection };
+  const latest = useRef({ scheduledPost, onChange, onGone, forget, reloadXConnection });
+  latest.current = { scheduledPost, onChange, onGone, forget, reloadXConnection };
 
   useEffect(() => {
     if (!reading) return;
@@ -82,7 +87,8 @@ export function usePosting(
         const { scheduledPost: current } = await postService.get(postId);
         if (stopped) return;
         const shown = latest.current;
-        if (!showsTheSame(current, shown.scheduledPost, shown.posting)) {
+        shown.forget();
+        if (!readsTheSame(current, shown.scheduledPost)) {
           if (current?.state === 'failed') void shown.reloadXConnection();
           shown.onChange(current);
         }

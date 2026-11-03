@@ -3507,6 +3507,86 @@ describe('Post page', () => {
       expect(panel('Scheduled').queryByText(EDIT_CLOSED)).not.toBeInTheDocument();
     });
 
+    it('turns to Posting… when its time comes after the editor was cancelled', async () => {
+      vi.setSystemTime(new Date('2026-10-12T06:59:50Z'));
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+      fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
+      const editor = within(await screen.findByRole('region', { name: 'Edit the scheduled post' }));
+      fireEvent.click(editor.getByRole('button', { name: 'Cancel' }));
+      await panel('Scheduled').findByRole('button', { name: 'Edit' });
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
+      expect(panel('Scheduled').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    });
+
+    it.each([
+      [
+        'failed',
+        'Failed',
+        { ...SCHEDULED, state: 'failed', failedReason: 'X refused the post.' },
+        "This post failed while you were editing, so your changes weren't saved.",
+      ],
+      [
+        'was published',
+        'Published',
+        { ...SCHEDULED, state: 'published', publishedAt: '2026-10-12T07:01:40Z' },
+        "This post was published while you were editing, so your changes weren't saved.",
+      ],
+    ] as const)(
+      'says the editor closed because the post %s',
+      async (_what, dock, read, message) => {
+        // X was busy: Edit is offered while its retry waits, and reads go on.
+        vi.setSystemTime(new Date('2026-10-12T07:01:30Z'));
+        renderPost(withScheduledPost(SCHEDULED));
+        await textCard();
+        fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
+        await screen.findByRole('region', { name: 'Edit the scheduled post' });
+        const region = liveRegion();
+        readsBack(read);
+
+        await act(() => vi.advanceTimersByTimeAsync(3_000));
+
+        expect(await panel(dock).findByText(message)).toBeInTheDocument();
+        expect(liveRegion()).toBe(region);
+        expect(region).toHaveTextContent(message);
+      },
+    );
+
+    it('says nothing of unsaved changes when a save in flight as posting starts goes through', async () => {
+      vi.setSystemTime(new Date('2026-10-12T06:59:50Z'));
+      let answer: (saved: ScheduledPost) => void = () => {};
+      vi.mocked(scheduledPostService.edit).mockReturnValue(
+        new Promise((resolve) => (answer = resolve)),
+      );
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+      fireEvent.click(await panel('Scheduled').findByRole('button', { name: 'Edit' }));
+      const editor = within(await screen.findByRole('region', { name: 'Edit the scheduled post' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'Post text' }), {
+        target: { value: 'the final text, edited' },
+      });
+      fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+      await waitFor(() => expect(scheduledPostService.edit).toHaveBeenCalled());
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(panel('Scheduled').getByText(EDIT_CLOSED)).toBeInTheDocument();
+
+      await act(async () =>
+        answer({
+          ...SCHEDULED,
+          parts: [{ ...SCHEDULED.parts[0], text: 'the final text, edited' }],
+          posting: true,
+        }),
+      );
+
+      expect(panel('Scheduled').queryByText(EDIT_CLOSED)).not.toBeInTheDocument();
+      expect(liveRegion()).not.toHaveTextContent(EDIT_CLOSED);
+      expect(panel('Scheduled').getByText('Posting…')).toBeInTheDocument();
+    });
+
     it('shows the post is gone once it is deleted while posting, and keeps reading after other failures', async () => {
       vi.setSystemTime(new Date('2026-10-12T07:00:30Z'));
       renderPost(withScheduledPost({ ...SCHEDULED, posting: true }));

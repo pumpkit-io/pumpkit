@@ -495,7 +495,7 @@ async def test_post_now_with_a_video_hands_it_to_the_publisher_due_now(
     assert [u.category for u in fake_x_publisher.uploads] == ["tweet_video"]
 
 
-async def test_a_handed_off_post_reads_posting_until_it_is_published(
+async def test_a_handed_off_post_reads_posting_when_read_listed_and_claimed(
     client,
     subscribed,
     db_session_maker,

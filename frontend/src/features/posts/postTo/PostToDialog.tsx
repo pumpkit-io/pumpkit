@@ -247,7 +247,7 @@ export function PostToDialog({
       onClose();
     } else if (outcome.kind === 'created') {
       const { scheduledPost } = outcome;
-      // Posted now but still waiting, and not handed to the publisher: X was busy, and the publisher retries.
+      // Posted now but waiting, not handed to the publisher: X was busy and the publisher retries.
       if (when.now && scheduledPost.state === 'scheduled' && !scheduledPost.posting)
         setStep({ kind: 'busy', scheduledPost });
       else onDone(scheduledPost);

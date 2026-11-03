@@ -18,12 +18,12 @@ export function ScheduledDock({
 }: {
   scheduledPost: ScheduledPost;
   posting: boolean;
-  /** Under the card, such as why the editor closed. */
+  /** Why the editor closed, under the card; the Post page announces it. */
   notice: string | null;
   onEdit: () => void;
 }) {
   return (
-    <Dock name="Scheduled" notes={notice && <Notice message={notice} />}>
+    <Dock name="Scheduled" notes={notice && <Notice message={notice} announced={false} />}>
       <div className={DOCK_CARD}>
         <div className="flex min-h-10 items-center gap-3 px-4 py-3">
           {posting && (

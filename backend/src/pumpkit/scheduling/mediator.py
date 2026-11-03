@@ -104,7 +104,7 @@ def _x_post_url(x_post_id: Optional[str]) -> Optional[str]:
     return f"https://x.com/i/web/status/{x_post_id}" if x_post_id else None
 
 
-def _posting(scheduled_post: ScheduledPost, now: datetime) -> bool:
+def _posting(scheduled_post: ScheduledPost, *, now: datetime) -> bool:
     return is_posting(
         scheduled_post.state,
         publish_at=scheduled_post.publish_at,
@@ -142,7 +142,7 @@ def scheduled_post_response(
         else None,
         share_with_followers=scheduled_post.share_with_followers,
         created_at=as_utc(scheduled_post.created_at),
-        posting=_posting(scheduled_post, now),
+        posting=_posting(scheduled_post, now=now),
     )
 
 
@@ -597,7 +597,9 @@ async def cancel_scheduled_post(
     return post_id
 
 
-async def get_post(db: AsyncSession, user: User, post_id: str, now: datetime) -> PostDetailResponse:
+async def get_post(
+    db: AsyncSession, user: User, post_id: str, *, now: datetime
+) -> PostDetailResponse:
     """The User's Post with its Text, every Version in order, its status and Scheduled post."""
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
@@ -616,7 +618,7 @@ async def get_post(db: AsyncSession, user: User, post_id: str, now: datetime) ->
 
 
 def _scheduled_post_summary(
-    scheduled_post: ScheduledPost, now: datetime
+    scheduled_post: ScheduledPost, *, now: datetime
 ) -> ScheduledPostSummaryResponse:
     published_at = scheduled_post.published_at
     community_id = scheduled_post.community_id
@@ -631,11 +633,11 @@ def _scheduled_post_summary(
         share_with_followers=scheduled_post.share_with_followers,
         failed_reason=scheduled_post.failed_reason,
         x_post_url=_x_post_url(scheduled_post.parts[0].x_post_id),
-        posting=_posting(scheduled_post, now),
+        posting=_posting(scheduled_post, now=now),
     )
 
 
-def _post_list_item(listed: service.ListedPost, now: datetime) -> PostListItemResponse:
+def _post_list_item(listed: service.ListedPost, *, now: datetime) -> PostListItemResponse:
     post, scheduled_post = listed.post, listed.scheduled_post
     versions = version_writing.versions_of(post)
     latest = versions[-1]
@@ -653,7 +655,7 @@ def _post_list_item(listed: service.ListedPost, now: datetime) -> PostListItemRe
         format=format,
         version_count=len(versions),
         latest_version_at=as_utc(latest.created_at),
-        scheduled_post=_scheduled_post_summary(scheduled_post, now) if scheduled_post else None,
+        scheduled_post=_scheduled_post_summary(scheduled_post, now=now) if scheduled_post else None,
     )
 
 
@@ -663,6 +665,7 @@ async def list_posts(
     status: Optional[PostStatus],
     limit: int,
     offset: int,
+    *,
     now: datetime,
 ) -> PostsPageResponse:
     """A page of the User's Posts in `status`, or every one, with how many each status holds."""
@@ -672,7 +675,7 @@ async def list_posts(
     )
     counts = await service.count_posts(db, user_id=user.id)
     return PostsPageResponse(
-        data=[_post_list_item(item, now) for item in listed[:limit]],
+        data=[_post_list_item(item, now=now) for item in listed[:limit]],
         counts=PostCountsResponse(**counts),
         next_offset=offset + limit if len(listed) > limit else None,
     )

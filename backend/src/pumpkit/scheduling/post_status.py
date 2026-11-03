@@ -36,7 +36,8 @@ def is_posting(
     now: datetime,
 ) -> bool:
     """
-    Being published, or due for the publisher to claim; one X was busy for waits for its retry.
+    Being published, or due for the publisher to claim; not while it waits for a retry after X
+    was busy, so that answer stays apart from a Post now handed to the publisher.
     """
     if state == PUBLISHING:
         return True

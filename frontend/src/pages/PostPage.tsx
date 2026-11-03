@@ -39,8 +39,12 @@ import type { Format, PostDetail } from '@/services/postService';
 import { usePosting } from '@/features/scheduledPosts/usePosting';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
-const EDIT_CLOSED_BY_POSTING =
-  "Posting started while you were editing, so your changes weren't saved.";
+type EditClosedBy = 'posting' | 'failed' | 'published';
+const EDIT_CLOSED: Record<EditClosedBy, string> = {
+  posting: "Posting started while you were editing, so your changes weren't saved.",
+  failed: "This post failed while you were editing, so your changes weren't saved.",
+  published: "This post was published while you were editing, so your changes weren't saved.",
+};
 const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
 
 /**
@@ -166,13 +170,21 @@ function LoadedPost({
   const [editing, setEditing] = useState(
     () => opensEditor && post.scheduledPost?.state === 'scheduled' && !posting,
   );
-  const [editClosedByPosting, setEditClosedByPosting] = useState(false);
+  const [editClosedBy, setEditClosedBy] = useState<EditClosedBy | null>(null);
+  const state = loaded.scheduledPost?.state;
+  const situation: EditClosedBy | null = posting
+    ? 'posting'
+    : state === 'failed' || state === 'published'
+      ? state
+      : null;
   // No editor while posting, even if X was busy and it comes back scheduled.
-  if (editing && (posting || loaded.scheduledPost?.state !== 'scheduled')) {
+  if (editing && (situation || state !== 'scheduled')) {
     setEditing(false);
-    setEditClosedByPosting(true);
+    setEditClosedBy(situation);
+  } else if (editClosedBy && editClosedBy !== situation) {
+    setEditClosedBy(null);
   }
-  if (editClosedByPosting && !posting) setEditClosedByPosting(false);
+  const editClosed = editClosedBy && EDIT_CLOSED[editClosedBy];
   const navigate = useNavigate();
   const [reconnectingForMedia, setReconnectingForMedia] = useState(false);
   const askToReconnect = useCallback(() => setReconnectingForMedia(true), []);
@@ -206,6 +218,7 @@ function LoadedPost({
     <p role="status" className="sr-only">
       {text.announcement && <span key={text.announcement.key}>{text.announcement.message}</span>}
       {posting && <span>Posting…</span>}
+      {editClosed && <span>{editClosed}</span>}
     </p>
   );
 
@@ -222,6 +235,8 @@ function LoadedPost({
             onSaved={(saved) => {
               onScheduledPost(saved);
               setEditing(false);
+              // A save still in flight when posting closed the editor went through after all.
+              setEditClosedBy(null);
             }}
             onUnscheduled={() => {
               onScheduledPost(null);
@@ -304,6 +319,7 @@ function LoadedPost({
         textVersion={textVersion}
         feedback={feedback}
         restoreError={text.restoreError}
+        notice={editClosed}
       />
     );
     postTo = (
@@ -322,12 +338,12 @@ function LoadedPost({
       <ScheduledDock
         scheduledPost={scheduledPost}
         posting={posting}
-        notice={editClosedByPosting && posting ? EDIT_CLOSED_BY_POSTING : null}
+        notice={editClosed}
         onEdit={() => setEditing(true)}
       />
     );
   } else if (post.status === 'published' && scheduledPost) {
-    dock = <PublishedDock scheduledPost={scheduledPost} />;
+    dock = <PublishedDock scheduledPost={scheduledPost} notice={editClosed} />;
   }
 
   return (
