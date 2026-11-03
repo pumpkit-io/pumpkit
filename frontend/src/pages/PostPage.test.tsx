@@ -1684,12 +1684,42 @@ describe('Post page', () => {
         chooseFiles('Part 2', photo('second.png'));
         await act(async () => {});
         expect(mediaService.attach).toHaveBeenCalledTimes(1);
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [[], [image('first')]]),
+        );
 
         await act(async () => answer(image('first')));
 
         await waitFor(() => expect(mediaService.attach).toHaveBeenCalledTimes(2));
         await waitFor(() =>
           expect(mediaIdsOn('Part 2')).resolves.toEqual(['first/preview', 'second/preview']),
+        );
+      });
+
+      it('shows an upload Feedback moved in the order the server put it, after Media already there', async () => {
+        let answer: (media: Media) => void = () => {};
+        vi.mocked(mediaService.attach).mockReturnValueOnce(
+          new Promise((resolve) => (answer = resolve)),
+        );
+        vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['short', 'shorter']));
+        renderPost(withMedia(threeParts(), [[], [], [image('m3')]]));
+        await textCard();
+
+        chooseFiles('Part 2', photo('new.png'));
+        await sendFeedback('two parts');
+        await waitFor(() =>
+          expect(card().getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2),
+        );
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(threadWith([part('short'), part('shorter')]), [
+            [],
+            [image('m3'), image('new')],
+          ]),
+        );
+        await act(async () => answer(image('new')));
+
+        await waitFor(() =>
+          expect(mediaIdsOn('Part 2')).resolves.toEqual(['m3/preview', 'new/preview']),
         );
       });
 
@@ -1753,6 +1783,10 @@ describe('Post page', () => {
         expect(await card().findByRole('textbox', { name: 'Part 3 text' })).toHaveValue('c');
         const button = card().getByRole('button', { name: 'Add media to Part 3' });
         expect(button).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.pointerMove(button, { pointerType: 'mouse' });
+        expect(await screen.findByRole('tooltip')).toHaveTextContent(
+          "Saving this part. Add media once it's saved.",
+        );
         chooseFiles('Part 3', photo('three.png'));
         fireEvent.drop(card().getByRole('listitem', { name: 'Part 3 of 3' }), {
           dataTransfer: { files: [photo('dropped.png')], types: ['Files'] },
@@ -1760,6 +1794,9 @@ describe('Post page', () => {
         await act(async () => {});
 
         expect(mediaService.attach).not.toHaveBeenCalled();
+        expect(
+          screen.getAllByText("Saving this part. Add media once it's saved.").length,
+        ).toBeGreaterThan(1);
         expect(screen.queryByRole('list', { name: 'Media on Part 3' })).not.toBeInTheDocument();
         expect(await mediaIdsOn('Part 2')).toEqual(['m2/preview']);
 

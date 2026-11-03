@@ -152,6 +152,7 @@ function partMediaOf(
         <MediaButton
           where={where}
           full={media.roomOn(index) <= 0}
+          saving={media.saving(index)}
           onFiles={(files) => media.attach(index, files, 'button')}
           onClickInsteadOfPicker={askToReconnect}
         />
