@@ -40,7 +40,12 @@ async def test_saving_a_draft_stores_the_parts_as_the_edited_text(client, subscr
     response = await _save(client, post_id, "As edited.")
 
     assert response.status_code == 200, response.text
-    saved = {"format": "post", "parts": [_part("As edited.")], "version_number": 1, "edited": True}
+    saved = {
+        "format": "post",
+        "parts": [{**_part("As edited."), "media": []}],
+        "version_number": 1,
+        "edited": True,
+    }
     assert response.json() == saved
     assert await _text_of(client, post_id) == saved
 

@@ -4,10 +4,13 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pumpkit.posts.formats import FORMAT_POST, Format
+from pumpkit.posts.models import MediaKind
 from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS
 
 # Per caller, for the routes and MCP tools that write a Version.
 WRITE_RATE = "20/minute"
+# Per caller, for attaching Media: enough to drop four files on each Part of a Thread at once.
+MEDIA_RATE = "60/minute"
 
 
 class PostStartRequest(BaseModel):
@@ -54,11 +57,28 @@ class VersionResponse(BaseModel):
     created_at: datetime
 
 
+class MediaResponse(BaseModel):
+    """One Media on a Part, as the web app and AI apps read it."""
+
+    id: str
+    kind: MediaKind
+    # Under the API's root, served only to the Media's owner.
+    preview_url: str
+    width: Optional[int]
+    height: Optional[int]
+
+
+class TextPartResponse(PartResponse):
+    """One Part of a Post's Text, with the Media published with it, in order."""
+
+    media: list[MediaResponse]
+
+
 class TextResponse(BaseModel):
     """A Post's Text (ADR 0016)."""
 
     format: Format
-    parts: list[PartResponse]
+    parts: list[TextPartResponse]
     # The Version it came from: the last one written or restored.
     version_number: int
     edited: bool

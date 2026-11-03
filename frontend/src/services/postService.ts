@@ -1,4 +1,5 @@
 import { apiService } from './apiService';
+import { toMedia, type Media, type MediaApi } from './mediaService';
 import {
   toScheduledPost,
   type Community,
@@ -65,6 +66,11 @@ export interface PostDetail extends Post {
   status: PostStatus;
   /** Null while the Post is a Draft. */
   scheduledPost: ScheduledPost | null;
+  /**
+   * Each of the Text's Parts' Media, in order, as the Post was read. Kept apart from the Text,
+   * since undo, redo, restoring and Feedback change only its words.
+   */
+  textMedia: Media[][];
 }
 
 /** How many Posts each status holds, for the Posts tabs and the sidebar's Failed badge. */
@@ -167,7 +173,7 @@ interface PostApi {
 
 interface PostTextApi {
   format: Format;
-  parts: PartApi[];
+  parts: (PartApi & { media: MediaApi[] })[];
   version_number: number;
   edited: boolean;
 }
@@ -246,6 +252,7 @@ export const postService = {
       versions: data.versions.map(toVersion),
       status: data.status,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
+      textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
   },
   /** Writes the first Version before answering, which can take a minute or two. */

@@ -166,7 +166,14 @@ async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fak
 
     assert text == {
         "format": "post",
-        "parts": [{"text": "shorter final", "char_count": 13, "char_limit": X_POST_MAX_CHARS}],
+        "parts": [
+            {
+                "text": "shorter final",
+                "char_count": 13,
+                "char_limit": X_POST_MAX_CHARS,
+                "media": [],
+            }
+        ],
         "version_number": 2,
         "edited": False,
     }

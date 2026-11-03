@@ -9,6 +9,7 @@ import { SidebarMobileDrawer } from '@/features/sidebar/SidebarMobileDrawer';
 import { SidebarProvider } from '@/features/sidebar/SidebarProvider';
 import { ReconnectXBanner } from '@/features/xConnection/ReconnectXBanner';
 import { XConnectionProvider } from '@/features/xConnection/XConnectionProvider';
+import { ConfirmLeavingNavigation } from '@/lib/ConfirmLeavingNavigation';
 import { ProfileProvider } from './layout/ProfileContext';
 import { Shell } from './layout/Shell';
 import { useBootstrap } from './layout/useBootstrap';
@@ -42,12 +43,14 @@ function AppLayoutInner() {
  */
 export function AppLayout() {
   return (
-    <SidebarProvider>
-      <BillingProvider>
-        <SubscribedProvider>
-          <AppLayoutInner />
-        </SubscribedProvider>
-      </BillingProvider>
-    </SidebarProvider>
+    <ConfirmLeavingNavigation>
+      <SidebarProvider>
+        <BillingProvider>
+          <SubscribedProvider>
+            <AppLayoutInner />
+          </SubscribedProvider>
+        </BillingProvider>
+      </SidebarProvider>
+    </ConfirmLeavingNavigation>
   );
 }

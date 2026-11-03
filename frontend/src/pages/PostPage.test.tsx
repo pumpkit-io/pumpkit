@@ -74,6 +74,10 @@ vi.mock('@/services/scheduledPostService', () => ({
     lookUpCommunity: vi.fn(),
   },
 }));
+vi.mock('@/services/mediaService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/mediaService')>()),
+  mediaService: { attach: vi.fn(), remove: vi.fn(), preview: vi.fn() },
+}));
 vi.mock('@/services/usageService', () => ({
   usageService: { get: vi.fn() },
 }));
@@ -105,6 +109,7 @@ import {
   type Community,
   type ScheduledPost,
 } from '@/services/scheduledPostService';
+import { mediaService, type Media } from '@/services/mediaService';
 import { usageService, type Usage } from '@/services/usageService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import {
@@ -160,6 +165,7 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
       versions: [],
       status: 'draft',
       scheduledPost: null,
+      textMedia: [],
     },
     versions,
   );
@@ -923,6 +929,518 @@ describe('Post page', () => {
         }),
       );
       expect((await textCard()).queryByRole('textbox')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Media', () => {
+    const MB = 1024 * 1024;
+
+    function image(id: string): Media {
+      return { id, kind: 'image', previewUrl: `/media/${id}/preview`, width: 40, height: 30 };
+    }
+
+    function withMedia(post: PostDetail, textMedia: Media[][]): PostDetail {
+      return { ...post, textMedia };
+    }
+
+    function photo(name = 'photo.png', type = 'image/png', size = 1024): File {
+      return new File([new Uint8Array(size)], name, { type });
+    }
+
+    function chooseFiles(part: string, ...files: File[]) {
+      fireEvent.change(screen.getByLabelText(`Choose media for ${part}`), { target: { files } });
+    }
+
+    function mediaOn(part: string) {
+      return within(screen.getByRole('list', { name: `Media on ${part}` }));
+    }
+
+    function threadOfTwo(): PostDetail {
+      return threadWith([part('one'), part('two')]);
+    }
+
+    beforeEach(() => {
+      vi.mocked(mediaService.attach).mockReset();
+      vi.mocked(mediaService.remove).mockReset().mockResolvedValue();
+      vi.mocked(mediaService.preview)
+        .mockReset()
+        .mockImplementation(async (url) => new Blob([url], { type: 'image/webp' }));
+      let made = 0;
+      URL.createObjectURL = vi.fn(() => `blob:local-${++made}`);
+      URL.revokeObjectURL = vi.fn();
+    });
+
+    it('puts a media button on each Part of the Text, named for its Part, and none in the dock', async () => {
+      renderPost(threadOfTwo());
+      await textCard();
+
+      const one = card().getByRole('listitem', { name: 'Part 1 of 2' });
+      const two = card().getByRole('listitem', { name: 'Part 2 of 2' });
+      expect(within(one).getByRole('button', { name: 'Add media to Part 1' })).toBeInTheDocument();
+      expect(within(two).getByRole('button', { name: 'Add media to Part 2' })).toBeInTheDocument();
+      expect(panel('Draft').queryByRole('button', { name: /media/i })).not.toBeInTheDocument();
+      expect(panel('Draft').queryByLabelText(/choose media/i)).not.toBeInTheDocument();
+    });
+
+    it('names the button for the post when the Text is a single post', async () => {
+      renderPost(postWith('the final text'));
+      await textCard();
+
+      expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    });
+
+    it('shows a chosen image uploading with its progress, then its stored preview', async () => {
+      let progress: (sent: number) => void = () => {};
+      let answer: (media: Media) => void = () => {};
+      vi.mocked(mediaService.attach).mockImplementation((_post, _part, _file, options) => {
+        progress = options?.onProgress ?? progress;
+        return new Promise((resolve) => (answer = resolve));
+      });
+      renderPost(threadOfTwo());
+      await textCard();
+      const file = photo();
+
+      chooseFiles('Part 2', file);
+
+      const tile = await mediaOn('Part 2').findByRole('listitem', { name: 'Image 1' });
+      expect(tile.querySelector('img')).toHaveAttribute('src', 'blob:local-1');
+      const bar = within(tile).getByRole('progressbar', { name: 'Uploading image 1' });
+      expect(mediaService.attach).toHaveBeenCalledWith('post_01', 2, file, expect.anything());
+
+      act(() => progress(0.5));
+      expect(bar).toHaveAttribute('aria-valuenow', '50');
+
+      await act(async () => answer(image('media_01')));
+
+      expect(within(tile).queryByRole('progressbar')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(mediaService.preview).toHaveBeenCalledWith(
+          '/media/media_01/preview',
+          expect.anything(),
+        ),
+      );
+      expect(track).toHaveBeenCalledWith('media_attached', {
+        kind: 'image',
+        via: 'button',
+        source: 'web',
+      });
+    });
+
+    it("shows the Text's Media from the server, read with the session", async () => {
+      renderPost(withMedia(threadOfTwo(), [[], [image('media_01'), image('media_02')]]));
+      await textCard();
+
+      const tiles = mediaOn('Part 2').getAllByRole('listitem');
+      expect(tiles.map((t) => t.getAttribute('aria-label'))).toEqual(['Image 1', 'Image 2']);
+      expect(screen.queryByRole('list', { name: 'Media on Part 1' })).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(tiles[0]!.querySelector('img')).toHaveAttribute('src', 'blob:local-1'),
+      );
+      expect(mediaService.preview).toHaveBeenCalledWith(
+        '/media/media_01/preview',
+        expect.anything(),
+      );
+    });
+
+    it('shows a muted block with an image icon when a preview fails to load', async () => {
+      vi.mocked(mediaService.preview).mockRejectedValue(new Error('Network Error'));
+      renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+      await textCard();
+
+      const tile = mediaOn('the post').getByRole('listitem', { name: 'Image 1' });
+      expect(await within(tile).findByText("Preview didn't load")).toBeInTheDocument();
+    });
+
+    it('removes an image with its ×', async () => {
+      renderPost(withMedia(postWith('the final text'), [[image('media_01'), image('media_02')]]));
+      await textCard();
+
+      fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 1' }));
+
+      await waitFor(() => expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(1));
+      expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_01');
+      expect(track).toHaveBeenCalledWith('media_removed', { kind: 'image', source: 'web' });
+    });
+
+    it('puts a removed image back when the server keeps it', async () => {
+      vi.mocked(mediaService.remove).mockRejectedValue(new Error('Network Error'));
+      renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+      await textCard();
+
+      fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 1' }));
+
+      await waitFor(() => expect(mediaService.remove).toHaveBeenCalled());
+      expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+    });
+
+    it("refuses a file over 5 MB or of a type X won't take on its tile, without sending it", async () => {
+      renderPost(postWith('the final text'));
+      await textCard();
+
+      chooseFiles(
+        'the post',
+        photo('big.png', 'image/png', 5 * MB + 1),
+        photo('clip.mp4', 'video/mp4'),
+      );
+
+      const big = within(await mediaOn('the post').findByRole('listitem', { name: 'big.png' }));
+      const clip = within(mediaOn('the post').getByRole('listitem', { name: 'clip.mp4' }));
+      expect(big.getByText('Larger than 5 MB')).toBeInTheDocument();
+      expect(clip.getByText('JPEG, PNG or WEBP only')).toBeInTheDocument();
+      const refused = mediaOn('the post');
+      expect(refused.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+      expect(mediaService.attach).not.toHaveBeenCalled();
+
+      fireEvent.click(refused.getByRole('button', { name: 'Remove big.png' }));
+
+      expect(refused.queryByText('Larger than 5 MB')).not.toBeInTheDocument();
+    });
+
+    it("names the server's refusal, and offers Retry when the upload itself failed", async () => {
+      vi.mocked(mediaService.attach)
+        .mockRejectedValueOnce(
+          apiError(422, "This image can't be read.", { code: 'MEDIA_UNREADABLE' }),
+        )
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockResolvedValueOnce(image('media_02'));
+      renderPost(postWith('the final text'));
+      await textCard();
+
+      chooseFiles('the post', photo('broken.png'));
+      const broken = within(
+        await mediaOn('the post').findByRole('listitem', { name: 'broken.png' }),
+      );
+      expect(await broken.findByText("Can't read this image")).toBeInTheDocument();
+      expect(broken.queryByRole('button', { name: 'Retry broken.png' })).not.toBeInTheDocument();
+
+      chooseFiles('the post', photo('flaky.png'));
+      fireEvent.click(await mediaOn('the post').findByRole('button', { name: 'Retry flaky.png' }));
+
+      expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+      expect(mediaService.attach).toHaveBeenCalledTimes(3);
+    });
+
+    it("stops taking files once a Part holds four images, naming X's rule", async () => {
+      const four = [1, 2, 3, 4].map((n) => image(`media_0${n}`));
+      renderPost(withMedia(threadOfTwo(), [four, []]));
+      await textCard();
+
+      const button = card().getByRole('button', { name: 'Add media to Part 1' });
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      act(() => button.focus());
+      expect(
+        (await screen.findAllByText('X takes up to 4 images, or 1 GIF, or 1 video, per post'))[0],
+      ).toBeInTheDocument();
+
+      fireEvent.drop(card().getByRole('listitem', { name: 'Part 1 of 2' }), {
+        dataTransfer: { files: [photo('fifth.png')], types: ['Files'] },
+      });
+
+      const fifth = within(await mediaOn('Part 1').findByRole('listitem', { name: 'fifth.png' }));
+      expect(
+        fifth.getByText('X takes up to 4 images, or 1 GIF, or 1 video, per post'),
+      ).toBeInTheDocument();
+      expect(mediaService.attach).not.toHaveBeenCalled();
+    });
+
+    it('offers no Retry on a failed upload while its Part is full', async () => {
+      vi.mocked(mediaService.attach).mockRejectedValueOnce(new Error('Network Error'));
+      const three = [1, 2, 3].map((n) => image(`media_0${n}`));
+      renderPost(withMedia(postWith('the final text'), [three]));
+      await textCard();
+
+      chooseFiles('the post', photo('flaky.png'));
+      expect(
+        await mediaOn('the post').findByRole('button', { name: 'Retry flaky.png' }),
+      ).toBeInTheDocument();
+      vi.mocked(mediaService.attach).mockResolvedValueOnce(image('media_04'));
+      chooseFiles('the post', photo('fourth.png'));
+
+      expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 4' })).toBeTruthy();
+      expect(
+        mediaOn('the post').queryByRole('button', { name: 'Retry flaky.png' }),
+      ).not.toBeInTheDocument();
+      expect(mediaOn('the post').getByText('Upload failed. Try again.')).toBeInTheDocument();
+    });
+
+    it('asks before following a link away while an image uploads', async () => {
+      vi.mocked(mediaService.attach).mockReturnValue(new Promise(() => {}));
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderPost(postWith('the final text'));
+      await textCard();
+      chooseFiles('the post', photo());
+      await mediaOn('the post').findByRole('progressbar');
+      const settings = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
+        name: 'Settings',
+      });
+
+      fireEvent.click(settings);
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(currentPath()).toBe('/posts/post_01');
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(settings);
+
+      await waitFor(() => expect(currentPath()).toBe('/settings'));
+      confirm.mockRestore();
+    });
+
+    it('follows links without asking once no image uploads', async () => {
+      const confirm = vi.spyOn(window, 'confirm');
+      renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+      await textCard();
+
+      fireEvent.click(
+        within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
+          name: 'Settings',
+        }),
+      );
+
+      await waitFor(() => expect(currentPath()).toBe('/settings'));
+      expect(confirm).not.toHaveBeenCalled();
+      confirm.mockRestore();
+    });
+
+    it('asks before the New post shortcut leaves while an image uploads', async () => {
+      vi.mocked(mediaService.attach).mockReturnValue(new Promise(() => {}));
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderPost(postWith('the final text'));
+      await textCard();
+      chooseFiles('the post', photo());
+      await mediaOn('the post').findByRole('progressbar');
+      const shortcut = { key: 'o', shiftKey: true, metaKey: true, ctrlKey: true };
+
+      fireEvent.keyDown(window, shortcut);
+
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(currentPath()).toBe('/posts/post_01');
+
+      confirm.mockReturnValue(true);
+      fireEvent.keyDown(window, shortcut);
+
+      await waitFor(() => expect(currentPath()).toBe('/new'));
+      confirm.mockRestore();
+    });
+
+    it('takes an image off the server when the page is left during its upload', async () => {
+      let answer: (media: Media) => void = () => {};
+      vi.mocked(mediaService.attach).mockImplementation(
+        () => new Promise((resolve) => (answer = resolve)),
+      );
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      renderPost(postWith('the final text'));
+      await textCard();
+      chooseFiles('the post', photo());
+      await mediaOn('the post').findByRole('progressbar');
+
+      fireEvent.click(
+        within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
+          name: 'Settings',
+        }),
+      );
+      await waitFor(() => expect(currentPath()).toBe('/settings'));
+      await act(async () => answer(image('media_09')));
+
+      expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_09');
+      confirm.mockRestore();
+    });
+
+    it('takes an image off the server when its upload is removed, however far it got', async () => {
+      let answer: (media: Media) => void = () => {};
+      vi.mocked(mediaService.attach).mockImplementation(
+        () => new Promise((resolve) => (answer = resolve)),
+      );
+      renderPost(postWith('the final text'));
+      await textCard();
+      chooseFiles('the post', photo());
+      await mediaOn('the post').findByRole('progressbar');
+
+      fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 1' }));
+      expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();
+
+      await act(async () => answer(image('media_09')));
+
+      expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_09');
+      expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();
+      expect(track).not.toHaveBeenCalledWith('media_attached', expect.anything());
+    });
+
+    it('never sends an image removed while it waits its turn', async () => {
+      let answer: (media: Media) => void = () => {};
+      vi.mocked(mediaService.attach).mockImplementation(
+        () => new Promise((resolve) => (answer = resolve)),
+      );
+      renderPost(postWith('the final text'));
+      await textCard();
+      chooseFiles('the post', photo('first.png'), photo('second.png'));
+      await mediaOn('the post').findAllByRole('progressbar');
+
+      fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 2' }));
+      await act(async () => answer(image('media_01')));
+
+      expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+      expect(mediaService.attach).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an upload whose answer got lost as attached, with no Retry to send it twice', async () => {
+      renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+      await textCard();
+      vi.mocked(mediaService.attach).mockImplementationOnce(async () => {
+        // The server took the file, but its answer never arrived.
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(postWith('the final text'), [[image('media_01'), image('media_taken')]]),
+        );
+        throw new Error('Network Error');
+      });
+
+      chooseFiles('the post', photo('lost.png'));
+
+      const taken = await mediaOn('the post').findByRole('listitem', { name: 'Image 2' });
+      await waitFor(() => expect(within(taken).queryByRole('progressbar')).toBeNull());
+      expect(mediaOn('the post').getAllByRole('listitem')).toHaveLength(2);
+      expect(mediaOn('the post').queryByRole('button', { name: /retry/i })).toBeNull();
+      expect(track).toHaveBeenCalledWith('media_attached', {
+        kind: 'image',
+        via: 'button',
+        source: 'web',
+      });
+
+      fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove image 2' }));
+      await waitFor(() =>
+        expect(mediaService.remove).toHaveBeenCalledWith('post_01', 'media_taken'),
+      );
+    });
+
+    it('offers Retry when the server holds no Media from a failed upload', async () => {
+      vi.mocked(mediaService.attach).mockRejectedValueOnce(new Error('Network Error'));
+      renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+      await textCard();
+
+      chooseFiles('the post', photo('lost.png'));
+
+      expect(
+        await mediaOn('the post').findByRole('button', { name: 'Retry lost.png' }),
+      ).toBeInTheDocument();
+      expect(mediaOn('the post').getAllByRole('listitem', { name: /^Image/ })).toHaveLength(1);
+    });
+
+    it('sends the next upload on a Part only once the server Media after a failure are shown', async () => {
+      vi.mocked(mediaService.attach)
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockResolvedValueOnce(image('media_02'));
+      renderPost(postWith('the final text'));
+      await textCard();
+      let stored: (post: PostDetail) => void = () => {};
+      vi.mocked(postService.get)
+        .mockClear()
+        .mockImplementation(() => new Promise((resolve) => (stored = resolve)));
+
+      chooseFiles('the post', photo('flaky.png'), photo('next.png'));
+      await waitFor(() => expect(postService.get).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(mediaService.attach).toHaveBeenCalledTimes(1);
+
+      await act(async () => stored(withMedia(postWith('the final text'), [[]])));
+
+      await waitFor(() => expect(mediaService.attach).toHaveBeenCalledTimes(2));
+      const images = await mediaOn('the post').findAllByRole('listitem', { name: /^Image/ });
+      await waitFor(() => expect(within(images[0]!).queryByRole('progressbar')).toBeNull());
+      expect(mediaOn('the post').getAllByRole('listitem', { name: /^Image/ })).toHaveLength(1);
+      expect(mediaOn('the post').getByRole('button', { name: 'Retry flaky.png' })).toBeTruthy();
+    });
+
+    it('shows the Media the server holds when it refuses a Part as full', async () => {
+      const three = [1, 2, 3].map((n) => image(`media_0${n}`));
+      renderPost(withMedia(postWith('the final text'), [three]));
+      await textCard();
+      vi.mocked(postService.get).mockResolvedValue(
+        withMedia(postWith('the final text'), [[...three, image('media_hidden')]]),
+      );
+      vi.mocked(mediaService.attach).mockRejectedValueOnce(
+        apiError(422, 'This post holds 4 images already.', { code: 'MEDIA_PART_FULL' }),
+      );
+
+      chooseFiles('the post', photo('late.png'));
+
+      expect(await mediaOn('the post').findByRole('listitem', { name: 'Image 4' })).toBeTruthy();
+      expect(
+        within(mediaOn('the post').getByRole('listitem', { name: 'late.png' })).getByText(
+          'X takes up to 4 images, or 1 GIF, or 1 video, per post',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('takes an image dropped on a Part or pasted into its text', async () => {
+      vi.mocked(mediaService.attach).mockImplementation(async (_post, part) =>
+        image(`media_part_${part}`),
+      );
+      renderPost(threadOfTwo());
+      await textCard();
+      const dropped = photo('dropped.png');
+      const pasted = photo('pasted.png');
+
+      fireEvent.drop(card().getByRole('listitem', { name: 'Part 2 of 2' }), {
+        dataTransfer: { files: [dropped], types: ['Files'] },
+      });
+      fireEvent.paste(card().getByRole('textbox', { name: 'Part 1 text' }), {
+        clipboardData: { files: [pasted], types: ['Files'], getData: () => '' },
+      });
+
+      expect(await mediaOn('Part 2').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+      expect(await mediaOn('Part 1').findByRole('listitem', { name: 'Image 1' })).toBeTruthy();
+      expect(mediaService.attach).toHaveBeenCalledWith('post_01', 2, dropped, expect.anything());
+      expect(mediaService.attach).toHaveBeenCalledWith('post_01', 1, pasted, expect.anything());
+      expect(track).toHaveBeenCalledWith('media_attached', {
+        kind: 'image',
+        via: 'drop',
+        source: 'web',
+      });
+      expect(track).toHaveBeenCalledWith('media_attached', {
+        kind: 'image',
+        via: 'paste',
+        source: 'web',
+      });
+    });
+
+    it('lets a paste of text go into the text box as typed', async () => {
+      renderPost(threadOfTwo());
+      await textCard();
+
+      fireEvent.paste(card().getByRole('textbox', { name: 'Part 1 text' }), {
+        clipboardData: { files: [], types: ['text/plain'], getData: () => 'words' },
+      });
+
+      expect(mediaService.attach).not.toHaveBeenCalled();
+    });
+
+    it('dims only the words while Feedback writes, never the Media', async () => {
+      vi.mocked(postService.addVersion).mockReturnValue(new Promise(() => {}));
+      renderPost(withMedia(postWith('the first final'), [[image('media_01')]]));
+      await textCard();
+
+      fireEvent.change(panel('Draft').getByRole('textbox', { name: 'Feedback' }), {
+        target: { value: 'shorter' },
+      });
+      const send = panel('Draft').getByRole('button', { name: 'Send feedback' });
+      await waitFor(() => expect(send).toBeEnabled());
+      fireEvent.click(send);
+
+      await waitFor(() =>
+        expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true'),
+      );
+      expect(card().getByText('the first final').closest('.opacity-60')).not.toBeNull();
+      expect(
+        screen.getByRole('list', { name: 'Media on the post' }).closest('.opacity-60'),
+      ).toBeNull();
+      expect(card().getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    });
+
+    it('shows no media controls once the Post is scheduled', async () => {
+      renderPost(withScheduledPost(SCHEDULED));
+      await textCard();
+
+      expect(screen.queryByRole('button', { name: /add media/i })).not.toBeInTheDocument();
     });
   });
 

@@ -16,12 +16,14 @@ from pumpkit.auth.models import User
 from pumpkit.billing.allowance import Draw
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
 from pumpkit.core.time import as_utc
+from pumpkit.posts import media as media_service
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.schemas import (
     PartResponse,
     StartingTextResponse,
+    TextPartResponse,
     TextResponse,
     VersionResponse,
 )
@@ -194,9 +196,15 @@ def text_response(post: Post, char_limit: int) -> Optional[TextResponse]:
     text = post_text(post)
     if text is None:
         return None
+    media = media_service.text_media_by_part(post)
     return TextResponse(
         format=text.format,
-        parts=_part_responses(text.parts, char_limit),
+        parts=[
+            TextPartResponse(
+                **part.model_dump(), media=[media_service.media_response(m) for m in on_part]
+            )
+            for part, on_part in zip(_part_responses(text.parts, char_limit), media, strict=True)
+        ],
         version_number=text.version_number,
         edited=post.text_edited,
     )

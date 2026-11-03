@@ -181,6 +181,14 @@ export const EVENTS = {
     description:
       "Post page: made an earlier Version the Post's Text again. Props: source (history | undo).",
   },
+  media_attached: {
+    description:
+      "Post page: attached Media to a Part of the Post's Text and its upload finished. Props: kind (image), via (button | drop | paste), source (web).",
+  },
+  media_removed: {
+    description:
+      "Post page: removed Media from a Part of the Post's Text. Props: kind (image), source (web).",
+  },
   post_final_copied: {
     description:
       "Post page: copied the text on screen with the card's copy icon, every Part of it.",

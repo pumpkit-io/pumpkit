@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Literal, Optional, get_args
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -54,6 +55,12 @@ class Post(Base):
     user: Mapped["User"] = relationship()
     attempts: Mapped[list["VersionAttempt"]] = relationship(
         back_populates="post", cascade="all, delete-orphan", order_by="VersionAttempt.sequence"
+    )
+    # Every Part's Media references, read with the Post, since the Text shows them.
+    text_media: Mapped[list["TextMedia"]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="(TextMedia.part_index, TextMedia.position)",
+        lazy="selectin",
     )
 
 
@@ -126,3 +133,55 @@ class VersionAttempt(Base):
             "post_id", "version_number", name="uq_version_attempts_post_id_version_number"
         ),
     )
+
+
+MediaKind = Literal["image", "gif", "video"]
+MEDIA_IMAGE: MediaKind = "image"
+MEDIA_GIF: MediaKind = "gif"
+MEDIA_VIDEO: MediaKind = "video"
+
+
+class Media(Base):
+    """
+    One file a User attached, kept by the Instance until its X post is Published (ADR 0021). The
+    Text and Scheduled post Parts reference it; it never belongs to a Version.
+    """
+
+    __tablename__ = "media"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("media")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[MediaKind] = mapped_column(PgEnum(*get_args(MediaKind), name="media_kind_enum"))
+    # Read from the file's own bytes, never from its name or the upload's declared type.
+    content_type: Mapped[str] = mapped_column(String)
+    byte_size: Mapped[int] = mapped_column(BigInteger)
+    width: Mapped[Optional[int]] = mapped_column(Integer)
+    height: Mapped[Optional[int]] = mapped_column(Integer)
+    alt_text: Mapped[Optional[str]] = mapped_column(Text)
+    # A video's length as the browser read it; the server never measures one.
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer)
+    # The file to publish, in the FileStorage; None once it is deleted after publishing.
+    file_key: Mapped[Optional[str]] = mapped_column(String)
+    # A small image the web app shows, kept after the file is gone.
+    preview_key: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class TextMedia(Base):
+    """One Media's place on a Post's Text: its Part, and its order among that Part's Media."""
+
+    __tablename__ = "text_media"
+
+    # A Media sits on one Text, once.
+    media_id: Mapped[str] = mapped_column(
+        ForeignKey("media.id", ondelete="CASCADE"), primary_key=True
+    )
+    post_id: Mapped[str] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), index=True)
+    # Counted from 0, as the Text's Parts are stored.
+    part_index: Mapped[int] = mapped_column(Integer)
+    # Orders the Part's Media; gaps left by removals don't matter.
+    position: Mapped[int] = mapped_column(Integer)
+
+    media: Mapped["Media"] = relationship(lazy="joined")

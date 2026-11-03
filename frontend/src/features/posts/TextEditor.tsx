@@ -4,7 +4,7 @@ import { useMediaQuery } from '@/lib/useMediaQuery';
 import { changeDiff, type PartChange } from './changeDiff';
 import type { ShownPart } from './shownText';
 import type { EditCause } from './textHistory';
-import { TextCard } from './TextCard';
+import { TextCard, type PartMedia } from './TextCard';
 import type { TextTrace } from './text/textController';
 
 /** How long the Pumpkin trace fades for, and how long it stays without a fade. */
@@ -81,6 +81,7 @@ function PartBox({
   onChange,
   onUndo,
   onRedo,
+  onPasteFiles,
   trace,
 }: {
   label: string;
@@ -88,6 +89,8 @@ function PartBox({
   onChange: (value: string, inputType: string | null, caret: number) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  /** Takes files pasted with no text, such as a screenshot, instead of the box. */
+  onPasteFiles?: (files: File[]) => void;
   trace: { key: number; change: PartChange; first: boolean; still: boolean } | null;
 }) {
   const box = useRef<HTMLTextAreaElement>(null);
@@ -129,6 +132,12 @@ function PartBox({
         onChange={(e) => {
           const native = e.nativeEvent as Partial<InputEvent>;
           onChange(e.target.value, native.inputType ?? null, e.target.selectionEnd);
+        }}
+        onPaste={(e) => {
+          const files = Array.from(e.clipboardData?.files ?? []);
+          if (!onPasteFiles || !files.length || e.clipboardData.getData('text/plain')) return;
+          e.preventDefault();
+          onPasteFiles(files);
         }}
         onKeyDown={(e) => {
           if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
@@ -177,6 +186,7 @@ export function TextEditor({
   onUndo,
   onRedo,
   trace,
+  media,
   corner,
   header,
   busy = false,
@@ -189,6 +199,7 @@ export function TextEditor({
   onUndo?: () => void;
   onRedo?: () => void;
   trace?: TextTrace | null;
+  media?: (index: number) => PartMedia | null;
   corner?: ReactNode;
   header?: ReactNode;
   busy?: boolean;
@@ -214,6 +225,7 @@ export function TextEditor({
     <TextCard
       parts={parts}
       busy={busy}
+      media={media}
       corner={corner}
       header={header}
       renderText={
@@ -226,6 +238,9 @@ export function TextEditor({
                   onChange={(value, inputType, at) => edit(index, value, inputType, at)}
                   onUndo={onUndo}
                   onRedo={onRedo}
+                  onPasteFiles={
+                    media ? (files) => media(index)?.onFiles(files, 'paste') : undefined
+                  }
                   trace={
                     shownTrace?.changes[index]
                       ? {

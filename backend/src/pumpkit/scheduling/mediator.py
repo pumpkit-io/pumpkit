@@ -1,11 +1,14 @@
+import asyncio
 from datetime import datetime
-from typing import Optional
+from typing import BinaryIO, Optional
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
+import pumpkit.posts.media as media_service
+import pumpkit.posts.media_files as media_files
 import pumpkit.posts.service as posts_service
 import pumpkit.posts.version_writing as version_writing
 import pumpkit.x_connection.service as x_connections_service
@@ -21,11 +24,13 @@ from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
 from pumpkit.core.logging import logger
+from pumpkit.core.rate_limit import hit_user_limit
+from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.models import Post
-from pumpkit.posts.schemas import TextResponse, VersionResponse
+from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
@@ -655,6 +660,70 @@ async def edit_text(
         rules.check_text_keeps_live_parts(live_count, post.text_parts or [], parts)
     posts_service.edit_text(post, parts)
     return await _commit_text(db, user=user, post=post)
+
+
+async def attach_text_media(
+    db: AsyncSession,
+    storage: FileStorage,
+    user: User,
+    post_id: str,
+    part_number: int,
+    file: BinaryIO,
+    byte_size: int,
+    now: datetime,
+) -> MediaResponse:
+    """
+    Attach the file to Part `part_number` of the Post's Text, last among its Media, once it is
+    an image Pumpkit takes and the Part has room. Only a Draft or a Failed Post's, on a Part not
+    live on X. Allowed while Feedback writes a Version, which leaves the Text's Media as it is.
+    """
+    post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
+    part_index = part_number - 1
+    _check_not_live(scheduled_post, part_index=part_index)
+    media_service.check_text_part_room(post, part_index=part_index)
+    checked = await asyncio.to_thread(media_files.check_image, file, byte_size)
+    media = await media_service.attach_to_text(
+        db, storage, post=post, part_index=part_index, checked=checked, file=file, now=now
+    )
+    await db.commit()
+    return media_service.media_response(media)
+
+
+async def start_media_upload(db: AsyncSession, user: User) -> None:
+    """
+    Before an upload's body arrives: counts it against the User's rate, and ends the transaction
+    the sign-in checks read in, so no connection stays held while a slow upload streams.
+    """
+    hit_user_limit("attach_text_media", user.id, MEDIA_RATE)
+    await db.commit()
+
+
+async def remove_text_media(db: AsyncSession, user: User, post_id: str, media_id: str) -> None:
+    """Take the Media off the Post's Text. Only a Draft or a Failed Post's, on a Part not live."""
+    post, scheduled_post = await _post_whose_media_changes(db, user=user, post_id=post_id)
+    placed = media_service.text_media_on(post, media_id=media_id)
+    _check_not_live(scheduled_post, part_index=placed.part_index)
+    media_service.remove_from_text(post, placed)
+    await db.commit()
+
+
+async def _post_whose_media_changes(
+    db: AsyncSession, *, user: User, post_id: str
+) -> tuple[Post, Optional[ScheduledPost]]:
+    """The User's Post, locked, with its Scheduled post, once its Text's Media may change."""
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
+    return post, scheduled_post
+
+
+def _check_not_live(scheduled_post: Optional[ScheduledPost], *, part_index: int) -> None:
+    """On a Failed Post, the Parts already on X went out with the Media they had."""
+    if scheduled_post is None:
+        return
+    live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
+    if part_index < live_count:
+        raise ConflictError(f"Part {part_index + 1} is already on X, so its media is set.")
 
 
 async def _post_whose_text_changes(

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
@@ -9,10 +9,12 @@ from pumpkit.authors.x_reader import XReader, get_x_reader
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
+from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.llm import LLM, get_llm
+from pumpkit.posts.media_upload import ReceivedMedia, receive_media
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import TextResponse, VersionResponse
+from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -301,3 +303,56 @@ async def edit_text(
     return await mediator.edit_text(
         db=db, user=current_user, post_id=post_id, parts=edit_request.parts, now=clock()
     )
+
+
+async def _uploading_user(
+    current_user: User = Depends(require_subscribed_user), db: AsyncSession = Depends(get_async_db)
+) -> User:
+    await mediator.start_media_upload(db=db, user=current_user)
+    return current_user
+
+
+@posts_router.post(
+    "/posts/{post_id}/text/parts/{part_number}/media",
+    response_model=MediaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def attach_text_media(
+    post_id: str,
+    part_number: Annotated[int, Path(ge=1)],
+    # Resolved in this order, so the User is counted and the connection freed before the body.
+    current_user: User = Depends(_uploading_user),
+    received: ReceivedMedia = Depends(receive_media),
+    db: AsyncSession = Depends(get_async_db),
+    storage: FileStorage = Depends(get_file_storage),
+    clock: Clock = Depends(get_clock),
+) -> MediaResponse:
+    """
+    Attaches an image, sent as the multipart field `file`, to Part `part_number` (from 1) of the
+    Post's Text, after the Part's other Media. The type is read from the file's bytes, and an
+    upload larger than X takes is refused while it streams. A Scheduled or Published Post is
+    refused.
+    """
+    return await mediator.attach_text_media(
+        db=db,
+        storage=storage,
+        user=current_user,
+        post_id=post_id,
+        part_number=part_number,
+        file=received.file,
+        byte_size=received.byte_size,
+        now=clock(),
+    )
+
+
+@posts_router.delete(
+    "/posts/{post_id}/text/media/{media_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_text_media(
+    post_id: str,
+    media_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> None:
+    """Takes the Media off the Post's Text. A Scheduled or Published Post is refused."""
+    await mediator.remove_text_media(db=db, user=current_user, post_id=post_id, media_id=media_id)

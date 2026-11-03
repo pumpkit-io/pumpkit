@@ -1,12 +1,17 @@
+from dataclasses import dataclass
 from datetime import datetime
+from typing import BinaryIO, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.core.errors import RefusedError
+from pumpkit.core.errors import NotFoundError, RefusedError
+from pumpkit.core.storage import FileStorage
+from pumpkit.posts import media as media_service
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
 from pumpkit.posts.llm import LLM
+from pumpkit.posts.media_files import PREVIEW_CONTENT_TYPE
 from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
@@ -63,3 +68,33 @@ async def start_post(
     return PostResponse(
         id=post.id, brief=post.brief, versions=[version_response(version, char_limit)]
     )
+
+
+@dataclass(frozen=True)
+class StoredFile:
+    """An open file the caller streams and closes."""
+
+    file: BinaryIO
+    content_type: str
+
+
+async def open_media_file(
+    db: AsyncSession,
+    storage: FileStorage,
+    user: User,
+    media_id: str,
+    which: Literal["preview", "file"],
+) -> StoredFile:
+    """The preview or the file of the User's Media, open for reading."""
+    media = await media_service.get_user_media(db, user_id=user.id, media_id=media_id)
+    if media is None:
+        raise NotFoundError("Media not found.")
+    if which == "preview":
+        key, content_type = media.preview_key, PREVIEW_CONTENT_TYPE
+    else:
+        key, content_type = media.file_key, media.content_type
+    if key is None:
+        raise NotFoundError("This media's file isn't kept any more.")
+    # Ends the read transaction, so no connection stays held while the file streams.
+    await db.commit()
+    return StoredFile(file=await storage.open(key), content_type=content_type)

@@ -36,6 +36,7 @@ dependencies = [
     "posthog>=7.0.0",
     "mcp>=2.3.0,<3",
     "pillow>=11.0",
+    "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]

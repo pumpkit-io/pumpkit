@@ -7,6 +7,9 @@ import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
+import { MediaButton } from '@/features/posts/media/MediaButton';
+import { MediaTiles } from '@/features/posts/media/MediaTiles';
+import { useTextMedia, type TextMedia } from '@/features/posts/media/useTextMedia';
 import { FailedDock, FailedPostTo } from '@/features/posts/panels/FailedDock';
 import {
   FeedbackDock,
@@ -26,6 +29,7 @@ import { PostToButton } from '@/features/posts/postTo/PostToButton';
 import { useCreateFromText } from '@/features/posts/postTo/senders';
 import { cardParts, copiedText, type ShownPart } from '@/features/posts/shownText';
 import type { TextController, TextSnapshot } from '@/features/posts/text/textController';
+import type { PartMedia } from '@/features/posts/TextCard';
 import { TextEditor } from '@/features/posts/TextEditor';
 import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import { usePost } from '@/features/posts/usePost';
@@ -116,6 +120,33 @@ function DraftPostTo({
   );
 }
 
+/** Media controls for each Part of the Text not yet live on X. */
+function partMediaOf(media: TextMedia, parts: ShownPart[]) {
+  return (index: number): PartMedia | null => {
+    if (parts[index]?.live) return null;
+    const where = parts.length > 1 ? `Part ${index + 1}` : 'the post';
+    return {
+      tiles: (
+        <MediaTiles
+          tiles={media.tilesOf(index)}
+          where={where}
+          canRetry={media.roomOn(index) > 0}
+          onRemove={(key) => media.remove(index, key)}
+          onRetry={(key) => media.retry(index, key)}
+        />
+      ),
+      button: (
+        <MediaButton
+          where={where}
+          full={media.roomOn(index) <= 0}
+          onFiles={(files) => media.attach(index, files, 'button')}
+        />
+      ),
+      onFiles: (files, via) => media.attach(index, files, via),
+    };
+  };
+}
+
 function LoadedPost({
   post: loaded,
   text,
@@ -140,6 +171,7 @@ function LoadedPost({
     () => opensEditor && post.scheduledPost?.state === 'scheduled',
   );
   const navigate = useNavigate();
+  const media = useTextMedia(loaded.id, loaded.textMedia);
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
   useEffect(() => {
@@ -267,6 +299,7 @@ function LoadedPost({
         onRedo={onRedo}
         trace={text.trace}
         busy={text.writing}
+        media={textChanges ? partMediaOf(media, parts) : undefined}
         header={<TextHeader origin={origin} tools={tools} action={postTo} />}
       />
       <p role="status" className="sr-only">
