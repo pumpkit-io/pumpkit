@@ -7,6 +7,7 @@ import {
   type BoundFunctions,
   type queries,
 } from '@testing-library/react';
+import { CanceledError } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -1645,26 +1646,73 @@ describe('Post page', () => {
         expect(screen.queryByText(/Over 20 minutes/)).not.toBeInTheDocument();
       });
 
-      it('stops a video still sending when its tile is removed, attaching nothing', async () => {
+      it('says nothing of a long video while no X account is connected', async () => {
+        vi.mocked(xConnectionService.get).mockResolvedValue(null);
+        renderPost(withMedia(threadOfTwo(), [[video('media_01', 21 * MINUTE)], []]));
+        await textCard();
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        expect(screen.queryByText(/Over 20 minutes/)).not.toBeInTheDocument();
+      });
+
+      it('says nothing of a long video a published post went out with', async () => {
+        renderPost(
+          withScheduledPost({
+            ...SCHEDULED,
+            state: 'published',
+            parts: [{ ...SCHEDULED.parts[0]!, live: true, media: [video('m1', 21 * MINUTE)] }],
+          }),
+        );
+        await textCard();
+        await mediaOn('the post').findByRole('listitem', { name: 'Video 1' });
+        await waitFor(() => expect(xConnectionService.get).toHaveBeenCalled());
+
+        expect(screen.queryByText(/Over 20 minutes/)).not.toBeInTheDocument();
+      });
+
+      function sendingUntilAborted(): { signal: () => AbortSignal | undefined } {
         let signal: AbortSignal | undefined;
         vi.mocked(mediaService.attach).mockImplementation(
           (_post, _part, _file, options) =>
             new Promise((_resolve, reject) => {
               signal = options?.signal;
-              options?.signal?.addEventListener('abort', () =>
-                reject(Object.assign(new Error('canceled'), { name: 'CanceledError' })),
-              );
+              options?.signal?.addEventListener('abort', () => reject(new CanceledError()));
             }),
         );
+        return { signal: () => signal };
+      }
+
+      it('shows, and keeps, media an app attached while a stopped video was sending', async () => {
+        const sending = sendingUntilAborted();
+        renderPost(postWith('the final text'));
+        await textCard();
+        chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
+        await waitFor(() => expect(sending.signal()).toBeDefined());
+        vi.mocked(postService.get).mockResolvedValue(
+          withMedia(postWith('the final text'), [[video('from_an_app')]]),
+        );
+
+        fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove video 1' }));
+
+        await waitFor(() =>
+          expect(
+            mediaOn('the post').getByRole('listitem', { name: 'Video 1' }),
+          ).toBeInTheDocument(),
+        );
+        expect(mediaService.remove).not.toHaveBeenCalled();
+      });
+
+      it('stops a video still sending when its tile is removed, attaching nothing', async () => {
+        const sending = sendingUntilAborted();
         vi.mocked(postService.get).mockResolvedValue(postWith('the final text'));
         renderPost(postWith('the final text'));
         await textCard();
         chooseFiles('the post', photo('demo.mp4', 'video/mp4'));
-        await waitFor(() => expect(signal).toBeDefined());
+        await waitFor(() => expect(sending.signal()).toBeDefined());
 
         fireEvent.click(mediaOn('the post').getByRole('button', { name: 'Remove video 1' }));
 
-        expect(signal?.aborted).toBe(true);
+        expect(sending.signal()?.aborted).toBe(true);
         await waitFor(() => expect(postService.get).toHaveBeenCalled());
         expect(mediaService.remove).not.toHaveBeenCalled();
         expect(screen.queryByRole('list', { name: 'Media on the post' })).not.toBeInTheDocument();

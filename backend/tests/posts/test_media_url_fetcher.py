@@ -4,7 +4,9 @@ redirect checked again, capped by the file's kind while it downloads, and within
 """
 
 import asyncio
+import re
 import socket
+from pathlib import Path
 
 import httpx
 import pytest
@@ -209,3 +211,14 @@ async def test_a_video_has_longer_to_download_than_an_image(production):
 
     async with fetcher.fetch(URL) as received:
         assert received.byte_size == len(mp4()) + 30
+
+
+def test_the_longest_download_ends_a_minute_before_the_proxy_gives_up_on_the_tool_call():
+    caddyfile = (Path(__file__).parents[3] / "infra" / "web" / "Caddyfile").read_text()
+    api_routes = caddyfile.split("handle /api/* {")[1].split("handle ")[0]
+    timeout = re.search(r"response_header_timeout (\d+)m", api_routes)
+    assert timeout is not None
+
+    longest = max(HttpMediaUrlFetcher().longer_deadlines.values())
+
+    assert longest <= (int(timeout.group(1)) - 1) * 60

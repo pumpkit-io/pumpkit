@@ -34,7 +34,8 @@ from pumpkit.posts.models import MEDIA_GIF, MEDIA_VIDEO, MediaKind
 # Long enough for the largest image on a slow host.
 _DEADLINE_SECONDS = 60.0
 # A larger kind's whole download, counted from its start once the file's first bytes name it.
-_LONGER_DEADLINES: Mapping[MediaKind, float] = {MEDIA_GIF: 2 * 60.0, MEDIA_VIDEO: 10 * 60.0}
+# A minute under the web proxy's 5 minutes for an API answer, so the tool call gets its answer.
+_LONGER_DEADLINES: Mapping[MediaKind, float] = {MEDIA_GIF: 2 * 60.0, MEDIA_VIDEO: 4 * 60.0}
 _MAX_REDIRECTS = 3
 
 logger = logging.getLogger(__name__)

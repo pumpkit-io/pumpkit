@@ -31,7 +31,7 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
-import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
+import { POST_NOW_VIDEO, X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
 import type { ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
@@ -94,10 +94,6 @@ function overMediaRule(parts: ShownPart[], thread: boolean): string[] {
     return [`${what} has more media than X takes. ${X_MEDIA_RULE}.`];
   });
 }
-
-/** The server's refusal: Post now publishes within the request, which a video's upload can outlast. */
-const POST_NOW_VIDEO =
-  "Post now can't publish a video yet. Schedule the post a minute from now instead.";
 
 /**
  * What the Parts about to go out with a link use of the link posts left, in the period and in

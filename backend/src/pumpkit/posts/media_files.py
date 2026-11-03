@@ -38,32 +38,24 @@ _IMAGE_SIGNATURES = (
     (b"GIF87a", "image/gif"),
     (b"GIF89a", "image/gif"),
 )
-# ISO media files share MP4's `ftyp` box; these brands are still images or audio, not video.
-_NOT_VIDEO_BRANDS = {
-    b"heic",
-    b"heix",
-    b"heim",
-    b"heis",
-    b"hevc",
-    b"hevx",
-    b"hevm",
-    b"hevs",
-    b"mif1",
-    b"msf1",
-    b"avif",
-    b"avis",
-    b"avio",
-    b"crx ",
-    b"M4A ",
-    b"M4B ",
-    b"M4P ",
-    b"jp2 ",
-    b"jpm ",
-    b"jpx ",
+# The `ftyp` brands MP4 and MOV videos start with. Other ISO media files share the box (HEIC,
+# AVIF, M4A, Motion JPEG 2000, 3GP); a generic brand may still hold only audio, which X refuses.
+_VIDEO_BRANDS: dict[bytes, str] = {
+    **dict.fromkeys(
+        [b"isom", b"iso2", b"iso4", b"iso5", b"iso6", b"mp41", b"mp42", b"avc1", b"mmp4"],
+        "video/mp4",
+    ),
+    **dict.fromkeys([b"M4V ", b"M4VH", b"M4VP"], "video/mp4"),
+    b"qt  ": "video/quicktime",
 }
-# A QuickTime movie made before `ftyp` existed starts straight with one of these atoms.
-_QUICKTIME_ATOMS = {b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"}
+# A QuickTime movie made before `ftyp` existed starts with its movie or media data atom, or with
+# an empty 8-byte `wide`, `free` or `skip` atom right before one.
+_QUICKTIME_ATOMS = {b"moov", b"mdat"}
+_QUICKTIME_PADDING_ATOMS = {b"wide", b"free", b"skip"}
 _KINDS: dict[str, MediaKind] = {
+    "image/jpeg": MEDIA_IMAGE,
+    "image/png": MEDIA_IMAGE,
+    "image/webp": MEDIA_IMAGE,
     "image/gif": MEDIA_GIF,
     "video/mp4": MEDIA_VIDEO,
     "video/quicktime": MEDIA_VIDEO,
@@ -123,9 +115,7 @@ def part_full(where: str, holds: Sequence[MediaKind]) -> MediaRefused:
 
 def takes_more(holds: Sequence[MediaKind], kind: Optional[MediaKind] = None) -> bool:
     """Whether one X post holding `holds` takes Media of `kind` too, or of some kind when None."""
-    if kind is None:
-        return not over_x_rule([*holds, MEDIA_IMAGE])
-    return not over_x_rule([*holds, kind])
+    return not over_x_rule([*holds, kind or MEDIA_IMAGE])
 
 
 def over_x_rule(kinds: Sequence[MediaKind]) -> bool:
@@ -144,17 +134,21 @@ def content_type_of(head: bytes) -> Optional[str]:
         return "image/webp"
     box = head[4:8]
     if box == b"ftyp":
-        brand = head[8:12]
-        if brand in _NOT_VIDEO_BRANDS or len(brand) < 4:
-            return None
-        return "video/quicktime" if brand == b"qt  " else "video/mp4"
+        return _VIDEO_BRANDS.get(head[8:12])
     if box in _QUICKTIME_ATOMS:
+        return "video/quicktime"
+    if (
+        box in _QUICKTIME_PADDING_ATOMS
+        and head[:4] == b"\0\0\0\x08"
+        and head[12:16] in _QUICKTIME_ATOMS
+    ):
         return "video/quicktime"
     return None
 
 
 def kind_of(content_type: str) -> MediaKind:
-    return _KINDS.get(content_type, MEDIA_IMAGE)
+    """The kind of a type `content_type_of` answers; a KeyError for any other."""
+    return _KINDS[content_type]
 
 
 @dataclass(frozen=True)
@@ -178,10 +172,8 @@ def check_media(
     poster: Optional[bytes] = None,
 ) -> CheckedMedia:
     """
-    The Media `source` holds, once it is a file Pumpkit takes and X allows, with its preview.
-    Raises `MediaRefused` naming the reason otherwise. Reads `source` from where it stands. A
-    video is never decoded: its preview is `poster`, the first frame the browser read, when that
-    is an image, and `duration_ms` is kept as the browser measured it. Both are ignored otherwise.
+    The Media `source` holds from where it stands, with its preview, or `MediaRefused`. A video is
+    never decoded: its preview is `poster` when that is an image, its length `duration_ms`.
     """
     content_type = content_type_of(source.read(SNIFF_BYTES))
     if content_type is None:

@@ -37,6 +37,9 @@ export const UNREADABLE = "Can't read this image";
 /** X takes longer videos only from Premium accounts. */
 export const PREMIUM_VIDEO_MS = 20 * 60 * 1000;
 export const LONG_VIDEO = 'Over 20 minutes: X takes longer videos only from Premium accounts.';
+/** The server's POST_NOW_VIDEO refusal, shown before Post now is tried. */
+export const POST_NOW_VIDEO =
+  "Post now can't publish a video yet. Schedule the post a minute from now instead.";
 export const UPLOAD_FAILED = 'Upload failed. Try again.';
 /** Why a Part an undo shows before it lands takes no files yet. */
 export const PART_SAVING = "Saving this part. Add media once it's saved.";
@@ -45,7 +48,7 @@ export function tooLarge(kind: MediaKind): string {
   return `Larger than ${MAX_BYTES[kind] / MB} MB`;
 }
 
-/** What the file is by the type the browser names, or its extension; null when Pumpkit can't take it. */
+/** The file's kind by its type, or its extension; null when Pumpkit can't take it. */
 export function kindOfFile(file: File): MediaKind | null {
   if (file.type) return KINDS_BY_TYPE[file.type] ?? null;
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
@@ -109,7 +112,7 @@ export function refusalBeforeUpload(file: File): Refusal | null {
   return null;
 }
 
-/** What a tile says of a failed upload of `file`: the backend's refusal, or a failure worth retrying. */
+/** A tile's words on a failed upload of `file`: the server's refusal, or a retryable failure. */
 export function refusalOf(error: unknown, file: File): Refusal {
   const refusals: Record<string, string> = {
     MEDIA_TYPE_UNSUPPORTED: typeRefused(file),

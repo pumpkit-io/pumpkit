@@ -148,8 +148,8 @@ async def test_a_first_frame_that_is_no_image_leaves_the_video_without_a_preview
     assert response.json()["preview_url"] is None
 
 
-@pytest.mark.parametrize("duration_ms", ["soon", "-1", "1.5"])
-async def test_a_length_that_is_no_count_of_milliseconds_is_refused(
+@pytest.mark.parametrize("duration_ms", ["soon", "-1", "1.5", "86400001", "9999999999999999"])
+async def test_a_length_that_is_no_count_of_milliseconds_up_to_a_day_is_refused(
     client, subscribed, post_with, duration_ms
 ):
     post_id = await post_with("Bad length.")
@@ -175,11 +175,40 @@ async def test_an_upload_with_an_unknown_field_is_refused(client, subscribed, po
 @pytest.mark.parametrize(
     "head",
     [
+        b"\0\0\0\x18ftypisom\0\0\x02\0isomiso2avc1mp41",
+        b"\0\0\0\x18ftypavc1\0\0\0\0avc1isom",
+        b"\0\0\0\x18ftypM4V \0\0\0\x01M4V mp42",
+        b"\0\0\0\x08wide\0\0\x10\0mdat",
+        b"\0\0\x10\0mdat",
+        b"\0\0\x10\0moov",
+    ],
+    ids=["isom", "avc1", "m4v", "wide-then-mdat", "mdat", "moov"],
+)
+async def test_mp4_and_quicktime_videos_by_their_first_box_are_taken(
+    client, subscribed, post_with, head
+):
+    post_id = await post_with("A video.")
+
+    response = await _attach(client, post_id, padded(head, 64))
+
+    assert response.status_code == 201, response.text
+    assert response.json()["kind"] == "video"
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
         b"\0\0\0\x18ftypheic\0\0\0\0mif1heic",
         b"\0\0\0\x1cftypavif\0\0\0\0avifmif1",
         b"\0\0\0\x20ftypM4A \0\0\0\0M4A isom",
+        b"\0\0\0\x20ftypf4a \0\0\0\0isommp42",
+        b"\0\0\0\x14ftypmjp2\0\0\0\0mjp2",
+        b"\0\0\0\x18ftyp3gp4\0\0\0\0isom3gp4",
+        b"\0\0\0\x08freeNot a movie at all",
+        b"\0\0\x10\0wideNot a movie",
+        b"\0\0\0\x08skip\0\0\0\x08junk",
     ],
-    ids=["heic", "avif", "m4a"],
+    ids=["heic", "avif", "m4a", "f4a", "motion-jpeg-2000", "3gp", "free", "wide", "skip"],
 )
 async def test_other_files_that_look_like_mp4_are_refused(client, subscribed, post_with, head):
     post_id = await post_with("Not a video.")

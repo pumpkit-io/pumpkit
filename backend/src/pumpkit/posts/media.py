@@ -94,7 +94,7 @@ def check_dropped_parts_media_movable(post: Post, *, part_count: int, live_count
 
 
 def check_text_part_room(post: Post, *, part_index: int, kind: Optional[MediaKind] = None) -> None:
-    """Refuses a Part of the Text whose X post can't take Media of `kind` too, as `check_part_room`."""
+    """Refuses a Part of the Text whose X post can't take Media of `kind` too."""
     count = len(post.text_parts or [])
     if not 0 <= part_index < count:
         raise NotFoundError(f"This post's text has no part {part_index + 1}.")

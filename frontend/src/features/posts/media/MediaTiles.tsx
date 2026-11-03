@@ -206,10 +206,7 @@ function RefusedTile({
   );
 }
 
-/**
- * The warning under a video X would refuse at publish time: over 20 minutes, from an X account
- * without Premium, or with none connected yet to say.
- */
+/** Under a video X would refuse: over 20 minutes, on a connected X account without Premium. */
 function LongVideoWarning({ tiles }: { tiles: Tile[] }) {
   const connection = useContext(XConnectionContext)?.connection;
   const long = tiles.some(
@@ -218,7 +215,7 @@ function LongVideoWarning({ tiles }: { tiles: Tile[] }) {
       kindOfTile(tile) === 'video' &&
       (durationOf(tile) ?? 0) > PREMIUM_VIDEO_MS,
   );
-  if (!long || connection === undefined || connection?.premium) return null;
+  if (!long || !connection || connection.premium) return null;
   return (
     <p className="flex items-start gap-1.5 font-sans text-[13px] font-medium text-foreground">
       <TriangleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
@@ -314,7 +311,6 @@ export function ReadOnlyMediaTiles({ media, where }: { media: Media[]; where: st
           />
         ))}
       </ul>
-      <LongVideoWarning tiles={shown} />
     </div>
   );
 }

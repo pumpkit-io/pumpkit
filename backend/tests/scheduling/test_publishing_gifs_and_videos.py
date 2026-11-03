@@ -5,13 +5,18 @@ token's life, so the publish keeps its claim and a fresh token through every cal
 Post now refuses a video for now.
 """
 
+import asyncio
 from datetime import timedelta
 
 from httpx import AsyncClient
+from sqlalchemy import select
 
-from pumpkit.scheduling.publisher import run_pass
+import pumpkit.scheduling.publish as publish_module
+import pumpkit.x_connection.service as x_connections_service
+from pumpkit.scheduling.publisher import run, run_pass
 from pumpkit.scheduling.publishing import recover_stuck
-from pumpkit.x_connection.x_publisher import XMediaRefusedError
+from pumpkit.x_connection.models import XConnection
+from pumpkit.x_connection.x_publisher import XMediaRefusedError, XRateLimitedError
 from tests.media_files import animated_gif, mp4
 
 POSTS = "/api/v1/posts"
@@ -125,8 +130,9 @@ async def test_a_token_expiring_during_a_video_upload_is_refreshed_before_the_ne
     post_id = await post_with("A very long demo.")
     await _attach(client, post_id, mp4(total=96), "demo.mp4")
     await _due(client, post_id, fixed_clock)
-    fake_x_publisher.chunk_bytes = 4
-    # The token from connecting lasts two hours; 26 calls of 6 minutes take 2 h 36.
+    # The token from connecting has 55 minutes left; 14 calls of 6 minutes take 1 h 24.
+    fixed_clock.advance(timedelta(hours=1))
+    fake_x_publisher.chunk_bytes = 8
     _each_upload_call_takes(fake_x_publisher, db_session_maker, fixed_clock, timedelta(minutes=6))
 
     await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
@@ -136,6 +142,83 @@ async def test_a_token_expiring_during_a_video_upload_is_refreshed_before_the_ne
     sent = fake_x_publisher.upload_tokens
     assert (sent[0], sent[-1]) == ("access-1001-1", "access-1001-2")
     assert fake_x_publisher.published[0][0] == "access-1001-2"
+
+
+async def test_a_video_upload_x_rate_limits_40_minutes_in_is_retried_after_a_backoff(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    post_id = await post_with("A long demo.")
+    await _attach(client, post_id, mp4(total=96), "demo.mp4")
+    await _due(client, post_id, fixed_clock)
+    fake_x_publisher.chunk_bytes = 8
+    calls = 0
+
+    async def slow_then_rate_limited() -> None:
+        nonlocal calls
+        calls += 1
+        fixed_clock.advance(timedelta(minutes=5))
+        if calls == 8:
+            raise XRateLimitedError("429")
+
+    fake_x_publisher.while_calling_x_to_upload = slow_then_rate_limited
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    waiting = await _scheduled_post(client, post_id)
+    assert waiting["state"] == "scheduled", waiting["failed_reason"]
+
+    fake_x_publisher.while_calling_x_to_upload = None
+    fixed_clock.advance(timedelta(minutes=1))
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert (await _scheduled_post(client, post_id))["state"] == "published"
+
+
+async def test_a_token_refresh_running_past_the_upload_limit_still_keeps_the_rotated_tokens(
+    client,
+    db,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+    monkeypatch,
+):
+    await connect_x()
+    post_id = await post_with("A demo.")
+    await _attach(client, post_id, mp4(), "demo.mp4")
+    await _due(client, post_id, fixed_clock)
+    monkeypatch.setattr(publish_module, "VIDEO_UPLOAD_LIMIT", timedelta(milliseconds=50))
+    refresh = fake_x_publisher.refresh
+
+    async def slow_refresh(**kwargs):
+        tokens = await refresh(**kwargs)
+        await asyncio.sleep(0.2)
+        return tokens
+
+    async def token_expires() -> None:
+        fixed_clock.advance(timedelta(hours=2))
+        fake_x_publisher.while_calling_x_to_upload = None
+
+    fake_x_publisher.refresh = slow_refresh
+    fake_x_publisher.while_calling_x_to_upload = token_expires
+
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert fake_x_publisher.refreshes == ["refresh-1001-1"]
+    connection = (await db.execute(select(XConnection))).scalar_one()
+    await db.refresh(connection)
+    assert x_connections_service.refresh_token(connection) == "refresh-1001-2"
 
 
 async def test_a_video_x_fails_to_process_fails_the_post_with_xs_reason(
@@ -160,6 +243,101 @@ async def test_a_video_x_fails_to_process_fails_the_post_with_xs_reason(
     assert failed["state"] == "failed"
     assert failed["failed_reason"] == ("X refused the post's media: Unsupported video codec.")
     assert fake_x_publisher.published == []
+
+
+def _upload_waits_for_another_post(fake_x_publisher, *, then_due: timedelta = timedelta(0)):
+    """The upload advances the clock by `then_due`, then waits until another post is published."""
+    another_published = asyncio.Event()
+    publish = fake_x_publisher.publish
+
+    async def publishing(**kwargs) -> str:
+        posted = await publish(**kwargs)
+        another_published.set()
+        return posted
+
+    async def waiting(fixed_clock) -> None:
+        fixed_clock.advance(then_due)
+        await asyncio.wait_for(another_published.wait(), timeout=5)
+
+    fake_x_publisher.publish = publishing
+    return waiting
+
+
+async def _run_until_published(
+    count: int, db_session_maker, fake_x_publisher, file_storage, fixed_clock
+) -> None:
+    """The publisher's loop, stopped once `count` posts are published or after 5 seconds."""
+    stop = asyncio.Event()
+    looping = asyncio.create_task(
+        run(
+            db_session_maker,
+            fake_x_publisher,
+            file_storage,
+            fixed_clock,
+            poll_interval=timedelta(milliseconds=10),
+            stop=stop,
+        )
+    )
+    for _ in range(100):
+        if len(fake_x_publisher.published) == count:
+            break
+        await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(looping, timeout=5)
+
+
+async def test_a_video_upload_in_flight_doesnt_hold_up_another_due_post(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    video_post_id = await post_with("A long demo.")
+    await _attach(client, video_post_id, mp4(), "demo.mp4")
+    await client.post(
+        SCHEDULED_POSTS, json={"post_id": video_post_id, "publish_at": "2026-10-10T12:04:00Z"}
+    )
+    text_post_id = await post_with("Just words.")
+    await _due(client, text_post_id, fixed_clock)
+    waiting = _upload_waits_for_another_post(fake_x_publisher)
+    fake_x_publisher.while_uploading = lambda: waiting(fixed_clock)
+
+    await _run_until_published(2, db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert [text for _, text in fake_x_publisher.published] == ["Just words.", "A long demo."]
+    assert (await _scheduled_post(client, video_post_id))["state"] == "published"
+    assert (await _scheduled_post(client, text_post_id))["state"] == "published"
+
+
+async def test_a_post_due_while_a_video_uploads_goes_out_on_the_next_pass(
+    client,
+    subscribed,
+    db_session_maker,
+    file_storage,
+    fake_x_publisher,
+    fixed_clock,
+    connect_x,
+    post_with,
+):
+    await connect_x()
+    video_post_id = await post_with("A long demo.")
+    await _attach(client, video_post_id, mp4(), "demo.mp4")
+    await _due(client, video_post_id, fixed_clock)
+    text_post_id = await post_with("Due later.")
+    await client.post(
+        SCHEDULED_POSTS, json={"post_id": text_post_id, "publish_at": "2026-10-10T12:12:00Z"}
+    )
+    waiting = _upload_waits_for_another_post(fake_x_publisher, then_due=timedelta(minutes=7))
+    fake_x_publisher.while_uploading = lambda: waiting(fixed_clock)
+
+    await _run_until_published(2, db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+
+    assert [text for _, text in fake_x_publisher.published] == ["Due later.", "A long demo."]
 
 
 async def test_post_now_refuses_a_video_for_now(

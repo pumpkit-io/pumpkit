@@ -40,12 +40,6 @@ X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
 _TIMEOUT_SECONDS = 30.0
 # Under X's 5 MB cap on an APPEND segment, with room for the multipart framing around it.
 MEDIA_CHUNK_BYTES = 4 * 1024 * 1024
-# Kept under the publish's own limit per Media, so this cap ends a slow upload with its own error.
-_MEDIA_PROCESSING_SECONDS: dict[str, float] = {
-    "tweet_image": 3 * 60,
-    "tweet_gif": 3 * 60,
-    "tweet_video": 30 * 60,
-}
 # The longest wait between STATUS polls, so each step of an upload stays short.
 _MAX_POLL_WAIT_SECONDS = 60.0
 # X's documented access token lifetime, used when a token response leaves out expires_in.
@@ -118,6 +112,12 @@ class XMediaRefusedError(XPublisherError):
 
 # X's media_category for what the upload is for, which sets its limits and processing.
 MediaCategory = Literal["tweet_image", "tweet_gif", "tweet_video"]
+# Kept under the publish's own limit per Media, so this cap ends a slow upload with its own error.
+_MEDIA_PROCESSING_SECONDS: dict[MediaCategory, float] = {
+    "tweet_image": 3 * 60,
+    "tweet_gif": 3 * 60,
+    "tweet_video": 30 * 60,
+}
 # Awaited before each call of an upload for the access token to send with it.
 TokenForCall = Callable[[], Awaitable[str]]
 
@@ -185,10 +185,8 @@ class XPublisher(Protocol):
         category: MediaCategory,
     ) -> str:
         """
-        X's media id for the `byte_size` bytes of `source`, once X has processed them. A video's
-        upload and processing can take an hour, so `token_for_call` is awaited before every call
-        to X, each chunk and STATUS poll included: the caller keeps its claim there, and refreshes
-        the token near expiry. It publishes nothing, so a failed upload may be tried again.
+        X's media id for `source` once X processed it. A video's upload can take an hour, so
+        `token_for_call` is awaited before every call to X, each chunk and STATUS poll included.
         """
         ...
 

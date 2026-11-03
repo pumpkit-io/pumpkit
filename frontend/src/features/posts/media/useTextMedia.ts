@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
 import { showToast } from '@/components/Toaster';
 import { track } from '@/lib/analytics';
 import { useConfirmLeaving } from '@/lib/useConfirmLeaving';
@@ -68,10 +69,6 @@ export function holdsPlace(tile: Tile): boolean {
 
 export function kindOfTile(tile: Tile): MediaKind {
   return tile.state === 'ready' ? tile.media.kind : tile.kind;
-}
-
-function isAbort(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'CanceledError' || error.name === 'AbortError');
 }
 
 function localUrlOf(file: Blob): string | null {
@@ -311,18 +308,11 @@ export function useTextMedia(
         } catch (caught) {
           error = caught;
         }
-        if (under.dropped && isAbort(error)) {
-          // Aborted before all of it was sent, so the server can't have attached it; a read
-          // finding one Media the page didn't know of takes it off all the same.
+        if (under.dropped && axios.isCancel(error)) {
+          // Aborted before all of it was sent, so the server can't have attached it. Media the
+          // read finds that the page didn't know of came from elsewhere, such as an AI app: shown.
           const server = await read();
-          const unknown = (server ?? [])
-            .flat()
-            .filter(
-              (m) =>
-                !discarded.current.has(m.id) &&
-                !current.current.flat().some((t) => t.state === 'ready' && t.media.id === m.id),
-            );
-          if (unknown.length === 1) await discard(unknown[0]!);
+          if (server) reconcile(server, null);
           return;
         }
         if (media) {

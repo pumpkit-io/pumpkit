@@ -247,8 +247,8 @@ async def attach_scheduled_post_media(
     """
     Attaches an image, a GIF or a video, sent as `attach_text_media` takes it, to Part
     `part_number` (from 1) of a scheduled or Failed Scheduled post, after the Part's other Media.
-    Only the Scheduled post's own copy changes, not the Post's Text. A Part already on X is refused, and so is a Scheduled post
-    publishing or Published.
+    Only the Scheduled post's own copy changes, not the Post's Text. A Part already on X is
+    refused, and so is a Scheduled post publishing or Published.
     """
     return await mediator.attach_scheduled_post_media(
         db=db,
@@ -457,9 +457,9 @@ async def upload_through_link(
     clock: Clock = Depends(get_clock),
 ) -> UploadedMediaResponse:
     """
-    Attaches an image, a GIF or a video, sent as the multipart field `file`, through a one-time link `attach_media`
-    made: to the Part it names, of the Post's Text or its waiting Scheduled post's copy. The link
-    is the only credential, and the first upload that starts through it spends it.
+    Attaches an image, a GIF or a video, sent as the multipart field `file`, through a one-time
+    link `attach_media` made: to the Part it names, of the Post's Text or its waiting Scheduled
+    post's copy. The link is the only credential, and the first upload through it spends it.
     """
     return await mediator.attach_through_link(
         db=db, storage=storage, upload=upload, received=received, now=clock()

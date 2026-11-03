@@ -29,6 +29,8 @@ FILE_FIELD = "file"
 # What the web app read of a video in the browser, sent beside it; the server never reads a video.
 DURATION_FIELD = "duration_ms"
 POSTER_FIELD = "poster"
+# A day, far past any video X takes, and well inside the column's 32-bit integer.
+_MAX_DURATION_MS = 24 * 60 * 60 * 1000
 _FIELD_MAX_BYTES = {DURATION_FIELD: 16, POSTER_FIELD: POSTER_MAX_BYTES}
 # Room for the multipart headers and boundaries around the file.
 _ENVELOPE_BYTES = 64 * 1024
@@ -82,9 +84,8 @@ class IncomingMedia:
 
 async def receive_media(request: Request) -> AsyncIterator[ReceivedMedia]:
     """
-    FastAPI dependency: the upload's `file` field, spooled and rewound, with a video's optional
-    `duration_ms` and `poster` image. Refuses an upload with no file, with any other field or a
-    field twice, or larger than the most X takes of the file's kind.
+    FastAPI dependency: the spooled `file` field with a video's optional `duration_ms` and `poster`.
+    Refuses no file, another or repeated field, and a file larger than X takes of its kind.
     """
     _, options = parse_options_header(request.headers.get("content-type", ""))
     boundary = options.get(b"boundary")
@@ -193,6 +194,8 @@ def _duration(value: Optional[bytearray]) -> Optional[int]:
     if value is None:
         return None
     text = value.decode("ascii", errors="replace").strip()
-    if not text.isdigit():
-        raise BadRequestError(f"Send `{DURATION_FIELD}` as a whole number of milliseconds.")
+    if not text.isdigit() or int(text) > _MAX_DURATION_MS:
+        raise BadRequestError(
+            f"Send `{DURATION_FIELD}` as a whole number of milliseconds, up to a day."
+        )
     return int(text)

@@ -5,6 +5,7 @@ of a publish: the claim and any rotated tokens are committed before X is called.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,20 +45,27 @@ async def publish_scheduled_post(
     return True
 
 
-async def publish_next_due(
-    db: AsyncSession, publisher: XPublisher, storage: FileStorage, *, clock: Clock
-) -> bool:
-    """The publisher's step. False when nothing is due."""
-    now = clock()
+async def claim_next_due(db: AsyncSession, *, now: datetime) -> Optional[str]:
+    """The publisher's claim of the soonest due Scheduled post, committed; None when none is due."""
     scheduled_post_id = await service.claim_next_due(db, now=now)
     # Commit the claim before calling X: from here on, no other pass can publish it.
     await db.commit()
-    if scheduled_post_id is None:
-        return False
+    return scheduled_post_id
+
+
+async def publish_claimed(
+    db: AsyncSession,
+    publisher: XPublisher,
+    storage: FileStorage,
+    *,
+    scheduled_post_id: str,
+    claimed_at: datetime,
+    clock: Clock,
+) -> None:
+    """Publish what `claim_next_due` claimed at `claimed_at`, its claim renewed by `clock`."""
     await _publish_claimed(
-        db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
+        db, publisher, storage, scheduled_post_id=scheduled_post_id, now=claimed_at, clock=clock
     )
-    return True
 
 
 async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
