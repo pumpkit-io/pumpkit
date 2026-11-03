@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime
 from typing import BinaryIO, Optional
 
@@ -9,10 +10,12 @@ import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
 import pumpkit.posts.media as media_service
 import pumpkit.posts.media_files as media_files
+import pumpkit.posts.media_upload_links as media_upload_links
 import pumpkit.posts.service as posts_service
 import pumpkit.posts.version_writing as version_writing
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
+from pumpkit.auth.service.sessions import may_hold_session
 from pumpkit.authors.x_reader import (
     CommunityNotFoundError,
     XReader,
@@ -20,9 +23,10 @@ from pumpkit.authors.x_reader import (
     XReaderNotConfiguredError,
 )
 from pumpkit.billing.allowance import COUNT_NOUNS, check_publishes_before_end
+from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
 from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
-from pumpkit.core.errors import BadRequestError, ConflictError, NotFoundError
+from pumpkit.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
@@ -30,6 +34,8 @@ from pumpkit.core.time import Clock, as_utc
 from pumpkit.posts.formats import Format, format_of
 from pumpkit.posts.llm import LLM
 from pumpkit.posts.media_fetcher import MediaUrlFetcher
+from pumpkit.posts.media_upload import ReceivedMedia
+from pumpkit.posts.media_upload_links import NewUploadLink
 from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.versions import write_next_version
@@ -68,6 +74,7 @@ from pumpkit.scheduling.schemas import (
     ScheduledPostResponse,
     ScheduledPostSummaryResponse,
     TopUpUsageResponse,
+    UploadedMediaResponse,
     UsageCountResponse,
     UsageResponse,
     XConnectionResponse,
@@ -864,38 +871,159 @@ async def attach_media_from_url(
     # No transaction stays open while the file downloads.
     await db.commit()
     async with fetcher.fetch(url) as received:
-        _, scheduled_post = await _post_with_scheduled_post(db, user=user, post_id=post_id)
-        taking = _scheduled_post_taking_media(scheduled_post)
-        if taking is None:
-            media = await attach_text_media(
-                db,
-                storage,
-                user,
-                post_id,
-                part_number,
-                received.file,
-                received.byte_size,
-                now,
-                alt_text=alt_text,
-            )
-            return PlacedMediaResponse(media=media, on_scheduled_post=False)
-        media = await attach_scheduled_post_media(
+        return await _attach_received(
+            db,
+            storage,
+            user=user,
+            post_id=post_id,
+            part_number=part_number,
+            received=received,
+            alt_text=alt_text,
+            now=now,
+        )
+
+
+async def _attach_received(
+    db: AsyncSession,
+    storage: FileStorage,
+    *,
+    user: User,
+    post_id: str,
+    part_number: int,
+    received: ReceivedMedia,
+    alt_text: Optional[str],
+    now: datetime,
+) -> PlacedMediaResponse:
+    """Attach a file an AI app sent where the Post's Media changes now, with the upload's checks."""
+    _, scheduled_post = await _post_with_scheduled_post(db, user=user, post_id=post_id)
+    taking = _scheduled_post_taking_media(scheduled_post)
+    if taking is None:
+        media = await attach_text_media(
             db,
             storage,
             user,
-            taking.id,
+            post_id,
             part_number,
             received.file,
             received.byte_size,
             now,
             alt_text=alt_text,
         )
-        return PlacedMediaResponse(media=media, on_scheduled_post=True)
+        return PlacedMediaResponse(media=media, on_scheduled_post=False)
+    media = await attach_scheduled_post_media(
+        db,
+        storage,
+        user,
+        taking.id,
+        part_number,
+        received.file,
+        received.byte_size,
+        now,
+        alt_text=alt_text,
+    )
+    return PlacedMediaResponse(media=media, on_scheduled_post=True)
 
 
-async def check_post_found(db: AsyncSession, user: User, post_id: str) -> None:
-    """Refuses a Post that isn't the User's."""
-    await version_writing.user_post(db, user=user, post_id=post_id)
+def post_url(post_id: str) -> str:
+    """The Post's page in the web app."""
+    return f"{settings.frontend_url()}{POSTS_PAGE}/{post_id}"
+
+
+def attached_message(part_number: int, *, on_scheduled_post: bool) -> str:
+    return f"Attached to part {part_number} of {media_holder(on_scheduled_post)}."
+
+
+def media_holder(on_scheduled_post: bool) -> str:
+    return "the post's scheduled post" if on_scheduled_post else "the post's text"
+
+
+async def create_media_upload_link(
+    db: AsyncSession,
+    user: User,
+    post_id: str,
+    part_number: int,
+    alt_text: Optional[str],
+    now: datetime,
+) -> NewUploadLink:
+    """
+    For AI apps with a shell: a one-time link that attaches the file sent to it to Part
+    `part_number`, as `attach_media_from_url` would, refused now for what attaching would refuse.
+    """
+    await x_connections_service.check_takes_media(db, user_id=user.id)
+    await _check_part_takes_media(db, user=user, post_id=post_id, part_number=part_number)
+    link = await media_upload_links.create(
+        db,
+        user_id=user.id,
+        post_id=post_id,
+        part_index=part_number - 1,
+        alt_text=alt_text,
+        now=now,
+    )
+    await db.commit()
+    return link
+
+
+@dataclass(frozen=True)
+class LinkUpload:
+    """An upload a one-time link let start: whose it is and where its file goes."""
+
+    user: User
+    post_id: str
+    part_number: int
+    alt_text: Optional[str]
+
+
+async def start_link_upload(db: AsyncSession, token: str, now: datetime) -> LinkUpload:
+    """
+    Before a link upload's body arrives, with the link as its only credential: refuse what the
+    User couldn't do signed in, and what attaching would refuse, then count it against the media
+    rate, spend the link and commit, so no connection stays held while the file streams.
+    """
+    link = await media_upload_links.find_usable(db, token=token, now=now)
+    user = await users_service.get_user_by_id(db=db, user_id=link.user_id)
+    if user is None or not may_hold_session(user):
+        raise ForbiddenError("This upload link no longer works.", code="UPLOAD_LINK_REFUSED")
+    if not await billing_service.has_access(db, user_id=user.id):
+        raise ForbiddenError(SUBSCRIPTION_NEEDED)
+    upload = LinkUpload(
+        user=user,
+        post_id=link.post_id,
+        part_number=link.part_index + 1,
+        alt_text=link.alt_text,
+    )
+    await x_connections_service.check_takes_media(db, user_id=user.id)
+    await _check_part_takes_media(
+        db, user=user, post_id=upload.post_id, part_number=upload.part_number
+    )
+    hit_user_limit("attach_text_media", user.id, MEDIA_RATE)
+    await media_upload_links.spend(db, link=link, now=now)
+    await db.commit()
+    return upload
+
+
+async def attach_through_link(
+    db: AsyncSession,
+    storage: FileStorage,
+    upload: LinkUpload,
+    received: ReceivedMedia,
+    now: datetime,
+) -> UploadedMediaResponse:
+    """Attach the file a one-time link took where `attach_media_from_url` would."""
+    placed = await _attach_received(
+        db,
+        storage,
+        user=upload.user,
+        post_id=upload.post_id,
+        part_number=upload.part_number,
+        received=received,
+        alt_text=upload.alt_text,
+        now=now,
+    )
+    return UploadedMediaResponse(
+        message=attached_message(upload.part_number, on_scheduled_post=placed.on_scheduled_post),
+        post_url=post_url(upload.post_id),
+        media=placed.media,
+    )
 
 
 async def remove_media(

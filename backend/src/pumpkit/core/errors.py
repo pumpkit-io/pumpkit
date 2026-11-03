@@ -87,6 +87,10 @@ class BadRequestError(RefusalError):
     status_code = 400
 
 
+class ForbiddenError(RefusalError):
+    status_code = 403
+
+
 class NotFoundError(RefusalError):
     status_code = 404
 
@@ -95,6 +99,12 @@ class ConflictError(RefusalError):
     """The request is valid, but what the User already has stands in its way."""
 
     status_code = 409
+
+
+class GoneError(RefusalError):
+    """What the request names existed, and can't be used any more."""
+
+    status_code = 410
 
 
 class RefusedError(RefusalError):

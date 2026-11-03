@@ -185,3 +185,24 @@ class TextMedia(Base):
     position: Mapped[int] = mapped_column(Integer)
 
     media: Mapped["Media"] = relationship(lazy="joined")
+
+
+class MediaUploadLink(Base):
+    """
+    A one-time link an AI app sends a Media file to with no other credentials, made by
+    `attach_media` for one Part of one of the User's Posts.
+    """
+
+    __tablename__ = "media_upload_links"
+
+    # The token in the link, hashed: the row, not the URL, names the User, Post and Part.
+    token_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    post_id: Mapped[str] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), index=True)
+    # Counted from 0, as the Text's Parts are stored.
+    part_index: Mapped[int] = mapped_column(Integer)
+    alt_text: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    # Set when an upload starts through it, whatever comes of that upload.
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

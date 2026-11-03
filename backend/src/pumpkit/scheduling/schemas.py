@@ -212,8 +212,20 @@ class PlacedMediaResponse(BaseModel):
 class AttachMediaToolResponse(BaseModel):
     message: str
     post_url: str
-    # None when the User attaches the media on the Post's page instead.
+    # None when the app uploads the file through the link instead.
     media: Optional[MediaResponse]
+    # A one-time link for the file, when no URL was given.
+    upload_url: Optional[str] = None
+    upload_expires_at: Optional[AwareDatetime] = None
+    curl_command: Optional[str] = None
+
+
+class UploadedMediaResponse(BaseModel):
+    """What an upload through a one-time link answers, for the app that ran it."""
+
+    message: str
+    post_url: str
+    media: MediaResponse
 
 
 class ScheduledPostUpdateRequest(BaseModel):
