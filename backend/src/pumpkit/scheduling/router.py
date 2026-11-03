@@ -298,9 +298,9 @@ async def set_scheduled_post_media_alt_text(
     clock: Clock = Depends(get_clock),
 ) -> MediaResponse:
     """
-    Sets the alt text of an image or GIF on a scheduled or Failed Scheduled post, up to 1,000
-    characters; empty or null clears it. A Part already on X is refused, and so is a Scheduled post
-    publishing or Published.
+    Sets the alt text of an image or GIF on a waiting Scheduled post, up to 1,000 characters; empty
+    or null clears it. A Part already on X is refused, and so is a Failed, publishing or Published
+    Scheduled post: a Failed Post's alt text changes on its Text.
     """
     return await mediator.set_scheduled_post_media_alt_text(
         db=db,

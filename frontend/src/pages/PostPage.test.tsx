@@ -1498,8 +1498,7 @@ describe('Post page', () => {
         const hollow = mediaOn('the post').getByRole('button', { name: 'Add alt text to image 1' });
         const solid = mediaOn('the post').getByRole('button', { name: 'Edit alt text of image 2' });
         expect(hollow).toHaveTextContent('Alt');
-        expect(hollow).toHaveAttribute('data-described', 'false');
-        expect(solid).toHaveAttribute('data-described', 'true');
+        expect(solid).toHaveTextContent('Alt');
         const second = mediaOn('the post').getByRole('listitem', { name: 'Image 2' });
         await waitFor(() =>
           expect(second.querySelector('img')).toHaveAttribute('alt', 'Gulls over the harbour.'),
@@ -1601,6 +1600,58 @@ describe('Post page', () => {
           mediaOn('the post').getByRole('button', { name: 'Add alt text to image 1' }),
         ).toBeInTheDocument();
         expect(track).not.toHaveBeenCalledWith('media_alt_text_set', expect.anything());
+      });
+
+      it('holds the popover open and its text fixed while saving, and keeps the draft when the save fails', async () => {
+        let fail: (error: Error) => void = () => {};
+        vi.mocked(mediaService.setAltText).mockReturnValue(
+          new Promise((_resolve, reject) => {
+            fail = reject;
+          }),
+        );
+        renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+        await textCard();
+
+        const popover = await openAltText('Add alt text to image 1');
+        const box = popover.getByRole('textbox', { name: 'Alt text' });
+        fireEvent.change(box, { target: { value: 'Gulls.' } });
+        fireEvent.click(popover.getByRole('button', { name: 'Save' }));
+
+        expect(await popover.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+        expect(box).toHaveAttribute('readonly');
+        fireEvent.keyDown(box, { key: 'Escape' });
+        expect(screen.getByRole('dialog', { name: 'Alt text for image 1' })).toBeInTheDocument();
+
+        fail(new Error('Network Error'));
+        expect(await popover.findByRole('alert')).toHaveTextContent(
+          "Couldn't save the alt text. Try again.",
+        );
+        expect(box).not.toHaveAttribute('readonly');
+        expect(box).toHaveValue('Gulls.');
+      });
+
+      it('reopens a popover whose save failed with its draft and the error', async () => {
+        vi.mocked(mediaService.setAltText).mockRejectedValue(new Error('Network Error'));
+        renderPost(withMedia(postWith('the final text'), [[image('media_01')]]));
+        await textCard();
+
+        let popover = await openAltText('Add alt text to image 1');
+        fireEvent.change(popover.getByRole('textbox', { name: 'Alt text' }), {
+          target: { value: 'Gulls.' },
+        });
+        fireEvent.click(popover.getByRole('button', { name: 'Save' }));
+        await popover.findByRole('alert');
+        fireEvent.keyDown(popover.getByRole('textbox', { name: 'Alt text' }), { key: 'Escape' });
+        await waitFor(() =>
+          expect(screen.queryByRole('dialog', { name: /^Alt text/ })).not.toBeInTheDocument(),
+        );
+
+        popover = await openAltText('Add alt text to image 1');
+
+        expect(popover.getByRole('textbox', { name: 'Alt text' })).toHaveValue('Gulls.');
+        expect(popover.getByRole('alert')).toHaveTextContent(
+          "Couldn't save the alt text. Try again.",
+        );
       });
 
       it('puts no Alt chip on an image still uploading', async () => {

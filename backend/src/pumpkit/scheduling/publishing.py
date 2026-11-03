@@ -203,7 +203,7 @@ async def _publish(
                             publisher,
                             scheduled_post,
                             part,
-                            one,
+                            one.alt_text,
                             x_media_id=x_media_id,
                             access_token=access_token,
                         )

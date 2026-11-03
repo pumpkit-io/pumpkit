@@ -876,19 +876,24 @@ async def set_scheduled_post_media_alt_text(
     alt_text: Optional[str],
     now: datetime,
 ) -> MediaResponse:
-    """Describe an image or GIF on a scheduled or Failed Scheduled post's Part not live, or clear it."""
+    """
+    Describe an image or GIF on a waiting Scheduled post's Part not live, or clear it. A Failed
+    Post's alt text changes on its Text, which the Scheduled post shares its Media with.
+    """
     scheduled_post, media = await _scheduled_post_whose_media_changes(
         db, user=user, scheduled_post_id=scheduled_post_id
     )
-    part_index, described = next(
-        ((i, m) for i, on_part in enumerate(media) for m in on_part if m.id == media_id),
-        (None, None),
-    )
-    if part_index is None or described is None:
+    if scheduled_post.state == FAILED:
+        raise ConflictError(
+            "This scheduled post failed, so its alt text changes on the post's text."
+        )
+    found = [(i, m) for i, on_part in enumerate(media) for m in on_part if m.id == media_id]
+    if not found:
         raise NotFoundError("This scheduled post has no such media.")
+    part_index, described = found[0]
     _check_not_live(scheduled_post, part_index=part_index)
     media_service.set_alt_text(described, alt_text)
-    await _save_scheduled_post_media(db, scheduled_post_id=scheduled_post_id, media=None, now=now)
+    await _check_not_claimed(db, scheduled_post_id=scheduled_post_id, now=now)
     await db.commit()
     return media_service.media_response(described)
 
@@ -1160,13 +1165,8 @@ async def _scheduled_post_whose_media_changes(
 
 
 async def _save_scheduled_post_media(
-    db: AsyncSession,
-    *,
-    scheduled_post_id: str,
-    media: Optional[list[list[Media]]],
-    now: datetime,
+    db: AsyncSession, *, scheduled_post_id: str, media: list[list[Media]], now: datetime
 ) -> None:
-    """Writes `media` as each Part's Media; None keeps the Media and only confirms the claim."""
     # The edit only applies while the publisher hasn't claimed it since it was read.
     if not await service.edit(
         db,
@@ -1174,7 +1174,15 @@ async def _save_scheduled_post_media(
         parts=None,
         reschedule=None,
         now=now,
-        media=_ids(media) if media is not None else None,
+        media=_ids(media),
+    ):
+        raise _publishing_started()
+
+
+async def _check_not_claimed(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> None:
+    """Refuses a change to the Scheduled post once the publisher has claimed it since it was read."""
+    if not await service.edit(
+        db, scheduled_post_id=scheduled_post_id, parts=None, reschedule=None, now=now, media=None
     ):
         raise _publishing_started()
 

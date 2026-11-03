@@ -15,7 +15,7 @@ const HOLLOW = 'border border-dashed border-muted-foreground bg-card text-muted-
 
 const SAVE_FAILED = "Couldn't save the alt text. Try again.";
 
-const count = (n: number) => n.toLocaleString('en-US');
+const withCommas = (n: number) => n.toLocaleString('en-US');
 
 /** A described image's chip where its alt text can't change, as on a Part already on X. */
 export function AltTextMark({ media }: { media: Media }) {
@@ -36,7 +36,7 @@ export function AltTextChip({
 }: {
   media: Media;
   number: number;
-  /** Rejects when the server didn't take it; the popover then stays open with the draft. */
+  /** Rejects when the server didn't take it; the popover then keeps the draft, even closed. */
   onSave: (altText: string | null) => Promise<void>;
 }) {
   const id = useId();
@@ -48,10 +48,9 @@ export function AltTextChip({
   const described = media.altText !== null;
 
   const openChange = (next: boolean) => {
-    if (next) {
-      setDraft(media.altText ?? '');
-      setFailed(false);
-    }
+    // A save in flight decides whether the popover closes.
+    if (saving) return;
+    if (next && !failed) setDraft(media.altText ?? '');
     setOpen(next);
   };
 
@@ -77,7 +76,6 @@ export function AltTextChip({
           aria-label={
             described ? `Edit alt text of image ${number}` : `Add alt text to image ${number}`
           }
-          data-described={described}
           className={cn(CHIP, described ? SOLID : HOLLOW, 'absolute bottom-1.5 left-1.5')}
         >
           Alt
@@ -102,6 +100,7 @@ export function AltTextChip({
           rows={4}
           maxLength={ALT_TEXT_MAX_CHARS}
           value={draft}
+          readOnly={saving}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -118,7 +117,7 @@ export function AltTextChip({
         )}
         <div className="flex items-center justify-between gap-3">
           <span className="font-sans text-xs tabular-nums text-muted-foreground">
-            {count(draft.length)} / {count(ALT_TEXT_MAX_CHARS)}
+            {withCommas(draft.length)} / {withCommas(ALT_TEXT_MAX_CHARS)}
           </span>
           <Button
             type="button"

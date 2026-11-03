@@ -271,19 +271,17 @@ async def set_alt_text(
     publisher: XPublisher,
     scheduled_post: ScheduledPost,
     part: ScheduledPostPart,
-    media: Media,
+    alt_text: str,
     *,
     x_media_id: str,
     access_token: str,
 ) -> None:
-    """Set the Media's alt text on X's upload `x_media_id`, or `Failed` as an upload would be."""
-    if media.alt_text is None:
-        return
+    """Set alt text on X's upload `x_media_id`, or `Failed` as an upload would be."""
     subject = _subject(scheduled_post, part)
     try:
         async with asyncio.timeout(X_CALL_LIMIT.total_seconds()):
             await publisher.set_alt_text(
-                access_token=access_token, media_id=x_media_id, alt_text=media.alt_text
+                access_token=access_token, media_id=x_media_id, alt_text=alt_text
             )
     except XReconnectNeededError:
         raise Failed("reconnect_needed", _not_published(subject, RECONNECT_NEEDED))

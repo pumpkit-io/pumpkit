@@ -12,6 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import update
 
 from pumpkit.posts.models import Media
+from pumpkit.scheduling.models import PUBLISHED, PUBLISHING, ScheduledPost
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.scheduling.publishing import recover_stuck
 from pumpkit.x_connection.x_publisher import (
@@ -194,15 +195,80 @@ async def test_a_part_already_on_x_keeps_its_alt_text(
     assert failed.json()["state"] == "failed", failed.text
 
     on_text = await _describe(client, post_id, live["id"], "Too late.")
-    on_scheduled_post = await _describe_on_scheduled_post(
-        client, failed.json()["id"], live["id"], "Too late."
-    )
     on_refused_part = await _describe(client, post_id, waiting["id"], "In time.")
 
     assert on_text.status_code == 409, on_text.text
     assert on_text.json()["detail"] == "Part 1 is already on X, so its media is set."
-    assert on_scheduled_post.status_code == 409, on_scheduled_post.text
     assert on_refused_part.status_code == 200, on_refused_part.text
+
+
+async def test_a_waiting_scheduled_posts_part_already_on_x_keeps_its_alt_text(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("Live one.", "Waiting two.")
+    live = await _attach(client, post_id, part=1)
+    waiting = await _attach(client, post_id, part=2)
+    fake_x_publisher.fail_publish = XRateLimitedError("429")
+    fake_x_publisher.fail_publish_on = 2
+    retrying = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
+    assert retrying.json()["state"] == "scheduled", retrying.text
+
+    on_live_part = await _describe_on_scheduled_post(
+        client, retrying.json()["id"], live["id"], "Too late."
+    )
+    on_waiting_part = await _describe_on_scheduled_post(
+        client, retrying.json()["id"], waiting["id"], "In time."
+    )
+
+    assert on_live_part.status_code == 409, on_live_part.text
+    assert on_waiting_part.status_code == 200, on_waiting_part.text
+
+
+async def test_a_failed_scheduled_post_takes_alt_text_only_through_the_text(
+    client, subscribed, fake_x_publisher, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("Refused.")
+    media = await _attach(client, post_id)
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    failed = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
+    assert failed.json()["state"] == "failed", failed.text
+
+    response = await _describe_on_scheduled_post(
+        client, failed.json()["id"], media["id"], "Not here."
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == (
+        "This scheduled post failed, so its alt text changes on the post's text."
+    )
+    assert _alt_texts((await _read(client, post_id))["text"]["parts"]) == [[None]]
+
+
+@pytest.mark.parametrize("state", [PUBLISHING, PUBLISHED])
+async def test_a_scheduled_post_publishing_or_published_takes_no_alt_text(
+    state, client, db, subscribed, fixed_clock, connect_x, post_with
+):
+    await connect_x()
+    post_id = await post_with("Going out.")
+    media = await _attach(client, post_id)
+    scheduled = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
+    assert scheduled.status_code == 201, scheduled.text
+    await db.execute(
+        update(ScheduledPost).where(ScheduledPost.id == scheduled.json()["id"]).values(state=state)
+    )
+    await db.commit()
+
+    response = await _describe_on_scheduled_post(
+        client, scheduled.json()["id"], media["id"], "Too late."
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == (
+        "Publishing has started, so this scheduled post can no longer change."
+    )
+    assert _alt_texts((await _read(client, post_id))["text"]["parts"]) == [[None]]
 
 
 async def _due(client: AsyncClient, post_id: str, fixed_clock) -> dict:

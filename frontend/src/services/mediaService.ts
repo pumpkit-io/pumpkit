@@ -11,7 +11,7 @@ export interface Media {
   previewUrl: string;
   width: number | null;
   height: number | null;
-  /** What an image or GIF shows, for screen readers; null until the User writes it. */
+  /** What an image or GIF shows, for screen readers; null until the User or their AI app writes it. */
   altText: string | null;
 }
 
