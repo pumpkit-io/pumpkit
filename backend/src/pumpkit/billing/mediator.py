@@ -10,7 +10,6 @@ from pumpkit.billing import service
 from pumpkit.billing.allowance import (
     SETTINGS_PAGE,
     limits,
-    may_buy_top_up,
     sells_top_ups,
     top_up_pack,
 )
@@ -50,7 +49,8 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
     What the User holds and may do, from Pumpkit's copy only: never a call to
     the billing provider, so it reflects the last sync (ADR 0004).
     """
-    subscription = await service.get_user_subscription(db, user_id=user.id)
+    entitlement = await service.get_entitlement(db, user_id=user.id)
+    subscription = entitlement.subscription
     offer = await service.get_subscription_offer(db, user_id=user.id)
     return BillingMeResponse(
         subscription=(
@@ -63,7 +63,7 @@ async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
                 cancel_at=subscription.cancel_at,
             )
         ),
-        subscribed=service.is_subscribed(subscription),
+        subscribed=entitlement.subscribed,
         may_subscribe=offer.may_subscribe,
         trial_days=offer.trial_days,
     )
@@ -254,10 +254,11 @@ async def _record_terms_acceptance(db: AsyncSession, user: User) -> None:
 
 
 async def _check_may_buy_top_up(db: AsyncSession, user: User) -> None:
-    subscription = await service.get_user_subscription(db, user_id=user.id)
-    if may_buy_top_up(subscription):
+    entitlement = await service.get_entitlement(db, user_id=user.id)
+    if entitlement.may_buy_top_up:
         return
-    status = subscription.status if subscription and service.is_subscribed(subscription) else None
+    subscription = entitlement.subscription
+    status = subscription.status if subscription and entitlement.subscribed else None
     if status == "trialing":
         message = "You can buy a top-up once your trial ends."
     elif status == "past_due":

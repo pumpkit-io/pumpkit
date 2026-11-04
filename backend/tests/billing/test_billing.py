@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -735,3 +735,100 @@ async def test_billing_routes_answer_404_where_no_plans_are_sold(
 
     assert response.status_code == 404
     assert fake_billing.checkouts == [] and fake_billing.portals == []
+
+
+@pytest.mark.parametrize(
+    ("status", "access", "way_out"),
+    [
+        ("trialing", True, "subscribe_now"),
+        ("active", True, "top_up"),
+        ("past_due", True, "update_payment"),
+        ("unpaid", False, None),
+        ("paused", False, None),
+        ("incomplete", False, None),
+        ("canceled", False, None),
+        ("incomplete_expired", False, None),
+    ],
+)
+async def test_billing_access_onboarding_and_usage_agree_for_each_subscription_status(
+    client, db, user, fake_billing, fixed_clock, monkeypatch, status, access, way_out
+):
+    monkeypatch.setattr(settings, "BILLING_TOP_UP_KEY", "top_up")
+    await _hold(db, user, _subscription("sub_1", status))
+
+    billing = await client.get(BILLING_ME)
+    onboarding = await client.get("/api/v1/onboarding")
+    posts = await client.get("/api/v1/posts")
+    usage = await client.get("/api/v1/usage")
+
+    assert billing.json()["subscribed"] is access
+    assert onboarding.json()["next_step"] == ("persona" if access else "paywall")
+    assert posts.status_code == (200 if access else 403)
+    assert usage.status_code == (200 if access else 403)
+    if access:
+        assert usage.json()["allowance"]["way_out"] == way_out
+        assert usage.json()["allowance"]["may_buy_top_up"] is (status == "active")
+
+
+@pytest.mark.parametrize("status", [None, "active", "unpaid"])
+async def test_billing_disabled_access_onboarding_and_usage_agree_despite_subscription_history(
+    client, db, user, fixed_clock, sells_no_plans, status
+):
+    if status is not None:
+        await _hold(db, user, _subscription("sub_1", status))
+
+    billing = await client.get(BILLING_ME)
+    onboarding = await client.get("/api/v1/onboarding")
+    posts = await client.get("/api/v1/posts")
+    usage = await client.get("/api/v1/usage")
+
+    assert billing.status_code == 404
+    assert onboarding.status_code == 200
+    assert onboarding.json() == {"next_step": "persona"}
+    assert posts.status_code == 200
+    assert usage.status_code == 200
+    assert usage.json() == {"allowance": None}
+
+
+@pytest.mark.parametrize("status", ["active", "trialing"])
+async def test_access_ends_when_the_provider_cancellation_is_synced_at_the_exact_end(
+    client, db, user, fake_billing, fixed_clock, status
+):
+    end = fixed_clock() + timedelta(seconds=1)
+    state = replace(
+        _subscription("sub_1", status),
+        current_period_end=end,
+        cancel_at=end,
+        trial_start=fixed_clock() - timedelta(days=7) if status == "trialing" else None,
+        trial_end=end if status == "trialing" else None,
+    )
+    await _with_customer(db, user)
+    await _hold(db, user, state)
+
+    async def assert_access(allowed):
+        billing = await client.get(BILLING_ME)
+        onboarding = await client.get("/api/v1/onboarding")
+        posts = await client.get("/api/v1/posts")
+        usage = await client.get("/api/v1/usage")
+        assert billing.status_code == onboarding.status_code == 200
+        assert billing.json()["subscribed"] is allowed
+        assert onboarding.json() == {"next_step": "persona" if allowed else "paywall"}
+        assert posts.status_code == usage.status_code == (200 if allowed else 403)
+        if allowed:
+            assert usage.json()["allowance"] is not None
+
+    await assert_access(True)
+    fixed_clock.advance(timedelta(seconds=1))
+    await assert_access(True)
+    fake_billing.set_subscription(CUSTOMER, replace(state, status="canceled"))
+    payload, signature = fake_billing.signed_event(
+        event_id="evt_cancellation_at_end",
+        event_type="customer.subscription.deleted",
+        data_object={"customer": CUSTOMER},
+    )
+    response = await client.post(
+        "/api/v1/stripe/webhook", content=payload, headers={"stripe-signature": signature}
+    )
+
+    assert response.status_code == 200
+    await assert_access(False)

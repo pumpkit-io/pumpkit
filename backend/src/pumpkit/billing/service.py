@@ -16,10 +16,10 @@ from pumpkit.billing.allowance import (
     Allowance,
     AllowanceUsedUp,
     Draw,
-    allowance_at,
     months_after,
     top_up_pack,
 )
+from pumpkit.billing.entitlement import Entitlement
 from pumpkit.billing.gateway import BillingGateway
 from pumpkit.billing.models import (
     AllowanceCount,
@@ -48,8 +48,6 @@ _RUNNING_STATUSES: set[SubscriptionStatus] = {
     "paused",
 }
 _INCOMPLETE_STATUSES: set[SubscriptionStatus] = {"incomplete"}
-# A Subscribed User's Subscription grants access to Pumpkit.
-_SUBSCRIBED_STATUSES: set[SubscriptionStatus] = {"trialing", "active", "past_due"}
 
 
 @dataclass(frozen=True)
@@ -130,11 +128,15 @@ def requires_terms_acceptance() -> bool:
     return sells_plans() and settings.is_operator_configured()
 
 
+async def get_entitlement(db: AsyncSession, *, user_id: str) -> Entitlement:
+    return Entitlement(
+        subscription=await get_user_subscription(db, user_id=user_id), plans_sold=sells_plans()
+    )
+
+
 async def has_access(db: AsyncSession, *, user_id: str) -> bool:
     """Whether a User may use Pumpkit: always where no Plans are sold, else only when Subscribed."""
-    if not sells_plans():
-        return True
-    return is_subscribed(await get_user_subscription(db, user_id=user_id))
+    return (await get_entitlement(db, user_id=user_id)).has_access
 
 
 async def get_allowance(db: AsyncSession, *, user_id: str, moment: datetime) -> Optional[Allowance]:
@@ -142,12 +144,7 @@ async def get_allowance(db: AsyncSession, *, user_id: str, moment: datetime) -> 
     The limits that apply to the User at `moment`: None where the Instance sells no Plans or the
     User isn't Subscribed, who may then do nothing an Allowance counts.
     """
-    if not sells_plans():
-        return None
-    subscription = await get_user_subscription(db, user_id=user_id)
-    if subscription is None or not is_subscribed(subscription):
-        return None
-    return allowance_at(subscription, moment)
+    return (await get_entitlement(db, user_id=user_id)).allowance_at(moment)
 
 
 def is_subscribed(subscription: Optional[Subscription]) -> bool:
@@ -155,7 +152,7 @@ def is_subscribed(subscription: Optional[Subscription]) -> bool:
     Whether a User holding `subscription` is Subscribed: it is in its Trial,
     paid up, or behind on payment while the provider still retries the charge.
     """
-    return subscription is not None and subscription.status in _SUBSCRIBED_STATUSES
+    return Entitlement(subscription=subscription, plans_sold=sells_plans()).subscribed
 
 
 async def get_subscription_by_stripe_id(
