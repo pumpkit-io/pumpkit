@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-04
+
 ### Added
 
 - A `media_data` volume, mounted in the `backend` and `publisher` services, keeps the images, GIFs and videos Users attach to their posts until each goes out on X. `MEDIA_STORAGE_DIR` names its directory and defaults to where the compose files mount it. The backend applies the database migration media needs when it starts, with nothing to do by hand. The bundled web server takes media uploads of up to 520 MiB and other API requests of up to 10 MiB. `compose.yml` gives the publisher up to 3 minutes to stop, so it can wait for X's answer on a post it is sending; a post still uploading media when the publisher stops is handed back to the next one. **Upgrade notes:** `docker compose up` creates the volume; add it to your backups with the database, as the self-hosting guide's "Backups and restore" shows. If you run the backend and publisher outside the bundled compose files, give both the same persistent directory at `MEDIA_STORAGE_DIR`. If you run your own proxy in front of the web server, let request bodies of at least 520 MiB through on `/api/*`, without a short timeout on reading them (the self-hosting guide's "A proxy in front of the web server" says how).
