@@ -68,6 +68,14 @@ _Avoid_: OAuth client, integration, connector, grant, authorized app
 
 ### Billing
 
+**Coupon**:
+A code a User redeems for a benefit, currently free months of Pro. It may be reserved for one email address, even before sign-up, or open to anyone, with a total redemption limit, at most one redemption per User, and an optional claim deadline.
+_Avoid_: voucher, promo code, discount code
+
+**Free access**:
+The months of Pro a redeemed Coupon gives a User, each with the full monthly Allowance. They follow any remaining paid time or Trial, stack with other free months, and create no obligation to subscribe or pay.
+_Avoid_: Trial (for Coupon benefits), free Subscription
+
 **Plan**:
 A recurring offer a User can subscribe to. Each Instance decides which Plans exist; besides them, only Top-ups are purchasable. An Instance may sell no Plans, and then every User may use all of Pumpkit without a Subscription.
 _Avoid_: price, tier, product
@@ -85,15 +93,15 @@ A Subscription that can never run again: it was cancelled, or its first payment 
 _Avoid_: inactive, expired (for Subscriptions)
 
 **Subscribed**:
-A User whose Subscription currently grants access to Pumpkit: it is in its Trial, paid up, or behind on payment while the billing provider still retries the charge.
+A User who currently has access to Pumpkit through Free access or a Subscription in its Trial, paid up, or behind on payment while the billing provider still retries the charge.
 _Avoid_: active, paying, premium
 
 **Trial**:
-The free, card-backed opening period of a User's first Subscription. Each User gets at most one.
+The free, card-backed opening period of a User's first Subscription. Each User gets at most one, and receiving Free access removes eligibility for it.
 _Avoid_: free tier, cardless trial
 
 **Paywall**:
-The page a signed-in User who is not Subscribed sees in place of the rest of Pumpkit, where they start their Trial or subscribe to a Plan. It is checked on every visit, not only the first. An Instance that sells no Plans has no Paywall.
+The page a signed-in User who is not Subscribed sees in place of the rest of Pumpkit, where they redeem a Coupon, start their Trial or subscribe to a Plan. It is checked on every visit, not only the first. An Instance that sells no Plans has no Paywall.
 _Avoid_: subscription gate, upgrade screen, hard wall
 
 **Allowance**:
@@ -109,11 +117,11 @@ One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: st
 _Avoid_: prompt, post prompt, credit, request
 
 **Allowance period**:
-The stretch of time one Allowance covers. For a paid Subscription it is a month, starting each month on the day the Subscription started, also on an annual Plan. A Trial is one Allowance period on its own, and paying before it ends starts the first monthly one at once.
+The stretch of time one Allowance covers. Paid Subscriptions and Free access have monthly periods, also on annual Plans; a paid Subscription's periods start each month on the day it started. A Trial is one Allowance period on its own, and paying before it ends starts the first monthly one at once.
 _Avoid_: billing cycle, billing period, month (alone)
 
 **Top-up**:
-A one-off purchase of extra Generations and X posts for a User who has used up their Allowance. It is spent only after the Allowance, lasts 12 months from purchase, and only a Subscribed User can spend it. Only a User whose paid Subscription is paid up can buy one. It is never part of a Plan.
+A one-off purchase of extra Generations and X posts for a User who has used up their Allowance. It is spent only after the Allowance, lasts 12 months from purchase, and only a Subscribed User can spend it. A User with Free access or a paid-up paid Subscription may buy one. It is never part of a Plan.
 _Avoid_: credits, credit pack, add-on, extra usage
 
 ### Writing
@@ -227,7 +235,7 @@ The company that runs the hosted Instance at pumpkit.io and is the other party t
 _Avoid_: we (in docs), owner, provider, Pumpkit (for the company)
 
 **Terms**:
-The contract between the Operator and a User for using the hosted Pumpkit, in English and Italian with both versions equally valid. A User accepts them before every checkout, so each Subscription has its own acceptance (see ADR 0010).
+The contract between the Operator and a User for using the hosted Pumpkit, in English and Italian with both versions equally valid. A User accepts them before every checkout and Coupon redemption, so each Subscription and redemption has its own acceptance (see ADR 0010 and ADR 0022).
 _Avoid_: ToS, terms and conditions, EULA, user agreement
 
 **Privacy Policy**:
