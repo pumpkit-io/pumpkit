@@ -735,3 +735,36 @@ async def test_billing_routes_answer_404_where_no_plans_are_sold(
 
     assert response.status_code == 404
     assert fake_billing.checkouts == [] and fake_billing.portals == []
+
+
+@pytest.mark.parametrize(
+    ("status", "access", "way_out"),
+    [
+        ("trialing", True, "subscribe_now"),
+        ("active", True, "top_up"),
+        ("past_due", True, "update_payment"),
+        ("unpaid", False, None),
+        ("paused", False, None),
+        ("incomplete", False, None),
+        ("canceled", False, None),
+        ("incomplete_expired", False, None),
+    ],
+)
+async def test_billing_access_onboarding_and_usage_agree_for_each_subscription_status(
+    client, db, user, fake_billing, fixed_clock, monkeypatch, status, access, way_out
+):
+    monkeypatch.setattr(settings, "BILLING_TOP_UP_KEY", "top_up")
+    await _hold(db, user, _subscription("sub_1", status))
+
+    billing = await client.get(BILLING_ME)
+    onboarding = await client.get("/api/v1/onboarding")
+    posts = await client.get("/api/v1/posts")
+    usage = await client.get("/api/v1/usage")
+
+    assert billing.json()["subscribed"] is access
+    assert onboarding.json()["next_step"] == ("persona" if access else "paywall")
+    assert posts.status_code == (200 if access else 403)
+    assert usage.status_code == (200 if access else 403)
+    if access:
+        assert usage.json()["allowance"]["way_out"] == way_out
+        assert usage.json()["allowance"]["may_buy_top_up"] is (status == "active")
