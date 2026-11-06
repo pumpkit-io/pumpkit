@@ -78,7 +78,7 @@ function IntervalToggle({
       <span
         aria-hidden
         className={cn(
-          'absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-primary shadow-raised transition-transform duration-200 ease-out motion-reduce:transition-none',
+          'absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-[#D96B45] shadow-raised transition-transform duration-200 ease-out motion-reduce:transition-none',
           value === 'annual' && 'translate-x-full',
         )}
       />
@@ -88,7 +88,7 @@ function IntervalToggle({
           className={cn(
             'relative flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 sm:gap-2 sm:px-4 text-sm font-medium transition-colors duration-200 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background',
             value === option.interval
-              ? 'text-primary-foreground'
+              ? 'text-[#20201E]'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >
@@ -115,7 +115,7 @@ function IntervalToggle({
 function PricingCta() {
   return (
     <CtaFrame>
-      <Button asChild size="lg" className="rounded-xl px-6 text-base">
+      <Button asChild variant="pumpkin" size="lg" className="rounded-xl px-6 text-base">
         <Link to="/login" onClick={() => track('landing_pricing_cta_clicked')}>
           Get started
         </Link>

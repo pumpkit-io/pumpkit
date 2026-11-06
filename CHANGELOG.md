@@ -8,6 +8,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
+- Orange buttons on the landing and sign-in pages match the pumpkin mascot, with charcoal labels in both themes.
+
 - Larger text makes the Google and email sign-in buttons easier to read.
 
 ## [0.8.0] - 2026-11-04

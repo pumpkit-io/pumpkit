@@ -16,6 +16,9 @@ const buttonVariants = cva(
         // Lifted off the page, darkening on hover and pressing in on click.
         // The hover tint is an inset shadow, which paints over the gradient but under the label.
         raised: `${RAISED} bg-primary bg-primary-gradient hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.16),inset_0_-1px_2px_rgb(0_0_0/0.24),0_1px_1px_rgb(0_0_0/0.06),0_0_0_1px_rgb(0_0_0/0.16),0_8px_16px_-8px_rgb(0_0_0/0.5),inset_0_0_0_999px_rgb(0_0_0/0.1)]`,
+        pumpkin:
+          'bg-[#D96B45] text-[#20201E] shadow-[inset_0_1px_0_rgb(255_255_255/0.16),0_0_0_1px_#D96B45,0_1px_2px_rgb(0_0_0/0.12)] hover:shadow-panel disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none',
+        raisedPumpkin: `${RAISED} bg-[#D96B45] text-[#20201E] hover:shadow-panel`,
         raisedNeutral: `${RAISED} bg-[var(--raised-neutral)] hover:bg-[var(--raised-neutral-hover)]`,
         // The primary fill without the gradient, for pages that keep gradients off.
         solid:

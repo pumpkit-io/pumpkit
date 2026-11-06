@@ -133,7 +133,7 @@ export function Login() {
                   )}
                   <Button
                     type="submit"
-                    variant="raised"
+                    variant="raisedPumpkin"
                     className="h-11 w-full text-base"
                     disabled={loading}
                   >

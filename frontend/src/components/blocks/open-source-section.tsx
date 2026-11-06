@@ -32,7 +32,7 @@ export function OpenSourceSection() {
             pumpkit.io and skip the setup.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild className="gap-2">
+            <Button asChild variant="pumpkin" className="gap-2">
               <a href={GITHUB_REPO_URL} onClick={() => track('landing_open_source_github_clicked')}>
                 <GitHubMark className="size-4" />
                 View on GitHub
