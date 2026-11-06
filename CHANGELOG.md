@@ -8,7 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
-- The website always uses dark mode, regardless of saved or device preferences, and Settings no longer offers a theme selector. The landing page has simpler signup buttons and consistent heading sizes and spacing; orange controls on the landing and login pages use `#E8825E` with charcoal labels.
+- The website always uses dark mode, regardless of saved or device preferences, and Settings no longer offers a theme selector. The landing page has simpler signup buttons and consistent heading sizes and spacing; orange controls on the landing and login pages use `#E8825E` with charcoal labels. The Privacy Policy no longer lists the removed theme preference as browser storage.
 - Larger text makes the Google and email sign-in buttons easier to read.
 
 ## [0.8.0] - 2026-11-04
