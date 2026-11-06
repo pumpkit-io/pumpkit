@@ -156,8 +156,8 @@
 @layer components {
   .landing {
     --landing-heading-size: clamp(1.625rem, 3vw, 2.625rem);
-    --landing-action: #b84f2e;
-    --landing-action-hover: #a84527;
+    --landing-action: #d96b45;
+    --landing-action-foreground: #20201e;
     --landing-focus: #b84f2e;
   }
   .dark .landing {

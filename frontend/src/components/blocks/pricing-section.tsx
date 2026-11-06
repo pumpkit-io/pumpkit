@@ -88,7 +88,7 @@ function IntervalToggle({
           className={cn(
             'relative flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap min-h-11 rounded-lg px-2.5 py-2 sm:gap-2 sm:px-4 text-base font-medium transition-colors duration-150 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--landing-focus)] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background',
             value === option.interval
-              ? 'text-white'
+              ? 'text-[var(--landing-action-foreground)]'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >

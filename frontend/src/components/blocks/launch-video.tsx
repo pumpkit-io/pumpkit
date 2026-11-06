@@ -321,7 +321,7 @@ function CentreButton({
         onClick={onClick}
         aria-label={withText ? undefined : label}
         className={cn(
-          'pointer-events-auto flex items-center justify-center gap-2 rounded-full bg-[var(--landing-action)] text-white shadow-lg transition-colors duration-150 hover:bg-[var(--landing-action-hover)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black',
+          'pointer-events-auto flex items-center justify-center gap-2 rounded-full bg-[var(--landing-action)] text-[var(--landing-action-foreground)] shadow-lg transition-[color,filter] duration-150 hover:brightness-105 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black',
           withText ? 'px-5 py-3 text-base font-medium' : 'size-16',
         )}
       >
