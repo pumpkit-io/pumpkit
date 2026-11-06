@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ThemeProvider } from './ThemeProvider';
 import { useTheme } from './useTheme';
@@ -36,39 +36,27 @@ describe('ThemeProvider', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('defaults to system and follows a light OS', () => {
+  it.each([false, true])('enforces dark mode when system dark mode is %s', (systemDark) => {
+    mockSystemDark(systemDark);
+    const { result } = renderHook(() => useTheme(), { wrapper });
+    expect(result.current.resolved).toBe('dark');
+    expect(document.documentElement).toHaveClass('dark');
+    expect(document.documentElement.style.colorScheme).toBe('dark');
+  });
+
+  it.each(['light', 'system', 'dark'])('ignores a stored %s preference', (choice) => {
     mockSystemDark(false);
-    const { result } = renderHook(() => useTheme(), { wrapper });
-    expect(result.current.choice).toBe('system');
-    expect(result.current.resolved).toBe('light');
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
-  });
-
-  it('follows a dark OS when choice is system', () => {
-    mockSystemDark(true);
-    const { result } = renderHook(() => useTheme(), { wrapper });
+    storage.set('theme', choice);
+    const { result, unmount } = renderHook(() => useTheme(), { wrapper });
     expect(result.current.resolved).toBe('dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement).toHaveClass('dark');
+    unmount();
+    renderHook(() => useTheme(), { wrapper });
+    expect(document.documentElement).toHaveClass('dark');
   });
 
-  it('applies a stored explicit choice', () => {
-    storage.set('theme', 'dark');
-    const { result } = renderHook(() => useTheme(), { wrapper });
-    expect(result.current.resolved).toBe('dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-  });
-
-  it('setChoice persists and re-resolves', () => {
-    storage.set('theme', 'dark');
-    const { result } = renderHook(() => useTheme(), { wrapper });
-    act(() => result.current.setChoice('light'));
-    expect(result.current.resolved).toBe('light');
-    expect(storage.get('theme', 'system')).toBe('light');
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
-  });
-
-  it('reports theme super properties', () => {
-    storage.set('theme', 'dark');
+  it('reports the enforced theme in analytics', () => {
+    storage.set('theme', 'light');
     renderHook(() => useTheme(), { wrapper });
     expect(registerSuperProperties).toHaveBeenCalledWith({ theme: 'dark', resolved_theme: 'dark' });
   });

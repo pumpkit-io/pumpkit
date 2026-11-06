@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
+import { CTA_CLASSES } from '@/components/blocks/cta-classes';
+import { cn } from '@/lib/utils';
 import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { useInstance } from '@/features/instance/useInstance';
@@ -74,7 +76,7 @@ export function Login() {
   };
 
   return (
-    <div className="grid min-h-screen bg-background text-foreground lg:grid-cols-2">
+    <div className="login grid min-h-screen bg-background text-foreground lg:grid-cols-2">
       <div className="flex flex-col">
         <main className="flex flex-1 items-center justify-center px-4 py-12">
           <div className="w-full max-w-[440px]">
@@ -133,8 +135,8 @@ export function Login() {
                   )}
                   <Button
                     type="submit"
-                    variant="raised"
-                    className="h-11 w-full text-base"
+                    variant="solid"
+                    className={cn(CTA_CLASSES, 'h-11 w-full')}
                     disabled={loading}
                   >
                     {loading ? 'Sending…' : 'Sign in with email'}

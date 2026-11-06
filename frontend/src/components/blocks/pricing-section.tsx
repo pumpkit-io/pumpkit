@@ -78,7 +78,7 @@ function IntervalToggle({
       <span
         aria-hidden
         className={cn(
-          'absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-[var(--landing-action)] transition-transform duration-150 ease-out motion-reduce:transition-none',
+          'absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-[var(--public-action)] transition-transform duration-150 ease-out motion-reduce:transition-none',
           value === 'annual' && 'translate-x-full',
         )}
       />
@@ -86,9 +86,9 @@ function IntervalToggle({
         <label
           key={option.interval}
           className={cn(
-            'relative flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap min-h-11 rounded-lg px-2.5 py-2 sm:gap-2 sm:px-4 text-base font-medium transition-colors duration-150 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--landing-focus)] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background',
+            'relative flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap min-h-11 rounded-lg px-2.5 py-2 sm:gap-2 sm:px-4 text-base font-medium transition-colors duration-150 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--public-action-focus)] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background',
             value === option.interval
-              ? 'text-[var(--landing-action-foreground)]'
+              ? 'text-[var(--public-action-foreground)]'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >

@@ -190,7 +190,7 @@ describe('Settings', () => {
     vi.mocked(track).mockClear();
   });
 
-  it('shows Profile, X account, Plan, Usage, Connect AI apps and Appearance to a Subscribed User', async () => {
+  it('shows Profile, X account, Plan, Usage and Connect AI apps to a Subscribed User', async () => {
     renderSettings();
 
     await card('Usage');
@@ -201,7 +201,6 @@ describe('Settings', () => {
       'Plan',
       'Usage',
       'Connect AI apps',
-      'Appearance',
     ]);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
@@ -1113,7 +1112,6 @@ describe('Settings', () => {
         'Profile',
         'X account',
         'Connect AI apps',
-        'Appearance',
       ]);
       expect(
         await (await card('X account')).findByRole('button', { name: 'Connect X' }),
@@ -1133,30 +1131,11 @@ describe('Settings', () => {
     });
   });
 
-  describe('Appearance', () => {
-    it('starts on System and switches to Dark, which a reload keeps', async () => {
-      const { unmount } = renderSettings();
-
-      const appearance = await card('Appearance');
-      expect(appearance.getByRole('radio', { name: 'System' })).toBeChecked();
-      fireEvent.click(appearance.getByRole('radio', { name: 'Dark' }));
-
-      expect(document.documentElement).toHaveClass('dark');
-      expect(track).toHaveBeenCalledWith('settings_theme_changed', { theme: 'dark' });
-      unmount();
-      renderSettings();
-      expect((await card('Appearance')).getByRole('radio', { name: 'Dark' })).toBeChecked();
-    });
-
-    it('switches to Light', async () => {
-      renderSettings();
-
-      const appearance = await card('Appearance');
-      fireEvent.click(appearance.getByRole('radio', { name: 'Light' }));
-
-      expect(appearance.getByRole('radio', { name: 'Light' })).toBeChecked();
-      expect(document.documentElement).not.toHaveClass('dark');
-    });
+  it('has no theme selector while dark mode is enforced', async () => {
+    renderSettings();
+    await card('Profile');
+    expect(screen.queryByRole('region', { name: 'Appearance' })).not.toBeInTheDocument();
+    expect(document.documentElement).toHaveClass('dark');
   });
 
   describe('Footer', () => {
