@@ -8,6 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Changed
 
+- The landing page has simpler signup buttons, consistent heading sizes and spacing, and white labels on deeper orange controls in both themes.
 - Larger text makes the Google and email sign-in buttons easier to read.
 
 ## [0.8.0] - 2026-11-04

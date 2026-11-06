@@ -1,20 +1,19 @@
 import type { PlanCatalogState } from '@/components/blocks/use-plan-catalog';
-import { formatPrice } from '@/lib/money';
 
-/** A label is null while the catalogue is still loading: the button holds its text back rather than flash "Get started". */
+/** Null labels reserve space while the catalogue loads, avoiding a flash of the wrong offer. */
 export interface CtaLabels {
   hero: string | null;
   nav: string | null;
+  note: string | null;
 }
 
-const NEUTRAL: CtaLabels = { hero: 'Get started', nav: 'Get started' };
+const NEUTRAL: CtaLabels = { hero: 'Get started', nav: 'Get started', note: null };
 
-/** Names the Trial only when the Instance offers one; "$0" and the day count come from the catalogue. */
+/** Trial copy appears only when the catalogue offers it. */
 export function ctaLabels(state: PlanCatalogState, sellsPlans: boolean): CtaLabels {
   if (!sellsPlans || state.status === 'error') return NEUTRAL;
-  if (state.status === 'loading') return { hero: null, nav: null };
+  if (state.status === 'loading') return { hero: null, nav: null, note: null };
   const { trial, plans } = state.catalog;
   if (!trial || plans.length === 0) return NEUTRAL;
-  const free = formatPrice(0, plans[0].currency);
-  return { hero: `Start a ${trial.days}-day trial for ${free}`, nav: `Start for ${free}` };
+  return { hero: 'Start free trial', nav: 'Start trial', note: `${trial.days}-day free trial` };
 }

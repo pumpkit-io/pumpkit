@@ -208,7 +208,7 @@ describe('Landing hero', () => {
 
   it('tracks the hero button and no longer tracks a screenshot', async () => {
     renderLanding();
-    fireEvent.click(await screen.findByRole('link', { name: 'Start a 7-day trial for €0' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Start free trial' }));
     expect(track).toHaveBeenCalledWith('landing_hero_cta_clicked');
     expect(vi.mocked(track).mock.calls.map(([event]) => event)).not.toContain(
       'landing_hero_screenshot_viewed',
@@ -408,34 +408,42 @@ describe('Landing header', () => {
 
   it('sends every Get started and Trial button to the sign-in page', async () => {
     renderLanding();
-    await screen.findByRole('link', { name: 'Start a 7-day trial for €0' });
+    await screen.findByRole('link', { name: 'Start free trial' });
     const signInLinks = screen.getAllByRole('link', {
-      name: /^(get started|start for €0|start a 7-day trial for €0)$/i,
+      name: /^(get started|start trial|start free trial)$/i,
     });
     expect(signInLinks.map((link) => link.textContent)).toEqual(
-      expect.arrayContaining(['Start for €0', 'Start a 7-day trial for €0', 'Get started']),
+      expect.arrayContaining(['Start trial', 'Start free trial', 'Get started']),
     );
     for (const link of signInLinks) expect(link).toHaveAttribute('href', '/login');
   });
 
-  it('names the Trial and its price in the hero and nav buttons once the catalogue loads', async () => {
+  it('keeps Trial buttons short and shows the configured duration below the hero button', async () => {
+    fakePlansEndpoint(200, {
+      ...OFFER,
+      trial: { ...OFFER.trial, days: 14 },
+      data: [MONTHLY_PLAN, ANNUAL_PLAN],
+    });
     renderLanding();
+    expect(await screen.findByRole('link', { name: 'Start free trial' })).toBeInTheDocument();
     expect(
-      await screen.findByRole('link', { name: 'Start a 7-day trial for €0' }),
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('banner')).getByRole('link', { name: 'Start for €0' }),
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Start trial' }),
     ).toBeVisible();
+    const heroCta = screen.getByRole('link', { name: 'Start free trial' });
+    expect(heroCta).toHaveAccessibleDescription('14-day free trial');
   });
 
   it('never shows Get started in the hero button while the catalogue is loading', async () => {
     renderLanding();
     const hero = screen.getByRole('heading', { level: 1 }).closest('section')!;
+    for (const link of screen.getAllByRole('link', { name: 'Loading signup options' })) {
+      expect(link).toHaveAttribute('aria-busy', 'true');
+    }
     expect(within(hero).queryByRole('link', { name: 'Get started' })).not.toBeInTheDocument();
     expect(
       within(screen.getByRole('banner')).queryByRole('link', { name: 'Get started' }),
     ).not.toBeInTheDocument();
-    await screen.findByRole('link', { name: 'Start a 7-day trial for €0' });
+    await screen.findByRole('link', { name: 'Start free trial' });
   });
 
   it('keeps Get started on both buttons when the Instance offers no Trial', async () => {
@@ -449,11 +457,11 @@ describe('Landing header', () => {
   it('tracks the logo and the desktop links with their surface', async () => {
     renderLanding();
     const header = screen.getByRole('banner');
-    await within(header).findByRole('link', { name: 'Start for €0' });
+    await within(header).findByRole('link', { name: 'Start trial' });
     fireEvent.click(within(header).getByRole('link', { name: 'Pumpkit home' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Authors' }));
     fireEvent.click(within(header).getByRole('link', { name: 'Pricing' }));
-    fireEvent.click(within(header).getByRole('link', { name: 'Start for €0' }));
+    fireEvent.click(within(header).getByRole('link', { name: 'Start trial' }));
     expect(track).toHaveBeenCalledWith('landing_nav_logo_clicked');
     expect(track).toHaveBeenCalledWith('landing_nav_authors_clicked', { surface: 'desktop' });
     expect(track).toHaveBeenCalledWith('landing_nav_pricing_clicked', { surface: 'desktop' });
@@ -464,14 +472,14 @@ describe('Landing header', () => {
 describe('Landing mobile menu', () => {
   it('opens and closes from its button', async () => {
     renderLanding();
-    await within(screen.getByRole('banner')).findByRole('link', { name: 'Start for €0' });
+    await within(screen.getByRole('banner')).findByRole('link', { name: 'Start trial' });
     expect(screen.queryByRole('navigation', { name: 'Menu' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const menu = screen.getByRole('navigation', { name: 'Menu' });
     expect(within(menu).getByRole('link', { name: 'Authors' })).toHaveAttribute('href', '#authors');
     expect(within(menu).getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '#pricing');
-    expect(within(menu).getByRole('link', { name: 'Start for €0' })).toHaveAttribute(
+    expect(within(menu).getByRole('link', { name: 'Start trial' })).toHaveAttribute(
       'href',
       '/login',
     );
@@ -496,10 +504,10 @@ describe('Landing mobile menu', () => {
   it.each([
     ['Authors', 'landing_nav_authors_clicked'],
     ['Pricing', 'landing_nav_pricing_clicked'],
-    ['Start for €0', 'landing_nav_get_started_clicked'],
+    ['Start trial', 'landing_nav_get_started_clicked'],
   ])('closes when %s is tapped and tracks it as mobile', async (name, event) => {
     renderLanding();
-    await within(screen.getByRole('banner')).findByRole('link', { name: 'Start for €0' });
+    await within(screen.getByRole('banner')).findByRole('link', { name: 'Start trial' });
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const menu = screen.getByRole('navigation', { name: 'Menu' });
     fireEvent.click(within(menu).getByRole('link', { name }));

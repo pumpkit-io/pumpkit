@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { Brand } from '@/components/brand/Brand';
 import { GITHUB_REPO_URL, GitHubMark } from '@/components/blocks/github';
-import { ArrowLabel } from '@/components/blocks/arrow-label';
+import { CtaLabel } from '@/components/blocks/cta-label';
 import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
@@ -63,7 +63,7 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string | null }) {
             track(event, { surface });
             if (surface === 'mobile') closeMenu();
           }}
-          className="block text-muted-foreground duration-150 hover:text-foreground"
+          className="landing-nav-link flex min-h-11 items-center text-muted-foreground duration-150 hover:text-foreground"
         >
           {label}
         </a>
@@ -74,17 +74,19 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string | null }) {
     <Button
       asChild
       size="sm"
-      variant="outline"
-      className={cn(CTA_CLASSES, surface === 'mobile' ? 'w-full' : 'text-base')}
+      variant="solid"
+      className={cn(CTA_CLASSES, 'h-11 min-w-32 px-4', surface === 'mobile' && 'w-full')}
     >
       <Link
         to="/login"
+        aria-busy={ctaLabel === null}
+        aria-label={ctaLabel === null ? 'Loading signup options' : undefined}
         onClick={() => {
           track('landing_nav_get_started_clicked', { surface });
           if (surface === 'mobile') closeMenu();
         }}
       >
-        <ArrowLabel pending={ctaLabel === null}>{ctaLabel}</ArrowLabel>
+        <CtaLabel pending={ctaLabel === null}>{ctaLabel}</CtaLabel>
       </Link>
     </Button>
   );
@@ -92,9 +94,9 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string | null }) {
   const gitHub = (surface: Surface) => (
     <Button
       asChild
-      variant="outline"
+      variant="ghost"
       size="sm"
-      className={cn('gap-2', surface === 'mobile' ? 'w-full' : 'text-base')}
+      className={cn('h-11 gap-2 text-base text-muted-foreground', surface === 'mobile' && 'w-full')}
     >
       <a
         href={GITHUB_REPO_URL}

@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CtaFrame } from '@/components/blocks/cta-frame';
+import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { Mascot } from '@/components/blocks/mascot';
 import { Button } from '@/components/ui/button';
 import type { PlanCatalogState } from '@/components/blocks/use-plan-catalog';
@@ -44,8 +44,8 @@ function PriceLine({ plan }: { plan: Plan }) {
       ? `a ${plan.interval}`
       : `every ${plan.intervalCount} ${plan.interval}s`;
   return (
-    <p className="text-lg text-muted-foreground">
-      <span className="text-5xl font-semibold tracking-tight text-foreground">
+    <p className="text-base leading-relaxed text-muted-foreground">
+      <span className="text-[2.625rem] font-semibold leading-tight tracking-tight text-foreground">
         {formatPrice(plan.amount, plan.currency)}
       </span>{' '}
       {every}
@@ -78,7 +78,7 @@ function IntervalToggle({
       <span
         aria-hidden
         className={cn(
-          'absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-primary shadow-raised transition-transform duration-200 ease-out motion-reduce:transition-none',
+          'absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-[var(--landing-action)] transition-transform duration-150 ease-out motion-reduce:transition-none',
           value === 'annual' && 'translate-x-full',
         )}
       />
@@ -86,9 +86,9 @@ function IntervalToggle({
         <label
           key={option.interval}
           className={cn(
-            'relative flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 sm:gap-2 sm:px-4 text-sm font-medium transition-colors duration-200 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background',
+            'relative flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap min-h-11 rounded-lg px-2.5 py-2 sm:gap-2 sm:px-4 text-base font-medium transition-colors duration-150 motion-reduce:transition-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--landing-focus)] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background',
             value === option.interval
-              ? 'text-primary-foreground'
+              ? 'text-white'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >
@@ -114,13 +114,11 @@ function IntervalToggle({
 
 function PricingCta() {
   return (
-    <CtaFrame>
-      <Button asChild size="lg" className="rounded-xl px-6 text-base">
-        <Link to="/login" onClick={() => track('landing_pricing_cta_clicked')}>
-          Get started
-        </Link>
-      </Button>
-    </CtaFrame>
+    <Button asChild size="lg" variant="solid" className={cn(CTA_CLASSES, 'h-12 px-6')}>
+      <Link to="/login" onClick={() => track('landing_pricing_cta_clicked')}>
+        Get started
+      </Link>
+    </Button>
   );
 }
 
@@ -180,7 +178,7 @@ function PricingCard({ catalog }: { catalog: PlanCatalog }) {
         )}
         <ul
           aria-label="Included"
-          className="mt-6 space-y-3 border-t border-border pt-6 text-base text-foreground"
+          className="mt-6 space-y-3 border-t border-border pt-6 text-base leading-relaxed text-foreground"
         >
           {offer.map((line) => (
             <li key={line.text}>
@@ -222,7 +220,7 @@ export function PricingSection({ state }: { state: PlanCatalogState }) {
       ref={sectionRef}
       id="pricing"
       aria-labelledby={headingId}
-      className="relative scroll-mt-24 bg-background pb-24 pt-16 md:pb-32 md:pt-24"
+      className="landing-section relative scroll-mt-24 bg-background"
     >
       <div
         aria-hidden
@@ -231,7 +229,7 @@ export function PricingSection({ state }: { state: PlanCatalogState }) {
       <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
         <h2
           id={headingId}
-          className="text-balance font-display text-4xl font-semibold tracking-tight md:text-5xl"
+          className="landing-section-heading text-balance font-display font-semibold tracking-tight"
         >
           One plan. Everything in it.
         </h2>

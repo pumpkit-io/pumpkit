@@ -18,10 +18,10 @@ export function Landing() {
   const labels = ctaLabels(catalog, sells_plans);
 
   return (
-    <>
+    <div className="landing">
       <HeroHeader ctaLabel={labels.nav} />
       <main>
-        <HeroSection ctaLabel={labels.hero} />
+        <HeroSection ctaLabel={labels.hero} ctaNote={labels.note} />
         <AuthorsSection />
         {sells_plans && <PricingSection state={catalog} />}
         <OpenSourceSection />
@@ -30,6 +30,6 @@ export function Landing() {
         <Mascot animation="doze_off" playInViewAfterMs={FOOTER_NAP_DELAY_MS} restOnLastFrame />
       </div>
       <CompanyFooter />
-    </>
+    </div>
   );
 }
