@@ -92,7 +92,7 @@ export function Login() {
                   <>
                     <GoogleAuthButton
                       variant="raisedNeutral"
-                      className="h-11"
+                      className="h-11 text-base"
                       onError={() => setError("We couldn't start Google sign-in. Try again.")}
                     />
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -131,7 +131,12 @@ export function Login() {
                       {error}
                     </div>
                   )}
-                  <Button type="submit" variant="raised" className="h-11 w-full" disabled={loading}>
+                  <Button
+                    type="submit"
+                    variant="raised"
+                    className="h-11 w-full text-base"
+                    disabled={loading}
+                  >
                     {loading ? 'Sending…' : 'Sign in with email'}
                   </Button>
                 </form>
