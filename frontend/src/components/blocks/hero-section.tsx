@@ -74,7 +74,7 @@ export function HeroSection({
                   asChild
                   size="lg"
                   variant="solid"
-                  className={cn(CTA_CLASSES, 'h-12 min-w-44 px-6')}
+                  className={cn(CTA_CLASSES, 'h-12 min-w-44 px-7')}
                 >
                   <Link
                     to="/login"

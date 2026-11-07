@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Changed
+
+- The buttons on the landing and login pages are cream with dark labels, a soft edge and glow, and a slight press when clicked; the landing page's header button is smaller. The pricing switch and the launch video's play button use the same cream.
+
 ## [0.9.0] - 2026-11-07
 
 ### Changed
