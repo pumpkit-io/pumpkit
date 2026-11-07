@@ -92,9 +92,7 @@ test.describe('logged in', () => {
     });
   });
 
-  test('the user card opens Settings, with the Profile, Plan and Appearance cards', async ({
-    page,
-  }) => {
+  test('the user card opens Settings, with the Profile and Plan cards', async ({ page }) => {
     await page.goto('/new');
     await page.getByRole('link', { name: /^Your account/ }).click();
 
@@ -103,7 +101,7 @@ test.describe('logged in', () => {
     const profile = page.getByRole('region', { name: 'Profile' });
     await expect(profile.getByLabel('Email')).toHaveValue(/@/);
     await expect(page.getByRole('region', { name: 'Plan' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Appearance' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Appearance' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   });
 
@@ -113,17 +111,13 @@ test.describe('logged in', () => {
     await expect(page.getByRole('region', { name: 'Plan' })).toBeVisible();
   });
 
-  test('theme choice persists across reloads', async ({ page }) => {
+  test('dark mode ignores light system and stored preferences across reloads', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.addInitScript(() => localStorage.setItem('pumpkit:theme', JSON.stringify('light')));
     await page.goto('/settings');
-    await page
-      .getByRole('region', { name: 'Appearance' })
-      .getByText('Dark', { exact: true })
-      .click();
     await expect(page.locator('html')).toHaveClass(/dark/);
+    await expect(page.getByRole('region', { name: 'Appearance' })).toHaveCount(0);
     await page.reload();
     await expect(page.locator('html')).toHaveClass(/dark/);
-    await expect(
-      page.getByRole('region', { name: 'Appearance' }).getByRole('radio', { name: 'Dark' }),
-    ).toBeChecked();
   });
 });

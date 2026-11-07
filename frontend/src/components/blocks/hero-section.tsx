@@ -2,8 +2,7 @@ import { Link } from 'react-router-dom';
 import type { Variants } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { CTA_CLASSES } from '@/components/blocks/cta-classes';
-import { ArrowLabel } from '@/components/blocks/arrow-label';
-import { CtaFrame } from '@/components/blocks/cta-frame';
+import { CtaLabel } from '@/components/blocks/cta-label';
 import { HeroHeadline } from '@/components/blocks/hero-headline';
 import { HeroFrame } from '@/components/blocks/hero-frame';
 import { LaunchVideo } from '@/components/blocks/launch-video';
@@ -31,7 +30,13 @@ const staggeredVariants: { container: Variants; item: Variants } = {
   ...transitionVariants,
 };
 
-export function HeroSection({ ctaLabel }: { ctaLabel: string | null }) {
+export function HeroSection({
+  ctaLabel,
+  ctaNote,
+}: {
+  ctaLabel: string | null;
+  ctaNote: string | null;
+}) {
   return (
     <div className="overflow-hidden">
       <div
@@ -51,29 +56,46 @@ export function HeroSection({ ctaLabel }: { ctaLabel: string | null }) {
           <div className="mx-auto grid max-w-[88rem] gap-12 px-6 lg:grid-cols-12 lg:items-start lg:gap-10">
             <div className="text-center lg:col-span-5">
               <AnimatedGroup variants={transitionVariants}>
-                <h1 className="mx-auto max-w-3xl text-balance font-display text-5xl font-semibold tracking-tighter text-foreground sm:text-6xl lg:text-[3.25rem] lg:leading-[1.05] xl:text-[70px] xl:leading-[77px]">
+                <h1 className="landing-headline mx-auto max-w-3xl text-balance font-display font-semibold tracking-tight text-foreground">
                   <HeroHeadline />
                 </h1>
-                <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg text-muted-foreground xl:text-[22px] xl:leading-[1.3]">
+                <p className="mx-auto mt-6 max-w-[48ch] text-pretty text-lg leading-relaxed text-muted-foreground">
                   Pumpkit writes and schedules posts on X for you. Posts sound like you, or like
                   your favorite X accounts. Use it in the web app, or use the MCP to let your agents
                   run it.
                 </p>
               </AnimatedGroup>
 
-              <AnimatedGroup variants={staggeredVariants} className="mt-10 flex justify-center">
-                <CtaFrame>
-                  <Button
-                    asChild
-                    size="lg"
-                    variant="outline"
-                    className={cn(CTA_CLASSES, 'h-12 rounded-xl px-5 text-lg xl:text-[19px]')}
+              <AnimatedGroup
+                variants={staggeredVariants}
+                className="mt-8 flex flex-col items-center"
+              >
+                <Button
+                  asChild
+                  size="lg"
+                  variant="solid"
+                  className={cn(CTA_CLASSES, 'h-12 min-w-44 px-6')}
+                >
+                  <Link
+                    to="/login"
+                    aria-busy={ctaLabel === null}
+                    aria-label={ctaLabel === null ? 'Loading signup options' : undefined}
+                    aria-describedby={ctaNote ? 'hero-cta-note' : undefined}
+                    onClick={() => track('landing_hero_cta_clicked')}
                   >
-                    <Link to="/login" onClick={() => track('landing_hero_cta_clicked')}>
-                      <ArrowLabel pending={ctaLabel === null}>{ctaLabel}</ArrowLabel>
-                    </Link>
-                  </Button>
-                </CtaFrame>
+                    <CtaLabel pending={ctaLabel === null}>{ctaLabel}</CtaLabel>
+                  </Link>
+                </Button>
+                <p
+                  id="hero-cta-note"
+                  aria-hidden={!ctaNote}
+                  className={cn(
+                    'mt-3 text-sm leading-relaxed text-muted-foreground',
+                    !ctaNote && 'invisible',
+                  )}
+                >
+                  {ctaNote ?? '\u00a0'}
+                </p>
               </AnimatedGroup>
             </div>
 

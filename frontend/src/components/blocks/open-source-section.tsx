@@ -1,6 +1,8 @@
 import { useRef } from 'react';
 import { GITHUB_REPO_URL, GitHubMark, SELF_HOSTING_GUIDE_URL } from '@/components/blocks/github';
 import { Mascot } from '@/components/blocks/mascot';
+import { CTA_CLASSES } from '@/components/blocks/cta-classes';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { track } from '@/lib/analytics';
 import { useOnceVisible } from '@/lib/useOnceVisible';
@@ -13,7 +15,7 @@ export function OpenSourceSection() {
     <section
       ref={sectionRef}
       aria-labelledby="open-source-heading"
-      className="relative bg-background pb-24 pt-16 md:pb-32 md:pt-24"
+      className="landing-section relative bg-background"
     >
       <div
         aria-hidden
@@ -23,22 +25,22 @@ export function OpenSourceSection() {
         <div className="max-w-2xl">
           <h2
             id="open-source-heading"
-            className="text-balance font-display text-3xl font-semibold tracking-tight md:text-4xl"
+            className="landing-section-heading text-balance font-display font-semibold tracking-tight"
           >
             Read every line. Run it yourself.
           </h2>
-          <p className="mt-4 max-w-xl text-pretty text-base text-muted-foreground md:text-lg">
+          <p className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground">
             Pumpkit is open source under AGPL-3.0. Self-host it on your own server, or use
             pumpkit.io and skip the setup.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild className="gap-2">
+            <Button asChild variant="solid" className={cn(CTA_CLASSES, 'h-11 gap-2 px-4')}>
               <a href={GITHUB_REPO_URL} onClick={() => track('landing_open_source_github_clicked')}>
                 <GitHubMark className="size-4" />
                 View on GitHub
               </a>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="landing-secondary-action h-11 text-base">
               <a
                 href={SELF_HOSTING_GUIDE_URL}
                 onClick={() => track('landing_open_source_self_hosting_clicked')}

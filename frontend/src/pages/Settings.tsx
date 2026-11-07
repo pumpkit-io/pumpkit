@@ -11,7 +11,6 @@ import { useBilling } from '@/features/billing/useBilling';
 import { ConnectedAppsCard } from '@/features/connectedApps/ConnectedAppsCard';
 import { useInstance } from '@/features/instance/useInstance';
 import { LegalLinks } from '@/features/legal/LegalLinks';
-import { AppearanceCard } from '@/features/theme/AppearanceCard';
 import { Topbar } from '@/features/topbar/Topbar';
 import { XAccountCard } from '@/features/xConnection/XAccountCard';
 import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
@@ -120,7 +119,6 @@ export function Settings() {
           )}
           {sells_plans && data?.me.subscribed && <UsageCard topUpBought={topUpBought} />}
           <ConnectedAppsCard />
-          <AppearanceCard />
           <footer className="pt-4">
             {/* A new tab, because leaving the signed-in layout would drop the Post on New post. */}
             <LegalLinks

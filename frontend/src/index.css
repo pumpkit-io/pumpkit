@@ -154,6 +154,31 @@
 }
 
 @layer components {
+  .landing,
+  .login {
+    --public-action: #e8825e;
+    --public-action-foreground: #20201e;
+    --public-action-focus: #e8825e;
+  }
+  .landing {
+    --landing-heading-size: clamp(1.625rem, 3vw, 2.625rem);
+  }
+  .landing-headline {
+    font-size: calc(var(--landing-heading-size) * 1.618);
+    line-height: 1.1;
+  }
+  .landing-section-heading {
+    font-size: var(--landing-heading-size);
+    line-height: 1.1;
+  }
+  .landing-section {
+    @apply py-16 md:py-24;
+  }
+  .landing-nav-link:focus-visible,
+  .landing-secondary-action:focus-visible {
+    outline: 2px solid var(--public-action-focus);
+    outline-offset: 4px;
+  }
   .landing-marquee {
     -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
     mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);

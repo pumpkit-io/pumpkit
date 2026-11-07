@@ -39,19 +39,19 @@ export function AuthorsSection() {
       ref={sectionRef}
       id="authors"
       aria-labelledby="authors-heading"
-      className="scroll-mt-24 bg-background pb-16 pt-20 md:pb-32 md:pt-28"
+      className="landing-section scroll-mt-24 bg-background"
     >
       <div className="mx-auto flex max-w-5xl items-center justify-center gap-4 px-6">
         <h2
           id="authors-heading"
-          className="text-balance text-center font-display text-2xl font-semibold tracking-tight md:text-3xl"
+          className="landing-section-heading min-w-0 text-balance text-center font-display font-semibold tracking-tight"
         >
           Write in the style of accounts like these.
         </h2>
         <Mascot animation="costume_change" />
       </div>
 
-      <div className="mt-12 flex flex-col gap-4 md:mt-16 md:gap-5">
+      <div className="mt-10 flex flex-col gap-4 md:mt-12 md:gap-5">
         {ROWS.map((row, index) => (
           <div key={index} className="landing-marquee overflow-hidden">
             <div
