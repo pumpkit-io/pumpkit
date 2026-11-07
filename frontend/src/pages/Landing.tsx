@@ -21,7 +21,7 @@ export function Landing() {
     <div className="landing">
       <HeroHeader ctaLabel={labels.nav} />
       <main>
-        <HeroSection ctaLabel={labels.hero} ctaNote={labels.note} />
+        <HeroSection ctaLabel={labels.hero} />
         <AuthorsSection />
         {sells_plans && <PricingSection state={catalog} />}
         <OpenSourceSection />

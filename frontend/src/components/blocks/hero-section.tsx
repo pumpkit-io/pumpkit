@@ -3,6 +3,7 @@ import type { Variants } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { CtaLabel } from '@/components/blocks/cta-label';
+import { CtaPeek } from '@/components/blocks/cta-peek';
 import { HeroHeadline } from '@/components/blocks/hero-headline';
 import { HeroFrame } from '@/components/blocks/hero-frame';
 import { LaunchVideo } from '@/components/blocks/launch-video';
@@ -30,13 +31,7 @@ const staggeredVariants: { container: Variants; item: Variants } = {
   ...transitionVariants,
 };
 
-export function HeroSection({
-  ctaLabel,
-  ctaNote,
-}: {
-  ctaLabel: string | null;
-  ctaNote: string | null;
-}) {
+export function HeroSection({ ctaLabel }: { ctaLabel: string | null }) {
   return (
     <div className="overflow-hidden">
       <div
@@ -68,34 +63,25 @@ export function HeroSection({
 
               <AnimatedGroup
                 variants={staggeredVariants}
-                className="mt-8 flex flex-col items-center"
+                className="mt-10 flex flex-col items-center"
               >
-                <Button
-                  asChild
-                  size="lg"
-                  variant="solid"
-                  className={cn(CTA_CLASSES, 'h-12 min-w-44 px-7')}
-                >
-                  <Link
-                    to="/login"
-                    aria-busy={ctaLabel === null}
-                    aria-label={ctaLabel === null ? 'Loading signup options' : undefined}
-                    aria-describedby={ctaNote ? 'hero-cta-note' : undefined}
-                    onClick={() => track('landing_hero_cta_clicked')}
+                <CtaPeek>
+                  <Button
+                    asChild
+                    size="lg"
+                    variant="solid"
+                    className={cn(CTA_CLASSES, 'h-12 min-w-44 px-7')}
                   >
-                    <CtaLabel pending={ctaLabel === null}>{ctaLabel}</CtaLabel>
-                  </Link>
-                </Button>
-                <p
-                  id="hero-cta-note"
-                  aria-hidden={!ctaNote}
-                  className={cn(
-                    'mt-3 text-sm leading-relaxed text-muted-foreground',
-                    !ctaNote && 'invisible',
-                  )}
-                >
-                  {ctaNote ?? '\u00a0'}
-                </p>
+                    <Link
+                      to="/login"
+                      aria-busy={ctaLabel === null}
+                      aria-label={ctaLabel === null ? 'Loading signup options' : undefined}
+                      onClick={() => track('landing_hero_cta_clicked')}
+                    >
+                      <CtaLabel pending={ctaLabel === null}>{ctaLabel}</CtaLabel>
+                    </Link>
+                  </Button>
+                </CtaPeek>
               </AnimatedGroup>
             </div>
 
