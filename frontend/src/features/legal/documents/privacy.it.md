@@ -92,6 +92,12 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 - **Perché:** per capire come le persone usano Pumpkit e per individuare e risolvere i problemi.
 - **Base giuridica:** il tuo consenso (art. 6, par. 1, lett. a) GDPR). Puoi revocarlo in qualsiasi momento, come spiega la sezione [Cookie e archiviazione nel browser](#cookies).
 
+### Statistiche del sito {#data-site-statistics}
+
+- **Quali dati:** per ogni visita a pumpkit.io, con o senza accesso: le pagine che visiti e i loro titoli, il sito o il link di campagna da cui arrivi, quanto tempo resti e fin dove scorri la pagina, la tua posizione approssimativa (paese, regione e città), e il browser, il sistema operativo, il tipo di dispositivo, le dimensioni dello schermo e la lingua. Pumpkit conta queste statistiche sul proprio server e non le invia a nessun altro. Le statistiche non salvano nulla nel tuo browser e non dipendono dal Consenso analitico. Il tuo indirizzo IP e il tuo user agent non vengono conservati: il server li combina con un valore casuale in un hash che indica se le pagine visualizzate nello stesso giorno provengono dallo stesso visitatore, usa l'indirizzo IP per ricavare la tua posizione approssimativa, e poi li scarta entrambi. Il valore casuale cambia ogni giorno e quello precedente viene eliminato dopo circa un giorno, quindi le visite di giorni diversi non possono essere collegate tra loro.
+- **Perché:** per contare le visite e vedere quali pagine vengono lette e da dove arrivano i visitatori.
+- **Base giuridica:** il legittimo interesse del Gestore a capire e migliorare pumpkit.io (art. 6, par. 1, lett. f) GDPR).
+
 ### Eventi del server e segnalazioni di errore {#data-server-events}
 
 - **Quali dati:** quando uno Scheduled post viene pubblicato (Published) o non va a buon fine (Failed), il server registra un evento associato al tuo identificativo utente. Quando il server incontra un errore, invia una segnalazione di errore a PostHog. Questi trattamenti non dipendono dal Consenso analitico e non salvano nulla nel tuo browser.
@@ -138,6 +144,7 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 - **Dati di fatturazione conservati da Stripe e fatture:** 10 anni, come richiesto dalla normativa fiscale italiana.
 - **Eventi di analisi, eventi del server e segnalazioni di errore:** 30 giorni.
 - **Registrazioni delle sessioni:** 30 giorni.
+- **Statistiche del sito:** 2 anni.
 - **Backup:** i backup del server vengono sovrascritti a rotazione, quindi i dati eliminati escono dai backup entro 30 giorni.
 
 ## I tuoi diritti {#rights}
@@ -178,6 +185,8 @@ Puoi opporti in qualsiasi momento. Scrivi a support@pumpkit.io indicando il tuo 
 ## Cookie e archiviazione nel browser {#cookies}
 
 Pumpkit salva alcune informazioni nel tuo browser. Alcune sono strettamente necessarie al funzionamento di Pumpkit e non richiedono consenso. Le altre servono all'analisi e vengono salvate solo dopo che hai prestato il Consenso analitico.
+
+Le [statistiche del sito](#data-site-statistics) non salvano nulla nel tuo browser, quindi non compaiono in nessuna delle due tabelle qui sotto.
 
 ### Strettamente necessari {#cookies-necessary}
 

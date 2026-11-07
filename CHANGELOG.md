@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Changed
+
+- The Privacy Policy describes the cookieless site statistics pumpkit.io counts on Pumpkit's own server: what each visit records, that they store nothing in the browser and keep no IP address or user agent, only a hash whose daily random value is deleted after about a day, that they rest on legitimate interest rather than Analytics consent, and that they are kept for 2 years.
+
 ## [0.9.0] - 2026-11-07
 
 ### Changed
