@@ -92,6 +92,12 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 - **Why:** to understand how people use Pumpkit and to find and fix problems.
 - **Legal basis:** your consent (Art. 6(1)(a) GDPR). You can withdraw it at any time, as [Cookies and browser storage](#cookies) explains.
 
+### Site statistics {#data-site-statistics}
+
+- **What:** for every visit to pumpkit.io, signed in or not: the pages you view and their titles, the site or campaign link that sent you, how long you stay and how far you scroll, your approximate location (country, region and city), and your browser, operating system, device type, screen size and language. Pumpkit counts these statistics on its own server and sends them to no one else. They store nothing in your browser and do not depend on Analytics consent. Your IP address and user agent are not stored: the server combines them with a random value into a hash that tells whether page views on the same day come from the same visitor, uses your IP address to look up your approximate location, and then discards both. The random value changes every day and the old one is deleted after about a day, so visits on different days cannot be linked.
+- **Why:** to count visits and see which pages people read and where they come from.
+- **Legal basis:** the Operator's legitimate interest in understanding and improving pumpkit.io (Art. 6(1)(f) GDPR).
+
 ### Server events and error reports {#data-server-events}
 
 - **What:** when a Scheduled post is Published or Failed, the server records an event under your user identifier. When the server hits an error, it sends an error report to PostHog. These do not depend on Analytics consent and store nothing in your browser.
@@ -138,6 +144,7 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 - **Billing records held by Stripe, and invoices:** 10 years, as Italian tax law requires.
 - **Analytics events, server events and error reports:** 30 days.
 - **Session recordings:** 30 days.
+- **Site statistics:** 2 years.
 - **Backups:** backups of the server are overwritten on a rolling schedule, so deleted data leaves them within 30 days.
 
 ## Your rights {#rights}
@@ -178,6 +185,8 @@ You can object at any time. Write to support@pumpkit.io with your X handle. The 
 ## Cookies and browser storage {#cookies}
 
 Pumpkit stores a few things in your browser. Some are strictly necessary for Pumpkit to work and need no consent. The others serve analytics and are set only after you give Analytics consent.
+
+The [site statistics](#data-site-statistics) store nothing in your browser, so they appear in neither table below.
 
 ### Strictly necessary {#cookies-necessary}
 
