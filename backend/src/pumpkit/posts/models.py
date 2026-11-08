@@ -210,3 +210,9 @@ class MediaUploadLink(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     # Set when an upload starts through it, whatever comes of that upload.
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class AccountFileDeletion(Base):
+    __tablename__ = "account_file_deletions"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)

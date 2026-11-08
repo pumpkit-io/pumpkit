@@ -141,9 +141,11 @@ async def recover_stuck(
     return Recovered(published=published, failed=failed)
 
 
-async def connection_to_publish_on(db: AsyncSession, scheduled_post: ScheduledPost) -> XConnection:
+async def connection_to_publish_on(
+    db: AsyncSession, scheduled_post: ScheduledPost, *, now: Optional[datetime] = None
+) -> XConnection:
     """The X connection, row-locked until the next commit, or `Failed`."""
-    if not await subscriptions_service.has_access(db, user_id=scheduled_post.user_id):
+    if not await subscriptions_service.has_access(db, user_id=scheduled_post.user_id, now=now):
         raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
     return await connection_still_publishing_on(db, scheduled_post)
 

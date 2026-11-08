@@ -2,7 +2,7 @@ import hashlib
 import json
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from typing import Sequence
+from typing import Optional, Sequence
 
 from itsdangerous import URLSafeSerializer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from pumpkit.auth.models import User
 from pumpkit.billing import coupon_service, service
 from pumpkit.billing.allowance import limits, months_after
 from pumpkit.billing.gateway import SubscriptionState
+from pumpkit.billing.models import Coupon
 from pumpkit.billing.schemas import CouponPreviewResponse, OfferedAllowanceResponse
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
@@ -24,13 +25,15 @@ async def preview(
     user: User,
     subscriptions: Sequence[SubscriptionState],
     now: datetime,
-    code: str,
+    code: str = "",
+    coupon: Optional[Coupon] = None,
 ) -> CouponPreviewResponse:
     try:
         coupon_service.require_enabled(settings)
     except coupon_service.CouponCommandError as exc:
         raise NotConfiguredError("Coupons are unavailable on this instance.") from exc
-    coupon = await coupon_service.find_by_code(db, code.strip())
+    if coupon is None:
+        coupon = await coupon_service.find_by_code(db, code.strip())
     if (
         coupon is None
         or coupon.disabled_at is not None
@@ -70,6 +73,9 @@ async def preview(
         raise ConflictError(
             "Coupons for an existing subscription are not available yet. Keep your code and try again later."
         )
+    await coupon_service.require_unclaimed(db, coupon=coupon, email=user.email, config=settings)
+    if await service.get_free_access(db, user_id=user.id, now=now):
+        raise ConflictError("Adding another coupon is not available yet. Keep your code for later.")
     if coupon.months > 24:
         raise ConflictError(
             "This coupon would exceed the supported 730-day access horizon. Ask its sender for a shorter benefit."

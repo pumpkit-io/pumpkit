@@ -23,6 +23,8 @@ from pumpkit.billing.entitlement import Entitlement
 from pumpkit.billing.gateway import BillingGateway
 from pumpkit.billing.models import (
     AllowanceCount,
+    CouponHistory,
+    FreeAccess,
     StripeEvent,
     Subscription,
     TermsAcceptance,
@@ -32,7 +34,7 @@ from pumpkit.billing.models import (
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.billing.top_ups import TopUpBalance, allocate, shortfall
 from pumpkit.core.config import settings
-from pumpkit.core.time import as_utc
+from pumpkit.core.time import as_utc, system_clock
 
 # How long a Top-up lasts from its purchase.
 TOP_UP_MONTHS = 12
@@ -61,16 +63,24 @@ class SubscriptionOffer:
     trial_days: Optional[int]
 
 
-async def get_subscription_offer(db: AsyncSession, *, user_id: str) -> SubscriptionOffer:
+async def get_subscription_offer(
+    db: AsyncSession, *, user_id: str, now: Optional[datetime] = None
+) -> SubscriptionOffer:
     """
     A User may subscribe only with no Running Subscription; only one who never had any gets a Trial.
     A Trial Checkout starts trialing, never `incomplete`, so cancelling `incomplete` costs no Trial.
     Reads only Pumpkit's copy: sync the customer first to match the provider.
     """
-    if await _newest_subscription(db, user_id=user_id, statuses=_RUNNING_STATUSES):
+    if await get_free_access(
+        db, user_id=user_id, now=now or system_clock()
+    ) or await _newest_subscription(db, user_id=user_id, statuses=_RUNNING_STATUSES):
         return SubscriptionOffer(may_subscribe=False, trial_days=None)
     days = settings.BILLING_TRIAL_PERIOD_DAYS
-    if days == 0 or await has_had_subscription(db, user_id=user_id):
+    if (
+        days == 0
+        or await db.get(CouponHistory, user_id) is not None
+        or await has_had_subscription(db, user_id=user_id)
+    ):
         # A zero length turns Trials off; Stripe rejects a zero-day Trial.
         return SubscriptionOffer(may_subscribe=True, trial_days=None)
     return SubscriptionOffer(may_subscribe=True, trial_days=days)
@@ -128,15 +138,25 @@ def requires_terms_acceptance() -> bool:
     return sells_plans() and settings.is_operator_configured()
 
 
-async def get_entitlement(db: AsyncSession, *, user_id: str) -> Entitlement:
+async def get_entitlement(
+    db: AsyncSession, *, user_id: str, now: Optional[datetime] = None
+) -> Entitlement:
     return Entitlement(
-        subscription=await get_user_subscription(db, user_id=user_id), plans_sold=sells_plans()
+        subscription=await get_user_subscription(db, user_id=user_id),
+        plans_sold=sells_plans(),
+        free_access=await db.scalar(
+            select(FreeAccess)
+            .where(FreeAccess.user_id == user_id)
+            .order_by(FreeAccess.ends_at.desc())
+            .limit(1)
+        ),
+        now=now or system_clock(),
     )
 
 
-async def has_access(db: AsyncSession, *, user_id: str) -> bool:
+async def has_access(db: AsyncSession, *, user_id: str, now: Optional[datetime] = None) -> bool:
     """Whether a User may use Pumpkit: always where no Plans are sold, else only when Subscribed."""
-    return (await get_entitlement(db, user_id=user_id)).has_access
+    return (await get_entitlement(db, user_id=user_id, now=now)).has_access
 
 
 async def get_allowance(db: AsyncSession, *, user_id: str, moment: datetime) -> Optional[Allowance]:
@@ -479,3 +499,12 @@ async def sync_top_ups(
             added.append(top_up)
     await db.flush()
     return added
+
+
+async def get_free_access(db: AsyncSession, *, user_id: str, now: datetime) -> Optional[FreeAccess]:
+    return await db.scalar(
+        select(FreeAccess)
+        .where(FreeAccess.user_id == user_id, FreeAccess.ends_at > now)
+        .order_by(FreeAccess.ends_at.desc())
+        .limit(1)
+    )

@@ -594,3 +594,30 @@ async def test_customer_invoice_settlement_reads_all_invoices_not_only_the_lates
     gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
     assert await gateway.has_unsettled_invoices(customer_id="cus_Contract") is unsettled
     assert parse_qs(urlsplit(http.urls[0]).query)["customer"] == ["cus_Contract"]
+
+
+@pytest.mark.parametrize("mode,pending", [("subscription", True), ("payment", False)])
+async def test_pending_subscription_checkout_read_is_customer_scoped_and_does_not_expire(
+    mode, pending
+):
+    gateway, http = _recorded_gateway(
+        json.dumps(
+            {
+                "object": "list",
+                "url": "/v1/checkout/sessions",
+                "has_more": False,
+                "data": [
+                    {
+                        "id": "cs_pending",
+                        "object": "checkout.session",
+                        "mode": mode,
+                        "status": "open",
+                    }
+                ],
+            }
+        )
+    )
+    assert await gateway.has_open_subscription_checkout(customer_id="cus_Contract") is pending
+    assert len(http.urls) == 1
+    assert parse_qs(urlsplit(http.urls[0]).query)["customer"] == ["cus_Contract"]
+    assert parse_qs(urlsplit(http.urls[0]).query)["status"] == ["open"]

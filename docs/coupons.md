@@ -1,6 +1,6 @@
 # Coupon implementation and operations contract
 
-This is the implementation contract for spec #392, settled by #396. Privileged issuance is implemented in #395; recipient preview and redemption remain unavailable until the later tickets implement those rules. The public English and Italian documents describe the complete feature; publishing them does not activate it or constitute legal approval. Self-hosters supply their own legal documents.
+This is the implementation contract for spec #392, settled by #396. Privileged issuance, recipient preview and cardless redemption are implemented. Subscriber extensions remain unavailable until their later tickets implement those rules. The public English and Italian documents describe the complete feature; publishing them does not activate it or constitute legal approval. Self-hosters supply their own legal documents.
 
 ## Activation and provider evidence
 
@@ -88,10 +88,42 @@ Run purge daily using the same protected settings, including while Coupons are o
 
 ## Recipient preview
 
-With Coupons enabled in an isolated test Instance, the Paywall offers **Have a coupon?** before paid checkout, including when a payment is on hold. **Check code** sends the code in an authenticated request body to `POST /api/v1/billing/coupons/preview`; it never puts it in a URL or analytics. This slice only checks the offer. Confirmation and access grants arrive in #398; there is no nonworking redemption control.
+With Coupons enabled in an isolated test Instance, the Paywall offers **Have a coupon?** before paid checkout, including when a payment is on hold. **Check code** sends the code in an authenticated request body to `POST /api/v1/billing/coupons/preview`; it never puts it in a URL or analytics. Checking a code previews the offer without consuming it; the separate confirmation grants access.
 
 Preview requires an available code, its verified recipient where restricted, compatible configured offers and a supported billing state. It checks current provider Subscriptions and all customer invoices, so an older outstanding invoice cannot be hidden by a newer paid one. Pending changes, unsettled invoices and unsupported existing-Subscription paths are nonconsuming refusals. No customer, Subscription, claim, capacity reservation or access is created. Provider failures retain the code in the form for retry.
 
 The response supplies UTC start/end timestamps, whole calendar months, the full monthly Allowance, payment consequences, the applicable Terms version and a signed `revision`. Benefits beyond 730 × 86400 seconds are refused before calendar overflow is possible. Month calculation uses the original anchor rather than adding clipped month ends successively.
 
 The revision uses the existing Instance JWT signing secret with a separate `coupon-preview` salt. It authenticates the caller and Coupon identifiers, displayed offer and preview instant, plus a digest of the issuance/recipient state. It contains no raw code, recipient email or fingerprint. Its payload expires ten minutes after preview. #398 must verify signature, expiry, caller and Coupon identity, then recheck current availability, recipient, billing eligibility, offer/Terms and horizon before confirming; a changed offer requires a fresh preview and acceptance. Merely advancing the clock does not corrupt the authenticated original preview instant. A preview reserves neither its dates nor capacity. Rotating the JWT secret invalidates outstanding previews, which can safely be checked again.
+
+## Cardless confirmation and access
+
+The first redemption path accepts a recipient with no running Subscription, pending paid Checkout or remaining Free access. Subscriber extensions and stacking remain nonconsuming refusals until their later tickets. A former subscriber with a settled account can redeem without using their saved card. Confirmation reads provider eligibility under the User billing lock and creates no Stripe customer, Subscription, Checkout or payment. An open paid Checkout must finish, expire or be cancelled by support before redemption; checking or refusing a Coupon does not cancel it.
+
+For an immediate cardless offer, the Paywall says **Starts when you redeem** and displays UTC calendar dates. Preview timestamps describe those dates; their seconds are not an already-running grant. The signed revision binds the months, displayed UTC dates, full monthly Allowance, payment consequences, Terms and issuance state. Confirmation anchors the whole calendar-month interval at its current server time, after lock waits and provider checks. It requires a fresh preview if either displayed UTC date changed, or if any other offer term changed. This preserves full usable months without treating every elapsed second as a changed offer. The final result contains precise UTC timestamps. A January 31 anchor resets on February's last day and then March 31, calculated from the original anchor.
+
+`POST /api/v1/billing/coupons/redemptions` accepts a caller-generated operation identifier, signed revision, language and the two cardless acceptance boxes above. It accepts no client dates, email or month quantity. The signed-in caller can recover the committed result with `GET /api/v1/billing/coupons/redemptions/{operation_id}`. Repeating the same operation and revision returns its original dates, including after disable, preview expiry or temporary feature deactivation. Reusing an identifier for another revision is refused. Keep the same identifier after a lost response. Result lookup and acceptance evidence remain available until the benefit's 90-day post-end purge; they are removed immediately on account deletion.
+
+The User row is locked and freshly rechecked for existence and suspension, followed by the Coupon row, then its claim and operation records. Disable locks only the Coupon. Under that lock, identity matching checks every retained claim key before inserting an active-key fingerprint. Claims have a database uniqueness constraint, each benefit has one unique claim and each caller has unique operation identifiers. Benefit, accepted offer, count and result commit together. Exhaustion records a permanent terminal time. No pending provider operations exist in this local-only path; #401 must extend the deletion and purge owners before introducing them.
+
+Free access remains effective when Coupons are temporarily disabled. Billing status, Onboarding, browser and Connected app access and the publisher use the same half-open interval: access ends at the precise end timestamp. Monthly Allowances use the accepted full caps, including existing Top-ups under their ordinary spending rules. Scheduling projects from the original anchor and refuses publication at or after the known end. New paid signup is refused during remaining Free access until #404 can preserve it; Top-up purchase during Free access arrives in #400. A minimal account-bound history marker removes introductory Trial eligibility after detailed benefit evidence is purged.
+
+Purge now reports `records_purged`, counting recipient assignments, claim fingerprints and ended benefits removed. It removes claims 30 days after the first terminal time while keeping the completed count. It removes account-bound benefit, acceptance and replay detail 90 days after the end. Both remain independent: a terminal code's fingerprints may be removed while its already granted benefit continues.
+
+### Support-requested account deletion
+
+Use the privileged owning command after verifying the deletion request under the Instance's support process:
+
+```sh
+docker compose exec backend python -m pumpkit.account_deletion --user-id user_ID
+```
+
+The command serializes against redemption using the User and then Coupon locks. It refuses unresolved Subscriptions, paid Checkouts or invoice/payment obligations; a saved card alone is not an obligation. Resolve actual billing obligations before retrying. It does not cancel a Subscription. It deletes the profile, sign-in links for its normalized email, Sessions, content and account-bound benefit/acceptance/results through their owning services and database cascades. Only protected claims without the old account identifier and nonpersonal completed counts survive as specified above. Recreating the same email therefore cannot claim the same still-redeemable Coupon again.
+
+Stored Media files need a separate retryable cleanup after the database commit. The deletion transaction queues their storage keys without retaining a profile or email. File cleanup removes each queued key and then its queue record. On failure the command returns nonzero; retry it or run `python -m pumpkit.account_deletion --retry-files` with the same protected configuration. Run `--retry-files` daily alongside Coupon purge, inspect failure status and retry immediately. Do not declare content deletion complete while queued files remain. Both commands work with Coupons disabled.
+
+**Upgrade notes:** Apply migration 0045 before deploying this slice. Add the daily `--retry-files` command to the existing purge job and use the owning deletion command instead of directly deleting User rows. Keep the complete identity key ring. The feature remains disabled outside isolated tests pending final #394.
+
+### PostgreSQL contention checks
+
+The ordinary suite still uses SQLite and needs no service. To exercise production row locks, explicitly supply a PostgreSQL URL to `PUMPKIT_TEST_POSTGRES_URL` and run `uv run --extra dev pytest tests/billing/postgres -q` from `backend/`. The harness creates a random isolated schema per test, sets every connection's search path and drops only that schema. It never drops or rewrites the supplied database's public schema. Independent authenticated HTTP requests contend on held rows for last-slot, same-identity, same-operation, disable, deletion and waiting-deadline cases.

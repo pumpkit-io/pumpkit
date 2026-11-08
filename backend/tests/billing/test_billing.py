@@ -601,6 +601,7 @@ async def test_billing_me_for_a_user_with_no_subscription_offers_the_trial(
 
     assert response.status_code == 200
     assert response.json() == {
+        "free_access": None,
         "subscription": None,
         "subscribed": False,
         "may_subscribe": True,
@@ -627,6 +628,7 @@ async def test_billing_me_reports_the_running_subscription_and_offers_nothing(
 
     assert response.status_code == 200
     assert response.json() == {
+        "free_access": None,
         "subscription": _billing_subscription(status),
         "subscribed": subscribed,
         "may_subscribe": False,
@@ -654,6 +656,7 @@ async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_on
 
     assert response.status_code == 200
     assert response.json() == {
+        "free_access": None,
         "subscription": _billing_subscription("incomplete"),
         "subscribed": False,
         "may_subscribe": True,
@@ -673,6 +676,7 @@ async def test_billing_me_never_reports_an_ended_subscription(
 
     assert response.status_code == 200
     assert response.json() == {
+        "free_access": None,
         "subscription": None,
         "subscribed": False,
         "may_subscribe": True,
@@ -716,6 +720,8 @@ async def test_billing_api_serves_subscription_top_up_and_coupon_routes(client):
     assert billing_paths == {
         "/api/v1/billing/me",
         "/api/v1/billing/coupons/preview",
+        "/api/v1/billing/coupons/redemptions",
+        "/api/v1/billing/coupons/redemptions/{operation_id}",
         "/api/v1/billing/plans",
         "/api/v1/billing/checkout",
         "/api/v1/billing/top-ups/checkout",

@@ -15,10 +15,11 @@ router = APIRouter(tags=["onboarding"])
 # Open to Users who aren't Subscribed: it is how the web app knows to show them the Paywall.
 @router.get("/onboarding", response_model=OnboardingResponse, status_code=status.HTTP_200_OK)
 async def get_onboarding(
+    clock: Clock = Depends(get_clock),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> OnboardingResponse:
-    return await mediator.get_onboarding(db, current_user)
+    return await mediator.get_onboarding(db, current_user, clock())
 
 
 @router.post("/onboarding/finish", status_code=status.HTTP_204_NO_CONTENT)

@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users can confirm cardless coupons on the Paywall, receive full monthly free access and recover interrupted redemption; account deletion preserves minimal same-code claim prevention. **Upgrade notes:** Apply migration 0045 and add the documented account-file cleanup retry to the daily coupon purge job. Coupons remain disabled by default pending final provider validation.
+
 ### Added
 
 - On isolated Instances with coupons enabled, signed-in recipients can check a coupon on the Paywall and see its free months, dates, monthly allowance and payment consequences. Preview does not consume the code or grant access; confirmation follows in the next implementation slice.

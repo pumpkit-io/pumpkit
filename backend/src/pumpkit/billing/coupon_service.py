@@ -5,14 +5,15 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.billing.coupon_identity import fingerprints
 from pumpkit.billing.gateway import Plan
-from pumpkit.billing.models import Coupon
+from pumpkit.billing.models import Coupon, CouponClaim, FreeAccess
 from pumpkit.billing.schemas import CouponIssueRequest
 from pumpkit.core.config import Settings
+from pumpkit.core.errors import ConflictError, NotConfiguredError
 from pumpkit.core.ids import ulid_with_prefix
 from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
@@ -138,10 +139,13 @@ async def disable(db: AsyncSession, coupon_id: str, *, now: datetime) -> Coupon:
     if coupon is None:
         raise CouponCommandError("Coupon not found.")
     if coupon.disabled_at is None:
+        terminal = now
+        if coupon.unclaimable_at is not None:
+            terminal = min(terminal, as_utc(coupon.unclaimable_at))
+        if coupon.claim_deadline is not None:
+            terminal = min(terminal, as_utc(coupon.claim_deadline))
         coupon.disabled_at = now
-        coupon.unclaimable_at = (
-            min(now, as_utc(coupon.claim_deadline)) if coupon.claim_deadline else now
-        )
+        coupon.unclaimable_at = terminal
         await db.flush()
     return coupon
 
@@ -150,7 +154,6 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
     candidates = await db.scalars(
         select(Coupon)
         .where(
-            or_(Coupon.unclaimable_at.is_(None), Coupon.recipient_fingerprint.is_not(None)),
             or_(Coupon.unclaimable_at <= now, Coupon.claim_deadline <= now),
         )
         .order_by(Coupon.id)
@@ -169,5 +172,34 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
             coupon.recipient_key_id = None
             coupon.recipient_fingerprint = None
             purged += 1
+        if (
+            coupon.unclaimable_at is not None
+            and as_utc(coupon.unclaimable_at) + timedelta(days=30) <= now
+        ):
+            removed = await db.scalars(
+                delete(CouponClaim)
+                .where(CouponClaim.coupon_id == coupon.id)
+                .returning(CouponClaim.id)
+            )
+            purged += len(list(removed))
+    ended = await db.scalars(
+        delete(FreeAccess)
+        .where(FreeAccess.ends_at <= now - timedelta(days=90))
+        .returning(FreeAccess.id)
+    )
+    purged += len(list(ended))
     await db.flush()
     return purged
+
+
+async def require_unclaimed(
+    db: AsyncSession, *, coupon: Coupon, email: str, config: Settings
+) -> dict[str, str]:
+    from_config = fingerprints(config=config, coupon_id=coupon.id, email=email, purpose="claim")
+    retained = list(await db.scalars(select(CouponClaim).where(CouponClaim.coupon_id == coupon.id)))
+    if any(claim.key_id not in from_config for claim in retained):
+        logger.error("Coupon claim key missing for coupon %s", coupon.id)
+        raise NotConfiguredError("A coupon identity key is unavailable. Contact support.")
+    if any(hmac.compare_digest(claim.fingerprint, from_config[claim.key_id]) for claim in retained):
+        raise ConflictError("You have already redeemed this coupon.")
+    return from_config
