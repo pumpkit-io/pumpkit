@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-08
+
 ### Fixed
 
 - The landing page’s rotating tool names no longer pile up and briefly overlap when animation frames are delayed.
