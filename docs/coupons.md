@@ -138,3 +138,9 @@ Each grant retains its own claim, acceptance, operation result and accepted mont
 The signed preview binds the preceding grant and offset as well as the offer. Confirmation serializes on the User lock, so a competing append changes the offer and requires a new preview and acceptance. It never silently shifts the grant or consumes a stale claim. The combined end, including all remaining free time, must be at most 730 × 86400 seconds after confirmation; an unsupported offer is refused without consuming it. Deadlines govern confirmation only, and disabling a code preserves already queued months.
 
 **Upgrade notes:** Apply migration 0046 before deploying this slice. It preserves existing grant anchors and adds offsets for subsequent appends. Keep the shared setting off outside isolated tests pending final #394. Subscriber deferral, buying Top-ups during Free access and paid signup that preserves free months remain separate implementation slices.
+
+### Top-ups during free access
+
+While free access is current, Usage offers the normal Buy top-up action, including for a recipient with no subscription or a provider subscription reported as trialing after deferral. The one-time purchase uses the existing pack, price and paid Terms confirmation; it creates no recurring subscription and preserves the full free period. Operators need no additional setting or product.
+
+The full monthly allowance is spent first, then unexpired previously purchased packs, earliest expiry first. Packs retain their existing 12-month expiry and refund/dispute removal rules. Queued free months alone do not qualify a current introductory trial or overdue payment for purchase: their existing Subscribe now or payment action remains. Instances without Plans or a configured top-up price offer no purchase. Already granted access and its top-ups continue when coupon issuance/redemption is disabled.

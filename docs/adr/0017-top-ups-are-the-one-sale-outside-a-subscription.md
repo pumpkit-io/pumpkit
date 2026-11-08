@@ -8,8 +8,8 @@ ADR 0022 broadens purchase eligibility to current Free access, even without a Su
 
 ## Rules
 
-- A Top-up is spent only after the Allowance of the period in question is used up. It stays for 12 months from purchase, and only a Subscribed User can spend it. When a Subscription ends, what is left waits for the next one.
-- Only a User whose paid Subscription is paid up may buy one: not in a Trial, where the offer is to start paying, and not while behind on payment.
+- A Top-up is spent only after the Allowance of the period in question is used up. It stays for 12 months from purchase, and only a Subscribed User can spend it. When access ends, what is left waits for a later Subscription or Free access.
+- Current Free access or a paid-up paid Subscription qualifies for purchase. Queued Free access alone does not qualify an introductory Trial or a User behind on payment.
 - One fixed pack, bought by hand. No pack sizes and no automatic reload.
 - A Top-up is never cheaper per Generation than the Plan (€0.040 against €0.038), so subscribing stays the better deal.
 - Its Checkout asks for the same Terms acceptance as a Subscription's (ADR 0010). Once any of it is spent there is no refund. A refund or dispute through Stripe removes whatever is left.

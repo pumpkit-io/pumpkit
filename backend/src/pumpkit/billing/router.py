@@ -86,9 +86,10 @@ async def create_top_up_checkout(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
+    clock: Clock = Depends(get_clock),
 ) -> CheckoutResponse:
     return await mediator.create_top_up_checkout(
-        db=db, gateway=gateway, user=current_user, checkout_request=checkout_request
+        db=db, gateway=gateway, user=current_user, checkout_request=checkout_request, clock=clock
     )
 
 

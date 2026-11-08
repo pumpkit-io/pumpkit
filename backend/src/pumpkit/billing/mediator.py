@@ -285,8 +285,8 @@ async def _record_terms_acceptance(db: AsyncSession, user: User) -> None:
     await db.commit()
 
 
-async def _check_may_buy_top_up(db: AsyncSession, user: User) -> None:
-    entitlement = await service.get_entitlement(db, user_id=user.id)
+async def _check_may_buy_top_up(db: AsyncSession, user: User, now: datetime) -> None:
+    entitlement = await service.get_entitlement(db, user_id=user.id, now=now)
     if entitlement.may_buy_top_up:
         return
     subscription = entitlement.subscription
@@ -305,17 +305,16 @@ async def create_top_up_checkout(
     gateway: BillingGateway,
     user: User,
     checkout_request: TopUpCheckoutRequest,
+    clock: Clock = system_clock,
 ) -> CheckoutResponse:
-    """
-    Create a Stripe Checkout that takes one payment for a Top-up (ADR 0017). Only a paid-up paid
-    Subscription may buy one, read from Pumpkit's copy; a refusal is a 409 and records nothing.
-    The Terms are checked and the acceptance committed before any Stripe call, as for a
-    Subscription (ADR 0010). The Top-up itself arrives with the webhook's sync, once paid.
+    """Current Free access or a paid-up Subscription qualifies; paid Terms precede Stripe.
+
+    The normal webhook sync adds the pack only once paid.
     """
     terms_apply = service.requires_terms_acceptance()
     if terms_apply:
         _require_terms_acceptance(checkout_request, "Accept the Terms to buy a top-up.")
-    await _check_may_buy_top_up(db, user)
+    await _check_may_buy_top_up(db, user, clock())
     if terms_apply:
         await _record_terms_acceptance(db, user)
 

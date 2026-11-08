@@ -66,7 +66,7 @@ async def get_usage(
         Query(description="A moment whose Allowance period to report, such as a publish time."),
     ] = None,
 ) -> UsageResponse:
-    return await mediator.get_usage(db=db, user=current_user, at=at or clock())
+    return await mediator.get_usage(db=db, user=current_user, at=at or clock(), now=clock())
 
 
 @x_connection_router.get(
