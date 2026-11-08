@@ -145,8 +145,7 @@ async def connection_to_publish_on(
     db: AsyncSession, scheduled_post: ScheduledPost, *, now: Optional[datetime] = None
 ) -> XConnection:
     """The X connection, row-locked until the next commit, or `Failed`."""
-    if not await subscriptions_service.has_access(db, user_id=scheduled_post.user_id, now=now):
-        raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
+    await require_access(db, user_id=scheduled_post.user_id, now=now)
     return await connection_still_publishing_on(db, scheduled_post)
 
 
@@ -427,3 +426,8 @@ def capture_failed(scheduled_post: ScheduledPost, category: FailureCategory) -> 
         distinct_id=scheduled_post.user_id,
         properties={"reason": category, **_shape(scheduled_post)},
     )
+
+
+async def require_access(db: AsyncSession, *, user_id: str, now: Optional[datetime] = None) -> None:
+    if not await subscriptions_service.has_access(db, user_id=user_id, now=now):
+        raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)

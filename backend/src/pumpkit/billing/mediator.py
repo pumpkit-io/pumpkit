@@ -216,7 +216,7 @@ async def create_checkout_session(
     start a Subscription. The User's row stays locked from the sync to the new Checkout, so
     concurrent Checkouts for one User run one at a time.
     """
-    await users_service.lock_user(db, user)
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     if await service.get_free_access(db, user_id=user.id, now=clock()):
         raise ConflictError(
             "Your free access is still running. Paid signup after free time is not available yet."
@@ -237,7 +237,7 @@ async def create_checkout_session(
 
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     # Take the User's lock again: creating the customer committed and released it.
-    await users_service.lock_user(db, user)
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     offer = await service.get_subscription_offer(db, user_id=user.id, now=clock())
     if not offer.may_subscribe:

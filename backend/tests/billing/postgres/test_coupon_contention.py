@@ -1,13 +1,17 @@
 import asyncio
+import json
 from datetime import timedelta
 from io import StringIO
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import select, text
 
 from pumpkit.account_deletion import run_cli
 from pumpkit.auth.models import User
 from pumpkit.billing.models import Coupon
+from pumpkit.core.config import settings
+from tests.billing.test_coupon_preview import KEYS
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 
@@ -79,11 +83,18 @@ async def test_independent_requests_cannot_duplicate_identity_or_take_last_slot(
     assert fake_billing.checkouts == []
 
 
+@pytest.mark.parametrize("boundary", ["deadline", "preview"])
 async def test_waiting_confirmation_rechecks_deadline_and_preview_expiry(
-    db_engine, db_session_maker, new_browser, sign_in_by_magic_link, coupons, fixed_clock
+    db_engine, db_session_maker, new_browser, sign_in_by_magic_link, coupons, fixed_clock, boundary
 ):
     browser = await browser_for(new_browser, sign_in_by_magic_link, "waiting@example.com")
-    created = await coupons("--claim-deadline", (fixed_clock() + timedelta(minutes=1)).isoformat())
+    created = await coupons(
+        *(
+            ["--claim-deadline", (fixed_clock() + timedelta(minutes=1)).isoformat()]
+            if boundary == "deadline"
+            else []
+        )
+    )
     offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
     async with db_session_maker() as control:
         await control.scalar(select(Coupon).where(Coupon.id == created["id"]).with_for_update())
@@ -100,7 +111,7 @@ async def test_waiting_confirmation_rechecks_deadline_and_preview_expiry(
                 break
             await asyncio.sleep(0.01)
         assert waiting
-        fixed_clock.advance(timedelta(minutes=10))
+        fixed_clock.advance(timedelta(minutes=2 if boundary == "deadline" else 10))
         await control.commit()
         response = await asyncio.wait_for(task, 10)
     assert response.status_code == 409
@@ -183,3 +194,21 @@ async def test_deletion_and_claim_serialize_without_orphaned_grant(
     recreated = await browser_for(new_browser, sign_in_by_magic_link, "deleted@example.com")
     retry = await recreated.post(PREVIEW, json={"code": created["code"]})
     assert retry.status_code == (409 if result.status_code == 200 else 200)
+
+
+async def test_rotating_active_key_between_same_email_requests_cannot_create_another_claim(
+    new_browser, sign_in_by_magic_link, coupons, monkeypatch
+):
+    browser = await browser_for(new_browser, sign_in_by_magic_link, "rotation@example.com")
+    created = await coupons("--max-redemptions", "2")
+    offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await browser.post(REDEEM, json=confirmation(offer))).status_code == 200
+    ring = json.loads(KEYS)
+    ring["keys"]["v2"] = "MTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTE="
+    ring["active"] = "v2"
+    monkeypatch.setattr(settings, "COUPON_IDENTITY_KEYS", SecretStr(json.dumps(ring)))
+    second = await browser_for(new_browser, sign_in_by_magic_link, "rotation@example.com")
+    assert (
+        await second.post(REDEEM, json=confirmation(offer, "rotated-second-operation"))
+    ).status_code == 409
+    assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1

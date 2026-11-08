@@ -69,7 +69,7 @@ export function useCouponRedemption(onConflict: () => void) {
       sessionStorage.removeItem(storageKey('coupon-redemption'));
     } catch (cause) {
       const status = errorStatus(cause);
-      if (confirming && status !== null && status >= 400 && status < 500) {
+      if (confirming && status !== null && [400, 409, 422].includes(status)) {
         setPending(null);
         sessionStorage.removeItem(storageKey('coupon-redemption'));
         conflict.current();

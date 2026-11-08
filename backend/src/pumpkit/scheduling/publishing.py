@@ -186,6 +186,7 @@ class _Access:
         if self.stop is not None and self.stop.is_set():
             raise _Stopped()
         now = self.claim.clock()
+        await publish.require_access(db, user_id=self.claim.scheduled_post.user_id, now=now)
         if as_utc(self.connection.access_token_expires_at) - now <= publish.REFRESH_MARGIN:
             scheduled_post = self.claim.scheduled_post
             await users_service.lock_user_id(db, user_id=scheduled_post.user_id)

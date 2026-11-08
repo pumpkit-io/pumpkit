@@ -6,13 +6,16 @@ import pytest
 from pydantic import SecretStr
 
 from pumpkit.account_deletion import run_cli
+from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
 from pumpkit.scheduling.publisher import run_pass
 from tests.billing.test_coupon_preview import KEYS
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.mcp_client import McpClient
+from tests.media_files import png
 from tests.oauth_app import REDIRECT, approved_code, exchange, register
+from tests.posts.writing_replies import written
 
 PREVIEW = "/api/v1/billing/coupons/preview"
 REDEEM = "/api/v1/billing/coupons/redemptions"
@@ -50,6 +53,10 @@ async def test_cardless_confirmation_replays_and_expires_without_provider_commit
     assert (await client.get("/api/v1/billing/me")).json()["trial_days"] is None
     assert (await client.get("/api/v1/onboarding")).json()["next_step"] == "paywall"
     assert fake_billing.checkouts == []
+    fixed_clock.advance(timedelta(days=90))
+    await coupons(command="purge")
+    assert (await client.get(REDEEM + "/redeem-test-0001")).status_code == 404
+    assert (await client.get("/api/v1/billing/me")).json()["trial_days"] is None
 
 
 @pytest.mark.parametrize("change", ["disabled", "terms", "allowance", "expired"])
@@ -310,3 +317,128 @@ async def test_rotation_retains_old_claim_matching_and_missing_keys_fail_closed(
     monkeypatch.setattr(settings, "COUPON_IDENTITY_KEYS", SecretStr(json.dumps(ring)))
     assert (await client.post(PREVIEW, json={"code": created["code"]})).status_code == 503
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1
+
+
+async def test_deletion_queues_file_cleanup_and_retry_removes_the_last_accounts_files(
+    authed_client,
+    coupons,
+    user,
+    db_session_maker,
+    fake_billing,
+    file_storage,
+    post_with,
+    connect_x,
+    monkeypatch,
+):
+    created = await coupons()
+    offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    await connect_x()
+    post_id = await post_with("Private account media")
+    attached = await authed_client.post(
+        f"/api/v1/posts/{post_id}/text/parts/1/media",
+        files={"file": ("image.png", png(), "image/png")},
+    )
+    assert attached.status_code == 201, attached.text
+    assert len(await file_storage.list_files("media")) == 2
+    original_delete = file_storage.delete
+
+    async def unavailable(key):
+        raise OSError("Storage unavailable")
+
+    monkeypatch.setattr(file_storage, "delete", unavailable)
+    err = StringIO()
+    status = await run_cli(
+        ["--user-id", user.id],
+        sessions=db_session_maker,
+        gateway=fake_billing,
+        storage=file_storage,
+        stdout=StringIO(),
+        stderr=err,
+    )
+    assert status == 1
+    assert "queued files remain pending" in err.getvalue()
+    assert (await authed_client.get("/api/v1/billing/me")).status_code == 401
+    monkeypatch.setattr(file_storage, "delete", original_delete)
+    status = await run_cli(
+        ["--retry-files"],
+        sessions=db_session_maker,
+        gateway=fake_billing,
+        storage=file_storage,
+        stdout=StringIO(),
+        stderr=StringIO(),
+    )
+    assert status == 0
+    assert await file_storage.list_files("media") == []
+
+
+async def test_cardless_writing_spends_the_full_monthly_allowance_and_resets(
+    client, coupons, fixed_clock, fake_x_reader, fake_llm
+):
+    created = await coupons("--months", "2")
+    offer = (await client.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(
+            post_id="coupon-author-post", text="A useful writing example", posted_at=fixed_clock()
+        )
+    ]
+    assert (
+        await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    ).status_code == 201
+    fake_llm.replies = [written("Sketch"), {"post": "Written during free access"}]
+    response = await client.post("/api/v1/posts", json={"brief": "Write a useful note"})
+    assert response.status_code == 201, response.text
+    usage = (await client.get("/api/v1/usage")).json()["allowance"]
+    assert usage["generations"]["limit"] == 500
+    assert usage["generations"]["used"] == 1
+    fixed_clock.advance(timedelta(days=31))
+    assert (await client.get("/api/v1/usage")).json()["allowance"]["generations"]["used"] == 0
+
+
+async def test_publisher_rechecks_access_before_a_later_thread_part(
+    client,
+    coupons,
+    fixed_clock,
+    connect_x,
+    post_with,
+    db_session_maker,
+    fake_x_publisher,
+    file_storage,
+):
+    fixed_clock.advance(timedelta(seconds=-30))
+    created = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": created["code"]})).json()
+    result = (await client.post(REDEEM, json=confirmation(offer))).json()
+    end = datetime.fromisoformat(result["ends_at"].replace("Z", "+00:00"))
+    await connect_x()
+    post_id = await post_with("First part", "Second part")
+    response = await client.post(
+        "/api/v1/scheduled-posts",
+        json={"post_id": post_id, "publish_at": (end - timedelta(minutes=1)).isoformat()},
+    )
+    assert response.status_code == 201, response.text
+    fixed_clock.advance(end - timedelta(minutes=1) - fixed_clock())
+
+    async def reaches_expiry():
+        fixed_clock.advance(end - fixed_clock())
+
+    fake_x_publisher.while_publishing = reaches_expiry
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    assert len(fake_x_publisher.published) == 1
+
+
+async def test_operation_lookup_and_identifier_uniqueness_are_caller_scoped(
+    authed_client, coupons, new_browser, sign_in_by_magic_link
+):
+    created = await coupons("--max-redemptions", "2")
+    offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    other = new_browser()
+    signed = await sign_in_by_magic_link(other, "another-recipient@example.com")
+    other.headers["Authorization"] = "Bearer " + signed.access_token
+    assert (await other.get(REDEEM + "/redeem-test-0001")).status_code == 404
+    assert (await other.post(REDEEM, json=confirmation(offer))).status_code == 409
+    other_offer = (await other.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await other.post(REDEEM, json=confirmation(other_offer))).status_code == 200
+    assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 2

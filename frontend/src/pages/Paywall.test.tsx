@@ -655,6 +655,25 @@ describe('Coupon preview on the Paywall', () => {
     expect(billingService.redeemCoupon).toHaveBeenCalledTimes(1);
   });
 
+  it.each([401, 403, 429])(
+    'keeps the original operation recoverable after HTTP %s',
+    async (status) => {
+      vi.mocked(billingService.redeemCoupon).mockRejectedValueOnce(apiError(status, 'Try again'));
+      renderPaywall();
+      await reviewCoupon();
+      fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('not confirmed yet');
+      const original = vi.mocked(billingService.redeemCoupon).mock.calls[0][0];
+      expect(sessionStorage.getItem(storageKey('coupon-redemption'))).toContain(
+        original.operationId,
+      );
+      vi.mocked(billingService.fetchCouponRedemption).mockResolvedValue(COUPON_RESULT);
+      fireEvent.click(screen.getByRole('button', { name: 'Check redemption' }));
+      expect(await screen.findByText('Coupon redeemed')).toHaveFocus();
+      expect(billingService.redeemCoupon).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('requires fresh review after conflict and retains the code', async () => {
     vi.mocked(billingService.redeemCoupon).mockRejectedValueOnce(
       apiError(409, 'The offer changed. Check the code again.'),

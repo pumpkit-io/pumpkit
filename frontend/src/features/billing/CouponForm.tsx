@@ -273,7 +273,7 @@ export function CouponForm() {
               )}
               <Button
                 type="button"
-                className="min-h-11"
+                className="min-h-11 focus-visible:ring-ring"
                 disabled={
                   blocked ||
                   Boolean(
