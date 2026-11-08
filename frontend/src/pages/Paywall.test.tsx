@@ -19,6 +19,8 @@ vi.mock('@/services/billingService', () => ({
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn(),
     previewCoupon: vi.fn(),
+    redeemCoupon: vi.fn(),
+    fetchCouponRedemption: vi.fn(),
     startSubscriptionCheckout: vi.fn(),
     openBillingPortal: vi.fn(),
   },
@@ -60,6 +62,7 @@ import { track } from '@/lib/analytics';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import { redirectTo } from '@/lib/navigation';
 import { session } from '@/lib/session';
+import { storageKey } from '@/lib/storage';
 import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
 import { onboardingService } from '@/services/onboardingService';
 import { BillingSuccessRedirect } from './BillingRedirect';
@@ -488,16 +491,46 @@ describe('Paywall', () => {
   });
 });
 
+const COUPON_OFFER = {
+  months: 3,
+  startsAt: '2028-01-31T12:00:00Z',
+  endsAt: '2028-04-30T12:00:00Z',
+  allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+  nextPaymentAt: null,
+  termsVersion: '2026-11-08',
+  revision: 'signed-preview',
+};
+const COUPON_RESULT = {
+  operationId: 'result',
+  months: 3,
+  startsAt: '2028-01-31T12:01:00Z',
+  endsAt: '2028-04-30T12:01:00Z',
+};
+async function reviewCoupon() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Have a coupon?' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Coupon code' }), {
+    target: { value: 'private-code' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Check code' }));
+  const fields = within(
+    await screen.findByRole('group', { name: 'Accept the Terms for free access' }),
+  );
+  for (const box of fields.getAllByRole('checkbox')) fireEvent.click(box);
+}
+
 describe('Coupon preview on the Paywall', () => {
   beforeEach(() => {
-    vi.mocked(billingService.previewCoupon).mockReset();
+    sessionStorage.clear();
+    vi.mocked(billingService.redeemCoupon).mockReset().mockResolvedValue(COUPON_RESULT);
+    vi.mocked(billingService.fetchCouponRedemption).mockReset();
+    vi.mocked(billingService.previewCoupon).mockReset().mockResolvedValue(COUPON_OFFER);
     vi.mocked(billingService.startSubscriptionCheckout).mockClear();
     vi.mocked(billingService.fetchBillingMe).mockResolvedValue(WITH_TRIAL);
     vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, couponsEnabled: true });
     vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
   });
 
-  it('checks a code independently of paid checkout and shows the actual offer without a dead redeem control', async () => {
+  it('requires two cardless acceptance boxes before redeeming without paid checkout', async () => {
     vi.mocked(billingService.previewCoupon).mockResolvedValue({
       months: 3,
       startsAt: '2028-01-31T12:00:00Z',
@@ -521,7 +554,170 @@ describe('Coupon preview on the Paywall', () => {
       screen.getByText(/This creates no subscription or obligation to pay/),
     ).toBeInTheDocument();
     expect(billingService.previewCoupon).toHaveBeenCalledWith('private-code');
+    const confirmation = within(
+      screen.getByRole('group', { name: 'Accept the Terms for free access' }),
+    );
+    expect(confirmation.getAllByRole('checkbox')).toHaveLength(2);
+    const redeem = screen.getByRole('button', { name: 'Redeem coupon' });
+    expect(redeem).toBeDisabled();
+    for (const box of confirmation.getAllByRole('checkbox')) fireEvent.click(box);
+    vi.mocked(billingService.redeemCoupon).mockResolvedValue({
+      operationId: 'result',
+      months: 3,
+      startsAt: '2028-01-31T12:01:00Z',
+      endsAt: '2028-04-30T12:01:00Z',
+    });
+    fireEvent.click(redeem);
+    expect(await screen.findByText('Coupon redeemed')).toHaveFocus();
+    expect(billingService.redeemCoupon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revision: 'signed-preview',
+        termsVersion: '2026-11-08',
+        acceptedTerms: true,
+        approvedSpecificClauses: true,
+        language: 'en',
+      }),
+    );
+    expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
+  });
+
+  it('redeems without acceptance boxes on an Instance with no Terms', async () => {
+    vi.mocked(billingService.previewCoupon).mockResolvedValue({
+      ...COUPON_OFFER,
+      termsVersion: null,
+    });
+    renderPaywall();
+    fireEvent.click(await screen.findByRole('button', { name: 'Have a coupon?' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Coupon code' }), {
+      target: { value: 'private-code' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check code' }));
+    const redeem = await screen.findByRole('button', { name: 'Redeem coupon' });
+    expect(
+      screen.queryByRole('group', { name: 'Accept the Terms for free access' }),
+    ).not.toBeInTheDocument();
+    expect(redeem).toBeEnabled();
+    fireEvent.click(redeem);
+    await screen.findByText('Coupon redeemed');
+    expect(billingService.redeemCoupon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        termsVersion: null,
+        acceptedTerms: false,
+        approvedSpecificClauses: false,
+      }),
+    );
+  });
+
+  it('prevents duplicate confirmation and shows progress while redemption is unresolved', async () => {
+    vi.mocked(billingService.redeemCoupon).mockReturnValue(new Promise(() => {}));
+    renderPaywall();
+    await reviewCoupon();
+    const redeem = screen.getByRole('button', { name: 'Redeem coupon' });
+    fireEvent.click(redeem);
+    fireEvent.click(redeem);
+    expect(screen.getByText('Confirming redemption…')).toHaveAttribute('role', 'status');
+    expect(redeem).toBeDisabled();
+    expect(billingService.redeemCoupon).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Check redemption' })).toBeDisabled();
+  });
+
+  it('looks up an uncertain result before retrying the same operation and revision', async () => {
+    vi.mocked(billingService.redeemCoupon).mockRejectedValueOnce({ isAxiosError: true });
+    vi.mocked(billingService.fetchCouponRedemption).mockRejectedValueOnce(
+      apiError(404, 'Not found'),
+    );
+    renderPaywall();
+    await reviewCoupon();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('not confirmed yet');
+    const original = vi.mocked(billingService.redeemCoupon).mock.calls[0][0];
+    expect(screen.getByRole('textbox', { name: 'Coupon code' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Check redemption' }));
+    expect(await screen.findByText('Coupon redeemed')).toHaveFocus();
+    expect(billingService.fetchCouponRedemption).toHaveBeenCalledWith(original.operationId);
+    expect(billingService.redeemCoupon).toHaveBeenNthCalledWith(2, original);
+    expect(sessionStorage.getItem(storageKey('coupon-redemption'))).toBeNull();
+  });
+
+  it('recovers a committed operation after remount without another confirmation', async () => {
+    vi.mocked(billingService.redeemCoupon).mockRejectedValueOnce({ isAxiosError: true });
+    const view = renderPaywall();
+    await reviewCoupon();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    await screen.findByRole('alert');
+    const original = vi.mocked(billingService.redeemCoupon).mock.calls[0][0];
+    expect(sessionStorage.getItem(storageKey('coupon-redemption'))).not.toContain('private-code');
+    view.unmount();
+    vi.mocked(billingService.fetchCouponRedemption).mockResolvedValue(COUPON_RESULT);
+    renderPaywall();
+    expect(await screen.findByText('Coupon redeemed')).toHaveFocus();
+    expect(billingService.fetchCouponRedemption).toHaveBeenCalledWith(original.operationId);
+    expect(billingService.redeemCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires fresh review after conflict and retains the code', async () => {
+    vi.mocked(billingService.redeemCoupon).mockRejectedValueOnce(
+      apiError(409, 'The offer changed. Check the code again.'),
+    );
+    renderPaywall();
+    await reviewCoupon();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('offer changed');
+    expect(screen.getByRole('textbox', { name: 'Coupon code' })).toHaveValue('private-code');
     expect(screen.queryByRole('button', { name: 'Redeem coupon' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Check code' }));
+    const fields = within(
+      await screen.findByRole('group', { name: 'Accept the Terms for free access' }),
+    );
+    for (const box of fields.getAllByRole('checkbox')) expect(box).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Redeem coupon' })).toBeDisabled();
+  });
+
+  it('clears acceptance when changing language and links only cardless clauses in Italian', async () => {
+    renderPaywall();
+    await reviewCoupon();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Terms language' }), {
+      target: { value: 'it' },
+    });
+    const fields = within(screen.getByRole('group', { name: 'Accept the Terms for free access' }));
+    expect(fields.getByRole('link', { name: 'Termini' })).toHaveAttribute('href', '/it/terms');
+    expect(fields.getByRole('link', { name: '21 (Foro competente)' })).toHaveAttribute(
+      'href',
+      '/it/terms#courts',
+    );
+    expect(fields.queryByText(/12|14-day/)).not.toBeInTheDocument();
+    for (const box of fields.getAllByRole('checkbox')) {
+      expect(box).not.toBeChecked();
+      fireEvent.click(box);
+    }
+    expect(screen.getByText('Nessun pagamento automatico')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    await screen.findByText('Coupon redeemed');
+    expect(billingService.redeemCoupon).toHaveBeenCalledWith(
+      expect.objectContaining({ language: 'it' }),
+    );
+  });
+
+  it('keeps the redeemed result available when refreshing Onboarding fails', async () => {
+    renderPaywall();
+    await reviewCoupon();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    await screen.findByText('Coupon redeemed');
+    vi.mocked(onboardingService.fetchNextStep).mockRejectedValue(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText(/Couldn’t refresh your access/)).toBeInTheDocument();
+    expect(screen.getByText('Coupon redeemed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('continues to Onboarding after redemption without choosing a paid plan', async () => {
+    renderPaywall();
+    await reviewCoupon();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    await screen.findByText('Coupon redeemed');
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(currentPath()).toBe('/onboarding'));
     expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
   });
 

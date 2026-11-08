@@ -1,6 +1,7 @@
 import { APP_SLUG } from './app';
 
 export type StorageKey =
+  | 'coupon-redemption'
   | 'theme'
   | 'posthog-identified'
   | 'session'

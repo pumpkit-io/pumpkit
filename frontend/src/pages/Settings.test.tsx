@@ -561,6 +561,22 @@ describe('Settings', () => {
   });
 
   describe('Plan', () => {
+    it('shows cardless free access without renewal or paid signup controls', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+        subscription: null,
+        subscribed: true,
+        maySubscribe: false,
+        trialDays: null,
+        freeAccess: { startsAt: '2028-01-31T12:01:00Z', endsAt: '2028-04-30T12:01:00Z', months: 3 },
+      });
+      renderSettings();
+      const plan = await card('Plan');
+      expect(await plan.findByText('Free access')).toBeInTheDocument();
+      expect(plan.getByText('No automatic payment')).toBeInTheDocument();
+      expect(plan.getByText(/January 31, 2028 to April 30, 2028 UTC/)).toBeInTheDocument();
+      expect(plan.queryByRole('button')).not.toBeInTheDocument();
+    });
+
     it.each([
       ['trialing', 'Trial', `Billing starts on ${PERIOD_END_LABEL}`],
       ['active', 'Active', `Renews on ${PERIOD_END_LABEL}`],
