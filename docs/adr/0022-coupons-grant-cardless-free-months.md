@@ -2,9 +2,9 @@
 
 Coupons give Users free months of Pro without requiring a payment card or creating an obligation to pay afterward. Existing subscribers, including annual subscribers, may redeem them too: their benefit must defer or reduce payment rather than overlap access they already paid for. A User without a paid Subscription meets the Paywall when free access ends unless they choose to subscribe.
 
-This changes the access premise of ADR 0018 and the checkout-only Terms acceptance premise of ADR 0010. A Coupon is not the existing card-backed Trial.
+This narrows ADR 0003’s subscription-only premise, ADR 0010’s checkout-only acceptance premise, ADR 0017’s Top-up purchase eligibility and ADR 0018’s Subscription-only access premise. A Coupon is not the existing card-backed Trial.
 
-A Coupon may be reserved for a verified email address before its recipient signs up, or available to anyone. Each Coupon has a configurable total redemption limit, defaulting to one, at most one redemption per User, and an optional claim deadline.
+A Coupon may be reserved for a verified email address before its recipient signs up, or available to anyone. Each Coupon has a configurable total redemption limit, defaulting to one, at most one redemption per verified email address, including after account deletion, and an optional claim deadline.
 
 ## Time and renewal
 
@@ -12,7 +12,7 @@ Free months are calendar months, using Pumpkit's existing short-month rules. Eac
 
 Free months append to existing paid or free time. Different Coupons stack; a claim deadline limits redemption, not when queued free time may run. Existing subscribers have their next renewal postponed by the free months, including annual subscribers. For example, three free months move a December 1 annual renewal to March 1. The Subscription then continues under the User's existing renewal choice. A cancellation stays cancelled, with free access after paid time ends. A Coupon creates no new payment commitment.
 
-Receiving free months removes eligibility for the introductory Trial. Users with neither Coupon benefits nor Subscription history retain their normal Trial eligibility.
+Receiving free months removes eligibility to start a new introductory Trial. Users with neither Coupon benefits nor Subscription history retain their normal Trial eligibility.
 
 A User already in a Trial finishes it under its existing Allowance before queued free months begin. Their first payment is postponed. Coupon-only Users may arrange a paid Subscription before free access ends, explicitly accepting the Plan and future charge date. Payment starts after remaining free time; arranging it early neither charges immediately nor discards that time.
 
@@ -24,7 +24,7 @@ Coupon-only Users may buy Top-ups and spend previously purchased ones, under the
 
 The Paywall offers an expandable "Have a coupon?" form before paid checkout. Settings offers "Redeem coupon" in the Plan card. Both check the code and preview the exact free period and payment consequences before confirmation. After redemption, new Users continue into Onboarding. These forms reuse the app's existing typography, colours and components; there is no separate Coupon dashboard or new visual direction.
 
-Redemption requires acceptance of the current Terms, recorded for that redemption. Cardless redemption describes free access and its end date. Paid subscription commitments belong in the later subscription flow; the exact acceptance wording remains input for the specification.
+Redemption requires acceptance of the current Terms, recorded for that redemption. Cardless redemption describes free access and its end date. Paid subscription commitments belong in the later subscription flow. The bilingual copy, two-box cardless acceptance evidence and separate paid acceptance contract are recorded in [the Coupon contract](../coupons.md#acceptance-contract).
 
 ## Issuance and lifecycle
 
@@ -34,7 +34,7 @@ Use cryptographically random, high-entropy opaque codes backed by Instance recor
 
 Disabling a Coupon stops future claims and preserves benefits already redeemed. Removing an individual's granted benefits is a separate support action outside this implementation, because shortening free time could bring a payment forward unexpectedly.
 
-Deleting and recreating an account with the same email does not permit a second claim of the same Coupon. Keep a minimal, protected claim record while that Coupon remains redeemable, including across account deletion. The specification must define retention and the Privacy Policy changes. This does not prevent claims using different email addresses; recipient assignment and total redemption limits bound that risk.
+Deleting and recreating an account with the same email does not permit a second claim of the same Coupon. Keep a minimal, protected claim record while that Coupon remains redeemable, including across account deletion. The [retention and key-custody contract](../coupons.md#retention-and-purge) sets precise purge periods, account-deletion handling and key rotation. The English and Italian Privacy Policy describes fingerprints as pseudonymous personal data, including indefinite claim prevention for redeemable no-deadline codes. This does not prevent claims using different email addresses; recipient assignment and total redemption limits bound that risk.
 
 Coupons are available only on Instances that sell Plans. Instances without billing already grant unrestricted access. Self-hosters with billing configured use the same public tooling to issue their own Coupons, consistent with ADR 0011.
 
@@ -71,9 +71,13 @@ Settings shows current or queued Free access in the Plan card, including its dat
 
 This plan extends the existing billing UI rather than setting a new design direction. Its review against the brief keeps redemption before onboarding, visible payment consequences before confirmation and no additional dashboard.
 
-## Validation required before implementation relies on deferral
+## Final validation before activation
 
-Verify the installed Stripe integration in test mode for monthly and annual renewal deferral, an existing Trial, short months and leap years, repeated redemptions, cancellation before and during Free access, early arrangement of paid renewal, and portal actions. Confirm no immediate charge, lost paid time, lost free time or unintended Allowance reset. A provider limitation that breaks these promises reopens the billing approach rather than silently changing the product rules.
+The maintainer’s November 8, 2026 execution policy in spec #392 replaces the earlier pre-implementation validation gate. Implement and review #395–#405 with normal checks, fake gateways and adapter contracts, then run final #394 after all implementation PRs merge. One shared Instance setting, `COUPONS_ENABLED`, stays false by default: no issuance, redemption, coupon-specific paid actions or Coupon affordances until enabled. Instances that sell no Plans retain unrestricted access. Real Stripe credentials and Dashboard access are required only for final validation.
+
+The `pro-coupons-t394` branch holds partial API/portal evidence and an opt-in harness. Reuse them, but do not treat historical experiments as validation of the merged implementation. Hosted Checkout through first payment and authenticated reminder/notice inspection remain outstanding. The implementation and operator handoff is [documented separately](../coupons.md), including activation, acceptance and retention.
+
+Before activation, verify the installed Stripe integration in test mode for monthly and annual renewal deferral, an existing Trial, short months and leap years, repeated redemptions, cancellation before and during Free access, early arrangement of paid renewal, and portal actions. Confirm no immediate charge, lost paid time, lost free time or unintended Allowance reset. A provider limitation that breaks these promises reopens the billing approach rather than silently changing the product rules.
 
 Stripe changes and a local database transaction are not atomic. Implementation must retain enough durable operation state to reconcile an uncertain provider result and retry safely. Never report redemption success until the necessary billing change is confirmed, and never grant duplicate benefits or oversubscribe a Coupon's redemption limit under concurrent claims.
 

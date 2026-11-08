@@ -82,9 +82,15 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 
 ### Fatturazione {#data-billing}
 
-- **Quali dati:** il tuo identificativo cliente Stripe e lo stato del tuo Abbonamento: Piano, stato e periodi di fatturazione. Stripe riceve il tuo nome e il tuo indirizzo email, e inserisci i dati di pagamento direttamente presso Stripe. I dati della tua carta non arrivano mai al Gestore.
-- **Perché:** per addebitare il tuo Abbonamento e tenere le scritture contabili richieste dalla legge.
+- **Quali dati:** il tuo identificativo cliente Stripe, lo stato del tuo Abbonamento (Piano, stato e periodi di fatturazione), acquisti, saldi, rimborsi e contestazioni dei Top-up e l’accettazione separata dei Termini per ogni pagamento. Stripe riceve il tuo nome e il tuo indirizzo email, e inserisci i dati di pagamento direttamente presso Stripe. I dati della tua carta non arrivano mai al Gestore.
+- **Perché:** per addebitare un Abbonamento esplicitamente concordato o un Top-up una tantum, fornirlo e tenere le scritture contabili richieste dalla legge. Il solo riscatto di un Coupon non crea un Abbonamento a pagamento né un’autorizzazione al pagamento.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR) e gli obblighi di legge del Gestore previsti dalla normativa fiscale italiana per fatture e scritture contabili (art. 6, par. 1, lett. c) GDPR).
+
+### Coupon e Accesso gratuito {#data-coupons}
+
+- **Quali dati:** l’impronta protetta di un indirizzo email riservato a un Coupon, anche prima dell’iscrizione; identificativi dei Coupon e date dei benefici; la tua accettazione dei Termini per ogni riscatto; e gli identificativi minimi delle operazioni e i dati di fatturazione necessari a confermare un esito incerto. Le impronte sono calcolate con una chiave segreta. Sono dati personali pseudonimi, non anonimi. Pumpkit non conserva codici Coupon recuperabili.
+- **Perché:** per concedere i mesi gratuiti promessi, limitare i codici riservati ai destinatari, impedire che la stessa email riscatti un Coupon due volte dopo l’eliminazione dell’account e recuperare una modifica incerta della fatturazione senza duplicare benefici o addebiti.
+- **Base giuridica:** esecuzione del contratto per concedere l’accesso e recuperare la tua operazione (art. 6, par. 1, lett. b) GDPR); il legittimo interesse del Gestore a limitare gli inviti e prevenire riscatti ripetuti, anche prima dell’iscrizione e dopo l’eliminazione (art. 6, par. 1, lett. f) GDPR). Puoi opporti usando i contatti sotto. Codici Coupon, assegnazioni ai destinatari e risposte integrali di fatturazione sono esclusi dalle analisi.
 
 ### Analisi nel tuo browser {#data-analytics}
 
@@ -141,6 +147,9 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 - **Registrazioni delle Sessioni e dei Magic link:** 90 giorni dalla scadenza. Ciò include un Magic link richiesto da chi non ha mai creato un account.
 - **Connected app:** finché non scolleghi l'app o il tuo account non viene eliminato. I dati di un'app scollegata e i suoi token vengono eliminati 90 giorni dopo che l'hai scollegata, e un token scaduto entro 90 giorni dalla scadenza.
 - **Post pubblici degli Inspiration author:** finché almeno un Utente ha quell'autore tra i propri Inspiration author, oppure finché l'autore non si oppone.
+- **Assegnazioni dei Coupon ai destinatari e impronte dei riscatti:** finché il Coupon è riscattabile, anche dopo l’eliminazione dell’account, poi eliminate entro 30 giorni da quando cessa definitivamente di accettare riscatti e ogni operazione incerta è risolta. Un codice senza scadenza può restare riscattabile a tempo indeterminato; le sue impronte minime restano per quel tempo. Disabilitare un codice è definitivo e fa cessare questa necessità una volta risolte le operazioni in sospeso.
+- **Accesso gratuito e accettazione al riscatto:** finché necessari a concedere benefici attuali o futuri, poi eliminati entro 90 giorni dalla fine del beneficio e dalla risoluzione delle operazioni collegate. L’eliminazione dell’account rimuove il collegamento all’account e ne fa cessare i benefici; restano soltanto i dati minimi per prevenire riscatti ripetuti e recuperare operazioni irrisolte, secondo i rispettivi periodi.
+- **Dati di recupero e controllo dei Coupon:** le operazioni irrisolte conservano identificativi minimi, offerta accettata e dati di fatturazione fino alla risoluzione, con verifiche giornaliere dei recuperi bloccati. I dati risolti vengono eliminati entro 90 giorni dalla risoluzione e dalla fine dei benefici collegati. Un’operazione irrisolta non viene eliminata solo perché un account o codice è stato eliminato o disabilitato. Non si tratta sempre di dati fiscali; la regola di 10 anni sotto riguarda soltanto fatture effettive e scritture contabili obbligatorie.
 - **Dati di fatturazione conservati da Stripe e fatture:** 10 anni, come richiesto dalla normativa fiscale italiana.
 - **Eventi di analisi, eventi del server e segnalazioni di errore:** 30 giorni.
 - **Registrazioni delle sessioni:** 30 giorni.
@@ -163,7 +172,7 @@ Per esercitare uno qualsiasi di questi diritti, scrivi a support@pumpkit.io dall
 
 ### Eliminare il tuo account {#account-deletion}
 
-Per eliminare il tuo account, scrivi a support@pumpkit.io dall'indirizzo email del tuo account. Il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato. I dati di fatturazione restano presso Stripe e nelle scritture contabili del Gestore per i 10 anni richiesti dalla legge, e i backup conservano i dati eliminati finché non vengono sovrascritti, come indicato nella sezione [Per quanto tempo vengono conservati i dati](#retention).
+Per eliminare il tuo account, scrivi a support@pumpkit.io dall'indirizzo email del tuo account. Il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato. Le impronte minime dei riscatti dei Coupon e i dati di recupero irrisolti restano solo per i periodi sopra indicati; ricreare un account con la stessa email non permette un altro riscatto dello stesso Coupon. I dati di fatturazione restano presso Stripe e nelle scritture contabili del Gestore per i 10 anni richiesti dalla legge, e i backup conservano i dati eliminati finché non vengono sovrascritti, come indicato nella sezione [Per quanto tempo vengono conservati i dati](#retention).
 
 ### Reclami {#complaints}
 

@@ -34,7 +34,7 @@ describe('Privacy Policy at /privacy', () => {
     renderLegalRoute('/privacy');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Privacy Policy');
-    expect(within(main).getByText('Last updated: 7 November 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Last updated: 8 November 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and English as the page language', () => {
@@ -61,6 +61,19 @@ describe('Privacy Policy at /privacy', () => {
     );
   });
 
+  it('explains retained claim fingerprints after account deletion', () => {
+    renderLegalRoute('/privacy');
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Coupons and Free access' }),
+    ).toHaveAttribute('id', 'data-coupons');
+    expect(screen.getByText(/pseudonymous personal data/)).toBeInTheDocument();
+    expect(
+      screen.getByText('Coupon recipient assignments and claim fingerprints:'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Free access and redemption acceptance:')).toBeInTheDocument();
+    expect(screen.getByText('Coupon recovery and audit evidence:')).toBeInTheDocument();
+  });
+
   it('names the Operator and the support address', () => {
     renderLegalRoute('/privacy');
     const main = screen.getByRole('main');
@@ -83,7 +96,7 @@ describe('Terms at /terms', () => {
     renderLegalRoute('/terms');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Terms');
-    expect(within(main).getByText('Last updated: 1 November 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Last updated: 8 November 2026')).toBeInTheDocument();
   });
 
   it.each([
@@ -96,6 +109,14 @@ describe('Terms at /terms', () => {
   ])('gives the onerous clause "%s" the anchor #%s', (name, id) => {
     renderLegalRoute('/terms');
     expect(screen.getByRole('heading', { level: 2, name })).toHaveAttribute('id', id);
+  });
+
+  it('describes cardless access without creating a payment commitment', () => {
+    renderLegalRoute('/terms');
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Coupons and Free access' }),
+    ).toHaveAttribute('id', 'coupons');
+    expect(screen.getByText(/Redeeming a Coupon requires no card/)).toBeInTheDocument();
   });
 
   it('gives Top-ups their own clause, #top-ups', () => {
@@ -112,7 +133,7 @@ describe('Informativa sulla privacy at /it/privacy', () => {
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
       'Informativa sulla privacy',
     );
-    expect(within(main).getByText('Ultimo aggiornamento: 7 novembre 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Ultimo aggiornamento: 8 novembre 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and Italian as the page language', () => {
@@ -142,7 +163,7 @@ describe('Termini at /it/terms', () => {
     renderLegalRoute('/it/terms');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Termini');
-    expect(within(main).getByText('Ultimo aggiornamento: 1 novembre 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Ultimo aggiornamento: 8 novembre 2026')).toBeInTheDocument();
   });
 
   it('sets Italian as the page language', () => {

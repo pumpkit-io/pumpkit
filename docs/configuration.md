@@ -195,3 +195,7 @@ These rarely need changing. `.env.example` lists only `APP_NAME` and `LOG_LEVEL`
 | `GOOGLE_ISSUER`, `GOOGLE_API_URL` | Point Google sign-in at an emulator; set both or neither. `GOOGLE_ISSUER` is the browser-facing URL and the issuer ID tokens must name; `GOOGLE_API_URL` is where the backend exchanges codes and fetches certs. Unset, sign-in reaches Google itself. `scripts/dev-stack` sets both. |
 | `STRIPE_API_URL` | Points the Stripe SDK at an emulator. Unset, billing reaches Stripe itself. `scripts/dev-stack` sets it. |
 | `API_PROXY_TARGET` | Where the Vite dev server proxies `/api`. Defaults to `http://localhost:8000`; `compose.dev.yml` sets `http://backend:8000`. Not read from `.env`. |
+
+## Coupons (implementation contract)
+
+Coupon runtime settings are introduced by #395, not by the legal-document update. [The Coupon contract](coupons.md) defines the default-off `COUPONS_ENABLED` setting, the secret `COUPON_IDENTITY_KEYS` key ring, backup/rotation, daily purge and the final Stripe activation gate. Do not enable the feature before all implementation tickets and final #394 are complete. Billing-disabled Instances need none of this configuration.

@@ -4,6 +4,8 @@ Each Subscription gives an Allowance per Allowance period: 500 Generations and 1
 
 The numbers follow from cost. A Generation costs about $0.0025 in model calls ($0.015 in the heaviest case we estimated), an X post $0.015 to publish, and one with a link $0.20. The link price is why link posts have their own limit: 100 of them would cost more than a month of the Plan brings in.
 
+ADR 0022 broadens purchase eligibility to current Free access, even without a Subscription. Queued free months alone do not make a present introductory Trial or unpaid state eligible. Allowance-first spending, expiry, refunds and disputes stay unchanged; remaining packs can wait for later Free access as well as a Subscription. The complete contract is in [the Coupon guidance](../coupons.md).
+
 ## Rules
 
 - A Top-up is spent only after the Allowance of the period in question is used up. It stays for 12 months from purchase, and only a Subscribed User can spend it. When a Subscription ends, what is left waits for the next one.

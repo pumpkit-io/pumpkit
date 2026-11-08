@@ -321,10 +321,11 @@ async def test_a_checkout_without_true_on_an_acceptance_is_rejected_without_call
     assert fake_billing.checkouts == []
 
 
+@pytest.mark.parametrize("version", ["2026-01-01", "2026-11-01"])
 async def test_a_checkout_for_an_outdated_terms_version_returns_409_without_calling_the_gateway(
-    client, fake_billing
+    client, fake_billing, version
 ):
-    response = await client.post(CHECKOUT, json={**CHECKOUT_MONTHLY, "terms_version": "2026-01-01"})
+    response = await client.post(CHECKOUT, json={**CHECKOUT_MONTHLY, "terms_version": version})
 
     assert response.status_code == 409
     assert response.json()["detail"] == (

@@ -82,9 +82,15 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 ### Billing {#data-billing}
 
-- **What:** your Stripe customer identifier and the state of your Subscription: its Plan, status and billing periods. Stripe receives your name and email address, and you enter your payment details directly with Stripe. Your card details never reach the Operator.
-- **Why:** to charge for your Subscription and keep the accounting records the law requires.
+- **What:** your Stripe customer identifier, the state of your Subscription (Plan, status and billing periods), Top-up purchases, balances, refunds and disputes, and separate Terms acceptance for each paid checkout. Stripe receives your name and email address, and you enter your payment details directly with Stripe. Your card details never reach the Operator.
+- **Why:** to charge for an explicitly agreed Subscription or one-off Top-up, deliver it and keep the accounting records the law requires. Coupon redemption alone creates no paid Subscription or payment authorization.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR), and the Operator's legal obligations under Italian tax law for invoices and accounting records (Art. 6(1)(c) GDPR).
+
+### Coupons and Free access {#data-coupons}
+
+- **What:** the protected fingerprint of an email address reserved for a Coupon, including before sign-up; Coupon identifiers and benefit dates; your acceptance of the Terms for each redemption; and minimal operation identifiers and billing facts needed to confirm an uncertain result. Fingerprints are calculated with a secret key. They are pseudonymous personal data, not anonymous data. Pumpkit stores no recoverable Coupon code.
+- **Why:** to deliver the promised free months, restrict recipient-only codes, prevent the same email claiming a Coupon twice after account deletion, and recover an uncertain billing change without duplicate benefits or charges.
+- **Legal basis:** performance of the contract for granting access and recovering your operation (Art. 6(1)(b) GDPR); the Operator’s legitimate interest in restricting invitations and preventing repeated claims, including before sign-up and after deletion (Art. 6(1)(f) GDPR). You may object using the contact details below. Coupon codes, recipient assignments and raw billing responses are excluded from analytics.
 
 ### Analytics in your browser {#data-analytics}
 
@@ -141,6 +147,9 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 - **Session and Magic link records:** 90 days after they expire. This includes a Magic link requested by someone who never created an account.
 - **Connected apps:** until you disconnect the app or your account is deleted. A disconnected app's record and its tokens are deleted 90 days after you disconnect it, and an expired token within 90 days of expiring.
 - **Inspiration authors' public posts:** while any User has that author among their Inspiration authors, or until the author objects.
+- **Coupon recipient assignments and claim fingerprints:** while the Coupon can still be redeemed, including after account deletion, then deleted within 30 days after it permanently stops accepting claims and any uncertain operation is resolved. A code with no deadline can remain redeemable indefinitely; its minimal fingerprints remain for that time. Disabling a code is permanent and ends this claim-prevention need once pending operations are resolved.
+- **Free access and redemption acceptance:** while needed to deliver current or queued benefits, then deleted within 90 days after the benefit ends and any related operation is resolved. Account deletion removes the account link and ends its benefits; only minimal claim-prevention and unresolved recovery records survive, under their own periods.
+- **Coupon recovery and audit evidence:** unresolved operations retain the minimum identifiers, accepted offer and billing facts until resolved, with daily checks for stalled recovery. Resolved evidence is deleted within 90 days after resolution and the end of related benefits. An unresolved operation is not deleted merely because an account or code was deleted or disabled. These are not all tax records; the 10-year billing rule below applies only to actual invoices and legally required accounting records.
 - **Billing records held by Stripe, and invoices:** 10 years, as Italian tax law requires.
 - **Analytics events, server events and error reports:** 30 days.
 - **Session recordings:** 30 days.
@@ -163,7 +172,7 @@ To use any of these rights, write to support@pumpkit.io from the email address o
 
 ### Deleting your account {#account-deletion}
 
-To delete your account, write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period. Billing records stay with Stripe and in the Operator's accounts for the 10 years the law requires, and backups keep the deleted data until they are overwritten, as [How long data is kept](#retention) says.
+To delete your account, write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period. Minimal Coupon claim fingerprints and unresolved recovery evidence remain only for the periods above; recreating an account with the same email does not permit another claim of the same Coupon. Billing records stay with Stripe and in the Operator's accounts for the 10 years the law requires, and backups keep the deleted data until they are overwritten, as [How long data is kept](#retention) says.
 
 ### Complaints {#complaints}
 

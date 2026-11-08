@@ -4,6 +4,8 @@ On an Instance that sells Plans, a signed-in User who is not Subscribed sees onl
 
 Onboarding (connect X, then choose a Persona) comes after the Paywall and happens once. Each step counts as done when what it asks for exists: an X connection, at least one Inspiration author. Refreshing, signing out or switching browsers therefore resumes at the right step. The one stored fact is when the User finished Onboarding. After that, disconnecting X or emptying the Persona never sends them back. A step the Instance can't offer is skipped: the X step on an Instance without X configured, and the Paywall on one that sells no Plans.
 
+ADR 0022 narrows the Subscription-only access premise: current local Free access also makes a User Subscribed, including without a Stripe Subscription. The Paywall and Onboarding order and backend/Connected app gates stay unchanged; they use effective access and its expiry. See [the Coupon contract](../coupons.md).
+
 ## Considered Options
 
 - **A gate in the frontend only.** It is cheaper, but the API and the MCP server would still serve an unsubscribed User's data, so the wall would exist only in the UI.

@@ -5,3 +5,5 @@ A User accepts the Terms in the Billing dialog, before every Stripe Checkout, by
 ADR 0011 narrows this: the Terms are accepted at checkout only on an Instance that sells Plans and has Operator details.
 
 The web app redesign (#164) removed the Billing dialog: the boxes now sit in the Choose a Plan card on Settings, still before every Stripe Checkout. The decision is unchanged.
+
+ADR 0022 narrows the Subscription-only access and checkout-only acceptance premises: cardless Coupon redemption records its own current Terms acceptance before Free access, without a paid immediate-start waiver or new renewal agreement. A later Subscription or Top-up checkout retains separate paid acceptance. The exact bilingual copy and evidence contract are in [the Coupon contract](../coupons.md#acceptance-contract).
