@@ -11,6 +11,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
+import pumpkit.billing.service as billing_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
@@ -195,6 +196,12 @@ class _Access:
                 db, self.publisher, self.connection, now=now
             )
         await self.claim.renew(db)
+        entitlement = await billing_service.get_entitlement(
+            db, user_id=self.claim.scheduled_post.user_id
+        )
+        # End the access read before X, then check its fixed horizon after the commit.
+        await db.commit()
+        publish.check_access(entitlement, now=self.claim.clock())
         return self.token
 
 

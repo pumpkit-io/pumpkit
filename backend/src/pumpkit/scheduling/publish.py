@@ -5,7 +5,7 @@ Flushes and never commits: `publishing` commits the claim and any rotated tokens
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.billing.service as subscriptions_service
 import pumpkit.posts.media as media_service
 import pumpkit.x_connection.service as x_connections_service
+from pumpkit.billing.entitlement import Entitlement
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage, StoredFileNotFoundError
@@ -428,6 +429,11 @@ def capture_failed(scheduled_post: ScheduledPost, category: FailureCategory) -> 
     )
 
 
-async def require_access(db: AsyncSession, *, user_id: str, now: Optional[datetime] = None) -> None:
-    if not await subscriptions_service.has_access(db, user_id=user_id, now=now):
+def check_access(entitlement: Entitlement, *, now: datetime) -> None:
+    if not replace(entitlement, now=now).has_access:
         raise Failed("not_subscribed", NOT_SUBSCRIBED_REASON)
+
+
+async def require_access(db: AsyncSession, *, user_id: str, now: Optional[datetime] = None) -> None:
+    entitlement = await subscriptions_service.get_entitlement(db, user_id=user_id, now=now)
+    check_access(entitlement, now=entitlement.now)

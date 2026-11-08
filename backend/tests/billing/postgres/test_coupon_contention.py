@@ -11,6 +11,7 @@ from pumpkit.account_deletion import run_cli
 from pumpkit.auth.models import User
 from pumpkit.billing.models import Coupon
 from pumpkit.core.config import settings
+from pumpkit.scheduling.publisher import run_pass
 from tests.billing.test_coupon_preview import KEYS
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
@@ -25,7 +26,7 @@ async def browser_for(new_browser, sign_in, email):
     return browser
 
 
-async def blocked_requests(engine, control, tasks, count):
+async def wait_for_locks(engine, count):
     for _ in range(200):
         async with engine.connect() as connection:
             waiting = await connection.scalar(
@@ -38,6 +39,10 @@ async def blocked_requests(engine, control, tasks, count):
         await asyncio.sleep(0.01)
     else:
         raise AssertionError("Requests did not contend on independent PostgreSQL connections")
+
+
+async def blocked_requests(engine, control, tasks, count):
+    await wait_for_locks(engine, count)
     await control.commit()
     return await asyncio.wait_for(asyncio.gather(*tasks), 10)
 
@@ -99,18 +104,7 @@ async def test_waiting_confirmation_rechecks_deadline_and_preview_expiry(
     async with db_session_maker() as control:
         await control.scalar(select(Coupon).where(Coupon.id == created["id"]).with_for_update())
         task = asyncio.create_task(browser.post(REDEEM, json=confirmation(offer)))
-        waiting = 0
-        for _ in range(200):
-            async with db_engine.connect() as connection:
-                waiting = await connection.scalar(
-                    text(
-                        "SELECT count(*) FROM pg_stat_activity WHERE application_name = current_setting('application_name') AND wait_event_type = 'Lock'"
-                    )
-                )
-            if waiting:
-                break
-            await asyncio.sleep(0.01)
-        assert waiting
+        await wait_for_locks(db_engine, 1)
         fixed_clock.advance(timedelta(minutes=2 if boundary == "deadline" else 10))
         await control.commit()
         response = await asyncio.wait_for(task, 10)
@@ -212,3 +206,56 @@ async def test_rotating_active_key_between_same_email_requests_cannot_create_ano
         await second.post(REDEEM, json=confirmation(offer, "rotated-second-operation"))
     ).status_code == 409
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1
+
+
+async def test_deletion_checks_a_publisher_claim_committed_while_it_waited_for_the_user(
+    db_engine,
+    db_session_maker,
+    new_browser,
+    sign_in_by_magic_link,
+    coupons,
+    fixed_clock,
+    user,
+    post_with,
+    connect_x,
+    fake_billing,
+    fake_x_publisher,
+    file_storage,
+):
+    fixed_clock.advance(timedelta(seconds=-30))
+    browser = await browser_for(new_browser, sign_in_by_magic_link, user.email)
+    created = await coupons()
+    offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await browser.post(REDEEM, json=confirmation(offer))).status_code == 200
+    await connect_x()
+    post_id = await post_with("Publish claimed while deletion waits for the User")
+    at = fixed_clock() + timedelta(minutes=1)
+    assert (
+        await browser.post(
+            "/api/v1/scheduled-posts", json={"post_id": post_id, "publish_at": at.isoformat()}
+        )
+    ).status_code == 201
+    fixed_clock.advance(timedelta(minutes=1))
+    error = StringIO()
+    async with db_session_maker() as control:
+        await control.scalar(select(User).where(User.id == user.id).with_for_update())
+        deletion = asyncio.create_task(
+            run_cli(
+                ["--user-id", user.id],
+                sessions=db_session_maker,
+                gateway=fake_billing,
+                storage=file_storage,
+                stdout=StringIO(),
+                stderr=error,
+            )
+        )
+        await wait_for_locks(db_engine, 1)
+        publishing = asyncio.create_task(
+            run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+        )
+        status, _ = await blocked_requests(db_engine, control, [deletion, publishing], 2)
+    assert status == 1
+    assert "publishing" in error.getvalue()
+    post = (await browser.get(f"/api/v1/posts/{post_id}")).json()
+    assert post["scheduled_post"]["state"] == "published"
+    assert post["scheduled_post"]["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"

@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -442,3 +443,114 @@ async def test_operation_lookup_and_identifier_uniqueness_are_caller_scoped(
     other_offer = (await other.post(PREVIEW, json={"code": created["code"]})).json()
     assert (await other.post(REDEEM, json=confirmation(other_offer))).status_code == 200
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 2
+
+
+async def test_deletion_waits_for_an_in_flight_x_publish_to_settle(
+    client,
+    coupons,
+    fixed_clock,
+    connect_x,
+    post_with,
+    db_session_maker,
+    fake_x_publisher,
+    fake_billing,
+    file_storage,
+    user,
+):
+    fixed_clock.advance(timedelta(seconds=-30))
+    created = await coupons()
+    offer = (await client.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    await connect_x()
+    post_id = await post_with("Accepted by X while support requests deletion")
+    at = fixed_clock() + timedelta(minutes=1)
+    response = await client.post(
+        "/api/v1/scheduled-posts", json={"post_id": post_id, "publish_at": at.isoformat()}
+    )
+    assert response.status_code == 201
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def held_x_call():
+        entered.set()
+        await release.wait()
+
+    fake_x_publisher.while_publishing = held_x_call
+    fixed_clock.advance(timedelta(minutes=1))
+    task = asyncio.create_task(
+        run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        error = StringIO()
+        status = await run_cli(
+            ["--user-id", user.id],
+            sessions=db_session_maker,
+            gateway=fake_billing,
+            storage=file_storage,
+            stdout=StringIO(),
+            stderr=error,
+        )
+        assert status == 1
+        assert "publishing" in error.getvalue()
+    finally:
+        release.set()
+        await asyncio.wait_for(task, 5)
+    post = (await client.get(f"/api/v1/posts/{post_id}")).json()
+    assert post["scheduled_post"]["state"] == "published"
+    assert (
+        post["scheduled_post"]["parts"][0]["x_post_url"]
+        == "https://x.com/i/web/status/1890000000000000001"
+    )
+    assert (
+        await run_cli(
+            ["--user-id", user.id],
+            sessions=db_session_maker,
+            gateway=fake_billing,
+            storage=file_storage,
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+        == 0
+    )
+
+
+async def test_publisher_rechecks_free_access_after_a_token_refresh_crosses_expiry(
+    client,
+    coupons,
+    fixed_clock,
+    connect_x,
+    post_with,
+    db_session_maker,
+    fake_x_publisher,
+    file_storage,
+    monkeypatch,
+):
+    fixed_clock.advance(timedelta(seconds=-30))
+    created = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": created["code"]})).json()
+    result = (await client.post(REDEEM, json=confirmation(offer))).json()
+    end = datetime.fromisoformat(result["ends_at"].replace("Z", "+00:00"))
+    await connect_x()
+    post_id = await post_with("Accepted before expiry", "Must not start after a slow refresh")
+    at = end - timedelta(hours=2)
+    response = await client.post(
+        "/api/v1/scheduled-posts", json={"post_id": post_id, "publish_at": at.isoformat()}
+    )
+    assert response.status_code == 201
+    fixed_clock.advance(at - fixed_clock())
+    original_refresh = fake_x_publisher.refresh
+
+    async def slow_refresh(*, refresh_token, now):
+        tokens = await original_refresh(refresh_token=refresh_token, now=now)
+        if len(fake_x_publisher.refreshes) == 2:
+            fixed_clock.advance(end - fixed_clock())
+        return tokens
+
+    async def first_part_took_time():
+        fixed_clock.advance(end - timedelta(minutes=4) - fixed_clock())
+
+    monkeypatch.setattr(fake_x_publisher, "refresh", slow_refresh)
+    fake_x_publisher.while_publishing = first_part_took_time
+    await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
+    assert len(fake_x_publisher.refreshes) == 2
+    assert len(fake_x_publisher.published) == 1

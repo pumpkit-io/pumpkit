@@ -19,6 +19,7 @@ from pumpkit.core.db.session import _db_session_handler
 from pumpkit.core.errors import AppError, ConflictError
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.posts import account_deletion as post_deletion
+from pumpkit.scheduling import service as scheduling
 
 
 async def delete_account(db: AsyncSession, gateway: BillingGateway, *, user_id: str) -> None:
@@ -29,6 +30,7 @@ async def delete_account(db: AsyncSession, gateway: BillingGateway, *, user_id: 
     if locked is None:
         return
     user = locked
+    await scheduling.require_settled_publishing_before_account_deletion(db, user_id=user.id)
     if user.stripe_customer_id:
         states = await gateway.list_subscriptions(customer_id=user.stripe_customer_id)
         if await gateway.has_open_subscription_checkout(customer_id=user.stripe_customer_id):
