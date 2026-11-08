@@ -157,6 +157,7 @@
   .landing,
   .login {
     --public-action: #f3eee6;
+    --public-action-hover: #e8825e;
     --public-action-foreground: #191917;
     --public-action-focus: #e8825e;
     --public-action-edge:
