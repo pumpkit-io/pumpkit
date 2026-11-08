@@ -4,16 +4,15 @@ import type { PlanCatalogState } from '@/components/blocks/use-plan-catalog';
 export interface CtaLabels {
   hero: string | null;
   nav: string | null;
-  note: string | null;
 }
 
-const NEUTRAL: CtaLabels = { hero: 'Get started', nav: 'Get started', note: null };
+const NEUTRAL: CtaLabels = { hero: 'Get started', nav: 'Get started' };
 
 /** Trial copy appears only when the catalogue offers it. */
 export function ctaLabels(state: PlanCatalogState, sellsPlans: boolean): CtaLabels {
   if (!sellsPlans || state.status === 'error') return NEUTRAL;
-  if (state.status === 'loading') return { hero: null, nav: null, note: null };
+  if (state.status === 'loading') return { hero: null, nav: null };
   const { trial, plans } = state.catalog;
   if (!trial || plans.length === 0) return NEUTRAL;
-  return { hero: 'Start free trial', nav: 'Start trial', note: `${trial.days}-day free trial` };
+  return { hero: 'Start free trial', nav: 'Start trial' };
 }

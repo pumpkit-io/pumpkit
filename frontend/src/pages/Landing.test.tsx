@@ -15,6 +15,8 @@ import { SELLS_PLANS, WITH_OPERATOR, WITH_SUPPORT_EMAIL } from '@/features/insta
 import { track } from '@/lib/analytics';
 import { api } from '@/services/apiService';
 import { billingService } from '@/services/billingService';
+import popUpPeek from '@/assets/mascot/pop_up_peek_paired-sheet.json';
+import wallPeek from '@/assets/mascot/wall_peek_paired-sheet.json';
 import { Landing } from './Landing';
 
 const LANDING_AUTHOR_NAMES = [
@@ -418,7 +420,7 @@ describe('Landing header', () => {
     for (const link of signInLinks) expect(link).toHaveAttribute('href', '/login');
   });
 
-  it('keeps Trial buttons short and shows the configured duration below the hero button', async () => {
+  it('keeps Trial buttons short and puts no note under the hero button', async () => {
     fakePlansEndpoint(200, {
       ...OFFER,
       trial: { ...OFFER.trial, days: 14 },
@@ -430,7 +432,8 @@ describe('Landing header', () => {
       within(screen.getByRole('banner')).getByRole('link', { name: 'Start trial' }),
     ).toBeVisible();
     const heroCta = screen.getByRole('link', { name: 'Start free trial' });
-    expect(heroCta).toHaveAccessibleDescription('14-day free trial');
+    expect(heroCta).not.toHaveAccessibleDescription();
+    expect(screen.queryByText('14-day free trial')).not.toBeInTheDocument();
   });
 
   it('never shows Get started in the hero button while the catalogue is loading', async () => {
@@ -946,7 +949,7 @@ describe('Landing mascots', () => {
     return pricing;
   }
 
-  it('shows four mascots beside sections, none in the hero, all hidden from assistive technology', async () => {
+  it('shows four mascots beside sections and only the peeking pair in the hero, all hidden from assistive technology', async () => {
     renderLanding();
     await pricingCard();
     expect(mascots().map((mascot) => mascot.dataset.mascot)).toEqual([
@@ -958,6 +961,42 @@ describe('Landing mascots', () => {
     mascots().forEach((mascot) => expect(mascot).toHaveAttribute('aria-hidden', 'true'));
     const hero = screen.getByRole('heading', { level: 1 }).closest('section')!;
     expect(hero.querySelector('[data-mascot]')).toBeNull();
+    const peeks = Array.from(hero.querySelectorAll<HTMLElement>('[data-peek]'));
+    expect(peeks.map((peek) => peek.dataset.peek)).toEqual(['wall', 'pop-up']);
+    peeks.forEach((peek) => expect(peek).toHaveAttribute('aria-hidden', 'true'));
+  });
+
+  it('times both hero peeks on one loop, so they keep taking turns', () => {
+    const total = (meta: { frames: { ms: number }[] }) =>
+      meta.frames.reduce((sum, frame) => sum + frame.ms, 0);
+    expect(total(wallPeek)).toBe(wallPeek.loop_ms);
+    expect(total(popUpPeek)).toBe(wallPeek.loop_ms);
+  });
+
+  it('peeks out of the hero button by turns: from its right edge, then from its top edge', () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    renderLanding({ ...SELLS_PLANS, sells_plans: false });
+    const peek = (name: string) => document.querySelector(`[data-peek="${name}"]`);
+    const start = Date.now();
+    const waitUntil = (ms: number) => {
+      while (Date.now() - start < ms) act(() => vi.advanceTimersByTime(100));
+    };
+
+    expect(peek('wall')).toHaveAttribute('data-state', 'hidden');
+    expect(peek('pop-up')).toHaveAttribute('data-state', 'hidden');
+    waitUntil(4_000);
+    expect(peek('wall')).toHaveAttribute('data-state', 'peeking');
+    expect(peek('pop-up')).toHaveAttribute('data-state', 'hidden');
+    waitUntil(15_000);
+    expect(peek('wall')).toHaveAttribute('data-state', 'hidden');
+    expect(peek('pop-up')).toHaveAttribute('data-state', 'peeking');
+    waitUntil(20_000);
+    expect(peek('pop-up')).toHaveAttribute('data-state', 'hidden');
+    waitUntil(26_500);
+    expect(peek('wall')).toHaveAttribute('data-state', 'peeking');
   });
 
   it('celebrates only the first switch to Annual on the pricing card', async () => {
@@ -1014,5 +1053,17 @@ describe('Landing mascots', () => {
     fireEvent.click(within(pricing).getByRole('radio', { name: 'Annual Save 17%' }));
     expect(mascots()).toHaveLength(4);
     mascots().forEach((mascot) => expect(mascot).toHaveAttribute('data-state', 'still'));
+  });
+
+  it('rests the hero mascot peeking over the button when the visitor prefers reduced motion', () => {
+    matchMediaQueries(['(prefers-reduced-motion: reduce)']);
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    renderLanding({ ...SELLS_PLANS, sells_plans: false });
+    act(() => vi.advanceTimersByTime(30_000));
+    expect(document.querySelector('[data-peek="wall"]')).toHaveAttribute('data-state', 'hidden');
+    expect(document.querySelector('[data-peek="pop-up"]')).toHaveAttribute('data-state', 'peeking');
   });
 });
