@@ -80,6 +80,23 @@ describe('theme tokens', () => {
     }
   });
 
+  it('keeps the landing and login button labels readable at rest and on hover', () => {
+    const publicTokens = tokens('.login');
+    const hexLuminance = (hex: string) => {
+      const channel = (offset: number) => {
+        const c = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    };
+    const label = hexLuminance(publicTokens.get('--public-action-foreground')!);
+    for (const fill of ['--public-action', '--public-action-hover']) {
+      const surface = hexLuminance(publicTokens.get(fill)!);
+      const [hi, lo] = [label, surface].sort((x, y) => y - x);
+      expect((hi + 0.05) / (lo + 0.05), `label on ${fill}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it.each([
     ['light', light],
     ['dark', dark],
