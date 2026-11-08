@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.billing import coupon_service
+from pumpkit.billing import coupon_service, service
 from pumpkit.billing.models import Coupon, CouponClaim, CouponHistory, FreeAccess
 from pumpkit.billing.schemas import (
     CouponPreviewResponse,
@@ -119,7 +119,12 @@ async def grant(
     claim = CouponClaim(coupon_id=coupon.id, key_id=key_id, fingerprint=candidates[key_id])
     db.add(claim)
     await db.flush()
+    previous = await service.get_free_access(db, user_id=user.id, now=now)
     access = FreeAccess(
+        calendar_anchor=(previous.calendar_anchor or previous.starts_at)
+        if previous
+        else offer.starts_at,
+        month_offset=previous.month_offset + previous.months if previous else 0,
         user_id=user.id,
         coupon_id=coupon.id,
         claim_id=claim.id,

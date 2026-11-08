@@ -17,7 +17,15 @@ function exactDate(value: string): string {
   })} UTC`;
 }
 
-export function CouponForm() {
+export function CouponForm({
+  inSettings = false,
+  onRedeemed,
+}: {
+  inSettings?: boolean;
+  onRedeemed?: () => void;
+}) {
+  const afterRedemption = useRef(onRedeemed);
+  afterRedemption.current = onRedeemed;
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const result = useRef<HTMLDivElement>(null);
@@ -45,7 +53,10 @@ export function CouponForm() {
     checking || redemption.busy || Boolean(redemption.pending) || Boolean(redemption.completed);
 
   useEffect(() => {
-    if (redemption.completed) success.current?.focus();
+    if (redemption.completed) {
+      success.current?.focus();
+      afterRedemption.current?.();
+    }
   }, [redemption.completed]);
 
   useEffect(() => {
@@ -89,17 +100,17 @@ export function CouponForm() {
   }
 
   return (
-    <section className="ph-no-capture max-w-[560px] text-left">
+    <section className="ph-no-capture max-w-[560px] break-words text-left">
       <Button
         type="button"
         variant="link"
-        className="min-h-11 px-0 focus-visible:ring-ring"
+        className="h-auto min-h-11 max-w-full whitespace-normal px-0 text-left focus-visible:ring-ring"
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
         disabled={blocked}
         onClick={() => setExpanded(!expanded)}
       >
-        Have a coupon?
+        {inSettings ? 'Redeem coupon' : 'Have a coupon?'}
       </Button>
       {redemption.completed && (
         <div className="space-y-3 text-sm text-foreground">
@@ -119,9 +130,26 @@ export function CouponForm() {
           {continueError && (
             <p role="alert">Couldn’t refresh your access. Continue again to check.</p>
           )}
-          <Button type="button" disabled={continuing} onClick={() => void continueToApp()}>
-            {continuing ? 'Continuing…' : 'Continue'}
-          </Button>
+          {inSettings ? (
+            <Button
+              type="button"
+              className="h-auto min-h-11 max-w-full whitespace-normal"
+              onClick={() => {
+                redemption.resetCompleted();
+                setCode('');
+                setPreview(null);
+                setAcceptance({ acceptedTerms: false, approvedSpecificClauses: false });
+                setExpanded(true);
+                requestAnimationFrame(() => input.current?.focus());
+              }}
+            >
+              Redeem another coupon
+            </Button>
+          ) : (
+            <Button type="button" disabled={continuing} onClick={() => void continueToApp()}>
+              {continuing ? 'Continuing…' : 'Continue'}
+            </Button>
+          )}
         </div>
       )}
       {redemption.error && (
@@ -208,7 +236,9 @@ export function CouponForm() {
               <p className="font-semibold">{count(preview.months, 'free month', 'free months')}</p>
               <dl className="space-y-2">
                 <div>
-                  <dt className="text-muted-foreground">Starts when you redeem</dt>
+                  <dt className="text-muted-foreground">
+                    {inSettings ? 'Starts' : 'Starts when you redeem'}
+                  </dt>
                   <dd>
                     <time dateTime={preview.startsAt}>{exactDate(preview.startsAt)}</time>
                   </dd>
@@ -273,7 +303,7 @@ export function CouponForm() {
               )}
               <Button
                 type="button"
-                className="min-h-11 focus-visible:ring-ring"
+                className="h-auto min-h-11 max-w-full whitespace-normal focus-visible:ring-ring"
                 disabled={
                   blocked ||
                   Boolean(

@@ -8,11 +8,15 @@ from pydantic import SecretStr
 
 from pumpkit.account_deletion import run_cli
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.billing.gateway import TopUpPurchase
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
+from pumpkit.core.time import get_clock
+from pumpkit.main import app
 from pumpkit.scheduling.publisher import run_pass
 from tests.billing.test_coupon_preview import KEYS
 from tests.billing.test_coupon_preview import coupons as coupons
+from tests.billing.test_top_ups import _send
 from tests.mcp_client import McpClient
 from tests.media_files import png
 from tests.oauth_app import REDIRECT, approved_code, exchange, register
@@ -554,3 +558,198 @@ async def test_publisher_rechecks_free_access_after_a_token_refresh_crosses_expi
     await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert len(fake_x_publisher.refreshes) == 2
     assert len(fake_x_publisher.published) == 1
+
+
+async def test_distinct_coupons_append_from_january_anchor_without_resetting_usage(
+    client, coupons, fixed_clock, fake_x_reader, fake_llm, monkeypatch
+):
+    fixed_clock.advance(datetime(2028, 1, 31, 12, tzinfo=timezone.utc) - fixed_clock())
+    first = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": first["code"]})).json()
+    first_result = (await client.post(REDEEM, json=confirmation(offer))).json()
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(post_id="append-author", text="An example", posted_at=fixed_clock())
+    ]
+    await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    fake_llm.replies = [written("Sketch"), {"post": "Before appending"}]
+    assert (await client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
+    before = (await client.get("/api/v1/usage")).json()
+    monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 700)
+    second = await coupons("--months", "1")
+    preview = await client.post(PREVIEW, json={"code": second["code"]})
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["starts_at"] == "2028-02-29T12:00:00Z"
+    assert preview.json()["ends_at"] == "2028-03-31T12:00:00Z"
+    assert (
+        await client.post(REDEEM, json=confirmation(preview.json(), "second-coupon-0001"))
+    ).status_code == 200
+    assert (await client.get("/api/v1/usage")).json() == before
+    third = await coupons("--months", "1")
+    preview = (await client.post(PREVIEW, json={"code": third["code"]})).json()
+    assert preview["ends_at"] == "2028-04-30T12:00:00Z"
+    assert (
+        await client.post(REDEEM, json=confirmation(preview, "third-coupon-00001"))
+    ).status_code == 200
+    me = (await client.get("/api/v1/billing/me")).json()
+    assert me["free_access"] == {
+        "months": 3,
+        "starts_at": "2028-01-31T12:00:00Z",
+        "ends_at": "2028-04-30T12:00:00Z",
+        "current_starts_at": "2028-01-31T12:00:00Z",
+        "current_ends_at": "2028-02-29T12:00:00Z",
+        "queued_starts_at": "2028-02-29T12:00:00Z",
+    }
+    assert (await client.get(REDEEM + "/redeem-test-0001")).json() == first_result
+    fixed_clock.advance(timedelta(days=29))
+    usage = (await client.get("/api/v1/usage")).json()["allowance"]
+    assert usage["generations"]["used"] == 0
+    assert usage["generations"]["limit"] == 700
+    assert usage["resets_at"] == "2028-03-31T12:00:00Z"
+    me = (await client.get("/api/v1/billing/me")).json()["free_access"]
+    assert me["current_starts_at"] == "2028-02-29T12:00:00Z"
+    assert me["current_ends_at"] == "2028-03-31T12:00:00Z"
+    assert me["queued_starts_at"] == "2028-03-31T12:00:00Z"
+    fixed_clock.advance(datetime(2028, 4, 30, 12, tzinfo=timezone.utc) - fixed_clock())
+    assert (await client.get("/api/v1/billing/me")).json()["subscribed"] is False
+    assert (await client.get("/api/v1/usage")).status_code == 403
+
+
+async def test_stale_append_requires_new_acceptance_without_consuming_the_other_code(
+    client, coupons
+):
+    first = await coupons("--months", "1")
+    second = await coupons("--months", "1")
+    offers = [
+        (await client.post(PREVIEW, json={"code": coupon["code"]})).json()
+        for coupon in (first, second)
+    ]
+    assert (await client.post(REDEEM, json=confirmation(offers[0]))).status_code == 200
+    stale = await client.post(REDEEM, json=confirmation(offers[1], "stale-second-code"))
+    assert stale.status_code == 409
+    assert "changed" in stale.json()["detail"]
+    assert (await coupons(second["id"], command="inspect"))["redeemed_count"] == 0
+    fresh = (await client.post(PREVIEW, json={"code": second["code"]})).json()
+    assert fresh["starts_at"] == offers[0]["ends_at"]
+    assert (
+        await client.post(REDEEM, json=confirmation(fresh, "fresh-second-code"))
+    ).status_code == 200
+
+
+async def test_combined_horizon_is_nonconsuming_and_moves_with_current_time(
+    client, coupons, fixed_clock
+):
+    fixed_clock.advance(datetime(2027, 1, 31, 12, tzinfo=timezone.utc) - fixed_clock())
+    first = await coupons("--months", "23")
+    offer = (await client.post(PREVIEW, json={"code": first["code"]})).json()
+    assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    second = await coupons("--months", "1")
+    refused = await client.post(PREVIEW, json={"code": second["code"]})
+    assert refused.status_code == 409
+    assert "730-day" in refused.json()["detail"]
+    assert (await coupons(second["id"], command="inspect"))["redeemed_count"] == 0
+    fixed_clock.advance(timedelta(days=1))
+    fresh = (await client.post(PREVIEW, json={"code": second["code"]})).json()
+    assert fresh["ends_at"] == "2029-01-31T12:00:00Z"
+    assert (
+        await client.post(REDEEM, json=confirmation(fresh, "horizon-after-day"))
+    ).status_code == 200
+
+
+async def test_queued_months_survive_deadline_disable_and_prior_grant_purge(
+    client, coupons, fixed_clock
+):
+    fixed_clock.advance(datetime(2028, 1, 31, 12, tzinfo=timezone.utc) - fixed_clock())
+    first = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": first["code"]})).json()
+    assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    second = await coupons("--months", "8", "--claim-deadline", "2028-02-01T00:00:00Z")
+    offer = (await client.post(PREVIEW, json={"code": second["code"]})).json()
+    request = confirmation(offer, "queued-eight-months")
+    result = await client.post(REDEEM, json=request)
+    assert result.status_code == 200
+    await coupons(second["id"], command="disable")
+    fixed_clock.advance(datetime(2028, 6, 1, 12, tzinfo=timezone.utc) - fixed_clock())
+    await coupons(command="purge")
+    assert (await client.get(REDEEM + "/redeem-test-0001")).status_code == 404
+    assert (await client.post(REDEEM, json=request)).json() == result.json()
+    usage = (await client.get("/api/v1/usage")).json()["allowance"]
+    assert usage["resets_at"] == "2028-06-30T12:00:00Z"
+    third = await coupons("--months", "1")
+    preview = (await client.post(PREVIEW, json={"code": third["code"]})).json()
+    assert preview["starts_at"] == "2028-10-31T12:00:00Z"
+    assert preview["ends_at"] == "2028-11-30T12:00:00Z"
+    assert (
+        await client.post(REDEEM, json=confirmation(preview, "after-prior-purge"))
+    ).status_code == 200
+    assert (await client.get("/api/v1/billing/me")).json()["free_access"][
+        "starts_at"
+    ] == "2028-01-31T12:00:00Z"
+
+
+async def test_appending_keeps_previously_purchased_top_up_balances(
+    client, coupons, fixed_clock, fake_billing, db, user
+):
+    user.stripe_customer_id = "cus_saved_topup"
+    await db.commit()
+    fake_billing.set_top_up(
+        "cus_saved_topup",
+        TopUpPurchase(
+            checkout_session_id="cs_existing_pack",
+            paid_at=fixed_clock(),
+            reversed=False,
+            charge_id="ch_existing_pack",
+        ),
+    )
+    assert (
+        await _send(
+            client,
+            fake_billing,
+            "evt_saved_pack",
+            "checkout.session.completed",
+            {"customer": "cus_saved_topup"},
+        )
+    ).status_code == 200
+    first = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": first["code"]})).json()
+    assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    before = (await client.get("/api/v1/usage")).json()["allowance"]["top_ups"]
+    assert before[0]["generations_left"] == 250
+    second = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": second["code"]})).json()
+    assert (
+        await client.post(REDEEM, json=confirmation(offer, "append-with-topup"))
+    ).status_code == 200
+    assert (await client.get("/api/v1/usage")).json()["allowance"]["top_ups"] == before
+
+
+async def test_crossing_current_grant_end_during_confirmation_keeps_the_validated_anchor(
+    client, coupons, fixed_clock
+):
+    fixed_clock.advance(datetime(2028, 1, 31, 12, tzinfo=timezone.utc) - fixed_clock())
+    first = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": first["code"]})).json()
+    assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    fixed_clock.advance(timedelta(days=29) - timedelta(minutes=1))
+    second = await coupons("--months", "1")
+    offer = (await client.post(PREVIEW, json={"code": second["code"]})).json()
+    moment = datetime(2028, 2, 29, 12, tzinfo=timezone.utc) - timedelta(microseconds=2)
+
+    def advancing_clock():
+        nonlocal moment
+        current = moment
+        moment += timedelta(microseconds=1)
+        return current
+
+    app.dependency_overrides[get_clock] = lambda: advancing_clock
+    try:
+        result = await client.post(REDEEM, json=confirmation(offer, "crossing-grant-end"))
+        assert result.status_code == 200, result.text
+    finally:
+        app.dependency_overrides[get_clock] = lambda: fixed_clock
+    fixed_clock.advance(timedelta(days=1))
+    me = (await client.get("/api/v1/billing/me")).json()["free_access"]
+    assert me["months"] == 2
+    assert me["starts_at"] == "2028-01-31T12:00:00Z"
+    assert (await client.get("/api/v1/usage")).json()["allowance"][
+        "resets_at"
+    ] == "2028-03-31T12:00:00Z"

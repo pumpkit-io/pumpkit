@@ -9,6 +9,9 @@ vi.mock('@/services/userService', () => ({
 }));
 vi.mock('@/services/billingService', () => ({
   billingService: {
+    previewCoupon: vi.fn(),
+    redeemCoupon: vi.fn(),
+    fetchCouponRedemption: vi.fn(),
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn(),
     startSubscriptionCheckout: vi.fn(),
@@ -44,6 +47,9 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     }),
   },
 }));
+vi.mock('@/services/onboardingService', () => ({
+  onboardingService: { fetchNextStep: vi.fn().mockResolvedValue(null) },
+}));
 vi.mock('@/services/usageService', () => ({ usageService: { get: vi.fn() } }));
 vi.mock('@/lib/navigation', () => ({ hardRedirect: vi.fn(), redirectTo: vi.fn() }));
 vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
@@ -60,6 +66,7 @@ import { redirectTo } from '@/lib/navigation';
 import { appConnectionService } from '@/services/appConnectionService';
 import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
 import { usageService } from '@/services/usageService';
+import { onboardingService } from '@/services/onboardingService';
 import { userService, type UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import {
@@ -573,7 +580,7 @@ describe('Settings', () => {
       const plan = await card('Plan');
       expect(await plan.findByText('Free access')).toBeInTheDocument();
       expect(plan.getByText('No automatic payment')).toBeInTheDocument();
-      expect(plan.getByText(/January 31, 2028 to April 30, 2028 UTC/)).toBeInTheDocument();
+      expect(plan.getByText(/January 31, 2028 UTC to April 30, 2028 UTC/)).toBeInTheDocument();
       expect(plan.queryByRole('button')).not.toBeInTheDocument();
     });
 
@@ -1199,4 +1206,72 @@ describe('Settings', () => {
       expect(screen.queryByRole('button', { name: 'Cookie settings' })).not.toBeInTheDocument();
     });
   });
+});
+
+it('redeems another coupon in Settings and refreshes the Plan and current Usage', async () => {
+  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+  sessionStorage.clear();
+  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+  vi.mocked(appConnectionService.list).mockResolvedValue([]);
+  vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, couponsEnabled: true });
+  const free = {
+    ...SUBSCRIBED,
+    subscription: null,
+    freeAccess: { startsAt: '2028-01-31T12:00:00Z', endsAt: '2028-02-29T12:00:00Z', months: 1 },
+  };
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue(free);
+  vi.mocked(usageService.get).mockResolvedValue(usageWith());
+  vi.mocked(billingService.previewCoupon).mockResolvedValue({
+    months: 1,
+    startsAt: '2028-02-29T12:00:00Z',
+    endsAt: '2028-03-31T12:00:00Z',
+    allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+    nextPaymentAt: null,
+    termsVersion: null,
+    revision: 'settings-preview',
+  });
+  vi.mocked(billingService.redeemCoupon).mockImplementation(async () => {
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...free,
+      freeAccess: {
+        ...free.freeAccess,
+        endsAt: '2028-03-31T12:00:00Z',
+        months: 2,
+        currentStartsAt: '2028-01-31T12:00:00Z',
+        currentEndsAt: '2028-02-29T12:00:00Z',
+        queuedStartsAt: '2028-02-29T12:00:00Z',
+      },
+    });
+    return {
+      operationId: 'settings-operation',
+      startsAt: '2028-02-29T12:00:00Z',
+      endsAt: '2028-03-31T12:00:00Z',
+      months: 1,
+    };
+  });
+  renderSettings();
+  const plan = await card('Plan');
+  fireEvent.click(await plan.findByRole('button', { name: 'Redeem coupon' }));
+  const input = plan.getByRole('textbox', { name: 'Coupon code' });
+  expect(input).toHaveFocus();
+  expect(plan.getByRole('button', { name: 'Check code' })).toBeDisabled();
+  fireEvent.change(input, { target: { value: 'private-settings-code' } });
+  fireEvent.click(plan.getByRole('button', { name: 'Check code' }));
+  const preview = await plan.findByRole('status', { name: 'Coupon preview' });
+  expect(preview).toHaveFocus();
+  expect(within(preview).getByText('Starts')).toBeInTheDocument();
+  const reads = vi.mocked(usageService.get).mock.calls.length;
+  fireEvent.click(within(preview).getByRole('button', { name: 'Redeem coupon' }));
+  expect(await plan.findByText('Coupon redeemed')).toHaveFocus();
+  await waitFor(() =>
+    expect(plan.getByText(/Free access through/)).toHaveTextContent('March 31, 2028'),
+  );
+  await waitFor(() => expect(vi.mocked(usageService.get).mock.calls.length).toBeGreaterThan(reads));
+  expect(plan.getByText(/Current free access:/)).toHaveTextContent('February 29, 2028');
+  expect(plan.getByText(/Queued free access:/)).toHaveTextContent('March 31, 2028');
+  expect(plan.getByText(/creates no subscription/)).toBeInTheDocument();
+  fireEvent.click(plan.getByRole('button', { name: 'Redeem another coupon' }));
+  await waitFor(() => expect(plan.getByRole('textbox', { name: 'Coupon code' })).toHaveFocus());
+  expect(plan.getByRole('textbox', { name: 'Coupon code' })).toHaveValue('');
+  expect(plan.getByRole('button', { name: 'Check code' })).toBeDisabled();
 });

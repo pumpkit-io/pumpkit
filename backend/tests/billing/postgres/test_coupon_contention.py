@@ -259,3 +259,36 @@ async def test_deletion_checks_a_publisher_claim_committed_while_it_waited_for_t
     post = (await browser.get(f"/api/v1/posts/{post_id}")).json()
     assert post["scheduled_post"]["state"] == "published"
     assert post["scheduled_post"]["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
+
+
+async def test_concurrent_distinct_appends_require_a_fresh_offer_without_lost_months(
+    db_engine, db_session_maker, new_browser, sign_in_by_magic_link, coupons, fixed_clock
+):
+    browser = await browser_for(new_browser, sign_in_by_magic_link, "appending@example.com")
+    initial = await coupons("--months", "1")
+    offer = (await browser.post(PREVIEW, json={"code": initial["code"]})).json()
+    assert (await browser.post(REDEEM, json=confirmation(offer))).status_code == 200
+    codes = [await coupons("--months", "1") for _ in range(2)]
+    offers = [(await browser.post(PREVIEW, json={"code": code["code"]})).json() for code in codes]
+    async with db_session_maker() as control:
+        await control.scalar(select(Coupon).where(Coupon.id == codes[0]["id"]).with_for_update())
+        first = asyncio.create_task(
+            browser.post(REDEEM, json=confirmation(offers[0], "append-operation-0"))
+        )
+        await wait_for_locks(db_engine, 1)
+        second = asyncio.create_task(
+            browser.post(REDEEM, json=confirmation(offers[1], "append-operation-1"))
+        )
+        outcomes = await blocked_requests(db_engine, control, [first, second], 2)
+    assert [response.status_code for response in outcomes] == [200, 409]
+    assert (await coupons(codes[1]["id"], command="inspect"))["redeemed_count"] == 0
+    fresh = (await browser.post(PREVIEW, json={"code": codes[1]["code"]})).json()
+    assert fresh["starts_at"] == outcomes[0].json()["ends_at"]
+    result = await browser.post(REDEEM, json=confirmation(fresh, "append-operation-1"))
+    assert result.status_code == 200
+    assert (await browser.get("/api/v1/billing/me")).json()["free_access"]["months"] == 3
+    assert (await coupons(codes[0]["id"], command="inspect"))["redeemed_count"] == 1
+    assert (await coupons(codes[1]["id"], command="inspect"))["redeemed_count"] == 1
+    assert (
+        await browser.post(REDEEM, json=confirmation(fresh, "append-operation-1"))
+    ).json() == result.json()

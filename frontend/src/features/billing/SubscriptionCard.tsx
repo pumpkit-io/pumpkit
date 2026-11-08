@@ -1,3 +1,4 @@
+import { CouponForm } from './CouponForm';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
@@ -6,6 +7,10 @@ import { cn } from '@/lib/utils';
 import type { Subscription, SubscriptionStatus } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
 import { useOpenPortal } from './useOpenPortal';
+
+function freeDate(value: string): string {
+  return `${new Date(value).toLocaleDateString(undefined, { dateStyle: 'long', timeZone: 'UTC' })} UTC`;
+}
 
 // How each Subscription status reads to the User. Ended ones are never shown.
 const STATUS_LABELS: Record<SubscriptionStatus, string> = {
@@ -46,10 +51,12 @@ export function SubscriptionCard({
   data,
   isLoading,
   loadError,
+  onRedeemed,
 }: {
   data: BillingData | null;
   isLoading: boolean;
   loadError: string | null;
+  onRedeemed?: () => void;
 }) {
   const { openPortal, error } = useOpenPortal();
 
@@ -100,26 +107,29 @@ export function SubscriptionCard({
           </div>
         </div>
       ) : freeAccess ? (
-        <div className="space-y-2 rounded-lg border border-border p-4 font-sans text-sm text-foreground">
+        <div className="space-y-2 break-words rounded-lg border border-border p-3 font-sans text-sm text-foreground sm:p-4">
           <p className="text-lg font-semibold">{data.plans[0]?.productName ?? 'Your plan'}</p>
           <Badge variant="success">Free access</Badge>
+          <p className="font-semibold">Free access through {freeDate(freeAccess.endsAt)}</p>
           <p>
-            Free access:{' '}
-            {new Date(freeAccess.startsAt).toLocaleDateString(undefined, {
-              dateStyle: 'long',
-              timeZone: 'UTC',
-            })}{' '}
-            to{' '}
-            {new Date(freeAccess.endsAt).toLocaleDateString(undefined, {
-              dateStyle: 'long',
-              timeZone: 'UTC',
-            })}{' '}
-            UTC
+            Current free access: {freeDate(freeAccess.currentStartsAt ?? freeAccess.startsAt)} to{' '}
+            {freeDate(freeAccess.currentEndsAt ?? freeAccess.endsAt)}
           </p>
+          {freeAccess.queuedStartsAt && (
+            <p>
+              Queued free access: {freeDate(freeAccess.queuedStartsAt)} to{' '}
+              {freeDate(freeAccess.endsAt)}
+            </p>
+          )}
           <p>No automatic payment</p>
           <p>Your free access creates no subscription or obligation to pay.</p>
         </div>
-      ) : null}
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No current plan. Redeem a coupon or choose a plan on the Paywall.
+        </p>
+      )}
+      {data?.couponsEnabled && <CouponForm inSettings onRedeemed={onRedeemed} />}
     </SettingsCard>
   );
 }

@@ -26,7 +26,14 @@ export interface BillingMe {
   maySubscribe: boolean;
   /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
-  freeAccess?: { startsAt: string; endsAt: string; months: number } | null;
+  freeAccess?: {
+    startsAt: string;
+    endsAt: string;
+    months: number;
+    currentStartsAt?: string;
+    currentEndsAt?: string;
+    queuedStartsAt?: string | null;
+  } | null;
 }
 
 /** A Plan a User can subscribe to: `amount` in minor units, every `intervalCount` `interval`s. */
@@ -139,7 +146,14 @@ interface BillingMeApi {
   subscribed: boolean;
   may_subscribe: boolean;
   trial_days: number | null;
-  free_access?: { starts_at: string; ends_at: string; months: number } | null;
+  free_access?: {
+    starts_at: string;
+    ends_at: string;
+    months: number;
+    current_starts_at?: string;
+    current_ends_at?: string;
+    queued_starts_at?: string | null;
+  } | null;
 }
 
 interface PlanApi {
@@ -198,6 +212,9 @@ function billingMe(data: BillingMeApi): BillingMe {
           startsAt: data.free_access.starts_at,
           endsAt: data.free_access.ends_at,
           months: data.free_access.months,
+          currentStartsAt: data.free_access.current_starts_at,
+          currentEndsAt: data.free_access.current_ends_at,
+          queuedStartsAt: data.free_access.queued_starts_at,
         }
       : null,
   };

@@ -20,6 +20,7 @@ from pumpkit.billing.allowance import (
     top_up_pack,
 )
 from pumpkit.billing.entitlement import Entitlement
+from pumpkit.billing.free_access import FreeAccessCoverage
 from pumpkit.billing.gateway import BillingGateway
 from pumpkit.billing.models import (
     AllowanceCount,
@@ -144,12 +145,7 @@ async def get_entitlement(
     return Entitlement(
         subscription=await get_user_subscription(db, user_id=user_id),
         plans_sold=sells_plans(),
-        free_access=await db.scalar(
-            select(FreeAccess)
-            .where(FreeAccess.user_id == user_id)
-            .order_by(FreeAccess.ends_at.desc())
-            .limit(1)
-        ),
+        free_access=await get_free_access_coverage(db, user_id=user_id),
         now=now or system_clock(),
     )
 
@@ -507,4 +503,26 @@ async def get_free_access(db: AsyncSession, *, user_id: str, now: datetime) -> O
         .where(FreeAccess.user_id == user_id, FreeAccess.ends_at > now)
         .order_by(FreeAccess.ends_at.desc())
         .limit(1)
+    )
+
+
+async def get_free_access_coverage(
+    db: AsyncSession, *, user_id: str
+) -> Optional[FreeAccessCoverage]:
+    grants = list(
+        (
+            await db.scalars(
+                select(FreeAccess).where(FreeAccess.user_id == user_id).order_by(FreeAccess.ends_at)
+            )
+        ).all()
+    )
+    if not grants:
+        return None
+    latest = grants[-1]
+    anchor = as_utc(latest.calendar_anchor or latest.starts_at)
+    return FreeAccessCoverage(
+        starts_at=anchor,
+        ends_at=as_utc(latest.ends_at),
+        months=latest.month_offset + latest.months,
+        grants=tuple(grant for grant in grants if as_utc(grant.ends_at) > anchor),
     )

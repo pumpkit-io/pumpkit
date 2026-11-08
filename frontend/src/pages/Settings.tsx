@@ -9,6 +9,7 @@ import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
 import { UsageCard } from '@/features/billing/UsageCard';
 import { useBilling } from '@/features/billing/useBilling';
 import { ConnectedAppsCard } from '@/features/connectedApps/ConnectedAppsCard';
+import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { useInstance } from '@/features/instance/useInstance';
 import { LegalLinks } from '@/features/legal/LegalLinks';
 import { Topbar } from '@/features/topbar/Topbar';
@@ -77,6 +78,7 @@ export function Settings() {
   const { logout } = useAuth();
   const { sells_plans, x_connection } = useInstance();
   const billing = useBilling();
+  const { refresh } = useOnboarding();
   const arrival = useArrivalState();
   const data = billing.data;
   const topUpBought = arrival.checkoutStatus === 'top_up_bought';
@@ -115,9 +117,14 @@ export function Settings() {
               data={data}
               isLoading={billing.isLoading}
               loadError={billing.loadError}
+              onRedeemed={() => {
+                void Promise.all([billing.load(), refresh()]);
+              }}
             />
           )}
-          {sells_plans && data?.me.subscribed && <UsageCard topUpBought={topUpBought} />}
+          {sells_plans && data?.me.subscribed && (
+            <UsageCard key={data.me.freeAccess?.endsAt} topUpBought={topUpBought} />
+          )}
           <ConnectedAppsCard />
           <footer className="pt-4">
             {/* A new tab, because leaving the signed-in layout would drop the Post on New post. */}
