@@ -34,7 +34,7 @@ describe('Privacy Policy at /privacy', () => {
     renderLegalRoute('/privacy');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Privacy Policy');
-    expect(within(main).getByText('Last updated: 6 November 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Last updated: 7 November 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and English as the page language', () => {
@@ -50,6 +50,14 @@ describe('Privacy Policy at /privacy', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Inspiration authors' })).toHaveAttribute(
       'id',
       'inspiration-authors',
+    );
+  });
+
+  it('describes the site statistics under #data-site-statistics', () => {
+    renderLegalRoute('/privacy');
+    expect(screen.getByRole('heading', { level: 3, name: 'Site statistics' })).toHaveAttribute(
+      'id',
+      'data-site-statistics',
     );
   });
 
@@ -104,7 +112,7 @@ describe('Informativa sulla privacy at /it/privacy', () => {
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
       'Informativa sulla privacy',
     );
-    expect(within(main).getByText('Ultimo aggiornamento: 6 novembre 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Ultimo aggiornamento: 7 novembre 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and Italian as the page language', () => {
@@ -121,6 +129,10 @@ describe('Informativa sulla privacy at /it/privacy', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Inspiration author' })).toHaveAttribute(
       'id',
       'inspiration-authors',
+    );
+    expect(screen.getByRole('heading', { level: 3, name: 'Statistiche del sito' })).toHaveAttribute(
+      'id',
+      'data-site-statistics',
     );
   });
 });
