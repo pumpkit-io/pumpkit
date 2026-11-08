@@ -7,17 +7,9 @@ import dozeOffSheet from '@/assets/mascot/doze_off-sheet.png';
 import dozeOff from '@/assets/mascot/doze_off-sheet.json';
 import tadaSheet from '@/assets/mascot/tada-sheet.png';
 import tada from '@/assets/mascot/tada-sheet.json';
+import { spriteStyle, type SheetMeta } from '@/components/blocks/sprite-sheet';
 import { REDUCED_MOTION, useMediaQuery } from '@/lib/useMediaQuery';
 import { cn } from '@/lib/utils';
-
-/** A sprite sheet's frame list, as animate-pixel-art writes it, at one screen pixel per cell. */
-interface SheetMeta {
-  frame_width: number;
-  frame_height: number;
-  columns: number;
-  rows: number;
-  frames: { x: number; y: number; ms: number }[];
-}
 
 const ANIMATIONS = {
   costume_change: { url: costumeChangeSheet, meta: costumeChange },
@@ -164,13 +156,7 @@ export function Mascot({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn('shrink-0 bg-no-repeat [image-rendering:pixelated]', className)}
-      style={{
-        width: meta.frame_width * px,
-        height: meta.frame_height * px,
-        backgroundImage: `url(${url})`,
-        backgroundSize: `${meta.columns * meta.frame_width * px}px ${meta.rows * meta.frame_height * px}px`,
-        backgroundPosition: `${-x * px}px ${-y * px}px`,
-      }}
+      style={spriteStyle(url, meta, x, y, px)}
     />
   );
 }

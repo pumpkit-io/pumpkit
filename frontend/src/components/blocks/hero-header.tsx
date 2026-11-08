@@ -75,7 +75,10 @@ export function HeroHeader({ ctaLabel }: { ctaLabel: string | null }) {
       asChild
       size="sm"
       variant="solid"
-      className={cn(CTA_CLASSES, 'h-11 min-w-32 px-4', surface === 'mobile' && 'w-full')}
+      className={cn(
+        CTA_CLASSES,
+        surface === 'desktop' ? 'h-9 min-w-28 px-4 text-sm' : 'h-11 w-full',
+      )}
     >
       <Link
         to="/login"
