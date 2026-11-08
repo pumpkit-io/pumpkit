@@ -298,12 +298,15 @@ export function pumpkitStripe(target: WebhookTarget) {
       }
 
       function expandedSession(session: StripeObject, expand: string[]): StripeObject {
-        if (!expand.includes('data.payment_intent.latest_charge') || !session.payment_intent)
+        const withCharge = expand.includes('data.payment_intent.latest_charge');
+        if ((!withCharge && !expand.includes('data.payment_intent')) || !session.payment_intent)
           return session;
         const intent = state.paymentIntents[session.payment_intent];
         return {
           ...session,
-          payment_intent: { ...intent, latest_charge: state.charges[intent.latest_charge] },
+          payment_intent: withCharge
+            ? { ...intent, latest_charge: state.charges[intent.latest_charge] }
+            : intent,
         };
       }
 

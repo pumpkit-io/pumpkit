@@ -6,7 +6,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
-- Users receiving current free access can buy normal top-ups without starting a subscription, with the existing allowance-first spending, expiry and refund rules.
+- Users receiving current free access can buy normal top-ups without starting a subscription, with the existing allowance-first spending, expiry and refund rules. Support account deletion waits for open or unresolved top-up payments.
 
 - Users can redeem distinct coupons in Settings to append free months while keeping current usage and Top-ups, with the combined dates shown in Plan. **Upgrade notes:** Apply migration 0046; coupons remain disabled by default pending final provider validation.
 

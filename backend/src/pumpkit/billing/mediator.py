@@ -311,6 +311,7 @@ async def create_top_up_checkout(
 
     The normal webhook sync adds the pack only once paid.
     """
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     terms_apply = service.requires_terms_acceptance()
     if terms_apply:
         _require_terms_acceptance(checkout_request, "Accept the Terms to buy a top-up.")
@@ -321,7 +322,11 @@ async def create_top_up_checkout(
     price = await _top_up_price(gateway)
     if price is None:
         raise BillingProviderError("The configured Top-up has no active one-off price")
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     customer_id = await _ensure_stripe_customer(db, gateway, user)
+    # First-customer creation commits, so deletion may have won the released User lock.
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    await _check_may_buy_top_up(db, user, clock())
     session = await gateway.create_top_up_checkout(
         customer_id=customer_id, price_id=price.price_id, user_id=user.id
     )
