@@ -18,7 +18,15 @@ function tokens(selector: string): Map<string, string> {
 const light = tokens(':root');
 const dark = tokens('.dark');
 
-function luminance(hsl: string): number {
+function luminance(colour: string): number {
+  if (colour.startsWith('#')) {
+    const channel = (offset: number) => {
+      const c = parseInt(colour.slice(offset, offset + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  }
+  const hsl = colour;
   const [h, s, l] = hsl.replace(/%/g, '').split(/\s+/).map(Number);
   const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
   const channel = (n: number) => {
@@ -77,6 +85,16 @@ describe('theme tokens', () => {
   ])('keeps text readable in %s mode', (_mode, theme) => {
     for (const [text, surface] of textPairs) {
       expect(contrast(theme, text, surface), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the landing and login button labels readable at rest and on hover', () => {
+    const publicTokens = tokens('.landing,\n  .login');
+    for (const fill of ['--public-action', '--public-action-hover']) {
+      expect(
+        contrast(publicTokens, '--public-action-foreground', fill),
+        `label on ${fill}`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 

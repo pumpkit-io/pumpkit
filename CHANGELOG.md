@@ -9,6 +9,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 ### Changed
 
 - The buttons on the landing and login pages are cream with dark labels, a soft edge and glow, and a slight press when clicked; the landing page's header button is smaller. The pricing switch and the launch video's play button use the same cream. The free trial length note under the landing page's main button is gone; instead, the pumpkin mascot takes turns peeking out from behind that button, from its right edge and then from its top edge, and rests peeking over the top for visitors who prefer reduced motion.
+- The buttons on the landing and login pages turn orange when you hover them.
 
 ## [0.9.0] - 2026-11-07
 
