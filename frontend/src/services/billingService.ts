@@ -65,6 +65,7 @@ export interface TopUpOffer extends OfferedAllowance {
 
 /** The Plans on sale, what they allow, and the Terms version a checkout must accept. */
 export interface PlanCatalog {
+  couponsEnabled: boolean;
   plans: Plan[];
   /** The current Terms' "Last updated" date, in ISO form; null where the Instance has no Terms (ADR 0011). */
   termsVersion: string | null;
@@ -73,6 +74,26 @@ export interface PlanCatalog {
   trial: OfferedTrial | null;
   /** Null where the Instance sells no Top-ups; whether this User may buy one is in usage. */
   topUp: TopUpOffer | null;
+}
+
+export interface CouponPreview {
+  months: number;
+  startsAt: string;
+  endsAt: string;
+  allowance: OfferedAllowance;
+  nextPaymentAt: string | null;
+  termsVersion: string | null;
+  revision: string;
+}
+
+interface CouponPreviewApi {
+  months: number;
+  starts_at: string;
+  ends_at: string;
+  allowance: OfferedAllowanceApi;
+  next_payment_at: string | null;
+  terms_version: string | null;
+  revision: string;
 }
 
 interface BillingMeApi {
@@ -103,6 +124,7 @@ interface OfferedAllowanceApi {
 }
 
 interface PlansApi {
+  coupons_enabled: boolean;
   data: PlanApi[];
   terms_version: string | null;
   allowance: OfferedAllowanceApi;
@@ -141,6 +163,18 @@ function billingMe(data: BillingMeApi): BillingMe {
 }
 
 export const billingService = {
+  previewCoupon: async (code: string): Promise<CouponPreview> => {
+    const { data } = await apiService.post<CouponPreviewApi>('/billing/coupons/preview', { code });
+    return {
+      months: data.months,
+      startsAt: data.starts_at,
+      endsAt: data.ends_at,
+      allowance: offeredAllowance(data.allowance),
+      nextPaymentAt: data.next_payment_at,
+      termsVersion: data.terms_version,
+      revision: data.revision,
+    };
+  },
   fetchBillingMe: async (): Promise<BillingMe> => {
     const { data } = await apiService.get<BillingMeApi>('/billing/me');
     return billingMe(data);
@@ -157,6 +191,7 @@ export const billingService = {
         interval: p.interval,
         intervalCount: p.interval_count,
       })),
+      couponsEnabled: data.coupons_enabled,
       termsVersion: data.terms_version,
       allowance: offeredAllowance(data.allowance),
       trial: data.trial && { days: data.trial.days, ...offeredAllowance(data.trial) },

@@ -8,6 +8,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ### Added
 
+- On isolated Instances with coupons enabled, signed-in recipients can check a coupon on the Paywall and see its free months, dates, monthly allowance and payment consequences. Preview does not consume the code or grant access; confirmation follows in the next implementation slice.
+
 - Billing-enabled Instances can create, inspect, list, disable and purge coupons through privileged command-line tooling. Coupon functionality is off by default pending the remaining implementation and final Stripe validation. **Upgrade notes:** Before isolated testing or eventual activation, configure and securely back up `COUPON_IDENTITY_KEYS` and schedule daily purge; existing Instances need no key while `COUPONS_ENABLED=false`.
 
 ### Changed

@@ -87,6 +87,9 @@ class SubscriptionState:
     trial_start: Optional[datetime] = None
     trial_end: Optional[datetime] = None
     billing_cycle_anchor: Optional[datetime] = None
+    has_pending_update: bool = False
+    schedule_id: Optional[str] = None
+    latest_invoice_status: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +163,10 @@ class BillingGateway(Protocol):
 
     async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
         """Every Subscription the customer has, Ended ones included."""
+        ...
+
+    async def has_unsettled_invoices(self, *, customer_id: str) -> bool:
+        """Whether any customer invoice still requires settlement, including an older debt."""
         ...
 
     async def cancel_subscription(self, *, subscription_id: str) -> None:
@@ -260,6 +267,15 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         trial_start=_optional_timestamp(subscription.get("trial_start")),
         trial_end=_optional_timestamp(subscription.get("trial_end")),
         billing_cycle_anchor=_optional_timestamp(subscription.get("billing_cycle_anchor")),
+        has_pending_update=subscription.get("pending_update") is not None,
+        schedule_id=_customer_id(subscription.get("schedule")),
+        latest_invoice_status=(
+            subscription["latest_invoice"].get("status") or "unknown"
+            if isinstance(subscription.get("latest_invoice"), dict)
+            else "unknown"
+            if subscription.get("latest_invoice")
+            else None
+        ),
     )
 
 
@@ -442,7 +458,12 @@ class StripeBillingGateway:
         def list_all() -> list[dict[str, Any]]:
             # Stripe leaves cancelled Subscriptions out unless asked for all of them.
             subscriptions = self._client.v1.subscriptions.list(
-                {"customer": customer_id, "status": "all", "limit": 100}
+                {
+                    "customer": customer_id,
+                    "status": "all",
+                    "limit": 100,
+                    "expand": ["data.latest_invoice"],
+                }
             )
             return [subscription.to_dict() for subscription in subscriptions.auto_paging_iter()]
 
@@ -450,6 +471,17 @@ class StripeBillingGateway:
             _subscription_state(subscription)
             for subscription in await self._call("list Subscriptions", list_all)
         ]
+
+    async def has_unsettled_invoices(self, *, customer_id: str) -> bool:
+        def unsettled() -> bool:
+            invoices = self._client.v1.invoices.list({"customer": customer_id, "limit": 100})
+            for invoice in invoices.auto_paging_iter():
+                state = invoice.to_dict()
+                if state.get("status") not in {"paid", "void"}:
+                    return True
+            return False
+
+        return await self._call("check invoice settlement", unsettled)
 
     async def cancel_subscription(self, *, subscription_id: str) -> None:
         await self._call(
@@ -608,6 +640,7 @@ class FakeBillingGateway:
     plan_lookups: list[list[str]] = field(default_factory=list)
     expired_checkouts: list[str] = field(default_factory=list)
     cancelled_subscriptions: list[str] = field(default_factory=list)
+    unsettled_invoice_customers: set[str] = field(default_factory=set)
     prices: list[OneOffPrice] = field(default_factory=list)
     top_up_checkouts: list[TopUpCheckoutCall] = field(default_factory=list)
     ended_trials: list[str] = field(default_factory=list)
@@ -683,6 +716,10 @@ class FakeBillingGateway:
     async def list_subscriptions(self, *, customer_id: str) -> list[SubscriptionState]:
         self._maybe_fail("list_subscriptions")
         return list(self._subscriptions.get(customer_id, {}).values())
+
+    async def has_unsettled_invoices(self, *, customer_id: str) -> bool:
+        self._maybe_fail("has_unsettled_invoices")
+        return customer_id in self.unsettled_invoice_customers
 
     async def cancel_subscription(self, *, subscription_id: str) -> None:
         self._maybe_fail("cancel_subscription")

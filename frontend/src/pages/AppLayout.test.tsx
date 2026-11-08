@@ -137,7 +137,12 @@ describe('The signed-in shell', () => {
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
     vi.mocked(billingService.fetchPlans)
       .mockReset()
-      .mockResolvedValue({ plans: [], termsVersion: '2026-10-11', ...NO_CAPS });
+      .mockResolvedValue({
+        plans: [],
+        couponsEnabled: false,
+        termsVersion: '2026-10-11',
+        ...NO_CAPS,
+      });
     vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(postService.start).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
@@ -208,6 +213,7 @@ describe('The signed-in shell', () => {
             intervalCount: 1,
           },
         ],
+        couponsEnabled: false,
         termsVersion: '2026-10-11',
         ...NO_CAPS,
       });

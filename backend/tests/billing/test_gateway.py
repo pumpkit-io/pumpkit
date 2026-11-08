@@ -543,3 +543,54 @@ async def test_the_stripe_adapter_calls_stripe_api_url_when_one_is_set(
 
     assert customer_id == "cus_e2e"
     assert http.urls == [called]
+
+
+async def test_subscription_reads_pending_changes_and_expanded_invoice_settlement():
+    listing = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
+    subscription = listing["data"][0]
+    subscription.update(
+        pending_update={"expires_at": 1762387200},
+        schedule={"id": "sub_sched_contract"},
+        latest_invoice={"id": "in_contract", "status": "open"},
+    )
+    listing["data"] = [subscription]
+    http = _RecordedStripe(json.dumps(listing))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+
+    [result] = await gateway.list_subscriptions(customer_id="cus_Contract")
+
+    assert result.has_pending_update is True
+    assert result.schedule_id == "sub_sched_contract"
+    assert result.latest_invoice_status == "open"
+    assert parse_qs(urlsplit(http.urls[0]).query)["expand[0]"] == ["data.latest_invoice"]
+
+
+@pytest.mark.parametrize(
+    "invoice_status, unsettled",
+    [
+        ("paid", False),
+        ("void", False),
+        ("open", True),
+        ("uncollectible", True),
+        ("draft", True),
+        (None, True),
+    ],
+)
+async def test_customer_invoice_settlement_reads_all_invoices_not_only_the_latest(
+    invoice_status, unsettled
+):
+    body = json.dumps(
+        {
+            "object": "list",
+            "url": "/v1/invoices",
+            "has_more": False,
+            "data": [
+                {"id": "in_older", "object": "invoice", "status": invoice_status},
+                {"id": "in_latest", "object": "invoice", "status": "paid"},
+            ],
+        }
+    )
+    http = _RecordedStripe(body)
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    assert await gateway.has_unsettled_invoices(customer_id="cus_Contract") is unsettled
+    assert parse_qs(urlsplit(http.urls[0]).query)["customer"] == ["cus_Contract"]

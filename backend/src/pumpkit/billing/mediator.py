@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
-from pumpkit.billing import service
+from pumpkit.billing import coupon_preview, coupon_service, service
 from pumpkit.billing.allowance import (
     SETTINGS_PAGE,
     limits,
@@ -27,6 +27,7 @@ from pumpkit.billing.schemas import (
     BillingSubscriptionResponse,
     CheckoutRequest,
     CheckoutResponse,
+    CouponPreviewResponse,
     OfferedAllowanceResponse,
     OfferedTrialResponse,
     PlanResponse,
@@ -40,6 +41,7 @@ from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import BILLING_PAGE, settings
 from pumpkit.core.errors import BadRequestError, ConflictError, RefusalError, RefusedError
 from pumpkit.core.logging import logger
+from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.core.time import as_utc
 
@@ -95,6 +97,7 @@ async def list_plans(gateway: BillingGateway) -> PlansListResponse:
         if key not in resolved:
             logger.error("Configured Plan %s has no active recurring price in Stripe", key)
     return PlansListResponse(
+        coupons_enabled=coupon_service.coupons_available(settings),
         data=[
             PlanResponse(
                 key=plan.key,
@@ -476,3 +479,33 @@ async def _locked_customer(db: AsyncSession, *, customer_id: str, event_id: str)
         return None
     await users_service.lock_user(db, user)
     return user
+
+
+async def preview_coupon(
+    db: AsyncSession, gateway: BillingGateway, user: User, *, code: str, now: datetime
+) -> CouponPreviewResponse:
+    if not coupon_service.coupons_available(settings):
+        raise RefusedError("Coupons are unavailable on this instance.")
+    hit_user_limit("check coupon", user.id, "10/minute")
+    try:
+        coupon_service.validate_offers(
+            await gateway.list_plans(settings.BILLING_PLAN_KEYS), config=settings
+        )
+    except coupon_service.CouponCommandError as exc:
+        raise ConflictError(
+            "The coupon offer is unavailable. Try again later or contact its sender."
+        ) from exc
+    if user.stripe_customer_id and await gateway.has_unsettled_invoices(
+        customer_id=user.stripe_customer_id
+    ):
+        raise ConflictError(
+            "Resolve your outstanding or processing payment in the billing portal before using a coupon."
+        )
+    subscriptions = (
+        await gateway.list_subscriptions(customer_id=user.stripe_customer_id)
+        if user.stripe_customer_id
+        else []
+    )
+    return await coupon_preview.preview(
+        db, user=user, subscriptions=subscriptions, now=now, code=code
+    )

@@ -492,14 +492,37 @@ export function pumpkitStripe(target: WebhookTarget) {
         return charge ? c.json(charge) : notFound(c, 'charge', c.req.param('id'));
       });
 
+      app.get('/v1/invoices', (c: any) => {
+        const { customer } = queryParams(c);
+        return c.json(
+          list(
+            '/v1/invoices',
+            Object.values(state.invoices).filter(
+              (invoice) => !customer || invoice.customer === customer,
+            ),
+          ),
+        );
+      });
+
       app.get('/v1/subscriptions', (c: any) => {
-        const { customer, status } = queryParams(c);
+        const { customer, status, expand = [] } = queryParams(c);
         const subscriptions = Object.values(state.subscriptions).filter(
           (s) =>
             (!customer || s.customer === customer) &&
             (status === 'all' || (status ? s.status === status : s.status !== 'canceled')),
         );
-        return c.json(list('/v1/subscriptions', subscriptions));
+        return c.json(
+          list(
+            '/v1/subscriptions',
+            subscriptions.map((subscription) => ({
+              ...subscription,
+              latest_invoice:
+                expand.includes('data.latest_invoice') && subscription.latest_invoice
+                  ? (state.invoices[subscription.latest_invoice] ?? subscription.latest_invoice)
+                  : subscription.latest_invoice,
+            })),
+          ),
+        );
       });
 
       app.delete('/v1/subscriptions/:id', (c: any) => {

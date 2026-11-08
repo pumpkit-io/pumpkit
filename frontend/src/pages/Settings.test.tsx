@@ -115,6 +115,7 @@ const CATALOG: PlanCatalog = {
       intervalCount: 1,
     },
   ],
+  couponsEnabled: false,
   termsVersion: '2026-10-11',
   allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
   trial: { days: 7, generations: 125, xPosts: 25, linkXPosts: 2 },
