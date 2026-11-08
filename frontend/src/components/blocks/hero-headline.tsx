@@ -105,8 +105,18 @@ export function HeroHeadline() {
   useEffect(() => {
     // Auto-rotating text with no pause control: hold on the first name instead.
     if (reduceMotion) return;
-    const id = window.setInterval(() => setActive((i) => (i + 1) % TOOLS.length), ROTATE_MS);
-    return () => window.clearInterval(id);
+    let lastRotation = performance.now();
+    let frame: number;
+    // Rotate only on rendered frames, so stalled animations cannot accumulate leaving names.
+    const rotate = (now: number) => {
+      if (now - lastRotation >= ROTATE_MS) {
+        setActive((i) => (i + 1) % TOOLS.length);
+        lastRotation = now;
+      }
+      frame = window.requestAnimationFrame(rotate);
+    };
+    frame = window.requestAnimationFrame(rotate);
+    return () => window.cancelAnimationFrame(frame);
   }, [reduceMotion]);
 
   const tool = TOOLS[active];
