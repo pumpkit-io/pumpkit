@@ -1,7 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Optional
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StrictBool,
+    field_validator,
+)
 
 from pumpkit.billing.subscription_status import SubscriptionStatus
 
@@ -121,3 +129,22 @@ class PlansListResponse(BaseModel):
     trial: Optional[OfferedTrialResponse]
     # None where the Instance sells no Top-ups; who may buy one is in `/usage`.
     top_up: Optional[TopUpOfferResponse] = None
+
+
+class CouponIssueRequest(BaseModel):
+    months: int = Field(gt=0, le=2_147_483_647)
+    max_redemptions: int = Field(default=1, gt=0, le=2_147_483_647)
+    recipient: Optional[EmailStr] = None
+    claim_deadline: Optional[datetime] = None
+
+    @field_validator("recipient", mode="before")
+    @classmethod
+    def normalize_recipient(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("claim_deadline")
+    @classmethod
+    def utc_deadline(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and value.utcoffset() != timedelta(0):
+            raise ValueError("Use a UTC claim deadline")
+        return value

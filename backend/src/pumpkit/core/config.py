@@ -1,9 +1,11 @@
+import base64
+import binascii
 import json
 from enum import StrEnum
 from typing import Annotated, Literal, Optional, Self
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from pumpkit.core.db.urls import PostgresSsl
@@ -112,6 +114,9 @@ class Settings(BaseSettings):
     # The Top-up's one-off price, as a Stripe price lookup key; unset or empty sells no Top-ups.
     BILLING_TOP_UP_KEY: Optional[str] = None
 
+    COUPONS_ENABLED: bool = False
+    COUPON_IDENTITY_KEYS: SecretStr = SecretStr("")
+
     # Any OpenAI-compatible chat completions endpoint; OpenRouter by default.
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
     # Optional: when unset, pumpkit.posts.llm_client raises LLMNotConfiguredError on use, not at boot.
@@ -209,6 +214,43 @@ class Settings(BaseSettings):
                 "address their company footer shows; missing: SUPPORT_EMAIL"
             )
         return self
+
+    @model_validator(mode="after")
+    def _coupon_keys_when_enabled(self) -> Self:
+        if self.COUPONS_ENABLED:
+            self.coupon_identity_keys()
+        return self
+
+    def coupon_identity_keys(self) -> tuple[str, dict[str, bytes]]:
+        try:
+            value = json.loads(self.COUPON_IDENTITY_KEYS.get_secret_value())
+            if not isinstance(value, dict) or set(value) != {"active", "keys"}:
+                raise ValueError
+            active, encoded = value["active"], value["keys"]
+            if (
+                not isinstance(active, str)
+                or not isinstance(encoded, dict)
+                or active not in encoded
+            ):
+                raise ValueError
+            keys = {}
+            for key_id, key in encoded.items():
+                if (
+                    not isinstance(key_id, str)
+                    or not key_id
+                    or len(key_id) > 64
+                    or not isinstance(key, str)
+                ):
+                    raise ValueError
+                decoded = base64.b64decode(key, validate=True)
+                if len(decoded) != 32:
+                    raise ValueError
+                keys[key_id] = decoded
+            return active, keys
+        except (ValueError, TypeError, binascii.Error):
+            raise ValueError(
+                "COUPON_IDENTITY_KEYS needs an active key and base64-encoded 32-byte keys"
+            ) from None
 
     def _provider_groups(self) -> dict[ProviderGroup, dict[str, object]]:
         """Each optional provider's required settings; empty values count as unset."""

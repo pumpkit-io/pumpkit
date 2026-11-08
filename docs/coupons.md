@@ -1,10 +1,10 @@
 # Coupon implementation and operations contract
 
-This is the implementation contract for spec #392, settled by #396. Coupons remain unavailable until the later tickets implement these rules. The public English and Italian documents describe the complete feature; publishing them does not activate it or constitute legal approval. Self-hosters supply their own legal documents.
+This is the implementation contract for spec #392, settled by #396. Privileged issuance is implemented in #395; recipient preview and redemption remain unavailable until the later tickets implement those rules. The public English and Italian documents describe the complete feature; publishing them does not activate it or constitute legal approval. Self-hosters supply their own legal documents.
 
 ## Activation and provider evidence
 
-#395 introduces `COUPONS_ENABLED=false`, the one default-off feature setting. Off means no issuance, preview, redemption or coupon-specific paid signup/Plan-change actions and no coupon affordances. Ordinary billing and Instances that sell no Plans keep their existing behavior. Coupon functionality also requires configured Plans. Enable it only in isolated test environments until final #394 passes.
+`COUPONS_ENABLED=false` is the one default-off feature setting. Off means no issuance, preview, redemption or coupon-specific paid signup/Plan-change actions and no coupon affordances. Ordinary billing and Instances that sell no Plans keep their existing behavior. Coupon functionality also requires configured Plans. Enable it only in isolated test environments until final #394 passes.
 
 Implement #396, #395, #397–#405 in order with normal checks, fake-gateway tests, adapter contracts and PR review. Real Stripe validation runs only after their PRs merge. It is the activation gate, not an implementation prerequisite. Reuse `pro-coupons-t394`'s `backend/tests/billing/test_stripe_deferral_live.py` and `docs/stripe-coupon-verification.md`. Their partial evidence is historical and does not validate the merged application. Hosted Checkout through its first paid period and authenticated notice/configuration inspection remain outstanding.
 
@@ -39,14 +39,14 @@ These periods implement purpose limitation rather than applying the tax retentio
 
 A Coupon becomes permanently unclaimable at its UTC deadline, permanent disable, or exhaustion by completed claims with no pending reservation that can restore capacity. Store this terminal time; disabling is irreversible. Pending operations still need reconciliation. Turning the feature off is temporary and does not terminate redeemability for retention purposes.
 
-| Record | Retain until | Purge behavior and owner |
-|---|---|---|
-| Unclaimed recipient assignment | Permanently unclaimable and all related operations resolved | Remove fingerprint/key identifier within 30 days; #395. No-deadline codes retain their assignment while claimable. |
-| Claim fingerprint, including after account deletion | Same terminal condition | Remove within 30 days; #398. Keep a nonpersonal completed-claim count so purging cannot restore capacity. |
-| Active/queued benefit and its acceptance | Benefit end and resolution of related operations | Remove within 90 days of the later event; #398. Account deletion ends benefits and removes the account link immediately, retaining only required claim/recovery evidence. |
-| Pending recovery intent/evidence | Confirmed reconciliation or definite refusal | Never age out unresolved work; #401. Keep only stable operation/provider identifiers, accepted offer, target and original coverage facts needed for recovery. |
-| Resolved recovery/audit evidence | Resolution and end of related benefits | Remove within 90 days of the later event; #401. Do not keep raw provider payloads or recipient email. |
-| Backups containing removed data or old keys | Last live removal | Existing rotation removes copies within 30 days. Reapply purge after restore before serving traffic. |
+| Record                                              | Retain until                                                | Purge behavior and owner                                                                                                                                                  |
+| --------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unclaimed recipient assignment                      | Permanently unclaimable and all related operations resolved | Remove fingerprint/key identifier within 30 days; #395. No-deadline codes retain their assignment while claimable.                                                        |
+| Claim fingerprint, including after account deletion | Same terminal condition                                     | Remove within 30 days; #398. Keep a nonpersonal completed-claim count so purging cannot restore capacity.                                                                 |
+| Active/queued benefit and its acceptance            | Benefit end and resolution of related operations            | Remove within 90 days of the later event; #398. Account deletion ends benefits and removes the account link immediately, retaining only required claim/recovery evidence. |
+| Pending recovery intent/evidence                    | Confirmed reconciliation or definite refusal                | Never age out unresolved work; #401. Keep only stable operation/provider identifiers, accepted offer, target and original coverage facts needed for recovery.             |
+| Resolved recovery/audit evidence                    | Resolution and end of related benefits                      | Remove within 90 days of the later event; #401. Do not keep raw provider payloads or recipient email.                                                                     |
+| Backups containing removed data or old keys         | Last live removal                                           | Existing rotation removes copies within 30 days. Reapply purge after restore before serving traffic.                                                                      |
 
 Where one row serves several purposes, remove unnecessary fields independently and retain only fields whose purpose remains. Account deletion detaches the User but preserves claim fingerprints and the minimum unresolved billing evidence. It must serialize with redemption/recovery and must not allow later recovery to grant orphaned access or charge a deleted account. A pending operation keeps enough deletion intent to finish safely; it does not retain the deleted profile or content. A legal hold must be separately justified, documented and limited to its actual records, not silently applied to every Coupon.
 
@@ -54,6 +54,34 @@ Where one row serves several purposes, remove unnecessary fields independently a
 
 ## Upgrading and self-hosting
 
-This contract does not introduce runtime keys or a runnable Coupon command by itself. #395 introduces their configuration, migration and executable purge command together; do not enable Coupons until those and later implementation slices are installed and #394 is complete. At that point, install a daily purge/recovery job, back up the complete key ring securely with the database recovery process, replace the legal documents for your Instance and verify the disabled setting before starting it. Each runtime ticket adds its applicable Upgrade notes. An Instance selling no Plans needs no Coupon key or job.
+#395 introduces the setting, key ring, migration and executable issuance/purge commands. Leave the setting off outside isolated tests until the later implementation slices are installed and #394 is complete. At that point, install a daily purge/recovery job, back up the complete key ring securely with the database recovery process, replace the legal documents for your Instance and verify the disabled setting before starting it. Each runtime ticket adds its applicable Upgrade notes. An Instance selling no Plans needs no Coupon key or job.
 
 Publishing these changed legal documents does not send the material-change notice promised in clause 19. The Operator must arrange that notice before applying a material change to existing Users; this PR sends no email. Self-hosters follow their own notice obligations and bump the frontend/backend Terms dates together when replacing the documents.
+
+## Privileged Coupon commands
+
+The commands run with the Instance's database and application configuration; they have no public endpoint. Access to the source alone does not allow issuance. Run migrations before using them. Each code is 32 cryptographically random bytes encoded for copying. The database stores its SHA-256 digest, never a recoverable code; recipient assignments use the keyed fingerprints above. Issuance metadata and benefit months cannot be changed through this tool.
+
+Generate each identity key with `openssl rand -base64 32` in a trusted terminal and insert it in the protected JSON ring. Keep the output out of shared logs. Coupons must stay off outside isolated tests until final validation.
+
+On a compose Instance, use its configured backend:
+
+```sh
+docker compose exec backend python -m pumpkit.billing.coupons create --months 3 --recipient recipient@example.org --max-redemptions 1 --claim-deadline 2027-12-01T00:00:00Z
+docker compose exec backend python -m pumpkit.billing.coupons list
+docker compose exec backend python -m pumpkit.billing.coupons inspect coupon_ID
+docker compose exec backend python -m pumpkit.billing.coupons disable coupon_ID
+docker compose exec backend python -m pumpkit.billing.coupons purge
+```
+
+For a managed database outside compose, export the same protected Instance settings, then run `uv run python -m pumpkit.billing.coupons ...` from `backend/`. Alternatively `uv run --env-file ../.env python -m pumpkit.billing.coupons ...` explicitly loads the root configuration. Do not point a development command at production accidentally.
+
+Create requires positive whole `--months`; `--max-redemptions` defaults to one. Omit `--recipient` for a general code and `--claim-deadline` for no deadline. A deadline must have a UTC offset (`Z` or `+00:00`) and be strictly in the future. Recipient normalization matches sign-in: trim whitespace and lowercase the validated email, retaining dots and plus suffixes. Unsupported future horizons are refused later at preview/confirmation rather than silently shortening benefits.
+
+Successful create prints one JSON object with `id` and the raw `code`. Deliver that code privately once. Avoid terminal recording, CI logs, redirected shared files and analytics. Losing it requires a new code; inspect/list cannot recover it. All other commands use the nonsecret `id` and never print the code, assigned email or fingerprint. Nonzero exit status means failure, with a sanitized explanation on stderr; a failed transaction prints no code.
+
+Disable is permanent and idempotent. It stops new claims and leaves existing benefit records intact when redemption is implemented. Inspect, list, disable and purge remain available while the feature is off so Operators can maintain existing records. Purge removes recipient fingerprints and their key identifiers at 30 days after permanent disable or deadline, preserving the restricted-recipient marker and immutable metadata. A still-claimable code without a deadline retains its assignment. The claim/recovery tickets extend purge for their additional records and pending-operation safety.
+
+Run purge daily using the same protected settings, including while Coupons are off. A cron/systemd job can invoke `docker compose exec -T backend python -m pumpkit.billing.coupons purge` from the Instance directory. Check its nonsecret count and exit status; retry failures immediately. Current management locks Coupon rows in identifier order, with purge skipping busy rows for the next run. Recipient redemption/recovery will follow User, then Coupon, then operation lock order; disable and purge never acquire a User lock after a Coupon lock.
+
+**Upgrade notes:** The migration adds only the Coupon table. Existing Instances need no key while the default setting stays off. Before isolated testing or eventual activation, configure and securely back up the key ring and install the daily purge job. Follow final #394 before enabling outside isolated tests. Already-issued codes require their matching database and complete key ring through upgrades and restores.

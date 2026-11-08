@@ -498,3 +498,9 @@ If it prints `blocked`, set `SMTP_PORT` to another port your provider listens on
 ## Coupon readiness
 
 Coupons are being implemented under spec #392 and remain disabled by default until final Stripe validation #394. [The Coupon contract](coupons.md) sets the cardless acceptance, retention/purge and key backup/rotation rules that the runtime slices must implement. Replace the bundled bilingual legal documents for your Instance and apply your own material-change notice process. The legal-document update alone adds no runtime setting, key or executable Coupon command. Follow the runtime Release’s Upgrade notes when installing those later slices; do not activate from historical provider evidence alone.
+
+### Coupon tooling
+
+Billing-enabled Instances can issue, inspect and permanently disable Coupons with the [privileged commands](coupons.md#privileged-coupon-commands). This adds no public issuance endpoint. `COUPONS_ENABLED` stays off by default until the complete feature passes final Stripe validation. An Instance selling no Plans needs no Coupon setting, key or purge job.
+
+Before isolated testing, apply migrations, configure `COUPON_IDENTITY_KEYS`, back up its complete key ring securely and separately from the database, and schedule daily purge with the same protected configuration. Restore matching keys and database together. Keep old keys during rotation; otherwise existing assignments and claims fail closed. [The contract](coupons.md#identity-and-key-custody) explains retention and rotation. Existing billing needs no manual change while Coupons remain off.
