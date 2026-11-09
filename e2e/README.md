@@ -21,7 +21,7 @@ E2E_COUPONS=1 E2E_BASE_URL=<Dev URL> npm test
 
 For focused authoring, append `-- tests/coupons.spec.ts`. Opting in fails if the running backend does not enable coupons or does not use the local Stripe Emulator configuration; it never silently skips the journeys. Without `E2E_COUPONS=1`, only this optional Coupon suite is skipped and the existing default-off suite runs as before.
 
-The seed helper creates a different account and recipient-bound code for every journey. It issues coupons through the privileged billing service and buys subscriber fixtures through the local Emulator. The browser confirms benefits, recovery, future payment consent and access gates through the app and authenticated API. Only access expiry and finished onboarding are advanced through seed data. Browser traces are disabled for these journeys so redemption codes and session tokens do not enter trace artifacts.
+The seed helper creates a different account and recipient-bound code for every journey. It issues coupons through the privileged billing service and buys subscriber fixtures through the local Emulator. The browser confirms benefits, recovery, future payment consent and access gates through the app and authenticated API. Only access expiry and finished onboarding are advanced through seed data. The suite captures the real enabled catalog once per worker and serves that unchanged response for repeated React loads, keeping those reads below the shared public catalog rate limit. All acceptance and billing operations still reach the backend and Emulator. Browser traces are disabled for these journeys so redemption codes and session tokens do not enter trace artifacts.
 
 Afterward, from the root:
 

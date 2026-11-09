@@ -30,6 +30,20 @@ interface Usage {
 test.skip(process.env.E2E_COUPONS !== '1', 'Enable the Coupon suite as e2e/README.md describes.');
 test.use({ storageState: { cookies: [], origins: [] }, trace: 'off' });
 
+let catalog: Promise<string> | null = null;
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/v1/billing/plans', async (route) => {
+    // Preserve the real catalog while repeated React loads avoid the shared public-read limit.
+    catalog ??= route.fetch().then(async (answer) => {
+      expect(answer.status(), 'the local Emulator catalog should load').toBe(200);
+      const body = await answer.text();
+      expect(JSON.parse(body).coupons_enabled).toBe(true);
+      return body;
+    });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: await catalog });
+  });
+});
+
 async function recipient(page: Page, scenario = 'new'): Promise<Recipient> {
   const out = runSeedScript('coupon_user.py', [scenario]);
   const value = out.match(/E2E_COUPON=(.+)/)?.[1];
@@ -54,11 +68,9 @@ async function get<T>(page: Page, user: Recipient, resource: string): Promise<T>
 }
 
 async function open(page: Page, path: string): Promise<void> {
-  await expect(async () => {
-    const loading = page.waitForResponse((r) => r.url().endsWith('/api/v1/billing/plans'));
-    await page.goto(path);
-    expect((await loading).status()).toBe(200);
-  }).toPass({ timeout: 70_000 });
+  const loading = page.waitForResponse((r) => r.url().endsWith('/api/v1/billing/plans'));
+  await page.goto(path);
+  expect((await loading).status()).toBe(200);
 }
 
 async function review(page: Page, user: Recipient, inSettings = false): Promise<void> {
