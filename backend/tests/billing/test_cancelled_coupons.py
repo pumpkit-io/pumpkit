@@ -167,6 +167,11 @@ async def test_cancellation_during_confirmation_completes_once_without_reactivat
             {"customer": "cus_monthly"},
         )
     recovered = await authed_client.get(REDEEM + "/redeem-test-0001")
+    if not after_mutation:
+        assert recovered.json()["status"] == "pending"
+        assert (await authed_client.get("/api/v1/billing/me")).json()["pending_coupon_operation"]
+        assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 0
+        return
     assert recovered.json()["status"] == "completed", recovered.text
     assert recovered.json()["next_payment_at"] is None
     assert len(fake_billing.deferrals) == (1 if after_mutation else 0)

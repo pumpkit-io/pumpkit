@@ -822,6 +822,8 @@ class StripeBillingGateway:
                 {"idempotency_key": "coupon-deferral-" + operation_id},
             )
         except stripe.InvalidRequestError as exc:
+            if exc.code == "idempotency_key_in_use":
+                raise BillingProviderError("Stripe coupon deferral is still executing") from exc
             raise DeferralRefused("Stripe refused the coupon deferral") from exc
         except stripe.StripeError as exc:
             raise BillingProviderError("Stripe coupon deferral outcome is uncertain") from exc
@@ -1016,6 +1018,8 @@ class FakeBillingGateway:
     plan_changes: list[str] = field(default_factory=list)
     restricted_portals: list[str] = field(default_factory=list)
     _changed_operations: set[str] = field(default_factory=set)
+    delay_deferrals: bool = False
+    pending_deferrals: dict[str, tuple[str, datetime]] = field(default_factory=dict)
     delay_plan_changes: bool = False
     pending_plan_changes: dict[str, tuple[str, str]] = field(default_factory=dict)
 
@@ -1278,8 +1282,22 @@ class FakeBillingGateway:
         self, *, subscription_id: str, target: datetime, operation_id: str
     ) -> None:
         self._maybe_fail("defer_renewal")
+        self._maybe_fail("deferral_in_progress")
         if "refuse_deferral" in self.fail_on:
             raise DeferralRefused("The deferral was refused")
+        if self.delay_deferrals:
+            self.pending_deferrals.setdefault(operation_id, (subscription_id, target))
+            raise BillingProviderError("Remote deferral continues after the client timed out")
+        self._complete_deferral(subscription_id, target, operation_id)
+        self._maybe_fail("after_defer_renewal")
+
+    def complete_pending_deferral(self, operation_id: str) -> None:
+        subscription_id, target = self.pending_deferrals.pop(operation_id)
+        self._complete_deferral(subscription_id, target, operation_id)
+
+    def _complete_deferral(self, subscription_id: str, target: datetime, operation_id: str) -> None:
+        if any(call[2] == operation_id for call in self.deferrals):
+            return
         self.deferrals.append((subscription_id, target, operation_id))
         for subscriptions in self._subscriptions.values():
             if subscription := subscriptions.get(subscription_id):
@@ -1293,7 +1311,6 @@ class FakeBillingGateway:
                     coupon_operation=operation_id,
                     paid_current_period=False,
                 )
-        self._maybe_fail("after_defer_renewal")
 
     async def change_plan(
         self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str

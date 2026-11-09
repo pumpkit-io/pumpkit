@@ -135,3 +135,98 @@ async def test_purge_skips_billing_user_lock_and_cannot_erase_a_new_paid_snapsho
     assert await saved_paid_coverage(db_session_maker, user.id) == refreshed
     me = (await authed_client.get("/api/v1/billing/me")).json()
     assert me["subscription"]["paid_through"] == period.end.isoformat().replace("+00:00", "Z")
+
+
+@pytest.mark.parametrize("replay_error", ["deferral_in_progress", "refuse_deferral"])
+async def test_independent_recovery_and_capacity_competition_preserve_delayed_deferral(
+    db_engine,
+    db_session_maker,
+    db,
+    authed_client,
+    user,
+    new_browser,
+    sign_in_by_magic_link,
+    coupons,
+    fake_billing,
+    fixed_clock,
+    replay_error,
+):
+    await monthly(db, user, fake_billing, fixed_clock)
+    competitor = await browser_for(
+        new_browser, sign_in_by_magic_link, "deferral-competitor@example.com"
+    )
+    code = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
+    other_offer = (await competitor.post(PREVIEW, json={"code": code["code"]})).json()
+    fake_billing.delay_deferrals = True
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).json()[
+        "status"
+    ] == "pending"
+    fake_billing.fail_on.add(replay_error)
+    async with db_session_maker() as control:
+        await control.scalar(select(User).where(User.id == user.id).with_for_update())
+        tasks = [
+            asyncio.create_task(authed_client.get(REDEEM + "/redeem-test-0001")) for _ in range(2)
+        ]
+        try:
+            await wait_for_locks(db_engine, 2)
+            competing = await competitor.post(
+                REDEEM, json=confirmation(other_offer, "pg-other-claim-0001")
+            )
+            assert competing.status_code == 409
+            await control.commit()
+            results = await asyncio.wait_for(asyncio.gather(*tasks), 10)
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+    assert all(result.json()["status"] == "pending" for result in results)
+    assert fake_billing.deferrals == []
+    fake_billing.fail_on.clear()
+    fake_billing.complete_pending_deferral(next(iter(fake_billing.pending_deferrals)))
+    assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "completed"
+    assert len(fake_billing.deferrals) == 1
+    assert (await coupons(code["id"], command="inspect"))["redeemed_count"] == 1
+
+
+async def test_recovery_generation_handoff_prevents_stale_first_refusal_releasing_claim(
+    db_engine,
+    authed_client,
+    coupons,
+    user,
+    db,
+    fake_billing,
+    fixed_clock,
+    monkeypatch,
+):
+    await monthly(db, user, fake_billing, fixed_clock)
+    code = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
+    entered, release = asyncio.Event(), asyncio.Event()
+    original_read = fake_billing.list_subscriptions
+    reads = 0
+
+    async def slow_confirmation_read(**kwargs):
+        nonlocal reads
+        reads += 1
+        if reads == 3:
+            entered.set()
+            await asyncio.wait_for(release.wait(), 10)
+        return await original_read(**kwargs)
+
+    monkeypatch.setattr(fake_billing, "list_subscriptions", slow_confirmation_read)
+    fake_billing.fail_on.add("refuse_deferral")
+    confirming = asyncio.create_task(authed_client.post(REDEEM, json=confirmation(offer)))
+    await asyncio.wait_for(entered.wait(), 10)
+    recovering = asyncio.create_task(authed_client.get(REDEEM + "/redeem-test-0001"))
+    try:
+        await wait_for_locks(db_engine, 1)
+    finally:
+        release.set()
+    results = await asyncio.wait_for(asyncio.gather(confirming, recovering), 10)
+    assert all(
+        result.status_code == 200 and result.json()["status"] == "pending" for result in results
+    )
+    fake_billing.fail_on.clear()
+    assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "completed"
+    assert len(fake_billing.deferrals) == 1

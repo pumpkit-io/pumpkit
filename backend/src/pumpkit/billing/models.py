@@ -267,6 +267,8 @@ class CouponOperation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
+    attempted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    dispatch_count: Mapped[int] = mapped_column(Integer, default=0)
     detail: Mapped[Optional[str]] = mapped_column(String)
 
 

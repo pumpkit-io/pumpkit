@@ -91,6 +91,9 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 - **Quali dati:** l’impronta protetta di un indirizzo email riservato a un Coupon, anche prima dell’iscrizione; identificativi dei Coupon e date dei benefici; la tua accettazione dei Termini per ogni riscatto; e gli identificativi minimi delle operazioni e i dati di fatturazione necessari a confermare un esito incerto. Le impronte sono calcolate con una chiave segreta. Sono dati personali pseudonimi, non anonimi. Pumpkit non conserva codici Coupon recuperabili.
 - **Perché:** per concedere i mesi gratuiti promessi, limitare i codici riservati ai destinatari, impedire che la stessa email riscatti un Coupon due volte dopo l’eliminazione dell’account e recuperare una modifica incerta della fatturazione senza duplicare benefici o addebiti.
 - **Base giuridica:** esecuzione del contratto per concedere l’accesso e recuperare la tua operazione (art. 6, par. 1, lett. b) GDPR); il legittimo interesse del Gestore a limitare gli inviti e prevenire riscatti ripetuti, anche prima dell’iscrizione e dopo l’eliminazione (art. 6, par. 1, lett. f) GDPR). Puoi opporti usando i contatti sotto. Codici Coupon, assegnazioni ai destinatari e risposte integrali di fatturazione sono esclusi dalle analisi.
+  | `pumpkit:coupon-redemption` | Session storage | Conserva la richiesta di riscatto di un Coupon accettata per recuperare un riscatto interrotto | Finché il recupero non la cancella o chiudi la scheda |
+  | `pumpkit:paid-signup` | Session storage | Conserva la sottoscrizione futura a pagamento accettata per recuperarla o annullarla | Finché il recupero non la cancella o chiudi la scheda |
+  | `pumpkit:plan-change` | Session storage | Conserva il cambio della frequenza di fatturazione accettato per verificarne l’esito | Finché il recupero non la cancella o chiudi la scheda |
 
 ### Analisi nel tuo browser {#data-analytics}
 

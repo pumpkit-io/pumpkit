@@ -11,6 +11,7 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.allowance import months_after
 from pumpkit.billing.gateway import Plan
 from pumpkit.billing.plan_change_recovery import run_cli
+from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
@@ -693,3 +694,63 @@ async def test_accepted_current_provider_price_stays_authoritative_after_lookup_
     assert me["future_plan"]["first_payment_at"] == added["ends_at"]
     assert me["future_plan"]["first_payment_at"] != old_result["first_payment_at"]
     assert (await authed_client.get(CHANGES + "/" + change["operation_id"])).json() == old_result
+
+
+async def test_expired_access_keeps_account_linked_change_recovery_after_external_cancellation(
+    authed_client,
+    coupons,
+    db,
+    user,
+    fake_billing,
+    fixed_clock,
+    monkeypatch,
+):
+    offer = await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    request = await proposed_change(authed_client)
+    fake_billing.delay_plan_changes = True
+    assert (await authed_client.post(CHANGES, json=request)).json()["status"] == "pending"
+    state = (await fake_billing.list_subscriptions(customer_id=user.stripe_customer_id))[0]
+    fake_billing.set_subscription(
+        user.stripe_customer_id, replace(state, status="canceled", cancel_at=state.trial_end)
+    )
+    fixed_clock.advance(
+        datetime.fromisoformat(offer["ends_at"].replace("Z", "+00:00"))
+        - fixed_clock()
+        + timedelta(seconds=1)
+    )
+    monkeypatch.setattr(settings, "COUPONS_ENABLED", False)
+    assert (
+        await _send(
+            authed_client,
+            fake_billing,
+            "evt_expired_pending_change",
+            "customer.subscription.deleted",
+            {"customer": user.stripe_customer_id},
+        )
+    ).status_code == 200
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscribed"] is False
+    assert me["pending_plan_change_id"] == request["operation_id"]
+    assert (await authed_client.get("/api/v1/onboarding")).json()["next_step"] == "paywall"
+    assert (await authed_client.get(CHANGES + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "pending"
+    assert (
+        await authed_client.post(
+            "/api/v1/billing/checkout",
+            json={
+                "plan_key": "pumpkit_pro_monthly",
+                "terms_version": TERMS_VERSION,
+                "accepted_terms": True,
+                "requested_immediate_start": True,
+                "approved_specific_clauses": True,
+            },
+        )
+    ).status_code == 409
+    fake_billing.complete_pending_plan_change(next(iter(fake_billing.pending_plan_changes)))
+    assert (await authed_client.get(CHANGES + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "pending"
+    assert (await authed_client.get("/api/v1/billing/me")).json()[
+        "pending_plan_change_id"
+    ] == request["operation_id"]

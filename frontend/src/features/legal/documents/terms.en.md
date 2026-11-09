@@ -118,7 +118,7 @@ Once you have spent any part of a Top-up, it is not refundable (clause 14). If a
 
 Your Subscription renews automatically at the end of each billing period, for a period of the same length, and the price of the Plan is charged to your payment method each time.
 
-You can cancel at any time in Settings with Manage subscription, which opens Stripe's billing portal. Cancelling stops the next renewal: you keep all remaining paid time and granted Free access, and you are not charged again. If you cancel during the Trial or before an agreed first payment after Free access, that payment is not charged.
+You can cancel at any time in Settings. When Cancel renewal is available, use it to cancel in Pumpkit; Manage billing opens Stripe’s portal for payment methods and invoices. Otherwise, use Manage subscription to open Stripe’s billing portal and cancel there. Cancelling stops the next renewal: you keep all remaining paid time and granted Free access, and you are not charged again. If you cancel during the Trial or before an agreed first payment after Free access, that payment is not charged.
 
 ## 13. Right of withdrawal for consumers {#withdrawal}
 

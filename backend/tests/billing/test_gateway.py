@@ -1073,3 +1073,34 @@ async def test_interval_change_in_progress_key_is_uncertain_even_on_invalid_requ
             operation_id="change_in_progress",
         )
     assert not isinstance(caught.value, DeferralRefused)
+
+
+async def test_in_progress_coupon_deferral_is_uncertain():
+    class InProgressStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            return (
+                json.dumps(
+                    {
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "idempotency_key_in_use",
+                            "message": "Still running",
+                        }
+                    }
+                ),
+                400,
+                {},
+            )
+
+    gateway = StripeBillingGateway(
+        stripe.StripeClient(
+            "sk_test_contract", http_client=InProgressStripe("{}"), max_network_retries=0
+        )
+    )
+    with pytest.raises(BillingProviderError) as caught:
+        await gateway.defer_renewal(
+            subscription_id="sub_defer",
+            target=datetime(2028, 3, 31, 12, tzinfo=timezone.utc),
+            operation_id="in_progress",
+        )
+    assert not isinstance(caught.value, DeferralRefused)

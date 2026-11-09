@@ -6,21 +6,23 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users retain uncertain coupon claims and billing recovery after access expires; the English and Italian billing instructions and browser-storage disclosures match the app. **Upgrade notes:** apply migration `0053` and audit pre-0053 pending/refused deferrals before activation, as `docs/coupons.md` describes. Keep bundled Terms dates together and arrange any required material-change notice before applying them.
+
 - Users see an accepted future payment amount only for the current subscription and its actual provider price, preserving accurate older prices when a plan lookup key changes.
 
 - Users retain billing and coupon safeguards when a rejected retry cannot settle an earlier uncertain billing-frequency change. **Upgrade notes:** apply `0052` to serialize dispatch ownership; existing pending changes retain their original replay deadline. Before activation, audit pre-0052 refusals after uncertain attempts against provider history.
 
-- Users can switch monthly/annual payment after all coupon free time, review the exact future amount/date, and recover interrupted changes without resetting paid/free Allowances or cancellation. Billing management uses a validated restricted portal; ordinary paid users retain Cancel renewal. **Upgrade notes:** apply `0051`, configure `STRIPE_COUPON_PORTAL_CONFIGURATION_ID` and add plan-change recovery to daily jobs. Resolve older portal-session/login risks and complete final #394 before enabling default-off Coupons; see `docs/coupons.md`.
+- Users can switch monthly/annual payment after all coupon free time, review the exact future amount/date, and recover interrupted changes without resetting paid/free allowances or cancellation. Billing management uses a validated restricted portal; ordinary paid users retain Cancel renewal. **Upgrade notes:** apply `0051`, configure `STRIPE_COUPON_PORTAL_CONFIGURATION_ID` and add plan-change recovery to daily jobs. Resolve older portal-session/login risks and complete final #394 before enabling default-off coupons; see `docs/coupons.md`.
 
 - Users retain paid access and recoverable cancellation when the provider applies cancellation but its response or the final local commit is lost.
 
-- Users cancelling an outdated signup see a clear current-plan recovery action instead of a misleading success, including after another Coupon extends renewal.
+- Users cancelling an outdated signup see a clear current-plan recovery action instead of a misleading success, including after another coupon extends renewal.
 
-- Users keep proven paid time and its monthly Allowance when an interrupted signup settles during cancellation, including across the first-payment boundary.
+- Users keep proven paid time and its monthly allowance when an interrupted signup settles during cancellation, including across the first-payment boundary.
 
 - Users can arrange renewal across stacked coupon months and see accurate same-day payment wording. Cancellation of an uncertain signup stays pending until the provider outcome is known, preventing a late subscription from escaping cancellation. **Upgrade notes:** apply migration `0050`; pre-checkpoint pending signups need provider-backed resolution before activation.
 
-- Users with coupon free access can explicitly arrange a monthly or annual paid renewal for its exact end, recover or cancel interrupted signup, and keep every free month and its Allowance. **Upgrade notes:** apply migration `0049` and add paid-signup recovery to billing recovery checks; Coupons remain disabled by default pending final Stripe validation. Preactivation grants with fractional timestamps retain their benefits and can subscribe after expiry; see `docs/coupons.md`.
+- Users with coupon free access can explicitly arrange a monthly or annual paid renewal for its exact end, recover or cancel interrupted signup, and keep every free month and its allowance. **Upgrade notes:** apply migration `0049` and add paid-signup recovery to billing recovery checks; coupons remain disabled by default pending final Stripe validation. Preactivation grants with fractional timestamps retain their benefits and can subscribe after expiry; see `docs/coupons.md`.
 
 - Further coupon claims follow their current free-access grant’s subscription, so retained older cancelled subscriptions cannot block redemption or bind unrelated cardless access.
 
@@ -30,7 +32,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - Scheduled posts that fail after access ends release top-up reservations for parts X did not accept, while preserving accepted parts and other scheduled posts.
 
-- Known cancellation dates keep expired access, Top-up purchases and immediate payments closed after coupon history is purged.
+- Known cancellation dates keep expired access, top-up purchases and immediate payments closed after coupon history is purged.
 
 - Self-hosters’ coupon purge now removes expired saved paid coverage from retained subscription records while preserving current benefits and pending recovery.
 
@@ -38,19 +40,19 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - Users receiving current free access can buy normal top-ups without starting a subscription, with the existing allowance-first spending, expiry and refund rules. Support account deletion waits for open or unresolved top-up payments.
 
-- Users can redeem distinct coupons in Settings to append free months while keeping current usage and Top-ups, with the combined dates shown in Plan. **Upgrade notes:** Apply migration 0046; coupons remain disabled by default pending final provider validation.
+- Users can redeem distinct coupons in Settings to append free months while keeping current usage and top-ups, with the combined dates shown in plan. **Upgrade notes:** Apply migration 0046; coupons remain disabled by default pending final provider validation.
 
 - Users can confirm cardless coupons on the Paywall, receive full monthly free access and recover interrupted redemption; account deletion preserves minimal same-code claim prevention. **Upgrade notes:** Apply migration 0045 and add the documented account-file cleanup retry to the daily coupon purge job. Coupons remain disabled by default pending final provider validation.
 
 ### Added
 
-- On isolated Instances with coupons enabled, signed-in recipients can check a coupon on the Paywall and see its free months, dates, monthly allowance and payment consequences. Preview does not consume the code or grant access; confirmation follows in the next implementation slice.
+- On isolated instances with coupons enabled, signed-in recipients can check a coupon on the Paywall and see its free months, dates, monthly allowance and payment consequences. Preview does not consume the code or grant access; confirmation follows in the next implementation slice.
 
-- Billing-enabled Instances can create, inspect, list, disable and purge coupons through privileged command-line tooling. Coupon functionality is off by default pending the remaining implementation and final Stripe validation. **Upgrade notes:** Before isolated testing or eventual activation, configure and securely back up `COUPON_IDENTITY_KEYS` and schedule daily purge; existing Instances need no key while `COUPONS_ENABLED=false`.
+- Billing-enabled instances can create, inspect, list, disable and purge coupons through privileged command-line tooling. Coupon functionality is off by default pending the remaining implementation and final Stripe validation. **Upgrade notes:** Before isolated testing or eventual activation, configure and securely back up `COUPON_IDENTITY_KEYS` and schedule daily purge; existing instances need no key while `COUPONS_ENABLED=false`.
 
 ### Changed
 
-- The English and Italian Terms and Privacy Policy describe cardless coupon access, its expiry, later explicit paid signup and retained claim fingerprints. Coupon functionality remains disabled pending implementation and final Stripe validation. **Upgrade notes:** Self-hosters who publish the bundled legal pages must replace them for their Instance and keep the frontend/backend Terms dates together; arrange any required material-change notice before applying the new Terms to existing Users.
+- The English and Italian Terms and Privacy Policy describe cardless coupon access, its expiry, later explicit paid signup and retained claim fingerprints. Coupon functionality remains disabled pending implementation and final Stripe validation. **Upgrade notes:** self-hosters who publish the bundled legal pages must replace them for their instance and keep the frontend/backend Terms dates together; arrange any required material-change notice before applying the new Terms to existing users.
 
 ### Fixed
 
