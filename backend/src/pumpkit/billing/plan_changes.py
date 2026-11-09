@@ -215,6 +215,7 @@ async def reconcile(
     clock: Clock,
     dispatch: bool = False,
     mutate: bool = True,
+    prior_unknown: bool = True,
 ) -> PlanChangeResponse:
     if operation.status != "pending":
         return response(operation)
@@ -291,7 +292,9 @@ async def reconcile(
                 operation_id=operation.id,
             )
         except DeferralRefused:
-            return refuse(operation, now=clock())
+            if not prior_unknown:
+                return refuse(operation, now=clock())
+            return response(operation)
         return await reconcile(
             db, gateway, user=user, operation=operation, clock=clock, mutate=False
         )

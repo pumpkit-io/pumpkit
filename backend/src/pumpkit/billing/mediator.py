@@ -1026,16 +1026,26 @@ async def _recover_plan_change(
         db, gateway, user=user, operation=operation, clock=clock, mutate=False
     )
     if operation.status == "pending":
-        if operation.attempted_at is None:
-            operation.attempted_at = clock()
-            # A crash or lost response after this checkpoint must keep billing changes guarded.
-            await db.commit()
-            user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
-            operation = await plan_changes.find(
-                db, user_id=user.id, operation_id=operation.operation_id
-            )
+        prior_unknown = operation.attempted_at is not None
+        operation.attempted_at = operation.attempted_at or clock()
+        operation.dispatch_count += 1
+        dispatch_count = operation.dispatch_count
+        # Keep uncertainty before dispatch; a newer claim makes this owner stale even if it never sent.
+        await db.commit()
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        operation = await plan_changes.find(
+            db, user_id=user.id, operation_id=operation.operation_id
+        )
+        if operation.status != "pending" or operation.dispatch_count != dispatch_count:
+            return plan_changes.response(operation)
         answer = await plan_changes.reconcile(
-            db, gateway, user=user, operation=operation, clock=clock, dispatch=True
+            db,
+            gateway,
+            user=user,
+            operation=operation,
+            clock=clock,
+            dispatch=True,
+            prior_unknown=prior_unknown,
         )
     await db.commit()
     return answer

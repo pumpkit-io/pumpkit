@@ -1041,3 +1041,35 @@ async def test_management_portal_requires_explicit_current_restricted_configurat
         )
         assert http.methods == ["get", "post"]
         assert http.forms[-1]["configuration"] == ["bpc_safe"]
+
+
+@pytest.mark.parametrize("status", [400, 409])
+async def test_interval_change_in_progress_key_is_uncertain_even_on_invalid_request(status):
+    class InProgressStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            return (
+                json.dumps(
+                    {
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "idempotency_key_in_use",
+                            "message": "The original request is still executing",
+                        }
+                    }
+                ),
+                status,
+                {},
+            )
+
+    http = InProgressStripe("{}")
+    gateway = StripeBillingGateway(
+        stripe.StripeClient("sk_test_contract", http_client=http, max_network_retries=0)
+    )
+    with pytest.raises(BillingProviderError) as caught:
+        await gateway.change_plan(
+            subscription_id="sub_change",
+            item_id="si_change",
+            price_id="price_year",
+            operation_id="change_in_progress",
+        )
+    assert not isinstance(caught.value, DeferralRefused)

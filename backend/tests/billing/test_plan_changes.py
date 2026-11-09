@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from pumpkit.account_deletion import run_cli as delete_cli
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.allowance import months_after
 from pumpkit.billing.gateway import Plan
@@ -488,3 +489,85 @@ async def test_explicit_future_signup_can_change_frequency_and_redeem_again_with
     assert me["subscription"]["introductory_trial_end"] is None
     assert me["subscription"]["paid_through"] is None
     assert me["future_plan"]["first_payment_at"] == offer["ends_at"]
+
+
+@pytest.mark.parametrize("replay_error", ["plan_change_in_progress", "refuse_plan_change"])
+async def test_rejected_replay_keeps_unknown_original_price_write_guarded_until_it_finishes(
+    authed_client,
+    coupons,
+    db,
+    user,
+    fake_billing,
+    fixed_clock,
+    db_session_maker,
+    file_storage,
+    replay_error,
+):
+    free = await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    request = await proposed_change(authed_client)
+    code = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
+    before = (await authed_client.get("/api/v1/usage")).json()
+    fake_billing.delay_plan_changes = True
+    assert (await authed_client.post(CHANGES, json=request)).json()["status"] == "pending"
+    fake_billing.fail_on.add(replay_error)
+    retried = await authed_client.get(CHANGES + "/" + request["operation_id"])
+    assert retried.json()["status"] == "pending", retried.text
+    assert (await authed_client.get("/api/v1/billing/me")).json()[
+        "pending_plan_change_id"
+    ] == request["operation_id"]
+    for path, body in [
+        (PREVIEW, {"code": code["code"]}),
+        (REDEEM, {**confirmation(offer), "operation_id": "guarded-claim-0001"}),
+        (SIGNUPS + "/preview", {"plan_key": "pumpkit_pro_annual"}),
+        ("/api/v1/billing/portal", None),
+        ("/api/v1/billing/cancel-renewal", None),
+        ("/api/v1/billing/subscribe-now", None),
+        ("/api/v1/billing/checkout", {"plan_key": "pumpkit_pro_annual"}),
+    ]:
+        assert (await authed_client.post(path, json=body)).status_code == 409
+    err = StringIO()
+    assert (
+        await delete_cli(
+            ["--user-id", user.id],
+            sessions=db_session_maker,
+            gateway=fake_billing,
+            storage=file_storage,
+            stdout=StringIO(),
+            stderr=err,
+        )
+        == 1
+    )
+    assert "confirmed" in err.getvalue()
+    assert (await coupons(code["id"], command="inspect"))["redeemed_count"] == 0
+    assert fake_billing.plan_changes == []
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+    fake_billing.fail_on.clear()
+    fake_billing.complete_pending_plan_change(next(iter(fake_billing.pending_plan_changes)))
+    answer = await authed_client.get(CHANGES + "/" + request["operation_id"])
+    assert answer.json()["status"] == "completed", answer.text
+    assert len(fake_billing.plan_changes) == 1
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["free_access"]["ends_at"] == free["ends_at"]
+    assert me["future_plan"]["plan_key"] == "pumpkit_pro_annual"
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+
+
+async def test_first_definite_price_refusal_releases_guard_without_consuming_coupon(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    request = await proposed_change(authed_client)
+    code = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
+    fake_billing.fail_on.add("refuse_plan_change")
+    answer = await authed_client.post(CHANGES, json=request)
+    assert answer.json()["status"] == "refused", answer.text
+    assert (await authed_client.get("/api/v1/billing/me")).json()["pending_plan_change_id"] is None
+    assert (await coupons(code["id"], command="inspect"))["redeemed_count"] == 0
+    assert fake_billing.plan_changes == []
+    fake_billing.fail_on.clear()
+    claimed = await authed_client.post(
+        REDEEM, json={**confirmation(offer), "operation_id": "after-refusal-0001"}
+    )
+    assert claimed.json()["status"] == "completed", claimed.text

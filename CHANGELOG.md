@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users retain billing and coupon safeguards when a rejected retry cannot settle an earlier uncertain billing-frequency change. **Upgrade notes:** apply `0052` to serialize dispatch ownership; existing pending changes retain their original replay deadline. Before activation, audit pre-0052 refusals after uncertain attempts against provider history.
+
 - Users can switch monthly/annual payment after all coupon free time, review the exact future amount/date, and recover interrupted changes without resetting paid/free Allowances or cancellation. Billing management uses a validated restricted portal; ordinary paid users retain Cancel renewal. **Upgrade notes:** apply `0051`, configure `STRIPE_COUPON_PORTAL_CONFIGURATION_ID` and add plan-change recovery to daily jobs. Resolve older portal-session/login risks and complete final #394 before enabling default-off Coupons; see `docs/coupons.md`.
 
 - Users retain paid access and recoverable cancellation when the provider applies cancellation but its response or the final local commit is lost.

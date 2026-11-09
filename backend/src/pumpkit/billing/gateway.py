@@ -842,6 +842,8 @@ class StripeBillingGateway:
                 {"idempotency_key": "plan-change-" + operation_id},
             )
         except stripe.InvalidRequestError as exc:
+            if exc.code == "idempotency_key_in_use":
+                raise BillingProviderError("Stripe interval change is still executing") from exc
             raise DeferralRefused("Stripe refused the interval change") from exc
         except stripe.StripeError as exc:
             raise BillingProviderError("Stripe interval change outcome is uncertain") from exc
@@ -1014,6 +1016,8 @@ class FakeBillingGateway:
     plan_changes: list[str] = field(default_factory=list)
     restricted_portals: list[str] = field(default_factory=list)
     _changed_operations: set[str] = field(default_factory=set)
+    delay_plan_changes: bool = False
+    pending_plan_changes: dict[str, tuple[str, str]] = field(default_factory=dict)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
     _payment_checkouts: dict[str, tuple[str, str]] = field(default_factory=dict, init=False)
@@ -1295,10 +1299,24 @@ class FakeBillingGateway:
         self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str
     ) -> None:
         self._maybe_fail("change_plan")
+        self._maybe_fail("plan_change_in_progress")
         if operation_id in self._changed_operations:
             return
         if "refuse_plan_change" in self.fail_on:
             raise DeferralRefused("The interval change was refused")
+        if self.delay_plan_changes:
+            self.pending_plan_changes.setdefault(operation_id, (subscription_id, price_id))
+            raise BillingProviderError("Remote price update continues after the client timed out")
+        self._complete_plan_change(subscription_id, price_id, operation_id)
+        self._maybe_fail("after_change_plan")
+
+    def complete_pending_plan_change(self, operation_id: str) -> None:
+        subscription_id, price_id = self.pending_plan_changes.pop(operation_id)
+        self._complete_plan_change(subscription_id, price_id, operation_id)
+
+    def _complete_plan_change(self, subscription_id: str, price_id: str, operation_id: str) -> None:
+        if operation_id in self._changed_operations:
+            return
         plan = next(p for p in self.plans if p.price_id == price_id)
         for subscriptions in self._subscriptions.values():
             if subscription := subscriptions.get(subscription_id):
@@ -1312,7 +1330,6 @@ class FakeBillingGateway:
                 )
         self._changed_operations.add(operation_id)
         self.plan_changes.append(operation_id)
-        self._maybe_fail("after_change_plan")
 
     async def cancel_renewal(self, *, subscription_id: str, ends_at: datetime) -> None:
         self._maybe_fail("cancel_renewal")

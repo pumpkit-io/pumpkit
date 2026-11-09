@@ -314,5 +314,6 @@ class PlanChange(Base):
     offer: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     attempted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    dispatch_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     detail: Mapped[Optional[str]] = mapped_column(String)
