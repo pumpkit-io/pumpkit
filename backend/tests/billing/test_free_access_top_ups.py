@@ -80,6 +80,7 @@ async def test_queued_free_time_does_not_unlock_checkout_or_projected_usage_acti
     grant.starts_at = fixed_clock() + timedelta(days=7)
     grant.ends_at = fixed_clock() + timedelta(days=97)
     grant.calendar_anchor = grant.starts_at
+    grant.coverage_starts_at = grant.starts_at
     grant.allowance = {**grant.allowance, "x_posts": 1}
     db.add(
         Subscription(

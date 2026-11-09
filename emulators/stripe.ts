@@ -70,6 +70,15 @@ function emptyState(): State {
 
 function periodEnd(start: number, price: StripeObject): number {
   const { interval, interval_count: count } = price.recurring;
+  if (interval === 'month' || interval === 'year') {
+    const date = new Date(start * 1000);
+    const day = date.getUTCDate();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + (count ?? 1) * (interval === 'year' ? 12 : 1));
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(Math.min(day, lastDay));
+    return Math.floor(date.getTime() / 1000);
+  }
   return start + INTERVAL_DAYS[interval] * (count ?? 1) * DAY;
 }
 
@@ -89,6 +98,7 @@ function newSubscription(
     created,
     start_date: created,
     billing_cycle_anchor: trialEnd ?? created,
+    billing_mode: { type: 'classic' },
     cancel_at: null,
     cancel_at_period_end: false,
     canceled_at: null,
@@ -168,8 +178,25 @@ function seedState(seed: Seed): State {
       item.current_period_end = periodEnd(item.current_period_start, price);
     }
     state.subscriptions[s.id] = { ...subscription, id: s.id, status: s.status };
+    if (s.status === 'active') {
+      const invoice = paidInvoice(subscription);
+      state.invoices[invoice.id] = invoice;
+      state.subscriptions[s.id].latest_invoice = invoice.id;
+    }
   }
   return state;
+}
+
+function paidInvoice(subscription: StripeObject): StripeObject {
+  const [item] = subscription.items.data;
+  return {
+    id: newId('in'), object: 'invoice', customer: subscription.customer,
+    status: 'paid', amount_paid: item.price.unit_amount * item.quantity, amount_remaining: 0,
+    lines: { data: [{ amount: item.price.unit_amount * item.quantity,
+      parent: { subscription_item_details: { subscription_item: item.id } },
+      period: { start: item.current_period_start, end: item.current_period_end } }] },
+    hosted_invoice_url: null,
+  };
 }
 
 // Stripe's form encoding: `line_items[0][price]=x&metadata[k]=v` into nested objects and arrays.
@@ -458,6 +485,11 @@ export function pumpkitStripe(target: WebhookTarget) {
             session.pumpkit_trial_days,
           );
           state.subscriptions[subscription.id] = subscription;
+          if (subscription.status === 'active') {
+            const invoice = paidInvoice(subscription);
+            state.invoices[invoice.id] = invoice;
+            subscription.latest_invoice = invoice.id;
+          }
           session.subscription = subscription.id;
           session.payment_status =
             subscription.status === 'trialing' ? 'no_payment_required' : 'paid';
@@ -537,11 +569,27 @@ export function pumpkitStripe(target: WebhookTarget) {
         return c.json(subscription);
       });
 
-      // Pumpkit updates a subscription only to end its Trial now; the first charge always succeeds here.
+      // Absolute coupon deferral and cancellation preserve the existing paid period.
       app.post('/v1/subscriptions/:id', async (c: any) => {
         const subscription = state.subscriptions[c.req.param('id')];
         if (!subscription) return notFound(c, 'subscription', c.req.param('id'));
-        const { trial_end: trialEnd, expand = [] } = await bodyParams(c);
+        const { trial_end: trialEnd, cancel_at: cancelAt, metadata, expand = [] } = await bodyParams(c);
+        if (trialEnd && trialEnd !== 'now') {
+          const target = Number(trialEnd);
+          if (!Number.isInteger(target) || target <= now() || target > now() + 730 * DAY) {
+            return c.json({ error: { type: 'invalid_request_error', message: 'Unsupported trial_end' } }, 400);
+          }
+          Object.assign(subscription, {
+            status: 'trialing', trial_start: now(), trial_end: target,
+            billing_cycle_anchor: target, metadata: { ...subscription.metadata, ...metadata },
+          });
+          subscription.items.data[0].current_period_end = target;
+          const invoice = { id: newId('in'), object: 'invoice', customer: subscription.customer,
+            status: 'paid', amount_paid: 0, amount_remaining: 0, lines: { data: [] } };
+          state.invoices[invoice.id] = invoice;
+          subscription.latest_invoice = invoice.id;
+        }
+        if (cancelAt) subscription.cancel_at = Number(cancelAt);
         // Like Stripe, ending a Trial that already ended changes nothing.
         if (trialEnd === 'now' && subscription.status === 'trialing') {
           const start = now();

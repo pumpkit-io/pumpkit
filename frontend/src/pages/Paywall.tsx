@@ -98,9 +98,15 @@ function PlanSkeleton() {
 
 function Offer({ data, notice }: { data: BillingData; notice: ReactNode }) {
   const { trialDays } = data.me;
+  const [couponPending, setCouponPending] = useState(false);
+  const [couponRedeemed, setCouponRedeemed] = useState(false);
   return (
     <div className="space-y-6">
-      {trialDays !== null ? (
+      {couponPending ? (
+        <Heading title="Confirm your coupon redemption" />
+      ) : couponRedeemed ? (
+        <Heading title="Your free access is ready" />
+      ) : trialDays !== null ? (
         <Heading
           title="Start your free trial"
           lead={`${trialDays} days free, then billed by the plan you pick.`}
@@ -109,14 +115,18 @@ function Offer({ data, notice }: { data: BillingData; notice: ReactNode }) {
         <Heading title="Subscribe to keep writing" lead="Pick a plan to use Pumpkit again." />
       )}
       {notice}
-      {data.couponsEnabled && <CouponForm />}
-      <PlanPicker
-        // A new Terms version must be accepted afresh.
-        key={data.termsVersion}
-        data={data}
-        actionLabel={trialDays !== null ? 'Start trial' : 'Subscribe'}
-      />
-      {trialDays !== null && (
+      {data.couponsEnabled && (
+        <CouponForm onPendingChange={setCouponPending} onRedeemed={() => setCouponRedeemed(true)} />
+      )}
+      {!couponPending && !couponRedeemed && (
+        <PlanPicker
+          // A new Terms version must be accepted afresh.
+          key={data.termsVersion}
+          data={data}
+          actionLabel={trialDays !== null ? 'Start trial' : 'Subscribe'}
+        />
+      )}
+      {!couponPending && !couponRedeemed && trialDays !== null && (
         <p className="font-sans text-sm text-foreground">
           You won&apos;t be charged until {firstChargeDate(trialDays)}.
         </p>
@@ -147,6 +157,17 @@ function PaywallContent() {
       <div className="space-y-6">
         <Heading title="Choose a plan" />
         <PlanSkeleton />
+      </div>
+    );
+  }
+  if (data.me.pendingCouponOperation) {
+    return (
+      <div className="space-y-5">
+        <Heading
+          title="Confirm your coupon redemption"
+          lead="Check your redemption before starting another billing action."
+        />
+        <CouponForm recoveryOnly operationId={data.me.pendingCouponOperationId} />
       </div>
     );
   }

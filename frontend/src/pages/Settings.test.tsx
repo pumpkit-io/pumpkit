@@ -18,6 +18,7 @@ vi.mock('@/services/billingService', () => ({
     startTopUpCheckout: vi.fn(),
     openBillingPortal: vi.fn(),
     subscribeNow: vi.fn(),
+    cancelRenewal: vi.fn(),
   },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
@@ -60,6 +61,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
+import { storageKey } from '@/lib/storage';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import type { Instance } from '@/lib/instance';
 import { redirectTo } from '@/lib/navigation';
@@ -1296,4 +1298,218 @@ it('redeems another coupon in Settings and refreshes the Plan and current Usage'
   await waitFor(() => expect(plan.getByRole('textbox', { name: 'Coupon code' })).toHaveFocus());
   expect(plan.getByRole('textbox', { name: 'Coupon code' })).toHaveValue('');
   expect(plan.getByRole('button', { name: 'Check code' })).toBeDisabled();
+});
+
+it('confirms a monthly coupon safely after reload and shows paid time and deferred renewal', async () => {
+  vi.mocked(billingService.redeemCoupon).mockClear();
+  vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+  sessionStorage.clear();
+  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+  vi.mocked(appConnectionService.list).mockResolvedValue([]);
+  vi.mocked(usageService.get).mockResolvedValue(usageWith());
+  vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, couponsEnabled: true });
+  const monthly = holding('active', true);
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue(monthly);
+  vi.mocked(billingService.previewCoupon).mockResolvedValue({
+    months: 1,
+    startsAt: '2028-02-29T12:00:00Z',
+    endsAt: '2028-03-31T12:00:00Z',
+    allowance: CATALOG.allowance,
+    nextPaymentAt: '2028-03-31T12:00:00Z',
+    termsVersion: null,
+    revision: 'monthly-preview',
+  });
+  const accepted = {
+    operationId: 'monthly-operation',
+    months: 1,
+    startsAt: '2028-02-29T12:00:00Z',
+    endsAt: '2028-03-31T12:00:00Z',
+    nextPaymentAt: '2028-03-31T12:00:00Z',
+  };
+  vi.mocked(billingService.redeemCoupon).mockResolvedValue({ ...accepted, status: 'pending' });
+  const view = renderSettings();
+  let plan = await card('Plan');
+  fireEvent.click(plan.getByRole('button', { name: 'Redeem coupon' }));
+  fireEvent.change(plan.getByRole('textbox', { name: 'Coupon code' }), {
+    target: { value: 'private-monthly-code' },
+  });
+  fireEvent.click(plan.getByRole('button', { name: 'Check code' }));
+  const preview = await plan.findByRole('status', { name: 'Coupon preview' });
+  expect(within(preview).getByText(/Next payment:/)).toHaveTextContent('Mar 31, 2028 UTC');
+  expect(within(preview).queryByText(/no subscription or obligation/)).not.toBeInTheDocument();
+  fireEvent.click(within(preview).getByRole('button', { name: 'Redeem coupon' }));
+  expect(await plan.findByText('Confirming redemption…')).toHaveAttribute('role', 'status');
+  await waitFor(() => expect(plan.getByRole('button', { name: 'Check redemption' })).toBeEnabled());
+  expect(plan.queryByText('Coupon redeemed')).not.toBeInTheDocument();
+  expect(plan.getByRole('button', { name: 'Manage subscription' })).toBeDisabled();
+  expect(sessionStorage.getItem(storageKey('coupon-redemption'))).toContain('monthly-preview');
+  expect(plan.getByRole('textbox', { name: 'Coupon code' })).toBeDisabled();
+  view.unmount();
+  vi.mocked(billingService.fetchCouponRedemption).mockResolvedValue({
+    ...accepted,
+    status: 'completed',
+  });
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+    ...monthly,
+    couponDeferral: true,
+    pendingCouponOperation: false,
+    subscription: {
+      ...monthly.subscription!,
+      status: 'trialing',
+      currentPeriodEnd: accepted.endsAt,
+      paidThrough: accepted.startsAt,
+    },
+    freeAccess: {
+      startsAt: accepted.startsAt,
+      endsAt: accepted.endsAt,
+      months: 1,
+      currentStartsAt: null,
+      currentEndsAt: null,
+      queuedStartsAt: accepted.startsAt,
+    },
+  });
+  renderSettings();
+  plan = await card('Plan');
+  expect(await plan.findByText('Coupon redeemed')).toHaveFocus();
+  expect(plan.getByText(/Paid access through/)).toHaveTextContent('February 29, 2028 UTC');
+  expect(plan.getByText(/Queued free access:/)).toHaveTextContent('March 31, 2028 UTC');
+  expect(plan.queryByText(/Current free access:/)).not.toBeInTheDocument();
+  expect(plan.getAllByText(/Next payment:/)).toHaveLength(2);
+  expect(plan.queryByText('Trial')).not.toBeInTheDocument();
+  expect(plan.queryByText('No automatic payment')).not.toBeInTheDocument();
+  expect(plan.queryByRole('button', { name: 'Manage subscription' })).not.toBeInTheDocument();
+  expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeEnabled();
+  expect(billingService.redeemCoupon).toHaveBeenCalledTimes(1);
+  expect(sessionStorage.getItem(storageKey('coupon-redemption'))).toBeNull();
+});
+
+it('recovers the account pending operation without browser storage while new coupons are disabled', async () => {
+  sessionStorage.clear();
+  vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+  vi.mocked(appConnectionService.list).mockResolvedValue([]);
+  vi.mocked(usageService.get).mockResolvedValue(usageWith());
+  vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+    ...holding('active', true),
+    pendingCouponOperation: true,
+    pendingCouponOperationId: 'recover-from-account',
+    subscription: { ...holding('trialing', true).subscription! },
+  });
+  const result = {
+    operationId: 'recover-from-account',
+    months: 1,
+    startsAt: '2028-02-29T12:00:00Z',
+    endsAt: '2028-03-31T12:00:00Z',
+    nextPaymentAt: '2028-03-31T12:00:00Z',
+  };
+  vi.mocked(billingService.fetchCouponRedemption)
+    .mockReset()
+    .mockResolvedValue({
+      ...result,
+      status: 'pending',
+    });
+  vi.mocked(billingService.redeemCoupon).mockClear();
+  renderSettings();
+  const plan = await card('Plan');
+  expect(await plan.findByText('Confirming redemption…')).toBeInTheDocument();
+  await waitFor(() => expect(plan.getByRole('button', { name: 'Check redemption' })).toBeEnabled());
+  expect(billingService.fetchCouponRedemption).toHaveBeenCalledWith('recover-from-account');
+  expect(plan.getByText('Confirming coupon')).toBeInTheDocument();
+  expect(plan.queryByText('Trial')).not.toBeInTheDocument();
+  expect(plan.queryByRole('button', { name: 'Redeem coupon' })).not.toBeInTheDocument();
+  expect(plan.getByRole('button', { name: 'Manage subscription' })).toBeDisabled();
+  vi.mocked(billingService.fetchCouponRedemption).mockResolvedValue({
+    ...result,
+    status: 'completed',
+  });
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('active', true));
+  fireEvent.click(plan.getByRole('button', { name: 'Check redemption' }));
+  await waitFor(() =>
+    expect(plan.getByRole('button', { name: 'Manage subscription' })).toBeEnabled(),
+  );
+  expect(billingService.redeemCoupon).not.toHaveBeenCalled();
+});
+
+it('retries cancellation safely and keeps the paid and queued free dates', async () => {
+  sessionStorage.clear();
+  vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+  vi.mocked(appConnectionService.list).mockResolvedValue([]);
+  vi.mocked(usageService.get).mockResolvedValue(usageWith());
+  vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+  const monthly: BillingMe = {
+    ...holding('trialing', true),
+    couponDeferral: true,
+    subscription: {
+      ...holding('trialing', true).subscription!,
+      paidThrough: '2028-02-29T12:00:00Z',
+      currentPeriodEnd: '2028-03-31T12:00:00Z',
+    },
+    freeAccess: {
+      months: 1,
+      startsAt: '2028-02-29T12:00:00Z',
+      endsAt: '2028-03-31T12:00:00Z',
+      currentStartsAt: null,
+      currentEndsAt: null,
+      queuedStartsAt: '2028-02-29T12:00:00Z',
+    },
+  };
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue(monthly);
+  vi.mocked(billingService.cancelRenewal)
+    .mockReset()
+    .mockRejectedValueOnce(apiError(502, 'Try again'));
+  renderSettings();
+  const plan = await card('Plan');
+  fireEvent.click(await plan.findByRole('button', { name: 'Cancel renewal' }));
+  expect(await plan.findByRole('alert')).toHaveTextContent('Try again');
+  vi.mocked(billingService.cancelRenewal).mockImplementation(async () => {
+    const canceled = {
+      ...monthly,
+      subscription: { ...monthly.subscription!, cancelAt: '2028-03-31T12:00:00Z' },
+    };
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(canceled);
+    return canceled;
+  });
+  fireEvent.click(plan.getByRole('button', { name: 'Cancel renewal' }));
+  expect(await plan.findByText(/Ends on/)).toHaveTextContent('March 31, 2028');
+  expect(plan.getByText(/Renewal cancelled/)).toHaveFocus();
+  expect(plan.getByText('No automatic payment')).toBeInTheDocument();
+  expect(plan.getByText(/Paid access through/)).toHaveTextContent('February 29, 2028 UTC');
+  expect(plan.getByText(/Queued free access:/)).toHaveTextContent('March 31, 2028 UTC');
+  expect(plan.queryByRole('button', { name: 'Cancel renewal' })).not.toBeInTheDocument();
+  expect(billingService.cancelRenewal).toHaveBeenCalledTimes(2);
+});
+
+it('shows earned free access through its end after an earlier provider cancellation', async () => {
+  vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+  vi.mocked(appConnectionService.list).mockResolvedValue([]);
+  vi.mocked(usageService.get).mockResolvedValue(usageWith());
+  vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+    ...holding('canceled', true),
+    couponDeferral: true,
+    subscription: {
+      ...holding('canceled', true).subscription!,
+      cancelAt: '2028-02-10T12:00:00Z',
+      paidThrough: '2028-02-29T12:00:00Z',
+    },
+    freeAccess: {
+      months: 1,
+      startsAt: '2028-02-29T12:00:00Z',
+      endsAt: '2028-03-31T12:00:00Z',
+      currentStartsAt: null,
+      currentEndsAt: null,
+      queuedStartsAt: '2028-02-29T12:00:00Z',
+    },
+  });
+  renderSettings();
+  const plan = await card('Plan');
+  expect(await plan.findByText(/Ends on/)).toHaveTextContent('March 31, 2028');
+  expect(plan.getByText('No automatic payment')).toBeInTheDocument();
 });

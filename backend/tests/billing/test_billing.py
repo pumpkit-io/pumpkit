@@ -587,8 +587,9 @@ def _billing_subscription(status: str) -> dict:
         "status": status,
         "plan_key": "pumpkit_pro_monthly",
         # SQLite drops the time zone that Postgres keeps.
-        "current_period_end": "2026-11-06T00:00:00",
+        "current_period_end": "2026-11-06T00:00:00Z",
         "cancel_at": None,
+        "paid_through": None,
     }
 
 
@@ -601,6 +602,9 @@ async def test_billing_me_for_a_user_with_no_subscription_offers_the_trial(
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_coupon_operation": False,
+        "pending_coupon_operation_id": None,
+        "coupon_deferral": False,
         "free_access": None,
         "subscription": None,
         "subscribed": False,
@@ -628,6 +632,9 @@ async def test_billing_me_reports_the_running_subscription_and_offers_nothing(
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_coupon_operation": False,
+        "pending_coupon_operation_id": None,
+        "coupon_deferral": False,
         "free_access": None,
         "subscription": _billing_subscription(status),
         "subscribed": subscribed,
@@ -643,7 +650,7 @@ async def test_billing_me_reports_when_a_cancelled_trial_ends(client, db, fake_b
     response = await client.get(BILLING_ME)
 
     assert response.status_code == 200
-    assert response.json()["subscription"]["cancel_at"] == "2026-11-09T00:00:00"
+    assert response.json()["subscription"]["cancel_at"] == "2026-11-09T00:00:00Z"
 
 
 async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_one(
@@ -656,6 +663,9 @@ async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_on
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_coupon_operation": False,
+        "pending_coupon_operation_id": None,
+        "coupon_deferral": False,
         "free_access": None,
         "subscription": _billing_subscription("incomplete"),
         "subscribed": False,
@@ -676,6 +686,9 @@ async def test_billing_me_never_reports_an_ended_subscription(
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_coupon_operation": False,
+        "pending_coupon_operation_id": None,
+        "coupon_deferral": False,
         "free_access": None,
         "subscription": None,
         "subscribed": False,
@@ -727,6 +740,7 @@ async def test_billing_api_serves_subscription_top_up_and_coupon_routes(client):
         "/api/v1/billing/top-ups/checkout",
         "/api/v1/billing/portal",
         "/api/v1/billing/subscribe-now",
+        "/api/v1/billing/cancel-renewal",
         "/api/v1/stripe/webhook",
     }
 
@@ -800,7 +814,7 @@ async def test_billing_disabled_access_onboarding_and_usage_agree_despite_subscr
 
 
 @pytest.mark.parametrize("status", ["active", "trialing"])
-async def test_access_ends_when_the_provider_cancellation_is_synced_at_the_exact_end(
+async def test_access_ends_at_the_known_cancellation_even_before_the_provider_nudge(
     client, db, user, fake_billing, fixed_clock, status
 ):
     end = fixed_clock() + timedelta(seconds=1)
@@ -828,7 +842,7 @@ async def test_access_ends_when_the_provider_cancellation_is_synced_at_the_exact
 
     await assert_access(True)
     fixed_clock.advance(timedelta(seconds=1))
-    await assert_access(True)
+    await assert_access(False)
     fake_billing.set_subscription(CUSTOMER, replace(state, status="canceled"))
     payload, signature = fake_billing.signed_event(
         event_id="evt_cancellation_at_end",

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import pumpkit.models  # noqa: F401
 from pumpkit.auth.service import users
-from pumpkit.billing import coupon_redemption
+from pumpkit.billing import coupon_operations, coupon_redemption
 from pumpkit.billing import service as billing
 from pumpkit.billing.gateway import BillingGateway, get_billing_gateway
 from pumpkit.billing.models import FreeAccess
@@ -30,6 +30,7 @@ async def delete_account(db: AsyncSession, gateway: BillingGateway, *, user_id: 
     if locked is None:
         return
     user = locked
+    await coupon_operations.require_settled(db, user_id=user.id)
     await scheduling.require_settled_publishing_before_account_deletion(db, user_id=user.id)
     if user.stripe_customer_id:
         states = await gateway.list_subscriptions(customer_id=user.stripe_customer_id)

@@ -27,8 +27,9 @@ function savedRequest(): CouponRedemptionRequest | null {
   }
 }
 
-export function useCouponRedemption(onConflict: () => void) {
-  const [pending, setPending] = useState(savedRequest);
+export function useCouponRedemption(onConflict: () => void, operationId?: string | null) {
+  const [request, setRequest] = useState(savedRequest);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<CouponRedemption | null>(null);
@@ -36,71 +37,105 @@ export function useCouponRedemption(onConflict: () => void) {
   const conflict = useRef(onConflict);
   conflict.current = onConflict;
 
-  const submit = useCallback(async (request: CouponRedemptionRequest, recover = false) => {
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      sessionStorage.setItem(storageKey('coupon-redemption'), JSON.stringify(request));
-    } catch {
-      setError("Couldn't save this redemption for recovery. Allow browser storage and try again.");
-      setBusy(false);
-      running.current = false;
-      return;
-    }
-    setPending(request);
-    let confirming = !recover;
-    try {
-      let answer: CouponRedemption | null = null;
-      if (recover) {
+  const execute = useCallback(
+    async (original: CouponRedemptionRequest | null, id: string, recover: boolean) => {
+      if (running.current) return;
+      running.current = true;
+      setBusy(true);
+      setError(null);
+      if (original) {
         try {
-          answer = await billingService.fetchCouponRedemption(request.operationId);
-        } catch (cause) {
-          if (errorStatus(cause) !== 404) throw cause;
+          sessionStorage.setItem(storageKey('coupon-redemption'), JSON.stringify(original));
+        } catch {
+          setError(
+            "Couldn't save this redemption for recovery. Allow browser storage and try again.",
+          );
+          setBusy(false);
+          running.current = false;
+          return;
         }
+        setRequest(original);
       }
-      if (!answer) {
-        confirming = true;
-        answer = await billingService.redeemCoupon(request);
+      setPendingId(id);
+      let confirming = !recover;
+      const clearPending = () => {
+        setRequest(null);
+        setPendingId(null);
+        try {
+          sessionStorage.removeItem(storageKey('coupon-redemption'));
+        } catch {
+          // Recovery from the account also works when browser storage is unavailable.
+        }
+      };
+      try {
+        let answer: CouponRedemption | null = null;
+        if (recover) {
+          try {
+            answer = await billingService.fetchCouponRedemption(id);
+          } catch (cause) {
+            if (!original || errorStatus(cause) !== 404) throw cause;
+          }
+        }
+        if (!answer && original) {
+          confirming = true;
+          answer = await billingService.redeemCoupon(original);
+        }
+        if (!answer || answer.status === 'pending') return;
+        if (answer.status === 'refused') {
+          conflict.current();
+          setError(
+            answer.detail ?? 'This redemption could not be completed. Check the code again.',
+          );
+        } else {
+          setCompleted(answer);
+        }
+        clearPending();
+      } catch (cause) {
+        const status = errorStatus(cause);
+        if (confirming && status !== null && [400, 409, 422].includes(status)) {
+          clearPending();
+          conflict.current();
+          setError(
+            errorMessage(
+              cause,
+              'Check the code again and review the current offer before redeeming.',
+            ),
+          );
+        } else {
+          setError(
+            'Your redemption is not confirmed yet. Check redemption to retrieve its result safely.',
+          );
+        }
+      } finally {
+        setBusy(false);
+        running.current = false;
       }
-      setCompleted(answer);
-      setPending(null);
-      sessionStorage.removeItem(storageKey('coupon-redemption'));
-    } catch (cause) {
-      const status = errorStatus(cause);
-      if (confirming && status !== null && [400, 409, 422].includes(status)) {
-        setPending(null);
-        sessionStorage.removeItem(storageKey('coupon-redemption'));
-        conflict.current();
-        setError(
-          errorMessage(
-            cause,
-            'Check the code again and review the current offer before redeeming.',
-          ),
-        );
-      } else {
-        setError(
-          'Your redemption is not confirmed yet. Check redemption to retrieve its result safely.',
-        );
-      }
-    } finally {
-      setBusy(false);
-      running.current = false;
-    }
-  }, []);
+    },
+    [],
+  );
 
-  const initial = useRef(pending);
+  const initial = useRef(request);
+  const recovered = useRef<string | null>(null);
   useEffect(() => {
-    if (initial.current) void submit(initial.current, true);
-  }, [submit]);
+    const original = initial.current;
+    initial.current = null;
+    const id = original?.operationId ?? operationId;
+    if (id && recovered.current !== id) {
+      recovered.current = id;
+      void execute(original, id, true);
+    }
+  }, [execute, operationId]);
 
   return {
-    pending,
+    pending: Boolean(request || pendingId),
     busy,
     error,
     completed,
-    submit,
+    submit: (next: CouponRedemptionRequest) => execute(next, next.operationId, false),
+    check: () => {
+      const id = request?.operationId ?? pendingId;
+      if (id) void execute(request, id, true);
+    },
     clearError: () => setError(null),
     resetCompleted: () => setCompleted(null),
   };

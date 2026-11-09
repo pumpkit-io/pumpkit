@@ -40,6 +40,10 @@ class BillingProviderError(AppError):
     reported = True
 
 
+class DeferralRefused(BillingProviderError):
+    """The provider definitely rejected the change without applying it."""
+
+
 class WebhookSignatureError(Exception):
     """A webhook payload is malformed or its signature doesn't verify."""
 
@@ -90,6 +94,15 @@ class SubscriptionState:
     has_pending_update: bool = False
     schedule_id: Optional[str] = None
     latest_invoice_status: Optional[str] = None
+    item_id: Optional[str] = None
+    item_count: int = 0
+    interval: Optional[str] = None
+    interval_count: Optional[int] = None
+    billing_mode: Optional[str] = None
+    current_period_start: Optional[datetime] = None
+    paid_current_period: bool = False
+    paused: bool = False
+    coupon_operation: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +190,12 @@ class BillingGateway(Protocol):
         """Cancel a Subscription now, so it Ends and can never run."""
         ...
 
+    async def defer_renewal(
+        self, *, subscription_id: str, target: datetime, operation_id: str
+    ) -> None: ...
+
+    async def cancel_renewal(self, *, subscription_id: str, ends_at: datetime) -> None: ...
+
     async def end_trial(self, *, subscription_id: str) -> Optional[str]:
         """
         End a trialing Subscription's Trial now: the provider charges the first period at once and
@@ -254,6 +273,7 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
     price = first_item.get("price")
     if not isinstance(price, dict):
         price = {"id": price} if isinstance(price, str) else {}
+    price = cast(dict[str, Any], price)
     # Current Stripe API versions put the period end on the subscription items.
     period_end = subscription.get("current_period_end") or first_item.get("current_period_end")
     # Flexible billing mode records a cancellation as `cancel_at`, the older way as a flag.
@@ -273,6 +293,19 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         billing_cycle_anchor=_optional_timestamp(subscription.get("billing_cycle_anchor")),
         has_pending_update=subscription.get("pending_update") is not None,
         schedule_id=_customer_id(subscription.get("schedule")),
+        item_id=first_item.get("id"),
+        item_count=len(subscription.get("items", {}).get("data", []))
+        if not subscription.get("items", {}).get("has_more") and first_item.get("quantity") == 1
+        else 0,
+        interval=price.get("recurring", {}).get("interval"),
+        interval_count=price.get("recurring", {}).get("interval_count"),
+        billing_mode=(subscription.get("billing_mode") or {}).get("type"),
+        current_period_start=_optional_timestamp(
+            first_item.get("current_period_start") or subscription.get("current_period_start")
+        ),
+        paused=bool(subscription.get("pause_collection")),
+        coupon_operation=subscription.get("metadata", {}).get("pumpkit_coupon_operation"),
+        paid_current_period=_paid_current_period(subscription, first_item),
         latest_invoice_status=(
             subscription["latest_invoice"].get("status") or "unknown"
             if isinstance(subscription.get("latest_invoice"), dict)
@@ -280,6 +313,36 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
             if subscription.get("latest_invoice")
             else None
         ),
+    )
+
+
+def _paid_current_period(subscription: dict[str, Any], item: dict[str, Any]) -> bool:
+    invoice = subscription.get("latest_invoice")
+    if (
+        not isinstance(invoice, dict)
+        or invoice.get("status") != "paid"
+        or invoice.get("amount_paid", 0) <= 0
+        or invoice.get("amount_remaining", 0) != 0
+    ):
+        return False
+    start = item.get("current_period_start") or subscription.get("current_period_start")
+    end = item.get("current_period_end") or subscription.get("current_period_end")
+    return bool(
+        start
+        and end
+        and any(
+            line.get("period", {}).get("start") == start
+            and line.get("period", {}).get("end") == end
+            and line.get("amount", 0) > 0
+            and (
+                line.get("subscription_item")
+                or (line.get("parent") or {})
+                .get("subscription_item_details", {})
+                .get("subscription_item")
+            )
+            == item.get("id")
+            for line in invoice.get("lines", {}).get("data", [])
+        )
     )
 
 
@@ -533,6 +596,34 @@ class StripeBillingGateway:
             lambda: self._client.v1.subscriptions.cancel(subscription_id),
         )
 
+    async def defer_renewal(
+        self, *, subscription_id: str, target: datetime, operation_id: str
+    ) -> None:
+        try:
+            await run_in_threadpool(
+                self._client.v1.subscriptions.update,
+                subscription_id,
+                {
+                    "trial_end": int(target.timestamp()),
+                    "proration_behavior": "none",
+                    "metadata": {"pumpkit_coupon_operation": operation_id},
+                },
+                {"idempotency_key": "coupon-deferral-" + operation_id},
+            )
+        except stripe.InvalidRequestError as exc:
+            raise DeferralRefused("Stripe refused the coupon deferral") from exc
+        except stripe.StripeError as exc:
+            raise BillingProviderError("Stripe coupon deferral outcome is uncertain") from exc
+
+    async def cancel_renewal(self, *, subscription_id: str, ends_at: datetime) -> None:
+        await self._call(
+            "cancel future renewal",
+            lambda: self._client.v1.subscriptions.update(
+                subscription_id,
+                {"cancel_at": int(ends_at.timestamp()), "proration_behavior": "none"},
+            ),
+        )
+
     async def end_trial(self, *, subscription_id: str) -> Optional[str]:
         subscription = await self._call(
             "end a Trial",
@@ -688,6 +779,7 @@ class FakeBillingGateway:
     prices: list[OneOffPrice] = field(default_factory=list)
     top_up_checkouts: list[TopUpCheckoutCall] = field(default_factory=list)
     ended_trials: list[str] = field(default_factory=list)
+    deferrals: list[tuple[str, datetime, str]] = field(default_factory=list)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
     _payment_checkouts: dict[str, tuple[str, str]] = field(default_factory=dict, init=False)
@@ -788,6 +880,33 @@ class FakeBillingGateway:
         for subscriptions in self._subscriptions.values():
             if subscription := subscriptions.get(subscription_id):
                 subscriptions[subscription_id] = replace(subscription, status="canceled")
+
+    async def defer_renewal(
+        self, *, subscription_id: str, target: datetime, operation_id: str
+    ) -> None:
+        self._maybe_fail("defer_renewal")
+        if "refuse_deferral" in self.fail_on:
+            raise DeferralRefused("The deferral was refused")
+        self.deferrals.append((subscription_id, target, operation_id))
+        for subscriptions in self._subscriptions.values():
+            if subscription := subscriptions.get(subscription_id):
+                subscriptions[subscription_id] = replace(
+                    subscription,
+                    status="trialing",
+                    trial_start=self.clock(),
+                    trial_end=target,
+                    billing_cycle_anchor=target,
+                    current_period_end=target,
+                    coupon_operation=operation_id,
+                    paid_current_period=False,
+                )
+        self._maybe_fail("after_defer_renewal")
+
+    async def cancel_renewal(self, *, subscription_id: str, ends_at: datetime) -> None:
+        self._maybe_fail("cancel_renewal")
+        for subscriptions in self._subscriptions.values():
+            if subscription := subscriptions.get(subscription_id):
+                subscriptions[subscription_id] = replace(subscription, cancel_at=ends_at)
 
     async def end_trial(self, *, subscription_id: str) -> Optional[str]:
         self._maybe_fail("end_trial")

@@ -7,7 +7,8 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from pumpkit.billing import coupon_service
+from pumpkit.auth.service import users
+from pumpkit.billing import coupon_operations, coupon_service, mediator
 from pumpkit.billing.gateway import BillingGateway, BillingProviderError
 from pumpkit.billing.schemas import CouponIssueRequest
 from pumpkit.core.config import Settings
@@ -44,8 +45,62 @@ async def run_cli(
     disable.add_argument("id")
     commands.add_parser("list")
     commands.add_parser("purge")
+    recover = commands.add_parser("recover")
+    recover.add_argument("--operation-id")
+    recover.add_argument("--limit", type=int, default=100)
+    recover.add_argument("--list", action="store_true")
     try:
         args = parser.parse_args(argv)
+        if args.command == "recover":
+            if not 1 <= args.limit <= 1000:
+                raise coupon_service.CouponCommandError("Use a recovery limit between 1 and 1000.")
+            async with sessions() as db:
+                candidates = await coupon_operations.recovery_candidates(
+                    db, operation_id=args.operation_id, limit=args.limit
+                )
+            outcomes = []
+            for user_id, operation_id in candidates:
+                async with sessions() as db:
+                    operation = await coupon_operations.find(
+                        db, user_id=user_id, operation_id=operation_id
+                    )
+                    assert operation is not None
+                    item = {
+                        "id": operation.id,
+                        "status": operation.status,
+                        "created_at": operation.created_at.isoformat(),
+                        "attempts": operation.attempts,
+                        "detail": operation.detail,
+                    }
+                    if not args.list:
+                        user = await users.get_user_by_id(db, user_id)
+                        if user is None:
+                            item["status"] = "conflict"
+                        else:
+                            try:
+                                resolved = await mediator.lookup_coupon_redemption(
+                                    db, gateway, user, operation_id=operation_id, clock=clock
+                                )
+                                item["status"] = resolved.status
+                                item["detail"] = resolved.detail
+                            except Exception:
+                                await db.rollback()
+                                item["status"] = "pending"
+                    outcomes.append(item)
+            print(
+                json.dumps(
+                    {
+                        "operations": outcomes,
+                        "remaining": sum(item["status"] == "pending" for item in outcomes),
+                    }
+                ),
+                file=stdout,
+            )
+            return (
+                0
+                if args.list or all(item["status"] in {"completed", "refused"} for item in outcomes)
+                else 1
+            )
         if args.command == "create":
             coupon_service.require_enabled(config)
             coupon_service.validate_offers(

@@ -240,6 +240,7 @@ async def check_x_posts_room(
                 needed=needed,
                 limits=growing,
                 changing_id=excluding_id,
+                now=now,
             )
         return
     caps: dict[AllowanceCount, Optional[int]] = {
@@ -356,7 +357,9 @@ async def create_scheduled_post(
     except IntegrityError:
         # Another request scheduled the same Post between the check and the insert.
         raise _already_scheduled()
-    await rebalance_top_ups(db, user_id=user.id, moments=[as_utc(scheduled_post.publish_at)])
+    await rebalance_top_ups(
+        db, user_id=user.id, moments=[as_utc(scheduled_post.publish_at)], now=now
+    )
     hand_off = new.publish_now and rules.hands_post_now_to_publisher(
         media_service.kinds_by_part(media), live_count=0
     )
@@ -543,7 +546,7 @@ async def edit_scheduled_post(
     ):
         raise _publishing_started()
     moments = [publish_at_before, reschedule.publish_at] if reschedule else [publish_at_before]
-    await rebalance_top_ups(db, user_id=user.id, moments=moments)
+    await rebalance_top_ups(db, user_id=user.id, moments=moments, now=now)
     if edit.publish_now and not hand_off:
         return await _post_now(
             db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
@@ -599,7 +602,7 @@ async def cancel_scheduled_post(
     await billing_service.give_back_charges(db, scheduled_post_id=scheduled_post_id)
     if not await service.cancel(db, scheduled_post_id=scheduled_post_id):
         raise _publishing_started()
-    await rebalance_top_ups(db, user_id=user.id, moments=[publish_at])
+    await rebalance_top_ups(db, user_id=user.id, moments=[publish_at], now=now)
     await db.commit()
     return post_id
 

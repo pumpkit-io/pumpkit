@@ -142,8 +142,17 @@ def requires_terms_acceptance() -> bool:
 async def get_entitlement(
     db: AsyncSession, *, user_id: str, now: Optional[datetime] = None
 ) -> Entitlement:
+    moment = now or system_clock()
+    subscription = await get_user_subscription(db, user_id=user_id)
+    if subscription is None:
+        subscription = await db.scalar(
+            select(Subscription)
+            .where(Subscription.user_id == user_id, Subscription.paid_end > moment)
+            .order_by(Subscription.paid_end.desc())
+            .limit(1)
+        )
     return Entitlement(
-        subscription=await get_user_subscription(db, user_id=user_id),
+        subscription=subscription,
         plans_sold=sells_plans(),
         free_access=await get_free_access_coverage(db, user_id=user_id),
         now=now or system_clock(),
@@ -171,6 +180,62 @@ def is_subscribed(subscription: Optional[Subscription]) -> bool:
     paid up, or behind on payment while the provider still retries the charge.
     """
     return Entitlement(subscription=subscription, plans_sold=sells_plans()).subscribed
+
+
+async def get_allocation_allowance(
+    db: AsyncSession, *, user_id: str, moment: datetime, now: Optional[datetime] = None
+) -> Optional[Allowance]:
+    """Rebalance existing reservations from historical coverage; never authorizes access."""
+    subscription = await db.scalar(
+        select(Subscription)
+        .where(
+            Subscription.user_id == user_id,
+            Subscription.stripe_created_at <= moment,
+            Subscription.status.not_in(["incomplete", "incomplete_expired"]),
+        )
+        .order_by(Subscription.stripe_created_at.desc())
+        .limit(1)
+    )
+    grant = await db.scalar(
+        select(FreeAccess)
+        .where(
+            FreeAccess.user_id == user_id,
+            FreeAccess.starts_at <= moment,
+            FreeAccess.ends_at > moment,
+        )
+        .order_by(FreeAccess.ends_at.desc())
+        .limit(1)
+    )
+    if (
+        subscription is not None
+        and subscription.trial_end is not None
+        and moment < as_utc(subscription.trial_end)
+        and grant is None
+        and await db.get(CouponHistory, user_id) is not None
+        and not (
+            subscription.paid_start is not None
+            and subscription.paid_end is not None
+            and as_utc(subscription.paid_start) <= moment < as_utc(subscription.paid_end)
+        )
+    ):
+        # A provider deferral is not an introductory Trial; purged Coupon caps cannot be reconstructed from it.
+        subscription = None
+    free = (
+        FreeAccessCoverage(
+            starts_at=as_utc(grant.starts_at),
+            ends_at=as_utc(grant.ends_at),
+            months=grant.months,
+            grants=(grant,),
+        )
+        if grant
+        else None
+    )
+    return Entitlement(
+        subscription=subscription,
+        plans_sold=sells_plans(),
+        free_access=free,
+        now=now or system_clock(),
+    ).allocation_at(moment)
 
 
 async def get_subscription_by_stripe_id(
@@ -399,6 +464,38 @@ async def give_back_charges(
     await db.flush()
 
 
+async def give_back_unpublished_charges(
+    db: AsyncSession,
+    *,
+    scheduled_post_id: str,
+    unpublished: dict[AllowanceCount, int],
+    live: dict[AllowanceCount, int],
+) -> None:
+    """Settle a newly failed reservation once when its historical Allowance is gone."""
+    rows = (
+        await db.execute(
+            select(TopUpCharge, TopUp.removed)
+            .join(TopUp, TopUpCharge.top_up_id == TopUp.id)
+            .where(TopUpCharge.scheduled_post_id == scheduled_post_id)
+            .order_by(TopUp.removed.desc(), TopUpCharge.id)
+        )
+    ).all()
+    for count, unaccepted in unpublished.items():
+        charges = [(charge, removed) for charge, removed in rows if charge.count == count]
+        total = sum(charge.quantity for charge, _ in charges)
+        protected = min(live[count], sum(charge.quantity for charge, removed in charges if removed))
+        # Allowance pays first, so unpublished units release the paid suffix; removed packs protect live units.
+        keep = max(protected, total - unaccepted)
+        for charge, _ in charges:
+            retained = min(charge.quantity, keep)
+            keep -= retained
+            if retained:
+                charge.quantity = retained
+            else:
+                await db.delete(charge)
+    await db.flush()
+
+
 async def keep_charges_after_delete(
     db: AsyncSession, *, scheduled_post_id: str
 ) -> dict[AllowanceCount, int]:
@@ -523,8 +620,16 @@ async def get_free_access_coverage(
     latest = grants[-1]
     anchor = as_utc(latest.calendar_anchor or latest.starts_at)
     return FreeAccessCoverage(
-        starts_at=anchor,
+        starts_at=as_utc(latest.coverage_starts_at or anchor),
         ends_at=as_utc(latest.ends_at),
-        months=latest.month_offset + latest.months,
+        months=latest.month_offset
+        + latest.months
+        - (
+            (as_utc(latest.coverage_starts_at).year - anchor.year) * 12
+            + as_utc(latest.coverage_starts_at).month
+            - anchor.month
+        )
+        if latest.coverage_starts_at
+        else latest.month_offset + latest.months,
         grants=tuple(grant for grant in grants if as_utc(grant.ends_at) > anchor),
     )

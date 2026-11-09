@@ -5,12 +5,13 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.auth.models import User
 from pumpkit.billing.coupon_identity import fingerprints
 from pumpkit.billing.gateway import Plan
-from pumpkit.billing.models import Coupon, CouponClaim, FreeAccess
+from pumpkit.billing.models import Coupon, CouponClaim, CouponOperation, FreeAccess, Subscription
 from pumpkit.billing.schemas import CouponIssueRequest
 from pumpkit.core.config import Settings
 from pumpkit.core.errors import ConflictError, NotConfiguredError
@@ -150,7 +151,52 @@ async def disable(db: AsyncSession, coupon_id: str, *, now: datetime) -> Coupon:
     return coupon
 
 
+async def _purge_paid_coverage(db: AsyncSession, *, now: datetime) -> int:
+    cutoff = now - timedelta(days=90)
+    users = await db.scalars(
+        select(User)
+        .where(User.id.in_(select(Subscription.user_id).where(Subscription.paid_end <= cutoff)))
+        .order_by(User.id)
+        .with_for_update(skip_locked=True)
+    )
+    removed = 0
+    for user in users:
+        subscriptions = await db.scalars(
+            select(Subscription)
+            .where(Subscription.user_id == user.id, Subscription.paid_end <= cutoff)
+            .execution_options(populate_existing=True)
+        )
+        for subscription in subscriptions:
+            retained = await db.scalar(
+                select(CouponOperation.id)
+                .where(
+                    CouponOperation.user_id == user.id,
+                    CouponOperation.subscription_id == subscription.stripe_subscription_id,
+                    or_(
+                        CouponOperation.status == "pending",
+                        CouponOperation.resolved_at.is_(None),
+                        CouponOperation.resolved_at > cutoff,
+                        and_(
+                            CouponOperation.status == "completed", CouponOperation.target > cutoff
+                        ),
+                    ),
+                )
+                .limit(1)
+            )
+            if retained is not None:
+                continue
+            subscription.paid_start = None
+            subscription.paid_end = None
+            subscription.paid_anchor = None
+            subscription.paid_allowance = None
+            removed += 1
+    await db.flush()
+    return removed
+
+
 async def purge(db: AsyncSession, *, now: datetime) -> int:
+    # Take User locks before Coupon locks; a busy account can be minimized by the next pass.
+    purged = await _purge_paid_coverage(db, now=now)
     candidates = await db.scalars(
         select(Coupon)
         .where(
@@ -160,8 +206,13 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
         .with_for_update(skip_locked=True)
         .execution_options(populate_existing=True)
     )
-    purged = 0
     for coupon in candidates:
+        if await db.scalar(
+            select(CouponOperation.id)
+            .where(CouponOperation.coupon_id == coupon.id, CouponOperation.status == "pending")
+            .limit(1)
+        ):
+            continue
         if coupon.unclaimable_at is None and coupon.claim_deadline is not None:
             coupon.unclaimable_at = as_utc(coupon.claim_deadline)
         if (
@@ -182,6 +233,19 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
                 .returning(CouponClaim.id)
             )
             purged += len(list(removed))
+    operations = await db.scalars(
+        delete(CouponOperation)
+        .where(
+            CouponOperation.status != "pending",
+            CouponOperation.resolved_at <= now - timedelta(days=90),
+            or_(
+                CouponOperation.status == "refused",
+                CouponOperation.target <= now - timedelta(days=90),
+            ),
+        )
+        .returning(CouponOperation.id)
+    )
+    purged += len(list(operations))
     ended = await db.scalars(
         delete(FreeAccess)
         .where(FreeAccess.ends_at <= now - timedelta(days=90))
