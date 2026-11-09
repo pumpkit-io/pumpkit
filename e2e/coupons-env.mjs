@@ -24,6 +24,8 @@ if (process.argv[2] === 'restore') {
   if (!existsSync(backup)) writeFileSync(backup, original, { mode: 0o600 });
   const values = {
     COUPONS_ENABLED: 'true',
+    OPERATOR_NAME: "'Pumpkit E2E'",
+    SUPPORT_EMAIL: 'support@e2e-user.dev',
     STRIPE_COUPON_PORTAL_CONFIGURATION_ID: 'bpc_coupon_management',
     COUPON_IDENTITY_KEYS: `'${JSON.stringify({ active: 'e2e', keys: { e2e: Buffer.alloc(32, 42).toString('base64') } })}'`,
   };

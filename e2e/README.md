@@ -11,7 +11,7 @@ node e2e/coupons-env.mjs prepare
 scripts/dev-stack up
 ```
 
-The preparation script saves the worktree's previous `.env` privately in `.sdlc/dev-stack/`, enables coupons, and supplies a throwaway identity key and the local Emulator's management-only portal configuration. `scripts/dev-stack` supplies local Stripe and Google Emulators and development credentials; never run these journeys against Stripe itself.
+The preparation script saves the worktree's previous `.env` privately in `.sdlc/dev-stack/`, enables coupons, and supplies a throwaway identity key and the local Emulator's management-only portal configuration. It also sets dummy operator details (`Pumpkit E2E`, `support@e2e-user.dev`) so the current Terms appear and every journey exercises acceptance: two boxes for a coupon, three for a future paid subscription. The dev stack keeps SMTP off; no email is sent. `scripts/dev-stack` supplies local Stripe and Google Emulators and development credentials; never run these journeys against Stripe itself.
 
 Run the complete suite, including all coupon journeys, from `e2e/`:
 

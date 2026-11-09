@@ -81,6 +81,7 @@ async function review(page: Page, user: Recipient, inSettings = false): Promise<
   await page.getByRole('button', { name: 'Check code', exact: true }).click();
   const preview = page.getByRole('status', { name: 'Coupon preview' });
   await expect(preview).toBeVisible();
+  await expect(preview.getByRole('checkbox')).toHaveCount(2);
   for (const box of await preview.getByRole('checkbox').all()) await box.check();
 }
 
@@ -187,6 +188,7 @@ test('a coupon-only recipient explicitly arranges future payment without losing 
   const futureReview = plan.getByRole('region', { name: 'Review future subscription' });
   await expect(futureReview).toContainText('No immediate payment.');
   await expect(futureReview).toContainText('renews automatically until cancelled');
+  await expect(futureReview.getByRole('checkbox')).toHaveCount(3);
   for (const box of await futureReview.getByRole('checkbox').all()) await box.check();
   const appOrigin = new URL(page.url()).origin;
   await futureReview.getByRole('button', { name: 'Agree and continue to checkout' }).click();

@@ -24,6 +24,7 @@ from pumpkit.onboarding.models import OnboardingFinish
 def require_emulator() -> None:
     if (
         not settings.COUPONS_ENABLED
+        or not settings.is_operator_configured()
         or urlparse(settings.STRIPE_API_URL or "").hostname != "emulate"
         or settings.STRIPE_SECRET_KEY != "sk_test_dev"
         or settings.STRIPE_COUPON_PORTAL_CONFIGURATION_ID != "bpc_coupon_management"
