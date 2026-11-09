@@ -21,6 +21,7 @@ from pumpkit.billing.models import (
     CouponHistory,
     CouponOperation,
     FreeAccess,
+    PaidSignup,
 )
 from pumpkit.billing.schemas import (
     CouponPreviewResponse,
@@ -52,6 +53,12 @@ async def pending(
 
 
 async def require_settled(db: AsyncSession, *, user_id: str) -> None:
+    if await db.scalar(
+        select(PaidSignup.id).where(PaidSignup.user_id == user_id, PaidSignup.status == "pending")
+    ):
+        raise ConflictError(
+            "Your paid signup is being confirmed. Complete or cancel it before changing billing or deleting your account."
+        )
     if await pending(db, user_id=user_id):
         raise ConflictError(
             "Your coupon redemption is being confirmed. Retry its status before changing billing or deleting your account."
@@ -138,9 +145,25 @@ async def deferrable_state(
             )
         )
     )
+    signup_backed = bool(
+        existing
+        and state.paid_signup_operation
+        and state.trial_end
+        and as_utc(state.trial_end) == as_utc(existing.ends_at)
+        and await db.scalar(
+            select(PaidSignup.id).where(
+                PaidSignup.id == state.paid_signup_operation,
+                PaidSignup.user_id == user_id,
+                PaidSignup.status == "completed",
+                PaidSignup.subscription_id == state.id,
+            )
+        )
+    )
+    backed = backed or signup_backed
     introductory = bool(
         state.status == "trialing"
         and state.coupon_operation is None
+        and state.paid_signup_operation is None
         and state.trial_start
         and state.trial_end
         and as_utc(state.trial_start) <= now < as_utc(state.trial_end)
@@ -234,7 +257,11 @@ async def prepare(
         or state.current_period_end is None
     ):
         raise ConflictError("Your subscription is being updated. Try again.")
-    introductory = state.status == "trialing" and state.coupon_operation is None
+    introductory = (
+        state.status == "trialing"
+        and state.coupon_operation is None
+        and state.paid_signup_operation is None
+    )
     if (state.paid_current_period or introductory) and (
         subscription.paid_end is None or as_utc(subscription.paid_end) <= now
     ):

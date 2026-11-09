@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from pumpkit.billing import (
     coupon_preview,
     coupon_redemption,
     coupon_service,
+    paid_signups,
     service,
 )
 from pumpkit.billing.allowance import (
@@ -28,7 +29,7 @@ from pumpkit.billing.gateway import (
     WebhookEvent,
     WebhookSignatureError,
 )
-from pumpkit.billing.models import Coupon, TopUp
+from pumpkit.billing.models import Coupon, PaidSignup, TopUp
 from pumpkit.billing.schemas import (
     BillingMeResponse,
     BillingPortalResponse,
@@ -41,6 +42,9 @@ from pumpkit.billing.schemas import (
     FreeAccessCoverageResponse,
     OfferedAllowanceResponse,
     OfferedTrialResponse,
+    PaidSignupPreviewResponse,
+    PaidSignupRequest,
+    PaidSignupResponse,
     PlanResponse,
     PlansListResponse,
     TermsAcceptanceRequest,
@@ -50,7 +54,13 @@ from pumpkit.billing.schemas import (
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import BILLING_PAGE, settings
-from pumpkit.core.errors import BadRequestError, ConflictError, RefusalError, RefusedError
+from pumpkit.core.errors import (
+    BadRequestError,
+    ConflictError,
+    NotFoundError,
+    RefusalError,
+    RefusedError,
+)
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.schemas import LinkToolResponse
@@ -73,7 +83,16 @@ async def get_billing_me(
         free = None
     current = free.grant_at(moment) if free and free.starts_at <= moment else None
     pending_operations = await coupon_operations.pending(db, user_id=user.id)
+    signup_operations = await paid_signups.pending(db, user_id=user.id)
     return BillingMeResponse(
+        pending_paid_signup_id=signup_operations[0].operation_id if signup_operations else None,
+        may_arrange_paid_signup=bool(
+            coupon_service.coupons_available(settings)
+            and free
+            and not subscription
+            and not pending_operations
+            and not signup_operations
+        ),
         pending_coupon_operation=bool(pending_operations),
         pending_coupon_operation_id=pending_operations[0].operation_id
         if pending_operations
@@ -462,15 +481,13 @@ async def handle_webhook(
     gateway: BillingGateway,
     payload: bytes,
     signature: Optional[str],
-    now: datetime,
+    clock: Clock,
 ) -> None:
-    """
-    Verify the webhook, deduplicate by event ID, and sync the customer it nudges about (ADR 0004).
+    """Deduplicate and sync a nudge before recovering paid signups from durable checkpoints.
 
-    The `stripe_events` insert and the sync share one transaction, committed here; handlers
-    must not commit. Anything that raises rolls the whole event back, dedup row included, and
-    the error response (502 for the gateway, else 500) makes Stripe retry.
+    Replays skip ordinary sync but still recover signups after an interrupted checkpoint.
     """
+    now = clock()
     if not signature:
         raise BadRequestError("Missing Stripe signature header.")
 
@@ -485,12 +502,19 @@ async def handle_webhook(
         if not is_new:
             logger.info("Ignoring replayed Stripe event %s (%s)", event.id, event.type)
             await db.rollback()
-            return
-        added = await _dispatch_event(db, gateway, event, now=now)
-        await db.commit()
+            added = []
+        else:
+            added = await _dispatch_event(db, gateway, event, now=now)
+            await db.commit()
     except Exception:
         await db.rollback()
         raise
+    if _is_subscription_nudge(event) and event.customer_id:
+        user = await users_service.get_user_by_stripe_customer_id(db, event.customer_id)
+        if user:
+            operations = await paid_signups.pending(db, user_id=user.id)
+            for signup in operations:
+                await _recover_paid_signup(db, gateway, user=user, operation=signup, clock=clock)
     for top_up in added:
         if as_utc(top_up.expires_at) > now:
             posthog_client.capture("top_up_added", distinct_id=top_up.user_id)
@@ -508,7 +532,8 @@ _TOP_UP_NUDGES = {
 def _is_subscription_nudge(event: WebhookEvent) -> bool:
     """Whether the event says a customer's Subscriptions may have changed."""
     return event.type.startswith("customer.subscription.") or (
-        event.type == "checkout.session.completed"
+        event.type
+        in {"checkout.session.completed", "setup_intent.succeeded", "setup_intent.canceled"}
     )
 
 
@@ -748,3 +773,178 @@ async def cancel_renewal(
         )
     await db.commit()
     return await get_billing_me(db, user, now=clock())
+
+
+async def preview_paid_signup(
+    db: AsyncSession, gateway: BillingGateway, user: User, *, plan_key: str, clock: Clock
+) -> PaidSignupPreviewResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    return await paid_signups.preview(db, gateway, user=user, plan_key=plan_key, now=clock())
+
+
+async def create_paid_signup(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    user: User,
+    *,
+    request: PaidSignupRequest,
+    clock: Clock,
+) -> PaidSignupResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    try:
+        operation = await paid_signups.find(db, user_id=user.id, operation_id=request.operation_id)
+    except NotFoundError:
+        operation = await paid_signups.prepare(db, gateway, user=user, request=request, now=clock())
+        # Accepted plan, date and paid consent must survive every subsequent provider write.
+        await db.commit()
+    if (
+        operation.revision_digest
+        != hashlib.sha256(request.revision.get_secret_value().encode()).hexdigest()
+    ):
+        raise ConflictError("This signup identifier belongs to another offer. Check its status.")
+    return await _recover_paid_signup(db, gateway, user=user, operation=operation, clock=clock)
+
+
+async def lookup_paid_signup(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    user: User,
+    *,
+    operation_id: str,
+    clock: Clock,
+    cancel: bool = False,
+) -> PaidSignupResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    operation = await paid_signups.find(db, user_id=user.id, operation_id=operation_id)
+    return await _recover_paid_signup(
+        db, gateway, user=user, operation=operation, clock=clock, cancel=cancel
+    )
+
+
+async def _recover_paid_signup(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    operation: PaidSignup,
+    clock: Clock,
+    cancel: bool = False,
+) -> PaidSignupResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
+    if cancel and operation.cancel_requested_at is None:
+        operation.cancel_requested_at = clock()
+        # Cancellation intent must outlive provider reads and any still-running remote creation.
+        await db.commit()
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        operation = await paid_signups.find(
+            db, user_id=user.id, operation_id=operation.operation_id
+        )
+    if operation.status == "pending" and not operation.customer_id:
+        if cancel:
+            answer = paid_signups.refuse(
+                operation,
+                now=clock(),
+                detail="Paid signup cancelled. Your free access is unchanged.",
+            )
+            await db.commit()
+            return answer
+        try:
+            if not user.stripe_customer_id:
+                customers = await gateway.find_user_customers(user_id=user.id)
+                if len(customers) > 1:
+                    raise BillingProviderError("Multiple attributed signup customers need review")
+                if customers:
+                    await users_service.set_stripe_customer_id(db, user, customers[0])
+            customer_id = await _ensure_stripe_customer(db, gateway, user)
+        except BillingProviderError:
+            operation.detail = "Your billing customer is being confirmed. Retry your signup status."
+            await db.commit()
+            return paid_signups.response(operation)
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        operation = await paid_signups.find(
+            db, user_id=user.id, operation_id=operation.operation_id
+        )
+        if operation.status != "pending":
+            return paid_signups.response(operation)
+        operation.customer_id = customer_id
+        # Recovery must retain the customer before a hosted setup can succeed independently.
+        await db.commit()
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
+    answer = await paid_signups.reconcile(
+        db, gateway, user=user, operation=operation, clock=clock, cancel=cancel
+    )
+    if (
+        operation.status == "pending"
+        and operation.cancel_requested_at is not None
+        and operation.creation_state == "confirmed"
+        and operation.subscription_id is not None
+    ):
+        # Retain earned coverage and recoverable cancellation before a provider mutation can outlive its response.
+        await db.commit()
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        operation = await paid_signups.find(
+            db, user_id=user.id, operation_id=operation.operation_id
+        )
+        answer = await paid_signups.reconcile(
+            db, gateway, user=user, operation=operation, clock=clock, cancel_dispatch=True
+        )
+    elif operation.status == "pending" and operation.creation_state == "ready":
+        answer = await _dispatch_paid_signup(
+            db, gateway, user=user, operation=operation, clock=clock, prior_unknown=False
+        )
+    elif (
+        operation.status == "pending"
+        and operation.creation_state == "uncertain"
+        and operation.cancel_requested_at is None
+        and operation.creation_attempted_at is not None
+        and clock() < as_utc(operation.creation_attempted_at) + timedelta(hours=23)
+        and clock() < as_utc(operation.first_payment_at)
+    ):
+        answer = await _dispatch_paid_signup(
+            db, gateway, user=user, operation=operation, clock=clock, prior_unknown=True
+        )
+    await db.commit()
+    return answer
+
+
+async def _dispatch_paid_signup(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    operation: PaidSignup,
+    clock: Clock,
+    prior_unknown: bool,
+) -> PaidSignupResponse:
+    operation.creation_state = "uncertain"
+    operation.creation_attempted_at = operation.creation_attempted_at or clock()
+    operation.creation_dispatch_count += 1
+    dispatch_count = operation.creation_dispatch_count
+    # This checkpoint precedes dispatch; the generation prevents a stale owner from sending after a newer claim.
+    await db.commit()
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
+    if operation.status != "pending" or operation.creation_dispatch_count != dispatch_count:
+        return paid_signups.response(operation)
+    if operation.cancel_requested_at is not None or as_utc(operation.first_payment_at) <= clock():
+        if not prior_unknown:
+            operation.creation_state = "refused"
+            return paid_signups.refuse(
+                operation,
+                now=clock(),
+                detail="No subscription request was sent. Review a fresh paid offer if you want to subscribe.",
+            )
+        return await paid_signups.reconcile(
+            db, gateway, user=user, operation=operation, clock=clock
+        )
+    return await paid_signups.reconcile(
+        db,
+        gateway,
+        user=user,
+        operation=operation,
+        clock=clock,
+        dispatch=True,
+        prior_unknown=prior_unknown,
+    )

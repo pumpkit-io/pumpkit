@@ -83,14 +83,14 @@ async def preview(
         if existing
         else as_utc(subscription.billing_cycle_anchor)
         if subscription and subscription.billing_cycle_anchor
-        else now
+        else now.replace(microsecond=0)
     )
     start = (
         as_utc(existing.ends_at)
         if existing
         else as_utc(subscription.current_period_end)
         if subscription and subscription.current_period_end
-        else now
+        else now.replace(microsecond=0)
     )
     offset = (
         existing.month_offset + existing.months

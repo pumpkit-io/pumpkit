@@ -603,6 +603,8 @@ async def test_billing_me_for_a_user_with_no_subscription_offers_the_trial(
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_paid_signup_id": None,
+        "may_arrange_paid_signup": False,
         "pending_coupon_operation": False,
         "pending_coupon_operation_id": None,
         "coupon_deferral": False,
@@ -633,6 +635,8 @@ async def test_billing_me_reports_the_running_subscription_and_offers_nothing(
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_paid_signup_id": None,
+        "may_arrange_paid_signup": False,
         "pending_coupon_operation": False,
         "pending_coupon_operation_id": None,
         "coupon_deferral": False,
@@ -664,6 +668,8 @@ async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_on
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_paid_signup_id": None,
+        "may_arrange_paid_signup": False,
         "pending_coupon_operation": False,
         "pending_coupon_operation_id": None,
         "coupon_deferral": False,
@@ -687,6 +693,8 @@ async def test_billing_me_never_reports_an_ended_subscription(
 
     assert response.status_code == 200
     assert response.json() == {
+        "pending_paid_signup_id": None,
+        "may_arrange_paid_signup": False,
         "pending_coupon_operation": False,
         "pending_coupon_operation_id": None,
         "coupon_deferral": False,
@@ -733,6 +741,10 @@ async def test_billing_api_serves_subscription_top_up_and_coupon_routes(client):
     }
     assert billing_paths == {
         "/api/v1/billing/me",
+        "/api/v1/billing/paid-signups/preview",
+        "/api/v1/billing/paid-signups",
+        "/api/v1/billing/paid-signups/{operation_id}",
+        "/api/v1/billing/paid-signups/{operation_id}/cancel",
         "/api/v1/billing/coupons/preview",
         "/api/v1/billing/coupons/redemptions",
         "/api/v1/billing/coupons/redemptions/{operation_id}",

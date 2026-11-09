@@ -21,7 +21,7 @@ from pumpkit.billing.allowance import (
 )
 from pumpkit.billing.entitlement import Entitlement
 from pumpkit.billing.free_access import FreeAccessCoverage
-from pumpkit.billing.gateway import BillingGateway
+from pumpkit.billing.gateway import BillingGateway, SubscriptionState
 from pumpkit.billing.models import (
     AllowanceCount,
     CouponHistory,
@@ -251,12 +251,13 @@ async def get_subscription_by_stripe_id(
 
 async def sync_customer(
     db: AsyncSession, gateway: BillingGateway, *, user_id: str, customer_id: str
-) -> None:
+) -> list[SubscriptionState]:
     """
     Make Pumpkit's copy of the customer's Subscriptions match the provider's now (ADR 0004).
     Never overwrites an Ended one: a guard against bugs, not event ordering. Flushes, never commits.
     """
-    for state in await gateway.list_subscriptions(customer_id=customer_id):
+    states = await gateway.list_subscriptions(customer_id=customer_id)
+    for state in states:
         subscription = await get_subscription_by_stripe_id(db, state.id)
         if subscription is None:
             subscription = Subscription(user_id=user_id, stripe_subscription_id=state.id)
@@ -274,6 +275,7 @@ async def sync_customer(
         subscription.trial_end = state.trial_end
         subscription.billing_cycle_anchor = state.billing_cycle_anchor
     await db.flush()
+    return states
 
 
 async def record_terms_acceptance(
@@ -284,6 +286,7 @@ async def record_terms_acceptance(
     accepted_terms: bool,
     requested_immediate_start: bool,
     approved_specific_clauses: bool,
+    paid_offer: Optional[dict] = None,
 ) -> TermsAcceptance:
     """Record that the User accepted `terms_version` with these boxes ticked. Flushes, never commits."""
     acceptance = TermsAcceptance(
@@ -292,6 +295,7 @@ async def record_terms_acceptance(
         accepted_terms=accepted_terms,
         requested_immediate_start=requested_immediate_start,
         approved_specific_clauses=approved_specific_clauses,
+        paid_offer=paid_offer,
     )
     db.add(acceptance)
     await db.flush()

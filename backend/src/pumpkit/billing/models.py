@@ -110,6 +110,7 @@ class TermsAcceptance(Base):
     accepted_terms: Mapped[bool] = mapped_column(Boolean)
     requested_immediate_start: Mapped[bool] = mapped_column(Boolean)
     approved_specific_clauses: Mapped[bool] = mapped_column(Boolean)
+    paid_offer: Mapped[Optional[dict]] = mapped_column(JSON)
 
 
 class TopUp(Base):
@@ -266,4 +267,31 @@ class CouponOperation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
+    detail: Mapped[Optional[str]] = mapped_column(String)
+
+
+class PaidSignup(Base):
+    __tablename__ = "paid_signups"
+    __table_args__ = (UniqueConstraint("user_id", "operation_id"),)
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("paid_signup")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    operation_id: Mapped[str] = mapped_column(String(128))
+    revision_digest: Mapped[str] = mapped_column(String(64))
+    status: Mapped[Literal["pending", "completed", "refused"]] = mapped_column(String, index=True)
+    creation_state: Mapped[str] = mapped_column(String, default="not_started")
+    creation_attempted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    creation_dispatch_count: Mapped[int] = mapped_column(Integer, default=0)
+    payment_method_id: Mapped[Optional[str]] = mapped_column(String)
+    cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    customer_id: Mapped[Optional[str]] = mapped_column(String)
+    session_id: Mapped[Optional[str]] = mapped_column(String)
+    subscription_id: Mapped[Optional[str]] = mapped_column(String)
+    offer: Mapped[dict] = mapped_column(JSON)
+    acceptance: Mapped[dict] = mapped_column(JSON)
+    first_payment_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     detail: Mapped[Optional[str]] = mapped_column(String)

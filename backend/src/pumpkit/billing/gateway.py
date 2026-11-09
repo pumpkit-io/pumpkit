@@ -57,6 +57,20 @@ class CheckoutSession:
 
 
 @dataclass(frozen=True)
+class PaidSignupSetup:
+    id: str
+    customer_id: str
+    operation_id: str
+    status: str
+    url: Optional[str] = None
+    payment_method_id: Optional[str] = None
+    setup_status: Optional[str] = None
+    setup_customer_id: Optional[str] = None
+    payment_method_customer_id: Optional[str] = None
+    usage: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class Plan:
     """
     A Plan key (the provider's price lookup key) resolved to its current price:
@@ -103,6 +117,7 @@ class SubscriptionState:
     paid_current_period: bool = False
     paused: bool = False
     coupon_operation: Optional[str] = None
+    paid_signup_operation: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -151,6 +166,8 @@ class BillingGateway(Protocol):
         """
         ...
 
+    async def find_user_customers(self, *, user_id: str) -> list[str]: ...
+
     async def create_subscription_checkout(
         self,
         *,
@@ -160,6 +177,30 @@ class BillingGateway(Protocol):
         user_id: str,
         trial_period_days: Optional[int] = None,
     ) -> CheckoutSession: ...
+
+    async def create_paid_signup_setup(
+        self,
+        *,
+        customer_id: str,
+        user_id: str,
+        operation_id: str,
+        currency: str,
+        expires_at: datetime,
+    ) -> PaidSignupSetup: ...
+
+    async def list_paid_signup_setups(self, *, customer_id: str) -> list[PaidSignupSetup]: ...
+
+    async def expire_paid_signup_setup(self, *, session_id: str) -> None: ...
+
+    async def create_paid_signup(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        payment_method_id: str,
+        operation_id: str,
+        first_payment_at: datetime,
+    ) -> None: ...
 
     async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
         """Expire the customer's open Checkouts so none can start a Subscription; return IDs."""
@@ -305,6 +346,7 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         ),
         paused=bool(subscription.get("pause_collection")),
         coupon_operation=subscription.get("metadata", {}).get("pumpkit_coupon_operation"),
+        paid_signup_operation=subscription.get("metadata", {}).get("pumpkit_paid_signup"),
         paid_current_period=_paid_current_period(subscription, first_item),
         latest_invoice_status=(
             subscription["latest_invoice"].get("status") or "unknown"
@@ -313,6 +355,31 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
             if subscription.get("latest_invoice")
             else None
         ),
+    )
+
+
+def _paid_signup_setup(session: dict[str, Any]) -> PaidSignupSetup:
+    intent = session.get("setup_intent")
+    intent = intent if isinstance(intent, dict) else {}
+    method = intent.get("payment_method")
+    method = method if isinstance(method, dict) else {}
+    customer = _customer_id(session.get("customer"))
+    operation = session.get("metadata", {}).get("pumpkit_paid_signup")
+    if not customer or not operation or session.get("mode") != "setup":
+        raise BillingProviderError("Stripe returned an unrelated setup Checkout")
+    if intent and intent.get("metadata", {}).get("pumpkit_paid_signup") != operation:
+        raise BillingProviderError("Stripe setup intent attribution differs")
+    return PaidSignupSetup(
+        id=session["id"],
+        customer_id=customer,
+        operation_id=operation,
+        status=session.get("status", "unknown"),
+        url=session.get("url"),
+        payment_method_id=method.get("id"),
+        setup_status=intent.get("status"),
+        setup_customer_id=_customer_id(intent.get("customer")),
+        payment_method_customer_id=_customer_id(method.get("customer")),
+        usage=intent.get("usage"),
     )
 
 
@@ -445,6 +512,17 @@ class StripeBillingGateway:
         )
         return customer.id
 
+    async def find_user_customers(self, *, user_id: str) -> list[str]:
+        def read() -> list[str]:
+            customers = self._client.v1.customers.list({"limit": 100})
+            return [
+                c.id
+                for c in customers.auto_paging_iter()
+                if c.to_dict().get("metadata", {}).get("user_id") == user_id
+            ]
+
+        return await self._call("find the signup customer", read)
+
     async def create_subscription_checkout(
         self,
         *,
@@ -478,6 +556,99 @@ class StripeBillingGateway:
             raise BillingProviderError(f"Stripe Checkout {session.id} has no URL")
         return CheckoutSession(id=session.id, url=session.url)
 
+    async def create_paid_signup_setup(
+        self,
+        *,
+        customer_id: str,
+        user_id: str,
+        operation_id: str,
+        currency: str,
+        expires_at: datetime,
+    ) -> PaidSignupSetup:
+        metadata = {"pumpkit_paid_signup": operation_id}
+        params: CheckoutSessionCreateParams = {
+            "mode": "setup",
+            "customer": customer_id,
+            "client_reference_id": user_id,
+            "currency": currency,
+            "payment_method_types": ["card"],
+            "billing_address_collection": "required",
+            "customer_update": {"address": "auto", "name": "auto"},
+            "tax_id_collection": {"enabled": True},
+            "metadata": metadata,
+            "setup_intent_data": {"metadata": metadata},
+            "expires_at": int(expires_at.timestamp()),
+            "success_url": settings.billing_page_url(),
+            "cancel_url": settings.billing_page_url(),
+        }
+        session = await self._call(
+            "create future signup Checkout",
+            lambda: self._client.v1.checkout.sessions.create(
+                params, {"idempotency_key": f"{operation_id}:setup"}
+            ),
+        )
+        return _paid_signup_setup(session.to_dict())
+
+    async def list_paid_signup_setups(self, *, customer_id: str) -> list[PaidSignupSetup]:
+        def read() -> list[PaidSignupSetup]:
+            sessions = self._client.v1.checkout.sessions.list(
+                {"customer": customer_id, "limit": 100}
+            )
+            result = []
+            for session in sessions.auto_paging_iter():
+                data = session.to_dict()
+                if data.get("mode") != "setup" or not data.get("metadata", {}).get(
+                    "pumpkit_paid_signup"
+                ):
+                    continue
+                current = self._client.v1.checkout.sessions.retrieve(
+                    session.id, {"expand": ["setup_intent.payment_method"]}
+                )
+                result.append(_paid_signup_setup(current.to_dict()))
+            return result
+
+        return await self._call("read future signup Checkouts", read)
+
+    async def expire_paid_signup_setup(self, *, session_id: str) -> None:
+        await self._call(
+            "expire future signup Checkout",
+            lambda: self._client.v1.checkout.sessions.expire(session_id),
+        )
+
+    async def create_paid_signup(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        payment_method_id: str,
+        operation_id: str,
+        first_payment_at: datetime,
+    ) -> None:
+        if first_payment_at.timestamp() <= time.time():
+            raise DeferralRefused("The accepted first payment date has passed")
+        try:
+            await run_in_threadpool(
+                lambda: self._client.v1.subscriptions.create(
+                    {
+                        "customer": customer_id,
+                        "items": [{"price": price_id, "quantity": 1}],
+                        "default_payment_method": payment_method_id,
+                        "trial_end": int(first_payment_at.timestamp()),
+                        "automatic_tax": {"enabled": True},
+                        "proration_behavior": "none",
+                        "payment_behavior": "error_if_incomplete",
+                        "metadata": {"pumpkit_paid_signup": operation_id},
+                    },
+                    {"idempotency_key": f"{operation_id}:subscription"},
+                )
+            )
+        except stripe.InvalidRequestError as error:
+            if error.code == "idempotency_key_in_use":
+                raise BillingProviderError("Stripe is still processing this signup key") from error
+            raise DeferralRefused("Stripe refused the exact future signup") from error
+        except stripe.StripeError as error:
+            raise BillingProviderError("Stripe failed to create future signup") from error
+
     async def has_open_subscription_checkout(self, *, customer_id: str) -> bool:
         def has_open() -> bool:
             sessions = self._client.v1.checkout.sessions.list(
@@ -493,12 +664,20 @@ class StripeBillingGateway:
     async def has_pending_checkout(self, *, customer_id: str) -> bool:
         def pending() -> bool:
             sessions = self._client.v1.checkout.sessions.list(
-                {"customer": customer_id, "expand": ["data.payment_intent"], "limit": 100}
+                {
+                    "customer": customer_id,
+                    "expand": ["data.payment_intent", "data.setup_intent"],
+                    "limit": 100,
+                }
             )
             for session in sessions.auto_paging_iter():
                 state = session.to_dict()
                 if state.get("status") == "expired":
                     continue
+                if state.get("mode") == "setup" and state.get("status") == "complete":
+                    setup = state.get("setup_intent")
+                    if isinstance(setup, dict) and setup.get("status") in {"succeeded", "canceled"}:
+                        continue
                 intent = state.get("payment_intent")
                 if (
                     state.get("status") == "complete"
@@ -801,8 +980,20 @@ class FakeBillingGateway:
             CustomerCall(email=email, name=name, user_id=user_id, idempotency_key=idempotency_key)
         )
         # Like Stripe, a repeated idempotency key returns the first customer.
-        return self._customers_by_idempotency_key.setdefault(
+        result = self._customers_by_idempotency_key.setdefault(
             idempotency_key, f"cus_fake_{len(self._customers_by_idempotency_key) + 1}"
+        )
+        self._maybe_fail("after_create_customer")
+        return result
+
+    async def find_user_customers(self, *, user_id: str) -> list[str]:
+        self._maybe_fail("find_user_customers")
+        return list(
+            dict.fromkeys(
+                self._customers_by_idempotency_key[c.idempotency_key]
+                for c in self.customers_created
+                if c.user_id == user_id
+            )
         )
 
     async def create_subscription_checkout(
@@ -828,14 +1019,154 @@ class FakeBillingGateway:
         self._open_checkouts[session_id] = customer_id
         return CheckoutSession(id=session_id, url=self.checkout_url)
 
+    paid_signup_setups: dict[str, PaidSignupSetup] = field(default_factory=dict)
+    paid_signups_created: list[str] = field(default_factory=list)
+    paid_signup_create_attempts: list[str] = field(default_factory=list)
+    delay_paid_signup_creation: bool = False
+    pending_paid_signup_creations: dict[str, tuple[str, str, datetime, datetime]] = field(
+        default_factory=dict
+    )
+
+    async def create_paid_signup_setup(
+        self,
+        *,
+        customer_id: str,
+        user_id: str,
+        operation_id: str,
+        currency: str,
+        expires_at: datetime,
+    ) -> PaidSignupSetup:
+        self._maybe_fail("create_paid_signup_setup")
+        previous = [s for s in self.paid_signup_setups.values() if s.operation_id == operation_id]
+        if previous:
+            return previous[0]
+        setup = PaidSignupSetup(
+            id=f"cs_setup_{len(self.paid_signup_setups) + 1}",
+            customer_id=customer_id,
+            operation_id=operation_id,
+            status="open",
+            url=self.checkout_url,
+        )
+        self.paid_signup_setups[setup.id] = setup
+        self._maybe_fail("after_create_paid_signup_setup")
+        return setup
+
+    async def list_paid_signup_setups(self, *, customer_id: str) -> list[PaidSignupSetup]:
+        self._maybe_fail("list_paid_signup_setups")
+        return [s for s in self.paid_signup_setups.values() if s.customer_id == customer_id]
+
+    async def expire_paid_signup_setup(self, *, session_id: str) -> None:
+        self._maybe_fail("expire_paid_signup_setup")
+        self.paid_signup_setups[session_id] = replace(
+            self.paid_signup_setups[session_id], status="expired", url=None
+        )
+
+    def complete_paid_signup_setup(self, session_id: str) -> None:
+        setup = self.paid_signup_setups[session_id]
+        self.paid_signup_setups[session_id] = replace(
+            setup,
+            status="complete",
+            url=None,
+            setup_status="succeeded",
+            payment_method_id=f"pm_{session_id}",
+            setup_customer_id=setup.customer_id,
+            payment_method_customer_id=setup.customer_id,
+            usage="off_session",
+        )
+
+    async def create_paid_signup(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        payment_method_id: str,
+        operation_id: str,
+        first_payment_at: datetime,
+    ) -> None:
+        self.paid_signup_create_attempts.append(operation_id)
+        self._maybe_fail("create_paid_signup")
+        if first_payment_at <= self.clock():
+            raise DeferralRefused("The accepted date has passed")
+        if any(
+            s.paid_signup_operation == operation_id
+            for s in self._subscriptions.get(customer_id, {}).values()
+        ):
+            return
+        if self.delay_paid_signup_creation:
+            self.pending_paid_signup_creations.setdefault(
+                operation_id,
+                (
+                    customer_id,
+                    price_id,
+                    first_payment_at,
+                    self.clock(),
+                ),
+            )
+            raise BillingProviderError("Remote creation continues after the client timed out")
+        self._complete_paid_signup_creation(customer_id, price_id, operation_id, first_payment_at)
+        self._maybe_fail("after_create_paid_signup")
+
+    def complete_pending_paid_signup(self, operation_id: str) -> None:
+        customer_id, price_id, first_payment_at, accepted_at = (
+            self.pending_paid_signup_creations.pop(operation_id)
+        )
+        self._complete_paid_signup_creation(
+            customer_id, price_id, operation_id, first_payment_at, accepted_at=accepted_at
+        )
+
+    def _complete_paid_signup_creation(
+        self,
+        customer_id: str,
+        price_id: str,
+        operation_id: str,
+        first_payment_at: datetime,
+        accepted_at: Optional[datetime] = None,
+    ) -> None:
+        accepted_at = accepted_at or self.clock()
+        started_paying = self.clock() >= first_payment_at
+        plan = next(p for p in self.plans if p.price_id == price_id)
+        self.paid_signups_created.append(operation_id)
+        self.set_subscription(
+            customer_id,
+            SubscriptionState(
+                id=f"sub_signup_{len(self.paid_signups_created)}",
+                status="active" if started_paying else "trialing",
+                price_id=price_id,
+                plan_key=plan.key,
+                current_period_start=first_payment_at if started_paying else accepted_at,
+                current_period_end=months_after(
+                    first_payment_at, 12 if plan.interval == "year" else 1
+                )
+                if started_paying
+                else first_payment_at,
+                created_at=accepted_at,
+                trial_start=accepted_at,
+                trial_end=first_payment_at,
+                billing_cycle_anchor=first_payment_at,
+                item_id=f"si_{operation_id}",
+                item_count=1,
+                interval=plan.interval,
+                interval_count=plan.interval_count,
+                billing_mode="classic",
+                latest_invoice_status="paid",
+                paid_signup_operation=operation_id,
+                paid_current_period=started_paying,
+            ),
+        )
+
     async def has_open_subscription_checkout(self, *, customer_id: str) -> bool:
         self._maybe_fail("has_open_subscription_checkout")
         return customer_id in self._open_checkouts.values()
 
     async def has_pending_checkout(self, *, customer_id: str) -> bool:
         self._maybe_fail("has_pending_checkout")
-        return customer_id in self._open_checkouts.values() or any(
-            customer == customer_id for customer, _ in self._payment_checkouts.values()
+        return (
+            any(
+                s.customer_id == customer_id and s.status == "open"
+                for s in self.paid_signup_setups.values()
+            )
+            or customer_id in self._open_checkouts.values()
+            or any(customer == customer_id for customer, _ in self._payment_checkouts.values())
         )
 
     async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
