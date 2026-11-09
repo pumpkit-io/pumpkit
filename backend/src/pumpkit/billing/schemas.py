@@ -71,6 +71,7 @@ class BillingSubscriptionResponse(BaseModel):
     plan_key: Optional[str]
     current_period_end: Optional[datetime]
     cancel_at: Optional[datetime]
+    paid_through: Optional[datetime] = None
 
 
 class FreeAccessResponse(BaseModel):
@@ -80,12 +81,15 @@ class FreeAccessResponse(BaseModel):
 
 
 class FreeAccessCoverageResponse(FreeAccessResponse):
-    current_starts_at: datetime
-    current_ends_at: datetime
+    current_starts_at: Optional[datetime]
+    current_ends_at: Optional[datetime]
     queued_starts_at: Optional[datetime]
 
 
 class BillingMeResponse(BaseModel):
+    pending_coupon_operation: bool = False
+    pending_coupon_operation_id: Optional[str] = None
+    coupon_deferral: bool = False
     """
     What the authenticated User holds and may do.
     `subscription` is the Running one, else `incomplete`, never Ended; `trial_days` is the Trial a Checkout would start with.
@@ -194,3 +198,6 @@ class CouponRedemptionRequest(BaseModel):
 
 class CouponRedemptionResponse(FreeAccessResponse):
     operation_id: str
+    status: Literal["pending", "completed", "refused"] = "completed"
+    next_payment_at: Optional[datetime] = None
+    detail: Optional[str] = None

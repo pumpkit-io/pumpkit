@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.billing.coupon_identity import fingerprints
 from pumpkit.billing.gateway import Plan
-from pumpkit.billing.models import Coupon, CouponClaim, FreeAccess
+from pumpkit.billing.models import Coupon, CouponClaim, CouponOperation, FreeAccess
 from pumpkit.billing.schemas import CouponIssueRequest
 from pumpkit.core.config import Settings
 from pumpkit.core.errors import ConflictError, NotConfiguredError
@@ -162,6 +162,12 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
     )
     purged = 0
     for coupon in candidates:
+        if await db.scalar(
+            select(CouponOperation.id)
+            .where(CouponOperation.coupon_id == coupon.id, CouponOperation.status == "pending")
+            .limit(1)
+        ):
+            continue
         if coupon.unclaimable_at is None and coupon.claim_deadline is not None:
             coupon.unclaimable_at = as_utc(coupon.claim_deadline)
         if (
@@ -182,6 +188,16 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
                 .returning(CouponClaim.id)
             )
             purged += len(list(removed))
+    operations = await db.scalars(
+        delete(CouponOperation)
+        .where(
+            CouponOperation.status != "pending",
+            CouponOperation.resolved_at <= now - timedelta(days=90),
+            CouponOperation.target <= now - timedelta(days=90),
+        )
+        .returning(CouponOperation.id)
+    )
+    purged += len(list(operations))
     ended = await db.scalars(
         delete(FreeAccess)
         .where(FreeAccess.ends_at <= now - timedelta(days=90))

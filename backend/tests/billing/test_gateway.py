@@ -137,6 +137,11 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
     assert subscriptions == [
         # The period end comes from the first item when the subscription has none.
         SubscriptionState(
+            item_id="si_1QaRunning",
+            item_count=1,
+            interval="month",
+            interval_count=1,
+            current_period_start=datetime(2025, 10, 6, tzinfo=timezone.utc),
             id="sub_1QaRunning",
             status="past_due",
             price_id="price_1Monthly",
@@ -148,6 +153,11 @@ async def test_the_stripe_adapter_lists_every_subscription_of_a_customer():
             billing_cycle_anchor=datetime(2025, 10, 6, tzinfo=timezone.utc),
         ),
         SubscriptionState(
+            item_id="si_1QaEnded",
+            item_count=1,
+            interval="month",
+            interval_count=1,
+            current_period_start=datetime(2025, 8, 1, tzinfo=timezone.utc),
             id="sub_1QaEnded",
             status="canceled",
             price_id="price_1Legacy",
@@ -707,3 +717,50 @@ async def test_pending_checkout_read_includes_async_payment_and_fails_closed(sta
     query = parse_qs(urlsplit(http.urls[0]).query)
     assert query["customer"] == ["cus_Contract"]
     assert "status" not in query
+
+
+async def test_coupon_deferral_sends_absolute_target_without_proration_and_stable_identity():
+    http = _RecordedStripe('{"id":"sub_defer","object":"subscription"}')
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    target = datetime(2028, 3, 31, 12, tzinfo=timezone.utc)
+    await gateway.defer_renewal(
+        subscription_id="sub_defer", target=target, operation_id="operation_123"
+    )
+    assert http.methods == ["post"]
+    assert http.urls[0].endswith("/v1/subscriptions/sub_defer")
+    assert http.forms[0] == {
+        "trial_end": ["1838116800"],
+        "proration_behavior": ["none"],
+        "metadata[pumpkit_coupon_operation]": ["operation_123"],
+    }
+    assert http.headers[0]["Idempotency-Key"] == "coupon-deferral-operation_123"
+
+
+@pytest.mark.parametrize("paid, expected", [(1900, True), (0, False)])
+async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoice(paid, expected):
+    raw = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
+    state = raw["data"][0]
+    state["status"] = "active"
+    state["cancel_at_period_end"] = False
+    state["billing_mode"] = {"type": "classic"}
+    state["latest_invoice"] = {
+        "id": "in_paid",
+        "status": "paid",
+        "amount_paid": paid,
+        "amount_remaining": 0,
+        "lines": {
+            "data": [
+                {
+                    "amount": paid,
+                    "parent": {"subscription_item_details": {"subscription_item": "si_1QaRunning"}},
+                    "period": {"start": 1759708800, "end": 1762387200},
+                }
+            ]
+        },
+    }
+    http = _RecordedStripe(json.dumps(raw))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    result = (await gateway.list_subscriptions(customer_id="cus_Contract"))[0]
+    assert result.paid_current_period is expected
+    assert result.billing_mode == "classic"
+    assert result.item_id == "si_1QaRunning"

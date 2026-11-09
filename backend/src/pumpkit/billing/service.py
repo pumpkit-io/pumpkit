@@ -142,8 +142,17 @@ def requires_terms_acceptance() -> bool:
 async def get_entitlement(
     db: AsyncSession, *, user_id: str, now: Optional[datetime] = None
 ) -> Entitlement:
+    moment = now or system_clock()
+    subscription = await get_user_subscription(db, user_id=user_id)
+    if subscription is None:
+        subscription = await db.scalar(
+            select(Subscription)
+            .where(Subscription.user_id == user_id, Subscription.paid_end > moment)
+            .order_by(Subscription.paid_end.desc())
+            .limit(1)
+        )
     return Entitlement(
-        subscription=await get_user_subscription(db, user_id=user_id),
+        subscription=subscription,
         plans_sold=sells_plans(),
         free_access=await get_free_access_coverage(db, user_id=user_id),
         now=now or system_clock(),
@@ -523,8 +532,16 @@ async def get_free_access_coverage(
     latest = grants[-1]
     anchor = as_utc(latest.calendar_anchor or latest.starts_at)
     return FreeAccessCoverage(
-        starts_at=anchor,
+        starts_at=as_utc(latest.coverage_starts_at or anchor),
         ends_at=as_utc(latest.ends_at),
-        months=latest.month_offset + latest.months,
+        months=latest.month_offset
+        + latest.months
+        - (
+            (as_utc(latest.coverage_starts_at).year - anchor.year) * 12
+            + as_utc(latest.coverage_starts_at).month
+            - anchor.month
+        )
+        if latest.coverage_starts_at
+        else latest.month_offset + latest.months,
         grants=tuple(grant for grant in grants if as_utc(grant.ends_at) > anchor),
     )

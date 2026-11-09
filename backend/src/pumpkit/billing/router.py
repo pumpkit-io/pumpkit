@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
-from pumpkit.billing import coupon_redemption, mediator, service
+from pumpkit.billing import mediator, service
 from pumpkit.billing.allowance import sells_top_ups
 from pumpkit.billing.gateway import BillingGateway, get_billing_gateway
 from pumpkit.billing.schemas import (
@@ -101,11 +101,12 @@ async def create_top_up_checkout(
 @limiter.limit("5/minute")
 async def subscribe_now(
     request: Request,
+    clock: Clock = Depends(get_clock),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> BillingMeResponse:
-    return await mediator.subscribe_now(db=db, gateway=gateway, user=current_user)
+    return await mediator.subscribe_now(db=db, gateway=gateway, user=current_user, clock=clock)
 
 
 @router.post(
@@ -116,11 +117,14 @@ async def subscribe_now(
 @limiter.limit("20/minute")
 async def create_billing_portal(
     request: Request,
+    clock: Clock = Depends(get_clock),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> BillingPortalResponse:
-    return await mediator.create_billing_portal_session(db=db, gateway=gateway, user=current_user)
+    return await mediator.create_billing_portal_session(
+        db=db, gateway=gateway, user=current_user, clock=clock
+    )
 
 
 @router.post("/stripe/webhook", status_code=status.HTTP_200_OK)
@@ -178,7 +182,21 @@ async def redeem_coupon(
 @router.get("/billing/coupons/redemptions/{operation_id}", response_model=CouponRedemptionResponse)
 async def lookup_coupon_redemption(
     operation_id: str,
+    gateway: BillingGateway = Depends(get_billing_gateway),
+    clock: Clock = Depends(get_clock),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> CouponRedemptionResponse:
-    return await coupon_redemption.lookup(db, user_id=current_user.id, operation_id=operation_id)
+    return await mediator.lookup_coupon_redemption(
+        db, gateway, current_user, operation_id=operation_id, clock=clock
+    )
+
+
+@router.post("/billing/cancel-renewal", response_model=BillingMeResponse)
+async def cancel_renewal(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+    clock: Clock = Depends(get_clock),
+) -> BillingMeResponse:
+    return await mediator.cancel_renewal(db, gateway, current_user, clock=clock)

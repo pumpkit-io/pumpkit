@@ -8,7 +8,7 @@ from itsdangerous import URLSafeSerializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.billing import coupon_service, service
+from pumpkit.billing import coupon_operations, coupon_service, service
 from pumpkit.billing.allowance import limits, months_after
 from pumpkit.billing.gateway import SubscriptionState
 from pumpkit.billing.models import Coupon
@@ -67,17 +67,36 @@ async def preview(
         raise ConflictError(
             "Resolve your outstanding or processing payment in the billing portal before using a coupon."
         )
-    if any(
-        state.status not in {"canceled", "incomplete_expired"} for state in subscriptions
-    ) or await service.get_user_subscription(db, user_id=user.id):
-        raise ConflictError(
-            "Coupons for an existing subscription are not available yet. Keep your code and try again later."
-        )
+    await coupon_operations.require_settled(db, user_id=user.id)
+    if (
+        coupon.redeemed_count + len(await coupon_operations.pending(db, coupon_id=coupon.id))
+        >= coupon.max_redemptions
+    ):
+        raise ConflictError("This coupon is being claimed. Try again later or ask its sender.")
+    monthly = await coupon_operations.monthly_state(
+        db, user_id=user.id, subscriptions=subscriptions, now=now
+    )
     await coupon_service.require_unclaimed(db, coupon=coupon, email=user.email, config=settings)
     existing = await service.get_free_access(db, user_id=user.id, now=now)
-    anchor = as_utc(existing.calendar_anchor or existing.starts_at) if existing else now
-    offset = existing.month_offset + existing.months if existing else 0
-    start = as_utc(existing.ends_at) if existing else now
+    anchor = (
+        as_utc(existing.calendar_anchor or existing.starts_at)
+        if existing
+        else as_utc(monthly.billing_cycle_anchor)
+        if monthly and monthly.billing_cycle_anchor
+        else now
+    )
+    start = (
+        as_utc(existing.ends_at)
+        if existing
+        else as_utc(monthly.current_period_end)
+        if monthly and monthly.current_period_end
+        else now
+    )
+    offset = (
+        existing.month_offset + existing.months
+        if existing
+        else (start.year - anchor.year) * 12 + start.month - anchor.month
+    )
     if coupon.months > 24:
         raise ConflictError(
             "This coupon would exceed the supported 730-day access horizon. Ask its sender for a shorter benefit."
@@ -93,12 +112,13 @@ async def preview(
         starts_at=start,
         ends_at=end,
         allowance=allowance,
-        next_payment_at=None,
+        next_payment_at=end if monthly else None,
         terms_version=TERMS_VERSION if service.requires_terms_acceptance() else None,
         revision="",
     )
     offer = response.model_dump(mode="json", exclude={"revision"})
     state = {
+        "subscription": asdict(monthly) if monthly else None,
         "previous_grant": existing.id if existing else None,
         "anchor": anchor.isoformat() if existing else None,
         "offset": offset,
@@ -110,7 +130,9 @@ async def preview(
         "recipient_key_id": coupon.recipient_key_id,
         "recipient_fingerprint": coupon.recipient_fingerprint,
     }
-    state_digest = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+    state_digest = hashlib.sha256(
+        json.dumps(state, sort_keys=True, default=str).encode()
+    ).hexdigest()
     revision = URLSafeSerializer(settings.JWT_SECRET_KEY, salt="coupon-preview").dumps(
         {
             "offer": offer,

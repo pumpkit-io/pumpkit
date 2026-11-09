@@ -66,6 +66,11 @@ class Subscription(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    paid_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    paid_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    paid_anchor: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    paid_allowance: Mapped[Optional[dict]] = mapped_column(JSON)
+
     user: Mapped["User"] = relationship()
 
 
@@ -220,6 +225,7 @@ class FreeAccess(Base):
     claim_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("coupon_claims.id", ondelete="SET NULL"), unique=True
     )
+    coverage_starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     calendar_anchor: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     month_offset: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     operation_id: Mapped[str] = mapped_column(String(128))
@@ -230,3 +236,32 @@ class FreeAccess(Base):
     allowance: Mapped[dict[str, Optional[int]]] = mapped_column(JSON)
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     acceptance: Mapped[dict] = mapped_column(JSON)
+
+
+class CouponOperation(Base):
+    __tablename__ = "coupon_operations"
+    __table_args__ = (UniqueConstraint("user_id", "operation_id"),)
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("coupon_operation")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    coupon_id: Mapped[str] = mapped_column(ForeignKey("coupons.id"), index=True)
+    claim_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("coupon_claims.id", ondelete="SET NULL"), unique=True
+    )
+    operation_id: Mapped[str] = mapped_column(String(128))
+    revision_digest: Mapped[str] = mapped_column(String(64))
+    status: Mapped[Literal["pending", "completed", "refused"]] = mapped_column(
+        String, index=True, default="pending"
+    )
+    customer_id: Mapped[str] = mapped_column(String)
+    subscription_id: Mapped[str] = mapped_column(String)
+    original: Mapped[dict] = mapped_column(JSON)
+    offer: Mapped[dict] = mapped_column(JSON)
+    acceptance: Mapped[dict] = mapped_column(JSON)
+    target: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    detail: Mapped[Optional[str]] = mapped_column(String)

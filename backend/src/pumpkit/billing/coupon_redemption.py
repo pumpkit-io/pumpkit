@@ -72,6 +72,7 @@ def result(access: FreeAccess) -> CouponRedemptionResponse:
         months=access.months,
         starts_at=as_utc(access.starts_at),
         ends_at=as_utc(access.ends_at),
+        next_payment_at=access.acceptance.get("next_payment_at"),
     )
 
 
@@ -121,6 +122,9 @@ async def grant(
     await db.flush()
     previous = await service.get_free_access(db, user_id=user.id, now=now)
     access = FreeAccess(
+        coverage_starts_at=(previous.coverage_starts_at or previous.starts_at)
+        if previous
+        else offer.starts_at,
         calendar_anchor=(previous.calendar_anchor or previous.starts_at)
         if previous
         else offer.starts_at,
