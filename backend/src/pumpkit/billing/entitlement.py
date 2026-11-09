@@ -72,6 +72,12 @@ class Entitlement:
         )
 
     def allowance_at(self, moment: datetime) -> Optional[Allowance]:
+        return self._allowance_at(moment, allocating=False)
+
+    def allocation_at(self, moment: datetime) -> Optional[Allowance]:
+        return self._allowance_at(moment, allocating=True)
+
+    def _allowance_at(self, moment: datetime, *, allocating: bool) -> Optional[Allowance]:
         subscription = self.subscription
         if (
             self.plans_sold
@@ -110,6 +116,10 @@ class Entitlement:
                 way_out="top_up" if self.may_buy_top_up else None,
                 ends_at=as_utc(self.free_access.ends_at),
             )
-        if not self.plans_sold or not self.subscribed or self.subscription is None:
+        if (
+            not self.plans_sold
+            or self.subscription is None
+            or (not allocating and not self.subscribed)
+        ):
             return None
         return allowance_at(self.subscription, moment)

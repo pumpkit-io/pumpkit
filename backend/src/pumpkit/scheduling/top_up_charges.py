@@ -19,6 +19,7 @@ from pumpkit.billing.models import ALLOWANCE_COUNTS, AllowanceCount
 from pumpkit.billing.top_ups import Covered, Need, TopUpBalance, cover_in_order
 from pumpkit.core.time import as_utc
 from pumpkit.scheduling import service
+from pumpkit.scheduling.models import FAILED
 from pumpkit.scheduling.rules import XPosts, x_posts_in
 
 # Scheduled posts use X posts and link posts, never Generations.
@@ -68,7 +69,9 @@ async def _allowances(
     """The Allowances of the periods holding `moments`, one per period, earliest first."""
     allowances: dict[datetime, Allowance] = {}
     for moment in moments:
-        allowance = await billing_service.get_allowance(db, user_id=user_id, moment=moment, now=now)
+        allowance = await billing_service.get_allocation_allowance(
+            db, user_id=user_id, moment=moment, now=now
+        )
         if allowance is not None:
             allowances[allowance.period.start] = allowance
     return [allowances[start] for start in sorted(allowances)]
@@ -177,6 +180,27 @@ async def rebalance_top_ups(
                     )
 
 
+async def settle_failed_top_ups(db: AsyncSession, *, scheduled_post_id: str, now: datetime) -> None:
+    scheduled_post = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
+    moment = as_utc(scheduled_post.publish_at)
+    if (
+        await billing_service.get_allocation_allowance(
+            db, user_id=scheduled_post.user_id, moment=moment, now=now
+        )
+        is not None
+    ):
+        await rebalance_top_ups(db, user_id=scheduled_post.user_id, moments=[moment], now=now)
+        return
+    total = x_posts_in([part.text for part in scheduled_post.parts])
+    live = x_posts_in([part.text for part in scheduled_post.parts if part.x_post_id])
+    await billing_service.give_back_unpublished_charges(
+        db,
+        scheduled_post_id=scheduled_post_id,
+        unpublished={count: getattr(total, count) - getattr(live, count) for count in _COUNTS},
+        live={count: getattr(live, count) for count in _COUNTS},
+    )
+
+
 async def keep_live_parts_counted(
     db: AsyncSession, *, user_id: str, scheduled_post_id: str, publish_at: datetime, now: datetime
 ) -> bool:
@@ -185,10 +209,15 @@ async def keep_live_parts_counted(
     counting, keeping what they take from Top-ups. False when publishing has started. Call it with
     the User locked. Flushes.
     """
+    scheduled_post = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
+    already_failed = scheduled_post.state == FAILED
     # Failed counts only the live Parts, so the charging below pays for them alone.
     if not await service.stop(db, scheduled_post_id=scheduled_post_id, now=now):
         return False
-    await rebalance_top_ups(db, user_id=user_id, moments=[publish_at], now=now)
+    if already_failed:
+        await rebalance_top_ups(db, user_id=user_id, moments=[publish_at], now=now)
+    else:
+        await settle_failed_top_ups(db, scheduled_post_id=scheduled_post_id, now=now)
     paid = await billing_service.keep_charges_after_delete(db, scheduled_post_id=scheduled_post_id)
     live = x_posts_in(await service.counted_parts(db, scheduled_post_id=scheduled_post_id))
     await service.keep_unscheduled_live_parts(
@@ -242,6 +271,9 @@ async def check_room(
             db, scheduled_post_id=changing_id, needed=needed, trimming=False
         )
     allowances = await _allowances(db, user_id=user_id, moments=moments, now=now)
+    if not any(a.period.start == allowance.period.start for a in allowances):
+        allowances.append(allowance)
+        allowances.sort(key=lambda a: a.period.start)
     planned = [await _planned(db, user_id=user_id, allowance=a) for a in allowances]
     ids = {p.scheduled_post_id for posts in planned for p in posts if p.scheduled_post_id}
     if changing_id is not None:

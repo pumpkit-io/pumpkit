@@ -19,7 +19,7 @@ from pumpkit.core.time import Clock, as_utc
 from pumpkit.posts.models import MEDIA_VIDEO
 from pumpkit.scheduling import publish, service
 from pumpkit.scheduling.models import ScheduledPost
-from pumpkit.scheduling.top_up_charges import rebalance_top_ups
+from pumpkit.scheduling.top_up_charges import settle_failed_top_ups
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XPublisher
 
@@ -94,9 +94,7 @@ async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
         db, publishing_since=publishing_since, user_ids=user_ids, now=now
     )
     for scheduled_post in recovered.failed:
-        await rebalance_top_ups(
-            db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)], now=now
-        )
+        await settle_failed_top_ups(db, scheduled_post_id=scheduled_post.id, now=now)
     await db.commit()
     for scheduled_post in recovered.published:
         publish.capture_published(scheduled_post)
@@ -252,12 +250,7 @@ async def _settle(
             db, scheduled_post, failed, now=claim.clock()
         )
         if failed_for_good:
-            await rebalance_top_ups(
-                db,
-                user_id=scheduled_post.user_id,
-                moments=[as_utc(scheduled_post.publish_at)],
-                now=claim.clock(),
-            )
+            await settle_failed_top_ups(db, scheduled_post_id=scheduled_post.id, now=claim.clock())
         await db.commit()
         if failed_for_good:
             publish.capture_failed(scheduled_post, failed.category)

@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Scheduled posts that fail after access ends release top-up reservations for parts X did not accept, while preserving accepted parts and other scheduled posts.
+
 - Known cancellation dates keep expired access, Top-up purchases and immediate payments closed after coupon history is purged.
 
 - Self-hosters’ coupon purge now removes expired saved paid coverage from retained subscription records while preserving current benefits and pending recovery.
