@@ -118,7 +118,7 @@ export function SubscriptionCard({
       : null;
 
   return (
-    <SettingsCard title="Plan">
+    <SettingsCard title="Plan" className="px-[20px] sm:px-6">
       {loadError && <ErrorBanner message={loadError} />}
       {error && <ErrorBanner message={error} />}
       {cancelError && <ErrorBanner message={cancelError} />}

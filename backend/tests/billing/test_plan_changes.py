@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.allowance import months_after
 from pumpkit.billing.gateway import Plan
 from pumpkit.billing.plan_change_recovery import run_cli
@@ -13,7 +14,9 @@ from pumpkit.core.config import settings
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_monthly_coupons import monthly
+from tests.billing.test_paid_signups import SIGNUPS, _open
 from tests.billing.test_top_ups import _send
+from tests.posts.writing_replies import written
 
 CHANGES = "/api/v1/billing/plan-changes"
 
@@ -426,3 +429,62 @@ async def test_privileged_plan_recovery_works_with_flag_off_and_same_acceptance(
         "status"
     ] == "completed"
     assert len(fake_billing.plan_changes) == 1
+
+
+async def test_interval_change_keeps_used_generation_and_captured_paid_caps(
+    authed_client,
+    coupons,
+    db,
+    user,
+    fake_billing,
+    fixed_clock,
+    fake_x_reader,
+    fake_llm,
+    monkeypatch,
+):
+    await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(post_id="plan-author", text="An example", posted_at=fixed_clock())
+    ]
+    assert (
+        await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    ).status_code == 201
+    fake_llm.replies = [
+        written("Sketch"),
+        {"post": "A used generation before changing payment frequency"},
+    ]
+    assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
+    monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 800)
+    before = (await authed_client.get("/api/v1/usage")).json()
+    assert before["allowance"]["generations"] == {"limit": 500, "used": 1, "left": 499}
+    assert (await authed_client.post(CHANGES, json=await proposed_change(authed_client))).json()[
+        "status"
+    ] == "completed"
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+
+
+async def test_explicit_future_signup_can_change_frequency_and_redeem_again_without_new_trial(
+    authed_client, coupons, fake_billing
+):
+    free, signup, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    assert (await authed_client.get(SIGNUPS + "/" + signup["operation_id"])).json()[
+        "status"
+    ] == "completed"
+    before = (await authed_client.get("/api/v1/usage")).json()
+    assert (await authed_client.post(CHANGES, json=await proposed_change(authed_client))).json()[
+        "status"
+    ] == "completed"
+    code = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
+    assert offer["starts_at"] == free["ends_at"]
+    assert (
+        await authed_client.post(
+            REDEEM, json={**confirmation(offer), "operation_id": "after-signup-change-0001"}
+        )
+    ).json()["status"] == "completed"
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["introductory_trial_end"] is None
+    assert me["subscription"]["paid_through"] is None
+    assert me["future_plan"]["first_payment_at"] == offer["ends_at"]

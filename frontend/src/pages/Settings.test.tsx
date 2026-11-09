@@ -2027,7 +2027,7 @@ describe('future billing frequency', () => {
       expect(review).toHaveTextContent(interval === 'month' ? '€9.00 / month' : '€90.00 / year');
       expect(review).toHaveTextContent('No immediate payment');
       expect(billingService.createPlanChange).not.toHaveBeenCalled();
-      fireEvent.click(within(review).getByRole('button', { name: 'Confirm billing frequency' }));
+      fireEvent.click(within(review).getByRole('button', { name: 'Confirm change' }));
       const success = await plan.findByText(
         'Billing frequency changed. Your paid and free access stay unchanged.',
       );
@@ -2122,7 +2122,7 @@ describe('future billing frequency', () => {
     let plan = await card('Plan');
     fireEvent.click(await plan.findByRole('button', { name: 'Change billing frequency' }));
     fireEvent.click(plan.getByRole('button', { name: 'Review yearly plan' }));
-    fireEvent.click(await plan.findByRole('button', { name: 'Confirm billing frequency' }));
+    fireEvent.click(await plan.findByRole('button', { name: 'Confirm change' }));
     expect(await plan.findByRole('alert')).toHaveTextContent('not confirmed yet');
     expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeDisabled();
     const saved = JSON.parse(sessionStorage.getItem(storageKey('plan-change'))!);
@@ -2171,11 +2171,9 @@ describe('future billing frequency', () => {
     const plan = await card('Plan');
     fireEvent.click(await plan.findByRole('button', { name: 'Change billing frequency' }));
     fireEvent.click(plan.getByRole('button', { name: 'Review yearly plan' }));
-    fireEvent.click(await plan.findByRole('button', { name: 'Confirm billing frequency' }));
+    fireEvent.click(await plan.findByRole('button', { name: 'Confirm change' }));
     expect(await plan.findByRole('alert')).toHaveTextContent('Review it again');
-    expect(
-      plan.queryByRole('button', { name: 'Confirm billing frequency' }),
-    ).not.toBeInTheDocument();
+    expect(plan.queryByRole('button', { name: 'Confirm change' })).not.toBeInTheDocument();
     expect(plan.getByText(/Next payment:/)).toHaveTextContent('March 31, 2028');
     expect(sessionStorage.getItem(storageKey('plan-change'))).toBeNull();
     expect(plan.getByRole('button', { name: 'Review yearly plan' })).toBeEnabled();

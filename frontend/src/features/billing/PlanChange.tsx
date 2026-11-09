@@ -107,7 +107,7 @@ export function PlanChange({
   );
   if (!eligible && !change.pending && !change.answer && !change.error) return null;
   return (
-    <div className="space-y-3 border-t border-border pt-4 font-sans text-sm text-foreground">
+    <div className="space-y-3 border-t border-border pt-4 font-sans text-sm text-foreground [overflow-wrap:anywhere]">
       {error && (
         <div
           ref={previewError}
@@ -134,7 +134,7 @@ export function PlanChange({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 whitespace-normal"
+                className="h-auto min-h-11 px-[16px] whitespace-normal"
                 disabled={change.busy}
                 onClick={() => void change.check()}
               >
@@ -156,7 +156,7 @@ export function PlanChange({
           <Button
             type="button"
             variant="outline"
-            className="h-auto min-h-11 whitespace-normal"
+            className="h-auto min-h-11 px-[16px] whitespace-normal"
             aria-expanded={expanded}
             onClick={() => setExpanded(!expanded)}
           >
@@ -175,7 +175,7 @@ export function PlanChange({
                       key={plan.key}
                       type="button"
                       variant="outline"
-                      className="h-auto min-h-11 max-w-full whitespace-normal"
+                      className="h-auto min-h-11 px-[16px] max-w-full whitespace-normal"
                       disabled={checking || change.busy}
                       onClick={() => void preview(plan.key)}
                     >
@@ -193,7 +193,7 @@ export function PlanChange({
                   ref={review}
                   tabIndex={-1}
                   aria-label="Review billing frequency"
-                  className="space-y-3 rounded-lg border border-border p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  className="space-y-3 rounded-lg border border-border p-[12px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <FuturePlanDetails plan={offer} />
                   <p>
@@ -201,11 +201,11 @@ export function PlanChange({
                   </p>
                   <Button
                     type="button"
-                    className="h-auto min-h-11 w-full whitespace-normal"
+                    className="h-auto min-h-11 px-[16px] w-full whitespace-normal"
                     disabled={change.busy || blocked}
                     onClick={() => void confirm()}
                   >
-                    {change.busy ? 'Confirming change…' : 'Confirm billing frequency'}
+                    {change.busy ? 'Confirming change…' : 'Confirm change'}
                   </Button>
                 </section>
               )}
