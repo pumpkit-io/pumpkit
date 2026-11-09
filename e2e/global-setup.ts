@@ -15,6 +15,9 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   const appOrigin = config.projects[0].use.baseURL;
   if (!appOrigin) throw new Error('playwright.config.ts sets no baseURL');
   const token = seedUserAndGetToken();
+  if (process.env.E2E_COUPONS === '1') {
+    runSeedScript('coupon_user.py', ['check']);
+  }
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();

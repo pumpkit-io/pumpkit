@@ -22,6 +22,7 @@ vi.mock('@/services/billingService', () => ({
     redeemCoupon: vi.fn(),
     fetchCouponRedemption: vi.fn(),
     fetchPaidSignup: vi.fn(),
+    fetchPlanChange: vi.fn(),
     cancelPaidSignup: vi.fn(),
     createPaidSignup: vi.fn(),
     startSubscriptionCheckout: vi.fn(),
@@ -907,6 +908,84 @@ describe('future signup recovery after free access expires', () => {
     expect(
       await area.findByRole('heading', { name: 'Subscribe to keep writing' }),
     ).toBeInTheDocument();
+    expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
+  });
+});
+
+describe('billing frequency recovery after free access expires', () => {
+  const operation = {
+    operationId: 'expired-free-plan-change',
+    status: 'pending' as const,
+    detail: 'Your earlier billing change is still being confirmed.',
+    planKey: 'pumpkit_pro_yearly',
+    productName: 'Pumpkit Pro',
+    amount: 9000,
+    currency: 'eur',
+    interval: 'year',
+    intervalCount: 1,
+    firstPaymentAt: '2026-11-01T12:00:00Z',
+  };
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.mocked(billingService.fetchPlanChange).mockReset().mockResolvedValue(operation);
+    vi.mocked(billingService.startSubscriptionCheckout).mockReset();
+    vi.mocked(onboardingService.fetchNextStep).mockReset().mockResolvedValue('paywall');
+    vi.mocked(billingService.fetchBillingMe)
+      .mockReset()
+      .mockResolvedValue({
+        ...NOT_SUBSCRIBED,
+        pendingPlanChangeId: operation.operationId,
+      });
+  });
+
+  it.each([true, false])(
+    'keeps account recovery reachable with coupons enabled=%s',
+    async (enabled) => {
+      vi.mocked(billingService.fetchPlans)
+        .mockReset()
+        .mockResolvedValue({ ...CATALOG, couponsEnabled: enabled });
+      renderSignedIn('/settings', { nextStep: 'paywall' });
+      const area = await paywall();
+      expect(
+        await area.findByRole('heading', { name: 'Confirm your billing frequency change' }),
+      ).toBeVisible();
+      expect(await area.findByText(operation.detail)).toBeVisible();
+      await waitFor(() =>
+        expect(area.getByRole('button', { name: 'Check billing change' })).toBeEnabled(),
+      );
+      expect(currentPath()).toBe('/subscribe');
+      expect(billingService.fetchPlanChange).toHaveBeenCalledWith(operation.operationId);
+      expect(
+        area.queryByRole('button', {
+          name: /Subscribe:|Start trial:|Have a coupon|Open billing portal/,
+        }),
+      ).not.toBeInTheDocument();
+      expect(area.queryByText(/Billing frequency changed\./)).not.toBeInTheDocument();
+
+      vi.mocked(billingService.fetchPlanChange).mockRejectedValueOnce(apiError(503, 'Try again'));
+      fireEvent.click(area.getByRole('button', { name: 'Check billing change' }));
+      expect(await area.findByRole('alert')).toHaveTextContent('not confirmed yet');
+      expect(area.getByRole('button', { name: 'Check billing change' })).toBeEnabled();
+      expect(area.queryByRole('button', { name: /^Subscribe:/ })).not.toBeInTheDocument();
+      expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refreshes a resolved refusal before offering a fresh subscription', async () => {
+    vi.mocked(billingService.fetchPlans).mockReset().mockResolvedValue(CATALOG);
+    renderPaywall();
+    const area = await paywall();
+    await area.findByText(operation.detail);
+    await waitFor(() =>
+      expect(area.getByRole('button', { name: 'Check billing change' })).toBeEnabled(),
+    );
+    vi.mocked(billingService.fetchPlanChange).mockImplementation(async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
+      return { ...operation, status: 'refused', detail: 'The change was not sent.' };
+    });
+    fireEvent.click(area.getByRole('button', { name: 'Check billing change' }));
+    expect(await area.findByRole('heading', { name: 'Subscribe to keep writing' })).toBeVisible();
+    expect(area.queryByText(/Billing frequency changed\./)).not.toBeInTheDocument();
     expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
   });
 });
