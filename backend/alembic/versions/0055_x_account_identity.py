@@ -28,9 +28,10 @@ def downgrade() -> None:
     x_sessions = bind.scalar(
         sa.text("SELECT id FROM refresh_tokens WHERE sign_in_method='x' LIMIT 1")
     )
-    if duplicates is not None or x_sessions is not None:
+    x_accounts = bind.scalar(sa.text("SELECT id FROM users WHERE x_user_id IS NOT NULL LIMIT 1"))
+    if duplicates is not None or x_sessions is not None or x_accounts is not None:
         raise RuntimeError(
-            "Downgrade requires unique contact emails and no X sessions; restore a compatible backup instead."
+            "Downgrade requires unique contact emails, no X accounts and no X sessions; restore a compatible backup instead."
         )
     with op.batch_alter_table("users") as batch:
         batch.drop_constraint("uq_users_x_user_id", type_="unique")

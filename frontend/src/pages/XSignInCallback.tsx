@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { session, signInPath, SIGN_IN_ERROR, isSignInErrorCode } from '@/lib/session';
+import { returnTo } from '@/lib/returnTo';
 import { errorMessage } from '@/services/apiErrors';
 import { xSignInService } from '@/services/xSignInService';
 
@@ -23,7 +24,9 @@ export function XSignInCallback() {
       .complete({ state, code: params.get('code'), error: params.get('error') })
       .then(({ accessToken, expiresAt }) => {
         const result = session.startFromCredentials(accessToken, expiresAt);
-        navigate(result.ok ? '/new' : signInPath(SIGN_IN_ERROR.signInFailed), { replace: true });
+        navigate(result.ok ? (returnTo.take() ?? '/new') : signInPath(SIGN_IN_ERROR.signInFailed), {
+          replace: true,
+        });
       })
       .catch((error: unknown) => {
         const detail = errorMessage(error, '');

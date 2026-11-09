@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { session } from '@/lib/session';
+import { returnTo } from '@/lib/returnTo';
 import { xSignInService } from '@/services/xSignInService';
 import { XSignInCallback } from './XSignInCallback';
 
@@ -23,6 +24,7 @@ function callback(search = '?code=valid&state=browser-state') {
         <Routes>
           <Route path="/oauth/x/callback" element={<XSignInCallback />} />
           <Route path="/new" element={<Destination />} />
+          <Route path="/oauth/consent" element={<Destination />} />
           <Route path="/login" element={<Destination />} />
         </Routes>
       </MemoryRouter>
@@ -48,6 +50,20 @@ it('announces sign-in progress and starts the existing session once before repla
     state: 'browser-state',
     error: null,
   });
+  expect(session.get()).toEqual({ accessToken: 'issued-access', expiresAt });
+});
+
+it('resumes the validated saved destination after starting the session', async () => {
+  returnTo.remember('/oauth/consent?request=pending-app');
+  const expiresAt = new Date(Date.now() + 3600_000).toISOString();
+  vi.mocked(xSignInService.complete).mockResolvedValue({ accessToken: 'issued-access', expiresAt });
+
+  callback();
+
+  expect(
+    await screen.findByText('/oauth/consent?request=pending-app via REPLACE'),
+  ).toBeInTheDocument();
+  expect(returnTo.take()).toBeNull();
   expect(session.get()).toEqual({ accessToken: 'issued-access', expiresAt });
 });
 

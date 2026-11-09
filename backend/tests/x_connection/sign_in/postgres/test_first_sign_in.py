@@ -8,6 +8,9 @@ from pumpkit.x_connection.x_publisher import X_SIGN_IN_SCOPES
 from tests.billing.postgres.test_coupon_contention import blocked_requests
 from tests.x_connection.sign_in.test_complete import begin, complete, profile
 from tests.x_connection.test_x_identity_migration import (
+    test_downgrade_preserves_x_identity_without_remaining_sessions as test_downgrade_preserves_x_identity_without_remaining_sessions,
+)
+from tests.x_connection.test_x_identity_migration import (
     test_stable_x_identity_and_shared_contact_email_can_be_migrated_and_reversed as test_stable_x_identity_and_shared_contact_email_can_be_migrated_and_reversed,
 )
 

@@ -6,6 +6,24 @@ from alembic import command
 from tests.migrations import migrate
 
 
+async def test_downgrade_preserves_x_identity_without_remaining_sessions(db_engine, user):
+    await migrate(db_engine, lambda config: command.stamp(config, "0055"))
+    async with db_engine.begin() as connection:
+        await connection.execute(
+            sa.text("UPDATE users SET x_user_id='1001', x_handle='ada' WHERE id=:id"),
+            {"id": user.id},
+        )
+
+    with pytest.raises(RuntimeError, match="no X accounts"):
+        await migrate(db_engine, lambda config: command.downgrade(config, "0054"))
+
+    async with db_engine.connect() as connection:
+        identity = await connection.scalar(
+            sa.text("SELECT x_user_id FROM users WHERE id=:id"), {"id": user.id}
+        )
+        assert identity == "1001"
+
+
 async def test_stable_x_identity_and_shared_contact_email_can_be_migrated_and_reversed(
     db_engine, user
 ):
@@ -38,6 +56,10 @@ async def test_stable_x_identity_and_shared_contact_email_can_be_migrated_and_re
         await migrate(db_engine, lambda config: command.downgrade(config, "0054"))
     async with db_engine.begin() as connection:
         await connection.execute(sa.text("DELETE FROM users WHERE id='user_other'"))
+        await connection.execute(
+            sa.text("UPDATE users SET x_user_id=NULL, x_handle=NULL WHERE id=:id"),
+            {"id": user.id},
+        )
     await migrate(db_engine, lambda config: command.downgrade(config, "0054"))
     async with db_engine.connect() as connection:
         preserved = await connection.scalar(
