@@ -1,4 +1,4 @@
-I presenti Termini costituiscono il contratto tra te e il Gestore, INCEPTIONAL S.R.L., per l'uso di Pumpkit su pumpkit.io. Ti chiediamo di leggerli prima di sottoscrivere un Abbonamento. L'[Informativa sulla privacy](/it/privacy) spiega cosa fa il Gestore con i tuoi dati personali.
+I presenti Termini costituiscono il contratto tra te e il Gestore, INCEPTIONAL S.R.L., per l'uso di Pumpkit su pumpkit.io. Ti chiediamo di leggerli prima di sottoscrivere un Abbonamento o riscattare un Coupon. L'[Informativa sulla privacy](/it/privacy) spiega cosa fa il Gestore con i tuoi dati personali.
 
 ## 1. Il Gestore e i presenti Termini {#operator}
 
@@ -14,7 +14,7 @@ Pumpkit è gestito da INCEPTIONAL S.R.L., società a responsabilità limitata a 
 
 I presenti Termini riguardano soltanto il servizio ospitato su pumpkit.io. Il codice di Pumpkit è open source e chiunque può eseguirne una propria copia. Il Gestore non gestisce tali istanze installate in proprio e i presenti Termini non si applicano a esse.
 
-I presenti Termini si applicano dal momento in cui accedi. Li accetti di nuovo prima di ogni pagamento, dove confermi anche, spuntando caselle separate, la tua richiesta che il servizio inizi immediatamente (clausola 13) e la tua approvazione specifica, che ogni Utente dà, delle clausole lì elencate ai sensi degli artt. 1341 e 1342 del Codice civile.
+I presenti Termini si applicano dal momento in cui accedi. Accetti i Termini attuali prima di ogni pagamento e riscatto di Coupon. Il pagamento registra separatamente la richiesta di prestazione immediata (clausola 13) e l’approvazione specifica delle clausole 9, 12, 14, 16, 19 e 21 ai sensi degli artt. 1341 e 1342 del Codice civile. Il riscatto registra l’accettazione e l’approvazione specifica delle clausole 9, 16, 19 e 21. Non ti chiede di rinunciare al recesso da un servizio a pagamento né di autorizzare un nuovo pagamento automatico.
 
 Nei presenti Termini, è **consumatore** la persona fisica che usa Pumpkit per scopi estranei alla propria attività imprenditoriale, commerciale, artigianale o professionale. È **impresa** chiunque altro, compresi l'imprenditore individuale e il libero professionista che usano Pumpkit per il proprio lavoro.
 
@@ -84,25 +84,33 @@ In caso di violazione grave o ripetuta della clausola 8, il Gestore può risolve
 
 ## 10. Piani e Trial {#plans}
 
-Le funzionalità di Pumpkit richiedono un Abbonamento a un Piano. La pagina Settings mostra ciascun Piano con il relativo prezzo e periodo di fatturazione prima della sottoscrizione. Paghi tramite Stripe Checkout, e Stripe elabora il tuo pagamento.
+Le funzionalità di Pumpkit richiedono un Abbonamento a un Piano o un Accesso gratuito attuale ottenuto con un Coupon. Pro è il nome dell’offerta su pumpkit.io; un Piano è la sua offerta ricorrente mensile o annuale. La pagina Settings mostra ciascun Piano con il relativo prezzo e periodo di fatturazione prima della sottoscrizione. Paghi tramite Stripe Checkout, e Stripe elabora il tuo pagamento.
 
-Il tuo primo Abbonamento può iniziare con un Trial, un periodo iniziale gratuito la cui durata è indicata nella pagina Settings prima del pagamento. Ogni Utente ha diritto al massimo a un Trial. Al momento del pagamento inserisci un metodo di pagamento, e durante il Trial non viene addebitato nulla. Al termine del Trial inizia il primo periodo di fatturazione e il prezzo del Piano viene addebitato automaticamente, salvo che tu abbia disdetto prima.
+Il tuo primo Abbonamento può iniziare con un Trial, un periodo iniziale gratuito la cui durata è indicata nella pagina Settings prima del pagamento. Ogni Utente ha diritto a un solo Trial introduttivo. Ricevere Accesso gratuito elimina l’idoneità a iniziare un nuovo Trial; un Trial già in corso termina con le date e l’Allowance originarie. Al momento del pagamento inserisci un metodo di pagamento, e durante il Trial non viene addebitato nulla. Al termine del Trial inizia il primo periodo di fatturazione e il prezzo del Piano viene addebitato automaticamente, salvo che tu abbia disdetto prima.
 
-Ogni Abbonamento ti dà un'Allowance, e puoi acquistare Top-up, come descritto nella clausola 11.
+Ogni Abbonamento o periodo di Accesso gratuito ti dà un’Allowance, e gli Utenti idonei possono acquistare Top-up, come descritto nella clausola 11.
+
+### Coupon e Accesso gratuito {#coupons}
+
+Un Coupon concede un numero intero positivo di mesi di calendario di Accesso gratuito, ciascuno con l’Allowance mensile completa del Piano. Può essere riservato a un indirizzo email verificato o aperto a tutti, con un limite totale di riscatti e un’eventuale scadenza per il riscatto. Puoi riscattare ogni Coupon una sola volta, anche se elimini l’account e lo ricrei con lo stesso indirizzo email. Disabilitare un Coupon impedisce nuovi riscatti e conserva i benefici già riscattati.
+
+Riscattare un Coupon non richiede una carta e non crea un Abbonamento né un obbligo di pagamento. Prima della conferma, Pumpkit mostra il periodo gratuito esatto, l’Allowance e l’eventuale effetto su una data di pagamento già concordata. Verificare un codice non riserva disponibilità né date; se l’offerta cambia, devi esaminarla e accettarla di nuovo. I mesi gratuiti seguono la copertura già pagata, un Trial in corso o altro Accesso gratuito. Non azzerano l’utilizzo attuale. I riscatti che porterebbero la fine dell’accesso o il prossimo pagamento concordato oltre 730 giorni nel futuro vengono rifiutati senza consumare il Coupon, così come quelli in presenza di un pagamento insoluto o in elaborazione o di una modifica incompatibile della fatturazione in attesa.
+
+Il prossimo pagamento di un Abbonamento esistente si sposta dopo i mesi gratuiti, rispettando la scelta di rinnovo già fatta. Una disdetta resta valida e conservi il tempo pagato e gratuito rimanente. L’Accesso gratuito da solo non prevede pagamenti automatici. Alla sua fine incontri il Paywall, salvo che tu abbia concordato separatamente un Abbonamento. Puoi scegliere esplicitamente un Abbonamento mensile o annuale che inizi ad addebitare dopo il tempo gratuito, con una nuova accettazione al pagamento e la data futura di addebito mostrata. Una carta salvata non lo autorizza da sola. Il passaggio tra fatturazione mensile e annuale ha effetto dopo il tempo gratuito, senza addebito immediato né perdita di mesi gratuiti.
 
 ## 11. Allowance e Top-up {#top-ups}
 
-Ogni Abbonamento ti dà un'Allowance per ciascun periodo di Allowance (Allowance period): un numero di Generazioni (Generation) e un numero di X post, di cui solo pochi possono contenere un link. Una Generazione è una Versione che Pumpkit scrive per te: iniziare un Post ne è una, e lo è anche ogni Feedback. Ogni parte di un thread è un X post. Un X post viene conteggiato quando è programmato o pubblicato subito, e smette di esserlo se lo elimini prima che venga pubblicato o se non va a buon fine senza che X lo abbia accettato.
+Un Abbonamento o l’Accesso gratuito attuale ti dà un’Allowance per ciascun periodo di Allowance (Allowance period): un numero di Generazioni (Generation) e un numero di X post, di cui solo pochi possono contenere un link. Una Generazione è una Versione che Pumpkit scrive per te: iniziare un Post ne è una, e lo è anche ogni Feedback. Ogni parte di un thread è un X post. Un X post viene conteggiato quando è programmato o pubblicato subito, e smette di esserlo se lo elimini prima che venga pubblicato o se non va a buon fine senza che X lo abbia accettato.
 
-Un periodo di Allowance dura un mese, a partire ogni mese dal giorno in cui è iniziato il tuo Abbonamento, anche con un Piano annuale. Un Trial costituisce da solo un periodo di Allowance, con un'Allowance più ridotta. Quanto resta di un'Allowance alla fine del suo periodo di Allowance non si riporta al periodo successivo. La pagina Settings mostra l'Allowance prima della sottoscrizione, e quanto ne resta.
+Gli Abbonamenti a pagamento hanno periodi di Allowance mensili, anche per un Piano annuale, ancorati al periodo pagato originario. Ogni mese di calendario di Accesso gratuito è un periodo di Allowance con la stessa Allowance mensile completa. Nei mesi più corti si usa l’ultimo giorno valido senza spostare i successivi giorni di riferimento mensili. Un Trial costituisce da solo un periodo di Allowance, con un'Allowance più ridotta. Quanto resta di un'Allowance alla fine del suo periodo di Allowance non si riporta al periodo successivo. La pagina Settings mostra l'Allowance prima della sottoscrizione, e quanto ne resta.
 
-Se ti serve più della tua Allowance, puoi acquistare un Top-up: un acquisto una tantum di Generazioni e X post aggiuntivi, di cui solo pochi possono contenere un link. Pumpkit mostra cosa comprende un Top-up e il suo prezzo prima del pagamento. Lo paghi una sola volta, tramite Stripe Checkout, e non si rinnova mai. Puoi acquistare un Top-up solo se il tuo Abbonamento a pagamento è in regola con i pagamenti: non durante il Trial, e non mentre un pagamento è insoluto.
+Se ti serve più della tua Allowance, puoi acquistare un Top-up: un acquisto una tantum di Generazioni e X post aggiuntivi, di cui solo pochi possono contenere un link. Pumpkit mostra cosa comprende un Top-up e il suo prezzo prima del pagamento. Lo paghi una sola volta, tramite Stripe Checkout, e non si rinnova mai. Puoi acquistare un Top-up durante l’Accesso gratuito attuale o con un Abbonamento a pagamento in regola. I soli mesi gratuiti futuri non ti rendono idoneo durante un Trial introduttivo o con un pagamento scaduto. Un Top-up non crea pagamenti ricorrenti e non accorcia il tempo gratuito.
 
 Un Top-up:
 
 - dura 12 mesi dal giorno in cui lo acquisti, e quanto ne resta scade a quel punto;
 - viene usato solo dopo che l'Allowance del periodo di Allowance in questione è esaurita;
-- può essere usato solo finché il tuo Abbonamento ti dà accesso a Pumpkit. Quando il tuo Abbonamento cessa, quanto resta attende il tuo prossimo Abbonamento, purché questo inizi entro quei 12 mesi.
+- può essere usato solo finché un Abbonamento o l’Accesso gratuito attuale ti dà accesso a Pumpkit. Quando l’accesso cessa, quanto resta attende che riprenda entro quei 12 mesi.
 
 Una volta che ne hai usato una qualsiasi parte, un Top-up non è rimborsabile (clausola 14). Se un pagamento per un Top-up viene rimborsato o contestato tramite Stripe, quanto resta di quel Top-up viene rimosso.
 
@@ -110,7 +118,7 @@ Una volta che ne hai usato una qualsiasi parte, un Top-up non è rimborsabile (c
 
 Il tuo Abbonamento si rinnova automaticamente alla fine di ogni periodo di fatturazione, per un periodo di uguale durata, e il prezzo del Piano viene addebitato ogni volta sul tuo metodo di pagamento.
 
-Puoi disdire in qualsiasi momento dalla pagina Settings con Manage subscription, che apre il portale di fatturazione di Stripe. La disdetta impedisce il rinnovo successivo: mantieni l'accesso fino alla fine del periodo già pagato e non ti viene addebitato altro. Se disdici durante il Trial, non ti viene mai addebitato nulla.
+Puoi disdire in qualsiasi momento dalla pagina Settings con Manage subscription, che apre il portale di fatturazione di Stripe. La disdetta impedisce il rinnovo successivo: conservi tutto il tempo pagato e l’Accesso gratuito concesso rimanenti, e non ti viene addebitato altro. Se disdici durante il Trial o prima di un primo pagamento concordato dopo l’Accesso gratuito, quel pagamento non viene addebitato.
 
 ## 13. Diritto di recesso per i consumatori {#withdrawal}
 
@@ -152,9 +160,9 @@ Se sei un consumatore, nulla nei presenti Termini limita i diritti che ti ricono
 
 Puoi porre fine al contratto in qualsiasi momento. Disdici il tuo Abbonamento come descritto nella clausola 12 e, per eliminare il tuo account, scrivi a support@pumpkit.io dall'indirizzo email del tuo account. Il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato, e quanto resta dei tuoi Top-up va perso, senza rimborso.
 
-Il Gestore può porre fine al contratto come descritto nella clausola 9.
+Eliminare l’account fa cessare anche l’Accesso gratuito rimanente. Non ripristina l’idoneità a riscattare lo stesso Coupon: restano i dati minimi descritti nell’Informativa sulla privacy. Il Gestore può porre fine al contratto come descritto nella clausola 9.
 
-Alla cessazione del contratto, il Gestore elimina il tuo account e i tuoi contenuti come descritto nell'[Informativa sulla privacy](/it/privacy#retention), ad eccezione dei dati che la legge gli impone di conservare. Le clausole 5, 6, 16, 17, 20 e 21 continuano ad applicarsi dopo la cessazione del contratto.
+Alla cessazione del contratto, il Gestore elimina il tuo account e i tuoi contenuti come descritto nell'[Informativa sulla privacy](/it/privacy#retention), ad eccezione dei dati richiesti dalla legge e dei dati limitati per prevenire riscatti ripetuti e recuperare operazioni descritti nell’Informativa. Le clausole 5, 6, 16, 17, 20 e 21 continuano ad applicarsi dopo la cessazione del contratto.
 
 ## 19. Modifiche ai presenti Termini {#changes}
 

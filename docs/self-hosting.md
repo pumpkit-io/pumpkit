@@ -494,3 +494,7 @@ If it prints `blocked`, set `SMTP_PORT` to another port your provider listens on
 **A Scheduled post does not go out.** `docker compose ps publisher` should show `(healthy)`; `docker compose logs --tail 50 publisher` shows its passes and any error from X. A Failed Scheduled post shows its reason on the Posts page.
 
 **Stripe Checkout fails, or a paid Subscription does not show.** Check Stripe Tax ([Selling Plans](#selling-plans), step 2) and the backend log, which has Stripe's reason. On Stripe's webhook endpoint page, check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.
+
+## Coupon readiness
+
+Coupons are being implemented under spec #392 and remain disabled by default until final Stripe validation #394. [The Coupon contract](coupons.md) sets the cardless acceptance, retention/purge and key backup/rotation rules that the runtime slices must implement. Replace the bundled bilingual legal documents for your Instance and apply your own material-change notice process. The legal-document update alone adds no runtime setting, key or executable Coupon command. Follow the runtime Release’s Upgrade notes when installing those later slices; do not activate from historical provider evidence alone.

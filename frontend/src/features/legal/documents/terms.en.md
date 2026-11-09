@@ -1,4 +1,4 @@
-These Terms are the contract between you and the Operator, INCEPTIONAL S.R.L., for using Pumpkit at pumpkit.io. Please read them before you subscribe. The [Privacy Policy](/privacy) explains what the Operator does with your personal data.
+These Terms are the contract between you and the Operator, INCEPTIONAL S.R.L., for using Pumpkit at pumpkit.io. Please read them before you subscribe or redeem a Coupon. The [Privacy Policy](/privacy) explains what the Operator does with your personal data.
 
 ## 1. The Operator and these Terms {#operator}
 
@@ -14,7 +14,7 @@ Pumpkit is run by INCEPTIONAL S.R.L., a single-member limited liability company 
 
 These Terms cover only the hosted service at pumpkit.io. Pumpkit's code is open source, and anyone can run their own copy. The Operator does not run those self-hosted instances, and these Terms do not apply to them.
 
-These Terms apply from the moment you sign in. You accept them again before every checkout, where you also confirm, by ticking separate boxes, your request for the service to start immediately (clause 13) and your specific approval, which every User gives, of the clauses listed there under arts. 1341 and 1342 of the Italian Civil Code.
+These Terms apply from the moment you sign in. You accept the current Terms before every checkout and Coupon redemption. Paid checkout separately records your request for immediate service (clause 13) and specific approval of clauses 9, 12, 14, 16, 19 and 21 under arts. 1341 and 1342 of the Italian Civil Code. Coupon redemption records acceptance and specific approval of clauses 9, 16, 19 and 21. It does not ask you to waive paid-service withdrawal rights or agree to a new automatic payment.
 
 In these Terms, a **consumer** is a person using Pumpkit for purposes outside their trade, business, craft or profession. A **business** is anyone else, including a sole trader or freelancer using Pumpkit for their work.
 
@@ -84,25 +84,33 @@ For a serious or repeated breach of clause 8, the Operator may end the contract 
 
 ## 10. Plans and Trial {#plans}
 
-Pumpkit's features need a Subscription to a Plan. Settings shows each Plan with its price and billing period before you subscribe. You pay through Stripe Checkout, and Stripe processes your payment.
+Pumpkit's features need a Subscription to a Plan or current Free access from a Coupon. Pro is the name of the offer at pumpkit.io; a Plan is its recurring monthly or annual offer. Settings shows each Plan with its price and billing period before you subscribe. You pay through Stripe Checkout, and Stripe processes your payment.
 
-Your first Subscription may start with a Trial, a free opening period whose length Settings shows before checkout. Each User gets at most one Trial. You enter a payment method at checkout, and nothing is charged during the Trial. When the Trial ends, the first billing period starts and the price of the Plan is charged automatically, unless you cancelled before then.
+Your first Subscription may start with a Trial, a free opening period whose length Settings shows before checkout. Each User gets at most one introductory Trial. Receiving Free access removes eligibility to start a new Trial; an existing Trial finishes under its original dates and Allowance. You enter a payment method at checkout, and nothing is charged during the Trial. When the Trial ends, the first billing period starts and the price of the Plan is charged automatically, unless you cancelled before then.
 
-Each Subscription gives you an Allowance, and you can buy Top-ups, as clause 11 describes.
+Each Subscription or period of Free access gives you an Allowance, and eligible Users can buy Top-ups, as clause 11 describes.
+
+### Coupons and Free access {#coupons}
+
+A Coupon grants a positive whole number of calendar months of Free access, each with the full monthly Plan Allowance. It may be reserved for one verified email address or open to anyone, with a total redemption limit and an optional claim deadline. You may redeem each Coupon once, including if you delete your account and recreate it with the same email address. Disabling a Coupon prevents new claims and preserves benefits already redeemed.
+
+Redeeming a Coupon requires no card and creates no Subscription or obligation to pay. Before confirmation, Pumpkit shows the exact free period, Allowance and any effect on an existing payment date. Checking a code reserves neither capacity nor dates; if the offer changes, you must review and accept it again. Free months follow remaining paid coverage, an existing Trial or other Free access. They do not reset your current usage. Claims that would put the end of access or the next agreed payment more than 730 days in the future are refused without consuming the Coupon, as are claims while a payment is unpaid or processing or an incompatible billing change is pending.
+
+An existing Subscription's next payment moves after the free months, under your existing renewal choice. A cancellation stays cancelled, and you keep remaining paid and free time. Free access alone has no automatic payment. When it ends, you meet the Paywall unless you have separately agreed to a Subscription. You may explicitly arrange a monthly or annual Subscription to start charging after free time ends, with fresh paid checkout acceptance and the displayed future charge date. A saved card never authorizes this by itself. A change between monthly and annual billing takes effect after free time, without an immediate charge or loss of free months.
 
 ## 11. Allowance and Top-ups {#top-ups}
 
-Each Subscription gives you an Allowance for each Allowance period: a number of Generations, and a number of X posts, of which only a few may contain a link. A Generation is one Version that Pumpkit writes for you: starting a Post is one, and so is each Feedback. Each part of a thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if you delete it before it is published or if it fails without X accepting it.
+A Subscription or current Free access gives you an Allowance for each Allowance period: a number of Generations, and a number of X posts, of which only a few may contain a link. A Generation is one Version that Pumpkit writes for you: starting a Post is one, and so is each Feedback. Each part of a thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if you delete it before it is published or if it fails without X accepting it.
 
-An Allowance period is a month, starting each month on the day your Subscription started, also on an annual Plan. A Trial is one Allowance period on its own, with a smaller Allowance. What is left of an Allowance at the end of its Allowance period does not carry over. Settings shows the Allowance before you subscribe, and how much of it is left.
+Paid Subscriptions have monthly Allowance periods, also on an annual Plan, anchored to the original paid period. Each calendar month of Free access is an Allowance period with the same full monthly Allowance. Short months use the last valid day without moving later monthly anchors. A Trial is one Allowance period on its own, with a smaller Allowance. What is left of an Allowance at the end of its Allowance period does not carry over. Settings shows the Allowance before you subscribe, and how much of it is left.
 
-If you need more than your Allowance, you can buy a Top-up: a one-off purchase of extra Generations and X posts, of which only a few may contain a link. Pumpkit shows what a Top-up holds and its price before checkout. You pay for it once, through Stripe Checkout, and it never renews. You can buy a Top-up only while your paid Subscription is paid up: not during the Trial, and not while a payment is overdue.
+If you need more than your Allowance, you can buy a Top-up: a one-off purchase of extra Generations and X posts, of which only a few may contain a link. Pumpkit shows what a Top-up holds and its price before checkout. You pay for it once, through Stripe Checkout, and it never renews. You can buy a Top-up while you have current Free access or a paid-up paid Subscription. Queued free months alone do not qualify you during an introductory Trial or while a payment is overdue. A Top-up creates no recurring payment and does not shorten free time.
 
 A Top-up:
 
 - lasts 12 months from the day you buy it, and whatever is left of it then expires;
 - is spent only after the Allowance of the Allowance period in question is used up;
-- can be spent only while your Subscription gives you access to Pumpkit. When your Subscription ends, whatever is left waits for your next Subscription, as long as it starts within those 12 months.
+- can be spent only while a Subscription or current Free access gives you access to Pumpkit. When access ends, whatever is left waits until access resumes within those 12 months.
 
 Once you have spent any part of a Top-up, it is not refundable (clause 14). If a payment for a Top-up is refunded or disputed through Stripe, whatever is left of that Top-up is removed.
 
@@ -110,7 +118,7 @@ Once you have spent any part of a Top-up, it is not refundable (clause 14). If a
 
 Your Subscription renews automatically at the end of each billing period, for a period of the same length, and the price of the Plan is charged to your payment method each time.
 
-You can cancel at any time in Settings with Manage subscription, which opens Stripe's billing portal. Cancelling stops the next renewal: you keep access until the end of the period you have paid for, and you are not charged again. If you cancel during the Trial, you are never charged.
+You can cancel at any time in Settings with Manage subscription, which opens Stripe's billing portal. Cancelling stops the next renewal: you keep all remaining paid time and granted Free access, and you are not charged again. If you cancel during the Trial or before an agreed first payment after Free access, that payment is not charged.
 
 ## 13. Right of withdrawal for consumers {#withdrawal}
 
@@ -152,9 +160,9 @@ If you are a consumer, nothing in these Terms limits the rights that Italian and
 
 You can end the contract at any time. Cancel your Subscription as clause 12 describes, and to delete your account write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period, and whatever is left of your Top-ups is lost, with no refund.
 
-The Operator can end the contract as clause 9 describes.
+Deleting your account also ends remaining Free access. It does not restore eligibility to claim the same Coupon: the minimal records described in the Privacy Policy remain. The Operator can end the contract as clause 9 describes.
 
-When the contract ends, the Operator deletes your account and your content as the [Privacy Policy](/privacy#retention) describes, except the records the law requires it to keep. Clauses 5, 6, 16, 17, 20 and 21 still apply after the contract ends.
+When the contract ends, the Operator deletes your account and your content as the [Privacy Policy](/privacy#retention) describes, except legally required records and the limited claim-prevention and recovery records described there. Clauses 5, 6, 16, 17, 20 and 21 still apply after the contract ends.
 
 ## 19. Changes to these Terms {#changes}
 

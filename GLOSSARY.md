@@ -69,11 +69,11 @@ _Avoid_: OAuth client, integration, connector, grant, authorized app
 ### Billing
 
 **Coupon**:
-A code a User redeems for a benefit, currently free months of Pro. It may be reserved for one email address, even before sign-up, or open to anyone, with a total redemption limit, at most one redemption per User, and an optional claim deadline.
+A code a User redeems for a benefit, currently free months of the configured Plan offer (Pro on pumpkit.io). It may be reserved for one email address, even before sign-up, or open to anyone, with a total redemption limit, at most one redemption per verified email address, including across account deletion, and an optional claim deadline.
 _Avoid_: voucher, promo code, discount code
 
 **Free access**:
-The months of Pro a redeemed Coupon gives a User, each with the full monthly Allowance. They follow any remaining paid time or Trial, stack with other free months, and create no obligation to subscribe or pay.
+The months of the configured Plan offer a redeemed Coupon gives a User, each with the full monthly Allowance. They follow any remaining paid time or Trial, stack with other free months, and create no obligation to subscribe or pay.
 _Avoid_: Trial (for Coupon benefits), free Subscription
 
 **Plan**:
@@ -97,7 +97,7 @@ A User who currently has access to Pumpkit through Free access or a Subscription
 _Avoid_: active, paying, premium
 
 **Trial**:
-The free, card-backed opening period of a User's first Subscription. Each User gets at most one, and receiving Free access removes eligibility for it.
+The free, card-backed opening period of a User's first Subscription. Each User gets at most one, and receiving Free access removes eligibility to start a new one.
 _Avoid_: free tier, cardless trial
 
 **Paywall**:
@@ -105,7 +105,7 @@ The page a signed-in User who is not Subscribed sees in place of the rest of Pum
 _Avoid_: subscription gate, upgrade screen, hard wall
 
 **Allowance**:
-How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may be Link posts. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans give the same Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
+How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may be Link posts. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans and each month of Free access give the same full monthly Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
 _Avoid_: quota, usage limit, credits, cap (in text users read; setting names and code may say cap)
 
 **Link post**:
@@ -117,7 +117,7 @@ One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: st
 _Avoid_: prompt, post prompt, credit, request
 
 **Allowance period**:
-The stretch of time one Allowance covers. Paid Subscriptions and Free access have monthly periods, also on annual Plans; a paid Subscription's periods start each month on the day it started. A Trial is one Allowance period on its own, and paying before it ends starts the first monthly one at once.
+The stretch of time one Allowance covers. Paid Subscriptions and Free access have monthly periods, also on annual Plans; the first paid or free period sets its recurring monthly day. A Trial is one Allowance period on its own, and paying before it ends starts the first monthly one at once.
 _Avoid_: billing cycle, billing period, month (alone)
 
 **Top-up**:
