@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from io import StringIO
 
 import pytest
@@ -92,6 +92,7 @@ async def test_late_original_deferral_survives_rejected_retry_and_restart(
     before = (await authed_client.get("/api/v1/usage")).json()["allowance"]
     assert before["generations"]["limit"] == (125 if coverage == "trial" else 500)
     monkeypatch.setattr(settings, "COUPONS_ENABLED", False)
+    monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 900)
     fake_billing.fail_on.clear()
     fake_billing.complete_pending_deferral(next(iter(fake_billing.pending_deferrals)))
     await _send(
@@ -107,6 +108,13 @@ async def test_late_original_deferral_survives_rejected_retry_and_restart(
     assert (await authed_client.get("/api/v1/usage")).json()["allowance"] == before
     assert (await coupons(code["id"], command="inspect"))["redeemed_count"] == 1
     assert len(fake_billing.deferrals) == 1
+    fixed_clock.advance(
+        datetime.fromisoformat(offer["starts_at"].replace("Z", "+00:00")) - fixed_clock()
+    )
+    free_usage = (await authed_client.get("/api/v1/usage")).json()["allowance"]
+    assert free_usage["generations"]["limit"] == 500
+    assert free_usage["trial"] is False
+    assert free_usage["resets_at"] == offer["ends_at"]
 
 
 async def test_recovery_observes_late_effect_beyond_retention_without_replaying(
@@ -201,6 +209,7 @@ async def test_retention_deadline_is_checked_after_slow_provider_reads(
     assert fake_billing.deferrals == []
 
 
+@pytest.mark.parametrize("legacy_status", ["pending", "refused"])
 async def test_migrated_zero_attempt_and_refused_records_need_conservative_recovery(
     authed_client,
     coupons,
@@ -209,20 +218,26 @@ async def test_migrated_zero_attempt_and_refused_records_need_conservative_recov
     fake_billing,
     fixed_clock,
     db_engine,
+    legacy_status,
 ):
     await monthly(db, user, fake_billing, fixed_clock)
     code = await coupons("--months", "1")
     offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
-    fake_billing.fail_on.add("refuse_deferral")
+    fake_billing.fail_on.add("refuse_deferral" if legacy_status == "refused" else "defer_renewal")
     assert (await authed_client.post(REDEEM, json=confirmation(offer))).json()[
         "status"
-    ] == "refused"
+    ] == legacy_status
+    saved = await db.scalar(select(CouponOperation))
+    assert saved is not None
+    saved.attempts = 0
+    await db.commit()
     await migrate(db_engine, lambda config: command.stamp(config, "head"))
     await migrate(db_engine, lambda config: command.downgrade(config, "0052"))
     await migrate(db_engine, lambda config: command.upgrade(config, "head"))
-    fake_billing.fail_on.clear()
+    fake_billing.fail_on = {"refuse_deferral"}
     answer = await authed_client.get(REDEEM + "/redeem-test-0001")
     assert answer.json()["status"] == "pending"
-    assert "audit" in answer.json()["detail"]
+    if legacy_status == "refused":
+        assert "audit" in answer.json()["detail"]
     assert fake_billing.deferrals == []
     assert (await authed_client.get("/api/v1/billing/me")).json()["pending_coupon_operation"]

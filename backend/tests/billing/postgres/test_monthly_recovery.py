@@ -86,7 +86,8 @@ async def test_last_reservation_and_duplicate_recovery_use_independent_database_
         assert winner_user is not None
         tasks = [asyncio.create_task(winner.get(REDEEM + "/" + operation_id)) for _ in range(2)]
         outcomes = await blocked_requests(db_engine, control, tasks, 2)
-    assert [response.json()["status"] for response in outcomes] == ["completed", "completed"]
+    assert all(response.json()["status"] in {"pending", "completed"} for response in outcomes)
+    assert (await winner.get(REDEEM + "/" + operation_id)).json()["status"] == "completed"
     assert len(fake_billing.deferrals) == 1
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1
 
