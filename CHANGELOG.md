@@ -10,6 +10,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - The English and Italian Terms and Privacy Policy describe cardless coupon access, its expiry, later explicit paid signup and retained claim fingerprints. Coupon functionality remains disabled pending implementation and final Stripe validation. **Upgrade notes:** Self-hosters who publish the bundled legal pages must replace them for their Instance and keep the frontend/backend Terms dates together; arrange any required material-change notice before applying the new Terms to existing Users.
 
+## [0.10.1] - 2026-11-08
+
 ### Fixed
 
 - The landing page’s rotating tool names no longer pile up and briefly overlap when animation frames are delayed.
