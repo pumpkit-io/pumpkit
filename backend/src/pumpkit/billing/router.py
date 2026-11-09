@@ -145,7 +145,7 @@ async def stripe_webhook(
     # handle_webhook owns the transaction and rolls back before re-raising, so errors reach
     # the global handlers (502 if Stripe failed during the sync, else 500) and Stripe retries.
     await mediator.handle_webhook(
-        db=db, gateway=gateway, payload=payload, signature=signature, now=clock()
+        db=db, gateway=gateway, payload=payload, signature=signature, clock=clock
     )
 
     return JSONResponse(content={"received": True}, status_code=status.HTTP_200_OK)

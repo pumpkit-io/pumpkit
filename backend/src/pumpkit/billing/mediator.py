@@ -481,12 +481,13 @@ async def handle_webhook(
     gateway: BillingGateway,
     payload: bytes,
     signature: Optional[str],
-    now: datetime,
+    clock: Clock,
 ) -> None:
     """Deduplicate and sync a nudge before recovering paid signups from durable checkpoints.
 
     Replays skip ordinary sync but still recover signups after an interrupted checkpoint.
     """
+    now = clock()
     if not signature:
         raise BadRequestError("Missing Stripe signature header.")
 
@@ -513,9 +514,7 @@ async def handle_webhook(
         if user:
             operations = await paid_signups.pending(db, user_id=user.id)
             for signup in operations:
-                await _recover_paid_signup(
-                    db, gateway, user=user, operation=signup, clock=lambda: now
-                )
+                await _recover_paid_signup(db, gateway, user=user, operation=signup, clock=clock)
     for top_up in added:
         if as_utc(top_up.expires_at) > now:
             posthog_client.capture("top_up_added", distinct_id=top_up.user_id)
@@ -874,7 +873,7 @@ async def _recover_paid_signup(
         user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
     answer = await paid_signups.reconcile(
-        db, gateway, user=user, operation=operation, now=clock(), cancel=cancel
+        db, gateway, user=user, operation=operation, clock=clock, cancel=cancel
     )
     if operation.status == "pending" and operation.creation_state == "ready":
         answer = await _dispatch_paid_signup(
@@ -923,14 +922,14 @@ async def _dispatch_paid_signup(
                 detail="No subscription request was sent. Review a fresh paid offer if you want to subscribe.",
             )
         return await paid_signups.reconcile(
-            db, gateway, user=user, operation=operation, now=clock()
+            db, gateway, user=user, operation=operation, clock=clock
         )
     return await paid_signups.reconcile(
         db,
         gateway,
         user=user,
         operation=operation,
-        now=clock(),
+        clock=clock,
         dispatch=True,
         prior_unknown=prior_unknown,
     )
