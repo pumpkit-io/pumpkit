@@ -17,6 +17,7 @@ from pumpkit.x_connection.x_publisher import (
     X_MEDIA_METADATA_URL,
     X_MEDIA_UPLOAD_URL,
     X_REVOKE_URL,
+    X_SIGN_IN_SCOPES,
     X_TOKEN_URL,
     X_TWEETS_URL,
     X_USERS_ME_URL,
@@ -205,7 +206,10 @@ async def test_reading_the_account_returns_its_id_handle_and_subscription_type()
     assert account == XAccount(user_id="42", handle="ada", subscription_type="Premium")
     request = route.calls.last.request
     assert request.headers["Authorization"] == "Bearer access-1"
-    assert request.url.params["user.fields"] == "subscription_type,profile_image_url"
+    assert (
+        request.url.params["user.fields"]
+        == "subscription_type,profile_image_url,confirmed_email,name"
+    )
 
 
 @respx.mock
@@ -841,3 +845,139 @@ async def test_alt_text_x_never_answers_is_a_passing_failure(side_effect, error)
 
     with pytest.raises(error):
         await _set_alt_text()
+
+
+def test_sign_in_requests_email_and_every_publishing_permission():
+    url = OfficialXPublisher().build_authorize_url(
+        state="sign-in", code_challenge="challenge", scopes=X_SIGN_IN_SCOPES
+    )
+
+    assert parse_qs(urlsplit(url).query)["scope"] == [
+        "tweet.read tweet.write users.read offline.access media.write users.email"
+    ]
+
+
+@respx.mock
+async def test_the_account_returns_confirmed_email_and_display_name():
+    route = respx.get(X_USERS_ME_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "id": "42",
+                    "username": "ada",
+                    "name": "Ada Lovelace",
+                    "confirmed_email": "Ada@Example.COM",
+                    "profile_image_url": None,
+                }
+            },
+        )
+    )
+
+    account = await OfficialXPublisher().fetch_account(access_token="access-1")
+
+    assert account.confirmed_email == "ada@example.com"
+    assert account.display_name == "Ada Lovelace"
+    assert account.photo_url is None
+    assert set(route.calls.last.request.url.params["user.fields"].split(",")) == {
+        "subscription_type",
+        "profile_image_url",
+        "confirmed_email",
+        "name",
+    }
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("confirmed_email", "not-an-email"),
+        ("confirmed_email", True),
+        ("name", {}),
+        ("name", " "),
+        ("profile_image_url", 42),
+        ("profile_image_url", "javascript:alert(1)"),
+        ("subscription_type", []),
+        ("id", " "),
+        ("id", "not-a-user-id"),
+        ("username", "@ada"),
+        ("username", " "),
+    ],
+)
+@respx.mock
+async def test_malformed_profile_fields_fail_without_returning_partial_identity(field, value):
+    data = {"id": "42", "username": "ada", "name": "Ada"}
+    data[field] = value
+    respx.get(X_USERS_ME_URL).mock(return_value=httpx.Response(200, json={"data": data}))
+
+    with pytest.raises(XPublisherError):
+        await OfficialXPublisher().fetch_account(access_token="access-1")
+
+
+@respx.mock
+async def test_unconfirmed_email_does_not_supply_a_sign_in_email():
+    respx.get(X_USERS_ME_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "id": "42",
+                    "username": "ada",
+                    "name": "Ada",
+                    "email": "unconfirmed@example.com",
+                }
+            },
+        )
+    )
+
+    account = await OfficialXPublisher().fetch_account(access_token="access-1")
+
+    assert account.confirmed_email is None
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "",
+        "tweet.read tweet.write users.read offline.access media.write",
+        "tweet.read users.read offline.access media.write users.email",
+        "tweet.read tweet.write users.read offline.access users.email",
+    ],
+)
+@respx.mock
+async def test_a_sign_in_exchange_refuses_incomplete_permissions(scope):
+    respx.post(X_TOKEN_URL).mock(return_value=httpx.Response(200, json=_token_body(scope=scope)))
+
+    with pytest.raises(XReconnectNeededError, match="permissions"):
+        await OfficialXPublisher().exchange_code(
+            code="c", code_verifier="v", now=NOW, required_scopes=X_SIGN_IN_SCOPES
+        )
+
+
+@pytest.mark.parametrize("scope", [X_SIGN_IN_SCOPES, None])
+@respx.mock
+async def test_a_sign_in_exchange_accepts_all_requested_permissions(scope):
+    respx.post(X_TOKEN_URL).mock(return_value=httpx.Response(200, json=_token_body(scope=scope)))
+
+    tokens = await OfficialXPublisher().exchange_code(
+        code="c", code_verifier="v", now=NOW, required_scopes=X_SIGN_IN_SCOPES
+    )
+
+    assert set(tokens.scope.split()) == {
+        "tweet.read",
+        "tweet.write",
+        "users.read",
+        "offline.access",
+        "media.write",
+        "users.email",
+    }
+
+
+@pytest.mark.parametrize("scope", [[], 42, True])
+@respx.mock
+async def test_malformed_granted_scopes_cannot_be_treated_as_implicit_consent(scope):
+    respx.post(X_TOKEN_URL).mock(return_value=httpx.Response(200, json=_token_body(scope=scope)))
+
+    with pytest.raises(XPublisherError):
+        await OfficialXPublisher().exchange_code(
+            code="c", code_verifier="v", now=NOW, required_scopes=X_SIGN_IN_SCOPES
+        )
