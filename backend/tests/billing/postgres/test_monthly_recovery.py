@@ -1,15 +1,23 @@
 import asyncio
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
 
 from pumpkit.auth.models import User
+from pumpkit.billing.allowance import paid_period
 from pumpkit.billing.models import Coupon
-from tests.billing.postgres.test_coupon_contention import blocked_requests, browser_for
+from pumpkit.core.time import as_utc
+from tests.billing.postgres.test_coupon_contention import (
+    blocked_requests,
+    browser_for,
+    wait_for_locks,
+)
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_monthly_coupons import monthly
+from tests.billing.test_paid_coverage_retention import saved_paid_coverage
 
 pytestmark = pytest.mark.postgres
 
@@ -81,3 +89,49 @@ async def test_last_reservation_and_duplicate_recovery_use_independent_database_
     assert [response.json()["status"] for response in outcomes] == ["completed", "completed"]
     assert len(fake_billing.deferrals) == 1
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1
+
+
+async def test_purge_skips_billing_user_lock_and_cannot_erase_a_new_paid_snapshot(
+    db_engine, db_session_maker, db, authed_client, coupons, user, fake_billing, fixed_clock
+):
+    state = await monthly(db, user, fake_billing, fixed_clock)
+    first = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": first["code"]})).json()
+    fake_billing.fail_on.add("refuse_deferral")
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).json()[
+        "status"
+    ] == "refused"
+    original = await saved_paid_coverage(db_session_maker, user.id)
+    assert state.current_period_end is not None and state.billing_cycle_anchor is not None
+    fixed_clock.advance(state.current_period_end + timedelta(days=91) - fixed_clock())
+    period = paid_period(state.billing_cycle_anchor, fixed_clock())
+    fake_billing.set_subscription(
+        "cus_monthly",
+        replace(state, current_period_start=period.start, current_period_end=period.end),
+    )
+    fake_billing.fail_on.clear()
+    second = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": second["code"]})).json()
+    async with db_session_maker() as control:
+        await control.scalar(select(User).where(User.id == user.id).with_for_update())
+        claim = asyncio.create_task(
+            authed_client.post(REDEEM, json=confirmation(offer, "new-paid-cycle-0001"))
+        )
+        try:
+            await wait_for_locks(db_engine, 1)
+            await asyncio.wait_for(coupons(command="purge"), 5)
+            assert await saved_paid_coverage(db_session_maker, user.id) == original
+            await control.commit()
+            response = await asyncio.wait_for(claim, 10)
+        finally:
+            if not claim.done():
+                claim.cancel()
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "completed"
+    refreshed = await saved_paid_coverage(db_session_maker, user.id)
+    assert as_utc(refreshed[0]) == period.start
+    assert as_utc(refreshed[1]) == period.end
+    await coupons(command="purge")
+    assert await saved_paid_coverage(db_session_maker, user.id) == refreshed
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["paid_through"] == period.end.isoformat().replace("+00:00", "Z")

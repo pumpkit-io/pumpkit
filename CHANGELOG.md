@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Self-hosters’ coupon purge now removes expired saved paid coverage from retained subscription records while preserving current benefits and pending recovery.
+
 - Users with paid-up renewing monthly subscriptions can redeem coupons from Settings, preserve paid usage and defer renewal, with recoverable confirmation and cancellation that keeps their free months. **Upgrade notes:** Apply migration 0047 and run the documented daily coupon recovery command alongside purge; investigate pending operations older than 24 hours. Coupons remain disabled by default pending final Stripe validation.
 
 - Users receiving current free access can buy normal top-ups without starting a subscription, with the existing allowance-first spending, expiry and refund rules. Support account deletion waits for open or unresolved top-up payments.
