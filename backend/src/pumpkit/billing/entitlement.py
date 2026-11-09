@@ -2,7 +2,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from pumpkit.billing.allowance import Allowance, Limits, allowance_at, may_buy_top_up, paid_period
+from pumpkit.billing.allowance import (
+    Allowance,
+    Limits,
+    allowance_at,
+    may_buy_top_up,
+    paid_period,
+    sells_top_ups,
+)
 from pumpkit.billing.free_access import FreeAccessCoverage
 from pumpkit.billing.models import Subscription
 from pumpkit.core.time import as_utc, system_clock
@@ -39,7 +46,12 @@ class Entitlement:
 
     @property
     def may_buy_top_up(self) -> bool:
-        return may_buy_top_up(self.subscription)
+        return self.plans_sold and (
+            sells_top_ups()
+            and self.free_access is not None
+            and as_utc(self.free_access.starts_at) <= self.now < as_utc(self.free_access.ends_at)
+            or may_buy_top_up(self.subscription)
+        )
 
     def allowance_at(self, moment: datetime) -> Optional[Allowance]:
         if (
@@ -51,7 +63,7 @@ class Entitlement:
             return Allowance(
                 period=paid_period(self.free_access.starts_at, moment),
                 limits=Limits(**self.free_access.grant_at(moment).allowance),
-                way_out=None,
+                way_out="top_up" if self.may_buy_top_up else None,
                 ends_at=as_utc(self.free_access.ends_at),
             )
         if not self.plans_sold or not self.subscribed or self.subscription is None:

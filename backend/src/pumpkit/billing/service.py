@@ -155,12 +155,14 @@ async def has_access(db: AsyncSession, *, user_id: str, now: Optional[datetime] 
     return (await get_entitlement(db, user_id=user_id, now=now)).has_access
 
 
-async def get_allowance(db: AsyncSession, *, user_id: str, moment: datetime) -> Optional[Allowance]:
+async def get_allowance(
+    db: AsyncSession, *, user_id: str, moment: datetime, now: Optional[datetime] = None
+) -> Optional[Allowance]:
     """
     The limits that apply to the User at `moment`: None where the Instance sells no Plans or the
     User isn't Subscribed, who may then do nothing an Allowance counts.
     """
-    return (await get_entitlement(db, user_id=user_id)).allowance_at(moment)
+    return (await get_entitlement(db, user_id=user_id, now=now)).allowance_at(moment)
 
 
 def is_subscribed(subscription: Optional[Subscription]) -> bool:

@@ -65,7 +65,7 @@ async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) 
 
 async def _generation_draw(db: AsyncSession, *, user_id: str, now: datetime) -> Optional[Draw]:
     """One Generation of the User's Allowance at `now`; None when it has no cap on them."""
-    allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now)
+    allowance = await billing_service.get_allowance(db, user_id=user_id, moment=now, now=now)
     if allowance is None or allowance.limits.generations is None:
         return None
     used = await service.count_versions_between(

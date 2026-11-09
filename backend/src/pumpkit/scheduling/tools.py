@@ -425,7 +425,7 @@ async def get_usage(call: ToolCall[User]) -> UsageResponse:
     top-ups with something left and when each expires; they are spent only once the allowance is
     used up. `allowance` is null where there are no allowances.
     """
-    return await mediator.get_usage(db=call.db, user=call.user, at=call.now)
+    return await mediator.get_usage(db=call.db, user=call.user, at=call.now, now=call.now)
 
 
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:

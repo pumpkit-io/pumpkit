@@ -568,6 +568,28 @@ describe('Settings', () => {
   });
 
   describe('Plan', () => {
+    it('lets a cardless free recipient buy a normal top-up with paid Terms', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+        subscription: null,
+        subscribed: true,
+        maySubscribe: false,
+        trialDays: null,
+        freeAccess: { startsAt: '2028-01-31T12:01:00Z', endsAt: '2028-04-30T12:01:00Z', months: 3 },
+      });
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({ wayOut: 'top_up', mayBuyTopUp: true }),
+      );
+      renderSettings();
+      const usage = await card('Usage');
+      expect((await card('Plan')).getByText('No automatic payment')).toBeInTheDocument();
+      fireEvent.click(await usage.findByRole('button', { name: 'Buy top-up, €10' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Buy a top-up' }));
+      expect(dialog.getByText(/250 generations/)).toBeInTheDocument();
+      expect(dialog.getAllByRole('checkbox')).toHaveLength(3);
+      expect(usage.queryByRole('button', { name: 'Subscribe now' })).not.toBeInTheDocument();
+    });
+
     it('shows cardless free access without renewal or paid signup controls', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
         subscription: null,

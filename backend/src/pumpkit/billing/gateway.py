@@ -167,6 +167,8 @@ class BillingGateway(Protocol):
 
     async def has_open_subscription_checkout(self, *, customer_id: str) -> bool: ...
 
+    async def has_pending_checkout(self, *, customer_id: str) -> bool: ...
+
     async def has_unsettled_invoices(self, *, customer_id: str) -> bool:
         """Whether any customer invoice still requires settlement, including an older debt."""
         ...
@@ -425,6 +427,34 @@ class StripeBillingGateway:
 
         return await self._call("check pending subscription Checkout", has_open)
 
+    async def has_pending_checkout(self, *, customer_id: str) -> bool:
+        def pending() -> bool:
+            sessions = self._client.v1.checkout.sessions.list(
+                {"customer": customer_id, "expand": ["data.payment_intent"], "limit": 100}
+            )
+            for session in sessions.auto_paging_iter():
+                state = session.to_dict()
+                if state.get("status") == "expired":
+                    continue
+                intent = state.get("payment_intent")
+                if (
+                    state.get("status") == "complete"
+                    and state.get("mode") in {"payment", "subscription"}
+                    and state.get("payment_status") == "unpaid"
+                    and isinstance(intent, dict)
+                    and intent.get("status") == "canceled"
+                ):
+                    continue
+                if (
+                    state.get("status") != "complete"
+                    or state.get("mode") not in {"payment", "subscription"}
+                    or state.get("payment_status") not in {"paid", "no_payment_required"}
+                ):
+                    return True
+            return False
+
+        return await self._call("check pending Checkout", pending)
+
     async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
         def expire_all() -> list[str]:
             sessions = self._client.v1.checkout.sessions.list(
@@ -660,6 +690,7 @@ class FakeBillingGateway:
     ended_trials: list[str] = field(default_factory=list)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
+    _payment_checkouts: dict[str, tuple[str, str]] = field(default_factory=dict, init=False)
     _subscriptions: dict[str, dict[str, SubscriptionState]] = field(
         default_factory=dict, init=False
     )
@@ -709,11 +740,23 @@ class FakeBillingGateway:
         self._maybe_fail("has_open_subscription_checkout")
         return customer_id in self._open_checkouts.values()
 
+    async def has_pending_checkout(self, *, customer_id: str) -> bool:
+        self._maybe_fail("has_pending_checkout")
+        return customer_id in self._open_checkouts.values() or any(
+            customer == customer_id for customer, _ in self._payment_checkouts.values()
+        )
+
     async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
         self._maybe_fail("expire_open_checkouts")
         expired = [s for s, c in self._open_checkouts.items() if c == customer_id]
+        expired.extend(
+            s
+            for s, (c, status) in self._payment_checkouts.items()
+            if c == customer_id and status == "open"
+        )
         for session_id in expired:
-            del self._open_checkouts[session_id]
+            self._open_checkouts.pop(session_id, None)
+            self._payment_checkouts.pop(session_id, None)
         self.expired_checkouts.extend(expired)
         return expired
 
@@ -801,13 +844,20 @@ class FakeBillingGateway:
         self.top_up_checkouts.append(
             TopUpCheckoutCall(customer_id=customer_id, price_id=price_id, user_id=user_id)
         )
-        return CheckoutSession(
-            id=f"cs_top_up_fake_{len(self.top_up_checkouts)}", url=self.checkout_url
-        )
+        session_id = f"cs_top_up_fake_{len(self.top_up_checkouts)}"
+        self._payment_checkouts[session_id] = (customer_id, "open")
+        return CheckoutSession(id=session_id, url=self.checkout_url)
+
+    def set_top_up_payment_pending(self, *, customer_id: str, checkout_session_id: str) -> None:
+        self._payment_checkouts[checkout_session_id] = (customer_id, "unpaid")
+
+    def set_top_up_payment_canceled(self, *, checkout_session_id: str) -> None:
+        self._payment_checkouts.pop(checkout_session_id, None)
 
     def set_top_up(self, customer_id: str, purchase: TopUpPurchase) -> None:
         """Make `purchase` what the provider holds now, replacing any for its Checkout."""
         self._top_ups.setdefault(customer_id, {})[purchase.checkout_session_id] = purchase
+        self._payment_checkouts.pop(purchase.checkout_session_id, None)
 
     async def list_top_ups(self, *, customer_id: str) -> list[TopUpPurchase]:
         self._maybe_fail("list_top_ups")

@@ -33,7 +33,7 @@ async def delete_account(db: AsyncSession, gateway: BillingGateway, *, user_id: 
     await scheduling.require_settled_publishing_before_account_deletion(db, user_id=user.id)
     if user.stripe_customer_id:
         states = await gateway.list_subscriptions(customer_id=user.stripe_customer_id)
-        if await gateway.has_open_subscription_checkout(customer_id=user.stripe_customer_id):
+        if await gateway.has_pending_checkout(customer_id=user.stripe_customer_id):
             raise ConflictError("Resolve the pending paid checkout before deleting this account.")
         if any(
             state.status not in {"canceled", "incomplete_expired"} for state in states

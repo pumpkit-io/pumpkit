@@ -206,6 +206,7 @@ async def check_x_posts_room(
     user_id: str,
     publish_at: datetime,
     parts: list[str],
+    now: Optional[datetime] = None,
     excluding_id: Optional[str] = None,
     before: Optional[rules.XPosts] = None,
 ) -> None:
@@ -218,7 +219,9 @@ async def check_x_posts_room(
     """
     needed = rules.x_posts_in(parts)
     if billing_service.sells_plans():
-        allowance = await billing_service.get_allowance(db, user_id=user_id, moment=publish_at)
+        allowance = await billing_service.get_allowance(
+            db, user_id=user_id, moment=publish_at, now=now
+        )
         if allowance is None:
             return
         if before is None:
@@ -267,10 +270,12 @@ def _usage_count(limit: Optional[int], used: int) -> UsageCountResponse:
     )
 
 
-async def get_usage(db: AsyncSession, user: User, at: datetime) -> UsageResponse:
+async def get_usage(
+    db: AsyncSession, user: User, at: datetime, now: Optional[datetime] = None
+) -> UsageResponse:
     """The User's usage in the Allowance period holding `at`, with the Top-ups unexpired then."""
     at = as_utc(at)
-    allowance = await billing_service.get_allowance(db, user_id=user.id, moment=at)
+    allowance = await billing_service.get_allowance(db, user_id=user.id, moment=at, now=now)
     if allowance is None:
         return UsageResponse(allowance=None)
     period = allowance.period
@@ -330,7 +335,7 @@ async def create_scheduled_post(
     media = media_service.text_media_by_part(post)
     await _check_media(db, media, user_id=user.id)
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
-    await check_x_posts_room(db, user_id=user.id, publish_at=publish_at, parts=parts)
+    await check_x_posts_room(db, user_id=user.id, publish_at=publish_at, parts=parts, now=now)
     community = await _community(reader, new.community) if new.community is not None else None
     try:
         scheduled_post = await service.create(
@@ -510,6 +515,7 @@ async def edit_scheduled_post(
             db,
             user_id=user.id,
             publish_at=new_publish_at,
+            now=now,
             parts=parts if parts is not None else current,
             excluding_id=scheduled_post_id,
         )
@@ -520,6 +526,7 @@ async def edit_scheduled_post(
             db,
             user_id=user.id,
             publish_at=as_utc(scheduled_post.publish_at),
+            now=now,
             parts=parts,
             excluding_id=scheduled_post_id,
             before=rules.x_posts_in(current),

@@ -621,3 +621,89 @@ async def test_pending_subscription_checkout_read_is_customer_scoped_and_does_no
     assert len(http.urls) == 1
     assert parse_qs(urlsplit(http.urls[0]).query)["customer"] == ["cus_Contract"]
     assert parse_qs(urlsplit(http.urls[0]).query)["status"] == ["open"]
+
+
+@pytest.mark.parametrize(
+    "state,pending",
+    [
+        ({"mode": "payment", "status": "open", "payment_status": "unpaid"}, True),
+        ({"mode": "payment", "status": "complete", "payment_status": "unpaid"}, True),
+        ({"mode": "payment", "status": "complete", "payment_status": "paid"}, False),
+        (
+            {
+                "mode": "payment",
+                "status": "complete",
+                "payment_status": "unpaid",
+                "payment_intent": {
+                    "id": "pi_check",
+                    "object": "payment_intent",
+                    "status": "canceled",
+                },
+            },
+            False,
+        ),
+        (
+            {
+                "mode": "payment",
+                "status": "complete",
+                "payment_status": "unpaid",
+                "payment_intent": {
+                    "id": "pi_check",
+                    "object": "payment_intent",
+                    "status": "processing",
+                },
+            },
+            True,
+        ),
+        (
+            {
+                "mode": "payment",
+                "status": "complete",
+                "payment_status": "unpaid",
+                "payment_intent": {
+                    "id": "pi_check",
+                    "object": "payment_intent",
+                    "status": "requires_payment_method",
+                },
+            },
+            True,
+        ),
+        (
+            {"mode": "subscription", "status": "complete", "payment_status": "no_payment_required"},
+            False,
+        ),
+        ({"mode": "payment", "status": "expired", "payment_status": "unpaid"}, False),
+        ({"mode": "payment", "status": "complete"}, True),
+        ({"mode": "payment", "payment_status": "paid"}, True),
+        ({"status": "complete", "payment_status": "paid"}, True),
+        (
+            {
+                "mode": "subscription",
+                "status": "complete",
+                "payment_status": "unpaid",
+                "payment_intent": {
+                    "id": "pi_check",
+                    "object": "payment_intent",
+                    "status": "canceled",
+                },
+            },
+            False,
+        ),
+    ],
+)
+async def test_pending_checkout_read_includes_async_payment_and_fails_closed(state, pending):
+    gateway, http = _recorded_gateway(
+        json.dumps(
+            {
+                "object": "list",
+                "url": "/v1/checkout/sessions",
+                "has_more": False,
+                "data": [{"id": "cs_check", "object": "checkout.session", **state}],
+            }
+        )
+    )
+    assert await gateway.has_pending_checkout(customer_id="cus_Contract") is pending
+    assert len(http.urls) == 1
+    query = parse_qs(urlsplit(http.urls[0]).query)
+    assert query["customer"] == ["cus_Contract"]
+    assert "status" not in query

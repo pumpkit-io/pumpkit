@@ -126,7 +126,7 @@ Stored Media files need a separate retryable cleanup after the database commit. 
 
 ### PostgreSQL contention checks
 
-The ordinary suite still uses SQLite and needs no service. To exercise production row locks, explicitly supply a PostgreSQL URL to `PUMPKIT_TEST_POSTGRES_URL` and run `uv run --extra dev pytest tests/billing/postgres -q` from `backend/`. The harness creates a random isolated schema per test, sets every connection's search path and drops only that schema. It never drops or rewrites the supplied database's public schema. Independent authenticated HTTP requests contend on held rows for last-slot, same-identity, same-operation, disable, deletion and waiting-deadline cases.
+The ordinary suite still uses SQLite and needs no service. To exercise production row locks, explicitly supply a PostgreSQL URL to `PUMPKIT_TEST_POSTGRES_URL` and run `uv run --extra dev pytest tests/billing/postgres -q` from `backend/`. The harness creates a random isolated schema per test, sets every connection's search path and drops only that schema. It never drops or rewrites the supplied database's public schema. Independent authenticated HTTP requests contend on held rows for last-slot, same-identity, same-operation, disable, deletion and waiting-deadline cases, plus Top-up creation/deletion ordering across first-customer commits.
 
 
 ### Appending free months in Settings
@@ -138,3 +138,11 @@ Each grant retains its own claim, acceptance, operation result and accepted mont
 The signed preview binds the preceding grant and offset as well as the offer. Confirmation serializes on the User lock, so a competing append changes the offer and requires a new preview and acceptance. It never silently shifts the grant or consumes a stale claim. The combined end, including all remaining free time, must be at most 730 × 86400 seconds after confirmation; an unsupported offer is refused without consuming it. Deadlines govern confirmation only, and disabling a code preserves already queued months.
 
 **Upgrade notes:** Apply migration 0046 before deploying this slice. It preserves existing grant anchors and adds offsets for subsequent appends. Keep the shared setting off outside isolated tests pending final #394. Subscriber deferral, buying Top-ups during Free access and paid signup that preserves free months remain separate implementation slices.
+
+### Top-ups during free access
+
+While free access is current, Usage offers the normal Buy top-up action, including for a recipient with no subscription or a provider subscription reported as trialing after deferral. The one-time purchase uses the existing pack, price and paid Terms confirmation; it creates no recurring subscription and preserves the full free period. Operators need no additional setting or product.
+
+The full monthly allowance is spent first, then unexpired previously purchased packs, earliest expiry first. Packs retain their existing 12-month expiry and refund/dispute removal rules. Queued free months alone do not qualify a current introductory trial or overdue payment for purchase: their existing Subscribe now or payment action remains. Instances without Plans or a configured top-up price offer no purchase. Already granted access and its top-ups continue when coupon issuance/redemption is disabled.
+
+Support account deletion refuses while any Checkout is open or a completed one-time payment is unresolved, including asynchronous payments without an invoice. It does not expire or cancel payments automatically. Resolve an open Checkout by completing or explicitly expiring it through the provider; for a completed asynchronous payment, wait for settlement or obtain a confirmed canceled PaymentIntent through the provider where cancellation is supported. Paid, no-payment-required, expired and confirmed canceled one-time payment history does not block deletion. Missing or unknown provider facts require investigation before deletion. Top-up creation and deletion share the User lock, including after first-customer creation commits.
