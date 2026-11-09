@@ -1,5 +1,7 @@
 # Coupons grant cardless free months, including to existing subscribers
 
+ADR 0023 extends the repeat-redemption restriction below to both the X account and verified email, including across account deletion. Receiving Coupon benefits also removes that X account’s Trial eligibility across deletion and recreation.
+
 Coupons give Users free months of Pro without requiring a payment card or creating an obligation to pay afterward. Existing subscribers, including annual subscribers, may redeem them too: their benefit must defer or reduce payment rather than overlap access they already paid for. A User without a paid Subscription meets the Paywall when free access ends unless they choose to subscribe.
 
 This narrows ADR 0003’s subscription-only premise, ADR 0010’s checkout-only acceptance premise, ADR 0017’s Top-up purchase eligibility and ADR 0018’s Subscription-only access premise. A Coupon is not the existing card-backed Trial.
