@@ -112,7 +112,9 @@ async def preview(
         starts_at=start,
         ends_at=end,
         allowance=allowance,
-        next_payment_at=end if subscription else None,
+        next_payment_at=end
+        if subscription and subscription.cancel_at is None and subscription.status != "canceled"
+        else None,
         terms_version=TERMS_VERSION if service.requires_terms_acceptance() else None,
         revision="",
     )

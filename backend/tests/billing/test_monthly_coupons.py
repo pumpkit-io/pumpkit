@@ -168,7 +168,14 @@ async def test_absolute_recovery_never_overwrites_later_or_ended_provider_state(
         replace(state, current_period_end=state.current_period_end + timedelta(days=100)),
     )
     assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "pending"
-    fake_billing.set_subscription("cus_monthly", replace(state, status="canceled"))
+    fake_billing.set_subscription(
+        "cus_monthly",
+        replace(
+            state,
+            status="canceled",
+            current_period_end=state.current_period_end + timedelta(days=100),
+        ),
+    )
     assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "pending"
     assert fake_billing.deferrals == []
     fixed_clock.advance(timedelta(days=100))

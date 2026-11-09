@@ -1484,35 +1484,40 @@ it('retries cancellation safely and keeps the paid and queued free dates', async
   expect(billingService.cancelRenewal).toHaveBeenCalledTimes(2);
 });
 
-it('shows earned free access through its end after an earlier provider cancellation', async () => {
-  vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
-  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
-  vi.mocked(appConnectionService.list).mockResolvedValue([]);
-  vi.mocked(usageService.get).mockResolvedValue(usageWith());
-  vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
-  vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
-    ...holding('canceled', true),
-    couponDeferral: true,
-    subscription: {
-      ...holding('canceled', true).subscription!,
-      cancelAt: '2028-02-10T12:00:00Z',
-      paidThrough: '2028-02-29T12:00:00Z',
-    },
-    freeAccess: {
-      months: 1,
-      startsAt: '2028-02-29T12:00:00Z',
-      endsAt: '2028-03-31T12:00:00Z',
-      currentStartsAt: null,
-      currentEndsAt: null,
-      queuedStartsAt: '2028-02-29T12:00:00Z',
-    },
-  });
-  renderSettings();
-  const plan = await card('Plan');
-  expect(await plan.findByText(/Ends on/)).toHaveTextContent('March 31, 2028');
-  expect(plan.getByText('No automatic payment')).toBeInTheDocument();
-});
+it.each(['2028-02-10T12:00:00Z', null])(
+  'shows earned coverage and no payment after provider cancellation at %s',
+  async (cancelAt) => {
+    vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+    vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+    vi.mocked(appConnectionService.list).mockResolvedValue([]);
+    vi.mocked(usageService.get).mockResolvedValue(usageWith());
+    vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...holding('canceled', true),
+      couponDeferral: true,
+      subscription: {
+        ...holding('canceled', true).subscription!,
+        cancelAt,
+        paidThrough: '2028-02-29T12:00:00Z',
+      },
+      freeAccess: {
+        months: 1,
+        startsAt: '2028-02-29T12:00:00Z',
+        endsAt: '2028-03-31T12:00:00Z',
+        currentStartsAt: null,
+        currentEndsAt: null,
+        queuedStartsAt: '2028-02-29T12:00:00Z',
+      },
+    });
+    renderSettings();
+    const plan = await card('Plan');
+    expect(await plan.findByText(/Ends on/)).toHaveTextContent('March 31, 2028');
+    expect(plan.getByText('No automatic payment')).toBeInTheDocument();
+    expect(plan.queryByRole('button', { name: 'Cancel renewal' })).not.toBeInTheDocument();
+    expect(plan.queryByText(/Next payment:/)).not.toBeInTheDocument();
+  },
+);
 
 it('distinguishes the original introductory trial from queued full free access and payment', async () => {
   vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
