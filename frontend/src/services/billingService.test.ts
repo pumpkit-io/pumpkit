@@ -267,3 +267,84 @@ describe('future paid signup', () => {
     expect(post).toHaveBeenCalledWith('/billing/paid-signups/operation/cancel');
   });
 });
+
+describe('deferred billing frequency', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('carries the exact offered plan and charge date through review, confirmation and recovery', async () => {
+    const future = {
+      plan_key: 'configured_year',
+      product_name: 'Configured plan',
+      amount: 12345,
+      currency: 'eur',
+      interval: 'year',
+      interval_count: 1,
+      first_payment_at: '2028-03-31T23:59:59Z',
+    };
+    const post = vi
+      .spyOn(apiService, 'post')
+      .mockResolvedValueOnce({ data: { ...future, revision: 'signed-frequency-offer' } } as never)
+      .mockResolvedValueOnce({
+        data: {
+          ...future,
+          operation_id: 'frequency-operation',
+          status: 'pending',
+          detail: 'Confirming',
+        },
+      } as never);
+    const get = vi
+      .spyOn(apiService, 'get')
+      .mockResolvedValueOnce({
+        data: { ...future, operation_id: 'frequency-operation', status: 'completed', detail: null },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          subscription: null,
+          subscribed: true,
+          may_subscribe: false,
+          trial_days: null,
+          future_plan: future,
+          may_change_plan: false,
+          pending_plan_change_id: 'frequency-operation',
+        },
+      } as never);
+    const offer = await billingService.previewPlanChange('configured_year');
+    expect(offer).toEqual({
+      planKey: 'configured_year',
+      productName: 'Configured plan',
+      amount: 12345,
+      currency: 'eur',
+      interval: 'year',
+      intervalCount: 1,
+      firstPaymentAt: '2028-03-31T23:59:59Z',
+      revision: 'signed-frequency-offer',
+    });
+    const pending = await billingService.createPlanChange({
+      operationId: 'frequency-operation',
+      revision: offer.revision,
+    });
+    expect(pending.status).toBe('pending');
+    expect(pending.firstPaymentAt).toBe('2028-03-31T23:59:59Z');
+    expect(post).toHaveBeenNthCalledWith(1, '/billing/plan-changes/preview', {
+      plan_key: 'configured_year',
+    });
+    expect(post).toHaveBeenNthCalledWith(2, '/billing/plan-changes', {
+      operation_id: 'frequency-operation',
+      revision: 'signed-frequency-offer',
+    });
+    expect((await billingService.fetchPlanChange('frequency-operation')).status).toBe('completed');
+    expect(get).toHaveBeenNthCalledWith(1, '/billing/plan-changes/frequency-operation');
+    const me = await billingService.fetchBillingMe();
+    expect(me.pendingPlanChangeId).toBe('frequency-operation');
+    expect(me.mayChangePlan).toBe(false);
+    expect(me.futurePlan).toEqual({
+      planKey: 'configured_year',
+      productName: 'Configured plan',
+      amount: 12345,
+      currency: 'eur',
+      interval: 'year',
+      intervalCount: 1,
+      firstPaymentAt: '2028-03-31T23:59:59Z',
+    });
+  });
+});

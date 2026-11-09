@@ -28,6 +28,9 @@ export interface BillingMe {
   maySubscribe: boolean;
   /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
+  pendingPlanChangeId?: string | null;
+  mayChangePlan?: boolean;
+  futurePlan?: FuturePlan | null;
   pendingPaidSignupId?: string | null;
   mayArrangePaidSignup?: boolean;
   pendingCouponOperation?: boolean;
@@ -152,6 +155,68 @@ interface CouponPreviewApi {
   revision: string;
 }
 
+export interface FuturePlan {
+  planKey: string;
+  productName: string;
+  amount: number;
+  currency: string;
+  interval: string;
+  intervalCount: number;
+  firstPaymentAt: string;
+}
+
+export interface PlanChangeOffer extends FuturePlan {
+  revision: string;
+}
+
+export interface PlanChangeRequest {
+  operationId: string;
+  revision: string;
+}
+
+export interface PlanChange extends FuturePlan {
+  operationId: string;
+  status: 'pending' | 'completed' | 'refused';
+  detail: string | null;
+}
+
+interface FuturePlanApi {
+  plan_key: string;
+  product_name: string;
+  amount: number;
+  currency: string;
+  interval: string;
+  interval_count: number;
+  first_payment_at: string;
+}
+
+interface PlanChangeApi extends FuturePlanApi {
+  operation_id: string;
+  status: 'pending' | 'completed' | 'refused';
+  detail: string | null;
+}
+
+function futurePlan(data: FuturePlanApi): FuturePlan {
+  return {
+    planKey: data.plan_key,
+    productName: data.product_name,
+    amount: data.amount,
+    currency: data.currency,
+    interval: data.interval,
+    intervalCount: data.interval_count,
+    firstPaymentAt: data.first_payment_at,
+  };
+}
+
+function planChange(data: PlanChangeApi): PlanChange {
+  return {
+    ...futurePlan(data),
+    operationId: data.operation_id,
+    status: data.status,
+    detail: data.detail,
+  };
+}
+
 export interface PaidSignupOffer {
   planKey: string;
   productName: string;
@@ -215,6 +280,9 @@ interface BillingMeApi {
   subscribed: boolean;
   may_subscribe: boolean;
   trial_days: number | null;
+  pending_plan_change_id?: string | null;
+  may_change_plan?: boolean;
+  future_plan?: FuturePlanApi | null;
   pending_paid_signup_id?: string | null;
   may_arrange_paid_signup?: boolean;
   pending_coupon_operation?: boolean;
@@ -283,6 +351,9 @@ function billingMe(data: BillingMeApi): BillingMe {
     subscribed: data.subscribed,
     maySubscribe: data.may_subscribe,
     trialDays: data.trial_days,
+    pendingPlanChangeId: data.pending_plan_change_id,
+    mayChangePlan: data.may_change_plan,
+    futurePlan: data.future_plan ? futurePlan(data.future_plan) : data.future_plan,
     pendingPaidSignupId: data.pending_paid_signup_id,
     mayArrangePaidSignup: data.may_arrange_paid_signup,
     pendingCouponOperation: data.pending_coupon_operation,
@@ -302,6 +373,26 @@ function billingMe(data: BillingMeApi): BillingMe {
 }
 
 export const billingService = {
+  previewPlanChange: async (planKey: string): Promise<PlanChangeOffer> => {
+    const { data } = await apiService.post<FuturePlanApi & { revision: string }>(
+      '/billing/plan-changes/preview',
+      { plan_key: planKey },
+    );
+    return { ...futurePlan(data), revision: data.revision };
+  },
+  createPlanChange: async (request: PlanChangeRequest): Promise<PlanChange> => {
+    const { data } = await apiService.post<PlanChangeApi>('/billing/plan-changes', {
+      operation_id: request.operationId,
+      revision: request.revision,
+    });
+    return planChange(data);
+  },
+  fetchPlanChange: async (operationId: string): Promise<PlanChange> => {
+    const { data } = await apiService.get<PlanChangeApi>(
+      `/billing/plan-changes/${encodeURIComponent(operationId)}`,
+    );
+    return planChange(data);
+  },
   previewPaidSignup: async (planKey: string): Promise<PaidSignupOffer> => {
     const { data } = await apiService.post<{
       plan_key: string;
