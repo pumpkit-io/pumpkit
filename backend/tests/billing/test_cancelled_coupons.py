@@ -273,3 +273,123 @@ async def test_cancelled_snapshot_is_minimized_only_after_all_related_grants_end
         saved.preserved_trial,
     ) == (None, None, None, None, None)
     assert (await authed_client.get("/api/v1/billing/me")).json()["subscribed"] is False
+
+
+async def test_current_cancelled_grant_uses_its_subscription_after_older_coverage_ends_and_purge(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    fixed_clock.advance(at("2028-01-15T12:00:00") - fixed_clock())
+    first_state = replace(
+        await monthly(db, user, fake_billing, fixed_clock),
+        billing_cycle_anchor=at("2028-01-01T12:00:00"),
+        current_period_start=at("2028-01-01T12:00:00"),
+        current_period_end=at("2028-02-01T12:00:00"),
+        cancel_at=at("2028-02-01T12:00:00"),
+    )
+    fake_billing.set_subscription("cus_monthly", first_state)
+    first = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": first["code"]})).json()
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).json()[
+        "status"
+    ] == "completed"
+    fake_billing.set_subscription("cus_monthly", replace(first_state, status="canceled"))
+    fixed_clock.advance(at("2028-03-02T12:00:00") - fixed_clock())
+    second_state = replace(
+        first_state,
+        id="sub_second",
+        created_at=at("2028-03-01T12:00:00"),
+        billing_cycle_anchor=at("2028-03-01T12:00:00"),
+        current_period_start=at("2028-03-01T12:00:00"),
+        current_period_end=at("2028-04-01T12:00:00"),
+        cancel_at=at("2028-04-01T12:00:00"),
+    )
+    fake_billing.set_subscription("cus_monthly", second_state)
+    second = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": second["code"]})).json()
+    assert (
+        await authed_client.post(REDEEM, json=confirmation(offer, "second-subscription-0001"))
+    ).json()["status"] == "completed"
+    fake_billing.set_subscription("cus_monthly", replace(second_state, status="canceled"))
+    fixed_clock.advance(at("2028-04-02T12:00:00") - fixed_clock())
+    await coupons(command="purge")
+    old = await db.scalar(
+        select(Subscription).where(Subscription.stripe_subscription_id == first_state.id)
+    )
+    assert old is not None and old.paid_anchor is not None
+    third = await coupons("--months", "6")
+    preview = await authed_client.post(PREVIEW, json={"code": third["code"]})
+    assert preview.status_code == 200, preview.text
+    offer = preview.json()
+    assert (offer["starts_at"], offer["ends_at"], offer["next_payment_at"]) == (
+        "2028-05-01T12:00:00Z",
+        "2028-11-01T12:00:00Z",
+        None,
+    )
+    assert (
+        await authed_client.post(REDEEM, json=confirmation(offer, "current-subscription-0001"))
+    ).json()["status"] == "completed"
+    fixed_clock.advance(at("2028-08-02T12:00:00") - fixed_clock())
+    await db.rollback()
+    await coupons(command="purge")
+    assert (await authed_client.get(REDEEM + "/second-subscription-0001")).status_code == 404
+    assert (await authed_client.get(REDEEM + "/current-subscription-0001")).json()[
+        "status"
+    ] == "completed"
+    fourth = await coupons("--months", "1")
+    preview = await authed_client.post(PREVIEW, json={"code": fourth["code"]})
+    assert preview.status_code == 200, preview.text
+    offer = preview.json()
+    assert (offer["starts_at"], offer["ends_at"], offer["next_payment_at"]) == (
+        "2028-11-01T12:00:00Z",
+        "2028-12-01T12:00:00Z",
+        None,
+    )
+    assert (
+        await authed_client.post(REDEEM, json=confirmation(offer, "retained-chain-0001"))
+    ).json()["status"] == "completed"
+    assert fake_billing.deferrals == []
+
+
+async def test_cardless_free_time_does_not_bind_to_unrelated_retained_cancelled_history(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    state = await monthly(db, user, fake_billing, fixed_clock)
+    fake_billing.set_subscription("cus_monthly", replace(state, cancel_at=state.current_period_end))
+    first = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": first["code"]})).json()
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).json()[
+        "status"
+    ] == "completed"
+    end = at(offer["ends_at"].removesuffix("Z"))
+    fake_billing.set_subscription("cus_monthly", replace(state, status="canceled", paused=True))
+    await _send(
+        authed_client,
+        fake_billing,
+        "evt_old_history_ended",
+        "customer.subscription.deleted",
+        {"customer": "cus_monthly"},
+    )
+    fixed_clock.advance(end + timedelta(days=1) - fixed_clock())
+    cardless = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": cardless["code"]})).json()
+    assert (
+        await authed_client.post(REDEEM, json=confirmation(offer, "cardless-history-0001"))
+    ).json()["status"] == "completed"
+    another = await coupons("--months", "6")
+    preview = await authed_client.post(PREVIEW, json={"code": another["code"]})
+    assert preview.status_code == 200, preview.text
+    offer = preview.json()
+    assert offer["next_payment_at"] is None
+    assert (
+        await authed_client.post(REDEEM, json=confirmation(offer, "cardless-append-0001"))
+    ).json()["status"] == "completed"
+    fixed_clock.advance(end + timedelta(days=91) - fixed_clock())
+    await coupons(command="purge")
+    old = await db.scalar(
+        select(Subscription)
+        .where(Subscription.stripe_subscription_id == state.id)
+        .execution_options(populate_existing=True)
+    )
+    assert old is not None and old.paid_anchor is None
+    assert (await authed_client.get("/api/v1/billing/me")).json()["subscribed"] is True
+    assert fake_billing.deferrals == []

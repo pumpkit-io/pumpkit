@@ -77,13 +77,29 @@ async def deferrable_state(
     db: AsyncSession, *, user_id: str, subscriptions: Sequence[SubscriptionState], now: datetime
 ) -> Optional[SubscriptionState]:
     existing = await service.get_free_access(db, user_id=user_id, now=now)
+    source_subscription = (
+        await db.scalar(
+            select(CouponOperation.subscription_id).where(
+                CouponOperation.user_id == user_id,
+                CouponOperation.operation_id == existing.operation_id,
+                CouponOperation.status == "completed",
+            )
+        )
+        if existing
+        else None
+    )
     running = [s for s in subscriptions if s.status not in {"canceled", "incomplete_expired"}]
     if not running:
         for candidate in subscriptions:
             if candidate.status != "canceled":
                 continue
             saved = await service.get_subscription_by_stripe_id(db, candidate.id)
-            earned = bool(existing and saved and saved.user_id == user_id and saved.paid_end)
+            earned = bool(
+                candidate.id == source_subscription
+                and saved
+                and saved.user_id == user_id
+                and saved.paid_end
+            )
             if earned or (
                 candidate.paid_current_period
                 and candidate.current_period_start
@@ -103,7 +119,11 @@ async def deferrable_state(
     saved = await service.get_subscription_by_stripe_id(db, state.id)
     cancelled = state.cancel_at is not None or state.status == "canceled"
     locally_backed = bool(
-        cancelled and existing and saved and saved.user_id == user_id and saved.paid_end
+        cancelled
+        and state.id == source_subscription
+        and saved
+        and saved.user_id == user_id
+        and saved.paid_end
     )
     backed = bool(
         existing
