@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal, Optional, get_args
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy import Enum as PgEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -143,3 +143,32 @@ class TopUpCharge(Base):
         ForeignKey("scheduled_posts.id", ondelete="CASCADE"), index=True, nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+    __table_args__ = (
+        CheckConstraint("months > 0", name="positive_months"),
+        CheckConstraint("max_redemptions > 0", name="positive_redemption_limit"),
+        CheckConstraint(
+            "redeemed_count >= 0 AND redeemed_count <= max_redemptions", name="redemption_capacity"
+        ),
+        CheckConstraint("benefit_kind = 'free_months'", name="supported_benefit"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("coupon")
+    )
+    code_digest: Mapped[str] = mapped_column(String(64), unique=True)
+    benefit_kind: Mapped[str] = mapped_column(String, default="free_months")
+    months: Mapped[int] = mapped_column(Integer)
+    max_redemptions: Mapped[int] = mapped_column(Integer, default=1)
+    redeemed_count: Mapped[int] = mapped_column(Integer, default=0)
+    plan_keys: Mapped[list[str]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    claim_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    unclaimable_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    recipient_restricted: Mapped[bool] = mapped_column(Boolean, default=False)
+    recipient_key_id: Mapped[Optional[str]] = mapped_column(String(64))
+    recipient_fingerprint: Mapped[Optional[str]] = mapped_column(String(64))

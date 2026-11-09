@@ -67,6 +67,7 @@ def test_internal_tunables_default_to_todays_values(instance_env):
     assert s.GOOGLE_COOKIE_MAX_AGE_SECONDS == 600
     assert s.GOOGLE_TOKEN_ENDPOINT_TIMEOUT_SECONDS == 30
     assert s.BILLING_TRIAL_PERIOD_DAYS == 7
+    assert s.COUPONS_ENABLED is False
 
 
 def test_postgres_connection_defaults_to_the_bundled_database(instance_env):

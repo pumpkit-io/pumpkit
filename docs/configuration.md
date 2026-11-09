@@ -199,3 +199,11 @@ These rarely need changing. `.env.example` lists only `APP_NAME` and `LOG_LEVEL`
 ## Coupons (implementation contract)
 
 Coupon runtime settings are introduced by #395, not by the legal-document update. [The Coupon contract](coupons.md) defines the default-off `COUPONS_ENABLED` setting, the secret `COUPON_IDENTITY_KEYS` key ring, backup/rotation, daily purge and the final Stripe activation gate. Do not enable the feature before all implementation tickets and final #394 are complete. Billing-disabled Instances need none of this configuration.
+
+## Coupon configuration
+
+`COUPONS_ENABLED` defaults to `false`. It gates issuance and, as the remaining implementation lands, preview, redemption and coupon-specific paid actions. Keep it off outside isolated tests until final #394 validates the merged implementation. Existing billing and Instances selling no Plans keep their behavior.
+
+`COUPON_IDENTITY_KEYS` is a secret JSON key ring: `{"active":"v1","keys":{"v1":"<base64 of 32 random bytes>"}}`. Enabling Coupons requires a valid ring and issuing requires configured Stripe Plans. All configured offers must resolve to the same offer name and currency, with one-month or one-year intervals. Missing or incompatible prices prevent issuance. This check reads the existing billing catalog and creates no payment or Subscription.
+
+Store the ring in the same protected Instance configuration used by the backend and privileged command. Back it up encrypted separately from the database, restore the matching complete ring with the database, and retain old keys for existing fingerprints and backups. Never replace key bytes under an existing identifier. See [key custody and rotation](coupons.md#identity-and-key-custody) and [the commands](coupons.md#privileged-coupon-commands).

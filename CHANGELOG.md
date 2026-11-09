@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+### Added
+
+- Billing-enabled Instances can create, inspect, list, disable and purge coupons through privileged command-line tooling. Coupon functionality is off by default pending the remaining implementation and final Stripe validation. **Upgrade notes:** Before isolated testing or eventual activation, configure and securely back up `COUPON_IDENTITY_KEYS` and schedule daily purge; existing Instances need no key while `COUPONS_ENABLED=false`.
+
 ### Changed
 
 - The English and Italian Terms and Privacy Policy describe cardless coupon access, its expiry, later explicit paid signup and retained claim fingerprints. Coupon functionality remains disabled pending implementation and final Stripe validation. **Upgrade notes:** Self-hosters who publish the bundled legal pages must replace them for their Instance and keep the frontend/backend Terms dates together; arrange any required material-change notice before applying the new Terms to existing Users.
