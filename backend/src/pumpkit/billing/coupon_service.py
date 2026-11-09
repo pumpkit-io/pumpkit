@@ -17,6 +17,7 @@ from pumpkit.billing.models import (
     CouponOperation,
     FreeAccess,
     PaidSignup,
+    PlanChange,
     Subscription,
 )
 from pumpkit.billing.schemas import CouponIssueRequest
@@ -264,6 +265,21 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
         .returning(PaidSignup.id)
     )
     purged += len(list(signups))
+    changes = await db.scalars(
+        delete(PlanChange)
+        .where(
+            PlanChange.status != "pending",
+            PlanChange.resolved_at <= now - timedelta(days=90),
+            ~select(FreeAccess.id)
+            .where(
+                FreeAccess.user_id == PlanChange.user_id,
+                FreeAccess.ends_at > now - timedelta(days=90),
+            )
+            .exists(),
+        )
+        .returning(PlanChange.id)
+    )
+    purged += len(list(changes))
     ended = await db.scalars(
         delete(FreeAccess)
         .where(FreeAccess.ends_at <= now - timedelta(days=90))

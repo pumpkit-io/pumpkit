@@ -16,7 +16,7 @@ from pumpkit.billing.gateway import (
     DeferralRefused,
     SubscriptionState,
 )
-from pumpkit.billing.models import CouponOperation, PaidSignup
+from pumpkit.billing.models import CouponOperation, PaidSignup, PlanChange
 from pumpkit.billing.schemas import PaidSignupPreviewResponse, PaidSignupRequest, PaidSignupResponse
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import BILLING_PAGE, settings
@@ -65,6 +65,10 @@ async def preview(
         )
     ):
         raise ConflictError("Resolve your pending billing operation before arranging paid renewal.")
+    if await db.scalar(
+        select(PlanChange.id).where(PlanChange.user_id == user.id, PlanChange.status == "pending")
+    ):
+        raise ConflictError("Resolve your pending billing frequency change first.")
     free = await service.get_free_access_coverage(db, user_id=user.id)
     if not free or not as_utc(free.starts_at) <= now < as_utc(free.ends_at):
         raise ConflictError("Review a new paid offer after your free access ends.")

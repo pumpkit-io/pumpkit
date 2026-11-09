@@ -224,7 +224,7 @@ If host port 5432 is already taken, add a local compose override that remaps the
 # compose.dev.override.local.yml
 services:
   db:
-    ports: !override ["55433:5432"]
+    ports: !override ['55433:5432']
 ```
 
 ```bash
@@ -238,3 +238,5 @@ Running an Instance: [self-hosting.md](./self-hosting.md). Cutting a release: [r
 ### Coupon implementation
 
 [The Coupon contract](coupons.md) fixes the acceptance copy, identity key ring, retention and purge execution for #392. Its ordered implementation keeps the feature default-off until final real Stripe validation in #394 after implementation PRs merge. Use the historical harness/evidence on `pro-coupons-t394`; do not repeat discovery or make live-provider credentials prerequisites for local implementation.
+
+Deferred frequency changes use `billing/plan_changes.py` and authenticated `/billing/plan-changes/preview`, confirmation and per-operation status routes. The mediator commits intent and the first-attempt checkpoint before the gateway replaces the item price without proration or changing its anchor/trial/cancellation. Pending changes share all existing billing/deletion guards. `python -m pumpkit.billing.plan_change_recovery recover` follows the same path as status lookup; webhook reconciliation only observes provider truth. The Emulator implements this bounded request and explicit management-only configuration `bpc_coupon_management`; it is not real-provider evidence. See [coverage owners and activation safeguards](coupons.md#coverage-ownership).

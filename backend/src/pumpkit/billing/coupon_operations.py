@@ -22,6 +22,7 @@ from pumpkit.billing.models import (
     CouponOperation,
     FreeAccess,
     PaidSignup,
+    PlanChange,
 )
 from pumpkit.billing.schemas import (
     CouponPreviewResponse,
@@ -53,6 +54,12 @@ async def pending(
 
 
 async def require_settled(db: AsyncSession, *, user_id: str) -> None:
+    if await db.scalar(
+        select(PlanChange.id).where(PlanChange.user_id == user_id, PlanChange.status == "pending")
+    ):
+        raise ConflictError(
+            "Your billing frequency change is being confirmed. Retry its status before changing billing or deleting your account."
+        )
     if await db.scalar(
         select(PaidSignup.id).where(PaidSignup.user_id == user_id, PaidSignup.status == "pending")
     ):

@@ -78,8 +78,9 @@ async def test_cancelled_paid_claim_keeps_cancellation_paid_resets_and_every_fre
         await authed_client.post(REDEEM, json=confirmation(second_offer, "cancelled-second-0001"))
     ).json()["status"] == "completed"
     assert fake_billing.deferrals == []
-    for path in ("/api/v1/billing/subscribe-now", "/api/v1/billing/portal"):
-        assert (await authed_client.post(path)).status_code == 409
+    assert (await authed_client.post("/api/v1/billing/subscribe-now")).status_code == 409
+    assert (await authed_client.post("/api/v1/billing/portal")).status_code == 200
+    assert fake_billing.restricted_portals == ["cus_monthly"]
     fixed_clock.advance(paid_end - fixed_clock())
     me = (await authed_client.get("/api/v1/billing/me")).json()
     assert me["subscribed"] is True

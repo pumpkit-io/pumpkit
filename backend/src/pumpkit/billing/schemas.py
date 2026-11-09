@@ -88,6 +88,9 @@ class FreeAccessCoverageResponse(FreeAccessResponse):
 
 
 class BillingMeResponse(BaseModel):
+    pending_plan_change_id: Optional[str] = None
+    may_change_plan: bool = False
+    future_plan: Optional["FuturePlanResponse"] = None
     pending_paid_signup_id: Optional[str] = None
     may_arrange_paid_signup: bool = False
     pending_coupon_operation: bool = False
@@ -237,3 +240,34 @@ class PaidSignupResponse(BaseModel):
     session_id: Optional[str] = None
     first_payment_at: datetime
     plan_key: str
+
+
+class PlanChangePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan_key: str = Field(min_length=1)
+
+
+class FuturePlanResponse(BaseModel):
+    plan_key: str
+    product_name: str
+    amount: int
+    currency: str
+    interval: str
+    interval_count: int
+    first_payment_at: datetime
+
+
+class PlanChangePreviewResponse(FuturePlanResponse):
+    revision: str
+
+
+class PlanChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation_id: str = Field(min_length=16, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
+    revision: SecretStr = Field(min_length=1, max_length=8192)
+
+
+class PlanChangeResponse(FuturePlanResponse):
+    operation_id: str
+    status: Literal["pending", "completed", "refused"]
+    detail: Optional[str] = None

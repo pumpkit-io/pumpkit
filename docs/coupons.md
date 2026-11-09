@@ -1,6 +1,6 @@
 # Coupon implementation and operations contract
 
-This is the implementation contract for spec #392, settled by #396. Privileged issuance, recipient preview and cardless redemption are implemented. Subscriber extensions remain unavailable until their later tickets implement those rules. The public English and Italian documents describe the complete feature; publishing them does not activate it or constitute legal approval. Self-hosters supply their own legal documents.
+This is the implementation contract for spec #392, settled by #396. Privileged issuance, preview, cardless and subscriber redemption, future paid signup and deferred monthly/annual changes are implemented behind the shared setting. The public English and Italian documents describe the complete feature; publishing them does not activate it or constitute legal approval. Self-hosters supply their own legal documents.
 
 ## Activation and provider evidence
 
@@ -98,7 +98,7 @@ The revision uses the existing Instance JWT signing secret with a separate `coup
 
 ## Cardless confirmation and access
 
-Cardless redemption accepts a recipient with no running Subscription or pending paid Checkout, including someone with remaining Free access. Renewing monthly and annual subscribers and Users finishing an existing introductory Trial use the durable provider-backed flow below. Cancelled-before-claim paths remain nonconsuming refusals until #403. A former subscriber with a settled account can redeem without using their saved card. Confirmation reads provider eligibility under the User billing lock and creates no Stripe customer, Subscription, Checkout or payment. An open paid Checkout must finish, expire or be cancelled by support before redemption; checking or refusing a Coupon does not cancel it.
+Cardless redemption accepts a recipient with no running Subscription or pending paid Checkout, including someone with remaining Free access. Renewing monthly and annual subscribers and Users finishing an existing introductory Trial use the durable provider-backed flow below. Already-cancelled renewal preserves cancellation and uses the local-coverage path below. A former subscriber with a settled account can redeem without using their saved card. Confirmation reads provider eligibility under the User billing lock and creates no Stripe customer, Subscription, Checkout or payment. An open paid Checkout must finish, expire or be cancelled by support before redemption; checking or refusing a Coupon does not cancel it.
 
 For an immediate cardless offer, the Paywall says **Starts when you redeem** and displays UTC calendar dates. Preview timestamps describe those dates; their seconds are not an already-running grant. The signed revision binds the months, displayed UTC dates, full monthly Allowance, payment consequences, Terms and issuance state. Confirmation anchors the whole calendar-month interval at its current server time, after lock waits and provider checks. It requires a fresh preview if either displayed UTC date changed, or if any other offer term changed. This preserves full usable months without treating every elapsed second as a changed offer. The final result contains precise UTC timestamps. A January 31 anchor resets on February's last day and then March 31, calculated from the original anchor.
 
@@ -128,7 +128,6 @@ Stored Media files need a separate retryable cleanup after the database commit. 
 
 The ordinary suite still uses SQLite and needs no service. To exercise production row locks, explicitly supply a PostgreSQL URL to `PUMPKIT_TEST_POSTGRES_URL` and run `uv run --extra dev pytest tests/billing/postgres -q` from `backend/`. The harness creates a random isolated schema per test, sets every connection's search path and drops only that schema. It never drops or rewrites the supplied database's public schema. Independent authenticated HTTP requests contend on held rows for last-slot, same-identity, same-operation, disable, deletion and waiting-deadline cases, plus Top-up creation/deletion ordering across first-customer commits.
 
-
 ### Appending free months in Settings
 
 With Coupons enabled, the Plan card in Settings offers **Redeem coupon**, using the same preview and two-box confirmation as the Paywall. A distinct Coupon appends after remaining Free access. Preview shows the new grant's dates; the Plan card shows the combined end prominently plus the current grant and queued ranges, and Usage retains the current period, usage and Top-ups. After success those reads and access state refresh. Another browser reads the same committed coverage on reload. No Subscription or automatic payment is created.
@@ -137,7 +136,7 @@ Each grant retains its own claim, acceptance, operation result and accepted mont
 
 The signed preview binds the preceding grant and offset as well as the offer. Confirmation serializes on the User lock, so a competing append changes the offer and requires a new preview and acceptance. It never silently shifts the grant or consumes a stale claim. The combined end, including all remaining free time, must be at most 730 × 86400 seconds after confirmation; an unsupported offer is refused without consuming it. Deadlines govern confirmation only, and disabling a code preserves already queued months.
 
-**Upgrade notes:** Apply migration 0046 before deploying this slice. It preserves existing grant anchors and adds offsets for subsequent appends. Keep the shared setting off outside isolated tests pending final #394. The following sections describe Top-ups and monthly subscriber deferral; paid signup that preserves free months remains a separate implementation slice.
+**Upgrade notes:** Apply migration 0046 before deploying this slice. It preserves existing grant anchors and adds offsets for subsequent appends. Keep the shared setting off outside isolated tests pending final #394. The following sections describe Top-ups and monthly subscriber deferral; the complete future paid signup and interval-change flows follow below.
 
 ### Top-ups during free access
 
@@ -173,7 +172,6 @@ Purge never removes pending operation evidence, reserved claims or recipient key
 
 **Upgrade notes:** Apply migration 0047 before deploying. It adds separate saved paid coverage, actual free coverage starts and durable operation records. Add daily `coupons recover` to the existing purge/file-cleanup jobs and alert on nonzero results and unresolved work older than 24 hours. Preserve the complete database/key-ring backup and use the owning account-deletion command. No new key or portal configuration is required. Keep Coupons off outside isolated tests until final #394 validates the merged Stripe behavior, cancellation, invoices, resumed paid boundaries and notices.
 
-
 ### Settling scheduled-post Top-ups after access ends
 
 Publication access checks continue to use current access and its precise cancellation/free end. Settling an existing reservation instead reads the historical Subscription or retained grant for its publish time, including terminal Subscriptions and older grant chains. This accounting read cannot authorize writing or publishing. A provider's coupon deferral is never treated as a reduced introductory Trial when its original local allowance evidence has been purged.
@@ -189,7 +187,6 @@ An introductory Trial already underway finishes with its original start, end, us
 Both cases use the same committed operation, absolute provider target, reconciliation, cancellation and purge as monthly claims. Provider trial fields remain truthful and never redefine the original reduced Allowance. The nullable `preserved_trial` field distinguishes the kind of saved coverage in the existing `paid_start`, `paid_end`, `paid_anchor` and `paid_allowance` fields; null on older rows means paid coverage. A definite refusal of the first Trial-backed attempt discards its unused snapshot and restores the ordinary Trial actions. After a grant, all five fields are cleared together 90 days after the later coverage/benefit/resolution boundary, with pending operations and current/queued benefits protected. Cancellation dates remain independent of those erasable fields. Historical Top-up settlement keeps its existing access-independent accounting path.
 
 **Upgrade notes:** Apply migration 0048 before deploying this slice. Existing paid snapshots and cardless benefits are unchanged; no new key, job or provider setting is required. Keep Coupons disabled outside isolated tests until final #394 verifies annual renewal, original Trial boundaries, full resumed paid intervals, recovery, cancellation and notices against real Stripe.
-
 
 ### Cancelled renewal and earned coverage
 
@@ -228,9 +225,7 @@ Run recovery periodically and alert on a nonzero exit or pending records. It pri
 
 **Upgrade notes:** apply migration `0049` before serving requests and include paid-signup recovery in the Instance's existing billing recovery checks. Coupons remain disabled by default. Final #394 must verify the merged hosted setup and direct-subscription flow on the installed Stripe version, including both intervals and billing modes, 48-hour boundaries, near-expiry and provider clock differences, full first paid periods, tax/address/ID collection, off-session authentication and customer notices. Emulator and adapter contracts establish the local behavior; they do not establish real hosted provider behavior. A failed final provider case needs a corrective follow-up before activation.
 
-
 New cardless offers use whole-second UTC start and calendar-anchor timestamps before acceptance, matching Stripe's timestamp resolution. Access starts immediately in that second; all monthly boundaries use the same anchor. Existing accepted timestamps are never rounded or rewritten. **Upgrade limitation:** a preactivation or isolated-test grant with fractional seconds cannot arrange an exact future Stripe payment. Signup is refused before customer or Checkout writes, and all free access remains intact. Use ordinary paid signup after that grant expires; receiving Free access still removes introductory Trial eligibility. Supported production activation has not begun while final #394 is pending. Do not rewrite a legacy grant to bypass this guard.
-
 
 ### Paid-signup creation checkpoints
 
@@ -242,11 +237,49 @@ Cancellation intent is committed before provider reads. After cancellation or ex
 
 **Upgrade notes:** apply `0050` before serving this flow. Pending pre-checkpoint signup records are conservatively marked uncertain without inventing a first-attempt time, so they cannot automatically replay or be released merely because no subscription is visible. Inspect and resolve any such preactivation records with provider evidence before activation. Continue periodic recovery and alert on nonzero exits or unresolved rows. The existing fractional-timestamp limitation above remains unchanged. The offer says "No immediate payment" and displays its exact timestamp: a valid first payment can fall later on the same UTC day.
 
-
 Cancellation samples the injected clock after provider waits and preserves coverage from the final authoritative subscription facts. If payment settles while the first subscription read or cancellation is in progress, a positively settled month/year keeps its full paid interval and monthly Allowance. Re-reading the same preserved paid interval keeps its captured caps even if configured limits change during cancellation. An unpaid invoice never creates paid coverage; existing debt checks remain in force. Cancellation stays pending if the final attributed ended subscription cannot be confirmed.
-
 
 A stale browser can still show Cancel signup after another browser completed that signup and redeemed an additional Coupon. If the completed commitment has changed, its original first-payment date has passed, or its cancellation cannot be confirmed, this old action returns `409 PAID_SIGNUP_CANCEL_CONFLICT` with current Settings guidance. It does not report signup completion as cancellation success or mutate an unrelated subscription. The browser retires those stale controls and refreshes the current Plan card: use **Cancel renewal** for the actual remaining free period, or **Manage subscription** after it. Free and paid coverage and captured caps stay intact. Uncertain unfinished operations keep their recovery controls and guards; only this explicit completed-signup conflict retires stale recovery state. A legacy cancellation response saying `completed` is also displayed as an unconfirmed cancellation rather than "Subscription arranged".
 
-
 Once cancellation validates the current attributed subscription, Pumpkit commits its pending cancellation state and any proven paid coverage before sending the provider mutation. Recovery reacquires the User lock and rechecks provider facts before dispatch. An ambiguous response therefore cannot roll back earned paid time or leave a completed record outside recovery: Settings status, webhooks and privileged recovery can finish it after the original first-payment date, including with Coupons disabled. A lost final local commit retains that earlier checkpoint. Unpaid invoices never become paid coverage and still block account deletion. Changed or stale offers refused before this validated cancellation checkpoint keep the explicit current-plan conflict contract above.
+
+## Deferred billing frequency changes
+
+With Coupons enabled, Settings offers **Change billing frequency** for a renewing subscription with current or queued Free access. Select the other configured monthly or annual Plan, review its full recurring amount, currency, interval and exact UTC first-payment date, then confirm. No immediate payment is requested. The new payment interval begins at the unchanged end of all free time. Current paid coverage, introductory Trial coverage, accepted monthly caps, usage, Top-ups and every free grant retain their original dates and rules. A cancelled commitment offers no interval change and never resumes implicitly.
+
+The in-app change uses the installed Stripe 15.6.1 / API `2026-08-26.dahlia` subscription update: replace only the existing item price, `proration_behavior=none`, `billing_cycle_anchor=unchanged`, and attribution metadata. It supplies no `trial_end`, cancellation or schedule field. Provider price selection changes now; payment begins after free time. Pumpkit keeps original paid coverage authoritative rather than reconstructing bought time from that newly selected price. Settings labels the selected offer as future billing. A subsequent compatible Coupon extends its payment date again; the first renewal buys a full month or year at the selected price. No schedules or API upgrade are used.
+
+Preview and confirmation read current provider facts under the User lock. Pending updates, schedules, paused/unsupported subscriptions, unsettled payments, Checkout and other unresolved billing operations refuse without consuming a Coupon. Confirmation binds the exact source subscription, selected price and accepted date; changes require fresh review. The displayed affordance comes from the last local copy and never substitutes for this confirmation check.
+
+Migration `0051` persists accepted change intent before provider writes. A second committed checkpoint fixes the original first-attempt time, then recovery reloads User and operation and rereads current provider facts. A stopped process can recover the same operation. Unknown results remain pending and guard redemption, paid signup, portal, cancellation and account deletion. Recovery may send only the identical key and parameters, with unchanged source facts, no cancellation, before both the original 23-hour checkpoint deadline and accepted payment date. It checks those deadlines again immediately before dispatch after provider waits. Cancellation, expiry or conflicting provider facts stop replay; an unknown result never ages into a refusal. Provider readback confirms attribution, selected price and preserved trial end/anchor before completion. A remote cancellation is never unset. A definite refusal changes no benefit. Lost local completion commits recover from the durable intent and authoritative provider state.
+
+Authenticated status retrieval and subscription webhooks reconcile attributed results even when Coupons are turned off. Privileged recovery uses the same lock/checkpoint path:
+
+```sh
+docker compose exec -T backend python -m pumpkit.billing.plan_change_recovery recover --list
+docker compose exec -T backend python -m pumpkit.billing.plan_change_recovery recover
+```
+
+Add this command to existing daily recovery checks; investigate pending work older than 24 hours and every nonzero exit. Unproven late writes require provider-backed resolution, never manual deletion to remove a guard. Resolved change evidence remains until 90 days after resolution and related free benefits end; unresolved work is retained. No raw provider payload, code or recipient identity is printed. Provider-calling Coupon status retrieval is limited to 60 requests/minute and cancellation to 20/minute; interval changes use 20/minute for preview/confirmation and 60/minute for status.
+
+### Portal and activation safeguards
+
+Set `STRIPE_COUPON_PORTAL_CONFIGURATION_ID` to an explicit active Stripe billing portal configuration. This implementation chooses a management-only portal: disable **subscription updates**, **subscription cancellation** and the **login page**; enable payment-method updates and invoice history as needed. Every session request rereads this configuration and fails closed if absent, inactive, incomplete or permissive. It names that configuration explicitly. When Coupons are enabled, even ordinary paid subscribers receive this restricted portal, so a newly issued unrestricted session cannot become a later Coupon bypass. Settings retains in-app **Cancel renewal** for ordinary paid subscribers too. While Coupons are off, ordinary subscribers keep their existing portal behavior; existing free benefits still block the unrestricted portal and immediate Subscribe now/Checkout.
+
+The historical candidate portal configuration permitted price changes with no proration and `trial_update_behavior=continue_trial`. The implemented flow instead keeps all price changes in the durable in-app action. Do not enable portal updates, `end_trial`, immediate-anchor changes, quantity changes, promotions, scheduled changes or resumption for Coupon recipients. Existing generic portal sessions, externally exposed portal login links and previously exposed configurations require separate safeguards before activation: inventory every applicable configuration and link; disable unsafe subscription actions and public login links; and establish with Stripe evidence how outstanding sessions expire, can be revoked, or are affected by configuration changes. Merely changing this new configuration ID does not prove that an old session is safe. Do not issue Coupons while any older session can still charge away or resume protected benefits. Final #394 must establish and document that transition and a safe reopening procedure; no unverified revocation guarantee is assumed here.
+
+**Upgrade notes:** apply `0051`, configure the explicit restricted portal, add interval-change recovery to existing jobs, and complete outstanding-session safeguards before activation. Coupons remain default-off until final #394 validates the merged application against real Stripe. Verify both directions in classic/flexible modes with queued paid coverage and current free time, first full renewal, cancellation, tax/authentication, hosted payment-method management, customer notices and all older-session paths. Local fakes, adapter contracts, PostgreSQL and the development Emulator establish application behavior, not those hosted guarantees. A failing provider case requires a corrective follow-up before activation.
+
+## Coverage ownership
+
+The parent spec promises are checked at the authenticated API, gateway adapter, calendar, PostgreSQL and frontend service boundaries. These owners avoid a separate duplicate hardening suite:
+
+- Issuance, identity keys/default-off behavior and migration: `backend/tests/billing/test_coupon_commands.py`, `test_coupon_migration.py`; preview refusal, horizon and rate limits: `test_coupon_preview.py`.
+- Cardless grants, acceptance, claims after deletion, access/Onboarding/MCP and recovery: `test_coupon_redemption.py`; Settings stacking and calendar anchors: its stacking cases and `test_allowance.py`; frontend `pages/Settings.test.tsx` and route/Paywall tests.
+- Current Free access, Top-up purchase/spend/refund and expiry: `test_top_ups.py`, `test_free_access_top_ups.py`, scheduling/usage tests, and PostgreSQL `test_top_up_deletion.py`.
+- Monthly provider deferral, reservations and restart/webhook recovery: `test_monthly_coupons.py`, `test_gateway.py`, PostgreSQL `test_monthly_recovery.py`; annual/introductory preservation and same-period caps: `test_annual_trial_coupons.py`.
+- Cancelled coverage, source attribution and exact expiry: `test_cancelled_coupons.py`, `test_cancelled_coupon_expiry.py`; paid-signup consent, creation checkpoints and cancellation across settlement: `test_paid_signups.py`, PostgreSQL `test_paid_signups.py` and frontend `pages/Settings.test.tsx`.
+- Deferred interval changes, exact dates/usage, subsequent Coupon/renewal, races, lost commits, flag-off recovery and route limits: `test_plan_changes.py`; request/configuration contracts: `test_gateway.py`; independent concurrent confirmation/redemption/cancellation: PostgreSQL `test_plan_changes.py`; frontend `pages/Settings.test.tsx` and `services/billingService.test.ts` and focused Dev URL browser evidence.
+- Last-slot/duplicate identity/disable contention: PostgreSQL `test_coupon_contention.py`. Run all opt-in PostgreSQL cases with `PUMPKIT_TEST_POSTGRES_URL` set to an isolated development database as documented in development guidance. Normal `make test` needs no service.
+
+Full tip E2E and final #394 own complete browser/hosted provider journeys. Keep #392 open until the latter passes after implementation merges.

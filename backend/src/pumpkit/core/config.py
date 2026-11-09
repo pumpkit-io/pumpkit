@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     BILLING_TOP_UP_KEY: Optional[str] = None
 
     COUPONS_ENABLED: bool = False
+    STRIPE_COUPON_PORTAL_CONFIGURATION_ID: Optional[str] = None
     COUPON_IDENTITY_KEYS: SecretStr = SecretStr("")
 
     # Any OpenAI-compatible chat completions endpoint; OpenRouter by default.

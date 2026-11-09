@@ -22,6 +22,7 @@ from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar, cast, g
 
 import stripe
 from starlette.concurrency import run_in_threadpool
+from stripe.params.billing_portal import SessionCreateParams as PortalSessionCreateParams
 from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateParams
 
 from pumpkit.billing.allowance import months_after
@@ -118,6 +119,7 @@ class SubscriptionState:
     paused: bool = False
     coupon_operation: Optional[str] = None
     paid_signup_operation: Optional[str] = None
+    plan_change_operation: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -206,7 +208,11 @@ class BillingGateway(Protocol):
         """Expire the customer's open Checkouts so none can start a Subscription; return IDs."""
         ...
 
-    async def create_portal_url(self, *, customer_id: str) -> str: ...
+    async def create_portal_url(self, *, customer_id: str, restricted: bool = False) -> str: ...
+
+    async def change_plan(
+        self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str
+    ) -> None: ...
 
     async def list_plans(self, keys: Sequence[str]) -> list[Plan]:
         """
@@ -347,6 +353,7 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         paused=bool(subscription.get("pause_collection")),
         coupon_operation=subscription.get("metadata", {}).get("pumpkit_coupon_operation"),
         paid_signup_operation=subscription.get("metadata", {}).get("pumpkit_paid_signup"),
+        plan_change_operation=subscription.get("metadata", {}).get("pumpkit_plan_change"),
         paid_current_period=_paid_current_period(subscription, first_item),
         latest_invoice_status=(
             subscription["latest_invoice"].get("status") or "unknown"
@@ -712,12 +719,37 @@ class StripeBillingGateway:
         # refuse the expiry: that surfaces as a provider error too.
         return await self._call("expire open Checkouts", expire_all)
 
-    async def create_portal_url(self, *, customer_id: str) -> str:
+    async def create_portal_url(self, *, customer_id: str, restricted: bool = False) -> str:
+        configuration = settings.STRIPE_COUPON_PORTAL_CONFIGURATION_ID if restricted else None
+        if restricted:
+            if not configuration:
+                raise BillingProviderError("Coupon-safe portal configuration is required")
+            config = await self._call(
+                "validate the billing portal",
+                lambda: self._client.v1.billing_portal.configurations.retrieve(configuration),
+            )
+            data = config.to_dict()
+            features = data.get("features", {})
+            if (
+                not data.get("active")
+                or any(
+                    features.get(name, {}).get("enabled") is not False
+                    for name in ("subscription_update", "subscription_cancel")
+                )
+                or data.get("login_page", {}).get("enabled") is not False
+            ):
+                raise BillingProviderError(
+                    "The portal configuration allows unsafe subscription changes"
+                )
+        params: PortalSessionCreateParams = {
+            "customer": customer_id,
+            "return_url": settings.stripe_billing_portal_return_url(),
+        }
+        if configuration:
+            params["configuration"] = configuration
         portal = await self._call(
             "create a billing-portal session",
-            lambda: self._client.v1.billing_portal.sessions.create(
-                {"customer": customer_id, "return_url": settings.stripe_billing_portal_return_url()}
-            ),
+            lambda: self._client.v1.billing_portal.sessions.create(params),
         )
         return portal.url
 
@@ -793,6 +825,26 @@ class StripeBillingGateway:
             raise DeferralRefused("Stripe refused the coupon deferral") from exc
         except stripe.StripeError as exc:
             raise BillingProviderError("Stripe coupon deferral outcome is uncertain") from exc
+
+    async def change_plan(
+        self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str
+    ) -> None:
+        try:
+            await run_in_threadpool(
+                self._client.v1.subscriptions.update,
+                subscription_id,
+                {
+                    "items": [{"id": item_id, "price": price_id}],
+                    "proration_behavior": "none",
+                    "billing_cycle_anchor": "unchanged",
+                    "metadata": {"pumpkit_plan_change": operation_id},
+                },
+                {"idempotency_key": "plan-change-" + operation_id},
+            )
+        except stripe.InvalidRequestError as exc:
+            raise DeferralRefused("Stripe refused the interval change") from exc
+        except stripe.StripeError as exc:
+            raise BillingProviderError("Stripe interval change outcome is uncertain") from exc
 
     async def cancel_renewal(self, *, subscription_id: str, ends_at: datetime) -> None:
         await self._call(
@@ -959,6 +1011,9 @@ class FakeBillingGateway:
     top_up_checkouts: list[TopUpCheckoutCall] = field(default_factory=list)
     ended_trials: list[str] = field(default_factory=list)
     deferrals: list[tuple[str, datetime, str]] = field(default_factory=list)
+    plan_changes: list[str] = field(default_factory=list)
+    restricted_portals: list[str] = field(default_factory=list)
+    _changed_operations: set[str] = field(default_factory=set)
 
     _open_checkouts: dict[str, str] = field(default_factory=dict, init=False)
     _payment_checkouts: dict[str, tuple[str, str]] = field(default_factory=dict, init=False)
@@ -1183,8 +1238,11 @@ class FakeBillingGateway:
         self.expired_checkouts.extend(expired)
         return expired
 
-    async def create_portal_url(self, *, customer_id: str) -> str:
+    async def create_portal_url(self, *, customer_id: str, restricted: bool = False) -> str:
         self._maybe_fail("create_portal_url")
+        if restricted:
+            self._maybe_fail("validate_portal")
+            self.restricted_portals.append(customer_id)
         self.portals.append(customer_id)
         return self.portal_url
 
@@ -1232,6 +1290,29 @@ class FakeBillingGateway:
                     paid_current_period=False,
                 )
         self._maybe_fail("after_defer_renewal")
+
+    async def change_plan(
+        self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str
+    ) -> None:
+        self._maybe_fail("change_plan")
+        if operation_id in self._changed_operations:
+            return
+        if "refuse_plan_change" in self.fail_on:
+            raise DeferralRefused("The interval change was refused")
+        plan = next(p for p in self.plans if p.price_id == price_id)
+        for subscriptions in self._subscriptions.values():
+            if subscription := subscriptions.get(subscription_id):
+                subscriptions[subscription_id] = replace(
+                    subscription,
+                    price_id=price_id,
+                    plan_key=plan.key,
+                    interval=plan.interval,
+                    interval_count=plan.interval_count,
+                    plan_change_operation=operation_id,
+                )
+        self._changed_operations.add(operation_id)
+        self.plan_changes.append(operation_id)
+        self._maybe_fail("after_change_plan")
 
     async def cancel_renewal(self, *, subscription_id: str, ends_at: datetime) -> None:
         self._maybe_fail("cancel_renewal")

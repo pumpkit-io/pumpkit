@@ -20,6 +20,10 @@ from pumpkit.billing.schemas import (
     PaidSignupPreviewResponse,
     PaidSignupRequest,
     PaidSignupResponse,
+    PlanChangePreviewRequest,
+    PlanChangePreviewResponse,
+    PlanChangeRequest,
+    PlanChangeResponse,
     PlansListResponse,
     TopUpCheckoutRequest,
 )
@@ -184,7 +188,9 @@ async def redeem_coupon(
 
 
 @router.get("/billing/coupons/redemptions/{operation_id}", response_model=CouponRedemptionResponse)
+@limiter.limit("60/minute")
 async def lookup_coupon_redemption(
+    request: Request,
     operation_id: str,
     gateway: BillingGateway = Depends(get_billing_gateway),
     clock: Clock = Depends(get_clock),
@@ -197,7 +203,9 @@ async def lookup_coupon_redemption(
 
 
 @router.post("/billing/cancel-renewal", response_model=BillingMeResponse)
+@limiter.limit("20/minute")
 async def cancel_renewal(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
@@ -263,4 +271,47 @@ async def cancel_paid_signup(
 ) -> PaidSignupResponse:
     return await mediator.lookup_paid_signup(
         db, gateway, current_user, operation_id=operation_id, clock=clock, cancel=True
+    )
+
+
+@router.post("/billing/plan-changes/preview", response_model=PlanChangePreviewResponse)
+@limiter.limit("20/minute")
+async def preview_plan_change(
+    request: Request,
+    change: PlanChangePreviewRequest,
+    clock: Clock = Depends(get_clock),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PlanChangePreviewResponse:
+    return await mediator.preview_plan_change(
+        db, gateway, current_user, plan_key=change.plan_key, clock=clock
+    )
+
+
+@router.post("/billing/plan-changes", response_model=PlanChangeResponse)
+@limiter.limit("20/minute")
+async def create_plan_change(
+    request: Request,
+    change: PlanChangeRequest,
+    clock: Clock = Depends(get_clock),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PlanChangeResponse:
+    return await mediator.create_plan_change(db, gateway, current_user, request=change, clock=clock)
+
+
+@router.get("/billing/plan-changes/{operation_id}", response_model=PlanChangeResponse)
+@limiter.limit("60/minute")
+async def lookup_plan_change(
+    request: Request,
+    operation_id: str,
+    clock: Clock = Depends(get_clock),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PlanChangeResponse:
+    return await mediator.lookup_plan_change(
+        db, gateway, current_user, operation_id=operation_id, clock=clock
     )

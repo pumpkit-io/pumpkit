@@ -295,3 +295,24 @@ class PaidSignup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     detail: Mapped[Optional[str]] = mapped_column(String)
+
+
+class PlanChange(Base):
+    __tablename__ = "plan_changes"
+    __table_args__ = (UniqueConstraint("user_id", "operation_id"),)
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("plan_change")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    operation_id: Mapped[str] = mapped_column(String(128))
+    revision_digest: Mapped[str] = mapped_column(String(64))
+    status: Mapped[Literal["pending", "completed", "refused"]] = mapped_column(String, index=True)
+    customer_id: Mapped[str] = mapped_column(String)
+    subscription_id: Mapped[str] = mapped_column(String)
+    original: Mapped[dict] = mapped_column(JSON)
+    offer: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    detail: Mapped[Optional[str]] = mapped_column(String)

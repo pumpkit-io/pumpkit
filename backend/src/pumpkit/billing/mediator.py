@@ -13,6 +13,7 @@ from pumpkit.billing import (
     coupon_redemption,
     coupon_service,
     paid_signups,
+    plan_changes,
     service,
 )
 from pumpkit.billing.allowance import (
@@ -29,7 +30,7 @@ from pumpkit.billing.gateway import (
     WebhookEvent,
     WebhookSignatureError,
 )
-from pumpkit.billing.models import Coupon, PaidSignup, TopUp
+from pumpkit.billing.models import Coupon, PaidSignup, PlanChange, TopUp
 from pumpkit.billing.schemas import (
     BillingMeResponse,
     BillingPortalResponse,
@@ -45,6 +46,9 @@ from pumpkit.billing.schemas import (
     PaidSignupPreviewResponse,
     PaidSignupRequest,
     PaidSignupResponse,
+    PlanChangePreviewResponse,
+    PlanChangeRequest,
+    PlanChangeResponse,
     PlanResponse,
     PlansListResponse,
     TermsAcceptanceRequest,
@@ -84,7 +88,23 @@ async def get_billing_me(
     current = free.grant_at(moment) if free and free.starts_at <= moment else None
     pending_operations = await coupon_operations.pending(db, user_id=user.id)
     signup_operations = await paid_signups.pending(db, user_id=user.id)
+    changes = await plan_changes.pending(db, user_id=user.id)
     return BillingMeResponse(
+        pending_plan_change_id=changes[0].operation_id if changes else None,
+        may_change_plan=bool(
+            coupon_service.coupons_available(settings)
+            and free
+            and subscription
+            and subscription.cancel_at is None
+            and not pending_operations
+            and not signup_operations
+            and not changes
+        ),
+        future_plan=await plan_changes.future_plan(
+            db, user_id=user.id, plan_key=subscription.plan_key, ends_at=free.ends_at
+        )
+        if free and subscription and subscription.cancel_at is None
+        else None,
         pending_paid_signup_id=signup_operations[0].operation_id if signup_operations else None,
         may_arrange_paid_signup=bool(
             coupon_service.coupons_available(settings)
@@ -92,6 +112,7 @@ async def get_billing_me(
             and not subscription
             and not pending_operations
             and not signup_operations
+            and not changes
         ),
         pending_coupon_operation=bool(pending_operations),
         pending_coupon_operation_id=pending_operations[0].operation_id
@@ -468,11 +489,12 @@ async def create_billing_portal_session(
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await coupon_operations.require_settled(db, user_id=user.id)
-    if await service.get_free_access(db, user_id=user.id, now=clock()):
-        raise ConflictError(
-            "Use Cancel renewal to keep your paid and free time. Other subscription changes are unavailable until free access ends."
-        )
-    url = await gateway.create_portal_url(customer_id=customer_id)
+    free = await service.get_free_access(db, user_id=user.id, now=clock())
+    if free and not coupon_service.coupons_available(settings):
+        raise ConflictError("Use Cancel renewal to keep your paid and free time.")
+    url = await gateway.create_portal_url(
+        customer_id=customer_id, restricted=bool(free or coupon_service.coupons_available(settings))
+    )
     return BillingPortalResponse(url=url)
 
 
@@ -560,6 +582,10 @@ async def _dispatch_event(
         return []
     if syncs_subscriptions:
         await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+        for change in await plan_changes.pending(db, user_id=user.id):
+            await plan_changes.reconcile(
+                db, gateway, user=user, operation=change, clock=lambda: now, mutate=False
+            )
         for operation in await coupon_operations.pending(db, user_id=user.id):
             await coupon_operations.reconcile(
                 db, gateway, user=user, operation=operation, now=now, mutate=False
@@ -758,15 +784,18 @@ async def cancel_renewal(
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await coupon_operations.require_settled(db, user_id=user.id)
     free = await service.get_free_access(db, user_id=user.id, now=clock())
-    if not free or not user.stripe_customer_id:
+    if not user.stripe_customer_id or (not free and not coupon_service.coupons_available(settings)):
         raise ConflictError("Manage your subscription in billing.")
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=user.stripe_customer_id)
     subscription = await service.get_user_subscription(db, user_id=user.id)
     if subscription is None:
         raise ConflictError("Your subscription has already ended.")
     if not subscription.cancel_at:
+        ends_at = free.ends_at if free else subscription.current_period_end
+        if ends_at is None or as_utc(ends_at) <= clock():
+            raise ConflictError("Your subscription has no remaining renewable coverage.")
         await gateway.cancel_renewal(
-            subscription_id=subscription.stripe_subscription_id, ends_at=as_utc(free.ends_at)
+            subscription_id=subscription.stripe_subscription_id, ends_at=as_utc(ends_at)
         )
         await service.sync_customer(
             db, gateway, user_id=user.id, customer_id=user.stripe_customer_id
@@ -948,3 +977,65 @@ async def _dispatch_paid_signup(
         dispatch=True,
         prior_unknown=prior_unknown,
     )
+
+
+async def preview_plan_change(
+    db: AsyncSession, gateway: BillingGateway, user: User, *, plan_key: str, clock: Clock
+) -> PlanChangePreviewResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    return await plan_changes.preview(db, gateway, user=user, plan_key=plan_key, now=clock())
+
+
+async def create_plan_change(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    user: User,
+    *,
+    request: PlanChangeRequest,
+    clock: Clock,
+) -> PlanChangeResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    try:
+        operation = await plan_changes.find(db, user_id=user.id, operation_id=request.operation_id)
+    except NotFoundError:
+        operation = await plan_changes.prepare(db, gateway, user=user, request=request, now=clock())
+        # Accepted future price and exact date must survive any provider mutation.
+        await db.commit()
+    if (
+        operation.revision_digest
+        != hashlib.sha256(request.revision.get_secret_value().encode()).hexdigest()
+    ):
+        raise ConflictError("This operation belongs to another plan offer. Check its status.")
+    return await _recover_plan_change(db, gateway, user=user, operation=operation, clock=clock)
+
+
+async def lookup_plan_change(
+    db: AsyncSession, gateway: BillingGateway, user: User, *, operation_id: str, clock: Clock
+) -> PlanChangeResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    operation = await plan_changes.find(db, user_id=user.id, operation_id=operation_id)
+    return await _recover_plan_change(db, gateway, user=user, operation=operation, clock=clock)
+
+
+async def _recover_plan_change(
+    db: AsyncSession, gateway: BillingGateway, *, user: User, operation: PlanChange, clock: Clock
+) -> PlanChangeResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    operation = await plan_changes.find(db, user_id=user.id, operation_id=operation.operation_id)
+    answer = await plan_changes.reconcile(
+        db, gateway, user=user, operation=operation, clock=clock, mutate=False
+    )
+    if operation.status == "pending":
+        if operation.attempted_at is None:
+            operation.attempted_at = clock()
+            # A crash or lost response after this checkpoint must keep billing changes guarded.
+            await db.commit()
+            user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+            operation = await plan_changes.find(
+                db, user_id=user.id, operation_id=operation.operation_id
+            )
+        answer = await plan_changes.reconcile(
+            db, gateway, user=user, operation=operation, clock=clock, dispatch=True
+        )
+    await db.commit()
+    return answer
