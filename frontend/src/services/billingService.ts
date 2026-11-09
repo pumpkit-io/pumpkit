@@ -26,6 +26,7 @@ export interface BillingMe {
   maySubscribe: boolean;
   /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
+  freeAccess?: { startsAt: string; endsAt: string; months: number } | null;
 }
 
 /** A Plan a User can subscribe to: `amount` in minor units, every `intervalCount` `interval`s. */
@@ -86,6 +87,38 @@ export interface CouponPreview {
   revision: string;
 }
 
+export interface CouponRedemptionRequest {
+  operationId: string;
+  revision: string;
+  termsVersion: string | null;
+  acceptedTerms: boolean;
+  approvedSpecificClauses: boolean;
+  language: 'en' | 'it';
+}
+
+export interface CouponRedemption {
+  operationId: string;
+  months: number;
+  startsAt: string;
+  endsAt: string;
+}
+
+interface CouponRedemptionApi {
+  operation_id: string;
+  months: number;
+  starts_at: string;
+  ends_at: string;
+}
+
+function redemption(data: CouponRedemptionApi): CouponRedemption {
+  return {
+    operationId: data.operation_id,
+    months: data.months,
+    startsAt: data.starts_at,
+    endsAt: data.ends_at,
+  };
+}
+
 interface CouponPreviewApi {
   months: number;
   starts_at: string;
@@ -106,6 +139,7 @@ interface BillingMeApi {
   subscribed: boolean;
   may_subscribe: boolean;
   trial_days: number | null;
+  free_access?: { starts_at: string; ends_at: string; months: number } | null;
 }
 
 interface PlanApi {
@@ -159,10 +193,38 @@ function billingMe(data: BillingMeApi): BillingMe {
     subscribed: data.subscribed,
     maySubscribe: data.may_subscribe,
     trialDays: data.trial_days,
+    freeAccess: data.free_access
+      ? {
+          startsAt: data.free_access.starts_at,
+          endsAt: data.free_access.ends_at,
+          months: data.free_access.months,
+        }
+      : null,
   };
 }
 
 export const billingService = {
+  redeemCoupon: async (request: CouponRedemptionRequest): Promise<CouponRedemption> => {
+    const { data } = await apiService.post<CouponRedemptionApi>('/billing/coupons/redemptions', {
+      operation_id: request.operationId,
+      revision: request.revision,
+      ...(request.termsVersion
+        ? {
+            terms_version: request.termsVersion,
+            accepted_terms: request.acceptedTerms,
+            approved_specific_clauses: request.approvedSpecificClauses,
+            language: request.language,
+          }
+        : {}),
+    });
+    return redemption(data);
+  },
+  fetchCouponRedemption: async (operationId: string): Promise<CouponRedemption> => {
+    const { data } = await apiService.get<CouponRedemptionApi>(
+      `/billing/coupons/redemptions/${encodeURIComponent(operationId)}`,
+    );
+    return redemption(data);
+  },
   previewCoupon: async (code: string): Promise<CouponPreview> => {
     const { data } = await apiService.post<CouponPreviewApi>('/billing/coupons/preview', { code });
     return {

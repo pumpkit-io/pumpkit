@@ -11,6 +11,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
+import pumpkit.billing.service as billing_service
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage
@@ -174,7 +175,7 @@ class _Access:
         """
         if stop is not None and stop.is_set():
             raise _Stopped()
-        connection = await publish.connection_to_publish_on(db, claim.scheduled_post)
+        connection = await publish.connection_to_publish_on(db, claim.scheduled_post, now=now)
         token = await publish.fresh_access_token(db, publisher, connection, now=now)
         return cls(claim, publisher, connection, token, stop)
 
@@ -186,6 +187,7 @@ class _Access:
         if self.stop is not None and self.stop.is_set():
             raise _Stopped()
         now = self.claim.clock()
+        await publish.require_access(db, user_id=self.claim.scheduled_post.user_id, now=now)
         if as_utc(self.connection.access_token_expires_at) - now <= publish.REFRESH_MARGIN:
             scheduled_post = self.claim.scheduled_post
             await users_service.lock_user_id(db, user_id=scheduled_post.user_id)
@@ -194,6 +196,12 @@ class _Access:
                 db, self.publisher, self.connection, now=now
             )
         await self.claim.renew(db)
+        entitlement = await billing_service.get_entitlement(
+            db, user_id=self.claim.scheduled_post.user_id
+        )
+        # End the access read before X, then check its fixed horizon after the commit.
+        await db.commit()
+        publish.check_access(entitlement, now=self.claim.clock())
         return self.token
 
 

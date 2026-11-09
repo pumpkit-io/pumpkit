@@ -165,6 +165,8 @@ class BillingGateway(Protocol):
         """Every Subscription the customer has, Ended ones included."""
         ...
 
+    async def has_open_subscription_checkout(self, *, customer_id: str) -> bool: ...
+
     async def has_unsettled_invoices(self, *, customer_id: str) -> bool:
         """Whether any customer invoice still requires settlement, including an older debt."""
         ...
@@ -410,6 +412,18 @@ class StripeBillingGateway:
         if not session.url:
             raise BillingProviderError(f"Stripe Checkout {session.id} has no URL")
         return CheckoutSession(id=session.id, url=session.url)
+
+    async def has_open_subscription_checkout(self, *, customer_id: str) -> bool:
+        def has_open() -> bool:
+            sessions = self._client.v1.checkout.sessions.list(
+                {"customer": customer_id, "status": "open", "limit": 100}
+            )
+            return any(
+                session.to_dict().get("mode") == "subscription"
+                for session in sessions.auto_paging_iter()
+            )
+
+        return await self._call("check pending subscription Checkout", has_open)
 
     async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
         def expire_all() -> list[str]:
@@ -690,6 +704,10 @@ class FakeBillingGateway:
         session_id = f"cs_fake_{len(self.checkouts)}"
         self._open_checkouts[session_id] = customer_id
         return CheckoutSession(id=session_id, url=self.checkout_url)
+
+    async def has_open_subscription_checkout(self, *, customer_id: str) -> bool:
+        self._maybe_fail("has_open_subscription_checkout")
+        return customer_id in self._open_checkouts.values()
 
     async def expire_open_checkouts(self, *, customer_id: str) -> list[str]:
         self._maybe_fail("expire_open_checkouts")

@@ -98,3 +98,63 @@ describe('billingService.subscribeNow', () => {
     });
   });
 });
+
+describe('cardless coupon redemption', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sends the operation and two-box acceptance without a paid immediate-start waiver', async () => {
+    const post = vi.spyOn(apiService, 'post').mockResolvedValue({
+      data: {
+        operation_id: 'op-one',
+        months: 3,
+        starts_at: '2028-01-31T12:01:00Z',
+        ends_at: '2028-04-30T12:01:00Z',
+      },
+    } as never);
+    const result = await billingService.redeemCoupon({
+      operationId: 'op-one',
+      revision: 'signed-preview',
+      termsVersion: '2026-11-08',
+      acceptedTerms: true,
+      approvedSpecificClauses: true,
+      language: 'it',
+    });
+    expect(post).toHaveBeenCalledWith('/billing/coupons/redemptions', {
+      operation_id: 'op-one',
+      revision: 'signed-preview',
+      terms_version: '2026-11-08',
+      accepted_terms: true,
+      approved_specific_clauses: true,
+      language: 'it',
+    });
+    expect(result).toEqual({
+      operationId: 'op-one',
+      months: 3,
+      startsAt: '2028-01-31T12:01:00Z',
+      endsAt: '2028-04-30T12:01:00Z',
+    });
+  });
+
+  it('reads free access independently of a Subscription', async () => {
+    vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        subscription: null,
+        subscribed: true,
+        may_subscribe: false,
+        trial_days: null,
+        free_access: {
+          starts_at: '2028-01-31T12:01:00Z',
+          ends_at: '2028-04-30T12:01:00Z',
+          months: 3,
+        },
+      },
+    } as never);
+    expect(await billingService.fetchBillingMe()).toEqual({
+      subscription: null,
+      subscribed: true,
+      maySubscribe: false,
+      trialDays: null,
+      freeAccess: { startsAt: '2028-01-31T12:01:00Z', endsAt: '2028-04-30T12:01:00Z', months: 3 },
+    });
+  });
+});

@@ -117,11 +117,11 @@ async def test_disable_is_idempotent_and_purge_keeps_claimable_assignments(
     assert {item["id"] for item in listed} == {issued["id"], still_claimable["id"]}
     disabled_config = Settings(**{**coupon_config.model_dump(), "COUPONS_ENABLED": False})
     _, before, _ = await commands("purge", config=disabled_config)
-    assert before == {"recipient_assignments_purged": 0}
+    assert before == {"records_purged": 0}
     fixed_clock.advance(timedelta(days=29))
     status, purged, error = await commands("purge", config=disabled_config)
     assert (status, error) == (0, "")
-    assert purged == {"recipient_assignments_purged": 1}
+    assert purged == {"records_purged": 1}
     _, inspected, _ = await commands("inspect", issued["id"])
     assert inspected["recipient_restricted"] is True
     assert inspected["recipient_retained"] is False
@@ -225,10 +225,10 @@ async def test_deadline_purge_uses_deadline_instant_and_missing_old_keys_fail_cl
         coupon_service.matches_recipient(coupon, "recipient@example.com", config=missing_old)
     fixed_clock.advance(timedelta(days=30, hours=23, minutes=59, seconds=59))
     _, pending, _ = await commands("purge")
-    assert pending == {"recipient_assignments_purged": 0}
+    assert pending == {"records_purged": 0}
     fixed_clock.advance(timedelta(seconds=1))
     _, purged, _ = await commands("purge")
-    assert purged == {"recipient_assignments_purged": 1}
+    assert purged == {"records_purged": 1}
 
 
 async def test_provider_catalog_failure_has_no_code_or_record(commands, fake_billing):
@@ -247,6 +247,6 @@ async def test_purge_records_deadline_terminal_time_even_for_general_codes(comma
     )
     fixed_clock.advance(timedelta(days=1))
     _, purged, _ = await commands("purge")
-    assert purged == {"recipient_assignments_purged": 0}
+    assert purged == {"records_purged": 0}
     _, inspected, _ = await commands("inspect", created["id"])
     assert inspected["unclaimable_at"] == deadline.isoformat()

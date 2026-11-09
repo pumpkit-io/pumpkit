@@ -4,11 +4,15 @@ import { Input } from '@/components/ui/input';
 import { errorMessage } from '@/services/apiErrors';
 import { billingService, type CouponPreview } from '@/services/billingService';
 import { count } from './counts';
+import { CouponAcceptanceFields, type CouponAcceptance } from './CouponAcceptanceFields';
+import type { LegalLanguage } from '@/features/legal/documents';
+import { useCouponRedemption } from './useCouponRedemption';
+import { useBilling } from './useBilling';
+import { useOnboarding } from '@/features/onboarding/useOnboarding';
 
 function exactDate(value: string): string {
-  return `${new Date(value).toLocaleString(undefined, {
+  return `${new Date(value).toLocaleDateString(undefined, {
     dateStyle: 'medium',
-    timeStyle: 'medium',
     timeZone: 'UTC',
   })} UTC`;
 }
@@ -22,6 +26,40 @@ export function CouponForm() {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<CouponPreview | null>(null);
+  const [language, setLanguage] = useState<LegalLanguage>('en');
+  const [acceptance, setAcceptance] = useState<CouponAcceptance>({
+    acceptedTerms: false,
+    approvedSpecificClauses: false,
+  });
+  const { load } = useBilling();
+  const { refresh } = useOnboarding();
+  const redemption = useCouponRedemption(() => {
+    setPreview(null);
+    setAcceptance({ acceptedTerms: false, approvedSpecificClauses: false });
+  });
+  const success = useRef<HTMLParagraphElement>(null);
+  const redemptionError = useRef<HTMLParagraphElement>(null);
+  const [continuing, setContinuing] = useState(false);
+  const [continueError, setContinueError] = useState(false);
+  const blocked =
+    checking || redemption.busy || Boolean(redemption.pending) || Boolean(redemption.completed);
+
+  useEffect(() => {
+    if (redemption.completed) success.current?.focus();
+  }, [redemption.completed]);
+
+  useEffect(() => {
+    if (redemption.error) redemptionError.current?.focus();
+  }, [redemption.error]);
+
+  async function continueToApp() {
+    setContinuing(true);
+    const next = await refresh();
+    const failed = next === undefined || next === 'paywall';
+    setContinueError(failed);
+    if (!failed) await load();
+    setContinuing(false);
+  }
 
   useEffect(() => {
     if (expanded) input.current?.focus();
@@ -35,10 +73,12 @@ export function CouponForm() {
 
   async function check(event: FormEvent) {
     event.preventDefault();
-    if (!code.trim() || checking) return;
+    if (!code.trim() || blocked) return;
     setChecking(true);
     setError(null);
+    redemption.clearError();
     setPreview(null);
+    setAcceptance({ acceptedTerms: false, approvedSpecificClauses: false });
     try {
       setPreview(await billingService.previewCoupon(code.trim()));
     } catch (cause) {
@@ -56,12 +96,61 @@ export function CouponForm() {
         className="min-h-11 px-0 focus-visible:ring-ring"
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
-        disabled={checking}
+        disabled={blocked}
         onClick={() => setExpanded(!expanded)}
       >
         Have a coupon?
       </Button>
-      {expanded && (
+      {redemption.completed && (
+        <div className="space-y-3 text-sm text-foreground">
+          <p
+            ref={success}
+            role="status"
+            tabIndex={-1}
+            className="font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            Coupon redeemed
+          </p>
+          <p>
+            {count(redemption.completed.months, 'free month', 'free months')}:{' '}
+            {exactDate(redemption.completed.startsAt)} to {exactDate(redemption.completed.endsAt)}.
+          </p>
+          <p>No automatic payment</p>
+          {continueError && (
+            <p role="alert">Couldn’t refresh your access. Continue again to check.</p>
+          )}
+          <Button type="button" disabled={continuing} onClick={() => void continueToApp()}>
+            {continuing ? 'Continuing…' : 'Continue'}
+          </Button>
+        </div>
+      )}
+      {redemption.error && (
+        <p
+          ref={redemptionError}
+          tabIndex={-1}
+          role="alert"
+          className="text-sm text-destructive focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {redemption.error}
+        </p>
+      )}
+      {(redemption.pending || redemption.busy) && !redemption.completed && (
+        <div className="space-y-3">
+          <p role="status" className="text-sm text-muted-foreground">
+            {redemption.busy
+              ? 'Confirming redemption…'
+              : 'Check your redemption before trying another code.'}
+          </p>
+          <Button
+            type="button"
+            disabled={redemption.busy}
+            onClick={() => redemption.pending && void redemption.submit(redemption.pending, true)}
+          >
+            Check redemption
+          </Button>
+        </div>
+      )}
+      {expanded && !redemption.completed && (
         <form id={`${id}-form`} onSubmit={(event) => void check(event)} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor={`${id}-code`} className="text-sm font-medium text-foreground">
@@ -76,13 +165,14 @@ export function CouponForm() {
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
-                disabled={checking}
+                disabled={blocked}
                 aria-invalid={Boolean(error)}
                 aria-describedby={error ? `${id}-error` : undefined}
                 className="min-h-11 min-w-0 focus-visible:ring-2 focus-visible:ring-ring"
                 onChange={(event) => {
                   setCode(event.target.value);
                   setError(null);
+                  redemption.clearError();
                   setPreview(null);
                 }}
               />
@@ -90,7 +180,7 @@ export function CouponForm() {
                 type="submit"
                 variant="solid"
                 className="min-h-11 shrink-0 focus-visible:ring-ring hover:bg-primary hover:brightness-95"
-                disabled={!code.trim() || checking}
+                disabled={!code.trim() || blocked}
               >
                 {checking ? 'Checking…' : 'Check code'}
               </Button>
@@ -118,7 +208,7 @@ export function CouponForm() {
               <p className="font-semibold">{count(preview.months, 'free month', 'free months')}</p>
               <dl className="space-y-2">
                 <div>
-                  <dt className="text-muted-foreground">Starts</dt>
+                  <dt className="text-muted-foreground">Starts when you redeem</dt>
                   <dd>
                     <time dateTime={preview.startsAt}>{exactDate(preview.startsAt)}</time>
                   </dd>
@@ -147,12 +237,62 @@ export function CouponForm() {
               <p className="font-medium">
                 {preview.nextPaymentAt
                   ? `Next payment: ${exactDate(preview.nextPaymentAt)}`
-                  : 'No automatic payment'}
+                  : language === 'it'
+                    ? 'Nessun pagamento automatico'
+                    : 'No automatic payment'}
               </p>
-              <p>
-                Free access ends on {exactDate(preview.endsAt)}. This creates no subscription or
-                obligation to pay.
+              <p lang={language}>
+                {language === 'it'
+                  ? `L’accesso gratuito termina il ${exactDate(preview.endsAt)}. Non crea un abbonamento né un obbligo di pagamento.`
+                  : `Free access ends on ${exactDate(preview.endsAt)}. This creates no subscription or obligation to pay.`}
               </p>
+              {preview.termsVersion && (
+                <>
+                  <label className="block text-xs">
+                    Terms language
+                    <select
+                      value={language}
+                      disabled={blocked}
+                      className="ml-2 min-h-11 rounded border border-input bg-card px-2 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                      onChange={(event) => {
+                        setLanguage(event.target.value as LegalLanguage);
+                        setAcceptance({ acceptedTerms: false, approvedSpecificClauses: false });
+                      }}
+                    >
+                      <option value="en">English</option>
+                      <option value="it">Italiano</option>
+                    </select>
+                  </label>
+                  <CouponAcceptanceFields
+                    language={language}
+                    value={acceptance}
+                    onChange={setAcceptance}
+                    disabled={blocked}
+                  />
+                </>
+              )}
+              <Button
+                type="button"
+                className="min-h-11 focus-visible:ring-ring"
+                disabled={
+                  blocked ||
+                  Boolean(
+                    preview.termsVersion &&
+                    (!acceptance.acceptedTerms || !acceptance.approvedSpecificClauses),
+                  )
+                }
+                onClick={() =>
+                  void redemption.submit({
+                    operationId: crypto.randomUUID(),
+                    revision: preview.revision,
+                    termsVersion: preview.termsVersion,
+                    ...acceptance,
+                    language,
+                  })
+                }
+              >
+                Redeem coupon
+              </Button>
             </div>
           )}
         </form>

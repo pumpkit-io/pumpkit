@@ -1096,7 +1096,7 @@ async def start_link_upload(db: AsyncSession, token: str, now: datetime) -> Link
     )
     if user is None or not may_hold_session(user) or app_connection is None:
         raise ForbiddenError("This upload link no longer works.", code="UPLOAD_LINK_REFUSED")
-    if not await billing_service.has_access(db, user_id=user.id):
+    if not await billing_service.has_access(db, user_id=user.id, now=now):
         raise ForbiddenError(SUBSCRIPTION_NEEDED)
     upload = LinkUpload(
         user=user,

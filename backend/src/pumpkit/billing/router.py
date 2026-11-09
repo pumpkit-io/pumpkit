@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
-from pumpkit.billing import mediator, service
+from pumpkit.billing import coupon_redemption, mediator, service
 from pumpkit.billing.allowance import sells_top_ups
 from pumpkit.billing.gateway import BillingGateway, get_billing_gateway
 from pumpkit.billing.schemas import (
@@ -14,6 +14,8 @@ from pumpkit.billing.schemas import (
     CheckoutResponse,
     CouponPreviewRequest,
     CouponPreviewResponse,
+    CouponRedemptionRequest,
+    CouponRedemptionResponse,
     PlansListResponse,
     TopUpCheckoutRequest,
 )
@@ -31,10 +33,11 @@ router = APIRouter(tags=["billing"], dependencies=[Depends(require_provider(serv
     status_code=status.HTTP_200_OK,
 )
 async def get_billing_me(
+    clock: Clock = Depends(get_clock),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> BillingMeResponse:
-    return await mediator.get_billing_me(db=db, user=current_user)
+    return await mediator.get_billing_me(db=db, user=current_user, now=clock())
 
 
 @router.get(
@@ -60,12 +63,13 @@ async def list_billing_plans(
 async def create_billing_checkout(
     request: Request,
     checkout_request: CheckoutRequest,
+    clock: Clock = Depends(get_clock),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ) -> CheckoutResponse:
     return await mediator.create_checkout_session(
-        db=db, gateway=gateway, user=current_user, checkout_request=checkout_request
+        db=db, gateway=gateway, user=current_user, checkout_request=checkout_request, clock=clock
     )
 
 
@@ -155,3 +159,25 @@ async def preview_coupon(
         code=preview_request.code.get_secret_value(),
         now=clock(),
     )
+
+
+@router.post("/billing/coupons/redemptions", response_model=CouponRedemptionResponse)
+@limiter.limit("20/minute")
+async def redeem_coupon(
+    request: Request,
+    redemption: CouponRedemptionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+    clock: Clock = Depends(get_clock),
+) -> CouponRedemptionResponse:
+    return await mediator.redeem_coupon(db, gateway, current_user, request=redemption, clock=clock)
+
+
+@router.get("/billing/coupons/redemptions/{operation_id}", response_model=CouponRedemptionResponse)
+async def lookup_coupon_redemption(
+    operation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> CouponRedemptionResponse:
+    return await coupon_redemption.lookup(db, user_id=current_user.id, operation_id=operation_id)

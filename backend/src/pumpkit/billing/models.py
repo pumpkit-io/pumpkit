@@ -1,7 +1,17 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal, Optional, get_args
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy import Enum as PgEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -172,3 +182,49 @@ class Coupon(Base):
     recipient_restricted: Mapped[bool] = mapped_column(Boolean, default=False)
     recipient_key_id: Mapped[Optional[str]] = mapped_column(String(64))
     recipient_fingerprint: Mapped[Optional[str]] = mapped_column(String(64))
+
+
+class CouponClaim(Base):
+    __tablename__ = "coupon_claims"
+    __table_args__ = (UniqueConstraint("coupon_id", "key_id", "fingerprint"),)
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("claim")
+    )
+    coupon_id: Mapped[str] = mapped_column(ForeignKey("coupons.id"), index=True)
+    key_id: Mapped[str] = mapped_column(String(64))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+
+
+class CouponHistory(Base):
+    __tablename__ = "coupon_history"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class FreeAccess(Base):
+    __tablename__ = "free_access"
+    __table_args__ = (
+        UniqueConstraint("user_id", "operation_id"),
+        CheckConstraint("ends_at > starts_at", name="positive_period"),
+        CheckConstraint("months > 0", name="positive_months"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("free_access")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    coupon_id: Mapped[str] = mapped_column(ForeignKey("coupons.id"), index=True)
+    claim_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("coupon_claims.id", ondelete="SET NULL"), unique=True
+    )
+    operation_id: Mapped[str] = mapped_column(String(128))
+    revision_digest: Mapped[str] = mapped_column(String(64))
+    months: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    allowance: Mapped[dict[str, Optional[int]]] = mapped_column(JSON)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    acceptance: Mapped[dict] = mapped_column(JSON)

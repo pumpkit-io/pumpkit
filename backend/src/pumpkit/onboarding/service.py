@@ -20,9 +20,11 @@ async def _needs_x_connection(db: AsyncSession, *, user_id: str) -> bool:
     return await x_connection_service.get_connection(db, user_id=user_id) is None
 
 
-async def next_step(db: AsyncSession, *, user_id: str) -> Optional[NextStep]:
+async def next_step(
+    db: AsyncSession, *, user_id: str, now: Optional[datetime] = None
+) -> Optional[NextStep]:
     """The Paywall comes first and is checked on every visit, even after Onboarding (ADR 0018)."""
-    if not await billing_service.has_access(db, user_id=user_id):
+    if not await billing_service.has_access(db, user_id=user_id, now=now):
         return "paywall"
     if await db.get(OnboardingFinish, user_id) is not None:
         return None

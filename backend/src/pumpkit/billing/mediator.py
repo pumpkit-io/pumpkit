@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Optional
@@ -6,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
-from pumpkit.billing import coupon_preview, coupon_service, service
+from pumpkit.billing import coupon_preview, coupon_redemption, coupon_service, service
 from pumpkit.billing.allowance import (
     SETTINGS_PAGE,
     limits,
@@ -20,7 +21,7 @@ from pumpkit.billing.gateway import (
     WebhookEvent,
     WebhookSignatureError,
 )
-from pumpkit.billing.models import TopUp
+from pumpkit.billing.models import Coupon, TopUp
 from pumpkit.billing.schemas import (
     BillingMeResponse,
     BillingPortalResponse,
@@ -28,6 +29,9 @@ from pumpkit.billing.schemas import (
     CheckoutRequest,
     CheckoutResponse,
     CouponPreviewResponse,
+    CouponRedemptionRequest,
+    CouponRedemptionResponse,
+    FreeAccessResponse,
     OfferedAllowanceResponse,
     OfferedTrialResponse,
     PlanResponse,
@@ -43,18 +47,26 @@ from pumpkit.core.errors import BadRequestError, ConflictError, RefusalError, Re
 from pumpkit.core.logging import logger
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.schemas import LinkToolResponse
-from pumpkit.core.time import as_utc
+from pumpkit.core.time import Clock, as_utc, system_clock
 
 
-async def get_billing_me(db: AsyncSession, user: User) -> BillingMeResponse:
+async def get_billing_me(
+    db: AsyncSession, user: User, now: Optional[datetime] = None
+) -> BillingMeResponse:
     """
     What the User holds and may do, from Pumpkit's copy only: never a call to
     the billing provider, so it reflects the last sync (ADR 0004).
     """
-    entitlement = await service.get_entitlement(db, user_id=user.id)
+    entitlement = await service.get_entitlement(db, user_id=user.id, now=now)
     subscription = entitlement.subscription
-    offer = await service.get_subscription_offer(db, user_id=user.id)
+    offer = await service.get_subscription_offer(db, user_id=user.id, now=now)
+    free = await service.get_free_access(db, user_id=user.id, now=now or system_clock())
     return BillingMeResponse(
+        free_access=FreeAccessResponse(
+            months=free.months, starts_at=as_utc(free.starts_at), ends_at=as_utc(free.ends_at)
+        )
+        if free
+        else None,
         subscription=(
             None
             if subscription is None
@@ -188,6 +200,7 @@ async def create_checkout_session(
     gateway: BillingGateway,
     user: User,
     checkout_request: CheckoutRequest,
+    clock: Clock = system_clock,
 ) -> CheckoutResponse:
     """
     Create a Stripe Checkout for one unit of a configured Plan, with a Trial if the User is eligible.
@@ -203,6 +216,11 @@ async def create_checkout_session(
     start a Subscription. The User's row stays locked from the sync to the new Checkout, so
     concurrent Checkouts for one User run one at a time.
     """
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    if await service.get_free_access(db, user_id=user.id, now=clock()):
+        raise ConflictError(
+            "Your free access is still running. Paid signup after free time is not available yet."
+        )
     terms_apply = service.requires_terms_acceptance()
     if terms_apply:
         _require_terms_acceptance(checkout_request)
@@ -219,9 +237,9 @@ async def create_checkout_session(
 
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     # Take the User's lock again: creating the customer committed and released it.
-    await users_service.lock_user(db, user)
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
-    offer = await service.get_subscription_offer(db, user_id=user.id)
+    offer = await service.get_subscription_offer(db, user_id=user.id, now=clock())
     if not offer.may_subscribe:
         # Commit before raising, or the 409 rolls back the sync of what Stripe just said.
         await db.commit()
@@ -495,6 +513,12 @@ async def preview_coupon(
         raise ConflictError(
             "The coupon offer is unavailable. Try again later or contact its sender."
         ) from exc
+    if user.stripe_customer_id and await gateway.has_open_subscription_checkout(
+        customer_id=user.stripe_customer_id
+    ):
+        raise ConflictError(
+            "You have a pending paid checkout. Finish it, let it expire, or contact support to cancel it before using a coupon."
+        )
     if user.stripe_customer_id and await gateway.has_unsettled_invoices(
         customer_id=user.stripe_customer_id
     ):
@@ -508,4 +532,80 @@ async def preview_coupon(
     )
     return await coupon_preview.preview(
         db, user=user, subscriptions=subscriptions, now=now, code=code
+    )
+
+
+async def redeem_coupon(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    user: User,
+    *,
+    request: CouponRedemptionRequest,
+    clock: Clock,
+) -> CouponRedemptionResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    existing = await coupon_redemption.find_result(
+        db, user_id=user.id, operation_id=request.operation_id
+    )
+    if existing is not None:
+        if (
+            existing.revision_digest
+            != hashlib.sha256(request.revision.get_secret_value().encode()).hexdigest()
+        ):
+            raise ConflictError(
+                "This operation was used for another coupon offer. Check its result."
+            )
+        return coupon_redemption.result(existing)
+    signed = coupon_redemption.decode(
+        request.revision.get_secret_value(), user_id=user.id, now=clock()
+    )
+    coupon = await coupon_redemption.lock_coupon(db, signed.coupon_id)
+    current = await _preview_locked_coupon(db, gateway, user, coupon=coupon, clock=clock)
+    signed = coupon_redemption.decode(
+        request.revision.get_secret_value(), user_id=user.id, now=current.starts_at
+    )
+    current_signed = coupon_redemption.decode(current.revision, user_id=user.id, now=clock())
+    if signed.state != current_signed.state:
+        raise ConflictError("The coupon offer has changed. Check the code and review it again.")
+    coupon_redemption.require_same_offer(signed, current, request)
+    access = await coupon_redemption.grant(
+        db, user=user, coupon=coupon, offer=current, request=request, now=current.starts_at
+    )
+    response = coupon_redemption.result(access)
+    await db.commit()
+    return response
+
+
+async def _preview_locked_coupon(
+    db: AsyncSession, gateway: BillingGateway, user: User, *, coupon: Coupon, clock: Clock
+) -> CouponPreviewResponse:
+    if not coupon_service.coupons_available(settings):
+        raise RefusedError("Coupons are unavailable on this instance.")
+    try:
+        coupon_service.validate_offers(
+            await gateway.list_plans(settings.BILLING_PLAN_KEYS), config=settings
+        )
+    except coupon_service.CouponCommandError as exc:
+        raise ConflictError("The coupon offer is unavailable. Try again later.") from exc
+    if user.stripe_customer_id and await gateway.has_open_subscription_checkout(
+        customer_id=user.stripe_customer_id
+    ):
+        raise ConflictError(
+            "You have a pending paid checkout. Finish it, let it expire, or contact support to cancel it before using a coupon."
+        )
+    if user.stripe_customer_id and await gateway.has_unsettled_invoices(
+        customer_id=user.stripe_customer_id
+    ):
+        raise ConflictError("Resolve your outstanding or processing payment before using a coupon.")
+    subscriptions = (
+        await gateway.list_subscriptions(customer_id=user.stripe_customer_id)
+        if user.stripe_customer_id
+        else []
+    )
+    if user.stripe_customer_id:
+        await service.sync_customer(
+            db, gateway, user_id=user.id, customer_id=user.stripe_customer_id
+        )
+    return await coupon_preview.preview(
+        db, user=user, subscriptions=subscriptions, now=clock(), coupon=coupon
     )

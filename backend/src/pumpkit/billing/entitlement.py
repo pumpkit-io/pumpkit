@@ -1,23 +1,36 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from pumpkit.billing.allowance import Allowance, allowance_at, may_buy_top_up
-from pumpkit.billing.models import Subscription
+from pumpkit.billing.allowance import Allowance, Limits, allowance_at, may_buy_top_up, paid_period
+from pumpkit.billing.models import FreeAccess, Subscription
+from pumpkit.core.time import as_utc, system_clock
 
 
 @dataclass(frozen=True)
 class Entitlement:
     subscription: Optional[Subscription]
     plans_sold: bool
+    free_access: Optional[FreeAccess] = None
+    now: datetime = field(default_factory=system_clock)
 
     @property
     def subscribed(self) -> bool:
-        return self.subscription is not None and self.subscription.status in {
-            "trialing",
-            "active",
-            "past_due",
-        }
+        return (
+            (
+                self.free_access is not None
+                and as_utc(self.free_access.starts_at)
+                <= self.now
+                < as_utc(self.free_access.ends_at)
+            )
+            or self.subscription is not None
+            and self.subscription.status
+            in {
+                "trialing",
+                "active",
+                "past_due",
+            }
+        )
 
     @property
     def has_access(self) -> bool:
@@ -28,6 +41,18 @@ class Entitlement:
         return may_buy_top_up(self.subscription)
 
     def allowance_at(self, moment: datetime) -> Optional[Allowance]:
+        if (
+            self.plans_sold
+            and self.free_access is not None
+            and moment >= as_utc(self.free_access.starts_at)
+            and (moment < as_utc(self.free_access.ends_at) or self.subscription is None)
+        ):
+            return Allowance(
+                period=paid_period(self.free_access.starts_at, moment),
+                limits=Limits(**self.free_access.allowance),
+                way_out=None,
+                ends_at=as_utc(self.free_access.ends_at),
+            )
         if not self.plans_sold or not self.subscribed or self.subscription is None:
             return None
         return allowance_at(self.subscription, moment)

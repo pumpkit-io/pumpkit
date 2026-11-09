@@ -2,10 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.auth.models import User
+from pumpkit.auth.models import MagicLink, User
+from pumpkit.core.errors import ForbiddenError
+from pumpkit.core.time import Clock, as_utc, system_clock
 
 
 async def get_user_by_email(
@@ -80,7 +82,7 @@ async def lock_user(db: AsyncSession, user: User) -> None:
     await lock_user_id(db, user_id=user.id)
 
 
-async def lock_user_id(db: AsyncSession, *, user_id: str) -> None:
+async def lock_user_id(db: AsyncSession, *, user_id: str) -> Optional[User]:
     """`lock_user` by the User's id: also serializes each User's checks and charges of usage."""
     query = (
         select(User)
@@ -88,7 +90,7 @@ async def lock_user_id(db: AsyncSession, *, user_id: str) -> None:
         .with_for_update()
         .execution_options(populate_existing=True)
     )
-    await db.execute(query)
+    return await db.scalar(query)
 
 
 async def set_stripe_customer_id(db: AsyncSession, user: User, stripe_customer_id: str) -> None:
@@ -157,3 +159,25 @@ async def update_user_profile(
 
     await db.flush()
     return user
+
+
+async def require_locked_user(
+    db: AsyncSession, *, user_id: str, clock: Clock = system_clock
+) -> User:
+    user = await db.scalar(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if user is None or (
+        user.suspended_until is not None and as_utc(user.suspended_until) > clock()
+    ):
+        raise ForbiddenError("This account cannot act. Sign in again or contact support.")
+    return user
+
+
+async def delete_account(db: AsyncSession, user: User) -> None:
+    await db.execute(delete(MagicLink).where(MagicLink.email == user.email))
+    await db.execute(delete(User).where(User.id == user.id))
+    await db.flush()

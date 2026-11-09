@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import (
     AfterValidator,
@@ -73,12 +73,19 @@ class BillingSubscriptionResponse(BaseModel):
     cancel_at: Optional[datetime]
 
 
+class FreeAccessResponse(BaseModel):
+    months: int
+    starts_at: datetime
+    ends_at: datetime
+
+
 class BillingMeResponse(BaseModel):
     """
     What the authenticated User holds and may do.
     `subscription` is the Running one, else `incomplete`, never Ended; `trial_days` is the Trial a Checkout would start with.
     """
 
+    free_access: Optional[FreeAccessResponse] = None
     subscription: Optional[BillingSubscriptionResponse]
     subscribed: bool
     may_subscribe: bool
@@ -166,3 +173,18 @@ class CouponPreviewResponse(BaseModel):
     next_payment_at: Optional[datetime] = None
     terms_version: Optional[str]
     revision: str
+
+
+class CouponRedemptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str = Field(min_length=16, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
+    revision: SecretStr = Field(min_length=1, max_length=8192)
+    terms_version: Optional[str] = None
+    accepted_terms: Optional[Accepted] = None
+    approved_specific_clauses: Optional[Accepted] = None
+    language: Literal["en", "it"] = "en"
+
+
+class CouponRedemptionResponse(FreeAccessResponse):
+    operation_id: str

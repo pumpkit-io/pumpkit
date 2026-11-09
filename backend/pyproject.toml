@@ -93,6 +93,7 @@ pythonVersion = "3.13"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+markers = ["postgres: opt-in isolated PostgreSQL HTTP contention tests"]
 
 # ADR 0008's import rules. pumpkit.main, pumpkit.models and pumpkit.mcp_server wire every area
 # together, so they sit outside the layers.

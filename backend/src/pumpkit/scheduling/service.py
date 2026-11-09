@@ -27,6 +27,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Subquery
 
 from pumpkit.billing.models import TopUpCharge
+from pumpkit.core.errors import ConflictError
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Media, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -708,3 +709,19 @@ async def record_failed(
     scheduled_post.failed_reason = reason
     scheduled_post.updated_at = now
     await db.flush()
+
+
+async def require_settled_publishing_before_account_deletion(
+    db: AsyncSession, *, user_id: str
+) -> None:
+    # Lock waiting posts too, so a publisher cannot claim one after this check.
+    states = await db.scalars(
+        select(ScheduledPost.state)
+        .where(ScheduledPost.user_id == user_id)
+        .order_by(ScheduledPost.id)
+        .with_for_update()
+    )
+    if any(state == PUBLISHING for state in states):
+        raise ConflictError(
+            "A post is publishing. Wait for publishing or recovery to finish, then retry account deletion."
+        )

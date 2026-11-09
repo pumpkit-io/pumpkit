@@ -54,6 +54,7 @@ export function SubscriptionCard({
   const { openPortal, error } = useOpenPortal();
 
   const subscription = data?.me.subscription ?? null;
+  const freeAccess = data?.me.freeAccess;
   const plan = subscription ? data?.plans.find((p) => p.key === subscription.planKey) : undefined;
   const paymentFailed = subscription ? PAYMENT_FAILED_STATUSES.has(subscription.status) : false;
   const next = subscription ? nextDateLabel(subscription) : null;
@@ -97,6 +98,26 @@ export function SubscriptionCard({
               {paymentFailed ? 'Fix payment' : 'Manage subscription'}
             </Button>
           </div>
+        </div>
+      ) : freeAccess ? (
+        <div className="space-y-2 rounded-lg border border-border p-4 font-sans text-sm text-foreground">
+          <p className="text-lg font-semibold">{data.plans[0]?.productName ?? 'Your plan'}</p>
+          <Badge variant="success">Free access</Badge>
+          <p>
+            Free access:{' '}
+            {new Date(freeAccess.startsAt).toLocaleDateString(undefined, {
+              dateStyle: 'long',
+              timeZone: 'UTC',
+            })}{' '}
+            to{' '}
+            {new Date(freeAccess.endsAt).toLocaleDateString(undefined, {
+              dateStyle: 'long',
+              timeZone: 'UTC',
+            })}{' '}
+            UTC
+          </p>
+          <p>No automatic payment</p>
+          <p>Your free access creates no subscription or obligation to pay.</p>
         </div>
       ) : null}
     </SettingsCard>

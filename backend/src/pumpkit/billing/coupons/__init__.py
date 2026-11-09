@@ -74,9 +74,7 @@ async def run_cli(
                     await coupon_service.disable(db, args.id, now=clock())
                 )
             elif args.command == "purge":
-                result = {
-                    "recipient_assignments_purged": await coupon_service.purge(db, now=clock())
-                }
+                result = {"records_purged": await coupon_service.purge(db, now=clock())}
             else:
                 result = coupon_service.describe(await coupon_service.inspect(db, args.id))
             await db.commit()
