@@ -17,6 +17,7 @@ export interface Subscription {
   planKey: string | null;
   currentPeriodEnd: string | null;
   cancelAt: string | null;
+  paidThrough?: string | null;
 }
 
 /** What the backend says the User holds and may do. */
@@ -26,12 +27,15 @@ export interface BillingMe {
   maySubscribe: boolean;
   /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
+  pendingCouponOperation?: boolean;
+  pendingCouponOperationId?: string | null;
+  couponDeferral?: boolean;
   freeAccess?: {
     startsAt: string;
     endsAt: string;
     months: number;
-    currentStartsAt?: string;
-    currentEndsAt?: string;
+    currentStartsAt?: string | null;
+    currentEndsAt?: string | null;
     queuedStartsAt?: string | null;
   } | null;
 }
@@ -104,6 +108,9 @@ export interface CouponRedemptionRequest {
 }
 
 export interface CouponRedemption {
+  status?: 'pending' | 'completed' | 'refused';
+  nextPaymentAt?: string | null;
+  detail?: string | null;
   operationId: string;
   months: number;
   startsAt: string;
@@ -111,6 +118,9 @@ export interface CouponRedemption {
 }
 
 interface CouponRedemptionApi {
+  status?: 'pending' | 'completed' | 'refused';
+  next_payment_at?: string | null;
+  detail?: string | null;
   operation_id: string;
   months: number;
   starts_at: string;
@@ -120,6 +130,9 @@ interface CouponRedemptionApi {
 function redemption(data: CouponRedemptionApi): CouponRedemption {
   return {
     operationId: data.operation_id,
+    status: data.status,
+    nextPaymentAt: data.next_payment_at,
+    detail: data.detail,
     months: data.months,
     startsAt: data.starts_at,
     endsAt: data.ends_at,
@@ -142,16 +155,20 @@ interface BillingMeApi {
     plan_key: string | null;
     current_period_end: string | null;
     cancel_at: string | null;
+    paid_through?: string | null;
   } | null;
   subscribed: boolean;
   may_subscribe: boolean;
   trial_days: number | null;
+  pending_coupon_operation?: boolean;
+  pending_coupon_operation_id?: string | null;
+  coupon_deferral?: boolean;
   free_access?: {
     starts_at: string;
     ends_at: string;
     months: number;
-    current_starts_at?: string;
-    current_ends_at?: string;
+    current_starts_at?: string | null;
+    current_ends_at?: string | null;
     queued_starts_at?: string | null;
   } | null;
 }
@@ -203,10 +220,14 @@ function billingMe(data: BillingMeApi): BillingMe {
       planKey: s.plan_key,
       currentPeriodEnd: s.current_period_end,
       cancelAt: s.cancel_at,
+      paidThrough: s.paid_through,
     },
     subscribed: data.subscribed,
     maySubscribe: data.may_subscribe,
     trialDays: data.trial_days,
+    pendingCouponOperation: data.pending_coupon_operation,
+    pendingCouponOperationId: data.pending_coupon_operation_id,
+    couponDeferral: data.coupon_deferral,
     freeAccess: data.free_access
       ? {
           startsAt: data.free_access.starts_at,
@@ -323,6 +344,11 @@ export const billingService = {
    */
   subscribeNow: async (): Promise<BillingMe> => {
     const { data } = await apiService.post<BillingMeApi>('/billing/subscribe-now');
+    return billingMe(data);
+  },
+
+  cancelRenewal: async (): Promise<BillingMe> => {
+    const { data } = await apiService.post<BillingMeApi>('/billing/cancel-renewal');
     return billingMe(data);
   },
 

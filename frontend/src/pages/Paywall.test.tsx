@@ -674,6 +674,23 @@ describe('Coupon preview on the Paywall', () => {
     },
   );
 
+  it('releases a definitely refused operation and requires a fresh review', async () => {
+    vi.mocked(billingService.redeemCoupon).mockResolvedValue({
+      ...COUPON_RESULT,
+      status: 'refused',
+      detail: 'This subscription changed. Check the code again.',
+    });
+    renderPaywall();
+    await reviewCoupon();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This subscription changed');
+    expect(screen.queryByText('Coupon redeemed')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Check redemption' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Coupon code' })).toHaveValue('private-code');
+    expect(screen.getByRole('button', { name: 'Check code' })).toBeEnabled();
+    expect(sessionStorage.getItem(storageKey('coupon-redemption'))).toBeNull();
+  });
+
   it('requires fresh review after conflict and retains the code', async () => {
     vi.mocked(billingService.redeemCoupon).mockRejectedValueOnce(
       apiError(409, 'The offer changed. Check the code again.'),
