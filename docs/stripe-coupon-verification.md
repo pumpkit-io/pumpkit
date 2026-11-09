@@ -20,8 +20,10 @@ The November 9, 2026 run validated merged main `ca29955e214fbf375673ecbcc3683f5e
 | Case | Observed result |
 | --- | --- |
 | Monthly classic subscriber, repeated coupons | Two grants stacked after paid coverage, original usage/reset remained, no additional nonzero invoice on deferral, and a full paid month began at the final free end. |
+| Monthly classic to annual billing | The app changed the future price, retained the accepted free end and original allowance, added no immediate nonzero invoice, and resumed with a full paid year. |
 | Monthly flexible to annual billing | The app changed the future price, preserved free/paid time and usage, added no immediate nonzero invoice, and resumed with a full paid year. |
 | Annual classic to monthly billing | Initially failed with Stripe HTTP 400 for explicit `billing_cycle_anchor=unchanged`. The correction below passed the browser flow, lost-acknowledgement recovery and first full paid month. |
+| Annual flexible to monthly billing | The app retained the accepted free end and original allowance, added no immediate nonzero invoice, and resumed with a full paid month. |
 | Annual flexible cancellation during deferral | Cancellation retained the full free end; advancing through it ended the subscription without another payment. |
 | Existing introductory trial, classic | The original reduced allowance, usage, reset and trial end remained; the full free month followed, then a full paid month. |
 | Existing introductory trial, flexible, cancellation before claim | The claim retained cancellation and queued free access; the provider ended without a new charge. |
@@ -41,7 +43,7 @@ The November 9, 2026 run validated merged main `ca29955e214fbf375673ecbcc3683f5e
 
 The original opt-in provider suite passed 16 cases. The corrected gateway/date-boundary cases passed another eight: four direction/mode combinations, two expired-date refusals and two last-second renewals. These are separate recorded invocations, not one claim that a single command ran all 24 together.
 
-The ordinary pre-correction suites passed `make check`, 2,456 backend tests and 1,084 frontend tests. The corrective gateway/recovery suite passed 123 tests, including legacy/new request-policy recovery. Final branch CI supplies fresh full-suite results. The local Emulator browser baseline also passed four coupon journeys and ten additional checks, but does not replace these real-provider observations.
+Final local `make check` and `make test` passed: 2,459 backend tests (59 skipped, including all 24 opt-in provider cases) and 1,084 frontend tests. The corrective gateway/recovery suite separately passed 123 tests, including legacy/new request-policy recovery. The local Emulator browser baseline also passed four coupon journeys and ten additional checks. After the correction and restoration, four coupon E2E tests and four browser groups passed again, including both deferred interval-switch directions, cancellation, stacking and cardless future signup. Emulator results do not replace the real-provider observations.
 
 ## Classic interval correction and replay compatibility
 
@@ -82,9 +84,15 @@ The generic trial-ending preview describes a trial ending on a sample date, a sa
 
 The generic renewal preview describes automatic renewal on a sample date and a saved card charged then, with a payment-details update link. No explicit cancellation link was visible in that preview. These are generic example templates, not a delivered notice for a tested customer; cardless access must not imply a saved card or an arranged subscription. Operators and Self-hosters must establish appropriate notice wording and delivery before enabling such reminders. This run supplies no legal approval or proof of delivery.
 
-The live portal configuration selector showed only Default. Its public login was inactive, but its preview still exposed cancellation. The sandbox Default likewise had no active public login. Shared configurations were left unchanged. An API inventory of all sandbox configurations and cleanup of owned fixtures is recorded separately; the live preview alone does not establish every historical link or outstanding session is safe.
+The live portal configuration selector showed only Default. Its public login was inactive, but its preview still exposed cancellation. The sandbox Default likewise had no active public login. Shared configurations were left unchanged. After owned-fixture cleanup, the sandbox API still listed two other active configurations with subscription actions and one active public login. They were left unchanged. The live preview alone does not establish every historical link or outstanding session is safe.
 
 Stripe [documents](https://docs.stripe.com/customer-management#features) a five-minute initial portal-session lifetime and expiry within one hour of its most recent use. An idle timeout does not by itself prove a fixed drain period: ongoing activity and already-open confirmations still need verification under #430.
+
+## Cleanup
+
+The app run's 24 owned clocks and their synthetic customers were removed; final provider inventory found no owned clock or older `pumpkit-394` harness clock remaining. Both owned prices and the product were archived. All four owned portal configurations and their public logins were disabled. Open owned Checkout sessions were expired, the synthetic unpaid invoice voided and the synthetic schedule released during cleanup. The opt-in provider fixtures separately delete their clocks and archive their catalogs.
+
+The test webhook listener was stopped. The disposable real-provider app/database and private clock/fault overrides were removed, the tracked dev-stack script restored, and the worktree restarted with dummy credentials and the local Stripe Emulator. Publishing, SMTP and analytics remain off. No other worktree's app or shared/live Stripe configuration was changed.
 
 ## Remaining activation work
 
