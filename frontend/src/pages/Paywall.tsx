@@ -8,6 +8,7 @@ import { checkoutStatusOf } from '@/features/billing/checkoutArrival';
 import { CouponForm } from '@/features/billing/CouponForm';
 import { PlanPicker } from '@/features/billing/PlanPicker';
 import { PaidSignup } from '@/features/billing/PaidSignup';
+import { PlanChange } from '@/features/billing/PlanChange';
 import { useBilling } from '@/features/billing/useBilling';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
@@ -140,6 +141,7 @@ function PaywallContent() {
   const { data, isLoading, loadError, load } = useBilling();
   const cancelled = useCancelledArrival();
   const [signupPending, setSignupPending] = useState(false);
+  const [planChangePending, setPlanChangePending] = useState(false);
   useViewedOnce();
 
   useEffect(() => {
@@ -159,6 +161,17 @@ function PaywallContent() {
       <div className="space-y-6">
         <Heading title="Choose a plan" />
         <PlanSkeleton />
+      </div>
+    );
+  }
+  if (data.me.pendingPlanChangeId || planChangePending) {
+    return (
+      <div className="space-y-5">
+        <Heading
+          title="Confirm your billing frequency change"
+          lead="Check the earlier change before starting another billing action."
+        />
+        <PlanChange data={data} blocked onPendingChange={setPlanChangePending} />
       </div>
     );
   }
