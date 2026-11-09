@@ -932,3 +932,36 @@ async def test_future_signup_refuses_elapsed_absolute_date_before_any_provider_w
             first_payment_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
         )
     assert http.methods == []
+
+
+async def test_in_progress_signup_idempotency_key_is_uncertain_not_definite_refusal():
+    class InProgressStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            return (
+                json.dumps(
+                    {
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "idempotency_key_in_use",
+                            "message": "Still running",
+                        }
+                    }
+                ),
+                400,
+                {},
+            )
+
+    gateway = StripeBillingGateway(
+        stripe.StripeClient(
+            "sk_test_contract", http_client=InProgressStripe("{}"), max_network_retries=0
+        )
+    )
+    with pytest.raises(BillingProviderError) as caught:
+        await gateway.create_paid_signup(
+            customer_id="cus_Contract",
+            price_id="price_monthly",
+            payment_method_id="pm_owned",
+            operation_id="paid_signup_original",
+            first_payment_at=datetime(2028, 1, 31, tzinfo=timezone.utc),
+        )
+    assert not isinstance(caught.value, DeferralRefused)

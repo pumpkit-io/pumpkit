@@ -643,6 +643,8 @@ class StripeBillingGateway:
                 )
             )
         except stripe.InvalidRequestError as error:
+            if error.code == "idempotency_key_in_use":
+                raise BillingProviderError("Stripe is still processing this signup key") from error
             raise DeferralRefused("Stripe refused the exact future signup") from error
         except stripe.StripeError as error:
             raise BillingProviderError("Stripe failed to create future signup") from error
@@ -1019,6 +1021,11 @@ class FakeBillingGateway:
 
     paid_signup_setups: dict[str, PaidSignupSetup] = field(default_factory=dict)
     paid_signups_created: list[str] = field(default_factory=list)
+    paid_signup_create_attempts: list[str] = field(default_factory=list)
+    delay_paid_signup_creation: bool = False
+    pending_paid_signup_creations: dict[str, tuple[str, str, datetime, datetime]] = field(
+        default_factory=dict
+    )
 
     async def create_paid_signup_setup(
         self,
@@ -1076,6 +1083,7 @@ class FakeBillingGateway:
         operation_id: str,
         first_payment_at: datetime,
     ) -> None:
+        self.paid_signup_create_attempts.append(operation_id)
         self._maybe_fail("create_paid_signup")
         if first_payment_at <= self.clock():
             raise DeferralRefused("The accepted date has passed")
@@ -1084,19 +1092,55 @@ class FakeBillingGateway:
             for s in self._subscriptions.get(customer_id, {}).values()
         ):
             return
+        if self.delay_paid_signup_creation:
+            self.pending_paid_signup_creations.setdefault(
+                operation_id,
+                (
+                    customer_id,
+                    price_id,
+                    first_payment_at,
+                    self.clock(),
+                ),
+            )
+            raise BillingProviderError("Remote creation continues after the client timed out")
+        self._complete_paid_signup_creation(customer_id, price_id, operation_id, first_payment_at)
+        self._maybe_fail("after_create_paid_signup")
+
+    def complete_pending_paid_signup(self, operation_id: str) -> None:
+        customer_id, price_id, first_payment_at, accepted_at = (
+            self.pending_paid_signup_creations.pop(operation_id)
+        )
+        self._complete_paid_signup_creation(
+            customer_id, price_id, operation_id, first_payment_at, accepted_at=accepted_at
+        )
+
+    def _complete_paid_signup_creation(
+        self,
+        customer_id: str,
+        price_id: str,
+        operation_id: str,
+        first_payment_at: datetime,
+        accepted_at: Optional[datetime] = None,
+    ) -> None:
+        accepted_at = accepted_at or self.clock()
+        started_paying = self.clock() >= first_payment_at
         plan = next(p for p in self.plans if p.price_id == price_id)
         self.paid_signups_created.append(operation_id)
         self.set_subscription(
             customer_id,
             SubscriptionState(
                 id=f"sub_signup_{len(self.paid_signups_created)}",
-                status="trialing",
+                status="active" if started_paying else "trialing",
                 price_id=price_id,
                 plan_key=plan.key,
-                current_period_start=self.clock(),
-                current_period_end=first_payment_at,
-                created_at=self.clock(),
-                trial_start=self.clock(),
+                current_period_start=first_payment_at if started_paying else accepted_at,
+                current_period_end=months_after(
+                    first_payment_at, 12 if plan.interval == "year" else 1
+                )
+                if started_paying
+                else first_payment_at,
+                created_at=accepted_at,
+                trial_start=accepted_at,
                 trial_end=first_payment_at,
                 billing_cycle_anchor=first_payment_at,
                 item_id=f"si_{operation_id}",
@@ -1106,9 +1150,9 @@ class FakeBillingGateway:
                 billing_mode="classic",
                 latest_invoice_status="paid",
                 paid_signup_operation=operation_id,
+                paid_current_period=started_paying,
             ),
         )
-        self._maybe_fail("after_create_paid_signup")
 
     async def has_open_subscription_checkout(self, *, customer_id: str) -> bool:
         self._maybe_fail("has_open_subscription_checkout")

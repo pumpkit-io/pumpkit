@@ -1559,9 +1559,14 @@ it('distinguishes the original introductory trial from queued full free access a
   expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeEnabled();
 });
 
-it.each(['month', 'year'])(
+it.each(['month', 'year', 'same-day'])(
   'reviews the exact future %s offer before separate paid acceptance',
-  async (interval) => {
+  async (scenario) => {
+    const interval = scenario === 'same-day' ? 'month' : scenario;
+    const firstPaymentAt =
+      scenario === 'same-day'
+        ? new Date().toISOString().slice(0, 10) + 'T23:59:59Z'
+        : '2028-03-31T12:00:00Z';
     sessionStorage.clear();
     vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
     vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
@@ -1582,7 +1587,7 @@ it.each(['month', 'year'])(
       currency: 'eur',
       interval,
       intervalCount: 1,
-      firstPaymentAt: '2028-03-31T12:00:00Z',
+      firstPaymentAt,
       termsVersion: '2026-11-08',
       revision: 'future-offer',
     });
@@ -1592,7 +1597,7 @@ it.each(['month', 'year'])(
       detail: null,
       url: 'https://checkout.stripe.test/setup',
       sessionId: 'cs_setup',
-      firstPaymentAt: '2028-03-31T12:00:00Z',
+      firstPaymentAt,
       planKey,
     });
     vi.mocked(redirectTo).mockClear();
@@ -1605,9 +1610,14 @@ it.each(['month', 'year'])(
       }),
     );
     const offer = await plan.findByRole('region', { name: 'Review future subscription' });
-    expect(offer).toHaveTextContent('March 31, 2028');
-    expect(offer).toHaveTextContent('12:00:00 UTC');
-    expect(offer).toHaveTextContent('No payment today');
+    if (scenario === 'same-day') {
+      expect(offer).toHaveTextContent('23:59:59 UTC');
+    } else {
+      expect(offer).toHaveTextContent('March 31, 2028');
+      expect(offer).toHaveTextContent('12:00:00 UTC');
+    }
+    expect(offer).toHaveTextContent('No immediate payment');
+    expect(offer).not.toHaveTextContent('No payment today');
     const confirm = within(offer).getByRole('button', { name: 'Agree and continue to checkout' });
     expect(confirm).toBeDisabled();
     expect(billingService.createPaidSignup).not.toHaveBeenCalled();

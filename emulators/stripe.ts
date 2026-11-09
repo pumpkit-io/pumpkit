@@ -495,7 +495,7 @@ export function pumpkitStripe(target: WebhookTarget) {
         if (session.status !== 'open')
           return c.html(page(`This Checkout is ${session.status}`, ''), 410);
         if (session.mode === 'setup')
-          return c.html(page('Save a card for your accepted future plan', `<p>No payment today. Your free access stays unchanged.</p><form method="post" action="/checkout/${session.id}/pay"><button type="submit">Save card</button></form><p><a href="${escapeHtml(session.cancel_url)}">Cancel</a></p>`));
+          return c.html(page('Save a card for your accepted future plan', `<p>No immediate payment. Your free access stays unchanged.</p><form method="post" action="/checkout/${session.id}/pay"><button type="submit">Save card</button></form><p><a href="${escapeHtml(session.cancel_url)}">Cancel</a></p>`));
         const price = state.prices[session.pumpkit_line_item.price];
         const product = state.products[price.product];
         const amount = `${(price.unit_amount / 100).toFixed(2)} ${price.currency.toUpperCase()}`;

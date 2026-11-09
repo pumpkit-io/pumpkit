@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 
 import pytest
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from pumpkit.core.errors import ConflictError
 from tests.billing.postgres.test_coupon_contention import blocked_requests
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_paid_signups import SIGNUPS, _open
+from tests.billing.test_paid_signups import billing_clock as billing_clock
 from tests.billing.test_top_ups import _send
 
 pytestmark = pytest.mark.postgres
@@ -37,7 +39,10 @@ async def test_independent_duplicate_recovery_and_provider_nudge_create_one_subs
             )
         )
         results = await blocked_requests(db_engine, control, tasks, 3)
-    assert all(r.json()["status"] == "completed" for r in results[:2])
+    assert all(r.json()["status"] in {"pending", "completed"} for r in results[:2])
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "completed"
     assert len(fake_billing.paid_signups_created) == 1
     me = (await authed_client.get("/api/v1/billing/me")).json()
     assert me["free_access"]["ends_at"] == free["ends_at"]
@@ -84,3 +89,55 @@ async def test_cancellation_racing_recovery_removes_future_payment_and_retains_f
     me = (await authed_client.get("/api/v1/billing/me")).json()
     assert me["subscribed"] is True
     assert me["free_access"]["ends_at"] == free["ends_at"]
+
+
+@pytest.mark.parametrize("cancel", [True, False])
+async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletion_lock(
+    db_engine, db_session_maker, authed_client, coupons, user, fake_billing, fixed_clock, cancel
+):
+    free, request, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    fake_billing.delay_paid_signup_creation = True
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "pending"
+    if not cancel:
+        target = datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00"))
+        fixed_clock.advance(target - fixed_clock())
+
+    async def delete():
+        async with db_session_maker() as deletion_db:
+            with pytest.raises(ConflictError):
+                await delete_account(deletion_db, fake_billing, user_id=user.id)
+
+    async with db_session_maker() as control:
+        await control.scalar(select(User).where(User.id == user.id).with_for_update())
+        action = (
+            authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")
+            if cancel
+            else authed_client.get(SIGNUPS + "/" + request["operation_id"])
+        )
+        tasks = [asyncio.create_task(action), asyncio.create_task(delete())]
+        results = await blocked_requests(db_engine, control, tasks, 2)
+    assert results[0].json()["status"] == "pending"
+    assert len(fake_billing.paid_signup_create_attempts) == 1
+    fake_billing.complete_pending_paid_signup(fake_billing.paid_signup_create_attempts[0])
+    async with db_session_maker() as control:
+        await control.scalar(select(User).where(User.id == user.id).with_for_update())
+        tasks = [
+            asyncio.create_task(authed_client.get(SIGNUPS + "/" + request["operation_id"])),
+            asyncio.create_task(
+                _send(
+                    authed_client,
+                    fake_billing,
+                    "evt_pg_late",
+                    "customer.subscription.created",
+                    {"customer": "cus_fake_1"},
+                )
+            ),
+        ]
+        results = await blocked_requests(db_engine, control, tasks, 2)
+    assert results[0].json()["status"] == "refused"
+    states = await fake_billing.list_subscriptions(customer_id="cus_fake_1")
+    assert len(states) == 1 and states[0].status == "canceled"
+    assert len(fake_billing.paid_signup_create_attempts) == 1

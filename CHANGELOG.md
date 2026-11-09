@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users can arrange renewal across stacked coupon months and see accurate same-day payment wording. Cancellation of an uncertain signup stays pending until the provider outcome is known, preventing a late subscription from escaping cancellation. **Upgrade notes:** apply migration `0050`; pre-checkpoint pending signups need provider-backed resolution before activation.
+
 - Users with coupon free access can explicitly arrange a monthly or annual paid renewal for its exact end, recover or cancel interrupted signup, and keep every free month and its Allowance. **Upgrade notes:** apply migration `0049` and add paid-signup recovery to billing recovery checks; Coupons remain disabled by default pending final Stripe validation. Preactivation grants with fractional timestamps retain their benefits and can subscribe after expiry; see `docs/coupons.md`.
 
 - Further coupon claims follow their current free-access grant’s subscription, so retained older cancelled subscriptions cannot block redemption or bind unrelated cardless access.

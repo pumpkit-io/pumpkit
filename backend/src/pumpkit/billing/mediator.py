@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -483,12 +483,9 @@ async def handle_webhook(
     signature: Optional[str],
     now: datetime,
 ) -> None:
-    """
-    Verify the webhook, deduplicate by event ID, and sync the customer it nudges about (ADR 0004).
+    """Deduplicate and sync a nudge before recovering paid signups from durable checkpoints.
 
-    The `stripe_events` insert and the sync share one transaction, committed here; handlers
-    must not commit. Anything that raises rolls the whole event back, dedup row included, and
-    the error response (502 for the gateway, else 500) makes Stripe retry.
+    Replays skip ordinary sync but still recover signups after an interrupted checkpoint.
     """
     if not signature:
         raise BadRequestError("Missing Stripe signature header.")
@@ -504,12 +501,21 @@ async def handle_webhook(
         if not is_new:
             logger.info("Ignoring replayed Stripe event %s (%s)", event.id, event.type)
             await db.rollback()
-            return
-        added = await _dispatch_event(db, gateway, event, now=now)
-        await db.commit()
+            added = []
+        else:
+            added = await _dispatch_event(db, gateway, event, now=now)
+            await db.commit()
     except Exception:
         await db.rollback()
         raise
+    if _is_subscription_nudge(event) and event.customer_id:
+        user = await users_service.get_user_by_stripe_customer_id(db, event.customer_id)
+        if user:
+            operations = await paid_signups.pending(db, user_id=user.id)
+            for signup in operations:
+                await _recover_paid_signup(
+                    db, gateway, user=user, operation=signup, clock=lambda: now
+                )
     for top_up in added:
         if as_utc(top_up.expires_at) > now:
             posthog_client.capture("top_up_added", distinct_id=top_up.user_id)
@@ -555,8 +561,6 @@ async def _dispatch_event(
         return []
     if syncs_subscriptions:
         await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
-        for signup in await paid_signups.pending(db, user_id=user.id):
-            await paid_signups.reconcile(db, gateway, user=user, operation=signup, now=now)
         for operation in await coupon_operations.pending(db, user_id=user.id):
             await coupon_operations.reconcile(
                 db, gateway, user=user, operation=operation, now=now, mutate=False
@@ -829,6 +833,14 @@ async def _recover_paid_signup(
 ) -> PaidSignupResponse:
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
+    if cancel and operation.cancel_requested_at is None:
+        operation.cancel_requested_at = clock()
+        # Cancellation intent must outlive provider reads and any still-running remote creation.
+        await db.commit()
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        operation = await paid_signups.find(
+            db, user_id=user.id, operation_id=operation.operation_id
+        )
     if operation.status == "pending" and not operation.customer_id:
         if cancel:
             answer = paid_signups.refuse(
@@ -864,5 +876,61 @@ async def _recover_paid_signup(
     answer = await paid_signups.reconcile(
         db, gateway, user=user, operation=operation, now=clock(), cancel=cancel
     )
+    if operation.status == "pending" and operation.creation_state == "ready":
+        answer = await _dispatch_paid_signup(
+            db, gateway, user=user, operation=operation, clock=clock, prior_unknown=False
+        )
+    elif (
+        operation.status == "pending"
+        and operation.creation_state == "uncertain"
+        and operation.cancel_requested_at is None
+        and operation.creation_attempted_at is not None
+        and clock() < as_utc(operation.creation_attempted_at) + timedelta(hours=23)
+        and clock() < as_utc(operation.first_payment_at)
+    ):
+        answer = await _dispatch_paid_signup(
+            db, gateway, user=user, operation=operation, clock=clock, prior_unknown=True
+        )
     await db.commit()
     return answer
+
+
+async def _dispatch_paid_signup(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    operation: PaidSignup,
+    clock: Clock,
+    prior_unknown: bool,
+) -> PaidSignupResponse:
+    operation.creation_state = "uncertain"
+    operation.creation_attempted_at = operation.creation_attempted_at or clock()
+    operation.creation_dispatch_count += 1
+    dispatch_count = operation.creation_dispatch_count
+    # This checkpoint precedes dispatch; the generation prevents a stale owner from sending after a newer claim.
+    await db.commit()
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
+    if operation.status != "pending" or operation.creation_dispatch_count != dispatch_count:
+        return paid_signups.response(operation)
+    if operation.cancel_requested_at is not None or as_utc(operation.first_payment_at) <= clock():
+        if not prior_unknown:
+            operation.creation_state = "refused"
+            return paid_signups.refuse(
+                operation,
+                now=clock(),
+                detail="No subscription request was sent. Review a fresh paid offer if you want to subscribe.",
+            )
+        return await paid_signups.reconcile(
+            db, gateway, user=user, operation=operation, now=clock()
+        )
+    return await paid_signups.reconcile(
+        db,
+        gateway,
+        user=user,
+        operation=operation,
+        now=clock(),
+        dispatch=True,
+        prior_unknown=prior_unknown,
+    )

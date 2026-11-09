@@ -1,4 +1,5 @@
 import hashlib
+from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -8,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
 from pumpkit.billing import coupon_service, service
-from pumpkit.billing.gateway import BillingGateway, BillingProviderError, DeferralRefused
+from pumpkit.billing.allowance import limits
+from pumpkit.billing.gateway import (
+    BillingGateway,
+    BillingProviderError,
+    DeferralRefused,
+    SubscriptionState,
+)
 from pumpkit.billing.models import CouponOperation, PaidSignup
 from pumpkit.billing.schemas import PaidSignupPreviewResponse, PaidSignupRequest, PaidSignupResponse
 from pumpkit.billing.terms import TERMS_VERSION
@@ -58,7 +65,7 @@ async def preview(
         )
     ):
         raise ConflictError("Resolve your pending billing operation before arranging paid renewal.")
-    free = await service.get_free_access(db, user_id=user.id, now=now)
+    free = await service.get_free_access_coverage(db, user_id=user.id)
     if not free or not as_utc(free.starts_at) <= now < as_utc(free.ends_at):
         raise ConflictError("Review a new paid offer after your free access ends.")
     if as_utc(free.ends_at).microsecond:
@@ -195,14 +202,18 @@ async def reconcile(
     now: datetime,
     cancel: bool = False,
     mutate: bool = True,
+    dispatch: bool = False,
+    prior_unknown: bool = False,
 ) -> PaidSignupResponse:
     if operation.status != "pending" and not (
         cancel and operation.status == "completed" and now < as_utc(operation.first_payment_at)
     ):
         return response(operation)
+    cancel = cancel or operation.cancel_requested_at is not None
     customer_id = operation.customer_id
     if not customer_id or customer_id != user.stripe_customer_id:
         raise ConflictError("Your paid signup customer is being confirmed. Retry its status.")
+    sent = False
     try:
         states = await gateway.list_subscriptions(customer_id=customer_id)
         attributed = [s for s in states if s.paid_signup_operation == operation.id]
@@ -225,6 +236,29 @@ async def reconcile(
             ):
                 operation.detail = (
                     "The provider plan differs from the accepted offer. Contact support."
+                )
+                return response(operation)
+            operation.creation_state = "confirmed"
+            if cancel or state.status in {"canceled", "incomplete_expired"}:
+                await _preserve_settled_paid_coverage(
+                    db,
+                    gateway,
+                    user=user,
+                    state=state,
+                    now=now,
+                    target=target,
+                    customer_id=customer_id,
+                )
+            if state.status in {"canceled", "incomplete_expired"}:
+                await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+                return refuse(
+                    operation,
+                    now=now,
+                    detail="This subscription has ended. No future renewal is arranged.",
+                )
+            if not cancel and state.status not in {"active", "trialing", "past_due"}:
+                operation.detail = (
+                    "Your subscription needs billing review before renewal can be confirmed."
                 )
                 return response(operation)
             if cancel and state.status not in {"canceled", "incomplete_expired"}:
@@ -260,6 +294,13 @@ async def reconcile(
         if setup:
             operation.session_id = setup.id
         target = as_utc(datetime.fromisoformat(operation.offer["first_payment_at"]))
+        if operation.creation_state in {"uncertain", "acknowledged"} and not dispatch:
+            if cancel or target <= now:
+                operation.cancel_requested_at = operation.cancel_requested_at or now
+                operation.detail = "Your cancellation is not confirmed yet. Check its status again; billing changes and account deletion will be available when confirmation finishes."
+            else:
+                operation.detail = "Your subscription request is being confirmed. Its agreed plan and payment date stay unchanged."
+            return response(operation)
         if cancel or target <= now:
             if setup and setup.status == "open":
                 if not mutate:
@@ -275,7 +316,7 @@ async def reconcile(
                 if target <= now
                 else "Paid signup cancelled. Your free access is unchanged.",
             )
-        free = await service.get_free_access(db, user_id=user.id, now=now)
+        free = await service.get_free_access_coverage(db, user_id=user.id)
         if not free or as_utc(free.ends_at) != target:
             operation.detail = (
                 "Your free access changed. Cancel this signup and review the new payment date."
@@ -316,6 +357,7 @@ async def reconcile(
             and setup.setup_customer_id == customer_id
             and setup.payment_method_customer_id == customer_id
             and setup.usage == "off_session"
+            and (not dispatch or setup.payment_method_id == operation.payment_method_id)
         ):
             operation.detail = (
                 "Your payment setup is being confirmed. Your free access is unchanged."
@@ -326,6 +368,12 @@ async def reconcile(
         ) or await gateway.has_unsettled_invoices(customer_id=customer_id):
             operation.detail = "Resolve the pending payment before paid signup can finish."
             return response(operation)
+        if not dispatch:
+            operation.payment_method_id = setup.payment_method_id
+            operation.creation_state = "ready"
+            operation.detail = "Your accepted subscription is ready to be arranged."
+            return response(operation)
+        sent = True
         await gateway.create_paid_signup(
             customer_id=customer_id,
             price_id=operation.offer["price_id"],
@@ -333,12 +381,52 @@ async def reconcile(
             operation_id=operation.id,
             first_payment_at=target,
         )
+        operation.creation_state = "acknowledged"
         return await reconcile(db, gateway, user=user, operation=operation, now=now, mutate=False)
     except DeferralRefused:
-        operation.detail = "The provider refused the exact agreed payment date. Your free access is unchanged; cancel this signup to review a fresh offer."
+        operation.creation_state = "uncertain" if prior_unknown else "refused"
+        operation.detail = (
+            "The earlier signup outcome is still being confirmed. A retry was refused; check again or contact support."
+            if prior_unknown
+            else "The provider refused the exact agreed payment date. Your free access is unchanged; cancel this signup to review a fresh offer."
+        )
         return response(operation)
     except BillingProviderError:
         operation.detail = (
             "Your paid signup is being confirmed. Retry its status; your free access is unchanged."
         )
         return response(operation)
+
+    finally:
+        if dispatch and not prior_unknown and not sent and operation.creation_state == "uncertain":
+            operation.creation_state = "not_started"
+
+
+async def _preserve_settled_paid_coverage(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    state: SubscriptionState,
+    now: datetime,
+    target: datetime,
+    customer_id: str,
+) -> None:
+    if not (
+        state.paid_current_period
+        and state.current_period_start
+        and state.current_period_end
+        and state.billing_cycle_anchor
+        and target <= as_utc(state.current_period_start) <= now < as_utc(state.current_period_end)
+    ):
+        return
+    await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+    subscription = await service.get_subscription_by_stripe_id(db, state.id)
+    if subscription is None or subscription.user_id != user.id:
+        raise ConflictError("Your paid coverage is being confirmed. Check signup again.")
+    subscription.preserved_trial = False
+    subscription.paid_start = state.current_period_start
+    subscription.paid_end = state.current_period_end
+    subscription.paid_anchor = state.billing_cycle_anchor
+    subscription.paid_allowance = asdict(limits(trial=False))
+    await db.flush()

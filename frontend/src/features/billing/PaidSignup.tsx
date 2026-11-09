@@ -119,8 +119,8 @@ export function PaidSignup({
           {signup.pending ? (
             <>
               <p>
-                Your future subscription is not confirmed yet. Your free access and allowance stay
-                unchanged.
+                {signup.answer?.detail ??
+                  'Your future subscription is not confirmed yet. Your free access and allowance stay unchanged.'}
               </p>
               <div className="flex flex-wrap gap-3">
                 {signup.answer?.url && (
@@ -179,8 +179,8 @@ export function PaidSignup({
           {expanded && (
             <div ref={choices} className="space-y-4">
               <p>
-                Choose a paid plan to start after your free access. No payment today and no extra
-                introductory trial.
+                Choose a paid plan to start after your free access. No immediate payment and no
+                extra introductory trial.
               </p>
               {plans.length === 0 ? (
                 <p>No monthly or yearly plans are available. Try again later.</p>
@@ -233,9 +233,9 @@ export function PaidSignup({
                   </p>
                   <p className="font-semibold">First payment: {exactDate(offer.firstPaymentAt)}</p>
                   <p>
-                    No payment today. Keep all your free access through this date, then start a full
-                    paid {offer.interval === 'year' ? 'year' : 'month'}. Your subscription renews
-                    automatically until cancelled.
+                    No immediate payment. Keep all your free access through this date, then start a
+                    full paid {offer.interval === 'year' ? 'year' : 'month'}. Your subscription
+                    renews automatically until cancelled.
                   </p>
                   <p>
                     Continue to checkout to provide a payment method. A saved card alone does not
