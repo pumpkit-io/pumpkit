@@ -90,7 +90,7 @@ async def test_lost_response_recovers_once_after_restart_disabled_and_expired_pr
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1
 
 
-async def test_definite_refusal_releases_capacity_but_ambiguous_reserves_it(
+async def test_rejected_retry_keeps_unknown_deferral_and_capacity_reserved(
     authed_client, coupons, db, user, fake_billing, fixed_clock, new_browser, sign_in_by_magic_link
 ):
     await monthly(db, user, fake_billing, fixed_clock)
@@ -105,8 +105,8 @@ async def test_definite_refusal_releases_capacity_but_ambiguous_reserves_it(
     assert (await other.post(PREVIEW, json={"code": created["code"]})).status_code == 409
     assert (await other.get(REDEEM + "/redeem-test-0001")).status_code == 404
     fake_billing.fail_on = {"refuse_deferral"}
-    assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "refused"
-    assert (await other.post(PREVIEW, json={"code": created["code"]})).status_code == 200
+    assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "pending"
+    assert (await other.post(PREVIEW, json={"code": created["code"]})).status_code == 409
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 0
 
 

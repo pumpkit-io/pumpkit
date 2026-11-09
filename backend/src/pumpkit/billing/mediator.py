@@ -30,7 +30,7 @@ from pumpkit.billing.gateway import (
     WebhookEvent,
     WebhookSignatureError,
 )
-from pumpkit.billing.models import Coupon, PaidSignup, PlanChange, TopUp
+from pumpkit.billing.models import Coupon, CouponOperation, PaidSignup, PlanChange, TopUp
 from pumpkit.billing.schemas import (
     BillingMeResponse,
     BillingPortalResponse,
@@ -588,7 +588,7 @@ async def _dispatch_event(
             )
         for operation in await coupon_operations.pending(db, user_id=user.id):
             await coupon_operations.reconcile(
-                db, gateway, user=user, operation=operation, now=now, mutate=False
+                db, gateway, user=user, operation=operation, clock=lambda: now, mutate=False
             )
     if syncs_top_ups:
         return await service.sync_top_ups(db, gateway, user_id=user.id, customer_id=customer_id)
@@ -666,11 +666,9 @@ async def redeem_coupon(
             raise ConflictError(
                 "This operation was used for another coupon offer. Check its result."
             )
-        response = await coupon_operations.reconcile(
-            db, gateway, user=user, operation=operation, now=clock()
+        return await _recover_coupon_operation(
+            db, gateway, user=user, operation=operation, clock=clock
         )
-        await db.commit()
-        return response
     await coupon_operations.require_settled(db, user_id=user.id)
     existing = await coupon_redemption.find_result(
         db, user_id=user.id, operation_id=request.operation_id
@@ -716,11 +714,9 @@ async def redeem_coupon(
             # Accepted intent must survive a lost provider response before any deferral is attempted.
             await db.commit()
             user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
-        response = await coupon_operations.reconcile(
-            db, gateway, user=user, operation=operation, now=clock()
+        return await _recover_coupon_operation(
+            db, gateway, user=user, operation=operation, clock=clock
         )
-        await db.commit()
-        return response
     access = await coupon_redemption.grant(
         db, user=user, coupon=coupon, offer=current, request=request, now=current_signed.issued_at
     )
@@ -771,11 +767,52 @@ async def lookup_coupon_redemption(
     operation = await coupon_operations.find(db, user_id=user.id, operation_id=operation_id)
     if operation is None:
         return await coupon_redemption.lookup(db, user_id=user.id, operation_id=operation_id)
-    response = await coupon_operations.reconcile(
-        db, gateway, user=user, operation=operation, now=clock()
+    return await _recover_coupon_operation(db, gateway, user=user, operation=operation, clock=clock)
+
+
+async def _recover_coupon_operation(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    operation: CouponOperation,
+    clock: Clock,
+) -> CouponRedemptionResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    refreshed = await coupon_operations.find(
+        db, user_id=user.id, operation_id=operation.operation_id
     )
+    assert refreshed is not None
+    operation = refreshed
+    answer = await coupon_operations.reconcile(
+        db, gateway, user=user, operation=operation, clock=clock, mutate=False
+    )
+    if operation.status == "pending" and operation.claim_id is not None:
+        prior_unknown = operation.attempted_at is not None
+        operation.attempted_at = operation.attempted_at or clock()
+        operation.dispatch_count += 1
+        dispatch_count = operation.dispatch_count
+        # Dispatch uncertainty must survive process loss; a newer owner invalidates this generation.
+        await db.commit()
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        refreshed = await coupon_operations.find(
+            db, user_id=user.id, operation_id=operation.operation_id
+        )
+        assert refreshed is not None
+        operation = refreshed
+        if operation.status != "pending" or operation.dispatch_count != dispatch_count:
+            return coupon_operations.response(operation)
+        answer = await coupon_operations.reconcile(
+            db,
+            gateway,
+            user=user,
+            operation=operation,
+            clock=clock,
+            dispatch=True,
+            prior_unknown=prior_unknown,
+        )
     await db.commit()
-    return response
+    return answer
 
 
 async def cancel_renewal(

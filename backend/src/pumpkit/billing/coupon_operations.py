@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Sequence
 
 from sqlalchemy import select
@@ -31,7 +31,7 @@ from pumpkit.billing.schemas import (
 )
 from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError
-from pumpkit.core.time import as_utc
+from pumpkit.core.time import Clock, as_utc
 
 
 async def find(db: AsyncSession, *, user_id: str, operation_id: str) -> Optional[CouponOperation]:
@@ -350,14 +350,37 @@ def compatible(state: SubscriptionState, operation: CouponOperation) -> bool:
     )
 
 
+async def refuse(
+    db: AsyncSession, *, user: User, operation: CouponOperation, now: datetime
+) -> CouponRedemptionResponse:
+    operation.status = "refused"
+    operation.detail = "No billing change was made for this redemption. The coupon was not consumed; review billing or contact its sender."
+    operation.resolved_at = now
+    subscription = await service.get_user_subscription(db, user_id=user.id)
+    if subscription and subscription.preserved_trial and operation.original["marker"] is None:
+        subscription.preserved_trial = None
+        subscription.paid_start = None
+        subscription.paid_end = None
+        subscription.paid_anchor = None
+        subscription.paid_allowance = None
+    claim = await db.get(CouponClaim, operation.claim_id)
+    operation.claim_id = None
+    await db.flush()
+    if claim:
+        await db.delete(claim)
+    return response(operation)
+
+
 async def reconcile(
     db: AsyncSession,
     gateway: BillingGateway,
     *,
     user: User,
     operation: CouponOperation,
-    now: datetime,
+    clock: Clock,
     mutate: bool = True,
+    dispatch: bool = False,
+    prior_unknown: bool = True,
 ) -> CouponRedemptionResponse:
     coupon = await coupon_redemption.lock_coupon(db, operation.coupon_id)
     refreshed = await find(db, user_id=user.id, operation_id=operation.operation_id)
@@ -365,12 +388,26 @@ async def reconcile(
     operation = refreshed
     if operation.status != "pending":
         return response(operation)
+    if operation.claim_id is None:
+        operation.detail = (
+            "This earlier redemption needs a billing audit. Contact support; it remains reserved."
+        )
+        return response(operation)
     operation.detail = (
         "Confirming redemption. Your place is reserved; retry this operation or contact support."
     )
+    definitely_unsent = dispatch and mutate and not prior_unknown
+
+    async def unresolved() -> CouponRedemptionResponse:
+        if definitely_unsent:
+            return await refuse(db, user=user, operation=operation, now=clock())
+        return response(operation)
+
     try:
         states = await gateway.list_subscriptions(customer_id=operation.customer_id)
         state = next((s for s in states if s.id == operation.subscription_id), None)
+        if state is not None and state.coupon_operation == operation.id:
+            definitely_unsent = False
         if (
             len([s for s in states if s.status not in {"canceled", "incomplete_expired"}]) > 1
             or state is None
@@ -378,7 +415,7 @@ async def reconcile(
             or not compatible(state, operation)
         ):
             operation.detail = "Billing changed while confirming redemption. Contact support; your redemption remains reserved."
-            return response(operation)
+            return await unresolved()
         applied = (
             state.coupon_operation == operation.id
             and state.trial_end is not None
@@ -397,13 +434,13 @@ async def reconcile(
             and state.current_period_end is not None
             and as_utc(state.cancel_at) <= as_utc(state.current_period_end)
         )
-        if not applied and cancelled and original_coverage:
+        if not applied and cancelled and original_coverage and operation.attempted_at is None:
             if await gateway.has_unsettled_invoices(
                 customer_id=operation.customer_id
             ) or await gateway.has_pending_checkout(customer_id=operation.customer_id):
-                return response(operation)
+                return await unresolved()
             applied = True
-        if not applied and mutate:
+        if not applied and mutate and dispatch:
             unchanged = (
                 state.status in {"active", "trialing"}
                 and state.cancel_at is None
@@ -416,16 +453,26 @@ async def reconcile(
             if (
                 not unchanged
                 or operation.offer.get("next_payment_at") is None
-                or as_utc(operation.target) <= now
-                or (as_utc(operation.target) - now).total_seconds() > 730 * 86400
+                or as_utc(operation.target) <= clock()
+                or (as_utc(operation.target) - clock()).total_seconds() > 730 * 86400
             ):
                 operation.detail = "Billing changed while confirming redemption. Contact support; no further change was sent."
-                return response(operation)
+                return await unresolved()
             if await gateway.has_unsettled_invoices(
                 customer_id=operation.customer_id
             ) or await gateway.has_pending_checkout(customer_id=operation.customer_id):
-                return response(operation)
+                return await unresolved()
+            # An old-state read cannot prove the original write failed; replay only within retention.
+            if (
+                operation.attempted_at is None
+                or clock() >= as_utc(operation.attempted_at) + timedelta(hours=23)
+                or clock() >= as_utc(operation.target)
+                or (as_utc(operation.target) - clock()).total_seconds() > 730 * 86400
+            ):
+                return await unresolved()
             operation.attempts += 1
+            # From dispatch onward, only provider evidence can settle an uncertain result.
+            definitely_unsent = False
             try:
                 await gateway.defer_renewal(
                     subscription_id=operation.subscription_id,
@@ -433,26 +480,9 @@ async def reconcile(
                     operation_id=operation.id,
                 )
             except DeferralRefused:
-                operation.status = "refused"
-                operation.detail = "The billing provider refused this redemption. The coupon was not consumed; contact its sender or check the code again."
-                operation.resolved_at = now
-                subscription = await service.get_user_subscription(db, user_id=user.id)
-                if (
-                    subscription
-                    and subscription.preserved_trial
-                    and operation.original["marker"] is None
-                ):
-                    subscription.preserved_trial = None
-                    subscription.paid_start = None
-                    subscription.paid_end = None
-                    subscription.paid_anchor = None
-                    subscription.paid_allowance = None
-                claim = await db.get(CouponClaim, operation.claim_id)
-                operation.claim_id = None
-                await db.flush()
-                if claim:
-                    await db.delete(claim)
-                return response(operation)
+                if prior_unknown:
+                    return response(operation)
+                return await refuse(db, user=user, operation=operation, now=clock())
             states = await gateway.list_subscriptions(customer_id=operation.customer_id)
             state = next((s for s in states if s.id == operation.subscription_id), None)
             applied = (
@@ -463,7 +493,8 @@ async def reconcile(
                 and as_utc(state.trial_end) == as_utc(operation.target)
             )
         if not applied:
-            return response(operation)
+            return await unresolved()
+        definitely_unsent = False
         cancelled = bool(
             state is not None
             and (
@@ -504,13 +535,13 @@ async def reconcile(
             db.add(CouponHistory(user_id=user.id))
         coupon.redeemed_count += 1
         if coupon.redeemed_count == coupon.max_redemptions:
-            coupon.unclaimable_at = now
+            coupon.unclaimable_at = clock()
         operation.status = "completed"
         operation.detail = None
-        operation.resolved_at = now
+        operation.resolved_at = clock()
         await db.flush()
     except BillingProviderError:
-        pass
+        return await unresolved()
     return response(operation)
 
 

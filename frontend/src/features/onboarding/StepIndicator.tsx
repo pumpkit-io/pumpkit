@@ -30,11 +30,11 @@ export function StepIndicator({ current }: { current: NextStep }) {
 
   return (
     <nav aria-label="Steps" className="min-w-0">
-      <p className="whitespace-nowrap font-sans text-xs text-muted-foreground sm:hidden">
+      <p className="font-sans text-xs text-muted-foreground sm:hidden">
         Step {at + 1} of {steps.length}
         <span className="text-foreground"> {steps[at]?.label}</span>
       </p>
-      <ol className="hidden items-center gap-2 sm:flex">
+      <ol className="hidden flex-wrap items-center justify-center gap-2 sm:flex">
         {steps.map((step, i) => {
           const done = i < at;
           const isCurrent = i === at;

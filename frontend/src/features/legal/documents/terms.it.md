@@ -118,7 +118,7 @@ Una volta che ne hai usato una qualsiasi parte, un Top-up non è rimborsabile (c
 
 Il tuo Abbonamento si rinnova automaticamente alla fine di ogni periodo di fatturazione, per un periodo di uguale durata, e il prezzo del Piano viene addebitato ogni volta sul tuo metodo di pagamento.
 
-Puoi disdire in qualsiasi momento dalla pagina Settings con Manage subscription, che apre il portale di fatturazione di Stripe. La disdetta impedisce il rinnovo successivo: conservi tutto il tempo pagato e l’Accesso gratuito concesso rimanenti, e non ti viene addebitato altro. Se disdici durante il Trial o prima di un primo pagamento concordato dopo l’Accesso gratuito, quel pagamento non viene addebitato.
+Puoi disdire in qualsiasi momento dalla pagina Settings. Quando è disponibile Cancel renewal, usalo per disdire in Pumpkit; Manage billing apre il portale di Stripe per i metodi di pagamento e le fatture. Altrimenti, usa Manage subscription per aprire il portale di fatturazione di Stripe e disdire lì. La disdetta impedisce il rinnovo successivo: conservi tutto il tempo pagato e l’Accesso gratuito concesso rimanenti, e non ti viene addebitato altro. Se disdici durante il Trial o prima di un primo pagamento concordato dopo l’Accesso gratuito, quel pagamento non viene addebitato.
 
 ## 13. Diritto di recesso per i consumatori {#withdrawal}
 
