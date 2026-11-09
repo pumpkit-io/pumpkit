@@ -24,6 +24,9 @@ function firstPeriod({ interval, intervalCount }: Plan): string {
 
 /** "500 generations and 100 X posts", leaving out a count with no cap. */
 function explanation(data: BillingData): string {
+  if (data.me.pendingCouponOperation || data.me.couponDeferral) {
+    return 'Your coupon protects your paid and free time. You cannot start a payment early.';
+  }
   const planKey = data.me.subscription?.planKey;
   const plan = data.plans.find((p) => p.key === planKey);
   const charge = plan
@@ -54,6 +57,7 @@ function SubscribeNowDialog({
   const [authenticationUrl, setAuthenticationUrl] = useState<string | null>(null);
 
   const confirm = async () => {
+    if (data?.me.pendingCouponOperation || data?.me.couponDeferral) return;
     setBusy(true);
     setError(null);
     setAuthenticationUrl(null);
@@ -110,7 +114,11 @@ function SubscribeNowDialog({
               </a>
             </Button>
           ) : (
-            <Button className="h-10" disabled={!data || busy} onClick={() => void confirm()}>
+            <Button
+              className="h-10"
+              disabled={!data || busy || data.me.pendingCouponOperation || data.me.couponDeferral}
+              onClick={() => void confirm()}
+            >
               Subscribe now
             </Button>
           )}

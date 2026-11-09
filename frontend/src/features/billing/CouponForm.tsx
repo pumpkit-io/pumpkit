@@ -20,9 +20,15 @@ function exactDate(value: string): string {
 export function CouponForm({
   inSettings = false,
   onRedeemed,
+  recoveryOnly = false,
+  operationId,
+  onPendingChange,
 }: {
   inSettings?: boolean;
   onRedeemed?: () => void;
+  recoveryOnly?: boolean;
+  operationId?: string | null;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const afterRedemption = useRef(onRedeemed);
   afterRedemption.current = onRedeemed;
@@ -44,13 +50,20 @@ export function CouponForm({
   const redemption = useCouponRedemption(() => {
     setPreview(null);
     setAcceptance({ acceptedTerms: false, approvedSpecificClauses: false });
-  });
+  }, operationId);
   const success = useRef<HTMLParagraphElement>(null);
   const redemptionError = useRef<HTMLParagraphElement>(null);
   const [continuing, setContinuing] = useState(false);
   const [continueError, setContinueError] = useState(false);
   const blocked =
     checking || redemption.busy || Boolean(redemption.pending) || Boolean(redemption.completed);
+
+  const wasPending = useRef(redemption.pending);
+  useEffect(() => {
+    onPendingChange?.(redemption.pending);
+    if (wasPending.current && !redemption.pending && !redemption.completed) void load();
+    wasPending.current = redemption.pending;
+  }, [onPendingChange, redemption.pending, redemption.completed, load]);
 
   useEffect(() => {
     if (redemption.completed) {
@@ -101,17 +114,19 @@ export function CouponForm({
 
   return (
     <section className="ph-no-capture max-w-[560px] break-words text-left">
-      <Button
-        type="button"
-        variant="link"
-        className="h-auto min-h-11 max-w-full whitespace-normal px-0 text-left focus-visible:ring-ring"
-        aria-expanded={expanded}
-        aria-controls={`${id}-form`}
-        disabled={blocked}
-        onClick={() => setExpanded(!expanded)}
-      >
-        {inSettings ? 'Redeem coupon' : 'Have a coupon?'}
-      </Button>
+      {!recoveryOnly && (
+        <Button
+          type="button"
+          variant="link"
+          className="h-auto min-h-11 max-w-full whitespace-normal px-0 text-left focus-visible:ring-ring"
+          aria-expanded={expanded}
+          aria-controls={`${id}-form`}
+          disabled={blocked}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {inSettings ? 'Redeem coupon' : 'Have a coupon?'}
+        </Button>
+      )}
       {redemption.completed && (
         <div className="space-y-3 text-sm text-foreground">
           <p
@@ -126,11 +141,15 @@ export function CouponForm({
             {count(redemption.completed.months, 'free month', 'free months')}:{' '}
             {exactDate(redemption.completed.startsAt)} to {exactDate(redemption.completed.endsAt)}.
           </p>
-          <p>No automatic payment</p>
+          <p>
+            {redemption.completed.nextPaymentAt
+              ? `Next payment: ${exactDate(redemption.completed.nextPaymentAt)}`
+              : 'No automatic payment'}
+          </p>
           {continueError && (
             <p role="alert">Couldn’t refresh your access. Continue again to check.</p>
           )}
-          {inSettings ? (
+          {inSettings && !recoveryOnly ? (
             <Button
               type="button"
               className="h-auto min-h-11 max-w-full whitespace-normal"
@@ -165,20 +184,17 @@ export function CouponForm({
       {(redemption.pending || redemption.busy) && !redemption.completed && (
         <div className="space-y-3">
           <p role="status" className="text-sm text-muted-foreground">
-            {redemption.busy
-              ? 'Confirming redemption…'
-              : 'Check your redemption before trying another code.'}
+            Confirming redemption…
           </p>
-          <Button
-            type="button"
-            disabled={redemption.busy}
-            onClick={() => redemption.pending && void redemption.submit(redemption.pending, true)}
-          >
+          <p className="text-sm text-foreground">
+            Your redemption is not confirmed yet. Check its result before trying another code.
+          </p>
+          <Button type="button" disabled={redemption.busy} onClick={redemption.check}>
             Check redemption
           </Button>
         </div>
       )}
-      {expanded && !redemption.completed && (
+      {expanded && !recoveryOnly && !redemption.completed && (
         <form id={`${id}-form`} onSubmit={(event) => void check(event)} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor={`${id}-code`} className="text-sm font-medium text-foreground">
@@ -272,9 +288,13 @@ export function CouponForm({
                     : 'No automatic payment'}
               </p>
               <p lang={language}>
-                {language === 'it'
-                  ? `L’accesso gratuito termina il ${exactDate(preview.endsAt)}. Non crea un abbonamento né un obbligo di pagamento.`
-                  : `Free access ends on ${exactDate(preview.endsAt)}. This creates no subscription or obligation to pay.`}
+                {preview.nextPaymentAt
+                  ? language === 'it'
+                    ? 'Il tempo già pagato e l’utilizzo restano invariati. Il prossimo pagamento dell’abbonamento è posticipato fino alla fine dell’accesso gratuito.'
+                    : 'Your remaining paid time and usage stay intact. Your next subscription payment moves to the end of free access.'
+                  : language === 'it'
+                    ? `L’accesso gratuito termina il ${exactDate(preview.endsAt)}. Non crea un abbonamento né un obbligo di pagamento.`
+                    : `Free access ends on ${exactDate(preview.endsAt)}. This creates no subscription or obligation to pay.`}
               </p>
               {preview.termsVersion && (
                 <>
