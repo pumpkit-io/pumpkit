@@ -636,6 +636,12 @@ export function pumpkitStripe(target: WebhookTarget) {
           billing_cycle_anchor: anchor,
           expand = [],
         } = await bodyParams(c);
+        if (trialEnd && trialEnd !== 'now') {
+          const target = Number(trialEnd);
+          if (!Number.isInteger(target) || target <= now() || target > now() + 730 * DAY) {
+            return c.json({ error: { type: 'invalid_request_error', message: 'Unsupported trial_end' } }, 400);
+          }
+        }
         if (items) {
           if (
             subscription.status !== 'trialing' ||
@@ -666,9 +672,6 @@ export function pumpkitStripe(target: WebhookTarget) {
         }
         if (trialEnd && trialEnd !== 'now') {
           const target = Number(trialEnd);
-          if (!Number.isInteger(target) || target <= now() || target > now() + 730 * DAY) {
-            return c.json({ error: { type: 'invalid_request_error', message: 'Unsupported trial_end' } }, 400);
-          }
           Object.assign(subscription, {
             status: 'trialing', trial_start: now(), trial_end: target,
             billing_cycle_anchor: target, metadata: { ...subscription.metadata, ...metadata },

@@ -761,20 +761,23 @@ async def test_expired_access_keeps_account_linked_change_recovery_after_externa
 async def test_recovery_keeps_the_original_provider_anchor_policy(
     authed_client, coupons, db, user, fake_billing, fixed_clock, monkeypatch, legacy
 ):
-    await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    offer = await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
     request = await proposed_change(authed_client)
     fake_billing.delay_plan_changes = True
     assert (await authed_client.post(CHANGES, json=request)).json()["status"] == "pending"
     if legacy:
         operation = await db.scalar(select(PlanChange))
         assert operation is not None
-        operation.offer = {k: v for k, v in operation.offer.items() if k != "use_provider_anchor"}
+        operation.offer = {k: v for k, v in operation.offer.items() if k != "preserve_payment_date"}
         await db.commit()
     fake_billing.delay_plan_changes = False
     change = fake_billing.change_plan
 
-    async def check_policy(*, use_provider_anchor=False, **kwargs):
-        assert use_provider_anchor is not legacy
+    async def check_policy(*, first_payment_at=None, **kwargs):
+        expected = (
+            None if legacy else datetime.fromisoformat(offer["ends_at"].replace("Z", "+00:00"))
+        )
+        assert first_payment_at == expected
         await change(**kwargs)
 
     monkeypatch.setattr(fake_billing, "change_plan", check_policy)

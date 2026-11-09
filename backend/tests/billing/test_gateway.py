@@ -975,12 +975,13 @@ async def test_interval_change_retains_trial_anchor_and_cancellation_without_pro
         item_id="si_change",
         price_id="price_year",
         operation_id="change_contract",
-        use_provider_anchor=True,
+        first_payment_at=datetime(2028, 1, 31, tzinfo=timezone.utc),
     )
     assert http.forms[0] == {
         "items[0][id]": ["si_change"],
         "items[0][price]": ["price_year"],
         "proration_behavior": ["none"],
+        "trial_end": ["1832889600"],
         "metadata[pumpkit_plan_change]": ["change_contract"],
     }
     assert http.headers[0]["Idempotency-Key"] == "plan-change-change_contract"

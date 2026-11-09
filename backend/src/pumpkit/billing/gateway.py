@@ -218,7 +218,7 @@ class BillingGateway(Protocol):
         item_id: str,
         price_id: str,
         operation_id: str,
-        use_provider_anchor: bool = False,
+        first_payment_at: Optional[datetime] = None,
     ) -> None: ...
 
     async def list_plans(self, keys: Sequence[str]) -> list[Plan]:
@@ -842,15 +842,17 @@ class StripeBillingGateway:
         item_id: str,
         price_id: str,
         operation_id: str,
-        use_provider_anchor: bool = False,
+        first_payment_at: Optional[datetime] = None,
     ) -> None:
         params: SubscriptionUpdateParams = {
             "items": [{"id": item_id, "price": price_id}],
             "proration_behavior": "none",
             "metadata": {"pumpkit_plan_change": operation_id},
         }
-        if not use_provider_anchor:
+        if first_payment_at is None:
             params["billing_cycle_anchor"] = "unchanged"
+        else:
+            params["trial_end"] = int(first_payment_at.timestamp())
         try:
             await run_in_threadpool(
                 self._client.v1.subscriptions.update,
@@ -1334,7 +1336,7 @@ class FakeBillingGateway:
         item_id: str,
         price_id: str,
         operation_id: str,
-        use_provider_anchor: bool = False,
+        first_payment_at: Optional[datetime] = None,
     ) -> None:
         self._maybe_fail("change_plan")
         self._maybe_fail("plan_change_in_progress")
