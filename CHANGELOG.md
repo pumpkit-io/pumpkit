@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users with coupon free access can explicitly arrange a monthly or annual paid renewal for its exact end, recover or cancel interrupted signup, and keep every free month and its Allowance. **Upgrade notes:** apply migration `0049` and add paid-signup recovery to billing recovery checks; Coupons remain disabled by default pending final Stripe validation.
+
 - Further coupon claims follow their current free-access grant’s subscription, so retained older cancelled subscriptions cannot block redemption or bind unrelated cardless access.
 
 - Users who cancelled renewal can redeem coupons after their remaining paid access without restarting payments; cancellation during confirmation preserves paid and free months, including after the provider subscription ends. Settings shows no automatic payment.

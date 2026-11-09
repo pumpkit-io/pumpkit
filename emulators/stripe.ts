@@ -12,6 +12,8 @@ interface State {
   subscriptions: Record<string, StripeObject>;
   checkoutSessions: Record<string, StripeObject>;
   paymentIntents: Record<string, StripeObject>;
+  setupIntents: Record<string, StripeObject>;
+  idempotentObjects: Record<string, StripeObject>;
   charges: Record<string, StripeObject>;
   invoices: Record<string, StripeObject>;
   portalSessions: Record<string, StripeObject>;
@@ -61,6 +63,8 @@ function emptyState(): State {
     subscriptions: {},
     checkoutSessions: {},
     paymentIntents: {},
+    setupIntents: {},
+    idempotentObjects: {},
     charges: {},
     invoices: {},
     portalSessions: {},
@@ -325,6 +329,8 @@ export function pumpkitStripe(target: WebhookTarget) {
       }
 
       function expandedSession(session: StripeObject, expand: string[]): StripeObject {
+        if (session.setup_intent && (expand.includes('setup_intent.payment_method') || expand.includes('data.setup_intent')))
+          return { ...session, setup_intent: state.setupIntents[session.setup_intent] };
         const withCharge = expand.includes('data.payment_intent.latest_charge');
         if ((!withCharge && !expand.includes('data.payment_intent')) || !session.payment_intent)
           return session;
@@ -388,8 +394,10 @@ export function pumpkitStripe(target: WebhookTarget) {
 
       app.post('/v1/checkout/sessions', async (c: any) => {
         const params = await bodyParams(c);
-        const [item] = params.line_items ?? [];
-        if (!state.prices[item?.price]) return notFound(c, 'price', item?.price);
+        const key = c.req.header('Idempotency-Key');
+        if (key && state.idempotentObjects[key]) return c.json(state.idempotentObjects[key]);
+        const [item] = params.line_items ?? [{}];
+        if (params.mode !== 'setup' && !state.prices[item?.price]) return notFound(c, 'price', item?.price);
         const days = params.subscription_data?.trial_period_days;
         const session = {
           id: newId('cs_test'),
@@ -405,6 +413,8 @@ export function pumpkitStripe(target: WebhookTarget) {
           created: now(),
           subscription: null,
           payment_intent: null,
+          setup_intent: null,
+          pumpkit_setup_metadata: params.setup_intent_data?.metadata ?? {},
           livemode: false,
           // Kept for completing the session; Stripe's own sessions expand line items instead.
           pumpkit_line_item: { price: item.price, quantity: Number(item.quantity ?? 1) },
@@ -413,6 +423,7 @@ export function pumpkitStripe(target: WebhookTarget) {
         // The browser opens it, so it uses the advertised route, not the address the backend called.
         session.url = `${baseUrl}/checkout/${session.id}`;
         state.checkoutSessions[session.id] = session;
+        if (key) state.idempotentObjects[key] = session;
         return c.json(session);
       });
 
@@ -429,7 +440,34 @@ export function pumpkitStripe(target: WebhookTarget) {
         );
       });
 
-      app.post('/v1/checkout/sessions/:id/expire', (c: any) => {
+      app.get('/v1/checkout/sessions/:id', (c: any) => {
+        const session = state.checkoutSessions[c.req.param('id')];
+        if (!session) return notFound(c, 'checkout.session', c.req.param('id'));
+        return c.json(expandedSession(session, queryParams(c).expand ?? []));
+      });
+
+      app.get('/v1/customers', (c: any) => c.json(list('/v1/customers', Object.values(state.customers))));
+
+      app.post('/v1/subscriptions', async (c: any) => {
+        const params = await bodyParams(c);
+        const key = c.req.header('Idempotency-Key');
+        if (key && state.idempotentObjects[key]) return c.json(state.idempotentObjects[key]);
+        const price = state.prices[params.items?.[0]?.price];
+        const target = Number(params.trial_end);
+        if (!price) return notFound(c, 'price', params.items?.[0]?.price);
+        if (!(target > now() && target <= now() + 730 * DAY))
+          return c.json({ error: { type: 'invalid_request_error', message: 'Invalid absolute trial end' } }, 400);
+        const subscription = newSubscription(params.customer, price, 1, (target - now()) / DAY);
+        subscription.metadata = params.metadata ?? {};
+        subscription.default_payment_method = params.default_payment_method;
+        subscription.automatic_tax = params.automatic_tax;
+        state.subscriptions[subscription.id] = subscription;
+        if (key) state.idempotentObjects[key] = subscription;
+        sendLater('customer.subscription.created', subscription);
+        return c.json(subscription);
+      });
+
+      app.post('/v1/checkout/sessions/:id/expire' , (c: any) => {
         const session = state.checkoutSessions[c.req.param('id')];
         if (!session) return notFound(c, 'checkout.session', c.req.param('id'));
         if (session.status !== 'open') {
@@ -453,6 +491,8 @@ export function pumpkitStripe(target: WebhookTarget) {
         if (!session) return c.html(page('Checkout not found', ''), 404);
         if (session.status !== 'open')
           return c.html(page(`This Checkout is ${session.status}`, ''), 410);
+        if (session.mode === 'setup')
+          return c.html(page('Save a card for your accepted future plan', `<p>No payment today. Your free access stays unchanged.</p><form method="post" action="/checkout/${session.id}/pay"><button type="submit">Save card</button></form><p><a href="${escapeHtml(session.cancel_url)}">Cancel</a></p>`));
         const price = state.prices[session.pumpkit_line_item.price];
         const product = state.products[price.product];
         const amount = `${(price.unit_amount / 100).toFixed(2)} ${price.currency.toUpperCase()}`;
@@ -474,6 +514,17 @@ export function pumpkitStripe(target: WebhookTarget) {
         const session = state.checkoutSessions[c.req.param('id')];
         if (!session || session.status !== 'open')
           return c.html(page('This Checkout is closed', ''), 410);
+        if (session.mode === 'setup') {
+          const intent = { id: newId('seti'), object: 'setup_intent', status: 'succeeded', usage: 'off_session',
+            customer: session.customer, metadata: session.pumpkit_setup_metadata,
+            payment_method: { id: newId('pm'), object: 'payment_method', customer: session.customer, type: 'card' } };
+          state.setupIntents[intent.id] = intent;
+          session.setup_intent = intent.id;
+          session.status = 'complete';
+          session.payment_status = 'no_payment_required';
+          await send('checkout.session.completed', session);
+          return c.redirect(session.success_url, 303);
+        }
         const { price: priceId, quantity } = session.pumpkit_line_item;
         const price = state.prices[priceId];
         session.status = 'complete';

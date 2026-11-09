@@ -284,6 +284,7 @@ async def record_terms_acceptance(
     accepted_terms: bool,
     requested_immediate_start: bool,
     approved_specific_clauses: bool,
+    paid_offer: Optional[dict] = None,
 ) -> TermsAcceptance:
     """Record that the User accepted `terms_version` with these boxes ticked. Flushes, never commits."""
     acceptance = TermsAcceptance(
@@ -292,6 +293,7 @@ async def record_terms_acceptance(
         accepted_terms=accepted_terms,
         requested_immediate_start=requested_immediate_start,
         approved_specific_clauses=approved_specific_clauses,
+        paid_offer=paid_offer,
     )
     db.add(acceptance)
     await db.flush()

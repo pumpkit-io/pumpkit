@@ -202,3 +202,28 @@ Cancellation between preview and confirmation changes the offer and requires a f
 Settings distinguishes paid-through, queued/current free access and its final end from actual provider status. Scheduling may use all earned paid and free months but refuses the exact final timestamp and later. The publisher checks current access again. Expiry returns to the existing Paywall unless the User independently agrees to a new paid subscription. Subscribe now and the generic portal cannot charge away remaining benefits, including while Coupons are off.
 
 No migration, new provider configuration or new job is required. Coupons remain disabled by default; final #394 must validate real monthly/annual cancellation before claim, during uncertain confirmation and during free access, including ended provider records, invoices and notices, before activation.
+
+## Arrange paid renewal during free access
+
+With Coupons enabled, Settings lets a recipient with current Free access and no running subscription review a configured monthly or annual plan. The review shows the current price, interval and exact first-payment timestamp in UTC. A fresh paid acceptance agrees to that plan and date. A saved card, an old customer record and acceptance of a Coupon never authorize this signup. No introductory Trial is added. Each grant keeps its accepted monthly Allowance, usage and calendar anchor.
+
+Pumpkit commits the accepted offer and paid consent before creating a customer or Checkout. Hosted Checkout collects a card for future off-session payments, the full billing address and tax ID; it takes no payment. After reading the current completed SetupIntent and its customer-owned payment method, Pumpkit creates the subscription with automatic tax and the unchanged absolute free end. This uses the installed Stripe API's direct subscription `trial_end`, avoiding subscription Checkout's 48-hour minimum. Setup mode itself does not calculate automatic tax. The first full paid month or year starts at the agreed end. The provider's `trialing` status describes this deferral; Settings continues to describe Free access.
+
+An open or uncertain signup is shown as being confirmed, with Resume checkout, Check status and Cancel signup actions. It blocks conflicting billing, Coupon redemption and account deletion under the same User lock. Cancellation, expiry, abandonment and failure leave all free months and Allowances intact. After confirmed signup, Cancel renewal preserves every remaining free month and removes the future payment. Additional Coupons extend this real subscription through the ordinary redemption flow; they never create an introductory Trial or a fabricated redemption operation.
+
+If setup finishes after the agreed date, Pumpkit first checks whether the authorized subscription already exists. If it does not, a fresh paid offer and acceptance are required. It never charges immediately off-session or substitutes a later date. A provider refusal of the exact date remains recoverable, with all benefits intact.
+
+`POST /api/v1/billing/paid-signups/preview` reviews a plan; `POST /api/v1/billing/paid-signups` accepts its signed offer with a caller-generated operation identifier and fresh paid acceptance. `GET /api/v1/billing/paid-signups/{operation_id}` recovers its outcome; `POST /api/v1/billing/paid-signups/{operation_id}/cancel` cancels an unfinished arrangement. Recovery remains available when Coupons are disabled. Webhooks read current setup sessions, SetupIntent/payment-method ownership and every subscription, including ended history, before reconciling. Stable metadata and absolute targets survive Stripe's idempotency-key retention; a lost customer response is recovered through its User metadata before another customer can be created.
+
+Privileged recovery without a browser:
+
+```sh
+cd backend
+uv run python -m pumpkit.billing.paid_signup_recovery recover --list
+uv run python -m pumpkit.billing.paid_signup_recovery recover --limit 100
+uv run python -m pumpkit.billing.paid_signup_recovery recover --operation-id CALLER_OPERATION_ID
+```
+
+Run recovery periodically and alert on a nonzero exit or pending records. It prints operation identifiers and sanitized statuses, never payment details, codes or recipient addresses. Pending intent never ages out. Resolved signup recovery evidence is removed by the existing Coupon purge 90 days after the later resolution and accepted free end; the accepted plan, price, interval, first-payment date and language remain with the existing paid Terms acceptance. Account deletion retains the existing paid-evidence lifecycle and cannot proceed with unresolved signup work.
+
+**Upgrade notes:** apply migration `0049` before serving requests and include paid-signup recovery in the Instance's existing billing recovery checks. Coupons remain disabled by default. Final #394 must verify the merged hosted setup and direct-subscription flow on the installed Stripe version, including both intervals and billing modes, 48-hour boundaries, near-expiry and provider clock differences, full first paid periods, tax/address/ID collection, off-session authentication and customer notices. Emulator and adapter contracts establish the local behavior; they do not establish real hosted provider behavior. A failed final provider case needs a corrective follow-up before activation.

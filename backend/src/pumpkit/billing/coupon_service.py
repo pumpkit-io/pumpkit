@@ -11,7 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.auth.models import User
 from pumpkit.billing.coupon_identity import fingerprints
 from pumpkit.billing.gateway import Plan
-from pumpkit.billing.models import Coupon, CouponClaim, CouponOperation, FreeAccess, Subscription
+from pumpkit.billing.models import (
+    Coupon,
+    CouponClaim,
+    CouponOperation,
+    FreeAccess,
+    PaidSignup,
+    Subscription,
+)
 from pumpkit.billing.schemas import CouponIssueRequest
 from pumpkit.core.config import Settings
 from pumpkit.core.errors import ConflictError, NotConfiguredError
@@ -247,6 +254,16 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
         .returning(CouponOperation.id)
     )
     purged += len(list(operations))
+    signups = await db.scalars(
+        delete(PaidSignup)
+        .where(
+            PaidSignup.status != "pending",
+            PaidSignup.resolved_at <= now - timedelta(days=90),
+            PaidSignup.first_payment_at <= now - timedelta(days=90),
+        )
+        .returning(PaidSignup.id)
+    )
+    purged += len(list(signups))
     ended = await db.scalars(
         delete(FreeAccess)
         .where(FreeAccess.ends_at <= now - timedelta(days=90))

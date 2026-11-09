@@ -88,6 +88,8 @@ class FreeAccessCoverageResponse(FreeAccessResponse):
 
 
 class BillingMeResponse(BaseModel):
+    pending_paid_signup_id: Optional[str] = None
+    may_arrange_paid_signup: bool = False
     pending_coupon_operation: bool = False
     pending_coupon_operation_id: Optional[str] = None
     coupon_deferral: bool = False
@@ -202,3 +204,36 @@ class CouponRedemptionResponse(FreeAccessResponse):
     status: Literal["pending", "completed", "refused"] = "completed"
     next_payment_at: Optional[datetime] = None
     detail: Optional[str] = None
+
+
+class PaidSignupPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan_key: str = Field(min_length=1)
+
+
+class PaidSignupPreviewResponse(BaseModel):
+    plan_key: str
+    product_name: str
+    amount: int
+    currency: str
+    interval: str
+    interval_count: int
+    first_payment_at: datetime
+    terms_version: Optional[str]
+    revision: str
+
+
+class PaidSignupRequest(TermsAcceptanceRequest):
+    operation_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
+    revision: SecretStr = Field(min_length=1, max_length=8192)
+    language: Literal["en", "it"]
+
+
+class PaidSignupResponse(BaseModel):
+    operation_id: str
+    status: Literal["pending", "completed", "refused"]
+    detail: Optional[str] = None
+    url: Optional[str] = None
+    session_id: Optional[str] = None
+    first_payment_at: datetime
+    plan_key: str

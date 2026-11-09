@@ -16,6 +16,10 @@ from pumpkit.billing.schemas import (
     CouponPreviewResponse,
     CouponRedemptionRequest,
     CouponRedemptionResponse,
+    PaidSignupPreviewRequest,
+    PaidSignupPreviewResponse,
+    PaidSignupRequest,
+    PaidSignupResponse,
     PlansListResponse,
     TopUpCheckoutRequest,
 )
@@ -200,3 +204,63 @@ async def cancel_renewal(
     clock: Clock = Depends(get_clock),
 ) -> BillingMeResponse:
     return await mediator.cancel_renewal(db, gateway, current_user, clock=clock)
+
+
+@router.post("/billing/paid-signups/preview", response_model=PaidSignupPreviewResponse)
+@limiter.limit("20/minute")
+async def preview_paid_signup(
+    request: Request,
+    signup_request: PaidSignupPreviewRequest,
+    clock: Clock = Depends(get_clock),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PaidSignupPreviewResponse:
+    return await mediator.preview_paid_signup(
+        db, gateway, current_user, plan_key=signup_request.plan_key, clock=clock
+    )
+
+
+@router.post("/billing/paid-signups", response_model=PaidSignupResponse)
+@limiter.limit("20/minute")
+async def create_paid_signup(
+    request: Request,
+    signup_request: PaidSignupRequest,
+    clock: Clock = Depends(get_clock),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PaidSignupResponse:
+    return await mediator.create_paid_signup(
+        db, gateway, current_user, request=signup_request, clock=clock
+    )
+
+
+@router.get("/billing/paid-signups/{operation_id}", response_model=PaidSignupResponse)
+@limiter.limit("60/minute")
+async def lookup_paid_signup(
+    request: Request,
+    operation_id: str,
+    clock: Clock = Depends(get_clock),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PaidSignupResponse:
+    return await mediator.lookup_paid_signup(
+        db, gateway, current_user, operation_id=operation_id, clock=clock
+    )
+
+
+@router.post("/billing/paid-signups/{operation_id}/cancel", response_model=PaidSignupResponse)
+@limiter.limit("20/minute")
+async def cancel_paid_signup(
+    request: Request,
+    operation_id: str,
+    clock: Clock = Depends(get_clock),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+) -> PaidSignupResponse:
+    return await mediator.lookup_paid_signup(
+        db, gateway, current_user, operation_id=operation_id, clock=clock, cancel=True
+    )
