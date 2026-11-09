@@ -814,7 +814,7 @@ async def test_billing_disabled_access_onboarding_and_usage_agree_despite_subscr
 
 
 @pytest.mark.parametrize("status", ["active", "trialing"])
-async def test_access_ends_when_the_provider_cancellation_is_synced_at_the_exact_end(
+async def test_access_ends_at_the_known_cancellation_even_before_the_provider_nudge(
     client, db, user, fake_billing, fixed_clock, status
 ):
     end = fixed_clock() + timedelta(seconds=1)
@@ -842,7 +842,7 @@ async def test_access_ends_when_the_provider_cancellation_is_synced_at_the_exact
 
     await assert_access(True)
     fixed_clock.advance(timedelta(seconds=1))
-    await assert_access(True)
+    await assert_access(False)
     fake_billing.set_subscription(CUSTOMER, replace(state, status="canceled"))
     payload, signature = fake_billing.signed_event(
         event_id="evt_cancellation_at_end",

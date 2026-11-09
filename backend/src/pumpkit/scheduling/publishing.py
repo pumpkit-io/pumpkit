@@ -95,7 +95,7 @@ async def recover_stuck(db: AsyncSession, *, now: datetime) -> None:
     )
     for scheduled_post in recovered.failed:
         await rebalance_top_ups(
-            db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)]
+            db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)], now=now
         )
     await db.commit()
     for scheduled_post in recovered.published:
@@ -253,7 +253,10 @@ async def _settle(
         )
         if failed_for_good:
             await rebalance_top_ups(
-                db, user_id=scheduled_post.user_id, moments=[as_utc(scheduled_post.publish_at)]
+                db,
+                user_id=scheduled_post.user_id,
+                moments=[as_utc(scheduled_post.publish_at)],
+                now=claim.clock(),
             )
         await db.commit()
         if failed_for_good:

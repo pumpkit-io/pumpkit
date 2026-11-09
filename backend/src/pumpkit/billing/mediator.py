@@ -389,7 +389,12 @@ async def subscribe_now(
     await coupon_operations.require_settled(db, user_id=user.id)
     if await service.get_free_access(db, user_id=user.id, now=clock()):
         raise ConflictError("Your coupon free access must finish before any immediate payment.")
-    if subscription is None or subscription.status != "trialing":
+    if (
+        subscription is None
+        or subscription.status != "trialing"
+        or subscription.cancel_at is not None
+        and as_utc(subscription.cancel_at) <= clock()
+    ):
         # Keep the provider sync when refusing without releasing a lock before a mutation.
         await db.commit()
         raise _not_trialing()

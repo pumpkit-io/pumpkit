@@ -63,12 +63,12 @@ def _cover(
 
 
 async def _allowances(
-    db: AsyncSession, *, user_id: str, moments: Iterable[datetime]
+    db: AsyncSession, *, user_id: str, moments: Iterable[datetime], now: Optional[datetime]
 ) -> list[Allowance]:
     """The Allowances of the periods holding `moments`, one per period, earliest first."""
     allowances: dict[datetime, Allowance] = {}
     for moment in moments:
-        allowance = await billing_service.get_allowance(db, user_id=user_id, moment=moment)
+        allowance = await billing_service.get_allowance(db, user_id=user_id, moment=moment, now=now)
         if allowance is not None:
             allowances[allowance.period.start] = allowance
     return [allowances[start] for start in sorted(allowances)]
@@ -135,14 +135,16 @@ async def _fixed(
     )
 
 
-async def rebalance_top_ups(db: AsyncSession, *, user_id: str, moments: Iterable[datetime]) -> None:
+async def rebalance_top_ups(
+    db: AsyncSession, *, user_id: str, moments: Iterable[datetime], now: datetime
+) -> None:
     """
     Charge the User's waiting and Failed Scheduled posts afresh in the Allowance periods holding
     `moments`, after one there is created, changed, deleted or Failed. Their charges go back to
     the Top-ups, then each, in publish-time order, takes what its period can't cover, so the
     Top-ups pay exactly for the overflow. Call it with the User locked. Flushes.
     """
-    allowances = await _allowances(db, user_id=user_id, moments=moments)
+    allowances = await _allowances(db, user_id=user_id, moments=moments, now=now)
     if not allowances:
         return
     planned = [await _planned(db, user_id=user_id, allowance=a, trimming=True) for a in allowances]
@@ -186,7 +188,7 @@ async def keep_live_parts_counted(
     # Failed counts only the live Parts, so the charging below pays for them alone.
     if not await service.stop(db, scheduled_post_id=scheduled_post_id, now=now):
         return False
-    await rebalance_top_ups(db, user_id=user_id, moments=[publish_at])
+    await rebalance_top_ups(db, user_id=user_id, moments=[publish_at], now=now)
     paid = await billing_service.keep_charges_after_delete(db, scheduled_post_id=scheduled_post_id)
     live = x_posts_in(await service.counted_parts(db, scheduled_post_id=scheduled_post_id))
     await service.keep_unscheduled_live_parts(
@@ -220,6 +222,7 @@ async def check_room(
     needed: XPosts,
     limits: dict[AllowanceCount, int],
     changing_id: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> None:
     """
     Raise `AllowanceUsedUp` when charging the periods afresh with a Scheduled post needing
@@ -238,7 +241,7 @@ async def check_room(
         paid = await _paid_on_removed(
             db, scheduled_post_id=changing_id, needed=needed, trimming=False
         )
-    allowances = await _allowances(db, user_id=user_id, moments=moments)
+    allowances = await _allowances(db, user_id=user_id, moments=moments, now=now)
     planned = [await _planned(db, user_id=user_id, allowance=a) for a in allowances]
     ids = {p.scheduled_post_id for posts in planned for p in posts if p.scheduled_post_id}
     if changing_id is not None:

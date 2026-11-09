@@ -45,8 +45,7 @@ class Entitlement:
                 "past_due",
             }
             and (
-                self.subscription.paid_start is None
-                or self.subscription.cancel_at is None
+                self.subscription.cancel_at is None
                 or self.now < as_utc(self.subscription.cancel_at)
             )
         )
