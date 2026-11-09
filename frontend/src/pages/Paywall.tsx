@@ -47,7 +47,7 @@ function firstChargeDate(trialDays: number): string {
 function Heading({ title, lead }: { title: string; lead?: string }) {
   return (
     <div className="max-w-[560px] space-y-2">
-      <h1 className="font-sans text-2xl/[30px] font-semibold tracking-[-0.015em] text-foreground">
+      <h1 className="font-sans text-2xl leading-tight font-semibold tracking-[-0.015em] text-foreground">
         {title}
       </h1>
       {lead && <p className="font-sans text-sm text-muted-foreground">{lead}</p>}
