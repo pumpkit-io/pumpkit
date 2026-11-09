@@ -156,7 +156,7 @@ class XAccount:
     display_name: Optional[str] = None
 
 
-class _XProfile(BaseModel):
+class _XSignInProfile(BaseModel):
     model_config = ConfigDict(strict=True)
 
     id: str = Field(pattern=r"^[0-9]+$")
@@ -206,8 +206,9 @@ class XPublisher(Protocol):
         """
         ...
 
-    async def fetch_account(self, *, access_token: str) -> XAccount:
-        """The X account the token acts for; a refused token raises `XReconnectNeededError`."""
+    async def fetch_account(self, *, access_token: str, for_sign_in: bool = False) -> XAccount:
+        """Publishing tokens may lack users.email, so only sign-in reads request confirmed email.
+        Sign-in reads also strictly validate identity; publishing retains existing field handling."""
         ...
 
     async def upload_media(
@@ -303,15 +304,16 @@ class OfficialXPublisher:
         )
         return _tokens_from(body, now=now, previous_refresh_token=refresh_token)
 
-    async def fetch_account(self, *, access_token: str) -> XAccount:
+    async def fetch_account(self, *, access_token: str, for_sign_in: bool = False) -> XAccount:
+        fields = "subscription_type,profile_image_url"
+        if for_sign_in:
+            fields += ",confirmed_email,name"
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 response = await client.get(
                     X_USERS_ME_URL,
                     headers={"Authorization": f"Bearer {access_token}"},
-                    params={
-                        "user.fields": "subscription_type,profile_image_url,confirmed_email,name"
-                    },
+                    params={"user.fields": fields},
                 )
         except httpx.HTTPError as error:
             raise XPublisherError(f"X unreachable: {type(error).__name__}") from error
@@ -323,8 +325,27 @@ class OfficialXPublisher:
         data = body.get("data") if isinstance(body, dict) else None
         if not isinstance(data, dict):
             raise XPublisherError("X users/me returned a body without data")
+        if not for_sign_in:
+            user_id, handle = data.get("id"), data.get("username")
+            if (
+                not isinstance(user_id, str)
+                or not user_id
+                or not isinstance(handle, str)
+                or not handle
+            ):
+                raise XPublisherError("X users/me returned no id or username")
+            subscription_type = data.get("subscription_type")
+            photo_url = data.get("profile_image_url")
+            return XAccount(
+                user_id=user_id,
+                handle=handle,
+                subscription_type=subscription_type if isinstance(subscription_type, str) else None,
+                photo_url=_larger_photo(photo_url)
+                if isinstance(photo_url, str) and photo_url
+                else None,
+            )
         try:
-            profile = _XProfile.model_validate(data)
+            profile = _XSignInProfile.model_validate(data)
         except ValidationError:
             raise XPublisherError("X users/me returned malformed profile data") from None
         return XAccount(
@@ -741,10 +762,14 @@ class FakeXPublisher:
             raise self.fail_refresh
         return replace(self._issue(now), scope=self.refresh_scope)
 
-    async def fetch_account(self, *, access_token: str) -> XAccount:
+    async def fetch_account(self, *, access_token: str, for_sign_in: bool = False) -> XAccount:
         if self.fail_fetch_account is not None:
             raise self.fail_fetch_account
-        return self.account
+        return (
+            self.account
+            if for_sign_in
+            else replace(self.account, confirmed_email=None, display_name=None)
+        )
 
     async def publish(
         self,

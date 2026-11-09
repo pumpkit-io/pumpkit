@@ -206,9 +206,29 @@ async def test_reading_the_account_returns_its_id_handle_and_subscription_type()
     assert account == XAccount(user_id="42", handle="ada", subscription_type="Premium")
     request = route.calls.last.request
     assert request.headers["Authorization"] == "Bearer access-1"
-    assert (
-        request.url.params["user.fields"]
-        == "subscription_type,profile_image_url,confirmed_email,name"
+    assert request.url.params["user.fields"] == "subscription_type,profile_image_url"
+
+
+@respx.mock
+async def test_publishing_profile_reads_keep_legacy_optional_field_handling():
+    respx.get(X_USERS_ME_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "id": "legacy-id",
+                    "username": "legacy_handle_longer_than_15",
+                    "subscription_type": 42,
+                    "profile_image_url": "",
+                }
+            },
+        )
+    )
+
+    account = await OfficialXPublisher().fetch_account(access_token="publishing-access")
+
+    assert account == XAccount(
+        user_id="legacy-id", handle="legacy_handle_longer_than_15", subscription_type=None
     )
 
 
@@ -874,7 +894,7 @@ async def test_the_account_returns_confirmed_email_and_display_name():
         )
     )
 
-    account = await OfficialXPublisher().fetch_account(access_token="access-1")
+    account = await OfficialXPublisher().fetch_account(access_token="access-1", for_sign_in=True)
 
     assert account.confirmed_email == "ada@example.com"
     assert account.display_name == "Ada Lovelace"
@@ -910,7 +930,7 @@ async def test_malformed_profile_fields_fail_without_returning_partial_identity(
     respx.get(X_USERS_ME_URL).mock(return_value=httpx.Response(200, json={"data": data}))
 
     with pytest.raises(XPublisherError):
-        await OfficialXPublisher().fetch_account(access_token="access-1")
+        await OfficialXPublisher().fetch_account(access_token="access-1", for_sign_in=True)
 
 
 @respx.mock
@@ -929,7 +949,7 @@ async def test_unconfirmed_email_does_not_supply_a_sign_in_email():
         )
     )
 
-    account = await OfficialXPublisher().fetch_account(access_token="access-1")
+    account = await OfficialXPublisher().fetch_account(access_token="access-1", for_sign_in=True)
 
     assert account.confirmed_email is None
 
