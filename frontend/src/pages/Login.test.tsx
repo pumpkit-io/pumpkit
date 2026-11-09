@@ -29,6 +29,12 @@ describe('the sign-in page', () => {
     ['invalid_magic_link', /magic link is invalid or has expired/i],
     ['account_suspended', /account has been suspended/i],
     ['sign_in_failed', /couldn't sign you in/i],
+    ['x_email_required', /confirm an email address on X/i],
+    ['x_authorization_invalid', /authorization expired or is invalid/i],
+    ['x_authorization_cancelled', /cancelled X authorization/i],
+    ['x_permissions_required', /allow all requested X permissions/i],
+    ['x_provider_failed', /X is not answering/i],
+    ['x_account_unavailable', /contact support/i],
     ['email_not_allowed', /^This site doesn't accept sign-ins from that email address\.$/i],
   ])('explains the %s error', (code, message) => {
     renderLogin(`/login?error=${code}`);

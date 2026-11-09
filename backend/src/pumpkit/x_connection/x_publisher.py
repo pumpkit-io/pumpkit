@@ -89,6 +89,10 @@ class XReconnectNeededError(XPublisherError):
     """X refuses these tokens for good: only the User going through X's consent screen again helps."""
 
 
+class XPermissionsRequiredError(XReconnectNeededError):
+    """The grant lacks a permission needed for this authorization."""
+
+
 class XRateLimitedError(XPublisherError):
     """X answered 429: nothing was published."""
 
@@ -292,7 +296,7 @@ class OfficialXPublisher:
             body, now=now, previous_refresh_token="", requested_scopes=required_scopes
         )
         if not tokens.refresh_token:
-            raise XReconnectNeededError(
+            raise XPermissionsRequiredError(
                 "X returned no refresh token: the authorization is missing the offline.access "
                 "scope, so it would stop working within two hours."
             )
@@ -592,7 +596,7 @@ def _tokens_from(
 
 def _require_scopes(tokens: XTokens, required_scopes: str) -> XTokens:
     if not set(required_scopes.split()).issubset(tokens.scope.split()):
-        raise XReconnectNeededError("X did not grant the required permissions")
+        raise XPermissionsRequiredError("X did not grant the required permissions")
     return tokens
 
 

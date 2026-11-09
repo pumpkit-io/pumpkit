@@ -25,6 +25,15 @@ const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
     'That magic link is invalid or has expired. Request a new one below.',
   [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
   [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Try again.",
+  [SIGN_IN_ERROR.xEmailRequired]: 'Confirm an email address on X, then try signing in again.',
+  [SIGN_IN_ERROR.xAuthorizationInvalid]:
+    'This X authorization expired or is invalid. Continue with X again.',
+  [SIGN_IN_ERROR.xAuthorizationCancelled]:
+    'You cancelled X authorization. Continue with X when you are ready.',
+  [SIGN_IN_ERROR.xPermissionsRequired]:
+    'Allow all requested X permissions so Pumpkit can sign you in and publish your posts.',
+  [SIGN_IN_ERROR.xAccountUnavailable]: 'This X account cannot sign in right now. Contact support.',
+  [SIGN_IN_ERROR.xProviderFailed]: 'X is not answering right now. Try signing in again shortly.',
   [SIGN_IN_ERROR.emailNotAllowed]: "This site doesn't accept sign-ins from that email address.",
 };
 

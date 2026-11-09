@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import delete, select
-from sqlalchemy.exc import MultipleResultsFound
+from sqlalchemy.exc import IntegrityError, MultipleResultsFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import MagicLink, User
@@ -18,7 +18,10 @@ async def get_user_by_email(
     query = select(User).where(User.email == email)
     result = await db.execute(query)
     try:
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        if user is not None and user.x_user_id is not None:
+            raise ForbiddenError("Sign in with the X account that owns this profile.")
+        return user
     except MultipleResultsFound as error:
         raise ForbiddenError(
             "This email belongs to more than one account. Contact support."
@@ -194,3 +197,32 @@ async def delete_account(db: AsyncSession, user: User) -> None:
     await db.execute(delete(MagicLink).where(MagicLink.email == user.email))
     await db.execute(delete(User).where(User.id == user.id))
     await db.flush()
+
+
+async def resolve_user_by_x_id(
+    db: AsyncSession, *, x_user_id: str, handle: str, email: str, display_name: Optional[str]
+) -> User:
+    query = (
+        select(User)
+        .where(User.x_user_id == x_user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    user = await db.scalar(query)
+    if user is None:
+        try:
+            async with db.begin_nested():
+                user = await create_user(
+                    db, email, NameHints(first_name=display_name, display_name=display_name)
+                )
+                user.x_user_id = x_user_id
+                await db.flush()
+        except IntegrityError:
+            # The stable-ID constraint elects one creator; a competing sign-in uses its account.
+            user = await db.scalar(query)
+            if user is None:
+                raise
+    user.email = email.strip().lower()
+    user.x_handle = handle
+    await db.flush()
+    return user

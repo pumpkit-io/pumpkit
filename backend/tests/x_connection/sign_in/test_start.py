@@ -75,14 +75,16 @@ async def test_the_browser_binding_is_an_expiring_http_only_cookie(
     started = await sign_in_browser.get("/api/v1/login/x")
 
     cookie = started.headers["set-cookie"]
-    assert cookie.startswith("x_sign_in_browser=")
+    cookie_name = "__Host-x_sign_in_browser" if secure else "x_sign_in_browser"
+    assert cookie.startswith(f"{cookie_name}=")
+    assert "; Domain=" not in cookie
     assert "; HttpOnly" in cookie
     assert "; Max-Age=600" in cookie
     assert "; Path=/" in cookie
     assert "; SameSite=lax" in cookie
     assert ("; Secure" in cookie) is secure
     query = parse_qs(urlsplit(started.json()["url"]).query)
-    secret = started.cookies["x_sign_in_browser"]
+    secret = started.cookies[cookie_name]
     assert len(secret) >= 43
     assert secret not in (query["state"][0], query["code_challenge"][0])
     assert secret not in started.json()["url"]

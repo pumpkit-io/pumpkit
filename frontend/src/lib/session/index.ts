@@ -32,7 +32,7 @@ export type EndSessionReason = 'user' | 'session_ended' | 'account_suspended' | 
  */
 export type StartFailureReason = 'missing_token' | 'invalid_expiry';
 
-export type StartFromFragmentResult = { ok: true } | { ok: false; reason: StartFailureReason };
+export type StartSessionResult = { ok: true } | { ok: false; reason: StartFailureReason };
 
 const ROUTE_AFTER_END: Record<EndSessionReason, string> = {
   user: signInPath(),
@@ -170,20 +170,22 @@ export const session = {
     ending = null;
     notify(current);
   },
-  /**
-   * Start a Session from a callback fragment (`#access_token=…&token_type=Bearer&expires_at=<ISO>`).
-   * On failure it starts nothing and returns the reason for a sign-in page error.
-   */
-  startFromFragment(fragment: string): StartFromFragmentResult {
-    const params = new URLSearchParams(fragment.replace(/^#/, ''));
-    const accessToken = params.get('access_token');
-    const expiresAt = params.get('expires_at');
-    if (!accessToken) return { ok: false, reason: 'missing_token' };
-    if (!expiresAt || Number.isNaN(Date.parse(expiresAt))) {
+  /** Malformed callback credentials must not create a Session. */
+  startFromCredentials(accessToken: unknown, expiresAt: unknown): StartSessionResult {
+    if (typeof accessToken !== 'string' || !accessToken)
+      return { ok: false, reason: 'missing_token' };
+    if (typeof expiresAt !== 'string' || Number.isNaN(Date.parse(expiresAt))) {
       return { ok: false, reason: 'invalid_expiry' };
     }
     session.start(accessToken, expiresAt);
     return { ok: true };
+  },
+  /** Read callback credentials from a fragment, which never reaches the server. */
+  startFromFragment(fragment: string): StartSessionResult {
+    const params = new URLSearchParams(fragment.replace(/^#/, ''));
+    const accessToken = params.get('access_token');
+    const expiresAt = params.get('expires_at');
+    return session.startFromCredentials(accessToken, expiresAt);
   },
   /**
    * Refresh through the single refresh path. A 401 ends the Session; any other
