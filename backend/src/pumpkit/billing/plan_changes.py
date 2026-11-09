@@ -198,7 +198,7 @@ async def prepare(
         customer_id=user.stripe_customer_id,
         subscription_id=signed["original"]["id"],
         original=signed["original"],
-        offer={**signed["offer"], "price_id": signed["price_id"]},
+        offer={**signed["offer"], "price_id": signed["price_id"], "use_provider_anchor": True},
         created_at=now,
     )
     db.add(operation)
@@ -297,6 +297,8 @@ async def reconcile(
                 item_id=original["item_id"],
                 price_id=operation.offer["price_id"],
                 operation_id=operation.id,
+                # Older intents must replay their original parameters under the same key.
+                use_provider_anchor=operation.offer.get("use_provider_anchor", False),
             )
         except DeferralRefused:
             if not prior_unknown:

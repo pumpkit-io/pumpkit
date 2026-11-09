@@ -22,6 +22,7 @@ from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar, cast, g
 
 import stripe
 from starlette.concurrency import run_in_threadpool
+from stripe.params import SubscriptionUpdateParams
 from stripe.params.billing_portal import SessionCreateParams as PortalSessionCreateParams
 from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateParams
 
@@ -211,7 +212,13 @@ class BillingGateway(Protocol):
     async def create_portal_url(self, *, customer_id: str, restricted: bool = False) -> str: ...
 
     async def change_plan(
-        self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str
+        self,
+        *,
+        subscription_id: str,
+        item_id: str,
+        price_id: str,
+        operation_id: str,
+        use_provider_anchor: bool = False,
     ) -> None: ...
 
     async def list_plans(self, keys: Sequence[str]) -> list[Plan]:
@@ -829,18 +836,26 @@ class StripeBillingGateway:
             raise BillingProviderError("Stripe coupon deferral outcome is uncertain") from exc
 
     async def change_plan(
-        self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str
+        self,
+        *,
+        subscription_id: str,
+        item_id: str,
+        price_id: str,
+        operation_id: str,
+        use_provider_anchor: bool = False,
     ) -> None:
+        params: SubscriptionUpdateParams = {
+            "items": [{"id": item_id, "price": price_id}],
+            "proration_behavior": "none",
+            "metadata": {"pumpkit_plan_change": operation_id},
+        }
+        if not use_provider_anchor:
+            params["billing_cycle_anchor"] = "unchanged"
         try:
             await run_in_threadpool(
                 self._client.v1.subscriptions.update,
                 subscription_id,
-                {
-                    "items": [{"id": item_id, "price": price_id}],
-                    "proration_behavior": "none",
-                    "billing_cycle_anchor": "unchanged",
-                    "metadata": {"pumpkit_plan_change": operation_id},
-                },
+                params,
                 {"idempotency_key": "plan-change-" + operation_id},
             )
         except stripe.InvalidRequestError as exc:
@@ -1313,7 +1328,13 @@ class FakeBillingGateway:
                 )
 
     async def change_plan(
-        self, *, subscription_id: str, item_id: str, price_id: str, operation_id: str
+        self,
+        *,
+        subscription_id: str,
+        item_id: str,
+        price_id: str,
+        operation_id: str,
+        use_provider_anchor: bool = False,
     ) -> None:
         self._maybe_fail("change_plan")
         self._maybe_fail("plan_change_in_progress")

@@ -975,12 +975,12 @@ async def test_interval_change_retains_trial_anchor_and_cancellation_without_pro
         item_id="si_change",
         price_id="price_year",
         operation_id="change_contract",
+        use_provider_anchor=True,
     )
     assert http.forms[0] == {
         "items[0][id]": ["si_change"],
         "items[0][price]": ["price_year"],
         "proration_behavior": ["none"],
-        "billing_cycle_anchor": ["unchanged"],
         "metadata[pumpkit_plan_change]": ["change_contract"],
     }
     assert http.headers[0]["Idempotency-Key"] == "plan-change-change_contract"
@@ -1104,3 +1104,16 @@ async def test_in_progress_coupon_deferral_is_uncertain():
             operation_id="in_progress",
         )
     assert not isinstance(caught.value, DeferralRefused)
+
+
+async def test_legacy_interval_change_replays_original_anchor_parameter():
+    http = _RecordedStripe('{"id":"sub_change","object":"subscription"}')
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    await gateway.change_plan(
+        subscription_id="sub_change",
+        item_id="si_change",
+        price_id="price_month",
+        operation_id="legacy_change",
+    )
+    assert http.forms[0]["billing_cycle_anchor"] == ["unchanged"]
+    assert http.headers[0]["Idempotency-Key"] == "plan-change-legacy_change"

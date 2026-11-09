@@ -3,13 +3,14 @@ from datetime import datetime, timedelta
 from io import StringIO
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from pumpkit.account_deletion import run_cli as delete_cli
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.allowance import months_after
 from pumpkit.billing.gateway import Plan
+from pumpkit.billing.models import PlanChange
 from pumpkit.billing.plan_change_recovery import run_cli
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
@@ -754,3 +755,29 @@ async def test_expired_access_keeps_account_linked_change_recovery_after_externa
     assert (await authed_client.get("/api/v1/billing/me")).json()[
         "pending_plan_change_id"
     ] == request["operation_id"]
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_recovery_keeps_the_original_provider_anchor_policy(
+    authed_client, coupons, db, user, fake_billing, fixed_clock, monkeypatch, legacy
+):
+    await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    request = await proposed_change(authed_client)
+    fake_billing.delay_plan_changes = True
+    assert (await authed_client.post(CHANGES, json=request)).json()["status"] == "pending"
+    if legacy:
+        operation = await db.scalar(select(PlanChange))
+        assert operation is not None
+        operation.offer = {k: v for k, v in operation.offer.items() if k != "use_provider_anchor"}
+        await db.commit()
+    fake_billing.delay_plan_changes = False
+    change = fake_billing.change_plan
+
+    async def check_policy(*, use_provider_anchor=False, **kwargs):
+        assert use_provider_anchor is not legacy
+        await change(**kwargs)
+
+    monkeypatch.setattr(fake_billing, "change_plan", check_policy)
+    result = await authed_client.get(CHANGES + "/" + request["operation_id"])
+    assert result.status_code == 200, result.text
+    assert result.json()["status"] == "completed"
