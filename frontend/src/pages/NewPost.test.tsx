@@ -18,6 +18,7 @@ vi.mock('@/services/billingService', () => ({
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn().mockResolvedValue({
       plans: [],
+      couponsEnabled: false,
       termsVersion: '2026-10-11',
       allowance: { generations: null, xPosts: null, linkXPosts: null },
       trial: null,
@@ -166,6 +167,7 @@ function sellingTopUps(termsVersion: string | null) {
   fetchPlans.mockResolvedValue({
     plans: [],
     termsVersion,
+    couponsEnabled: false,
     allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
     trial: null,
     topUp: { amount: 1000, currency: 'eur', generations: 250, xPosts: 50, linkXPosts: 5 },
@@ -620,6 +622,7 @@ describe('New post', () => {
             intervalCount: 1,
           },
         ],
+        couponsEnabled: false,
         termsVersion: '2026-10-11',
         allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
         trial: null,

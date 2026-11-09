@@ -18,6 +18,7 @@ vi.mock('@/services/billingService', () => ({
   billingService: {
     fetchBillingMe: vi.fn(),
     fetchPlans: vi.fn(),
+    previewCoupon: vi.fn(),
     startSubscriptionCheckout: vi.fn(),
     openBillingPortal: vi.fn(),
   },
@@ -91,6 +92,7 @@ const CATALOG: PlanCatalog = {
       intervalCount: 1,
     },
   ],
+  couponsEnabled: false,
   termsVersion: '2026-10-11',
   allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
   trial: { days: 7, generations: 125, xPosts: 25, linkXPosts: 2 },
@@ -483,5 +485,95 @@ describe('Paywall', () => {
       expect(end).toHaveBeenCalledWith('user');
       end.mockRestore();
     });
+  });
+});
+
+describe('Coupon preview on the Paywall', () => {
+  beforeEach(() => {
+    vi.mocked(billingService.previewCoupon).mockReset();
+    vi.mocked(billingService.startSubscriptionCheckout).mockClear();
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(WITH_TRIAL);
+    vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, couponsEnabled: true });
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
+  });
+
+  it('checks a code independently of paid checkout and shows the actual offer without a dead redeem control', async () => {
+    vi.mocked(billingService.previewCoupon).mockResolvedValue({
+      months: 3,
+      startsAt: '2028-01-31T12:00:00Z',
+      endsAt: '2028-04-30T12:00:00Z',
+      allowance: { generations: 500, xPosts: 100, linkXPosts: 10 },
+      nextPaymentAt: null,
+      termsVersion: '2026-11-08',
+      revision: 'signed-preview',
+    });
+    renderPaywall();
+    fireEvent.click(await screen.findByRole('button', { name: 'Have a coupon?' }));
+    const input = screen.getByRole('textbox', { name: 'Coupon code' });
+    expect(input).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Check code' })).toBeDisabled();
+    fireEvent.change(input, { target: { value: 'private-code' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Check code' }));
+    expect(await screen.findByText('3 free months')).toBeInTheDocument();
+    expect(screen.getByText('No automatic payment')).toBeInTheDocument();
+    expect(screen.getByText(/500 generations/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/This creates no subscription or obligation to pay/),
+    ).toBeInTheDocument();
+    expect(billingService.previewCoupon).toHaveBeenCalledWith('private-code');
+    expect(screen.queryByRole('button', { name: 'Redeem coupon' })).not.toBeInTheDocument();
+    expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
+  });
+
+  it('retains the code and restores focus after a transport error, then permits retry', async () => {
+    vi.mocked(billingService.previewCoupon).mockRejectedValueOnce({ isAxiosError: true });
+    renderPaywall();
+    fireEvent.click(await screen.findByRole('button', { name: 'Have a coupon?' }));
+    const input = screen.getByRole('textbox', { name: 'Coupon code' });
+    fireEvent.change(input, { target: { value: 'private-retry-code' } });
+    screen.getByRole('button', { name: 'Check code' }).focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Check code' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Couldn't check this coupon. Try again.",
+    );
+    expect(input).toHaveValue('private-retry-code');
+    expect(input).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Check code' })).toBeEnabled();
+  });
+
+  it('keeps checking available when paid checkout is on hold and shows the eligibility refusal', async () => {
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('unpaid'));
+    vi.mocked(billingService.previewCoupon).mockRejectedValueOnce(
+      apiError(409, 'Resolve your outstanding payment before using a coupon.'),
+    );
+    renderPaywall();
+    fireEvent.click(await screen.findByRole('button', { name: 'Have a coupon?' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Coupon code' }), {
+      target: { value: 'held-code' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check code' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Resolve your outstanding payment');
+    expect(screen.getByRole('button', { name: 'Open billing portal' })).toBeInTheDocument();
+  });
+
+  it('announces checking and prevents repeated submission until the result arrives', async () => {
+    vi.mocked(billingService.previewCoupon).mockReturnValue(new Promise(() => {}));
+    renderPaywall();
+    fireEvent.click(await screen.findByRole('button', { name: 'Have a coupon?' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Coupon code' }), {
+      target: { value: 'pending-code' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check code' }));
+    expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Coupon code' })).toBeDisabled();
+    expect(screen.getByText('Checking coupon…')).toHaveAttribute('role', 'status');
+    expect(billingService.previewCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides coupon entry when the feature is disabled', async () => {
+    vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+    renderPaywall();
+    await paywall();
+    expect(screen.queryByRole('button', { name: 'Have a coupon?' })).not.toBeInTheDocument();
   });
 });

@@ -12,6 +12,8 @@ from pumpkit.billing.schemas import (
     BillingPortalResponse,
     CheckoutRequest,
     CheckoutResponse,
+    CouponPreviewRequest,
+    CouponPreviewResponse,
     PlansListResponse,
     TopUpCheckoutRequest,
 )
@@ -134,3 +136,22 @@ async def stripe_webhook(
     )
 
     return JSONResponse(content={"received": True}, status_code=status.HTTP_200_OK)
+
+
+@router.post("/billing/coupons/preview", response_model=CouponPreviewResponse)
+@limiter.limit("20/minute")
+async def preview_coupon(
+    request: Request,
+    preview_request: CouponPreviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+    clock: Clock = Depends(get_clock),
+) -> CouponPreviewResponse:
+    return await mediator.preview_coupon(
+        db=db,
+        gateway=gateway,
+        user=current_user,
+        code=preview_request.code.get_secret_value(),
+        now=clock(),
+    )

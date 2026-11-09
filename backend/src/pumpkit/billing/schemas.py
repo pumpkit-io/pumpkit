@@ -7,6 +7,7 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    SecretStr,
     StrictBool,
     field_validator,
 )
@@ -124,6 +125,7 @@ class PlansListResponse(BaseModel):
     """
 
     data: list[PlanResponse]
+    coupons_enabled: bool = False
     terms_version: Optional[str]
     allowance: OfferedAllowanceResponse
     trial: Optional[OfferedTrialResponse]
@@ -148,3 +150,19 @@ class CouponIssueRequest(BaseModel):
         if value is not None and value.utcoffset() != timedelta(0):
             raise ValueError("Use a UTC claim deadline")
         return value
+
+
+class CouponPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: SecretStr = Field(min_length=1, max_length=256)
+
+
+class CouponPreviewResponse(BaseModel):
+    months: int
+    starts_at: datetime
+    ends_at: datetime
+    allowance: OfferedAllowanceResponse
+    next_payment_at: Optional[datetime] = None
+    terms_version: Optional[str]
+    revision: str

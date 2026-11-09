@@ -5,6 +5,7 @@ import { Notice } from '@/components/Notice';
 import { Button } from '@/components/ui/button';
 import { BillingProvider, type BillingData } from '@/features/billing/BillingProvider';
 import { checkoutStatusOf } from '@/features/billing/checkoutArrival';
+import { CouponForm } from '@/features/billing/CouponForm';
 import { PlanPicker } from '@/features/billing/PlanPicker';
 import { useBilling } from '@/features/billing/useBilling';
 import { track } from '@/lib/analytics';
@@ -53,7 +54,7 @@ function Heading({ title, lead }: { title: string; lead?: string }) {
 }
 
 /** Where the billing portal is the only way forward: a payment still processing, or one failed. */
-function PortalState({ title, lead }: { title: string; lead: string }) {
+function PortalState({ title, lead, coupon }: { title: string; lead: string; coupon?: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
 
@@ -73,6 +74,7 @@ function PortalState({ title, lead }: { title: string; lead: string }) {
   return (
     <div className="space-y-5">
       <Heading title={title} lead={lead} />
+      {coupon}
       {error && <ErrorBanner message={error} />}
       <Button type="button" disabled={opening} onClick={() => void openPortal()}>
         {opening ? 'Opening…' : 'Open billing portal'}
@@ -107,6 +109,7 @@ function Offer({ data, notice }: { data: BillingData; notice: ReactNode }) {
         <Heading title="Subscribe to keep writing" lead="Pick a plan to use Pumpkit again." />
       )}
       {notice}
+      {data.couponsEnabled && <CouponForm />}
       <PlanPicker
         // A new Terms version must be accepted afresh.
         key={data.termsVersion}
@@ -151,6 +154,7 @@ function PaywallContent() {
   if (status === 'incomplete') {
     return (
       <PortalState
+        coupon={data.couponsEnabled && <CouponForm />}
         title="Your payment is still processing"
         lead="Open the billing portal to see where it stands. You don't need to check out again."
       />
@@ -159,6 +163,7 @@ function PaywallContent() {
   if (!data.me.maySubscribe) {
     return (
       <PortalState
+        coupon={data.couponsEnabled && <CouponForm />}
         title="Your subscription is on hold"
         lead="Your last payment failed. Update your card in the billing portal to keep writing."
       />
