@@ -9,7 +9,7 @@ if (
   git('rev-parse', '--absolute-git-dir') ===
   git('rev-parse', '--path-format=absolute', '--git-common-dir')
 ) {
-  throw new Error('Prepare Coupon tests in an isolated linked worktree.');
+  throw new Error('Prepare coupon tests in an isolated linked worktree.');
 }
 const env = path.join(root, '.env');
 const directory = path.join(root, '.sdlc', 'dev-stack');
@@ -24,6 +24,8 @@ if (process.argv[2] === 'restore') {
   if (!existsSync(backup)) writeFileSync(backup, original, { mode: 0o600 });
   const values = {
     COUPONS_ENABLED: 'true',
+    OPERATOR_NAME: "'Pumpkit E2E'",
+    SUPPORT_EMAIL: 'support@e2e-user.dev',
     STRIPE_COUPON_PORTAL_CONFIGURATION_ID: 'bpc_coupon_management',
     COUPON_IDENTITY_KEYS: `'${JSON.stringify({ active: 'e2e', keys: { e2e: Buffer.alloc(32, 42).toString('base64') } })}'`,
   };
@@ -35,7 +37,7 @@ if (process.argv[2] === 'restore') {
       : `${updated.trimEnd()}\n${key}=${value}\n`;
   }
   writeFileSync(env, updated, { mode: 0o600 });
-  console.log('Prepared local Coupon configuration. Start only through scripts/dev-stack.');
+  console.log('Prepared local coupon configuration. Start only through scripts/dev-stack.');
 } else {
   throw new Error('Use: node e2e/coupons-env.mjs prepare|restore');
 }

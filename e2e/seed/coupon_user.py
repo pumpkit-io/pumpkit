@@ -1,4 +1,4 @@
-"""Create isolated Coupon journey users against this worktree's local Stripe Emulator."""
+"""Create isolated coupon journey users against this worktree's local Stripe Emulator."""
 
 import asyncio
 import json
@@ -24,6 +24,7 @@ from pumpkit.onboarding.models import OnboardingFinish
 def require_emulator() -> None:
     if (
         not settings.COUPONS_ENABLED
+        or not settings.is_operator_configured()
         or urlparse(settings.STRIPE_API_URL or "").hostname != "emulate"
         or settings.STRIPE_SECRET_KEY != "sk_test_dev"
         or settings.STRIPE_COUPON_PORTAL_CONFIGURATION_ID != "bpc_coupon_management"
@@ -95,7 +96,7 @@ async def main() -> None:
             )
             db.add(OnboardingFinish(user_id=user.id, finished_at=now))
         elif action != "new":
-            raise ValueError("Unknown Coupon journey")
+            raise ValueError("Unknown coupon journey")
         _, code = await coupon_service.issue(
             db,
             request=CouponIssueRequest(months=1, recipient=email),

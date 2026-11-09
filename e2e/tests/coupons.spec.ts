@@ -27,8 +27,22 @@ interface Usage {
 }
 
 // These optional journeys run only against a deliberately enabled, isolated Emulator stack.
-test.skip(process.env.E2E_COUPONS !== '1', 'Enable the Coupon suite as e2e/README.md describes.');
+test.skip(process.env.E2E_COUPONS !== '1', 'Enable the coupon suite as e2e/README.md describes.');
 test.use({ storageState: { cookies: [], origins: [] }, trace: 'off' });
+
+let catalog: Promise<string> | null = null;
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/v1/billing/plans', async (route) => {
+    // Preserve the real catalog while repeated React loads avoid the shared public-read limit.
+    catalog ??= route.fetch().then(async (answer) => {
+      expect(answer.status(), 'the local Emulator catalog should load').toBe(200);
+      const body = await answer.text();
+      expect(JSON.parse(body).coupons_enabled).toBe(true);
+      return body;
+    });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: await catalog });
+  });
+});
 
 async function recipient(page: Page, scenario = 'new'): Promise<Recipient> {
   const out = runSeedScript('coupon_user.py', [scenario]);
@@ -54,11 +68,9 @@ async function get<T>(page: Page, user: Recipient, resource: string): Promise<T>
 }
 
 async function open(page: Page, path: string): Promise<void> {
-  await expect(async () => {
-    const loading = page.waitForResponse((r) => r.url().endsWith('/api/v1/billing/plans'));
-    await page.goto(path);
-    expect((await loading).status()).toBe(200);
-  }).toPass({ timeout: 70_000 });
+  const loading = page.waitForResponse((r) => r.url().endsWith('/api/v1/billing/plans'));
+  await page.goto(path);
+  expect((await loading).status()).toBe(200);
 }
 
 async function review(page: Page, user: Recipient, inSettings = false): Promise<void> {
@@ -69,6 +81,7 @@ async function review(page: Page, user: Recipient, inSettings = false): Promise<
   await page.getByRole('button', { name: 'Check code', exact: true }).click();
   const preview = page.getByRole('status', { name: 'Coupon preview' });
   await expect(preview).toBeVisible();
+  await expect(preview.getByRole('checkbox')).toHaveCount(2);
   for (const box of await preview.getByRole('checkbox').all()) await box.check();
 }
 
@@ -175,6 +188,7 @@ test('a coupon-only recipient explicitly arranges future payment without losing 
   const futureReview = plan.getByRole('region', { name: 'Review future subscription' });
   await expect(futureReview).toContainText('No immediate payment.');
   await expect(futureReview).toContainText('renews automatically until cancelled');
+  await expect(futureReview.getByRole('checkbox')).toHaveCount(3);
   for (const box of await futureReview.getByRole('checkbox').all()) await box.check();
   const appOrigin = new URL(page.url()).origin;
   await futureReview.getByRole('button', { name: 'Agree and continue to checkout' }).click();
