@@ -802,6 +802,54 @@ describe('Coupon preview on the Paywall', () => {
     expect(billingService.previewCoupon).toHaveBeenCalledTimes(1);
   });
 
+  it('recovers the account pending coupon on the Paywall without browser storage or new coupon entry', async () => {
+    vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...NOT_SUBSCRIBED,
+      pendingCouponOperation: true,
+      pendingCouponOperationId: 'ended-subscription-operation',
+    });
+    vi.mocked(billingService.fetchCouponRedemption).mockResolvedValue({
+      ...COUPON_RESULT,
+      status: 'pending',
+    });
+    renderPaywall();
+    expect(await screen.findByText('Confirming redemption…')).toHaveAttribute('role', 'status');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Check redemption' })).toBeEnabled(),
+    );
+    expect(billingService.fetchCouponRedemption).toHaveBeenCalledWith(
+      'ended-subscription-operation',
+    );
+    expect(screen.queryByRole('button', { name: 'Have a coupon?' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Start trial|Subscribe:|Open billing portal/ }),
+    ).not.toBeInTheDocument();
+    vi.mocked(billingService.fetchCouponRedemption).mockResolvedValue({
+      ...COUPON_RESULT,
+      status: 'completed',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check redemption' }));
+    expect(await screen.findByText('Coupon redeemed')).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+    expect(billingService.redeemCoupon).not.toHaveBeenCalled();
+    expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
+  });
+
+  it('removes paid checkout while a coupon submitted on the Paywall is pending', async () => {
+    vi.mocked(billingService.redeemCoupon).mockResolvedValue({
+      ...COUPON_RESULT,
+      status: 'pending',
+    });
+    renderPaywall();
+    await reviewCoupon();
+    expect(screen.getByRole('button', { name: 'Start trial: Monthly' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
+    expect(await screen.findByText('Confirming redemption…')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start trial: Monthly' })).not.toBeInTheDocument();
+    expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
+  });
+
   it('hides coupon entry when the feature is disabled', async () => {
     vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
     renderPaywall();
