@@ -70,6 +70,7 @@ async def run_cli(
                         "status": operation.status,
                         "created_at": operation.created_at.isoformat(),
                         "attempts": operation.attempts,
+                        "detail": operation.detail,
                     }
                     if not args.list:
                         user = await users.get_user_by_id(db, user_id)
@@ -81,6 +82,7 @@ async def run_cli(
                                     db, gateway, user, operation_id=operation_id, clock=clock
                                 )
                                 item["status"] = resolved.status
+                                item["detail"] = resolved.detail
                             except Exception:
                                 await db.rollback()
                                 item["status"] = "pending"

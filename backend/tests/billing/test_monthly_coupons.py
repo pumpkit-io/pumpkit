@@ -350,3 +350,49 @@ async def test_cancelled_during_uncertain_deferral_keeps_earned_paid_and_free_ti
     assert (await authed_client.get("/api/v1/usage")).json()["allowance"]["generations"][
         "limit"
     ] == 500
+
+
+async def test_delayed_duplicate_webhooks_complete_uncertain_mutation_without_reissuing_it(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    await monthly(db, user, fake_billing, fixed_clock)
+    created = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
+    fake_billing.fail_on.add("after_defer_renewal")
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).json()[
+        "status"
+    ] == "pending"
+    fake_billing.fail_on.clear()
+    for event_id in ("evt_older_active", "evt_older_active", "evt_later_trial"):
+        assert (
+            await _send(
+                authed_client,
+                fake_billing,
+                event_id,
+                "customer.subscription.updated",
+                {"customer": "cus_monthly", "status": "active"},
+            )
+        ).status_code == 200
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["pending_coupon_operation"] is False
+    assert me["subscription"]["status"] == "trialing"
+    assert me["subscription"]["current_period_end"] == offer["ends_at"]
+    assert me["free_access"]["months"] == 1
+    assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1
+    assert len(fake_billing.deferrals) == 1
+
+
+async def test_refused_operation_audit_expires_after_resolution_without_a_benefit(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    await monthly(db, user, fake_billing, fixed_clock)
+    created = await coupons("--months", "12")
+    offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
+    fake_billing.fail_on.add("refuse_deferral")
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).json()[
+        "status"
+    ] == "refused"
+    fixed_clock.advance(timedelta(days=91))
+    await coupons(command="purge")
+    assert (await authed_client.get(REDEEM + "/redeem-test-0001")).status_code == 404
+    assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 0

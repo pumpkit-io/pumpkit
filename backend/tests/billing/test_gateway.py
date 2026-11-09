@@ -17,6 +17,7 @@ import stripe
 from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
+    DeferralRefused,
     FakeBillingGateway,
     OneOffPrice,
     StripeBillingGateway,
@@ -764,3 +765,33 @@ async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoi
     assert result.paid_current_period is expected
     assert result.billing_mode == "classic"
     assert result.item_id == "si_1QaRunning"
+
+
+@pytest.mark.parametrize("status", [400, 500])
+async def test_deferral_error_classifies_definite_refusal_and_ambiguous_provider_failure(status):
+    class RejectedStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            return (
+                json.dumps(
+                    {
+                        "error": {
+                            "type": "invalid_request_error" if status == 400 else "api_error",
+                            "message": "Provider detail",
+                        }
+                    }
+                ),
+                status,
+                {},
+            )
+
+    http = RejectedStripe("{}")
+    gateway = StripeBillingGateway(
+        stripe.StripeClient("sk_test_contract", http_client=http, max_network_retries=0)
+    )
+    with pytest.raises(BillingProviderError) as caught:
+        await gateway.defer_renewal(
+            subscription_id="sub_defer",
+            target=datetime(2028, 3, 31, 12, tzinfo=timezone.utc),
+            operation_id="classify_deferral",
+        )
+    assert isinstance(caught.value, DeferralRefused) is (status == 400)

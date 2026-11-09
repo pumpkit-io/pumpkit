@@ -100,7 +100,9 @@ export function SubscriptionCard({
       ? deferral && !subscription.cancelAt
         ? subscription.currentPeriodEnd &&
           `Next payment: ${freeDate(subscription.currentPeriodEnd)}`
-        : nextDateLabel(subscription)
+        : deferral && subscription.cancelAt && freeAccess
+          ? nextDateLabel({ ...subscription, cancelAt: freeAccess.endsAt })
+          : nextDateLabel(subscription)
       : null;
 
   return (
@@ -138,13 +140,16 @@ export function SubscriptionCard({
               Your last payment failed. Update your card to keep access.
             </p>
           )}
-          <div className="flex items-center justify-between gap-3 px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
             <div className="min-w-0">
               <p className="truncate font-sans text-lg font-semibold leading-tight text-foreground">
                 {plan?.productName ?? 'Your plan'}
               </p>
             </div>
-            <Badge variant={statusBadgeVariant(subscription.status)} className="shrink-0">
+            <Badge
+              variant={statusBadgeVariant(subscription.status)}
+              className="max-w-full shrink-0 break-words"
+            >
               {pending
                 ? 'Confirming coupon'
                 : deferral

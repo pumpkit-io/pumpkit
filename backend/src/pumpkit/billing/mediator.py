@@ -380,10 +380,10 @@ async def subscribe_now(
     db: AsyncSession, gateway: BillingGateway, user: User, clock: Clock = system_clock
 ) -> BillingMeResponse:
     """Hold the User lock through immediate payment so accepted coupon intent cannot race it."""
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     if not user.stripe_customer_id:
         raise _not_trialing()
     customer_id = user.stripe_customer_id
-    await users_service.lock_user(db, user)
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     subscription = await service.get_user_subscription(db, user_id=user.id)
     await coupon_operations.require_settled(db, user_id=user.id)
@@ -432,8 +432,10 @@ async def create_billing_portal_session(
     user: User,
     clock: Clock = system_clock,
 ) -> BillingPortalResponse:
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    await coupon_operations.require_settled(db, user_id=user.id)
     customer_id = await _ensure_stripe_customer(db, gateway, user)
-    await users_service.lock_user(db, user)
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await coupon_operations.require_settled(db, user_id=user.id)
     if await service.get_free_access(db, user_id=user.id, now=clock()):
         raise ConflictError(
@@ -472,7 +474,7 @@ async def handle_webhook(
             logger.info("Ignoring replayed Stripe event %s (%s)", event.id, event.type)
             await db.rollback()
             return
-        added = await _dispatch_event(db, gateway, event)
+        added = await _dispatch_event(db, gateway, event, now=now)
         await db.commit()
     except Exception:
         await db.rollback()
@@ -499,7 +501,7 @@ def _is_subscription_nudge(event: WebhookEvent) -> bool:
 
 
 async def _dispatch_event(
-    db: AsyncSession, gateway: BillingGateway, event: WebhookEvent
+    db: AsyncSession, gateway: BillingGateway, event: WebhookEvent, *, now: datetime
 ) -> list[TopUp]:
     """
     Act on a verified, first-seen Stripe event; returns the Top-ups it added not already removed.
@@ -523,7 +525,7 @@ async def _dispatch_event(
         await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
         for operation in await coupon_operations.pending(db, user_id=user.id):
             await coupon_operations.reconcile(
-                db, gateway, user=user, operation=operation, now=system_clock(), mutate=False
+                db, gateway, user=user, operation=operation, now=now, mutate=False
             )
     if syncs_top_ups:
         return await service.sync_top_ups(db, gateway, user_id=user.id, customer_id=customer_id)

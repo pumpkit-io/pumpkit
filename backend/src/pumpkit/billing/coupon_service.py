@@ -193,7 +193,10 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
         .where(
             CouponOperation.status != "pending",
             CouponOperation.resolved_at <= now - timedelta(days=90),
-            CouponOperation.target <= now - timedelta(days=90),
+            or_(
+                CouponOperation.status == "refused",
+                CouponOperation.target <= now - timedelta(days=90),
+            ),
         )
         .returning(CouponOperation.id)
     )
