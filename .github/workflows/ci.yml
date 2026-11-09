@@ -15,7 +15,8 @@ jobs:
         with:
           fetch-depth: 0
       - run: |
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          curl -sSfL --retry 3 --retry-delay 2 "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" --output "$RUNNER_TEMP/gitleaks.tar.gz"
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" gitleaks
           ./gitleaks git --no-banner --redact
   backend:
     runs-on: ubuntu-latest

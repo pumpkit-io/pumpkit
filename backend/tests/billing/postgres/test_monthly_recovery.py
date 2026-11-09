@@ -231,3 +231,56 @@ async def test_recovery_generation_handoff_prevents_stale_first_refusal_releasin
     fake_billing.fail_on.clear()
     assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "completed"
     assert len(fake_billing.deferrals) == 1
+
+
+@pytest.mark.parametrize("settlement", ["invoice", "checkout"])
+async def test_unsent_settlement_refusal_releases_last_slot_under_independent_recovery(
+    db_engine,
+    authed_client,
+    coupons,
+    user,
+    db,
+    fake_billing,
+    fixed_clock,
+    monkeypatch,
+    new_browser,
+    sign_in_by_magic_link,
+    settlement,
+):
+    await monthly(db, user, fake_billing, fixed_clock)
+    other = await browser_for(new_browser, sign_in_by_magic_link, "settlement-slot@example.com")
+    code = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
+    other_offer = (await other.post(PREVIEW, json={"code": code["code"]})).json()
+    entered, release = asyncio.Event(), asyncio.Event()
+    method = "has_unsettled_invoices" if settlement == "invoice" else "has_pending_checkout"
+    original_read = getattr(fake_billing, method)
+    reads = 0
+
+    async def new_obligation(**kwargs):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            entered.set()
+            await asyncio.wait_for(release.wait(), 10)
+            return True
+        return await original_read(**kwargs)
+
+    monkeypatch.setattr(fake_billing, method, new_obligation)
+    first = asyncio.create_task(authed_client.post(REDEEM, json=confirmation(offer)))
+    await asyncio.wait_for(entered.wait(), 10)
+    recovery = asyncio.create_task(authed_client.get(REDEEM + "/redeem-test-0001"))
+    competing = asyncio.create_task(
+        other.post(REDEEM, json=confirmation(other_offer, "settlement-competing-0001"))
+    )
+    try:
+        await wait_for_locks(db_engine, 2)
+    finally:
+        release.set()
+    results = await asyncio.wait_for(asyncio.gather(first, recovery, competing), 10)
+    assert [result.json()["status"] for result in results] == ["refused", "refused", "completed"]
+    assert fake_billing.deferrals == []
+    assert (await authed_client.get("/api/v1/billing/me")).json()[
+        "pending_coupon_operation"
+    ] is False
+    assert (await coupons(code["id"], command="inspect"))["redeemed_count"] == 1

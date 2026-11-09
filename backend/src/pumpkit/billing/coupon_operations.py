@@ -396,9 +396,18 @@ async def reconcile(
     operation.detail = (
         "Confirming redemption. Your place is reserved; retry this operation or contact support."
     )
+    definitely_unsent = dispatch and mutate and not prior_unknown
+
+    async def unresolved() -> CouponRedemptionResponse:
+        if definitely_unsent:
+            return await refuse(db, user=user, operation=operation, now=clock())
+        return response(operation)
+
     try:
         states = await gateway.list_subscriptions(customer_id=operation.customer_id)
         state = next((s for s in states if s.id == operation.subscription_id), None)
+        if state is not None and state.coupon_operation == operation.id:
+            definitely_unsent = False
         if (
             len([s for s in states if s.status not in {"canceled", "incomplete_expired"}]) > 1
             or state is None
@@ -406,7 +415,7 @@ async def reconcile(
             or not compatible(state, operation)
         ):
             operation.detail = "Billing changed while confirming redemption. Contact support; your redemption remains reserved."
-            return response(operation)
+            return await unresolved()
         applied = (
             state.coupon_operation == operation.id
             and state.trial_end is not None
@@ -429,7 +438,7 @@ async def reconcile(
             if await gateway.has_unsettled_invoices(
                 customer_id=operation.customer_id
             ) or await gateway.has_pending_checkout(customer_id=operation.customer_id):
-                return response(operation)
+                return await unresolved()
             applied = True
         if not applied and mutate and dispatch:
             unchanged = (
@@ -448,15 +457,11 @@ async def reconcile(
                 or (as_utc(operation.target) - clock()).total_seconds() > 730 * 86400
             ):
                 operation.detail = "Billing changed while confirming redemption. Contact support; no further change was sent."
-                return (
-                    response(operation)
-                    if prior_unknown
-                    else await refuse(db, user=user, operation=operation, now=clock())
-                )
+                return await unresolved()
             if await gateway.has_unsettled_invoices(
                 customer_id=operation.customer_id
             ) or await gateway.has_pending_checkout(customer_id=operation.customer_id):
-                return response(operation)
+                return await unresolved()
             # An old-state read cannot prove the original write failed; replay only within retention.
             if (
                 operation.attempted_at is None
@@ -464,12 +469,10 @@ async def reconcile(
                 or clock() >= as_utc(operation.target)
                 or (as_utc(operation.target) - clock()).total_seconds() > 730 * 86400
             ):
-                return (
-                    response(operation)
-                    if prior_unknown
-                    else await refuse(db, user=user, operation=operation, now=clock())
-                )
+                return await unresolved()
             operation.attempts += 1
+            # From dispatch onward, only provider evidence can settle an uncertain result.
+            definitely_unsent = False
             try:
                 await gateway.defer_renewal(
                     subscription_id=operation.subscription_id,
@@ -490,7 +493,8 @@ async def reconcile(
                 and as_utc(state.trial_end) == as_utc(operation.target)
             )
         if not applied:
-            return response(operation)
+            return await unresolved()
+        definitely_unsent = False
         cancelled = bool(
             state is not None
             and (
@@ -537,7 +541,7 @@ async def reconcile(
         operation.resolved_at = clock()
         await db.flush()
     except BillingProviderError:
-        pass
+        return await unresolved()
     return response(operation)
 
 
