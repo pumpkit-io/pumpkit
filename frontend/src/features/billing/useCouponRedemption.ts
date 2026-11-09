@@ -95,5 +95,13 @@ export function useCouponRedemption(onConflict: () => void) {
     if (initial.current) void submit(initial.current, true);
   }, [submit]);
 
-  return { pending, busy, error, completed, submit, clearError: () => setError(null) };
+  return {
+    pending,
+    busy,
+    error,
+    completed,
+    submit,
+    clearError: () => setError(null),
+    resetCompleted: () => setCompleted(null),
+  };
 }

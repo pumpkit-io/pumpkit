@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Optional
 
 from pumpkit.billing.allowance import Allowance, Limits, allowance_at, may_buy_top_up, paid_period
-from pumpkit.billing.models import FreeAccess, Subscription
+from pumpkit.billing.free_access import FreeAccessCoverage
+from pumpkit.billing.models import Subscription
 from pumpkit.core.time import as_utc, system_clock
 
 
@@ -11,7 +12,7 @@ from pumpkit.core.time import as_utc, system_clock
 class Entitlement:
     subscription: Optional[Subscription]
     plans_sold: bool
-    free_access: Optional[FreeAccess] = None
+    free_access: Optional[FreeAccessCoverage] = None
     now: datetime = field(default_factory=system_clock)
 
     @property
@@ -49,7 +50,7 @@ class Entitlement:
         ):
             return Allowance(
                 period=paid_period(self.free_access.starts_at, moment),
-                limits=Limits(**self.free_access.allowance),
+                limits=Limits(**self.free_access.grant_at(moment).allowance),
                 way_out=None,
                 ends_at=as_utc(self.free_access.ends_at),
             )

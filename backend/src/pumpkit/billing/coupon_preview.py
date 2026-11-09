@@ -74,13 +74,15 @@ async def preview(
             "Coupons for an existing subscription are not available yet. Keep your code and try again later."
         )
     await coupon_service.require_unclaimed(db, coupon=coupon, email=user.email, config=settings)
-    if await service.get_free_access(db, user_id=user.id, now=now):
-        raise ConflictError("Adding another coupon is not available yet. Keep your code for later.")
+    existing = await service.get_free_access(db, user_id=user.id, now=now)
+    anchor = as_utc(existing.calendar_anchor or existing.starts_at) if existing else now
+    offset = existing.month_offset + existing.months if existing else 0
+    start = as_utc(existing.ends_at) if existing else now
     if coupon.months > 24:
         raise ConflictError(
             "This coupon would exceed the supported 730-day access horizon. Ask its sender for a shorter benefit."
         )
-    end = months_after(now, coupon.months)
+    end = months_after(anchor, offset + coupon.months)
     if (end - now).total_seconds() > 730 * 86400:
         raise ConflictError(
             "This coupon would exceed the supported 730-day access horizon. Ask its sender for a shorter benefit."
@@ -88,7 +90,7 @@ async def preview(
     allowance = OfferedAllowanceResponse(**asdict(limits(trial=False)))
     response = CouponPreviewResponse(
         months=coupon.months,
-        starts_at=now,
+        starts_at=start,
         ends_at=end,
         allowance=allowance,
         next_payment_at=None,
@@ -97,6 +99,9 @@ async def preview(
     )
     offer = response.model_dump(mode="json", exclude={"revision"})
     state = {
+        "previous_grant": existing.id if existing else None,
+        "anchor": anchor.isoformat() if existing else None,
+        "offset": offset,
         "code_digest": coupon.code_digest,
         "plan_keys": coupon.plan_keys,
         "claim_deadline": as_utc(coupon.claim_deadline).isoformat()

@@ -79,13 +79,19 @@ class FreeAccessResponse(BaseModel):
     ends_at: datetime
 
 
+class FreeAccessCoverageResponse(FreeAccessResponse):
+    current_starts_at: datetime
+    current_ends_at: datetime
+    queued_starts_at: Optional[datetime]
+
+
 class BillingMeResponse(BaseModel):
     """
     What the authenticated User holds and may do.
     `subscription` is the Running one, else `incomplete`, never Ended; `trial_days` is the Trial a Checkout would start with.
     """
 
-    free_access: Optional[FreeAccessResponse] = None
+    free_access: Optional[FreeAccessCoverageResponse] = None
     subscription: Optional[BillingSubscriptionResponse]
     subscribed: bool
     may_subscribe: bool

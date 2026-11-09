@@ -220,6 +220,8 @@ class FreeAccess(Base):
     claim_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("coupon_claims.id", ondelete="SET NULL"), unique=True
     )
+    calendar_anchor: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    month_offset: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     operation_id: Mapped[str] = mapped_column(String(128))
     revision_digest: Mapped[str] = mapped_column(String(64))
     months: Mapped[int] = mapped_column(Integer)

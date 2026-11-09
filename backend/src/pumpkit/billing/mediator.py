@@ -31,7 +31,7 @@ from pumpkit.billing.schemas import (
     CouponPreviewResponse,
     CouponRedemptionRequest,
     CouponRedemptionResponse,
-    FreeAccessResponse,
+    FreeAccessCoverageResponse,
     OfferedAllowanceResponse,
     OfferedTrialResponse,
     PlanResponse,
@@ -57,15 +57,26 @@ async def get_billing_me(
     What the User holds and may do, from Pumpkit's copy only: never a call to
     the billing provider, so it reflects the last sync (ADR 0004).
     """
-    entitlement = await service.get_entitlement(db, user_id=user.id, now=now)
+    moment = now or system_clock()
+    entitlement = await service.get_entitlement(db, user_id=user.id, now=moment)
     subscription = entitlement.subscription
-    offer = await service.get_subscription_offer(db, user_id=user.id, now=now)
-    free = await service.get_free_access(db, user_id=user.id, now=now or system_clock())
+    offer = await service.get_subscription_offer(db, user_id=user.id, now=moment)
+    free = entitlement.free_access
+    if free and free.ends_at <= moment:
+        free = None
+    current = free.grant_at(moment) if free else None
     return BillingMeResponse(
-        free_access=FreeAccessResponse(
-            months=free.months, starts_at=as_utc(free.starts_at), ends_at=as_utc(free.ends_at)
+        free_access=FreeAccessCoverageResponse(
+            months=free.months,
+            starts_at=free.starts_at,
+            ends_at=free.ends_at,
+            current_starts_at=as_utc(current.starts_at),
+            current_ends_at=as_utc(current.ends_at),
+            queued_starts_at=as_utc(current.ends_at)
+            if as_utc(current.ends_at) < free.ends_at
+            else None,
         )
-        if free
+        if free and current
         else None,
         subscription=(
             None
@@ -562,14 +573,14 @@ async def redeem_coupon(
     coupon = await coupon_redemption.lock_coupon(db, signed.coupon_id)
     current = await _preview_locked_coupon(db, gateway, user, coupon=coupon, clock=clock)
     signed = coupon_redemption.decode(
-        request.revision.get_secret_value(), user_id=user.id, now=current.starts_at
+        request.revision.get_secret_value(), user_id=user.id, now=clock()
     )
     current_signed = coupon_redemption.decode(current.revision, user_id=user.id, now=clock())
     if signed.state != current_signed.state:
         raise ConflictError("The coupon offer has changed. Check the code and review it again.")
     coupon_redemption.require_same_offer(signed, current, request)
     access = await coupon_redemption.grant(
-        db, user=user, coupon=coupon, offer=current, request=request, now=current.starts_at
+        db, user=user, coupon=coupon, offer=current, request=request, now=current_signed.issued_at
     )
     response = coupon_redemption.result(access)
     await db.commit()

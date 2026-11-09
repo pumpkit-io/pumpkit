@@ -98,7 +98,7 @@ The revision uses the existing Instance JWT signing secret with a separate `coup
 
 ## Cardless confirmation and access
 
-The first redemption path accepts a recipient with no running Subscription, pending paid Checkout or remaining Free access. Subscriber extensions and stacking remain nonconsuming refusals until their later tickets. A former subscriber with a settled account can redeem without using their saved card. Confirmation reads provider eligibility under the User billing lock and creates no Stripe customer, Subscription, Checkout or payment. An open paid Checkout must finish, expire or be cancelled by support before redemption; checking or refusing a Coupon does not cancel it.
+Cardless redemption accepts a recipient with no running Subscription or pending paid Checkout, including someone with remaining Free access. Subscriber extensions remain nonconsuming refusals until their later tickets. A former subscriber with a settled account can redeem without using their saved card. Confirmation reads provider eligibility under the User billing lock and creates no Stripe customer, Subscription, Checkout or payment. An open paid Checkout must finish, expire or be cancelled by support before redemption; checking or refusing a Coupon does not cancel it.
 
 For an immediate cardless offer, the Paywall says **Starts when you redeem** and displays UTC calendar dates. Preview timestamps describe those dates; their seconds are not an already-running grant. The signed revision binds the months, displayed UTC dates, full monthly Allowance, payment consequences, Terms and issuance state. Confirmation anchors the whole calendar-month interval at its current server time, after lock waits and provider checks. It requires a fresh preview if either displayed UTC date changed, or if any other offer term changed. This preserves full usable months without treating every elapsed second as a changed offer. The final result contains precise UTC timestamps. A January 31 anchor resets on February's last day and then March 31, calculated from the original anchor.
 
@@ -127,3 +127,14 @@ Stored Media files need a separate retryable cleanup after the database commit. 
 ### PostgreSQL contention checks
 
 The ordinary suite still uses SQLite and needs no service. To exercise production row locks, explicitly supply a PostgreSQL URL to `PUMPKIT_TEST_POSTGRES_URL` and run `uv run --extra dev pytest tests/billing/postgres -q` from `backend/`. The harness creates a random isolated schema per test, sets every connection's search path and drops only that schema. It never drops or rewrites the supplied database's public schema. Independent authenticated HTTP requests contend on held rows for last-slot, same-identity, same-operation, disable, deletion and waiting-deadline cases.
+
+
+### Appending free months in Settings
+
+With Coupons enabled, the Plan card in Settings offers **Redeem coupon**, using the same preview and two-box confirmation as the Paywall. A distinct Coupon appends after remaining Free access. Preview shows the new grant's dates; the Plan card shows the combined end prominently plus the current grant and queued ranges, and Usage retains the current period, usage and Top-ups. After success those reads and access state refresh. Another browser reads the same committed coverage on reload. No Subscription or automatic payment is created.
+
+Each grant retains its own claim, acceptance, operation result and accepted monthly caps. Current-period caps and usage remain unchanged when a new offer has different caps; those caps apply only in its queued months. The grant persists the original UTC calendar anchor and its whole-month offset, so January 31 clips to February's last day and then returns to March 31. Purging an earlier ended grant never changes a queued grant's anchor. Purge still removes each grant's detail 90 days after its own end.
+
+The signed preview binds the preceding grant and offset as well as the offer. Confirmation serializes on the User lock, so a competing append changes the offer and requires a new preview and acceptance. It never silently shifts the grant or consumes a stale claim. The combined end, including all remaining free time, must be at most 730 × 86400 seconds after confirmation; an unsupported offer is refused without consuming it. Deadlines govern confirmation only, and disabling a code preserves already queued months.
+
+**Upgrade notes:** Apply migration 0046 before deploying this slice. It preserves existing grant anchors and adds offsets for subsequent appends. Keep the shared setting off outside isolated tests pending final #394. Subscriber deferral, buying Top-ups during Free access and paid signup that preserves free months remain separate implementation slices.
