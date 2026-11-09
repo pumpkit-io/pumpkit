@@ -19,7 +19,7 @@ function freeDate(value: string): string {
   return `${new Date(value).toLocaleDateString(undefined, { dateStyle: 'long', timeZone: 'UTC' })} UTC`;
 }
 
-// How each Subscription status reads to the User. Ended ones are never shown.
+// Ended provider subscriptions can still carry earned local paid coverage.
 const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   trialing: 'Trial',
   active: 'Active',
@@ -95,13 +95,18 @@ export function SubscriptionCard({
   const paymentFailed = subscription ? PAYMENT_FAILED_STATUSES.has(subscription.status) : false;
   const deferral = data?.me.couponDeferral;
   const pending = data?.me.pendingCouponOperation || localPending;
+  const renewalCancelled = Boolean(
+    subscription?.cancelAt ||
+    subscription?.status === 'canceled' ||
+    subscription?.status === 'incomplete_expired',
+  );
   const next =
     subscription && !pending
-      ? deferral && !subscription.cancelAt
+      ? deferral && !renewalCancelled
         ? subscription.currentPeriodEnd &&
           `Next payment: ${freeDate(subscription.currentPeriodEnd)}`
-        : deferral && subscription.cancelAt && freeAccess
-          ? nextDateLabel({ ...subscription, cancelAt: freeAccess.endsAt })
+        : deferral && renewalCancelled && freeAccess
+          ? `Ends on ${freeDate(freeAccess.endsAt)}`
           : nextDateLabel(subscription)
       : null;
 
@@ -183,11 +188,11 @@ export function SubscriptionCard({
             {next && !paymentFailed && (
               <div className="space-y-2 text-sm text-foreground">
                 <p>{next}</p>
-                {deferral && subscription.cancelAt && <p>No automatic payment</p>}
+                {deferral && renewalCancelled && <p>No automatic payment</p>}
               </div>
             )}
             {deferral ? (
-              !subscription.cancelAt && (
+              !renewalCancelled && (
                 <div className="space-y-2 sm:max-w-64">
                   <p className="text-sm text-foreground">
                     Cancel renewal to keep all remaining access with no payment afterward.

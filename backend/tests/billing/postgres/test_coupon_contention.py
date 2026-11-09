@@ -1,5 +1,6 @@
 import asyncio
 import json
+from dataclasses import replace
 from datetime import timedelta
 from io import StringIO
 
@@ -15,6 +16,8 @@ from pumpkit.scheduling.publisher import run_pass
 from tests.billing.test_coupon_preview import KEYS
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
+from tests.billing.test_monthly_coupons import monthly
+from tests.billing.test_top_ups import _send
 
 pytestmark = pytest.mark.postgres
 
@@ -292,3 +295,38 @@ async def test_concurrent_distinct_appends_require_a_fresh_offer_without_lost_mo
     assert (
         await browser.post(REDEEM, json=confirmation(fresh, "append-operation-1"))
     ).json() == result.json()
+
+
+async def test_cancelled_redemption_replay_and_provider_nudge_share_earned_coverage(
+    authed_client, coupons, db, user, fake_billing, fixed_clock, db_engine, db_session_maker
+):
+    state = await monthly(db, user, fake_billing, fixed_clock)
+    cancelled = replace(state, cancel_at=state.current_period_end)
+    fake_billing.set_subscription("cus_monthly", cancelled)
+    created = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
+    async with db_session_maker() as control:
+        await control.scalar(select(User).where(User.id == user.id).with_for_update())
+        tasks = [
+            asyncio.create_task(authed_client.post(REDEEM, json=confirmation(offer))),
+            asyncio.create_task(authed_client.post(REDEEM, json=confirmation(offer))),
+            asyncio.create_task(
+                _send(
+                    authed_client,
+                    fake_billing,
+                    "evt_cancel_contending",
+                    "customer.subscription.updated",
+                    {"customer": "cus_monthly"},
+                )
+            ),
+        ]
+        responses = await blocked_requests(db_engine, control, tasks, 3)
+    assert [response.status_code for response in responses] == [200, 200, 200]
+    assert responses[0].json() == responses[1].json()
+    assert responses[0].json()["next_payment_at"] is None
+    assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 1
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["paid_through"] == offer["starts_at"]
+    assert me["free_access"]["months"] == 1
+    assert fake_billing.deferrals == []
+    assert (await fake_billing.list_subscriptions(customer_id="cus_monthly"))[0] == cancelled

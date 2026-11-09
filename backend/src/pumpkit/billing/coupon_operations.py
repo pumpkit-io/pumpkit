@@ -15,7 +15,13 @@ from pumpkit.billing.gateway import (
     DeferralRefused,
     SubscriptionState,
 )
-from pumpkit.billing.models import Coupon, CouponClaim, CouponHistory, CouponOperation, FreeAccess
+from pumpkit.billing.models import (
+    Coupon,
+    CouponClaim,
+    CouponHistory,
+    CouponOperation,
+    FreeAccess,
+)
 from pumpkit.billing.schemas import (
     CouponPreviewResponse,
     CouponRedemptionRequest,
@@ -60,7 +66,9 @@ def response(operation: CouponOperation) -> CouponRedemptionResponse:
         months=offer.months,
         starts_at=offer.starts_at,
         ends_at=offer.ends_at,
-        next_payment_at=offer.next_payment_at,
+        next_payment_at=None
+        if operation.original.get("renewal_cancelled")
+        else offer.next_payment_at,
         detail=operation.detail,
     )
 
@@ -68,7 +76,23 @@ def response(operation: CouponOperation) -> CouponRedemptionResponse:
 async def deferrable_state(
     db: AsyncSession, *, user_id: str, subscriptions: Sequence[SubscriptionState], now: datetime
 ) -> Optional[SubscriptionState]:
+    existing = await service.get_free_access(db, user_id=user_id, now=now)
     running = [s for s in subscriptions if s.status not in {"canceled", "incomplete_expired"}]
+    if not running:
+        for candidate in subscriptions:
+            if candidate.status != "canceled":
+                continue
+            saved = await service.get_subscription_by_stripe_id(db, candidate.id)
+            earned = bool(existing and saved and saved.user_id == user_id and saved.paid_end)
+            if earned or (
+                candidate.paid_current_period
+                and candidate.current_period_start
+                and candidate.current_period_end
+                and as_utc(candidate.current_period_start)
+                <= now
+                < as_utc(candidate.current_period_end)
+            ):
+                running.append(candidate)
     if not running:
         if await service.get_user_subscription(db, user_id=user_id):
             raise ConflictError("Your subscription is being updated. Retry after billing settles.")
@@ -76,7 +100,11 @@ async def deferrable_state(
     if len(running) != 1:
         raise ConflictError("Resolve your subscriptions before using a coupon.")
     state = running[0]
-    existing = await service.get_free_access(db, user_id=user_id, now=now)
+    saved = await service.get_subscription_by_stripe_id(db, state.id)
+    cancelled = state.cancel_at is not None or state.status == "canceled"
+    locally_backed = bool(
+        cancelled and existing and saved and saved.user_id == user_id and saved.paid_end
+    )
     backed = bool(
         existing
         and state.coupon_operation
@@ -101,9 +129,12 @@ async def deferrable_state(
         and state.billing_cycle_anchor == state.trial_end
         and await db.get(CouponHistory, user_id) is None
     )
+    backed = backed or locally_backed
+    allowed_statuses = {"active", "trialing"} if backed or introductory else {"active"}
+    if cancelled:
+        allowed_statuses.add("canceled")
     if (
-        state.status not in ({"active", "trialing"} if backed or introductory else {"active"})
-        or state.cancel_at is not None
+        state.status not in allowed_statuses
         or state.paused
         or state.has_pending_update
         or state.schedule_id
@@ -118,10 +149,17 @@ async def deferrable_state(
         or not state.current_period_start
         or not state.current_period_end
         or not (backed or introductory or state.paid_current_period)
-        or not as_utc(state.current_period_start) <= now < as_utc(state.current_period_end)
+        or (
+            not backed
+            and not as_utc(state.current_period_start) <= now < as_utc(state.current_period_end)
+        )
+        or (
+            state.cancel_at is not None
+            and as_utc(state.cancel_at) > as_utc(state.current_period_end)
+        )
     ):
         raise ConflictError(
-            "Coupons require a settled renewing subscription. Keep your code for cancelled renewal, and resolve any unsettled payment first."
+            "Coupons require a settled renewing subscription or settled cancelled coverage. Resolve any unsettled payment first."
         )
     if not backed and not introductory:
         assert (
@@ -168,10 +206,10 @@ async def prepare(
     claim = CouponClaim(coupon_id=coupon.id, key_id=key_id, fingerprint=candidates[key_id])
     db.add(claim)
     await db.flush()
-    subscription = await service.get_user_subscription(db, user_id=user.id)
+    subscription = await service.get_subscription_by_stripe_id(db, state.id)
     if (
         subscription is None
-        or subscription.stripe_subscription_id != state.id
+        or subscription.user_id != user.id
         or state.billing_cycle_anchor is None
         or state.current_period_end is None
     ):
@@ -232,7 +270,7 @@ async def prepare(
             if offer.terms_version
             else False,
             "requested_immediate_start": False,
-            "next_payment_at": offer.ends_at.isoformat(),
+            "next_payment_at": offer.next_payment_at.isoformat() if offer.next_payment_at else None,
         },
         target=offer.ends_at,
         created_at=now,
@@ -292,6 +330,25 @@ async def reconcile(
             and state.trial_end is not None
             and as_utc(state.trial_end) == as_utc(operation.target)
         )
+        original_coverage = (
+            state.status in {"active", "trialing", "canceled"}
+            and state.current_period_end is not None
+            and as_utc(state.current_period_end).isoformat() == operation.original["period_end"]
+            and (state.trial_end.isoformat() if state.trial_end else None)
+            == operation.original["trial_end"]
+            and state.coupon_operation == operation.original["marker"]
+        )
+        cancelled = state.status == "canceled" or (
+            state.cancel_at is not None
+            and state.current_period_end is not None
+            and as_utc(state.cancel_at) <= as_utc(state.current_period_end)
+        )
+        if not applied and cancelled and original_coverage:
+            if await gateway.has_unsettled_invoices(
+                customer_id=operation.customer_id
+            ) or await gateway.has_pending_checkout(customer_id=operation.customer_id):
+                return response(operation)
+            applied = True
         if not applied and mutate:
             unchanged = (
                 state.status in {"active", "trialing"}
@@ -304,6 +361,7 @@ async def reconcile(
             )
             if (
                 not unchanged
+                or operation.offer.get("next_payment_at") is None
                 or as_utc(operation.target) <= now
                 or (as_utc(operation.target) - now).total_seconds() > 730 * 86400
             ):
@@ -352,6 +410,19 @@ async def reconcile(
             )
         if not applied:
             return response(operation)
+        cancelled = bool(
+            state is not None
+            and (
+                state.status == "canceled"
+                or (
+                    state.cancel_at is not None
+                    and state.current_period_end is not None
+                    and as_utc(state.cancel_at) <= as_utc(state.current_period_end)
+                )
+            )
+        )
+        if cancelled:
+            operation.original = {**operation.original, "renewal_cancelled": True}
         await service.sync_customer(db, gateway, user_id=user.id, customer_id=operation.customer_id)
         offer = CouponPreviewResponse.model_validate(operation.offer)
         access = FreeAccess(
@@ -368,7 +439,11 @@ async def reconcile(
             ends_at=offer.ends_at,
             allowance=offer.allowance.model_dump(),
             accepted_at=operation.created_at,
-            acceptance={**operation.acceptance, "offer": operation.offer},
+            acceptance={
+                **operation.acceptance,
+                "next_payment_at": None if cancelled else operation.acceptance["next_payment_at"],
+                "offer": operation.offer,
+            },
         )
         db.add(access)
         if await db.get(CouponHistory, user.id) is None:

@@ -739,15 +739,16 @@ async def test_coupon_deferral_sends_absolute_target_without_proration_and_stabl
 
 @pytest.mark.parametrize("interval, period_end", [("month", 1762387200), ("year", 1791244800)])
 @pytest.mark.parametrize("paid, expected", [(1900, True), (0, False)])
+@pytest.mark.parametrize("cancelled", [False, True])
 async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoice(
-    paid, expected, interval, period_end
+    paid, expected, interval, period_end, cancelled
 ):
     raw = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
     state = raw["data"][0]
     state["status"] = "active"
     state["items"]["data"][0]["price"]["recurring"]["interval"] = interval
     state["items"]["data"][0]["current_period_end"] = period_end
-    state["cancel_at_period_end"] = False
+    state["cancel_at_period_end"] = cancelled
     state["billing_mode"] = {"type": "classic"}
     state["latest_invoice"] = {
         "id": "in_paid",
@@ -770,6 +771,9 @@ async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoi
     assert result.interval == interval
     assert result.current_period_end == datetime.fromtimestamp(period_end, tz=timezone.utc)
     assert result.paid_current_period is expected
+    assert result.cancel_at == (
+        datetime.fromtimestamp(period_end, tz=timezone.utc) if cancelled else None
+    )
     assert result.billing_mode == "classic"
     assert result.item_id == "si_1QaRunning"
 

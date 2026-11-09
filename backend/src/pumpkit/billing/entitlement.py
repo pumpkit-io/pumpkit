@@ -101,7 +101,11 @@ class Entitlement:
                 limits=Limits(**subscription.paid_allowance),
                 way_out="top_up" if self.may_buy_top_up else None,
                 ends_at=max(as_utc(subscription.paid_end), as_utc(self.free_access.ends_at))
-                if self.free_access and subscription.cancel_at
+                if self.free_access
+                and (
+                    subscription.cancel_at
+                    or subscription.status in {"canceled", "incomplete_expired"}
+                )
                 else as_utc(subscription.paid_end)
                 if subscription.status in {"canceled", "incomplete_expired"}
                 else as_utc(subscription.cancel_at)
@@ -112,7 +116,12 @@ class Entitlement:
             self.plans_sold
             and self.free_access is not None
             and moment >= as_utc(self.free_access.starts_at)
-            and (moment < as_utc(self.free_access.ends_at) or self.subscription is None)
+            and (
+                moment < as_utc(self.free_access.ends_at)
+                or subscription is None
+                or subscription.cancel_at is not None
+                or subscription.status in {"canceled", "incomplete_expired"}
+            )
         ):
             return Allowance(
                 period=paid_period(

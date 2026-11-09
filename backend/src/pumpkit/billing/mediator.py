@@ -647,15 +647,11 @@ async def redeem_coupon(
     if signed.state != current_signed.state:
         raise ConflictError("The coupon offer has changed. Check the code and review it again.")
     coupon_redemption.require_same_offer(signed, current, request)
-    if current.next_payment_at is not None:
+    state = await coupon_operations.deferrable_state(
+        db, user_id=user.id, subscriptions=subscriptions, now=clock()
+    )
+    if state is not None:
         assert user.stripe_customer_id is not None
-        state = await coupon_operations.deferrable_state(
-            db,
-            user_id=user.id,
-            subscriptions=subscriptions,
-            now=clock(),
-        )
-        assert state is not None
         operation = await coupon_operations.prepare(
             db,
             user=user,
@@ -665,9 +661,10 @@ async def redeem_coupon(
             state=state,
             now=current_signed.issued_at,
         )
-        # Accepted intent and its reservation must survive a lost provider response or process crash.
-        await db.commit()
-        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        if current.next_payment_at is not None:
+            # Accepted intent must survive a lost provider response before any deferral is attempted.
+            await db.commit()
+            user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
         response = await coupon_operations.reconcile(
             db, gateway, user=user, operation=operation, now=clock()
         )

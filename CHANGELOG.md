@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users who cancelled renewal can redeem coupons after their remaining paid access without restarting payments; cancellation during confirmation preserves paid and free months, including after the provider subscription ends. Settings shows no automatic payment.
+
 - Users on renewing annual plans or existing introductory trials can redeem coupons while keeping their original coverage and allowance resets; free months postpone the next full paid interval. Settings shows the original trial end separately. **Upgrade notes:** Apply migration 0048; coupons remain disabled by default pending final Stripe validation.
 
 - Scheduled posts that fail after access ends release top-up reservations for parts X did not accept, while preserving accepted parts and other scheduled posts.
