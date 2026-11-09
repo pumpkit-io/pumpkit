@@ -16,7 +16,7 @@ from pumpkit.billing.gateway import (
     DeferralRefused,
     SubscriptionState,
 )
-from pumpkit.billing.models import PlanChange
+from pumpkit.billing.models import PlanChange, Subscription
 from pumpkit.billing.schemas import (
     FuturePlanResponse,
     PlanChangePreviewResponse,
@@ -60,15 +60,22 @@ def response(operation: PlanChange) -> PlanChangeResponse:
 
 
 async def future_plan(
-    db: AsyncSession, *, user_id: str, plan_key: Optional[str], ends_at: datetime
+    db: AsyncSession, *, subscription: Subscription, ends_at: datetime
 ) -> Optional[FuturePlanResponse]:
+    if not subscription.stripe_price_id:
+        return None
     operation = await db.scalar(
         select(PlanChange)
-        .where(PlanChange.user_id == user_id, PlanChange.status == "completed")
+        .where(
+            PlanChange.user_id == subscription.user_id,
+            PlanChange.subscription_id == subscription.stripe_subscription_id,
+            PlanChange.status == "completed",
+            PlanChange.offer["price_id"].as_string() == subscription.stripe_price_id,
+        )
         .order_by(PlanChange.created_at.desc(), PlanChange.id.desc())
         .limit(1)
     )
-    if operation and operation.offer["plan_key"] == plan_key:
+    if operation:
         return FuturePlanResponse.model_validate({**operation.offer, "first_payment_at": ends_at})
     return None
 

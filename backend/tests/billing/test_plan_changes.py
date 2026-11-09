@@ -571,3 +571,125 @@ async def test_first_definite_price_refusal_releases_guard_without_consuming_cou
         REDEEM, json={**confirmation(offer), "operation_id": "after-refusal-0001"}
     )
     assert claimed.json()["status"] == "completed", claimed.text
+
+
+async def test_ended_change_history_cannot_price_a_new_explicit_signup_with_same_plan_key(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    free = await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    change = await proposed_change(authed_client)
+    old_result = (await authed_client.post(CHANGES, json=change)).json()
+    assert old_result["status"] == "completed"
+    assert old_result["amount"] == 20000
+    fixed_clock.advance(
+        datetime.fromisoformat(free["starts_at"].replace("Z", "+00:00")) - fixed_clock()
+    )
+    original = (await fake_billing.list_subscriptions(customer_id=user.stripe_customer_id))[0]
+    await fake_billing.cancel_subscription(subscription_id=original.id)
+    await _send(
+        authed_client,
+        fake_billing,
+        "evt_old_change_ended",
+        "customer.subscription.deleted",
+        {"customer": user.stripe_customer_id},
+    )
+    fake_billing.plans = [
+        replace(plan, price_id="price_new_annual", amount=25000)
+        if plan.key == "pumpkit_pro_annual"
+        else plan
+        for plan in fake_billing.plans
+    ]
+    proposed = await authed_client.post(
+        SIGNUPS + "/preview", json={"plan_key": "pumpkit_pro_annual"}
+    )
+    assert proposed.status_code == 200, proposed.text
+    offer = proposed.json()
+    assert offer["amount"] == 25000
+    signup = {
+        "operation_id": "new-subscription-after-A",
+        "revision": offer["revision"],
+        "terms_version": offer["terms_version"],
+        "accepted_terms": True,
+        "requested_immediate_start": True,
+        "approved_specific_clauses": True,
+        "language": "en",
+    }
+    opened = await authed_client.post(SIGNUPS, json=signup)
+    assert opened.status_code == 200, opened.text
+    fake_billing.complete_paid_signup_setup(opened.json()["session_id"])
+    assert (await authed_client.get(SIGNUPS + "/" + signup["operation_id"])).json()[
+        "status"
+    ] == "completed"
+    states = await fake_billing.list_subscriptions(customer_id=user.stripe_customer_id)
+    current = next(state for state in states if state.status == "trialing")
+    assert current.id != original.id
+    assert current.price_id == "price_new_annual"
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["plan_key"] == "pumpkit_pro_annual"
+    assert me["free_access"]["ends_at"] == free["ends_at"]
+    assert me["future_plan"] is None
+    assert (await authed_client.get(CHANGES + "/" + change["operation_id"])).json() == old_result
+
+
+async def test_current_subscription_with_replaced_provider_price_cannot_reuse_accepted_amount(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    change = await proposed_change(authed_client)
+    old_result = (await authed_client.post(CHANGES, json=change)).json()
+    assert old_result["status"] == "completed"
+    original = (await fake_billing.list_subscriptions(customer_id=user.stripe_customer_id))[0]
+    fake_billing.set_subscription(
+        user.stripe_customer_id, replace(original, price_id="price_new_annual")
+    )
+    await _send(
+        authed_client,
+        fake_billing,
+        "evt_same_sub_new_price",
+        "customer.subscription.updated",
+        {"customer": user.stripe_customer_id},
+    )
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["plan_key"] == "pumpkit_pro_annual"
+    assert me["future_plan"] is None
+    assert (await authed_client.get(CHANGES + "/" + change["operation_id"])).json() == old_result
+
+
+async def test_accepted_current_provider_price_stays_authoritative_after_lookup_key_moves(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    free = await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    change = await proposed_change(authed_client)
+    old_result = (await authed_client.post(CHANGES, json=change)).json()
+    assert old_result["status"] == "completed"
+    next_code = await coupons("--months", "1")
+    added = (await authed_client.post(PREVIEW, json={"code": next_code["code"]})).json()
+    assert added["starts_at"] == free["ends_at"]
+    assert (
+        await authed_client.post(
+            REDEEM, json={**confirmation(added), "operation_id": "extended-current-price-0001"}
+        )
+    ).json()["status"] == "completed"
+    fake_billing.plans = [
+        replace(plan, price_id="price_new_annual", amount=25000)
+        if plan.key == "pumpkit_pro_annual"
+        else plan
+        for plan in fake_billing.plans
+    ]
+    original = (await fake_billing.list_subscriptions(customer_id=user.stripe_customer_id))[0]
+    fake_billing.set_subscription(user.stripe_customer_id, replace(original, plan_key=None))
+    await _send(
+        authed_client,
+        fake_billing,
+        "evt_old_price_key_moved",
+        "customer.subscription.updated",
+        {"customer": user.stripe_customer_id},
+    )
+    catalog = (await authed_client.get("/api/v1/billing/plans")).json()["data"]
+    assert next(plan for plan in catalog if plan["key"] == "pumpkit_pro_annual")["amount"] == 25000
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["plan_key"] is None
+    assert me["future_plan"]["amount"] == 20000
+    assert me["future_plan"]["first_payment_at"] == added["ends_at"]
+    assert me["future_plan"]["first_payment_at"] != old_result["first_payment_at"]
+    assert (await authed_client.get(CHANGES + "/" + change["operation_id"])).json() == old_result

@@ -101,7 +101,7 @@ async def get_billing_me(
             and not changes
         ),
         future_plan=await plan_changes.future_plan(
-            db, user_id=user.id, plan_key=subscription.plan_key, ends_at=free.ends_at
+            db, subscription=subscription, ends_at=free.ends_at
         )
         if free and subscription and subscription.cancel_at is None
         else None,
