@@ -1858,3 +1858,93 @@ it('replays the original accepted signup after reload only when its status is ab
   expect(redirectTo).toHaveBeenCalledWith('https://checkout.test/existing-setup');
   expect(sessionStorage.getItem(storageKey('paid-signup'))).toContain(original.operationId);
 });
+
+it.each(['http-conflict', 'completed-with-detail', 'unknown-conflict'])(
+  'handles signup cancellation %s without false success',
+  async (answer) => {
+    sessionStorage.clear();
+    sessionStorage.setItem(
+      storageKey('paid-signup'),
+      JSON.stringify({
+        operationId: 'stale-signup',
+        revision: 'stale-review',
+        termsVersion: '2026-11-08',
+        acceptedTerms: true,
+        requestedImmediateStart: true,
+        approvedSpecificClauses: true,
+        language: 'en',
+      }),
+    );
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+    vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+    vi.mocked(appConnectionService.list).mockResolvedValue([]);
+    vi.mocked(usageService.get).mockResolvedValue(usageWith());
+    vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+    const free = { startsAt: '2028-01-31T12:00:00Z', endsAt: '2028-05-31T12:00:00Z', months: 4 };
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...SUBSCRIBED,
+      subscription: null,
+      pendingPaidSignupId: 'stale-signup',
+      freeAccess: free,
+    });
+    vi.mocked(billingService.fetchPaidSignup).mockReset().mockResolvedValue({
+      operationId: 'stale-signup',
+      status: 'pending',
+      detail: null,
+      url: null,
+      sessionId: 'cs_old',
+      firstPaymentAt: '2028-03-31T12:00:00Z',
+      planKey: 'pumpkit_pro_monthly',
+    });
+    const detail =
+      'Cancellation could not be confirmed from this signup. Review your current plan in Settings, then use Cancel renewal or Manage subscription.';
+    vi.mocked(billingService.cancelPaidSignup)
+      .mockReset()
+      .mockImplementation(async () => {
+        if (answer === 'unknown-conflict')
+          throw apiError(409, 'Your paid signup customer is being confirmed.');
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+          ...SUBSCRIBED,
+          subscription: {
+            status: 'trialing',
+            planKey: 'pumpkit_pro_monthly',
+            currentPeriodEnd: free.endsAt,
+            cancelAt: null,
+          },
+          couponDeferral: true,
+          freeAccess: free,
+        });
+        if (answer === 'http-conflict')
+          throw apiError(409, detail, { code: 'PAID_SIGNUP_CANCEL_CONFLICT' });
+        return {
+          operationId: 'stale-signup',
+          status: 'completed',
+          detail,
+          url: null,
+          sessionId: 'cs_old',
+          firstPaymentAt: '2028-03-31T12:00:00Z',
+          planKey: 'pumpkit_pro_monthly',
+        };
+      });
+    renderSettings();
+    const plan = await card('Plan');
+    await waitFor(() => expect(plan.getByRole('button', { name: 'Cancel signup' })).toBeEnabled());
+    fireEvent.click(plan.getByRole('button', { name: 'Cancel signup' }));
+    if (answer === 'unknown-conflict') {
+      expect(
+        await plan.findByText(/Check signup to retrieve its result safely/),
+      ).toBeInTheDocument();
+      expect(plan.getByRole('button', { name: 'Check signup' })).toBeEnabled();
+      expect(plan.getByRole('button', { name: 'Cancel signup' })).toBeEnabled();
+      expect(plan.queryByText(/Subscription arranged/)).not.toBeInTheDocument();
+      expect(sessionStorage.getItem(storageKey('paid-signup'))).toContain('stale-signup');
+      return;
+    }
+    expect(await plan.findByText(detail)).toBeInTheDocument();
+    expect(plan.queryByText(/Subscription arranged/)).not.toBeInTheDocument();
+    expect(await plan.findByRole('button', { name: 'Cancel renewal' })).toBeEnabled();
+    expect(plan.getByText('Next payment: May 31, 2028 UTC')).toBeInTheDocument();
+    expect(plan.queryByRole('button', { name: 'Cancel signup' })).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(storageKey('paid-signup'))).toBeNull();
+  },
+);

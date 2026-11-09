@@ -898,3 +898,99 @@ async def test_replay_deadline_is_rechecked_after_provider_waits_before_dispatch
     async with db_session_maker() as deletion_db:
         with pytest.raises(ConflictError):
             await delete_account(deletion_db, fake_billing, user_id=user.id)
+
+
+@pytest.mark.parametrize("after_original_target", [False, True])
+async def test_stale_signup_cancellation_after_coupon_extension_requires_current_plan_action(
+    authed_client, coupons, fake_billing, fixed_clock, after_original_target
+):
+    free, request, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    await _send(
+        authed_client,
+        fake_billing,
+        "evt_other_browser_complete",
+        "checkout.session.completed",
+        {"customer": "cus_fake_1"},
+    )
+    second = await coupons("--months", "2")
+    offer = (await authed_client.post(PREVIEW, json={"code": second["code"]})).json()
+    assert (
+        await authed_client.post(
+            REDEEM, json=confirmation(offer, operation="other-browser-extension-0001")
+        )
+    ).json()["status"] == "completed"
+    if after_original_target:
+        target = datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00"))
+        fixed_clock.advance(target + timedelta(seconds=1) - fixed_clock())
+    before = (await authed_client.get("/api/v1/usage")).json()
+    stale = await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["code"] == "PAID_SIGNUP_CANCEL_CONFLICT"
+    assert "Cancellation could not be confirmed" in stale.json()["detail"]
+    assert "Settings" in stale.json()["detail"] and "Cancel renewal" in stale.json()["detail"]
+    assert fake_billing.cancelled_subscriptions == []
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["free_access"]["ends_at"] == offer["ends_at"]
+    assert me["subscription"]["current_period_end"] == offer["ends_at"]
+    cancelled = await authed_client.post("/api/v1/billing/cancel-renewal")
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["subscription"]["cancel_at"] == offer["ends_at"]
+    assert cancelled.json()["free_access"]["ends_at"] == offer["ends_at"]
+
+
+async def test_stale_completed_signup_cancellation_after_paid_start_is_explicit_conflict(
+    authed_client, coupons, fake_billing, fixed_clock
+):
+    free, request, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "completed"
+    target = datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00"))
+    fixed_clock.advance(target + timedelta(seconds=1) - fixed_clock())
+    state = (await fake_billing.list_subscriptions(customer_id="cus_fake_1"))[0]
+    fake_billing.set_subscription(
+        "cus_fake_1",
+        replace(
+            state,
+            status="active",
+            current_period_start=target,
+            current_period_end=months_after(target, 1),
+            paid_current_period=True,
+        ),
+    )
+    await _send(
+        authed_client,
+        fake_billing,
+        "evt_paid_start",
+        "customer.subscription.updated",
+        {"customer": "cus_fake_1"},
+    )
+    before = (await authed_client.get("/api/v1/usage")).json()
+    result = await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")
+    assert result.status_code == 409, result.text
+    assert "Manage subscription" in result.json()["detail"]
+    assert fake_billing.cancelled_subscriptions == []
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+
+
+@pytest.mark.parametrize("mismatch", ["price", "provider-error"])
+async def test_completed_signup_cancellation_does_not_claim_success_for_unknown_provider_facts(
+    authed_client, coupons, fake_billing, mismatch
+):
+    _, request, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "completed"
+    if mismatch == "price":
+        state = (await fake_billing.list_subscriptions(customer_id="cus_fake_1"))[0]
+        fake_billing.set_subscription("cus_fake_1", replace(state, price_id="price_unknown"))
+    else:
+        fake_billing.fail_on.add("list_subscriptions")
+    result = await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")
+    assert result.status_code == 409, result.text
+    assert result.json()["code"] == "PAID_SIGNUP_CANCEL_CONFLICT"
+    assert fake_billing.cancelled_subscriptions == []

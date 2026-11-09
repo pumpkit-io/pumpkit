@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users cancelling an outdated signup see a clear current-plan recovery action instead of a misleading success, including after another Coupon extends renewal.
+
 - Users keep proven paid time and its monthly Allowance when an interrupted signup settles during cancellation, including across the first-payment boundary.
 
 - Users can arrange renewal across stacked coupon months and see accurate same-day payment wording. Cancellation of an uncertain signup stays pending until the provider outcome is known, preventing a late subscription from escaping cancellation. **Upgrade notes:** apply migration `0050`; pre-checkpoint pending signups need provider-backed resolution before activation.

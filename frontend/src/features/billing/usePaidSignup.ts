@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { storageKey } from '@/lib/storage';
-import { errorMessage, errorStatus } from '@/services/apiErrors';
+import { errorCode, errorMessage, errorStatus } from '@/services/apiErrors';
 import { billingService, type PaidSignup, type PaidSignupRequest } from '@/services/billingService';
 
 function savedRequest(): PaidSignupRequest | null {
@@ -82,15 +82,26 @@ export function usePaidSignup(accountOperationId?: string | null) {
             result = await billingService.createPaidSignup(original);
           }
         }
+        if (action === 'cancel' && result.status === 'completed') {
+          clear();
+          setAnswer(null);
+          setError(
+            result.detail ??
+              'Cancellation could not be confirmed. Review your current plan in Settings, then use Cancel renewal or Manage subscription.',
+          );
+          return null;
+        }
         setAnswer(result);
         if (result.status !== 'pending') clear();
         return result;
       } catch (cause) {
         if (
           (confirming && [400, 409, 422].includes(errorStatus(cause) ?? 0)) ||
-          (action === 'cancel' && errorStatus(cause) === 404)
+          (action === 'cancel' &&
+            (errorStatus(cause) === 404 || errorCode(cause) === 'PAID_SIGNUP_CANCEL_CONFLICT'))
         ) {
           clear();
+          if (action === 'cancel') setAnswer(null);
           setError(
             errorMessage(cause, 'Review the current plan and payment date before trying again.'),
           );
