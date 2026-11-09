@@ -18,6 +18,7 @@ export interface Subscription {
   currentPeriodEnd: string | null;
   cancelAt: string | null;
   paidThrough?: string | null;
+  introductoryTrialEnd?: string | null;
 }
 
 /** What the backend says the User holds and may do. */
@@ -156,6 +157,7 @@ interface BillingMeApi {
     current_period_end: string | null;
     cancel_at: string | null;
     paid_through?: string | null;
+    introductory_trial_end?: string | null;
   } | null;
   subscribed: boolean;
   may_subscribe: boolean;
@@ -221,6 +223,7 @@ function billingMe(data: BillingMeApi): BillingMe {
       currentPeriodEnd: s.current_period_end,
       cancelAt: s.cancel_at,
       paidThrough: s.paid_through,
+      introductoryTrialEnd: s.introductory_trial_end,
     },
     subscribed: data.subscribed,
     maySubscribe: data.may_subscribe,

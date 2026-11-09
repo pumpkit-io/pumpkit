@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users on renewing annual plans or existing introductory trials can redeem coupons while keeping their original coverage and allowance resets; free months postpone the next full paid interval. Settings shows the original trial end separately. **Upgrade notes:** Apply migration 0048; coupons remain disabled by default pending final Stripe validation.
+
 - Scheduled posts that fail after access ends release top-up reservations for parts X did not accept, while preserving accepted parts and other scheduled posts.
 
 - Known cancellation dates keep expired access, Top-up purchases and immediate payments closed after coupon history is purged.

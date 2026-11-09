@@ -4,6 +4,7 @@ from typing import Optional
 
 from pumpkit.billing.allowance import (
     Allowance,
+    AllowancePeriod,
     Limits,
     allowance_at,
     may_buy_top_up,
@@ -66,6 +67,7 @@ class Entitlement:
             and as_utc(self.subscription.paid_start)
             <= self.now
             < as_utc(self.subscription.paid_end)
+            and not self.subscription.preserved_trial
             and sells_top_ups()
             or self.subscribed
             and may_buy_top_up(self.subscription)
@@ -89,7 +91,13 @@ class Entitlement:
             and as_utc(subscription.paid_start) <= moment < as_utc(subscription.paid_end)
         ):
             return Allowance(
-                period=paid_period(subscription.paid_anchor, moment),
+                period=AllowancePeriod(
+                    start=as_utc(subscription.paid_start),
+                    end=as_utc(subscription.paid_end),
+                    trial=True,
+                )
+                if subscription.preserved_trial
+                else paid_period(subscription.paid_anchor, moment),
                 limits=Limits(**subscription.paid_allowance),
                 way_out="top_up" if self.may_buy_top_up else None,
                 ends_at=max(as_utc(subscription.paid_end), as_utc(self.free_access.ends_at))

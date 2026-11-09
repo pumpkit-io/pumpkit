@@ -73,7 +73,7 @@ async def preview(
         >= coupon.max_redemptions
     ):
         raise ConflictError("This coupon is being claimed. Try again later or ask its sender.")
-    monthly = await coupon_operations.monthly_state(
+    subscription = await coupon_operations.deferrable_state(
         db, user_id=user.id, subscriptions=subscriptions, now=now
     )
     await coupon_service.require_unclaimed(db, coupon=coupon, email=user.email, config=settings)
@@ -81,15 +81,15 @@ async def preview(
     anchor = (
         as_utc(existing.calendar_anchor or existing.starts_at)
         if existing
-        else as_utc(monthly.billing_cycle_anchor)
-        if monthly and monthly.billing_cycle_anchor
+        else as_utc(subscription.billing_cycle_anchor)
+        if subscription and subscription.billing_cycle_anchor
         else now
     )
     start = (
         as_utc(existing.ends_at)
         if existing
-        else as_utc(monthly.current_period_end)
-        if monthly and monthly.current_period_end
+        else as_utc(subscription.current_period_end)
+        if subscription and subscription.current_period_end
         else now
     )
     offset = (
@@ -112,13 +112,13 @@ async def preview(
         starts_at=start,
         ends_at=end,
         allowance=allowance,
-        next_payment_at=end if monthly else None,
+        next_payment_at=end if subscription else None,
         terms_version=TERMS_VERSION if service.requires_terms_acceptance() else None,
         revision="",
     )
     offer = response.model_dump(mode="json", exclude={"revision"})
     state = {
-        "subscription": asdict(monthly) if monthly else None,
+        "subscription": asdict(subscription) if subscription else None,
         "previous_grant": existing.id if existing else None,
         "anchor": anchor.isoformat() if existing else None,
         "offset": offset,

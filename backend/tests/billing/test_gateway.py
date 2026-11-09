@@ -737,11 +737,16 @@ async def test_coupon_deferral_sends_absolute_target_without_proration_and_stabl
     assert http.headers[0]["Idempotency-Key"] == "coupon-deferral-operation_123"
 
 
+@pytest.mark.parametrize("interval, period_end", [("month", 1762387200), ("year", 1791244800)])
 @pytest.mark.parametrize("paid, expected", [(1900, True), (0, False)])
-async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoice(paid, expected):
+async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoice(
+    paid, expected, interval, period_end
+):
     raw = json.loads((FIXTURES / "stripe_subscription_list.json").read_text())
     state = raw["data"][0]
     state["status"] = "active"
+    state["items"]["data"][0]["price"]["recurring"]["interval"] = interval
+    state["items"]["data"][0]["current_period_end"] = period_end
     state["cancel_at_period_end"] = False
     state["billing_mode"] = {"type": "classic"}
     state["latest_invoice"] = {
@@ -754,7 +759,7 @@ async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoi
                 {
                     "amount": paid,
                     "parent": {"subscription_item_details": {"subscription_item": "si_1QaRunning"}},
-                    "period": {"start": 1759708800, "end": 1762387200},
+                    "period": {"start": 1759708800, "end": period_end},
                 }
             ]
         },
@@ -762,6 +767,8 @@ async def test_settlement_facts_distinguish_paid_coverage_from_coupon_zero_invoi
     http = _RecordedStripe(json.dumps(raw))
     gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
     result = (await gateway.list_subscriptions(customer_id="cus_Contract"))[0]
+    assert result.interval == interval
+    assert result.current_period_end == datetime.fromtimestamp(period_end, tz=timezone.utc)
     assert result.paid_current_period is expected
     assert result.billing_mode == "classic"
     assert result.item_id == "si_1QaRunning"

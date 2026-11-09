@@ -103,8 +103,15 @@ async def get_billing_me(
                 if subscription.current_period_end
                 else None,
                 cancel_at=as_utc(subscription.cancel_at) if subscription.cancel_at else None,
+                introductory_trial_end=as_utc(subscription.paid_end)
+                if subscription.preserved_trial
+                and subscription.paid_end
+                and as_utc(subscription.paid_end) > moment
+                else None,
                 paid_through=as_utc(subscription.paid_end)
-                if subscription.paid_end and as_utc(subscription.paid_end) > moment
+                if not subscription.preserved_trial
+                and subscription.paid_end
+                and as_utc(subscription.paid_end) > moment
                 else None,
             )
         ),
@@ -642,7 +649,7 @@ async def redeem_coupon(
     coupon_redemption.require_same_offer(signed, current, request)
     if current.next_payment_at is not None:
         assert user.stripe_customer_id is not None
-        state = await coupon_operations.monthly_state(
+        state = await coupon_operations.deferrable_state(
             db,
             user_id=user.id,
             subscriptions=subscriptions,

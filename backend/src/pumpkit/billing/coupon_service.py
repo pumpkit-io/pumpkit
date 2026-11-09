@@ -185,6 +185,7 @@ async def _purge_paid_coverage(db: AsyncSession, *, now: datetime) -> int:
             )
             if retained is not None:
                 continue
+            subscription.preserved_trial = None
             subscription.paid_start = None
             subscription.paid_end = None
             subscription.paid_anchor = None

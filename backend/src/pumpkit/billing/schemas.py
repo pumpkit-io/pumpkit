@@ -72,6 +72,7 @@ class BillingSubscriptionResponse(BaseModel):
     current_period_end: Optional[datetime]
     cancel_at: Optional[datetime]
     paid_through: Optional[datetime] = None
+    introductory_trial_end: Optional[datetime] = None
 
 
 class FreeAccessResponse(BaseModel):
