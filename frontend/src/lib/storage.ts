@@ -1,6 +1,7 @@
 import { APP_SLUG } from './app';
 
 export type StorageKey =
+  | 'plan-change'
   | 'paid-signup'
   | 'coupon-redemption'
   | 'theme'

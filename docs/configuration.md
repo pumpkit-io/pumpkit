@@ -202,8 +202,11 @@ Coupon runtime settings are introduced by #395, not by the legal-document update
 
 ## Coupon configuration
 
-`COUPONS_ENABLED` defaults to `false`. It gates issuance and, as the remaining implementation lands, preview, redemption and coupon-specific paid actions. Keep it off outside isolated tests until final #394 validates the merged implementation. Existing billing and Instances selling no Plans keep their behavior.
+`COUPONS_ENABLED` defaults to `false`. It gates issuance, preview, redemption, future paid signup and deferred billing frequency changes. Keep it off outside isolated tests until final #394 validates the merged implementation. Existing billing and Instances selling no Plans keep their behavior.
 
 `COUPON_IDENTITY_KEYS` is a secret JSON key ring: `{"active":"v1","keys":{"v1":"<base64 of 32 random bytes>"}}`. Enabling Coupons requires a valid ring and issuing requires configured Stripe Plans. All configured offers must resolve to the same offer name and currency, with one-month or one-year intervals. Missing or incompatible prices prevent issuance. This check reads the existing billing catalog and creates no payment or Subscription.
 
 Store the ring in the same protected Instance configuration used by the backend and privileged command. Back it up encrypted separately from the database, restore the matching complete ring with the database, and retain old keys for existing fingerprints and backups. Never replace key bytes under an existing identifier. See [key custody and rotation](coupons.md#identity-and-key-custody) and [the commands](coupons.md#privileged-coupon-commands).
+
+
+`STRIPE_COUPON_PORTAL_CONFIGURATION_ID` names an active Stripe management-only portal configuration with subscription updates, subscription cancellation and its login page disabled. Enable payment-method management/invoice history as needed. Every restricted session validates the current provider configuration and names it explicitly; an unsafe or missing configuration refuses the session. Enabled Instances use it for ordinary paid subscribers too, with cancellation available in Settings. It is optional while Coupons stay off, and adds no second feature switch. See [portal activation safeguards](coupons.md#portal-and-activation-safeguards): changing the ID alone does not revoke old sessions. Final #394 must validate existing-session treatment before activation.

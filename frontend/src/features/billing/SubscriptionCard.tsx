@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CouponForm } from './CouponForm';
 import { PaidSignup } from './PaidSignup';
+import { PlanChange, FuturePlanDetails } from './PlanChange';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
@@ -71,6 +72,7 @@ export function SubscriptionCard({
   const [canceling, setCanceling] = useState(false);
   const [localPending, setLocalPending] = useState(false);
   const [signupPending, setSignupPending] = useState(false);
+  const [changePending, setChangePending] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [canceledThrough, setCanceledThrough] = useState<string | null>(null);
   const cancellation = useRef<HTMLParagraphElement>(null);
@@ -97,7 +99,9 @@ export function SubscriptionCard({
   const paymentFailed = subscription ? PAYMENT_FAILED_STATUSES.has(subscription.status) : false;
   const deferral = data?.me.couponDeferral;
   const pending = data?.me.pendingCouponOperation || localPending;
-  const billingBlocked = pending || signupPending || Boolean(data?.me.pendingPaidSignupId);
+  const planChangePending = changePending || Boolean(data?.me.pendingPlanChangeId);
+  const billingBlocked =
+    pending || signupPending || Boolean(data?.me.pendingPaidSignupId) || planChangePending;
   const renewalCancelled = Boolean(
     subscription?.cancelAt ||
     subscription?.status === 'canceled' ||
@@ -114,7 +118,7 @@ export function SubscriptionCard({
       : null;
 
   return (
-    <SettingsCard title="Plan">
+    <SettingsCard title="Plan" className="px-[20px] sm:px-6">
       {loadError && <ErrorBanner message={loadError} />}
       {error && <ErrorBanner message={error} />}
       {cancelError && <ErrorBanner message={cancelError} />}
@@ -150,7 +154,7 @@ export function SubscriptionCard({
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
             <div className="min-w-0">
               <p className="truncate font-sans text-lg font-semibold leading-tight text-foreground">
-                {plan?.productName ?? 'Your plan'}
+                {deferral ? 'Your plan' : (plan?.productName ?? 'Your plan')}
               </p>
             </div>
             <Badge
@@ -186,7 +190,12 @@ export function SubscriptionCard({
               )}
             </div>
           )}
-          <div className="flex flex-col gap-3 border-t border-border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          {data.me.futurePlan && !renewalCancelled && !billingBlocked && (
+            <div className="border-t border-border px-4 py-3">
+              <FuturePlanDetails plan={data.me.futurePlan} />
+            </div>
+          )}
+          <div className="flex flex-col gap-3 border-t border-border bg-muted/40 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             {/* While a payment fails Stripe retries it, so nothing renews on the period end. */}
             {next && !paymentFailed && (
               <div className="space-y-2 text-sm text-foreground">
@@ -194,32 +203,38 @@ export function SubscriptionCard({
                 {deferral && renewalCancelled && <p>No automatic payment</p>}
               </div>
             )}
-            {deferral ? (
-              !renewalCancelled && (
-                <div className="space-y-2 sm:max-w-64">
-                  <p className="text-sm text-foreground">
-                    Cancel renewal to keep all remaining access with no payment afterward.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal"
-                    disabled={canceling || billingBlocked}
-                    onClick={() => void cancelRenewal()}
-                  >
-                    {canceling ? 'Confirming cancellation…' : 'Cancel renewal'}
-                  </Button>
-                </div>
-              )
-            ) : (
+            {(deferral || data.couponsEnabled) && !renewalCancelled && (
+              <div className="space-y-2 sm:max-w-64">
+                <p className="text-sm text-foreground">
+                  Cancel renewal to keep all remaining access with no payment afterward.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal"
+                  disabled={canceling || billingBlocked}
+                  onClick={() => void cancelRenewal()}
+                >
+                  {canceling ? 'Confirming cancellation…' : 'Cancel renewal'}
+                </Button>
+              </div>
+            )}
+            {(!deferral || data.couponsEnabled) && (
               <Button
                 type="button"
                 disabled={billingBlocked}
                 variant={paymentFailed ? 'default' : 'outline'}
-                className={cn('h-10 shrink-0 sm:ml-auto', !paymentFailed && 'bg-card')}
+                className={cn(
+                  'h-auto min-h-11 max-w-full shrink-0 whitespace-normal sm:ml-auto',
+                  !paymentFailed && 'bg-card',
+                )}
                 onClick={() => void openPortal()}
               >
-                {paymentFailed ? 'Fix payment' : 'Manage subscription'}
+                {paymentFailed
+                  ? 'Fix payment'
+                  : data.couponsEnabled
+                    ? 'Manage billing'
+                    : 'Manage subscription'}
               </Button>
             )}
           </div>
@@ -252,17 +267,34 @@ export function SubscriptionCard({
         </p>
       )}
       {data && (
-        <PaidSignup data={data} onPendingChange={setSignupPending} onArranged={onRedeemed} />
-      )}
-      {(data?.couponsEnabled || pending) && !signupPending && !data?.me.pendingPaidSignupId && (
-        <CouponForm
-          inSettings
-          recoveryOnly={!data?.couponsEnabled}
-          operationId={data?.me.pendingCouponOperationId}
-          onPendingChange={setLocalPending}
-          onRedeemed={onRedeemed}
+        <PlanChange
+          data={data}
+          blocked={Boolean(
+            pending ||
+            signupPending ||
+            data.me.pendingPaidSignupId ||
+            canceling ||
+            renewalCancelled,
+          )}
+          onPendingChange={setChangePending}
+          onChanged={onRedeemed}
         />
       )}
+      {data && !planChangePending && (
+        <PaidSignup data={data} onPendingChange={setSignupPending} onArranged={onRedeemed} />
+      )}
+      {(data?.couponsEnabled || pending) &&
+        !signupPending &&
+        !data?.me.pendingPaidSignupId &&
+        !planChangePending && (
+          <CouponForm
+            inSettings
+            recoveryOnly={!data?.couponsEnabled}
+            operationId={data?.me.pendingCouponOperationId}
+            onPendingChange={setLocalPending}
+            onRedeemed={onRedeemed}
+          />
+        )}
     </SettingsCard>
   );
 }

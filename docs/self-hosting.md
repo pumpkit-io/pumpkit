@@ -54,9 +54,9 @@ The `git checkout` moves to the latest release, so the compose file, `setup.sh` 
 
 Choose `PUBLIC_URL`, the address Users open:
 
-| Path | `PUBLIC_URL` | Also pass |
-| --- | --- | --- |
-| Laptop | `http://localhost:8080` | nothing; with port 8080 taken, `--http-port 8081` and `--public-url http://localhost:8081` |
+| Path   | `PUBLIC_URL`                               | Also pass                                                                                      |
+| ------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Laptop | `http://localhost:8080`                    | nothing; with port 8080 taken, `--http-port 8081` and `--public-url http://localhost:8081`     |
 | Server | `https://pumpkit.example.org`, your domain | `--http-port 80`, and optionally `--acme-email you@example.org` for certificate expiry notices |
 
 `PUBLIC_URL` must be an address the clients can reach, not only the browser: AI apps connect to `PUBLIC_URL/api/v1/mcp` (see [docs/mcp.md](mcp.md)). claude.ai and ChatGPT connect from their own servers, so they need a `PUBLIC_URL` reachable from the internet over HTTPS. A laptop's `http://localhost:8080` works only for apps running on that laptop, such as Claude Code. Connecting apps needs no setting of its own.
@@ -303,9 +303,11 @@ Turn this on only if you charge Users. You are then the seller: your own Terms, 
    ```
 
    **Check:** it prints `"sells_plans":true`, and `curl -s PUBLIC_URL/api/v1/billing/plans` lists each Plan with its price.
+
 5. **Sell Top-ups, if you want to.** A Top-up is a one-off pack, half of each monthly cap (250 generations and 50 X posts, up to 5 with a link, at the defaults), that a paid-up User buys once they run low; it lasts 12 months and is spent only after the Allowance. In Stripe, add a one-off price (not recurring) to a product, give it a lookup key such as `top_up`, set its tax behaviour to inclusive, and set `BILLING_TOP_UP_KEY=top_up` in `.env`. Leave the setting out and no Top-ups are sold. A refund or a dispute of a Top-up's payment in Stripe removes whatever is left of it; what it already paid for, waiting Scheduled posts included, stays paid for and doesn't move onto the Allowance. Your Terms should say that a Top-up is not refunded once any of it is spent.
 
    **Check:** `curl -s PUBLIC_URL/api/v1/billing/plans` shows `top_up` with its price.
+
 6. **Set the Operator details and replace the legal documents**, below, so Users accept your Terms at checkout.
 
 Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.stripe.com/testing), and check that the Plan card in Settings shows the Subscription.
@@ -419,6 +421,7 @@ Before 1.0, an upgrade may need manual steps. Each release lists them under **Up
    ```
 
    Checking out the release keeps the compose files in step with the images. The backend applies new migrations when it starts.
+
 5. Check the health and the running version:
 
    ```sh
@@ -427,6 +430,7 @@ Before 1.0, an upgrade may need manual steps. Each release lists them under **Up
    ```
 
    **Check:** `{"status":"ok"}`, and the `TAG` column shows the new version for `pumpkit-backend` and `pumpkit-web`.
+
 6. Run any one-off command the **Upgrade notes** ask for, once, inside the running backend. For example, the author photo backfill:
 
    ```sh
@@ -497,10 +501,12 @@ If it prints `blocked`, set `SMTP_PORT` to another port your provider listens on
 
 ## Coupon readiness
 
-Coupons are being implemented under spec #392 and remain disabled by default until final Stripe validation #394. [The Coupon contract](coupons.md) sets the cardless acceptance, retention/purge and key backup/rotation rules that the runtime slices must implement. Replace the bundled bilingual legal documents for your Instance and apply your own material-change notice process. The legal-document update alone adds no runtime setting, key or executable Coupon command. Follow the runtime Release’s Upgrade notes when installing those later slices; do not activate from historical provider evidence alone.
+Coupons are being implemented under spec #392 and remain disabled by default until final Stripe validation #394. [The Coupon contract](coupons.md) sets the cardless acceptance, retention/purge and key backup/rotation rules that the runtime slices must implement. Replace the bundled bilingual legal documents for your Instance and apply your own material-change notice process. Apply the runtime Release’s migrations and Upgrade notes; do not activate from historical provider evidence alone.
 
 ### Coupon tooling
 
 Billing-enabled Instances can issue, inspect and permanently disable Coupons with the [privileged commands](coupons.md#privileged-coupon-commands). This adds no public issuance endpoint. `COUPONS_ENABLED` stays off by default until the complete feature passes final Stripe validation. An Instance selling no Plans needs no Coupon setting, key or purge job.
 
 Before isolated testing, apply migrations, configure `COUPON_IDENTITY_KEYS`, back up its complete key ring securely and separately from the database, and schedule daily purge with the same protected configuration. Restore matching keys and database together. Keep old keys during rotation; otherwise existing assignments and claims fail closed. [The contract](coupons.md#identity-and-key-custody) explains retention and rotation. Existing billing needs no manual change while Coupons remain off.
+
+Before eventual activation, configure `STRIPE_COUPON_PORTAL_CONFIGURATION_ID` with subscription updates/cancellation and portal login disabled. Settings supplies cancellation and deferred frequency changes while the portal manages payment methods/invoices. Inventory older portal configurations, login links and outstanding sessions and establish their safe handling in final #394; a new configuration ID does not revoke them. Add `python -m pumpkit.billing.plan_change_recovery recover` to existing daily recovery checks, keep migrations through `0052` installed, and investigate every unresolved operation. The [complete supported flow](coupons.md#deferred-billing-frequency-changes) preserves paid/free dates and monthly Allowance across annual/monthly changes.

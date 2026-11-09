@@ -143,7 +143,8 @@ async def test_pending_blocks_other_billing_and_deletion_then_cancellation_prese
     fake_billing.fail_on.clear()
     assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "completed"
     assert (await authed_client.post("/api/v1/billing/subscribe-now")).status_code == 409
-    assert (await authed_client.post("/api/v1/billing/portal")).status_code == 409
+    assert (await authed_client.post("/api/v1/billing/portal")).status_code == 200
+    assert fake_billing.restricted_portals == ["cus_monthly"]
     cancelled = await authed_client.post("/api/v1/billing/cancel-renewal")
     assert cancelled.status_code == 200, cancelled.text
     assert cancelled.json()["subscription"]["cancel_at"] == offer["ends_at"]

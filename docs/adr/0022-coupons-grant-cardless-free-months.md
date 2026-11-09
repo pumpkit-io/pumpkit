@@ -93,3 +93,9 @@ Sources: [renewal deferral](https://docs.stripe.com/billing/subscriptions/billin
 
 - Requiring a card and automatically charging after the free period. Recipients should be able to use their free months without taking on a future payment.
 - Granting access alongside an existing paid Subscription without changing payment. That gives existing subscribers no benefit, especially when they already paid for a year.
+
+## Deferred interval implementation
+
+Monthly/annual changes during current or queued Free access use a durable in-app subscription-item price update on the installed API, with no proration and unchanged anchor. The price changes in Stripe immediately; payment begins at the preserved free end, and original paid/Trial coverage and accepted Allowance caps remain local authority. No schedule or API upgrade is introduced. Pending changes serialize with redemption and paid signup; bounded same-key recovery preserves cancellation and never guesses the outcome of a late write. The detailed checkpoint, retention and API contract is in [the complete flow](../coupons.md#deferred-billing-frequency-changes).
+
+An explicit validated management-only portal replaces unrestricted sessions while Coupons are enabled, including for ordinary subscribers who might redeem later. Subscription updates, cancellation and login are disabled there; Settings supplies cancellation and frequency changes. This is narrower than the historical `continue_trial` price-change portal candidate. Existing sessions and external login links still require provider-backed activation safeguards; naming a new configuration does not establish revocation. Final #394 must validate the merged integration and those outstanding-session paths before enabling Coupons.

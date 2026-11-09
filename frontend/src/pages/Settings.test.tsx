@@ -9,6 +9,9 @@ vi.mock('@/services/userService', () => ({
 }));
 vi.mock('@/services/billingService', () => ({
   billingService: {
+    previewPlanChange: vi.fn(),
+    createPlanChange: vi.fn(),
+    fetchPlanChange: vi.fn(),
     previewPaidSignup: vi.fn(),
     createPaidSignup: vi.fn(),
     fetchPaidSignup: vi.fn(),
@@ -1346,7 +1349,7 @@ it('confirms a monthly coupon safely after reload and shows paid time and deferr
   expect(await plan.findByText('Confirming redemption…')).toHaveAttribute('role', 'status');
   await waitFor(() => expect(plan.getByRole('button', { name: 'Check redemption' })).toBeEnabled());
   expect(plan.queryByText('Coupon redeemed')).not.toBeInTheDocument();
-  expect(plan.getByRole('button', { name: 'Manage subscription' })).toBeDisabled();
+  expect(plan.getByRole('button', { name: 'Manage billing' })).toBeDisabled();
   expect(sessionStorage.getItem(storageKey('coupon-redemption'))).toContain('monthly-preview');
   expect(plan.getByRole('textbox', { name: 'Coupon code' })).toBeDisabled();
   view.unmount();
@@ -1382,7 +1385,7 @@ it('confirms a monthly coupon safely after reload and shows paid time and deferr
   expect(plan.getAllByText(/Next payment:/)).toHaveLength(2);
   expect(plan.queryByText('Trial')).not.toBeInTheDocument();
   expect(plan.queryByText('No automatic payment')).not.toBeInTheDocument();
-  expect(plan.queryByRole('button', { name: 'Manage subscription' })).not.toBeInTheDocument();
+  expect(plan.getByRole('button', { name: 'Manage billing' })).toBeEnabled();
   expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeEnabled();
   expect(billingService.redeemCoupon).toHaveBeenCalledTimes(1);
   expect(sessionStorage.getItem(storageKey('coupon-redemption'))).toBeNull();
@@ -1948,3 +1951,263 @@ it.each(['http-conflict', 'completed-with-detail', 'unknown-conflict'])(
     expect(sessionStorage.getItem(storageKey('paid-signup'))).toBeNull();
   },
 );
+
+describe('future billing frequency', () => {
+  const paymentAt = '2028-03-31T12:00:00Z';
+  const free = {
+    startsAt: '2028-02-29T12:00:00Z',
+    endsAt: paymentAt,
+    months: 1,
+    queuedStartsAt: '2028-02-29T12:00:00Z',
+  };
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+    vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+    vi.mocked(appConnectionService.list).mockResolvedValue([]);
+    vi.mocked(usageService.get).mockResolvedValue(usageWith());
+    vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, couponsEnabled: true });
+    vi.mocked(billingService.previewPlanChange).mockReset();
+    vi.mocked(billingService.createPlanChange).mockReset();
+    vi.mocked(billingService.fetchPlanChange).mockReset();
+  });
+
+  it.each(['month', 'year'])(
+    'reviews and confirms a future %s plan without losing coverage',
+    async (interval) => {
+      const target = CATALOG.plans.find((p) => p.interval === interval)!;
+      const original = CATALOG.plans.find((p) => p.interval !== interval)!;
+      const me = {
+        ...holding('trialing', true),
+        couponDeferral: true,
+        mayChangePlan: true,
+        subscription: {
+          ...holding('trialing', true).subscription!,
+          planKey: original.key,
+          paidThrough: free.startsAt,
+          currentPeriodEnd: paymentAt,
+        },
+        freeAccess: free,
+      };
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(me);
+      const future = {
+        planKey: target.key,
+        productName: target.productName,
+        amount: target.amount,
+        currency: target.currency,
+        interval,
+        intervalCount: 1,
+        firstPaymentAt: paymentAt,
+      };
+      vi.mocked(billingService.previewPlanChange).mockResolvedValue({
+        ...future,
+        revision: 'accepted-frequency-offer',
+      });
+      vi.mocked(billingService.createPlanChange).mockImplementation(async (request) => {
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+          ...me,
+          futurePlan: future,
+          subscription: { ...me.subscription, planKey: target.key },
+        });
+        return { ...future, operationId: request.operationId, status: 'completed', detail: null };
+      });
+      renderSettings();
+      const plan = await card('Plan');
+      fireEvent.click(await plan.findByRole('button', { name: 'Change billing frequency' }));
+      fireEvent.click(
+        plan.getByRole('button', {
+          name: interval === 'month' ? 'Review monthly plan' : 'Review yearly plan',
+        }),
+      );
+      const review = await plan.findByRole('region', { name: 'Review billing frequency' });
+      expect(review).toHaveFocus();
+      expect(review).toHaveTextContent('March 31, 2028');
+      expect(review).toHaveTextContent('12:00:00 UTC');
+      expect(review).toHaveTextContent(interval === 'month' ? '€9.00 / month' : '€90.00 / year');
+      expect(review).toHaveTextContent('No immediate payment');
+      expect(billingService.createPlanChange).not.toHaveBeenCalled();
+      fireEvent.click(within(review).getByRole('button', { name: 'Confirm change' }));
+      const success = await plan.findByText(
+        'Billing frequency changed. Your paid and free access stay unchanged.',
+      );
+      expect(success.closest('[role="status"]')).toHaveFocus();
+      expect(plan.getByText(/Your future plan:/)).toHaveTextContent(target.productName);
+      expect(plan.getByText(/Future payment:/)).toHaveTextContent('March 31, 2028');
+      expect(plan.getByText(/Paid access through/)).toHaveTextContent('February 29, 2028');
+      expect(plan.getByText(/Queued free access:/)).toHaveTextContent('March 31, 2028');
+      expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeEnabled();
+      expect(billingService.createPlanChange).toHaveBeenCalledWith(
+        expect.objectContaining({ revision: 'accepted-frequency-offer' }),
+      );
+    },
+  );
+
+  it('recovers an uncertain change with coupons off and blocks conflicting billing until confirmed', async () => {
+    const future = {
+      planKey: 'pumpkit_pro_yearly',
+      productName: 'Pro yearly',
+      amount: 9000,
+      currency: 'eur',
+      interval: 'year',
+      intervalCount: 1,
+      firstPaymentAt: paymentAt,
+    };
+    vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+    const me = {
+      ...holding('trialing', true),
+      couponDeferral: true,
+      pendingPlanChangeId: 'account-plan-change',
+      subscription: {
+        ...holding('trialing', true).subscription!,
+        paidThrough: free.startsAt,
+        currentPeriodEnd: paymentAt,
+      },
+      freeAccess: free,
+    };
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(me);
+    vi.mocked(billingService.fetchPlanChange).mockResolvedValueOnce({
+      ...future,
+      operationId: 'account-plan-change',
+      status: 'pending',
+      detail: 'Confirming the billing change.',
+    });
+    renderSettings();
+    const plan = await card('Plan');
+    expect(await plan.findByText('Confirming the billing change.')).toBeInTheDocument();
+    expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeDisabled();
+    expect(
+      plan.queryByRole('button', { name: 'Change billing frequency' }),
+    ).not.toBeInTheDocument();
+    expect(plan.queryByRole('button', { name: 'Redeem coupon' })).not.toBeInTheDocument();
+    vi.mocked(billingService.fetchPlanChange).mockImplementation(async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+        ...me,
+        pendingPlanChangeId: null,
+        futurePlan: future,
+      });
+      return { ...future, operationId: 'account-plan-change', status: 'completed', detail: null };
+    });
+    fireEvent.click(plan.getByRole('button', { name: 'Check billing change' }));
+    expect(await plan.findByText(/Billing frequency changed/)).toBeInTheDocument();
+    await waitFor(() => expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeEnabled());
+    expect(plan.getByText(/Your future plan:/)).toHaveTextContent('Pro yearly');
+    expect(billingService.createPlanChange).not.toHaveBeenCalled();
+  });
+
+  it('retains an interrupted confirmation for lookup after reload, without starting another change', async () => {
+    const me = {
+      ...holding('trialing', true),
+      couponDeferral: true,
+      mayChangePlan: true,
+      subscription: { ...holding('trialing', true).subscription!, currentPeriodEnd: paymentAt },
+      freeAccess: free,
+    };
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(me);
+    const future = {
+      planKey: 'pumpkit_pro_yearly',
+      productName: 'Pro yearly',
+      amount: 9000,
+      currency: 'eur',
+      interval: 'year',
+      intervalCount: 1,
+      firstPaymentAt: paymentAt,
+    };
+    vi.mocked(billingService.previewPlanChange).mockResolvedValue({
+      ...future,
+      revision: 'interrupted-offer',
+    });
+    vi.mocked(billingService.createPlanChange).mockRejectedValue(apiError(502, 'Unavailable'));
+    const view = renderSettings();
+    let plan = await card('Plan');
+    fireEvent.click(await plan.findByRole('button', { name: 'Change billing frequency' }));
+    fireEvent.click(plan.getByRole('button', { name: 'Review yearly plan' }));
+    fireEvent.click(await plan.findByRole('button', { name: 'Confirm change' }));
+    expect(await plan.findByRole('alert')).toHaveTextContent('not confirmed yet');
+    expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeDisabled();
+    const saved = JSON.parse(sessionStorage.getItem(storageKey('plan-change'))!);
+    expect(saved.revision).toBe('interrupted-offer');
+    expect(billingService.createPlanChange).toHaveBeenCalledTimes(1);
+    view.unmount();
+    vi.mocked(billingService.fetchPlanChange).mockResolvedValue({
+      ...future,
+      operationId: saved.operationId,
+      status: 'completed',
+      detail: null,
+    });
+    renderSettings();
+    plan = await card('Plan');
+    expect(await plan.findByText(/Billing frequency changed/)).toBeInTheDocument();
+    expect(billingService.fetchPlanChange).toHaveBeenCalledWith(saved.operationId);
+    expect(billingService.createPlanChange).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(storageKey('plan-change'))).toBeNull();
+  });
+
+  it('requires a fresh review after a stale offer and keeps the current payment date visible', async () => {
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...holding('trialing', true),
+      couponDeferral: true,
+      mayChangePlan: true,
+      subscription: { ...holding('trialing', true).subscription!, currentPeriodEnd: paymentAt },
+      freeAccess: free,
+    });
+    const future = {
+      planKey: 'pumpkit_pro_yearly',
+      productName: 'Pro yearly',
+      amount: 9000,
+      currency: 'eur',
+      interval: 'year',
+      intervalCount: 1,
+      firstPaymentAt: paymentAt,
+    };
+    vi.mocked(billingService.previewPlanChange).mockResolvedValue({
+      ...future,
+      revision: 'stale-offer',
+    });
+    vi.mocked(billingService.createPlanChange).mockRejectedValue(
+      apiError(409, 'The billing offer changed. Review it again.'),
+    );
+    renderSettings();
+    const plan = await card('Plan');
+    fireEvent.click(await plan.findByRole('button', { name: 'Change billing frequency' }));
+    fireEvent.click(plan.getByRole('button', { name: 'Review yearly plan' }));
+    fireEvent.click(await plan.findByRole('button', { name: 'Confirm change' }));
+    expect(await plan.findByRole('alert')).toHaveTextContent('Review it again');
+    expect(plan.queryByRole('button', { name: 'Confirm change' })).not.toBeInTheDocument();
+    expect(plan.getByText(/Next payment:/)).toHaveTextContent('March 31, 2028');
+    expect(sessionStorage.getItem(storageKey('plan-change'))).toBeNull();
+    expect(plan.getByRole('button', { name: 'Review yearly plan' })).toBeEnabled();
+  });
+
+  it('keeps ordinary cancellation and payment-method management available on an enabled instance', async () => {
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('active', true));
+    vi.mocked(billingService.openBillingPortal).mockResolvedValue(
+      'https://portal.stripe.test/safe',
+    );
+    vi.mocked(redirectTo).mockClear();
+    renderSettings();
+    const plan = await card('Plan');
+    expect(await plan.findByRole('button', { name: 'Cancel renewal' })).toBeEnabled();
+    fireEvent.click(plan.getByRole('button', { name: 'Manage billing' }));
+    await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://portal.stripe.test/safe'));
+    expect(
+      plan.queryByRole('button', { name: 'Change billing frequency' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers no new frequency or ordinary cancellation controls with coupons disabled', async () => {
+    vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...holding('active', true),
+      mayChangePlan: true,
+    });
+    renderSettings();
+    const plan = await card('Plan');
+    expect(await plan.findByRole('button', { name: 'Manage subscription' })).toBeEnabled();
+    expect(plan.queryByRole('button', { name: 'Cancel renewal' })).not.toBeInTheDocument();
+    expect(
+      plan.queryByRole('button', { name: 'Change billing frequency' }),
+    ).not.toBeInTheDocument();
+    expect(billingService.previewPlanChange).not.toHaveBeenCalled();
+  });
+});

@@ -965,3 +965,111 @@ async def test_in_progress_signup_idempotency_key_is_uncertain_not_definite_refu
             first_payment_at=datetime(2028, 1, 31, tzinfo=timezone.utc),
         )
     assert not isinstance(caught.value, DeferralRefused)
+
+
+async def test_interval_change_retains_trial_anchor_and_cancellation_without_proration():
+    http = _RecordedStripe('{"id":"sub_change","object":"subscription"}')
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    await gateway.change_plan(
+        subscription_id="sub_change",
+        item_id="si_change",
+        price_id="price_year",
+        operation_id="change_contract",
+    )
+    assert http.forms[0] == {
+        "items[0][id]": ["si_change"],
+        "items[0][price]": ["price_year"],
+        "proration_behavior": ["none"],
+        "billing_cycle_anchor": ["unchanged"],
+        "metadata[pumpkit_plan_change]": ["change_contract"],
+    }
+    assert http.headers[0]["Idempotency-Key"] == "plan-change-change_contract"
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [None, "subscription_update", "subscription_cancel", "login_page", "inactive", "missing"],
+)
+async def test_management_portal_requires_explicit_current_restricted_configuration(
+    monkeypatch, unsafe
+):
+    configuration = {
+        "id": "bpc_safe",
+        "object": "billing_portal.configuration",
+        "active": True,
+        "features": {
+            "subscription_update": {"enabled": False},
+            "subscription_cancel": {"enabled": False},
+        },
+        "login_page": {"enabled": False},
+    }
+    if unsafe in {"subscription_update", "subscription_cancel"}:
+        configuration["features"][unsafe]["enabled"] = True
+    elif unsafe == "login_page":
+        configuration["login_page"]["enabled"] = True
+    elif unsafe == "inactive":
+        configuration["active"] = False
+    elif unsafe == "missing":
+        configuration["features"] = {}
+
+    class PortalStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            self._bodies = [
+                json.dumps(
+                    configuration
+                    if method == "get"
+                    else {
+                        "id": "bps_safe",
+                        "object": "billing_portal.session",
+                        "url": "https://billing.test/safe",
+                    }
+                )
+            ]
+            return super().request(method, url, headers, post_data, _usage=_usage)
+
+    monkeypatch.setattr(settings, "STRIPE_COUPON_PORTAL_CONFIGURATION_ID", "bpc_safe")
+    http = PortalStripe("{}")
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    if unsafe:
+        with pytest.raises(BillingProviderError):
+            await gateway.create_portal_url(customer_id="cus_contract", restricted=True)
+        assert http.methods == ["get"]
+    else:
+        assert (
+            await gateway.create_portal_url(customer_id="cus_contract", restricted=True)
+            == "https://billing.test/safe"
+        )
+        assert http.methods == ["get", "post"]
+        assert http.forms[-1]["configuration"] == ["bpc_safe"]
+
+
+@pytest.mark.parametrize("status", [400, 409])
+async def test_interval_change_in_progress_key_is_uncertain_even_on_invalid_request(status):
+    class InProgressStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            return (
+                json.dumps(
+                    {
+                        "error": {
+                            "type": "invalid_request_error",
+                            "code": "idempotency_key_in_use",
+                            "message": "The original request is still executing",
+                        }
+                    }
+                ),
+                status,
+                {},
+            )
+
+    http = InProgressStripe("{}")
+    gateway = StripeBillingGateway(
+        stripe.StripeClient("sk_test_contract", http_client=http, max_network_retries=0)
+    )
+    with pytest.raises(BillingProviderError) as caught:
+        await gateway.change_plan(
+            subscription_id="sub_change",
+            item_id="si_change",
+            price_id="price_year",
+            operation_id="change_in_progress",
+        )
+    assert not isinstance(caught.value, DeferralRefused)

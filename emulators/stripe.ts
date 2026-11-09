@@ -627,7 +627,33 @@ export function pumpkitStripe(target: WebhookTarget) {
       app.post('/v1/subscriptions/:id', async (c: any) => {
         const subscription = state.subscriptions[c.req.param('id')];
         if (!subscription) return notFound(c, 'subscription', c.req.param('id'));
-        const { trial_end: trialEnd, cancel_at: cancelAt, metadata, expand = [] } = await bodyParams(c);
+        const {
+          trial_end: trialEnd,
+          cancel_at: cancelAt,
+          metadata,
+          items,
+          proration_behavior: proration,
+          billing_cycle_anchor: anchor,
+          expand = [],
+        } = await bodyParams(c);
+        if (items) {
+          if (
+            subscription.status !== 'trialing' ||
+            proration !== 'none' ||
+            anchor !== 'unchanged'
+          ) {
+            return c.json(
+              { error: { type: 'invalid_request_error', message: 'Unsupported price update' } },
+              400,
+            );
+          }
+          const item = items[0];
+          const price = state.prices[item?.price];
+          if (!price || item.id !== subscription.items.data[0].id)
+            return notFound(c, 'price', item?.price);
+          subscription.items.data[0].price = price;
+          subscription.metadata = { ...subscription.metadata, ...metadata };
+        }
         if (trialEnd && trialEnd !== 'now') {
           const target = Number(trialEnd);
           if (!Number.isInteger(target) || target <= now() || target > now() + 730 * DAY) {
@@ -678,6 +704,23 @@ export function pumpkitStripe(target: WebhookTarget) {
       // Every first charge succeeds, so no invoice ever waits on a payment.
       app.get('/v1/invoice_payments', (c: any) => c.json(list('/v1/invoice_payments', [])));
 
+      app.get('/v1/billing_portal/configurations/:id', (c: any) => {
+        if (c.req.param('id') !== 'bpc_coupon_management')
+          return notFound(c, 'configuration', c.req.param('id'));
+        return c.json({
+          id: 'bpc_coupon_management',
+          object: 'billing_portal.configuration',
+          active: true,
+          features: {
+            subscription_update: { enabled: false },
+            subscription_cancel: { enabled: false },
+            payment_method_update: { enabled: true },
+            invoice_history: { enabled: true },
+          },
+          login_page: { enabled: false },
+        });
+      });
+
       app.post('/v1/billing_portal/sessions', async (c: any) => {
         const params = await bodyParams(c);
         if (!state.customers[params.customer]) return notFound(c, 'customer', params.customer);
@@ -685,6 +728,7 @@ export function pumpkitStripe(target: WebhookTarget) {
           id: newId('bps'),
           object: 'billing_portal.session',
           customer: params.customer,
+          configuration: params.configuration,
           return_url: params.return_url,
           created: now(),
           livemode: false,
@@ -700,7 +744,7 @@ export function pumpkitStripe(target: WebhookTarget) {
         const running = Object.values(state.subscriptions).filter(
           (s) => s.customer === portal.customer && s.status !== 'canceled' && !s.cancel_at,
         );
-        const forms = running
+        const forms = (portal.configuration ? [] : running)
           .map(
             (s) => `<form method="post" action="/billing_portal/${portal.id}/cancel/${s.id}">
 <button type="submit">Cancel ${escapeHtml(s.items.data[0].price.lookup_key ?? s.id)}</button></form>`,
@@ -717,7 +761,7 @@ export function pumpkitStripe(target: WebhookTarget) {
       app.post('/billing_portal/:id/cancel/:subscription', async (c: any) => {
         const portal = state.portalSessions[c.req.param('id')];
         const subscription = state.subscriptions[c.req.param('subscription')];
-        if (!portal || subscription?.customer !== portal.customer)
+        if (!portal || portal.configuration || subscription?.customer !== portal.customer)
           return c.html(page('Not found', ''), 404);
         subscription.cancel_at = subscription.items.data[0].current_period_end;
         await send('customer.subscription.updated', subscription);
