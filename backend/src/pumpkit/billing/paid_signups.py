@@ -61,6 +61,10 @@ async def preview(
     free = await service.get_free_access(db, user_id=user.id, now=now)
     if not free or not as_utc(free.starts_at) <= now < as_utc(free.ends_at):
         raise ConflictError("Review a new paid offer after your free access ends.")
+    if as_utc(free.ends_at).microsecond:
+        raise ConflictError(
+            "This existing free access date cannot be represented exactly by billing. Contact support; all free access is unchanged."
+        )
     if as_utc(free.ends_at) > now + timedelta(days=730):
         raise ConflictError("The future payment date exceeds the supported limit.")
     await require_provider_ready(gateway, user=user)
@@ -232,9 +236,11 @@ async def reconcile(
                 ):
                     return response(operation)
             await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
-            operation.status = "completed"
+            operation.status = "refused" if cancel else "completed"
             operation.resolved_at = now
-            operation.detail = None
+            operation.detail = (
+                "Paid signup cancelled. Your free access is unchanged." if cancel else None
+            )
             await db.flush()
             return response(operation)
         if any(s.status not in {"canceled", "incomplete_expired"} for s in states):

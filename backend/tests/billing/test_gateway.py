@@ -904,3 +904,31 @@ async def test_setup_recovery_reads_current_intent_and_payment_method_ownership(
     assert setups[0].setup_customer_id == "cus_Contract"
     assert setups[0].payment_method_customer_id == "cus_Contract"
     assert "setup_intent.payment_method" in parse_qs(urlsplit(http.urls[1]).query)["expand[0]"]
+
+
+async def test_completed_setup_no_longer_blocks_billing_or_account_deletion():
+    session = {
+        "id": "cs_setup",
+        "object": "checkout.session",
+        "mode": "setup",
+        "status": "complete",
+        "customer": "cus_Contract",
+        "setup_intent": {"id": "seti_done", "status": "succeeded"},
+    }
+    http = _RecordedStripe(json.dumps({"object": "list", "data": [session], "has_more": False}))
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    assert await gateway.has_pending_checkout(customer_id="cus_Contract") is False
+
+
+async def test_future_signup_refuses_elapsed_absolute_date_before_any_provider_write():
+    http = _RecordedStripe("{}")
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    with pytest.raises(DeferralRefused):
+        await gateway.create_paid_signup(
+            customer_id="cus_Contract",
+            price_id="price_monthly",
+            payment_method_id="pm_1",
+            operation_id="paid_signup_contract",
+            first_payment_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        )
+    assert http.methods == []

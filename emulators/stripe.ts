@@ -458,6 +458,9 @@ export function pumpkitStripe(target: WebhookTarget) {
         if (!(target > now() && target <= now() + 730 * DAY))
           return c.json({ error: { type: 'invalid_request_error', message: 'Invalid absolute trial end' } }, 400);
         const subscription = newSubscription(params.customer, price, 1, (target - now()) / DAY);
+        subscription.trial_end = target;
+        subscription.billing_cycle_anchor = target;
+        subscription.items.data[0].current_period_end = target;
         subscription.metadata = params.metadata ?? {};
         subscription.default_payment_method = params.default_payment_method;
         subscription.automatic_tax = params.automatic_tax;

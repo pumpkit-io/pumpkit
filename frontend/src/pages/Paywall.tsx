@@ -7,6 +7,7 @@ import { BillingProvider, type BillingData } from '@/features/billing/BillingPro
 import { checkoutStatusOf } from '@/features/billing/checkoutArrival';
 import { CouponForm } from '@/features/billing/CouponForm';
 import { PlanPicker } from '@/features/billing/PlanPicker';
+import { PaidSignup } from '@/features/billing/PaidSignup';
 import { useBilling } from '@/features/billing/useBilling';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
@@ -138,6 +139,7 @@ function Offer({ data, notice }: { data: BillingData; notice: ReactNode }) {
 function PaywallContent() {
   const { data, isLoading, loadError, load } = useBilling();
   const cancelled = useCancelledArrival();
+  const [signupPending, setSignupPending] = useState(false);
   useViewedOnce();
 
   useEffect(() => {
@@ -157,6 +159,17 @@ function PaywallContent() {
       <div className="space-y-6">
         <Heading title="Choose a plan" />
         <PlanSkeleton />
+      </div>
+    );
+  }
+  if (data.me.pendingPaidSignupId || signupPending) {
+    return (
+      <div className="space-y-5">
+        <Heading
+          title="Confirm your future subscription"
+          lead="Check the earlier signup before agreeing to another payment."
+        />
+        <PaidSignup data={data} onPendingChange={setSignupPending} />
       </div>
     );
   }

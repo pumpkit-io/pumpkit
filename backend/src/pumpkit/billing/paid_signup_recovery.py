@@ -3,7 +3,7 @@ import asyncio
 import sys
 from typing import Optional, Sequence, TextIO
 
-import pumpkit.models  # noqa: F401
+import pumpkit.auth.models  # noqa: F401
 from pumpkit.auth.service import users
 from pumpkit.billing import mediator, paid_signups
 from pumpkit.billing.gateway import BillingGateway, get_billing_gateway

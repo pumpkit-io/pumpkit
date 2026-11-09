@@ -21,6 +21,9 @@ vi.mock('@/services/billingService', () => ({
     previewCoupon: vi.fn(),
     redeemCoupon: vi.fn(),
     fetchCouponRedemption: vi.fn(),
+    fetchPaidSignup: vi.fn(),
+    cancelPaidSignup: vi.fn(),
+    createPaidSignup: vi.fn(),
     startSubscriptionCheckout: vi.fn(),
     openBillingPortal: vi.fn(),
   },
@@ -855,5 +858,55 @@ describe('Coupon preview on the Paywall', () => {
     renderPaywall();
     await paywall();
     expect(screen.queryByRole('button', { name: 'Have a coupon?' })).not.toBeInTheDocument();
+  });
+});
+
+describe('future signup recovery after free access expires', () => {
+  beforeEach(() => {
+    vi.mocked(billingService.fetchPlans).mockReset().mockResolvedValue(CATALOG);
+    vi.mocked(billingService.startSubscriptionCheckout).mockReset();
+    vi.mocked(billingService.fetchPaidSignup).mockReset();
+    vi.mocked(onboardingService.fetchNextStep).mockReset().mockResolvedValue('paywall');
+  });
+  it('recovers account intent on the Paywall with coupons off before requesting fresh paid consent', async () => {
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...NOT_SUBSCRIBED,
+      trialDays: null,
+      pendingPaidSignupId: 'expired-free-signup',
+    });
+    vi.mocked(billingService.fetchPaidSignup).mockResolvedValue({
+      operationId: 'expired-free-signup',
+      status: 'pending',
+      detail: null,
+      url: null,
+      sessionId: 'cs_expired',
+      firstPaymentAt: '2026-11-01T12:00:00Z',
+      planKey: 'pumpkit_pro_monthly',
+    });
+    renderPaywall();
+    const area = await paywall();
+    expect(
+      await area.findByRole('heading', { name: 'Confirm your future subscription' }),
+    ).toBeInTheDocument();
+    expect(await area.findByRole('button', { name: 'Check signup' })).toBeInTheDocument();
+    expect(area.queryByRole('button', { name: /^Subscribe:/ })).not.toBeInTheDocument();
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...NOT_SUBSCRIBED,
+      trialDays: null,
+    });
+    vi.mocked(billingService.fetchPaidSignup).mockResolvedValue({
+      operationId: 'expired-free-signup',
+      status: 'refused',
+      detail: 'Review a fresh paid offer.',
+      url: null,
+      sessionId: 'cs_expired',
+      firstPaymentAt: '2026-11-01T12:00:00Z',
+      planKey: 'pumpkit_pro_monthly',
+    });
+    fireEvent.click(area.getByRole('button', { name: 'Check signup' }));
+    expect(
+      await area.findByRole('heading', { name: 'Subscribe to keep writing' }),
+    ).toBeInTheDocument();
+    expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
   });
 });

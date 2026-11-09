@@ -3,11 +3,13 @@ from datetime import datetime, timedelta
 from io import StringIO
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from pumpkit.account_deletion import delete_account
+from pumpkit.billing.allowance import paid_period
 from pumpkit.billing.gateway import Plan
+from pumpkit.billing.models import FreeAccess
 from pumpkit.billing.paid_signup_recovery import run_cli
 from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError
@@ -316,3 +318,103 @@ async def test_provider_success_database_commit_failure_is_recovered_without_ano
         "status"
     ] == "completed"
     assert len(fake_billing.paid_signups_created) == 1
+
+
+async def test_successful_setup_cannot_subscribe_with_another_customers_payment_method(
+    authed_client, coupons, fake_billing
+):
+    free, request, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    setup = fake_billing.paid_signup_setups[opened["session_id"]]
+    fake_billing.paid_signup_setups[setup.id] = replace(
+        setup, payment_method_customer_id="cus_other"
+    )
+    response = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
+    assert response.json()["status"] == "pending"
+    assert fake_billing.paid_signups_created == []
+    assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"]["ends_at"] == free[
+        "ends_at"
+    ]
+
+
+async def test_subsecond_clock_free_access_uses_provider_representable_exact_boundary(
+    authed_client, coupons, fake_billing, fixed_clock
+):
+    fixed_clock.advance(timedelta(microseconds=123456))
+    free, request, opened = await _open(authed_client, coupons)
+    assert datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00")).microsecond == 0
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    result = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
+    assert result.json()["status"] == "completed"
+    assert (await authed_client.get("/api/v1/billing/me")).json()["subscription"][
+        "current_period_end"
+    ] == free["ends_at"]
+
+
+async def test_existing_fractional_grant_is_never_rounded_or_sent_to_provider(
+    authed_client, coupons, fake_billing, fixed_clock, db
+):
+    created = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
+    assert (await authed_client.post(REDEEM, json=confirmation(offer))).status_code == 200
+    legacy = await db.scalar(select(FreeAccess))
+    for field in ("starts_at", "ends_at", "calendar_anchor", "coverage_starts_at"):
+        setattr(legacy, field, getattr(legacy, field) + timedelta(microseconds=123456))
+    await db.commit()
+    fixed_clock.advance(timedelta(seconds=1))
+    before = (await authed_client.get("/api/v1/billing/me")).json()
+    usage = (await authed_client.get("/api/v1/usage")).json()
+    response = await authed_client.post(
+        SIGNUPS + "/preview", json={"plan_key": "pumpkit_pro_monthly"}
+    )
+    assert response.status_code == 409 and "represented exactly" in response.json()["detail"]
+    assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"] == before[
+        "free_access"
+    ]
+    assert (await authed_client.get("/api/v1/usage")).json() == usage
+    assert fake_billing.customers_created == []
+    assert fake_billing.paid_signup_setups == {}
+    assert fake_billing.paid_signups_created == []
+
+
+@pytest.mark.parametrize("settled_paid", [True, False])
+async def test_later_coupon_after_signup_detail_purge_uses_real_paid_settlement_not_stale_metadata(
+    authed_client, coupons, fake_billing, fixed_clock, settled_paid
+):
+    free, request, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "completed"
+    end = datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00"))
+    fixed_clock.advance(end + timedelta(days=91) - fixed_clock())
+    await coupons(command="purge")
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).status_code == 404
+    state = (await fake_billing.list_subscriptions(customer_id="cus_fake_1"))[0]
+    period = paid_period(end, fixed_clock())
+    fake_billing.set_subscription(
+        "cus_fake_1",
+        replace(
+            state,
+            status="active" if settled_paid else "trialing",
+            paid_current_period=settled_paid,
+            current_period_start=period.start,
+            current_period_end=period.end,
+            latest_invoice_status="paid",
+        ),
+    )
+    coupon = await coupons("--months", "1")
+    preview = await authed_client.post(PREVIEW, json={"code": coupon["code"]})
+    if not settled_paid:
+        assert preview.status_code == 409
+        assert fake_billing.deferrals == []
+        return
+    assert preview.status_code == 200, preview.text
+    assert datetime.fromisoformat(preview.json()["starts_at"].replace("Z", "+00:00")) == period.end
+    result = await authed_client.post(
+        REDEEM, json=confirmation(preview.json(), operation="after-signup-purge-0001")
+    )
+    assert result.status_code == 200 and result.json()["status"] == "completed", result.text
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["subscription"]["paid_through"] == preview.json()["starts_at"]
+    assert me["subscription"]["introductory_trial_end"] is None
