@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CouponForm } from './CouponForm';
+import { PaidSignup } from './PaidSignup';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
@@ -69,6 +70,7 @@ export function SubscriptionCard({
   const { load } = useBilling();
   const [canceling, setCanceling] = useState(false);
   const [localPending, setLocalPending] = useState(false);
+  const [signupPending, setSignupPending] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [canceledThrough, setCanceledThrough] = useState<string | null>(null);
   const cancellation = useRef<HTMLParagraphElement>(null);
@@ -95,13 +97,14 @@ export function SubscriptionCard({
   const paymentFailed = subscription ? PAYMENT_FAILED_STATUSES.has(subscription.status) : false;
   const deferral = data?.me.couponDeferral;
   const pending = data?.me.pendingCouponOperation || localPending;
+  const billingBlocked = pending || signupPending || Boolean(data?.me.pendingPaidSignupId);
   const renewalCancelled = Boolean(
     subscription?.cancelAt ||
     subscription?.status === 'canceled' ||
     subscription?.status === 'incomplete_expired',
   );
   const next =
-    subscription && !pending
+    subscription && !billingBlocked
       ? deferral && !renewalCancelled
         ? subscription.currentPeriodEnd &&
           `Next payment: ${freeDate(subscription.currentPeriodEnd)}`
@@ -201,7 +204,7 @@ export function SubscriptionCard({
                     type="button"
                     variant="outline"
                     className="h-auto min-h-11 max-w-full whitespace-normal"
-                    disabled={canceling || pending}
+                    disabled={canceling || billingBlocked}
                     onClick={() => void cancelRenewal()}
                   >
                     {canceling ? 'Confirming cancellation…' : 'Cancel renewal'}
@@ -211,7 +214,7 @@ export function SubscriptionCard({
             ) : (
               <Button
                 type="button"
-                disabled={pending}
+                disabled={billingBlocked}
                 variant={paymentFailed ? 'default' : 'outline'}
                 className={cn('h-10 shrink-0 sm:ml-auto', !paymentFailed && 'bg-card')}
                 onClick={() => void openPortal()}
@@ -236,15 +239,22 @@ export function SubscriptionCard({
               {freeDate(freeAccess.endsAt)}
             </p>
           )}
-          <p>No automatic payment</p>
-          <p>Your free access creates no subscription or obligation to pay.</p>
+          {!signupPending && !data.me.pendingPaidSignupId && (
+            <>
+              <p>No automatic payment</p>
+              <p>Your free access creates no subscription or obligation to pay.</p>
+            </>
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
           No current plan. Redeem a coupon or choose a plan on the Paywall.
         </p>
       )}
-      {(data?.couponsEnabled || pending) && (
+      {data && (
+        <PaidSignup data={data} onPendingChange={setSignupPending} onArranged={onRedeemed} />
+      )}
+      {(data?.couponsEnabled || pending) && !signupPending && !data?.me.pendingPaidSignupId && (
         <CouponForm
           inSettings
           recoveryOnly={!data?.couponsEnabled}

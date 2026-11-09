@@ -28,6 +28,8 @@ export interface BillingMe {
   maySubscribe: boolean;
   /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
+  pendingPaidSignupId?: string | null;
+  mayArrangePaidSignup?: boolean;
   pendingCouponOperation?: boolean;
   pendingCouponOperationId?: string | null;
   couponDeferral?: boolean;
@@ -150,6 +152,57 @@ interface CouponPreviewApi {
   revision: string;
 }
 
+export interface PaidSignupOffer {
+  planKey: string;
+  productName: string;
+  amount: number;
+  currency: string;
+  interval: string;
+  intervalCount: number;
+  firstPaymentAt: string;
+  termsVersion: string | null;
+  revision: string;
+}
+
+export interface PaidSignupRequest extends TermsAcceptance {
+  operationId: string;
+  revision: string;
+  termsVersion: string | null;
+  language: 'en' | 'it';
+}
+
+export interface PaidSignup {
+  operationId: string;
+  status: 'pending' | 'completed' | 'refused';
+  detail: string | null;
+  url: string | null;
+  sessionId: string | null;
+  firstPaymentAt: string;
+  planKey: string;
+}
+
+interface PaidSignupApi {
+  operation_id: string;
+  status: 'pending' | 'completed' | 'refused';
+  detail: string | null;
+  url: string | null;
+  session_id: string | null;
+  first_payment_at: string;
+  plan_key: string;
+}
+
+function paidSignup(data: PaidSignupApi): PaidSignup {
+  return {
+    operationId: data.operation_id,
+    status: data.status,
+    detail: data.detail,
+    url: data.url,
+    sessionId: data.session_id,
+    firstPaymentAt: data.first_payment_at,
+    planKey: data.plan_key,
+  };
+}
+
 interface BillingMeApi {
   subscription: {
     status: SubscriptionStatus;
@@ -162,6 +215,8 @@ interface BillingMeApi {
   subscribed: boolean;
   may_subscribe: boolean;
   trial_days: number | null;
+  pending_paid_signup_id?: string | null;
+  may_arrange_paid_signup?: boolean;
   pending_coupon_operation?: boolean;
   pending_coupon_operation_id?: string | null;
   coupon_deferral?: boolean;
@@ -228,6 +283,8 @@ function billingMe(data: BillingMeApi): BillingMe {
     subscribed: data.subscribed,
     maySubscribe: data.may_subscribe,
     trialDays: data.trial_days,
+    pendingPaidSignupId: data.pending_paid_signup_id,
+    mayArrangePaidSignup: data.may_arrange_paid_signup,
     pendingCouponOperation: data.pending_coupon_operation,
     pendingCouponOperationId: data.pending_coupon_operation_id,
     couponDeferral: data.coupon_deferral,
@@ -245,6 +302,51 @@ function billingMe(data: BillingMeApi): BillingMe {
 }
 
 export const billingService = {
+  previewPaidSignup: async (planKey: string): Promise<PaidSignupOffer> => {
+    const { data } = await apiService.post<{
+      plan_key: string;
+      product_name: string;
+      amount: number;
+      currency: string;
+      interval: string;
+      interval_count: number;
+      first_payment_at: string;
+      terms_version: string | null;
+      revision: string;
+    }>('/billing/paid-signups/preview', { plan_key: planKey });
+    return {
+      planKey: data.plan_key,
+      productName: data.product_name,
+      amount: data.amount,
+      currency: data.currency,
+      interval: data.interval,
+      intervalCount: data.interval_count,
+      firstPaymentAt: data.first_payment_at,
+      termsVersion: data.terms_version,
+      revision: data.revision,
+    };
+  },
+  createPaidSignup: async (request: PaidSignupRequest): Promise<PaidSignup> => {
+    const { data } = await apiService.post<PaidSignupApi>('/billing/paid-signups', {
+      operation_id: request.operationId,
+      revision: request.revision,
+      language: request.language,
+      ...termsFields(request.termsVersion, request),
+    });
+    return paidSignup(data);
+  },
+  fetchPaidSignup: async (operationId: string): Promise<PaidSignup> => {
+    const { data } = await apiService.get<PaidSignupApi>(
+      `/billing/paid-signups/${encodeURIComponent(operationId)}`,
+    );
+    return paidSignup(data);
+  },
+  cancelPaidSignup: async (operationId: string): Promise<PaidSignup> => {
+    const { data } = await apiService.post<PaidSignupApi>(
+      `/billing/paid-signups/${encodeURIComponent(operationId)}/cancel`,
+    );
+    return paidSignup(data);
+  },
   redeemCoupon: async (request: CouponRedemptionRequest): Promise<CouponRedemption> => {
     const { data } = await apiService.post<CouponRedemptionApi>('/billing/coupons/redemptions', {
       operation_id: request.operationId,

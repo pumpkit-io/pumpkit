@@ -158,3 +158,112 @@ describe('cardless coupon redemption', () => {
     });
   });
 });
+
+describe('future paid signup', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reads the exact server offer and sends separate paid consent with its stable operation', async () => {
+    const post = vi
+      .spyOn(apiService, 'post')
+      .mockResolvedValueOnce({
+        data: {
+          plan_key: 'configured_year',
+          product_name: 'Configured plan',
+          amount: 12000,
+          currency: 'eur',
+          interval: 'year',
+          interval_count: 1,
+          first_payment_at: '2028-03-31T12:00:00Z',
+          terms_version: '2026-11-08',
+          revision: 'signed-offer',
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          operation_id: '550e8400-e29b-41d4-a716-446655440000',
+          status: 'pending',
+          detail: null,
+          url: 'https://checkout.test/setup',
+          session_id: 'cs_setup',
+          first_payment_at: '2028-03-31T12:00:00Z',
+          plan_key: 'configured_year',
+        },
+      } as never);
+    const offer = await billingService.previewPaidSignup('configured_year');
+    expect(offer).toEqual({
+      planKey: 'configured_year',
+      productName: 'Configured plan',
+      amount: 12000,
+      currency: 'eur',
+      interval: 'year',
+      intervalCount: 1,
+      firstPaymentAt: '2028-03-31T12:00:00Z',
+      termsVersion: '2026-11-08',
+      revision: 'signed-offer',
+    });
+    const result = await billingService.createPaidSignup({
+      operationId: '550e8400-e29b-41d4-a716-446655440000',
+      revision: offer.revision,
+      termsVersion: offer.termsVersion,
+      acceptedTerms: true,
+      requestedImmediateStart: true,
+      approvedSpecificClauses: true,
+      language: 'en',
+    });
+    expect(post).toHaveBeenNthCalledWith(1, '/billing/paid-signups/preview', {
+      plan_key: 'configured_year',
+    });
+    expect(post).toHaveBeenNthCalledWith(2, '/billing/paid-signups', {
+      operation_id: '550e8400-e29b-41d4-a716-446655440000',
+      revision: 'signed-offer',
+      terms_version: '2026-11-08',
+      accepted_terms: true,
+      requested_immediate_start: true,
+      approved_specific_clauses: true,
+      language: 'en',
+    });
+    expect(result).toEqual({
+      operationId: '550e8400-e29b-41d4-a716-446655440000',
+      status: 'pending',
+      detail: null,
+      url: 'https://checkout.test/setup',
+      sessionId: 'cs_setup',
+      firstPaymentAt: '2028-03-31T12:00:00Z',
+      planKey: 'configured_year',
+    });
+  });
+
+  it('sends no legal evidence without Terms and recovers or cancels only the named operation', async () => {
+    const response = {
+      data: {
+        operation_id: 'operation',
+        status: 'refused',
+        detail: 'Review the current payment date.',
+        url: null,
+        session_id: null,
+        first_payment_at: '2028-03-31T12:00:00Z',
+        plan_key: 'configured_month',
+      },
+    };
+    const post = vi.spyOn(apiService, 'post').mockResolvedValue(response as never);
+    const get = vi.spyOn(apiService, 'get').mockResolvedValue(response as never);
+    await billingService.createPaidSignup({
+      operationId: 'operation',
+      revision: 'revision',
+      termsVersion: null,
+      acceptedTerms: false,
+      requestedImmediateStart: false,
+      approvedSpecificClauses: false,
+      language: 'en',
+    });
+    expect(post).toHaveBeenCalledWith('/billing/paid-signups', {
+      operation_id: 'operation',
+      revision: 'revision',
+      language: 'en',
+    });
+    expect((await billingService.fetchPaidSignup('operation')).status).toBe('refused');
+    expect(get).toHaveBeenCalledWith('/billing/paid-signups/operation');
+    await billingService.cancelPaidSignup('operation');
+    expect(post).toHaveBeenCalledWith('/billing/paid-signups/operation/cancel');
+  });
+});
