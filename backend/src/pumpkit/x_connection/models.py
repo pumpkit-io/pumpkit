@@ -61,3 +61,18 @@ class PendingXAuthorization(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     __table_args__ = (CheckConstraint("expires_at > created_at", name="expires_at_gt_created_at"),)
+
+
+class PendingXSignIn(Base):
+    """A browser-bound sign-in attempt, independent of any existing User."""
+
+    __tablename__ = "pending_x_sign_ins"
+
+    state_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    browser_secret_hash: Mapped[str] = mapped_column(String)
+    code_verifier_encrypted: Mapped[str] = mapped_column(Text)
+    return_to: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    __table_args__ = (CheckConstraint("expires_at > created_at", name="expires_at_gt_created_at"),)
