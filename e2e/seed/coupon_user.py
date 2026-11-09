@@ -1,4 +1,4 @@
-"""Create isolated Coupon journey users against this worktree's local Stripe Emulator."""
+"""Create isolated coupon journey users against this worktree's local Stripe Emulator."""
 
 import asyncio
 import json
@@ -95,7 +95,7 @@ async def main() -> None:
             )
             db.add(OnboardingFinish(user_id=user.id, finished_at=now))
         elif action != "new":
-            raise ValueError("Unknown Coupon journey")
+            raise ValueError("Unknown coupon journey")
         _, code = await coupon_service.issue(
             db,
             request=CouponIssueRequest(months=1, recipient=email),

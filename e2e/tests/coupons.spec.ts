@@ -27,7 +27,7 @@ interface Usage {
 }
 
 // These optional journeys run only against a deliberately enabled, isolated Emulator stack.
-test.skip(process.env.E2E_COUPONS !== '1', 'Enable the Coupon suite as e2e/README.md describes.');
+test.skip(process.env.E2E_COUPONS !== '1', 'Enable the coupon suite as e2e/README.md describes.');
 test.use({ storageState: { cookies: [], origins: [] }, trace: 'off' });
 
 let catalog: Promise<string> | null = null;
