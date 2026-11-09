@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users retain paid access and recoverable cancellation when the provider applies cancellation but its response or the final local commit is lost.
+
 - Users cancelling an outdated signup see a clear current-plan recovery action instead of a misleading success, including after another Coupon extends renewal.
 
 - Users keep proven paid time and its monthly Allowance when an interrupted signup settles during cancellation, including across the first-payment boundary.

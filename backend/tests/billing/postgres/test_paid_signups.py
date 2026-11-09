@@ -1,11 +1,15 @@
 import asyncio
-from datetime import datetime
+from dataclasses import replace
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
 from pumpkit.account_deletion import delete_account
 from pumpkit.auth.models import User
+from pumpkit.billing.allowance import months_after
+from pumpkit.billing.gateway import BillingProviderError
+from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError
 from tests.billing.postgres.test_coupon_contention import blocked_requests
 from tests.billing.test_coupon_preview import coupons as coupons
@@ -141,3 +145,90 @@ async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletio
     states = await fake_billing.list_subscriptions(customer_id="cus_fake_1")
     assert len(states) == 1 and states[0].status == "canceled"
     assert len(fake_billing.paid_signup_create_attempts) == 1
+
+
+@pytest.mark.parametrize("after_mutation", [True, False])
+async def test_completed_cancellation_checkpoint_keeps_paid_access_and_excludes_deletion_on_uncertainty(
+    db_engine,
+    db_session_maker,
+    authed_client,
+    coupons,
+    user,
+    fake_billing,
+    fixed_clock,
+    monkeypatch,
+    after_mutation,
+):
+    free, request, opened = await _open(authed_client, coupons)
+    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "completed"
+    target = datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00"))
+    fixed_clock.advance(target - timedelta(seconds=1) - fixed_clock())
+    original_list = fake_billing.list_subscriptions
+    original_cancel = fake_billing.cancel_subscription
+    crossed = False
+    raised = False
+
+    async def crossing(*, customer_id):
+        nonlocal crossed
+        states = await original_list(customer_id=customer_id)
+        if not crossed:
+            crossed = True
+            fixed_clock.advance(timedelta(seconds=2))
+            fake_billing.set_subscription(
+                customer_id,
+                replace(
+                    states[0],
+                    status="active",
+                    current_period_start=target,
+                    current_period_end=months_after(target, 1),
+                    paid_current_period=True,
+                ),
+            )
+        return await original_list(customer_id=customer_id)
+
+    async def uncertain_cancel(*, subscription_id):
+        nonlocal raised
+        if not raised:
+            raised = True
+            if after_mutation:
+                await original_cancel(subscription_id=subscription_id)
+            raise BillingProviderError("Uncertain provider cancellation")
+        await original_cancel(subscription_id=subscription_id)
+
+    monkeypatch.setattr(fake_billing, "list_subscriptions", crossing)
+    monkeypatch.setattr(fake_billing, "cancel_subscription", uncertain_cancel)
+    assert (await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")).json()[
+        "status"
+    ] == "pending"
+    fake_billing.fail_on.add("list_subscriptions")
+
+    async def delete():
+        async with db_session_maker() as deletion_db:
+            with pytest.raises(ConflictError):
+                await delete_account(deletion_db, fake_billing, user_id=user.id)
+
+    async with db_session_maker() as control:
+        await control.scalar(select(User).where(User.id == user.id).with_for_update())
+        tasks = [
+            asyncio.create_task(authed_client.get(SIGNUPS + "/" + request["operation_id"])),
+            asyncio.create_task(delete()),
+        ]
+        results = await blocked_requests(db_engine, control, tasks, 2)
+    assert results[0].json()["status"] == "pending"
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["pending_paid_signup_id"] == request["operation_id"] and me["subscribed"] is True
+    assert datetime.fromisoformat(
+        me["subscription"]["paid_through"].replace("Z", "+00:00")
+    ) == months_after(target, 1)
+    fake_billing.fail_on.clear()
+    monkeypatch.setattr(settings, "COUPONS_ENABLED", False)
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "refused"
+    assert len(fake_billing.cancelled_subscriptions) == 1
+    assert (await authed_client.get("/api/v1/usage")).json()["allowance"]["generations"][
+        "limit"
+    ] == 500

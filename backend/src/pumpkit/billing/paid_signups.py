@@ -216,6 +216,7 @@ async def reconcile(
     mutate: bool = True,
     dispatch: bool = False,
     prior_unknown: bool = False,
+    cancel_dispatch: bool = False,
 ) -> PaidSignupResponse:
     now = clock()
     if operation.status != "pending" and not (
@@ -272,6 +273,11 @@ async def reconcile(
                 )
                 return _cancellation_response(operation, cancel=cancel)
             if cancel and state.status not in {"canceled", "incomplete_expired"}:
+                if not cancel_dispatch:
+                    operation.status = "pending"
+                    operation.detail = "Your cancellation is being confirmed. Check signup again; your paid and free access stay unchanged."
+                    await db.flush()
+                    return _cancellation_response(operation, cancel=cancel)
                 await gateway.cancel_subscription(subscription_id=state.id)
                 states = await service.sync_customer(
                     db, gateway, user_id=user.id, customer_id=customer_id
@@ -434,7 +440,9 @@ async def reconcile(
         return _cancellation_response(operation, cancel=cancel)
     except BillingProviderError:
         operation.detail = (
-            "Your paid signup is being confirmed. Retry its status; your free access is unchanged."
+            "Your cancellation is being confirmed. Check signup again; your paid and free access stay unchanged."
+            if operation.cancel_requested_at is not None
+            else "Your paid signup is being confirmed. Retry its status; your free access is unchanged."
         )
         return _cancellation_response(operation, cancel=cancel)
 

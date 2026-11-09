@@ -875,7 +875,22 @@ async def _recover_paid_signup(
     answer = await paid_signups.reconcile(
         db, gateway, user=user, operation=operation, clock=clock, cancel=cancel
     )
-    if operation.status == "pending" and operation.creation_state == "ready":
+    if (
+        operation.status == "pending"
+        and operation.cancel_requested_at is not None
+        and operation.creation_state == "confirmed"
+        and operation.subscription_id is not None
+    ):
+        # Retain earned coverage and recoverable cancellation before a provider mutation can outlive its response.
+        await db.commit()
+        user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+        operation = await paid_signups.find(
+            db, user_id=user.id, operation_id=operation.operation_id
+        )
+        answer = await paid_signups.reconcile(
+            db, gateway, user=user, operation=operation, clock=clock, cancel_dispatch=True
+        )
+    elif operation.status == "pending" and operation.creation_state == "ready":
         answer = await _dispatch_paid_signup(
             db, gateway, user=user, operation=operation, clock=clock, prior_unknown=False
         )
