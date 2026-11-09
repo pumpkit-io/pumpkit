@@ -350,6 +350,27 @@ def compatible(state: SubscriptionState, operation: CouponOperation) -> bool:
     )
 
 
+async def refuse(
+    db: AsyncSession, *, user: User, operation: CouponOperation, now: datetime
+) -> CouponRedemptionResponse:
+    operation.status = "refused"
+    operation.detail = "No billing change was made for this redemption. The coupon was not consumed; review billing or contact its sender."
+    operation.resolved_at = now
+    subscription = await service.get_user_subscription(db, user_id=user.id)
+    if subscription and subscription.preserved_trial and operation.original["marker"] is None:
+        subscription.preserved_trial = None
+        subscription.paid_start = None
+        subscription.paid_end = None
+        subscription.paid_anchor = None
+        subscription.paid_allowance = None
+    claim = await db.get(CouponClaim, operation.claim_id)
+    operation.claim_id = None
+    await db.flush()
+    if claim:
+        await db.delete(claim)
+    return response(operation)
+
+
 async def reconcile(
     db: AsyncSession,
     gateway: BillingGateway,
@@ -427,7 +448,11 @@ async def reconcile(
                 or (as_utc(operation.target) - clock()).total_seconds() > 730 * 86400
             ):
                 operation.detail = "Billing changed while confirming redemption. Contact support; no further change was sent."
-                return response(operation)
+                return (
+                    response(operation)
+                    if prior_unknown
+                    else await refuse(db, user=user, operation=operation, now=clock())
+                )
             if await gateway.has_unsettled_invoices(
                 customer_id=operation.customer_id
             ) or await gateway.has_pending_checkout(customer_id=operation.customer_id):
@@ -439,7 +464,11 @@ async def reconcile(
                 or clock() >= as_utc(operation.target)
                 or (as_utc(operation.target) - clock()).total_seconds() > 730 * 86400
             ):
-                return response(operation)
+                return (
+                    response(operation)
+                    if prior_unknown
+                    else await refuse(db, user=user, operation=operation, now=clock())
+                )
             operation.attempts += 1
             try:
                 await gateway.defer_renewal(
@@ -450,26 +479,7 @@ async def reconcile(
             except DeferralRefused:
                 if prior_unknown:
                     return response(operation)
-                operation.status = "refused"
-                operation.detail = "The billing provider refused this redemption. The coupon was not consumed; contact its sender or check the code again."
-                operation.resolved_at = clock()
-                subscription = await service.get_user_subscription(db, user_id=user.id)
-                if (
-                    subscription
-                    and subscription.preserved_trial
-                    and operation.original["marker"] is None
-                ):
-                    subscription.preserved_trial = None
-                    subscription.paid_start = None
-                    subscription.paid_end = None
-                    subscription.paid_anchor = None
-                    subscription.paid_allowance = None
-                claim = await db.get(CouponClaim, operation.claim_id)
-                operation.claim_id = None
-                await db.flush()
-                if claim:
-                    await db.delete(claim)
-                return response(operation)
+                return await refuse(db, user=user, operation=operation, now=clock())
             states = await gateway.list_subscriptions(customer_id=operation.customer_id)
             state = next((s for s in states if s.id == operation.subscription_id), None)
             applied = (

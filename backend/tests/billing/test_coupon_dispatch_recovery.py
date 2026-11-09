@@ -241,3 +241,37 @@ async def test_migrated_zero_attempt_and_refused_records_need_conservative_recov
         assert "audit" in answer.json()["detail"]
     assert fake_billing.deferrals == []
     assert (await authed_client.get("/api/v1/billing/me")).json()["pending_coupon_operation"]
+
+
+async def test_first_dispatch_known_unsent_after_target_expiry_releases_capacity(
+    authed_client,
+    coupons,
+    db,
+    user,
+    fake_billing,
+    fixed_clock,
+    monkeypatch,
+    new_browser,
+    sign_in_by_magic_link,
+):
+    await monthly(db, user, fake_billing, fixed_clock)
+    code = await coupons("--months", "1")
+    offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
+    read = fake_billing.has_pending_checkout
+    reads = 0
+
+    async def slow_final_read(**kwargs):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            fixed_clock.advance(timedelta(days=50))
+        return await read(**kwargs)
+
+    monkeypatch.setattr(fake_billing, "has_pending_checkout", slow_final_read)
+    answer = await authed_client.post(REDEEM, json=confirmation(offer))
+    assert answer.json()["status"] == "refused"
+    assert fake_billing.deferrals == []
+    other = new_browser()
+    signed = await sign_in_by_magic_link(other, "unsent-competitor@example.com")
+    other.headers["Authorization"] = "Bearer " + signed.access_token
+    assert (await other.post(PREVIEW, json={"code": code["code"]})).status_code == 200

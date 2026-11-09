@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,11 +12,12 @@ if (
   throw new Error('Prepare coupon tests in an isolated linked worktree.');
 }
 const env = path.join(root, '.env');
-const directory = path.join(root, '.sdlc', 'dev-stack');
+const directory = path.join(root, '.sdlc');
 const backup = path.join(directory, 'coupons-env-backup');
 if (process.argv[2] === 'restore') {
   if (!existsSync(backup)) throw new Error('No saved environment to restore.');
   writeFileSync(env, readFileSync(backup), { mode: 0o600 });
+  unlinkSync(backup);
   console.log('Restored this worktree’s environment. Restart through scripts/dev-stack.');
 } else if (process.argv[2] === 'prepare') {
   const original = readFileSync(env, 'utf8');
