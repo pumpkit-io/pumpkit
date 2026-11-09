@@ -117,8 +117,7 @@ export function SubscriptionCard({
           tabIndex={-1}
           className="text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
         >
-          Renewal cancelled. Your paid and free access stays available through{' '}
-          {freeDate(canceledThrough)}.
+          Renewal cancelled. Your access stays available through {freeDate(canceledThrough)}.
         </p>
       )}
       {pending && (
@@ -157,8 +156,11 @@ export function SubscriptionCard({
                   : STATUS_LABELS[subscription.status]}
             </Badge>
           </div>
-          {(subscription.paidThrough || freeAccess) && (
+          {(subscription.paidThrough || subscription.introductoryTrialEnd || freeAccess) && (
             <div className="space-y-2 border-t border-border px-4 py-3 text-sm text-foreground">
+              {subscription.introductoryTrialEnd && (
+                <p>Introductory trial through {freeDate(subscription.introductoryTrialEnd)}</p>
+              )}
               {subscription.paidThrough && (
                 <p>Paid access through {freeDate(subscription.paidThrough)}</p>
               )}
@@ -188,7 +190,7 @@ export function SubscriptionCard({
               !subscription.cancelAt && (
                 <div className="space-y-2 sm:max-w-64">
                   <p className="text-sm text-foreground">
-                    Cancel renewal to keep all paid and free time with no payment afterward.
+                    Cancel renewal to keep all remaining access with no payment afterward.
                   </p>
                   <Button
                     type="button"

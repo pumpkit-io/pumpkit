@@ -1513,3 +1513,39 @@ it('shows earned free access through its end after an earlier provider cancellat
   expect(await plan.findByText(/Ends on/)).toHaveTextContent('March 31, 2028');
   expect(plan.getByText('No automatic payment')).toBeInTheDocument();
 });
+
+it('distinguishes the original introductory trial from queued full free access and payment', async () => {
+  vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+  vi.mocked(appConnectionService.list).mockResolvedValue([]);
+  vi.mocked(usageService.get).mockResolvedValue(usageWith());
+  vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+  vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+    ...holding('trialing', true),
+    couponDeferral: true,
+    subscription: {
+      ...holding('trialing', true).subscription!,
+      introductoryTrialEnd: '2028-01-31T12:00:00Z',
+      currentPeriodEnd: '2028-03-31T12:00:00Z',
+    },
+    freeAccess: {
+      months: 2,
+      startsAt: '2028-01-31T12:00:00Z',
+      endsAt: '2028-03-31T12:00:00Z',
+      currentStartsAt: null,
+      currentEndsAt: null,
+      queuedStartsAt: '2028-01-31T12:00:00Z',
+    },
+  });
+  renderSettings();
+  const plan = await card('Plan');
+  expect(await plan.findByText(/Introductory trial through/)).toHaveTextContent(
+    'January 31, 2028 UTC',
+  );
+  expect(plan.queryByText(/Paid access through/)).not.toBeInTheDocument();
+  expect(plan.getByText(/Queued free access:/)).toHaveTextContent('January 31, 2028 UTC');
+  expect(plan.getByText(/Next payment:/)).toHaveTextContent('March 31, 2028 UTC');
+  expect(plan.queryByRole('button', { name: 'Subscribe now' })).not.toBeInTheDocument();
+  expect(plan.getByRole('button', { name: 'Cancel renewal' })).toBeEnabled();
+});

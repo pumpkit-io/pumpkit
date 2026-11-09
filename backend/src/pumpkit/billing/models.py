@@ -66,6 +66,8 @@ class Subscription(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    # Saved coverage uses paid_* fields for both paid periods and original introductory Trials.
+    preserved_trial: Mapped[Optional[bool]] = mapped_column(Boolean)
     paid_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     paid_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     paid_anchor: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

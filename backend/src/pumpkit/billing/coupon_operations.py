@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
 from pumpkit.billing import coupon_redemption, coupon_service, service
-from pumpkit.billing.allowance import limits, paid_period
+from pumpkit.billing.allowance import limits, months_after, paid_period
 from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
@@ -65,7 +65,7 @@ def response(operation: CouponOperation) -> CouponRedemptionResponse:
     )
 
 
-async def monthly_state(
+async def deferrable_state(
     db: AsyncSession, *, user_id: str, subscriptions: Sequence[SubscriptionState], now: datetime
 ) -> Optional[SubscriptionState]:
     running = [s for s in subscriptions if s.status not in {"canceled", "incomplete_expired"}]
@@ -90,8 +90,19 @@ async def monthly_state(
             )
         )
     )
+    introductory = bool(
+        state.status == "trialing"
+        and state.coupon_operation is None
+        and state.trial_start
+        and state.trial_end
+        and as_utc(state.trial_start) <= now < as_utc(state.trial_end)
+        and state.current_period_start == state.trial_start
+        and state.current_period_end == state.trial_end
+        and state.billing_cycle_anchor == state.trial_end
+        and await db.get(CouponHistory, user_id) is None
+    )
     if (
-        state.status not in ({"active", "trialing"} if backed else {"active"})
+        state.status not in ({"active", "trialing"} if backed or introductory else {"active"})
         or state.cancel_at is not None
         or state.paused
         or state.has_pending_update
@@ -100,28 +111,35 @@ async def monthly_state(
         or not state.item_id
         or not state.price_id
         or state.plan_key not in settings.BILLING_PLAN_KEYS
-        or state.interval != "month"
+        or state.interval not in {"month", "year"}
         or state.interval_count != 1
         or state.billing_mode not in {"classic", "flexible"}
         or not state.billing_cycle_anchor
         or not state.current_period_start
         or not state.current_period_end
-        or not (backed or state.paid_current_period)
+        or not (backed or introductory or state.paid_current_period)
         or not as_utc(state.current_period_start) <= now < as_utc(state.current_period_end)
     ):
         raise ConflictError(
-            "Coupons currently require a paid-up renewing monthly subscription. Keep your code for annual plans, introductory trials or cancelled renewal, and resolve any unsettled payment first."
+            "Coupons require a settled renewing subscription. Keep your code for cancelled renewal, and resolve any unsettled payment first."
         )
-    if not backed:
+    if not backed and not introductory:
         assert (
             state.billing_cycle_anchor is not None
             and state.current_period_end is not None
             and state.current_period_start is not None
         )
-        paid = paid_period(state.billing_cycle_anchor, now)
-        if paid.start != as_utc(state.current_period_start) or paid.end != as_utc(
-            state.current_period_end
-        ):
+        start = as_utc(state.current_period_start)
+        offset = (
+            (start.year - state.billing_cycle_anchor.year) * 12
+            + start.month
+            - state.billing_cycle_anchor.month
+        )
+        end = months_after(
+            state.billing_cycle_anchor, offset + (12 if state.interval == "year" else 1)
+        )
+        period = paid_period(state.billing_cycle_anchor, start)
+        if period.start != start or end != as_utc(state.current_period_end):
             raise ConflictError(
                 "Your paid period has an unsupported boundary. Contact support before using a coupon."
             )
@@ -158,17 +176,22 @@ async def prepare(
         or state.current_period_end is None
     ):
         raise ConflictError("Your subscription is being updated. Try again.")
-    if state.paid_current_period and (
+    introductory = state.status == "trialing" and state.coupon_operation is None
+    if (state.paid_current_period or introductory) and (
         subscription.paid_end is None or as_utc(subscription.paid_end) <= now
     ):
-        period = paid_period(state.billing_cycle_anchor, now)
-        subscription.paid_start = period.start
+        subscription.preserved_trial = introductory
+        subscription.paid_start = state.trial_start if introductory else state.current_period_start
         subscription.paid_end = state.current_period_end
-        subscription.paid_anchor = state.billing_cycle_anchor
-        subscription.paid_allowance = asdict(limits(trial=False))
+        subscription.paid_anchor = state.trial_start if introductory else state.billing_cycle_anchor
+        subscription.paid_allowance = asdict(limits(trial=introductory))
     previous = await service.get_free_access(db, user_id=user.id, now=now)
     anchor = (
-        (previous.calendar_anchor or previous.starts_at) if previous else subscription.paid_anchor
+        (previous.calendar_anchor or previous.starts_at)
+        if previous
+        else state.trial_end
+        if introductory
+        else subscription.paid_anchor
     )
     assert anchor is not None
     anchor = as_utc(anchor)
@@ -178,6 +201,7 @@ async def prepare(
         else (offer.starts_at.year - anchor.year) * 12 + offer.starts_at.month - anchor.month
     )
     original = {
+        "interval": state.interval,
         "item_id": state.item_id,
         "price_id": state.price_id,
         "billing_mode": state.billing_mode,
@@ -223,7 +247,7 @@ async def prepare(
 def compatible(state: SubscriptionState, operation: CouponOperation) -> bool:
     return (
         state.item_count == 1
-        and state.interval == "month"
+        and state.interval == operation.original.get("interval", "month")
         and state.interval_count == 1
         and state.item_id == operation.original["item_id"]
         and state.price_id == operation.original["price_id"]
@@ -300,6 +324,17 @@ async def reconcile(
                 operation.status = "refused"
                 operation.detail = "The billing provider refused this redemption. The coupon was not consumed; contact its sender or check the code again."
                 operation.resolved_at = now
+                subscription = await service.get_user_subscription(db, user_id=user.id)
+                if (
+                    subscription
+                    and subscription.preserved_trial
+                    and operation.original["marker"] is None
+                ):
+                    subscription.preserved_trial = None
+                    subscription.paid_start = None
+                    subscription.paid_end = None
+                    subscription.paid_anchor = None
+                    subscription.paid_allowance = None
                 claim = await db.get(CouponClaim, operation.claim_id)
                 operation.claim_id = None
                 await db.flush()

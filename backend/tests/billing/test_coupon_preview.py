@@ -106,7 +106,7 @@ async def test_unavailable_codes_are_private_nonconsuming_refusals(
         ({"status": "canceled", "latest_invoice_status": "open"}, "payment"),
         ({"status": "active", "has_pending_update": True}, "pending"),
         ({"status": "active", "schedule_id": "sub_sched_test"}, "pending"),
-        ({"status": "active"}, "paid-up renewing monthly"),
+        ({"status": "active"}, "settled renewing"),
     ],
 )
 async def test_preview_uses_current_provider_eligibility_without_mutation(

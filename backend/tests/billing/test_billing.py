@@ -590,6 +590,7 @@ def _billing_subscription(status: str) -> dict:
         "current_period_end": "2026-11-06T00:00:00Z",
         "cancel_at": None,
         "paid_through": None,
+        "introductory_trial_end": None,
     }
 
 
