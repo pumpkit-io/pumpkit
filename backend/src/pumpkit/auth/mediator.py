@@ -324,7 +324,6 @@ async def _sign_in_with_magic_link(
         return sessions.sign_in_error_redirect(EMAIL_NOT_ALLOWED)
 
     # Trust only the email on the consumed Magic link row, never the click URL.
-    # Every Sign-in method resolves through this operation, so one email reaches one User.
     user = await user_service.resolve_user_by_verified_email(db, redeemed.email)
 
     result = await sessions.start(
