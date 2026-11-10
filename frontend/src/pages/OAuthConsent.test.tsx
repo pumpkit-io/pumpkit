@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/services/xSignInService', () => ({ xSignInService: { complete: vi.fn() } }));
 vi.mock('@/services/userService', () => ({
   userService: {
     fetchProfile: vi.fn().mockResolvedValue({
@@ -37,7 +38,8 @@ import { onboardingService } from '@/services/onboardingService';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import type { Instance } from '@/lib/instance';
-import { MagicLinkCallback } from './MagicLinkCallback';
+import { XSignInCallback } from './XSignInCallback';
+import { xSignInService } from '@/services/xSignInService';
 import { apiError, currentPath, renderSignedIn } from './testing/signedInApp';
 
 const CLAUDE: ConsentApp = {
@@ -75,20 +77,21 @@ function renderConsent(query = '?request=req_1', nextStep: 'paywall' | 'persona'
   return renderSignedIn(`/oauth/consent${query}`, { nextStep, instance: QUILL });
 }
 
-const EXPIRES_AT = encodeURIComponent('2099-01-01T00:00:00+00:00');
+const EXPIRES_AT = '2099-01-01T00:00:00+00:00';
 
-/** Opens a valid Magic link's callback; the consent route shows where it landed. */
-function signInWithMagicLink() {
+function signInWithX() {
+  vi.mocked(xSignInService.complete).mockResolvedValue({
+    accessToken: 'tok',
+    expiresAt: EXPIRES_AT,
+  });
   render(
     <InstanceProvider instance={SELLS_PLANS}>
       <MemoryRouter
-        initialEntries={[
-          `/auth/magic-link/callback#access_token=tok&token_type=Bearer&expires_at=${EXPIRES_AT}`,
-        ]}
+        initialEntries={['/oauth/x/callback?code=valid&state=bound-state']}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
-          <Route path="/auth/magic-link/callback" element={<MagicLinkCallback />} />
+          <Route path="/oauth/x/callback" element={<XSignInCallback />} />
           <Route path="/new" element={<Landing />} />
           <Route path="/oauth/consent" element={<Landing />} />
         </Routes>
@@ -267,7 +270,7 @@ describe('Consent page', () => {
       await waitFor(() => expect(end).toHaveBeenCalledWith('user'));
       end.mockRestore();
       cleanup();
-      signInWithMagicLink();
+      signInWithX();
 
       expect(await screen.findByText('at /oauth/consent?request=req_1')).toBeInTheDocument();
     });
