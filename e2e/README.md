@@ -29,3 +29,13 @@ Afterward, from the root:
 scripts/dev-stack destroy
 node e2e/coupons-env.mjs restore
 ```
+
+## Real Stripe portal transition verification
+
+The separate, opt-in provider harness in [the portal transition runbook](../docs/stripe-portal-transition.md) exercises only synthetic Stripe test-mode sessions. It does not start a Pumpkit stack or use the Emulator coupon journeys above. With an explicit `PUMPKIT_STRIPE_TEST_KEY` supplied privately, run:
+
+```sh
+npm test -- --config playwright.stripe-portal.config.ts
+```
+
+Live keys are refused, and the normal E2E configuration excludes these tests. The runbook defines the two tested transitions, credential handling, private artifacts, resource cleanup and the activation conditions; passing this harness alone does not enable production coupons.
