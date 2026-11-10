@@ -22,7 +22,7 @@ Nei presenti Termini, è **consumatore** la persona fisica che usa Pumpkit per s
 
 Pumpkit scrive post per X. Scrivi un Brief che dice di cosa parla un Post e cosa ne pensi, e scegli fino a tre Inspiration author: account X i cui post pubblici recenti determinano lo stile dei tuoi Post, mai il loro contenuto. Pumpkit scrive una Versione del Post a partire dal tuo Brief, e una nuova Versione ogni volta che dai un Feedback. Ogni Versione contiene il testo destinato a X.
 
-Se colleghi il tuo account X tramite una X connection, Pumpkit può anche pubblicare Scheduled post su quell'account all'orario che scegli.
+Accedendo con X autorizzi anche Pumpkit a pubblicare Scheduled post sullo stesso account all'orario che scegli.
 
 ## 3. Chi può usare Pumpkit {#eligibility}
 
@@ -32,7 +32,7 @@ Se usi Pumpkit per conto di una società o di un'altra organizzazione, confermi 
 
 ## 4. Il tuo account {#account}
 
-Accedi con Google o con un Magic link inviato al tuo indirizzo email. Mantieni sicuro l'accesso a quell'account Google e a quella casella email, perché chiunque li controlli può accedere al tuo account. Scrivi subito a support@pumpkit.io se ritieni che qualcun altro abbia usato il tuo account.
+Accedi soltanto con X e devi avere un'email confermata su X. Mantieni sicuro quell'account X: chi lo controlla può accedere al relativo account Pumpkit. L'identificativo X stabile determina il tuo account anche se email o handle cambiano. Account X diversi restano separati anche se condividono l'email. Profile mostra identità e foto gestite da X; puoi modificare il tuo nome Pumpkit. L'autorizzazione a pubblicare persa può essere ripristinata soltanto con lo stesso account X. Scrivi subito a support@pumpkit.io se ritieni che qualcun altro abbia usato il tuo account.
 
 Le informazioni che fornisci al momento della registrazione devono essere veritiere, e sei tenuto a mantenerle aggiornate.
 
@@ -86,13 +86,13 @@ In caso di violazione grave o ripetuta della clausola 8, il Gestore può risolve
 
 Le funzionalità di Pumpkit richiedono un Abbonamento a un Piano o un Accesso gratuito attuale ottenuto con un Coupon. Pro è il nome dell’offerta su pumpkit.io; un Piano è la sua offerta ricorrente mensile o annuale. La pagina Settings mostra ciascun Piano con il relativo prezzo e periodo di fatturazione prima della sottoscrizione. Paghi tramite Stripe Checkout, e Stripe elabora il tuo pagamento.
 
-Il tuo primo Abbonamento può iniziare con un Trial, un periodo iniziale gratuito la cui durata è indicata nella pagina Settings prima del pagamento. Ogni Utente ha diritto a un solo Trial introduttivo. Ricevere Accesso gratuito elimina l’idoneità a iniziare un nuovo Trial; un Trial già in corso termina con le date e l’Allowance originarie. Al momento del pagamento inserisci un metodo di pagamento, e durante il Trial non viene addebitato nulla. Al termine del Trial inizia il primo periodo di fatturazione e il prezzo del Piano viene addebitato automaticamente, salvo che tu abbia disdetto prima.
+Il tuo primo Abbonamento può iniziare con un Trial, un periodo iniziale gratuito la cui durata è indicata nella pagina Settings prima del pagamento. Ogni account X riceve al massimo un Trial introduttivo su questa Istanza, anche dopo l'eliminazione e la ricreazione dell'account. Ricevere Accesso gratuito elimina l’idoneità a iniziare un nuovo Trial; un Trial già in corso termina con le date e l’Allowance originarie. Al momento del pagamento inserisci un metodo di pagamento, e durante il Trial non viene addebitato nulla. Al termine del Trial inizia il primo periodo di fatturazione e il prezzo del Piano viene addebitato automaticamente, salvo che tu abbia disdetto prima.
 
 Ogni Abbonamento o periodo di Accesso gratuito ti dà un’Allowance, e gli Utenti idonei possono acquistare Top-up, come descritto nella clausola 11.
 
 ### Coupon e Accesso gratuito {#coupons}
 
-Un Coupon concede un numero intero positivo di mesi di calendario di Accesso gratuito, ciascuno con l’Allowance mensile completa del Piano. Può essere riservato a un indirizzo email verificato o aperto a tutti, con un limite totale di riscatti e un’eventuale scadenza per il riscatto. Puoi riscattare ogni Coupon una sola volta, anche se elimini l’account e lo ricrei con lo stesso indirizzo email. Disabilitare un Coupon impedisce nuovi riscatti e conserva i benefici già riscattati.
+Un Coupon concede un numero intero positivo di mesi di calendario di Accesso gratuito, ciascuno con l’Allowance mensile completa del Piano. Può essere riservato a un indirizzo email verificato o aperto a tutti, con un limite totale di riscatti e un’eventuale scadenza per il riscatto. Ogni Coupon può essere riscattato al massimo una volta dallo stesso account X o dalla stessa email verificata, anche dopo modifiche ai contatti o l'eliminazione e la ricreazione dell'account. Disabilitare un Coupon impedisce nuovi riscatti e conserva i benefici già riscattati.
 
 Riscattare un Coupon non richiede una carta e non crea un Abbonamento né un obbligo di pagamento. Prima della conferma, Pumpkit mostra il periodo gratuito esatto, l’Allowance e l’eventuale effetto su una data di pagamento già concordata. Verificare un codice non riserva disponibilità né date; se l’offerta cambia, devi esaminarla e accettarla di nuovo. I mesi gratuiti seguono la copertura già pagata, un Trial in corso o altro Accesso gratuito. Non azzerano l’utilizzo attuale. I riscatti che porterebbero la fine dell’accesso o il prossimo pagamento concordato oltre 730 giorni nel futuro vengono rifiutati senza consumare il Coupon, così come quelli in presenza di un pagamento insoluto o in elaborazione o di una modifica incompatibile della fatturazione in attesa.
 
@@ -160,9 +160,9 @@ Se sei un consumatore, nulla nei presenti Termini limita i diritti che ti ricono
 
 Puoi porre fine al contratto in qualsiasi momento. Disdici il tuo Abbonamento come descritto nella clausola 12 e, per eliminare il tuo account, scrivi a support@pumpkit.io dall'indirizzo email del tuo account. Il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato, e quanto resta dei tuoi Top-up va perso, senza rimborso.
 
-Eliminare l’account fa cessare anche l’Accesso gratuito rimanente. Non ripristina l’idoneità a riscattare lo stesso Coupon: restano i dati minimi descritti nell’Informativa sulla privacy. Il Gestore può porre fine al contratto come descritto nella clausola 9.
+Eliminare l’account fa cessare anche l’Accesso gratuito rimanente. Non ripristina l’idoneità al Trial introduttivo né a riscattare lo stesso Coupon: restano i dati minimi descritti nell’Informativa sulla privacy. Il Gestore può porre fine al contratto come descritto nella clausola 9.
 
-Alla cessazione del contratto, il Gestore elimina il tuo account e i tuoi contenuti come descritto nell'[Informativa sulla privacy](/it/privacy#retention), ad eccezione dei dati richiesti dalla legge e dei dati limitati per prevenire riscatti ripetuti e recuperare operazioni descritti nell’Informativa. Le clausole 5, 6, 16, 17, 20 e 21 continuano ad applicarsi dopo la cessazione del contratto.
+Alla cessazione del contratto, il Gestore elimina il tuo account e i tuoi contenuti come descritto nell'[Informativa sulla privacy](/it/privacy#retention), ad eccezione dei dati richiesti dalla legge e dei dati limitati per l'idoneità al Trial conservati per l'intera durata dell'Istanza, per prevenire riscatti ripetuti e per recuperare operazioni, descritti nell'Informativa. Le clausole 5, 6, 16, 17, 20 e 21 continuano ad applicarsi dopo la cessazione del contratto.
 
 ## 19. Modifiche ai presenti Termini {#changes}
 

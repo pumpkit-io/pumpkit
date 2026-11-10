@@ -9,7 +9,7 @@ Prerequisites: Docker with Compose, Make, Node.js 22 or newer with npm, and [uv]
 ```bash
 # Environment: writes .env with the secrets generated (see docs/configuration.md).
 # Placeholder keys are enough until you write a Post or add an Inspiration author.
-LLM_API_KEY=dev TWITTERAPI_IO_API_KEY=dev sh scripts/setup.sh --public-url http://localhost:5173 </dev/null
+X_CLIENT_ID=dev X_CLIENT_SECRET=dev LLM_API_KEY=dev TWITTERAPI_IO_API_KEY=dev sh scripts/setup.sh --public-url http://localhost:5173 </dev/null
 
 # Local tooling for checks, tests and the Git hooks
 npm install                                   # repo root: installs the Husky pre-commit and pre-push hooks
@@ -20,7 +20,7 @@ npm install                                   # repo root: installs the Husky pr
 scripts/dev-stack up
 ```
 
-Use `scripts/dev-stack up` for isolated local work. It prints this worktree's Dev URL, starts provider stand-ins with throwaway credentials, and disables external publishing, email and analytics. Check and stop it through the same contract; see [the dev stack guide](docs/agents/dev-stack.md). Before the X-only cutover, its separate `scripts/dev-stack staged-x-url` fixture exercises the complete prepared X sign-in flow while normal app routes remain unmounted. No live Google, X or mail credentials are needed for browser authentication tests.
+Use `scripts/dev-stack up` for isolated local work. It prints this worktree's Dev URL, starts provider stand-ins with throwaway credentials, and disables external publishing, email and analytics. Check and stop it through the same contract; see [the dev stack guide](docs/agents/dev-stack.md). The normal Dev URL signs in through the deterministic local X provider. No live X or mail credentials are needed for browser authentication tests. Google and magic link implementations remain inactive; there is no method-selection setting.
 
 ### Make targets
 
@@ -67,7 +67,7 @@ The project layout and common recipes are in [docs/development.md](./docs/develo
 
 ## Releases
 
-Maintainers cut releases by pushing a version tag; [docs/releasing.md](./docs/releasing.md) has the steps.
+Maintainers cut releases only with `sh scripts/release.sh`; [docs/releasing.md](./docs/releasing.md) has the steps.
 
 ## AI-assisted contributions
 

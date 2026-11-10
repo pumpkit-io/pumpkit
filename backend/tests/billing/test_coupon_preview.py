@@ -53,7 +53,7 @@ async def test_cli_code_previews_full_months_without_a_claim_or_provider_mutatio
     assert result["starts_at"] == "2028-01-31T12:00:00Z"
     assert result["ends_at"] == "2028-04-30T12:00:00Z"
     assert result["next_payment_at"] is None
-    assert result["terms_version"] == "2026-11-09"
+    assert result["terms_version"] == "2026-11-10"
     assert result["allowance"] == {"generations": 500, "x_posts": 100, "link_x_posts": 10}
     assert result["revision"]
     again = await client.post(PREVIEW, json={"code": created["code"]})

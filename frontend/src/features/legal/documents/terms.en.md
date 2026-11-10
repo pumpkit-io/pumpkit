@@ -22,7 +22,7 @@ In these Terms, a **consumer** is a person using Pumpkit for purposes outside th
 
 Pumpkit writes posts for X. You write a Brief saying what a Post is about and what you think about it, and pick up to three Inspiration authors: X accounts whose recent public posts set the style of your Posts, never their content. Pumpkit writes a Version of the Post from your Brief, and a new Version each time you give Feedback. Each Version holds the text meant for X.
 
-If you connect your X account through an X connection, Pumpkit can also publish Scheduled posts on that account at the time you choose.
+Signing in with X also authorizes Pumpkit to publish Scheduled posts on that same account at the time you choose.
 
 ## 3. Who can use Pumpkit {#eligibility}
 
@@ -32,7 +32,7 @@ If you use Pumpkit for a company or other organisation, you confirm that you hav
 
 ## 4. Your account {#account}
 
-You sign in with Google or with a Magic link sent to your email address. Keep access to that Google account and that email inbox secure, because anyone who controls them can sign in to your account. Write to support@pumpkit.io straight away if you think someone else has used your account.
+You sign in only with X and must have a confirmed email on X. Keep that X account secure: anyone who controls it can sign in to its Pumpkit account. Its stable X identifier determines your account, even when its email or handle changes. Different X accounts remain separate even when they share an email. Profile shows X-managed identity and photo; you may edit your Pumpkit name. Lost publishing authorization can be restored only with the same X account. Write to support@pumpkit.io straight away if you think someone else has used your account.
 
 The information you give when you sign up must be true, and you keep it up to date.
 
@@ -86,13 +86,13 @@ For a serious or repeated breach of clause 8, the Operator may end the contract 
 
 Pumpkit's features need a Subscription to a Plan or current Free access from a Coupon. Pro is the name of the offer at pumpkit.io; a Plan is its recurring monthly or annual offer. Settings shows each Plan with its price and billing period before you subscribe. You pay through Stripe Checkout, and Stripe processes your payment.
 
-Your first Subscription may start with a Trial, a free opening period whose length Settings shows before checkout. Each User gets at most one introductory Trial. Receiving Free access removes eligibility to start a new Trial; an existing Trial finishes under its original dates and Allowance. You enter a payment method at checkout, and nothing is charged during the Trial. When the Trial ends, the first billing period starts and the price of the Plan is charged automatically, unless you cancelled before then.
+Your first Subscription may start with a Trial, a free opening period whose length Settings shows before checkout. Each X account gets at most one introductory Trial on this Instance, including after account deletion and recreation. Receiving Free access removes eligibility to start a new Trial; an existing Trial finishes under its original dates and Allowance. You enter a payment method at checkout, and nothing is charged during the Trial. When the Trial ends, the first billing period starts and the price of the Plan is charged automatically, unless you cancelled before then.
 
 Each Subscription or period of Free access gives you an Allowance, and eligible Users can buy Top-ups, as clause 11 describes.
 
 ### Coupons and Free access {#coupons}
 
-A Coupon grants a positive whole number of calendar months of Free access, each with the full monthly Plan Allowance. It may be reserved for one verified email address or open to anyone, with a total redemption limit and an optional claim deadline. You may redeem each Coupon once, including if you delete your account and recreate it with the same email address. Disabling a Coupon prevents new claims and preserves benefits already redeemed.
+A Coupon grants a positive whole number of calendar months of Free access, each with the full monthly Plan Allowance. It may be reserved for one verified email address or open to anyone, with a total redemption limit and an optional claim deadline. Each Coupon may be redeemed at most once by either the same X account or the same verified email, including after contact changes or account deletion and recreation. Disabling a Coupon prevents new claims and preserves benefits already redeemed.
 
 Redeeming a Coupon requires no card and creates no Subscription or obligation to pay. Before confirmation, Pumpkit shows the exact free period, Allowance and any effect on an existing payment date. Checking a code reserves neither capacity nor dates; if the offer changes, you must review and accept it again. Free months follow remaining paid coverage, an existing Trial or other Free access. They do not reset your current usage. Claims that would put the end of access or the next agreed payment more than 730 days in the future are refused without consuming the Coupon, as are claims while a payment is unpaid or processing or an incompatible billing change is pending.
 
@@ -160,9 +160,9 @@ If you are a consumer, nothing in these Terms limits the rights that Italian and
 
 You can end the contract at any time. Cancel your Subscription as clause 12 describes, and to delete your account write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period, and whatever is left of your Top-ups is lost, with no refund.
 
-Deleting your account also ends remaining Free access. It does not restore eligibility to claim the same Coupon: the minimal records described in the Privacy Policy remain. The Operator can end the contract as clause 9 describes.
+Deleting your account also ends remaining Free access. It does not restore introductory Trial eligibility or eligibility to claim the same Coupon: the minimal records described in the Privacy Policy remain. The Operator can end the contract as clause 9 describes.
 
-When the contract ends, the Operator deletes your account and your content as the [Privacy Policy](/privacy#retention) describes, except legally required records and the limited claim-prevention and recovery records described there. Clauses 5, 6, 16, 17, 20 and 21 still apply after the contract ends.
+When the contract ends, the Operator deletes your account and your content as the [Privacy Policy](/privacy#retention) describes, except legally required records and the limited lifetime Trial eligibility, claim-prevention and recovery records described there. Clauses 5, 6, 16, 17, 20 and 21 still apply after the contract ends.
 
 ## 19. Changes to these Terms {#changes}
 
