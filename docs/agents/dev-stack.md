@@ -48,3 +48,46 @@ Use `e2e/backend.ts` to run scripts from `e2e/seed/` inside this worktree's back
 Chrome, Firefox, Edge, `curl` and Node's `fetch` resolve `*.localhost` on their own. Safari may not: run `portless hosts sync` once when a Dev URL doesn't resolve there.
 
 The staged assembly fetches only the exact local provider avatar URL with a test-owned photo adapter. The production photo adapter keeps its HTTPS-only rule.
+
+## Personal X sign-in on a human-operated stack
+
+Use a dedicated worktree for personal X sign-in. This explicit exception to the
+contract's throwaway credentials and ephemeral frontend ports is for a human
+checking the real provider. Automated checks always use plain `scripts/dev-stack up`.
+
+1. Configure that worktree's protected `.env` with the OAuth2 confidential app's
+   `X_CLIENT_ID` and `X_CLIENT_SECRET` and a persistent `TRIAL_IDENTITY_KEYS` ring.
+   Preserve the ring with this local instance's data; do not use the committed
+   emulator ring for personal accounts. Keep the existing encryption keys too.
+2. Register exactly `http://127.0.0.1:5173/oauth/x/callback` on the X app, preserving
+   its other callbacks. X documents HTTP loopback development with `127.0.0.1`.
+   The app must grant `tweet.read tweet.write users.read offline.access media.write users.email`,
+   and the human account must have a confirmed email. Credential presence alone
+   does not prove app entitlement or a successful real sign-in.
+3. Run `scripts/dev-stack up --real-x`. For a different registered port, pass the
+   exact origin, for example `scripts/dev-stack up --real-x http://127.0.0.1:5175`.
+   The port must be free; the script never stops its current owner. Open only the
+   returned loopback URL throughout sign-in so browser-bound cookies and the
+   callback share an origin.
+
+The main backend and publisher use the real X app credentials and canonical X
+endpoints. Stripe and the inactive Google adapter remain emulated, mail and
+analytics remain off, and the staged X fixture retains fake credentials and URLs.
+The scheduled publisher is disabled. **Post now and media requests target real X**;
+this mode does not block manual publishing. Do not use those actions for a sign-in check.
+
+The real stack has its own Compose project and volumes, separate from the default
+emulated stack. `.sdlc/dev-stack/` records only the selected mode and public URL
+alongside the existing route bookkeeping; it never records credentials. `url`,
+`status`, `logs` and `down` retain that selection. `up --real-x` resumes it;
+plain `up` refuses, including when called automatically by `make e2e`. No E2E seed
+target is written in real mode. Do not point E2E at the personal stack explicitly.
+
+Use `scripts/dev-stack down` to stop it and preserve personal data. To return to
+emulation, use another worktree. `scripts/dev-stack destroy` explicitly deletes
+this stack's database and media volumes and clears its mode, after which plain
+`up` creates an emulated stack. Do not destroy personal data as an automated cleanup
+step. Shared Portless proxy settings and other worktrees' routes remain untouched.
+
+Provider setup references: [X Apps](https://docs.x.com/fundamentals/developer-apps)
+and [OAuth2 authorization code](https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code).
