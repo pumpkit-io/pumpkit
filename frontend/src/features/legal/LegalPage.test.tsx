@@ -34,7 +34,7 @@ describe('Privacy Policy at /privacy', () => {
     renderLegalRoute('/privacy');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Privacy Policy');
-    expect(within(main).getByText('Last updated: 9 November 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Last updated: 10 November 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and English as the page language', () => {
@@ -66,7 +66,11 @@ describe('Privacy Policy at /privacy', () => {
     expect(
       screen.getByRole('heading', { level: 3, name: 'Coupons and Free access' }),
     ).toHaveAttribute('id', 'data-coupons');
-    expect(screen.getByText(/pseudonymous personal data/)).toBeInTheDocument();
+    expect(screen.getByText(/They are pseudonymous personal data/)).toBeInTheDocument();
+    expect(screen.getByText(/The record is pseudonymous personal data/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Introductory trial eligibility' }),
+    ).toHaveAttribute('id', 'data-trial-eligibility');
     expect(
       screen.getByText('Coupon recipient assignments and claim fingerprints:'),
     ).toBeInTheDocument();
@@ -96,7 +100,7 @@ describe('Terms at /terms', () => {
     renderLegalRoute('/terms');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Terms');
-    expect(within(main).getByText('Last updated: 9 November 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Last updated: 10 November 2026')).toBeInTheDocument();
   });
 
   it.each([
@@ -133,7 +137,7 @@ describe('Informativa sulla privacy at /it/privacy', () => {
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent(
       'Informativa sulla privacy',
     );
-    expect(within(main).getByText('Ultimo aggiornamento: 9 novembre 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Ultimo aggiornamento: 10 novembre 2026')).toBeInTheDocument();
   });
 
   it('sets its own page title and Italian as the page language', () => {
@@ -163,7 +167,7 @@ describe('Termini at /it/terms', () => {
     renderLegalRoute('/it/terms');
     const main = screen.getByRole('main');
     expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Termini');
-    expect(within(main).getByText('Ultimo aggiornamento: 9 novembre 2026')).toBeInTheDocument();
+    expect(within(main).getByText('Ultimo aggiornamento: 10 novembre 2026')).toBeInTheDocument();
   });
 
   it('sets Italian as the page language', () => {

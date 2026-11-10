@@ -2,6 +2,8 @@
 
 ADR 0023 supersedes the sign-in fallbacks and the ability to run without X configuration below. Every Instance requires X sign-in settings, and retained Google/Magic link flows stay disabled. Other provider configuration decisions remain unchanged.
 
+## Historical decision
+
 The hosted Instance and every Self-hoster's Instance run the same code from this repo. Nothing selects an edition: each outside provider turns on only when its settings are present, and the app runs with it left out. With no Stripe keys an Instance sells no Plans and every User may use all of Pumpkit. With no Operator details it shows no legal pages, company footer or Terms acceptance. With no PostHog key it loads no analytics and shows no consent banner. With no Google credentials it offers only the Magic link. With no SMTP settings it writes each Magic link to the backend log, in every environment, so a Self-hoster can sign in without an email provider. We chose this so contributors work on the code the Operator ships, and a Self-hoster can run Pumpkit with only the providers the writing itself needs. This narrows ADR 0010: Users accept the Terms at checkout only on an Instance that sells Plans and has Operator details; on any other Instance there are no Terms to accept.
 
 ## Considered Options

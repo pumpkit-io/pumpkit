@@ -20,25 +20,21 @@ Each category below says what the data is, what the Operator uses it for, and th
 
 ### Account and profile {#data-account}
 
-- **What:** your email address, your name, and your Photo, if you have one.
+- **What:** your stable X account identifier, current handle, confirmed contact email, your name and a stored copy of your X photo, when available. X alone signs you in and authorizes publishing. Your email and handle do not identify or merge accounts; different X accounts may share an email. Pumpkit updates contact email on successful sign-in, seeds your name from X once and preserves your later name edits.
 - **Why:** to create your account, sign you in and show your profile.
 - **Legal basis:** performance of the contract with you (Art. 6(1)(b) GDPR).
 
-### Google identity {#data-google}
+### X identity {#data-google}
 
-- **What:** if you sign in with Google, your Google account identifier, the profile Google shares with Pumpkit (name, email address and picture) and the sign-in token Google issues, stored encrypted.
-- **Why:** to sign you in with your Google account. If you have no Photo and have never chosen or removed one, Pumpkit downloads a copy of your Google account's picture and uses it as your Photo. You can change or remove it in Settings, and Pumpkit then never replaces it.
-- **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
+Your X identity, handle and email are read-only in Pumpkit.
 
-### Gravatar picture {#data-gravatar}
+### X profile photo {#data-gravatar}
 
-- **What:** if you sign in with a Magic link, have no Photo and have never chosen or removed one, Pumpkit sends Gravatar, run by Automattic, a hash of your email address to look up the picture you published there. Your email address itself is not sent.
-- **Why:** to use your Gravatar picture as your Photo. Pumpkit downloads a copy of it; if you have none, you keep your initials. You can change or remove it in Settings, and Pumpkit then never replaces it.
-- **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
+Your photo follows X when Pumpkit next fetches your profile for sign-in or publishing authorization; ordinary profile reads make no extra X request. An unavailable photo uses initials. Google, magic link and Gravatar implementations are inactive and do not provide sign-in or photo selection.
 
-### Session and Magic link records {#data-sessions}
+### Session and sign-in security records {#data-sessions}
 
-- **What:** for each Session, when it started and when it expires, with the IP address and browser user agent it was created from. For each Magic link, the email address it was sent to, when it was sent and used, and the IP address and user agent that requested it.
+- **What:** for each Session, when it started and when it expires, with the IP address and browser user agent it was created from. Short-lived X authorization attempts retain hashed state and browser binding, an encrypted PKCE verifier, expiry and a validated return destination. Authorization codes and tokens are excluded from ordinary logs and analytics.
 - **Why:** to keep you signed in, and to detect and stop misuse of accounts.
 - **Legal basis:** performance of the contract for the Session itself (Art. 6(1)(b) GDPR), and the Operator's legitimate interest in keeping accounts secure for the IP address and user agent (Art. 6(1)(f) GDPR).
 
@@ -70,8 +66,8 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 ### X connection {#data-x-connection}
 
-- **What:** your X account identifier, handle and the address of its photo, the permissions you granted, your X subscription type, and the access tokens X issues, stored encrypted. Pumpkit shows your X account's photo by having your browser load it from X. If you choose "Use photo", Pumpkit stores a copy of that photo as your Photo.
-- **Why:** to publish on your X account when you ask Pumpkit to.
+- **What:** your X account identifier, handle, photo address, granted permissions, X subscription type and encrypted access and refresh tokens. Pumpkit downloads a copy of your X photo for your profile. Losing publishing authorization does not remove your identity or end your Pumpkit Session; reconnect accepts only the same X account.
+- **Why:** to sign you in and publish on that same X account when you ask Pumpkit to.
 - **Legal basis:** performance of the contract (Art. 6(1)(b) GDPR).
 
 ### Connected apps {#data-connected-apps}
@@ -88,9 +84,15 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 ### Coupons and Free access {#data-coupons}
 
-- **What:** the protected fingerprint of an email address reserved for a Coupon, including before sign-up; Coupon identifiers and benefit dates; your acceptance of the Terms for each redemption; and minimal operation identifiers and billing facts needed to confirm an uncertain result. Fingerprints are calculated with a secret key. They are pseudonymous personal data, not anonymous data. Pumpkit stores no recoverable Coupon code.
-- **Why:** to deliver the promised free months, restrict recipient-only codes, prevent the same email claiming a Coupon twice after account deletion, and recover an uncertain billing change without duplicate benefits or charges.
+- **What:** protected fingerprints of a reserved email address, including before sign-up, and of the confirmed email and stable X account that claim a Coupon; Coupon identifiers and benefit dates; your acceptance of the Terms for each redemption; and minimal operation identifiers and billing facts needed to confirm an uncertain result. Fingerprints are calculated with a secret key. They are pseudonymous personal data, not anonymous data. Pumpkit stores no recoverable Coupon code.
+- **Why:** to deliver the promised free months, restrict recipient-only codes, prevent either the same X account or the same verified email claiming a Coupon twice, including after account deletion or contact changes, and recover an uncertain billing change without duplicate benefits or charges.
 - **Legal basis:** performance of the contract for granting access and recovering your operation (Art. 6(1)(b) GDPR); the Operator’s legitimate interest in restricting invitations and preventing repeated claims, including before sign-up and after deletion (Art. 6(1)(f) GDPR). You may object using the contact details below. Coupon codes, recipient assignments and raw billing responses are excluded from analytics.
+
+### Introductory trial eligibility {#data-trial-eligibility}
+
+- **What:** a keyed fingerprint of the stable X account identifier, a key identifier and whether the account is eligible for an introductory trial. The record is pseudonymous personal data, not anonymous data. After account deletion it contains no email, handle, photo, posts, publishing tokens or link to the deleted user.
+- **Why:** to allow at most one introductory trial per X account for the lifetime of this Instance. Subscription history or confirmed Coupon benefits remove eligibility; deleting and recreating an account or changing email does not restore it. Different X accounts are evaluated separately even when they share an email.
+- **Legal basis:** the Operator's legitimate interest in preventing repeated introductory benefits (Art. 6(1)(f) GDPR). You may object using the contact details below.
 
 ### Analytics in your browser {#data-analytics}
 
@@ -114,18 +116,15 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 The Operator shares personal data only with the providers below, and each receives only what its task needs.
 
-| Recipient                                                        | What it receives                                                                                                  | Where              |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------ |
-| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                              | Frankfurt, Germany |
-| Google (sign-in)                                                 | Your sign-in request when you choose Google                                                                       | United States      |
-| Gravatar, run by Automattic (Photo)                              | A hash of your email address, when you sign in with a Magic link and have no Photo                                | United States      |
-| Resend (email)                                                   | Your email address and the Magic link email                                                                       | United States      |
-| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout                | United States      |
-| X (X connection and publishing)                                  | Your authorization when you connect, and the text, Media and alt text of each Scheduled post when it is published | United States      |
-| twitterapi.io (reading public posts)                             | The handles of your Inspiration authors                                                                           |                    |
-| OpenRouter (writing)                                             | Your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors  | United States      |
-| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                            | United States      |
-| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                      | European Union     |
+| Recipient                                                        | What it receives                                                                                                        | Where              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                                    | Frankfurt, Germany |
+| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout                      | United States      |
+| X (sign-in and publishing)                                       | Your sign-in and publishing authorization, and the text, Media and alt text of each Scheduled post when it is published | United States      |
+| twitterapi.io (reading public posts)                             | The handles of your Inspiration authors                                                                                 |                    |
+| OpenRouter (writing)                                             | Your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors        | United States      |
+| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                                  | United States      |
+| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                            | European Union     |
 
 The Operator may also disclose personal data to public authorities when the law requires it.
 
@@ -141,12 +140,13 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 
 ## How long data is kept {#retention}
 
-- **Account content** (your profile, Google identity, Briefs, Feedback, Versions, Inspiration authors, Scheduled posts and X connection): until your account is deleted.
+- **Account content** (your profile, stable X identity, Briefs, Feedback, Versions, Inspiration authors, Scheduled posts and publishing credentials): until your account is deleted.
 - **Media:** each file is deleted from the server once the X post that carries it is published; its preview and alt text stay with the Post until your account is deleted. Media that neither a Post's text nor a Scheduled post holds any more, such as Media you remove from both, is deleted with its preview within two hours. Media you remove from a Scheduled post while its Post's text still holds it is deleted once that part is published on X, or once you remove it from the text too.
 - **Upload links:** one day after they expire, which is 15 minutes after an AI app asks for them.
-- **Session and Magic link records:** 90 days after they expire. This includes a Magic link requested by someone who never created an account.
+- **Session records:** 90 days after expiry. Any retained records from earlier magic link sign-in also expire under that same 90-day rule. X authorization attempts expire after 10 minutes and are single-use; expired attempt records are removed when another sign-in starts.
 - **Connected apps:** until you disconnect the app or your account is deleted. A disconnected app's record and its tokens are deleted 90 days after you disconnect it, and an expired token within 90 days of expiring.
 - **Inspiration authors' public posts:** while any User has that author among their Inspiration authors, or until the author objects.
+- **Trial eligibility:** the minimal keyed X fingerprint, key identifier and eligibility state remain for the lifetime of this Instance, independently of account deletion and Coupon claim purges. They are used only to enforce introductory eligibility.
 - **Coupon recipient assignments and claim fingerprints:** while the Coupon can still be redeemed, including after account deletion, then deleted within 30 days after it permanently stops accepting claims and any uncertain operation is resolved. A code with no deadline can remain redeemable indefinitely; its minimal fingerprints remain for that time. Disabling a code is permanent and ends this claim-prevention need once pending operations are resolved.
 - **Free access and redemption acceptance:** while needed to deliver current or queued benefits, then deleted within 90 days after the benefit ends and any related operation is resolved. Account deletion removes the account link and ends its benefits; only minimal claim-prevention and unresolved recovery records survive, under their own periods.
 - **Coupon recovery and audit evidence:** unresolved operations retain the minimum identifiers, accepted offer and billing facts until resolved, with daily checks for stalled recovery. Resolved evidence is deleted within 90 days after resolution and the end of related benefits. An unresolved operation is not deleted merely because an account or code was deleted or disabled. These are not all tax records; the 10-year billing rule below applies only to actual invoices and legally required accounting records.
@@ -172,7 +172,7 @@ To use any of these rights, write to support@pumpkit.io from the email address o
 
 ### Deleting your account {#account-deletion}
 
-To delete your account, write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period. Minimal Coupon claim fingerprints and unresolved recovery evidence remain only for the periods above; recreating an account with the same email does not permit another claim of the same Coupon. Billing records stay with Stripe and in the Operator's accounts for the 10 years the law requires, and backups keep the deleted data until they are overwritten, as [How long data is kept](#retention) says.
+To delete your account, write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period. The minimal trial eligibility record remains for the lifetime of this Instance. Coupon claim fingerprints and unresolved recovery evidence follow their separate periods above. Recreating an account cannot restore a trial, or let the same X account or verified email claim the same Coupon again. Billing records stay with Stripe and in the Operator's accounts for the 10 years the law requires, and backups keep the deleted data until they are overwritten, as [How long data is kept](#retention) says.
 
 ### Complaints {#complaints}
 
@@ -199,17 +199,17 @@ The [site statistics](#data-site-statistics) store nothing in your browser, so t
 
 ### Strictly necessary {#cookies-necessary}
 
-| Name                                                                             | Kind            | Purpose                                                                             | Lifetime                                                               |
-| -------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `__Host-refresh_token`                                                           | Cookie          | Keeps you signed in to your Session                                                 | 30 days                                                                |
-| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookies         | Protect Google sign-in from forgery                                                 | 10 minutes                                                             |
-| `pumpkit:session`                                                                | Local storage   | Holds the access token of your current Session                                      | Until you sign out or the Session ends                                 |
-| `pumpkit:analytics-consent`                                                      | Local storage   | Remembers whether you gave Analytics consent                                        | Until you clear it                                                     |
-| `pumpkit:return-to`                                                              | Local storage   | Remembers the app connection you were signing in to approve, so you land back on it | Until your next sign-in                                                |
-| `pumpkit:x-connection-return`                                                    | Local storage   | Remembers the post you left to reconnect X, so you land back on it                  | Until you come back from X or connect X again; unused after 30 minutes |
-| `pumpkit:coupon-redemption`                                                      | Session storage | Retains an accepted Coupon request so you can recover an interrupted redemption     | Until recovery clears it or you close the tab                          |
-| `pumpkit:paid-signup`                                                            | Session storage | Retains an accepted future paid signup so you can recover or cancel it              | Until recovery clears it or you close the tab                          |
-| `pumpkit:plan-change`                                                            | Session storage | Retains an accepted billing frequency change so you can check its outcome           | Until recovery clears it or you close the tab                          |
+| Name                          | Kind            | Purpose                                                                             | Lifetime                                                               |
+| ----------------------------- | --------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `__Host-refresh_token`        | Cookie          | Keeps you signed in to your Session                                                 | 30 days                                                                |
+| `__Host-x_sign_in_browser`    | Cookie          | Binds an X sign-in attempt to the browser that started it                           | 10 minutes                                                             |
+| `pumpkit:session`             | Local storage   | Holds the access token of your current Session                                      | Until you sign out or the Session ends                                 |
+| `pumpkit:analytics-consent`   | Local storage   | Remembers whether you gave Analytics consent                                        | Until you clear it                                                     |
+| `pumpkit:return-to`           | Local storage   | Remembers the app connection you were signing in to approve, so you land back on it | Until successful sign-in consumes it; ignored after 30 minutes         |
+| `pumpkit:x-connection-return` | Local storage   | Remembers the post you left to reconnect X, so you land back on it                  | Until you come back from X or connect X again; unused after 30 minutes |
+| `pumpkit:coupon-redemption`   | Session storage | Retains an accepted Coupon request so you can recover an interrupted redemption     | Until recovery clears it or you close the tab                          |
+| `pumpkit:paid-signup`         | Session storage | Retains an accepted future paid signup so you can recover or cancel it              | Until recovery clears it or you close the tab                          |
+| `pumpkit:plan-change`         | Session storage | Retains an accepted billing frequency change so you can check its outcome           | Until recovery clears it or you close the tab                          |
 
 ### Analytics, only with Analytics consent {#cookies-analytics}
 

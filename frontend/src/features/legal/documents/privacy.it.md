@@ -20,25 +20,21 @@ Per ciascuna categoria qui sotto sono indicati di quali dati si tratta, per cosa
 
 ### Account e profilo {#data-account}
 
-- **Quali dati:** il tuo indirizzo email, il tuo nome e la tua foto, se ne hai una.
+- **Quali dati:** l'identificativo stabile del tuo account X, l'handle attuale, l'email di contatto confermata, il nome e una copia della foto X, se disponibile. Solo X consente l'accesso e autorizza la pubblicazione. Email e handle non identificano né uniscono gli account; account X diversi possono condividere la stessa email. Pumpkit aggiorna l'email dopo ogni accesso riuscito, usa inizialmente il nome di X e conserva le successive modifiche che fai al nome.
 - **Perché:** per creare il tuo account, farti accedere e mostrare il tuo profilo.
 - **Base giuridica:** esecuzione del contratto concluso con te (art. 6, par. 1, lett. b) GDPR).
 
-### Identità Google {#data-google}
+### Identità X {#data-google}
 
-- **Quali dati:** se accedi con Google, l'identificativo del tuo account Google, il profilo che Google condivide con Pumpkit (nome, indirizzo email e immagine) e il token di accesso rilasciato da Google, conservato in forma cifrata.
-- **Perché:** per farti accedere con il tuo account Google. Se non hai una foto e non ne hai mai scelta o rimossa una, Pumpkit scarica una copia dell'immagine del tuo account Google e la usa come tua foto. Puoi cambiarla o rimuoverla nelle Impostazioni, e da quel momento Pumpkit non la sostituisce più.
-- **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
+Identità X, handle ed email sono di sola lettura in Pumpkit.
 
-### Immagine Gravatar {#data-gravatar}
+### Foto del profilo X {#data-gravatar}
 
-- **Quali dati:** se accedi con un Magic link, non hai una foto e non ne hai mai scelta o rimossa una, Pumpkit invia a Gravatar, gestito da Automattic, un hash del tuo indirizzo email per cercare l'immagine che vi hai pubblicato. Il tuo indirizzo email in sé non viene inviato.
-- **Perché:** per usare la tua immagine Gravatar come tua foto. Pumpkit ne scarica una copia; se non ne hai una, restano le tue iniziali. Puoi cambiarla o rimuoverla nelle Impostazioni, e da quel momento Pumpkit non la sostituisce più.
-- **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
+La foto segue X quando Pumpkit recupera nuovamente il profilo per l'accesso o l'autorizzazione alla pubblicazione; leggere il profilo in Pumpkit non causa ulteriori richieste a X. Se la foto non è disponibile, compaiono le iniziali. Le implementazioni Google, Magic link e Gravatar sono inattive e non consentono accesso o scelta della foto.
 
-### Registrazioni delle Sessioni e dei Magic link {#data-sessions}
+### Registrazioni delle Sessioni e sicurezza dell'accesso {#data-sessions}
 
-- **Quali dati:** per ogni Sessione, quando è iniziata e quando scade, con l'indirizzo IP e lo user agent del browser da cui è stata creata. Per ogni Magic link, l'indirizzo email a cui è stato inviato, quando è stato inviato e usato, e l'indirizzo IP e lo user agent che lo hanno richiesto.
+- **Quali dati:** per ogni Sessione, quando è iniziata e quando scade, con l'indirizzo IP e lo user agent del browser da cui è stata creata. I tentativi di autorizzazione X di breve durata conservano hash dello stato e del vincolo al browser, un verificatore PKCE cifrato, la scadenza e una destinazione di ritorno convalidata. Codici di autorizzazione e token sono esclusi dai log ordinari e dall'analisi.
 - **Perché:** per mantenere attivo il tuo accesso e per individuare e bloccare usi impropri degli account.
 - **Base giuridica:** esecuzione del contratto per la Sessione in sé (art. 6, par. 1, lett. b) GDPR) e, per l'indirizzo IP e lo user agent, il legittimo interesse del Gestore a mantenere sicuri gli account (art. 6, par. 1, lett. f) GDPR).
 
@@ -70,8 +66,8 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 
 ### X connection {#data-x-connection}
 
-- **Quali dati:** l'identificativo, l'handle e l'indirizzo della foto del tuo account X, le autorizzazioni che hai concesso, il tipo di abbonamento X e i token di accesso rilasciati da X, conservati in forma cifrata. Pumpkit mostra la foto del tuo account X facendola caricare al tuo browser direttamente da X. Se scegli "Use photo", Pumpkit conserva una copia di quella foto come tua foto.
-- **Perché:** per pubblicare sul tuo account X quando lo chiedi a Pumpkit.
+- **Quali dati:** l'identificativo del tuo account X, l'handle, l'indirizzo della foto, le autorizzazioni concesse, il tipo di abbonamento X e i token di accesso e rinnovo cifrati. Pumpkit scarica una copia della foto X per il tuo profilo. La perdita dell'autorizzazione a pubblicare non rimuove l'identità né termina la Sessione Pumpkit; il ricollegamento accetta soltanto lo stesso account X.
+- **Perché:** per farti accedere e pubblicare sullo stesso account X quando lo chiedi a Pumpkit.
 - **Base giuridica:** esecuzione del contratto (art. 6, par. 1, lett. b) GDPR).
 
 ### Connected app {#data-connected-apps}
@@ -88,9 +84,15 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 
 ### Coupon e Accesso gratuito {#data-coupons}
 
-- **Quali dati:** l’impronta protetta di un indirizzo email riservato a un Coupon, anche prima dell’iscrizione; identificativi dei Coupon e date dei benefici; la tua accettazione dei Termini per ogni riscatto; e gli identificativi minimi delle operazioni e i dati di fatturazione necessari a confermare un esito incerto. Le impronte sono calcolate con una chiave segreta. Sono dati personali pseudonimi, non anonimi. Pumpkit non conserva codici Coupon recuperabili.
-- **Perché:** per concedere i mesi gratuiti promessi, limitare i codici riservati ai destinatari, impedire che la stessa email riscatti un Coupon due volte dopo l’eliminazione dell’account e recuperare una modifica incerta della fatturazione senza duplicare benefici o addebiti.
+- **Quali dati:** impronte protette di un'email riservata, anche prima della registrazione, e dell'email confermata e dell'account X stabile che riscattano un Coupon; identificativi dei Coupon e date dei benefici; la tua accettazione dei Termini per ogni riscatto; e gli identificativi minimi delle operazioni e i dati di fatturazione necessari a confermare un esito incerto. Le impronte sono calcolate con una chiave segreta. Sono dati personali pseudonimi, non anonimi. Pumpkit non conserva codici Coupon recuperabili.
+- **Perché:** per concedere i mesi gratuiti promessi, limitare i codici riservati ai destinatari, impedire che lo stesso account X o la stessa email verificata riscattino due volte un Coupon, anche dopo l'eliminazione dell'account o modifiche ai contatti e recuperare una modifica incerta della fatturazione senza duplicare benefici o addebiti.
 - **Base giuridica:** esecuzione del contratto per concedere l’accesso e recuperare la tua operazione (art. 6, par. 1, lett. b) GDPR); il legittimo interesse del Gestore a limitare gli inviti e prevenire riscatti ripetuti, anche prima dell’iscrizione e dopo l’eliminazione (art. 6, par. 1, lett. f) GDPR). Puoi opporti usando i contatti sotto. Codici Coupon, assegnazioni ai destinatari e risposte integrali di fatturazione sono esclusi dalle analisi.
+
+### Idoneità al Trial introduttivo {#data-trial-eligibility}
+
+- **Quali dati:** un'impronta dell'identificativo stabile dell'account X calcolata con una chiave segreta, l'identificativo della chiave e l'idoneità al Trial introduttivo. Sono dati personali pseudonimi, non anonimi. Dopo l'eliminazione dell'account, il dato non contiene email, handle, foto, post, token di pubblicazione o un collegamento all'Utente eliminato.
+- **Perché:** per concedere al massimo un Trial introduttivo per account X per l'intera durata di questa Istanza. La storia degli Abbonamenti o benefici confermati da Coupon rimuovono l'idoneità; eliminare e ricreare l'account o cambiare email non la ripristina. Account X diversi sono valutati separatamente anche se condividono l'email.
+- **Base giuridica:** il legittimo interesse del Gestore a impedire benefici introduttivi ripetuti (art. 6, par. 1, lett. f) GDPR). Puoi opporti usando i contatti indicati sotto.
 
 ### Analisi nel tuo browser {#data-analytics}
 
@@ -114,18 +116,15 @@ I post pubblici di questi autori sono trattati nella sezione [Inspiration author
 
 Il Gestore condivide i dati personali solo con i fornitori indicati qui sotto, e ciascuno riceve solo ciò che serve al suo compito.
 
-| Destinatario                                                               | Cosa riceve                                                                                                                               | Dove                  |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| DigitalOcean (hosting)                                                     | Tutti i dati sopra indicati, sul server su cui girano Pumpkit e il suo database                                                           | Francoforte, Germania |
-| Google (accesso)                                                           | La tua richiesta di accesso quando scegli Google                                                                                          | Stati Uniti           |
-| Gravatar, gestito da Automattic (foto)                                     | Un hash del tuo indirizzo email, quando accedi con un Magic link e non hai una foto                                                       | Stati Uniti           |
-| Resend (email)                                                             | Il tuo indirizzo email e l'email con il Magic link                                                                                        | Stati Uniti           |
-| Stripe (fatturazione)                                                      | Il tuo nome, indirizzo email e identificativo utente, e i dati di pagamento che inserisci su Stripe Checkout                              | Stati Uniti           |
-| X (X connection e pubblicazione)                                           | La tua autorizzazione quando colleghi l'account e il testo, i Media e il testo alternativo di ogni Scheduled post quando viene pubblicato | Stati Uniti           |
-| twitterapi.io (lettura dei post pubblici)                                  | Gli handle dei tuoi Inspiration author                                                                                                    |                       |
-| OpenRouter (scrittura)                                                     | Il tuo Brief, i tuoi Feedback, le Versioni precedenti del Post e i post pubblici recenti dei tuoi Inspiration author                      | Stati Uniti           |
-| Il fornitore del modello dietro OpenRouter, attualmente OpenAI (scrittura) | Gli stessi dati di OpenRouter                                                                                                             | Stati Uniti           |
-| PostHog (analisi)                                                          | L'analisi nel tuo browser, solo dopo il Consenso analitico, e gli eventi del server e le segnalazioni di errore                           | Unione europea        |
+| Destinatario                                                               | Cosa riceve                                                                                                                                      | Dove                  |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| DigitalOcean (hosting)                                                     | Tutti i dati sopra indicati, sul server su cui girano Pumpkit e il suo database                                                                  | Francoforte, Germania |
+| Stripe (fatturazione)                                                      | Il tuo nome, indirizzo email e identificativo utente, e i dati di pagamento che inserisci su Stripe Checkout                                     | Stati Uniti           |
+| X (accesso e pubblicazione)                                                | La tua autorizzazione all'accesso e alla pubblicazione e il testo, i Media e il testo alternativo di ogni Scheduled post quando viene pubblicato | Stati Uniti           |
+| twitterapi.io (lettura dei post pubblici)                                  | Gli handle dei tuoi Inspiration author                                                                                                           |                       |
+| OpenRouter (scrittura)                                                     | Il tuo Brief, i tuoi Feedback, le Versioni precedenti del Post e i post pubblici recenti dei tuoi Inspiration author                             | Stati Uniti           |
+| Il fornitore del modello dietro OpenRouter, attualmente OpenAI (scrittura) | Gli stessi dati di OpenRouter                                                                                                                    | Stati Uniti           |
+| PostHog (analisi)                                                          | L'analisi nel tuo browser, solo dopo il Consenso analitico, e gli eventi del server e le segnalazioni di errore                                  | Unione europea        |
 
 Il Gestore può inoltre comunicare dati personali alle autorità pubbliche quando la legge lo richiede.
 
@@ -141,12 +140,13 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 
 ## Per quanto tempo vengono conservati i dati {#retention}
 
-- **Contenuti dell'account** (il tuo profilo, l'identità Google, i Brief, i Feedback, le Versioni, gli Inspiration author, gli Scheduled post e la X connection): fino all'eliminazione del tuo account.
+- **Contenuti dell'account** (il tuo profilo, l'identità X stabile, i Brief, i Feedback, le Versioni, gli Inspiration author, gli Scheduled post e le credenziali di pubblicazione): fino all'eliminazione del tuo account.
 - **Media:** ogni file viene eliminato dal server non appena il post X che lo contiene è pubblicato; l'anteprima e il testo alternativo restano con il Post fino all'eliminazione del tuo account. I Media che né il testo di un Post né uno Scheduled post contengono più, come quelli che rimuovi da entrambi, vengono eliminati insieme all'anteprima entro due ore. I Media che rimuovi da uno Scheduled post mentre il testo del Post li contiene ancora vengono eliminati quando quella parte è pubblicata su X, oppure quando li rimuovi anche dal testo.
 - **Link di caricamento:** un giorno dopo la scadenza, che arriva 15 minuti dopo che un'app di intelligenza artificiale li ha chiesti.
-- **Registrazioni delle Sessioni e dei Magic link:** 90 giorni dalla scadenza. Ciò include un Magic link richiesto da chi non ha mai creato un account.
+- **Registrazioni delle Sessioni:** 90 giorni dalla scadenza. Eventuali dati conservati da precedenti accessi con Magic link seguono lo stesso termine di 90 giorni. I tentativi di autorizzazione X scadono dopo 10 minuti e sono monouso; i dati dei tentativi scaduti vengono rimossi quando inizia un altro accesso.
 - **Connected app:** finché non scolleghi l'app o il tuo account non viene eliminato. I dati di un'app scollegata e i suoi token vengono eliminati 90 giorni dopo che l'hai scollegata, e un token scaduto entro 90 giorni dalla scadenza.
 - **Post pubblici degli Inspiration author:** finché almeno un Utente ha quell'autore tra i propri Inspiration author, oppure finché l'autore non si oppone.
+- **Idoneità al Trial:** l'impronta X minima calcolata con chiave segreta, l'identificativo della chiave e lo stato di idoneità restano per l'intera durata di questa Istanza, indipendentemente dall'eliminazione dell'account e dalla cancellazione delle impronte dei Coupon. Servono soltanto a far rispettare l'idoneità introduttiva.
 - **Assegnazioni dei Coupon ai destinatari e impronte dei riscatti:** finché il Coupon è riscattabile, anche dopo l’eliminazione dell’account, poi eliminate entro 30 giorni da quando cessa definitivamente di accettare riscatti e ogni operazione incerta è risolta. Un codice senza scadenza può restare riscattabile a tempo indeterminato; le sue impronte minime restano per quel tempo. Disabilitare un codice è definitivo e fa cessare questa necessità una volta risolte le operazioni in sospeso.
 - **Accesso gratuito e accettazione al riscatto:** finché necessari a concedere benefici attuali o futuri, poi eliminati entro 90 giorni dalla fine del beneficio e dalla risoluzione delle operazioni collegate. L’eliminazione dell’account rimuove il collegamento all’account e ne fa cessare i benefici; restano soltanto i dati minimi per prevenire riscatti ripetuti e recuperare operazioni irrisolte, secondo i rispettivi periodi.
 - **Dati di recupero e controllo dei Coupon:** le operazioni irrisolte conservano identificativi minimi, offerta accettata e dati di fatturazione fino alla risoluzione, con verifiche giornaliere dei recuperi bloccati. I dati risolti vengono eliminati entro 90 giorni dalla risoluzione e dalla fine dei benefici collegati. Un’operazione irrisolta non viene eliminata solo perché un account o codice è stato eliminato o disabilitato. Non si tratta sempre di dati fiscali; la regola di 10 anni sotto riguarda soltanto fatture effettive e scritture contabili obbligatorie.
@@ -172,7 +172,7 @@ Per esercitare uno qualsiasi di questi diritti, scrivi a support@pumpkit.io dall
 
 ### Eliminare il tuo account {#account-deletion}
 
-Per eliminare il tuo account, scrivi a support@pumpkit.io dall'indirizzo email del tuo account. Il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato. Le impronte minime dei riscatti dei Coupon e i dati di recupero irrisolti restano solo per i periodi sopra indicati; ricreare un account con la stessa email non permette un altro riscatto dello stesso Coupon. I dati di fatturazione restano presso Stripe e nelle scritture contabili del Gestore per i 10 anni richiesti dalla legge, e i backup conservano i dati eliminati finché non vengono sovrascritti, come indicato nella sezione [Per quanto tempo vengono conservati i dati](#retention).
+Per eliminare il tuo account, scrivi a support@pumpkit.io dall'indirizzo email del tuo account. Il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato. Il dato minimo di idoneità al Trial resta per l'intera durata di questa Istanza. Le impronte dei riscatti dei Coupon e i dati di recupero irrisolti seguono i rispettivi periodi sopra indicati. Ricreare un account non ripristina il Trial e non consente allo stesso account X o alla stessa email verificata di riscattare nuovamente lo stesso Coupon. I dati di fatturazione restano presso Stripe e nelle scritture contabili del Gestore per i 10 anni richiesti dalla legge, e i backup conservano i dati eliminati finché non vengono sovrascritti, come indicato nella sezione [Per quanto tempo vengono conservati i dati](#retention).
 
 ### Reclami {#complaints}
 
@@ -199,17 +199,17 @@ Le [statistiche del sito](#data-site-statistics) non salvano nulla nel tuo brows
 
 ### Strettamente necessari {#cookies-necessary}
 
-| Nome                                                                             | Tipo            | Finalità                                                                                                 | Durata                                                                                |
-| -------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `__Host-refresh_token`                                                           | Cookie          | Mantiene il tuo accesso nella Sessione                                                                   | 30 giorni                                                                             |
-| `google_oauth_sign_in_state`, `google_oauth_nonce`, `google_oauth_code_verifier` | Cookie          | Proteggono l'accesso con Google dalla contraffazione                                                     | 10 minuti                                                                             |
-| `pumpkit:session`                                                                | Local storage   | Conserva il token di accesso della Sessione corrente                                                     | Finché non esci o la Sessione non termina                                             |
-| `pumpkit:analytics-consent`                                                      | Local storage   | Ricorda se hai prestato il Consenso analitico                                                            | Finché non lo cancelli                                                                |
-| `pumpkit:return-to`                                                              | Local storage   | Ricorda il collegamento di un'app che stavi per approvare quando hai effettuato l'accesso, così ci torni | Fino al tuo prossimo accesso                                                          |
-| `pumpkit:x-connection-return`                                                    | Local storage   | Ricorda il post da cui sei uscito per ricollegare X, così ci torni                                       | Fino al tuo ritorno da X o a un nuovo collegamento di X; non più usato dopo 30 minuti |
-| `pumpkit:coupon-redemption`                                                      | Session storage | Conserva la richiesta di riscatto di un Coupon accettata per recuperare un riscatto interrotto           | Finché il recupero non la cancella o chiudi la scheda                                 |
-| `pumpkit:paid-signup`                                                            | Session storage | Conserva la sottoscrizione futura a pagamento accettata per recuperarla o annullarla                     | Finché il recupero non la cancella o chiudi la scheda                                 |
-| `pumpkit:plan-change`                                                            | Session storage | Conserva il cambio della frequenza di fatturazione accettato per verificarne l’esito                     | Finché il recupero non la cancella o chiudi la scheda                                 |
+| Nome                          | Tipo            | Finalità                                                                                                 | Durata                                                                                |
+| ----------------------------- | --------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `__Host-refresh_token`        | Cookie          | Mantiene il tuo accesso nella Sessione                                                                   | 30 giorni                                                                             |
+| `__Host-x_sign_in_browser`    | Cookie          | Vincola un tentativo di accesso X al browser che lo ha iniziato                                          | 10 minuti                                                                             |
+| `pumpkit:session`             | Local storage   | Conserva il token di accesso della Sessione corrente                                                     | Finché non esci o la Sessione non termina                                             |
+| `pumpkit:analytics-consent`   | Local storage   | Ricorda se hai prestato il Consenso analitico                                                            | Finché non lo cancelli                                                                |
+| `pumpkit:return-to`           | Local storage   | Ricorda il collegamento di un'app che stavi per approvare quando hai effettuato l'accesso, così ci torni | Fino all'accesso riuscito che lo consuma; ignorato dopo 30 minuti                     |
+| `pumpkit:x-connection-return` | Local storage   | Ricorda il post da cui sei uscito per ricollegare X, così ci torni                                       | Fino al tuo ritorno da X o a un nuovo collegamento di X; non più usato dopo 30 minuti |
+| `pumpkit:coupon-redemption`   | Session storage | Conserva la richiesta di riscatto di un Coupon accettata per recuperare un riscatto interrotto           | Finché il recupero non la cancella o chiudi la scheda                                 |
+| `pumpkit:paid-signup`         | Session storage | Conserva la sottoscrizione futura a pagamento accettata per recuperarla o annullarla                     | Finché il recupero non la cancella o chiudi la scheda                                 |
+| `pumpkit:plan-change`         | Session storage | Conserva il cambio della frequenza di fatturazione accettato per verificarne l’esito                     | Finché il recupero non la cancella o chiudi la scheda                                 |
 
 ### Analisi, solo con il Consenso analitico {#cookies-analytics}
 
