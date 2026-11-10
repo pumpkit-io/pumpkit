@@ -1,0 +1,13 @@
+# Human-only opt-in: provider URL overrides remain empty for the actual app only.
+x-real-x-environment: &real-x-environment
+  X_AUTHORIZE_URL: ''
+  X_API_URL: ''
+  X_CLIENT_ID: ${X_CLIENT_ID:?real X requires X_CLIENT_ID in .env}
+  X_CLIENT_SECRET: ${X_CLIENT_SECRET:?real X requires X_CLIENT_SECRET in .env}
+  TRIAL_IDENTITY_KEYS: ${TRIAL_IDENTITY_KEYS:?real X requires a persistent TRIAL_IDENTITY_KEYS ring in .env}
+
+services:
+  backend:
+    environment: *real-x-environment
+  publisher:
+    environment: *real-x-environment

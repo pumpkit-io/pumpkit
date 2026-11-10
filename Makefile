@@ -12,6 +12,7 @@ dev:
 	$(DEV_COMPOSE) up --build
 
 check: check-backend check-frontend check-e2e
+	python3 scripts/tests/test_dev_stack.py
 
 check-backend:
 	cd backend && uv run ruff check .
