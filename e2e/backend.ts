@@ -22,6 +22,12 @@ function sameOrigin(url: string | undefined, other: string): boolean {
   }
 }
 
+export function stagedXBaseURL(): string | undefined {
+  if (!existsSync(DEV_STACK_TARGET_FILE)) return undefined;
+  const [devUrl, , staged] = readFileSync(DEV_STACK_TARGET_FILE, 'utf8').split('\n');
+  return sameOrigin(process.env.E2E_BASE_URL, devUrl) ? staged : undefined;
+}
+
 /** Runs one of `seed/`'s Python scripts inside the dev stack's backend container, with `args`. */
 export function runSeedScript(name: string, args: string[] = []): string {
   return execFileSync(

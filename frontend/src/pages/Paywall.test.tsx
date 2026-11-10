@@ -37,7 +37,7 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
   inspirationAuthorService: { list: vi.fn().mockResolvedValue([]) },
 }));
 vi.mock('@/services/xConnectionService', () => ({
-  xConnectionService: { get: vi.fn().mockResolvedValue(null) },
+  xConnectionService: { get: vi.fn().mockResolvedValue(null), startAuthorization: vi.fn() },
 }));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
@@ -63,6 +63,7 @@ import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 import { OnboardingProvider } from '@/features/onboarding/OnboardingProvider';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { track } from '@/lib/analytics';
+import { xConnectionService } from '@/services/xConnectionService';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import { redirectTo } from '@/lib/navigation';
 import { session } from '@/lib/session';
@@ -154,9 +155,51 @@ describe('Paywall', () => {
     vi.mocked(redirectTo).mockReset();
     vi.mocked(fireSuccessConfetti).mockReset();
     vi.mocked(track).mockClear();
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
+    vi.mocked(xConnectionService.startAuthorization).mockReset();
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('offers publishing recovery without requiring the User to buy access', async () => {
+    vi.mocked(xConnectionService.get).mockResolvedValue({
+      handle: 'ada',
+      charLimit: 280,
+      premium: false,
+      needsReconnect: true,
+      needsReconnectForMedia: false,
+      scheduledPostsWaiting: 1,
+      photoUrl: null,
+      offerPhoto: false,
+    });
+    vi.mocked(xConnectionService.startAuthorization).mockResolvedValue('https://x.com/i/oauth2');
+    renderPaywall();
+
+    const banner = within(await screen.findByRole('region', { name: 'Reconnect X' }));
+    fireEvent.click(banner.getByRole('button', { name: 'Reconnect X' }));
+
+    await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2'));
+    expect(currentPath()).toBe('/subscribe');
+  });
+
+  it('announces the expected-account recovery error on the paywall', async () => {
+    vi.mocked(xConnectionService.get).mockResolvedValue({
+      handle: 'ada',
+      charLimit: 280,
+      premium: false,
+      needsReconnect: true,
+      needsReconnectForMedia: false,
+      scheduledPostsWaiting: 1,
+      photoUrl: null,
+      offerPhoto: false,
+    });
+    const detail = 'Reconnect the same X account, @ada. Sign out of X and retry with that account.';
+    renderPaywall({ state: { xConnectionNotice: detail } });
+
+    const banner = within(await screen.findByRole('region', { name: 'Reconnect X' }));
+
+    expect(banner.getByRole('alert')).toHaveTextContent(detail);
+  });
 
   describe('Routing', () => {
     it.each(['/new', '/posts/post_1', '/settings', '/persona'])(
@@ -457,11 +500,10 @@ describe('Paywall', () => {
       const listed = within(steps.getByRole('list'));
       expect(listed.getAllByRole('listitem').map((step) => step.textContent)).toEqual([
         '1Plan',
-        '2Connect X',
-        '3Persona',
+        '2Persona',
       ]);
       expect(listed.getByText('Plan').closest('[aria-current="step"]')).not.toBeNull();
-      expect(steps.getByText(/Step 1 of 3/)).toBeInTheDocument();
+      expect(steps.getByText(/Step 1 of 2/)).toBeInTheDocument();
       expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
     });
 
@@ -755,7 +797,7 @@ describe('Coupon preview on the Paywall', () => {
     await reviewCoupon();
     fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
     await screen.findByText('Coupon redeemed');
-    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('persona');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(currentPath()).toBe('/onboarding'));
     expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();

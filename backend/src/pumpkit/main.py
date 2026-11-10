@@ -7,7 +7,6 @@ from starlette.routing import Route
 
 import pumpkit.mcp_server as mcp_server
 import pumpkit.scheduling.router as scheduling_router
-from pumpkit.auth.mailer import announce_magic_link_delivery
 from pumpkit.auth.router import router as auth_router
 from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.dependencies import require_subscribed_user
@@ -30,12 +29,12 @@ from pumpkit.posts.router import router as posts_router
 from pumpkit.scheduling.mediator import UPLOAD_LINKS_PATH
 from pumpkit.support.router import router as support_router
 from pumpkit.x_connection.router import router as x_connection_router
+from pumpkit.x_connection.sign_in_router import router as x_sign_in_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up application...")
-    announce_magic_link_delivery()
     yield
     logger.info("Shutting down application...")
     # Flush any pending PostHog events before the process exits.
@@ -56,6 +55,7 @@ app.add_middleware(OpenCorsMiddleware)
 
 # The prefix lives here so routers stay unaware of their mount point.
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(x_sign_in_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
 app.include_router(support_router, prefix="/api/v1")
 app.include_router(authors_router, prefix="/api/v1")

@@ -32,11 +32,11 @@ async def test_instance_without_posthog_has_no_analytics(
     assert response.json() == {
         "app_name": "acmeWriter",
         "sells_plans": True,
-        "sign_in_methods": ["magic_link", "google"],
+        "sign_in_methods": ["x"],
         "operator": None,
         "support_email": None,
         "analytics": None,
-        "x_connection": False,
+        "x_connection": True,
         "mcp_url": "http://localhost:5173/api/v1/mcp",
     }
 
@@ -74,13 +74,13 @@ async def test_an_instance_with_stripe_sells_plans(client):
 async def test_instance_without_google_offers_only_the_magic_link(client, google_off):
     response = await client.get("/api/v1/instance")
 
-    assert response.json()["sign_in_methods"] == ["magic_link"]
+    assert response.json()["sign_in_methods"] == ["x"]
 
 
 async def test_instance_with_google_offers_both_sign_in_methods(client):
     response = await client.get("/api/v1/instance")
 
-    assert response.json()["sign_in_methods"] == ["magic_link", "google"]
+    assert response.json()["sign_in_methods"] == ["x"]
 
 
 async def test_instance_with_neither_has_no_operator_or_support_email(
@@ -117,24 +117,10 @@ async def test_instance_with_operator_details_carries_them(client, monkeypatch):
     assert response.json()["support_email"] == "help@example.org"
 
 
-async def test_an_instance_without_x_keys_offers_no_x_connection(client):
-    response = await client.get("/api/v1/instance")
-
-    assert response.json()["x_connection"] is False
-
-
 async def test_an_instance_with_x_keys_offers_the_x_connection(client, x_configured):
     response = await client.get("/api/v1/instance")
 
     assert response.json()["x_connection"] is True
-
-
-async def test_an_instance_with_only_one_x_key_offers_no_x_connection(client, monkeypatch):
-    monkeypatch.setattr(settings, "X_CLIENT_ID", "x-client-id")
-
-    response = await client.get("/api/v1/instance")
-
-    assert response.json()["x_connection"] is False
 
 
 async def test_instance_mcp_url_follows_public_url(client, monkeypatch):

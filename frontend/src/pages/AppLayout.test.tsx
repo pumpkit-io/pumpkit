@@ -319,6 +319,38 @@ describe('The signed-in shell', () => {
       );
     });
 
+    it('announces a recovery refusal instead of mistaking every 403 for a paywall', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(NEEDS_RECONNECT);
+      vi.mocked(xConnectionService.startAuthorization).mockRejectedValue({
+        response: { status: 403, data: { detail: 'Reconnect your original X account and retry.' } },
+      });
+      renderSignedIn('/persona');
+      const banner = within(await screen.findByRole('region', { name: 'Reconnect X' }));
+
+      fireEvent.click(banner.getByRole('button', { name: 'Reconnect X' }));
+
+      expect(await banner.findByRole('alert')).toHaveTextContent(
+        'Reconnect your original X account and retry.',
+      );
+      expect(banner.getByRole('button', { name: 'Reconnect X' })).toBeEnabled();
+    });
+
+    it('disables repeated recovery while X is opening', async () => {
+      vi.mocked(xConnectionService.get).mockResolvedValue(NEEDS_RECONNECT);
+      vi.mocked(xConnectionService.startAuthorization)
+        .mockReset()
+        .mockReturnValue(new Promise(() => {}));
+      renderSignedIn('/persona');
+      const banner = within(await screen.findByRole('region', { name: 'Reconnect X' }));
+
+      fireEvent.click(banner.getByRole('button', { name: 'Reconnect X' }));
+
+      const opening = await banner.findByRole('button', { name: 'Opening X…' });
+      expect(opening).toBeDisabled();
+      fireEvent.click(opening);
+      expect(xConnectionService.startAuthorization).toHaveBeenCalledTimes(1);
+    });
+
     it('stays away on an Instance without X, where reconnecting cannot work', async () => {
       vi.mocked(xConnectionService.get).mockResolvedValue(NEEDS_RECONNECT);
       renderSignedIn('/new', { instance: { ...SELLS_PLANS, x_connection: false } });

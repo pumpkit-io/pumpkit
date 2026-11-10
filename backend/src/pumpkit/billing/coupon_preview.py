@@ -76,7 +76,9 @@ async def preview(
     subscription = await coupon_operations.deferrable_state(
         db, user_id=user.id, subscriptions=subscriptions, now=now
     )
-    await coupon_service.require_unclaimed(db, coupon=coupon, email=user.email, config=settings)
+    await coupon_service.require_unclaimed(
+        db, coupon=coupon, email=user.email, config=settings, x_user_id=user.x_user_id
+    )
     existing = await service.get_free_access(db, user_id=user.id, now=now)
     anchor = (
         as_utc(existing.calendar_anchor or existing.starts_at)

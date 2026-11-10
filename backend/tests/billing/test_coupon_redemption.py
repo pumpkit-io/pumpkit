@@ -116,7 +116,7 @@ async def test_deletion_preserves_claim_then_purge_removes_identity_without_rest
     file_storage,
     fixed_clock,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
 ):
 
     client = authed_client
@@ -134,7 +134,7 @@ async def test_deletion_preserves_claim_then_purge_removes_identity_without_rest
     )
     assert status == 0
     browser = new_browser()
-    signed_in = await sign_in_by_magic_link(browser, "alice@example.com")
+    signed_in = await sign_in_for_test(browser, "alice@example.com")
     browser.headers["Authorization"] = "Bearer " + signed_in.access_token
     refused = await browser.post(PREVIEW, json={"code": created["code"]})
     assert refused.status_code == 409
@@ -434,13 +434,13 @@ async def test_publisher_rechecks_access_before_a_later_thread_part(
 
 
 async def test_operation_lookup_and_identifier_uniqueness_are_caller_scoped(
-    authed_client, coupons, new_browser, sign_in_by_magic_link
+    authed_client, coupons, new_browser, sign_in_for_test
 ):
     created = await coupons("--max-redemptions", "2")
     offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
     assert (await authed_client.post(REDEEM, json=confirmation(offer))).status_code == 200
     other = new_browser()
-    signed = await sign_in_by_magic_link(other, "another-recipient@example.com")
+    signed = await sign_in_for_test(other, "another-recipient@example.com")
     other.headers["Authorization"] = "Bearer " + signed.access_token
     assert (await other.get(REDEEM + "/redeem-test-0001")).status_code == 404
     assert (await other.post(REDEEM, json=confirmation(offer))).status_code == 409

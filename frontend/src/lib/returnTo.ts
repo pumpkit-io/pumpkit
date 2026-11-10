@@ -8,7 +8,7 @@ function isResumable(path: string): boolean {
 }
 
 /**
- * The page to land on after sign-in (pathname and search), so it survives Google's redirect and a
- * Magic link opened in the same browser. A Magic link opened on another device lands on New post.
+ * The consent page to resume after sign-in in the same browser, including an X authorization
+ * that was cancelled and retried. A successful sign-in consumes the destination once.
  */
 export const returnTo = savedReturn('return-to', isResumable);

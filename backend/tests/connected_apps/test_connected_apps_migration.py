@@ -1,5 +1,6 @@
 """Migration 0036 creates the Connected apps tables, and its downgrade drops them."""
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -33,3 +34,8 @@ async def test_upgrade_creates_the_tables_and_downgrade_drops_them(db_engine):
 
     await migrate(db_engine, lambda config: command.downgrade(config, "0035"))
     assert not TABLES & await _tables(db_engine)
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

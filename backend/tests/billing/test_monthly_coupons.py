@@ -2,6 +2,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 
+import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -91,7 +92,7 @@ async def test_lost_response_recovers_once_after_restart_disabled_and_expired_pr
 
 
 async def test_rejected_retry_keeps_unknown_deferral_and_capacity_reserved(
-    authed_client, coupons, db, user, fake_billing, fixed_clock, new_browser, sign_in_by_magic_link
+    authed_client, coupons, db, user, fake_billing, fixed_clock, new_browser, sign_in_for_test
 ):
     await monthly(db, user, fake_billing, fixed_clock)
     created = await coupons("--months", "1")
@@ -100,7 +101,7 @@ async def test_rejected_retry_keeps_unknown_deferral_and_capacity_reserved(
     result = await authed_client.post(REDEEM, json=confirmation(offer))
     assert result.json()["status"] == "pending"
     other = new_browser()
-    signed = await sign_in_by_magic_link(other, "other@example.com")
+    signed = await sign_in_for_test(other, "other@example.com")
     other.headers["Authorization"] = "Bearer " + signed.access_token
     assert (await other.post(PREVIEW, json={"code": created["code"]})).status_code == 409
     assert (await other.get(REDEEM + "/redeem-test-0001")).status_code == 404
@@ -404,3 +405,8 @@ async def test_refused_operation_audit_expires_after_resolution_without_a_benefi
     await coupons(command="purge")
     assert (await authed_client.get(REDEEM + "/redeem-test-0001")).status_code == 404
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 0
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

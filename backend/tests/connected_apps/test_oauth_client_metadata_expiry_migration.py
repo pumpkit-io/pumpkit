@@ -1,5 +1,6 @@
 """Migration 0038 adds when an app's cached metadata document goes stale, and its downgrade drops it."""
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -27,3 +28,8 @@ async def test_upgrade_adds_metadata_expires_at_and_downgrade_drops_it(db_engine
 
     await migrate(db_engine, lambda config: command.downgrade(config, "0037"))
     assert "metadata_expires_at" not in await _columns(db_engine)
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

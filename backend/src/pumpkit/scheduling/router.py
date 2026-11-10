@@ -8,6 +8,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import XReader, get_x_reader
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.photos import PhotoFetcher, get_photo_fetcher
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
@@ -41,6 +42,7 @@ from pumpkit.scheduling.schemas import (
     UsageResponse,
     XConnectionResponse,
 )
+from pumpkit.x_connection.dependencies import require_x_connection_user
 from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
@@ -73,7 +75,7 @@ async def get_usage(
     "/x-connection", response_model=XConnectionResponse, status_code=status.HTTP_200_OK
 )
 async def get_x_connection(
-    current_user: User = Depends(require_subscribed_user),
+    current_user: User = Depends(require_x_connection_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> XConnectionResponse:
     return await mediator.get_x_connection(db=db, user=current_user)
@@ -88,14 +90,16 @@ async def get_x_connection(
 async def complete_x_authorization(
     request: Request,
     complete_request: XAuthorizationCompleteRequest,
-    current_user: User = Depends(require_subscribed_user),
+    current_user: User = Depends(require_x_connection_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
     clock: Clock = Depends(get_clock),
 ) -> XConnectionResponse:
     return await mediator.complete_x_authorization(
         db=db,
         publisher=publisher,
+        photo_fetcher=photo_fetcher,
         user=current_user,
         code=complete_request.code,
         state=complete_request.state,
@@ -139,6 +143,7 @@ async def create_scheduled_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
     storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
@@ -162,6 +167,7 @@ async def create_scheduled_post(
         user=current_user,
         new=new,
         clock=clock,
+        photo_fetcher=photo_fetcher,
     )
 
 
@@ -185,6 +191,7 @@ async def edit_scheduled_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
     storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
@@ -207,6 +214,7 @@ async def edit_scheduled_post(
         scheduled_post_id=scheduled_post_id,
         edit=edit,
         clock=clock,
+        photo_fetcher=photo_fetcher,
     )
 
 

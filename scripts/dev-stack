@@ -21,7 +21,7 @@ safe_mode_env() {
 }
 
 # Emulators, as "<service> <path that answers 200>".
-EMULATORS=("google /.well-known/openid-configuration" "pumpkit-stripe /_emulate")
+EMULATORS=("google /.well-known/openid-configuration" "pumpkit-stripe /_emulate" "pumpkit-x /_pumpkit/events")
 
 # compose.emulators.yml hands these to the backend over .env's, so .env's real keys never reach an Emulator.
 emulator_env() {
@@ -29,7 +29,10 @@ emulator_env() {
   GOOGLE_ISSUER=$(emulator_url google)
   GOOGLE_API_URL=$(b_emulator_api_url google)
   STRIPE_API_URL=$(b_emulator_api_url pumpkit-stripe)
+  X_AUTHORIZE_URL="$(emulator_url pumpkit-x)/i/oauth2/authorize"
+  X_API_URL=$(b_emulator_api_url pumpkit-x)
   export GOOGLE_ISSUER GOOGLE_API_URL STRIPE_API_URL
+  export X_AUTHORIZE_URL X_API_URL
   export GOOGLE_CLIENT_ID="pumpkit-dev" GOOGLE_CLIENT_SECRET="pumpkit-dev-secret"
   export STRIPE_SECRET_KEY="sk_test_dev" STRIPE_PUBLISHABLE_KEY="pk_test_dev"
   export STRIPE_WEBHOOK_URL="http://backend:8000/api/v1/stripe/webhook" STRIPE_WEBHOOK_SECRET="whsec_dev"
@@ -109,8 +112,60 @@ init_names() {
     fi
     DEV_URL="$scheme://$HOST$port_part"
   fi
+  ROUTED_DEV_URL=$DEV_URL
   # Compose files interpolate it on every command, not only on up.
   export "$APP_URL_VAR=$DEV_URL"
+  export DEV_STAGED_X_URL="${DEV_URL%%"$HOST"*}${ROUTE%"$PROJECT"}staged-x.$PROJECT.localhost${DEV_URL#*"$HOST"}"
+  MODE=emulated
+  if [ -f "$STATE_DIR/mode" ]; then
+    IFS= read -r MODE <"$STATE_DIR/mode"
+    case "$MODE" in emulated|real-x) ;; *) die "invalid saved stack mode" ;; esac
+  fi
+  if [ "$MODE" = real-x ]; then
+    IFS= read -r DEV_URL <"$STATE_DIR/public-url"
+    validate_real_url "$DEV_URL"
+    COMPOSE_PROJECT="$COMPOSE_PROJECT-real-x"
+    export DEV_WEB_BIND="127.0.0.1:${DEV_URL##*:}"
+    export "$APP_URL_VAR=$DEV_URL"
+  fi
+}
+
+validate_real_url() {
+  [[ "$1" =~ ^http://127\.0\.0\.1:([1-9][0-9]{0,4})$ ]] || die "real X needs http://127.0.0.1:PORT without a path"
+  [ "${1##*:}" -le 65535 ] || die "callback port must be between 1 and 65535"
+}
+
+select_mode() {
+  local requested=emulated requested_url=http://127.0.0.1:5173
+  if [ "$#" -gt 0 ]; then
+    [ "$1" = --real-x ] && [ "$#" -le 2 ] || die "expected up [--real-x [http://127.0.0.1:PORT]]"
+    requested=real-x
+    if [ "$MODE" = real-x ]; then requested_url=$DEV_URL; fi
+    requested_url=${2:-$requested_url}
+    validate_real_url "$requested_url"
+  fi
+  if [ -f "$STATE_DIR/mode" ]; then
+    [ "$requested" = "$MODE" ] || die "saved $MODE stack: use a separate worktree, or explicitly destroy this stack before changing mode"
+    [ "$MODE" != real-x ] || [ "$DEV_URL" = "$requested_url" ] || die "saved real-X callback differs; use its saved URL or a separate worktree"
+  else
+    if [ "$requested" = real-x ]; then
+      [ ! -f "$STATE_DIR/e2e-target" ] && [ ! -f "$STATE_DIR/routes" ] || die "existing emulated stack: use a separate worktree or explicitly destroy it first"
+      python3 - "${requested_url##*:}" <<'PORTCHECK' || die "callback port is occupied; choose and register a free loopback port"
+import socket
+import sys
+with socket.socket() as listener:
+    try:
+        listener.bind(("127.0.0.1", int(sys.argv[1])))
+    except OSError:
+        sys.exit(1)
+PORTCHECK
+    fi
+    [ "$requested" != emulated ] || requested_url=$DEV_URL
+    mkdir -p "$STATE_DIR"
+    printf '%s\n' "$requested" >"$STATE_DIR/mode"
+    printf '%s\n' "$requested_url" >"$STATE_DIR/public-url"
+    init_names
+  fi
 }
 
 # In HTTPS mode, trust the Portless CA for this request only.
@@ -178,14 +233,18 @@ b_emulate_env() {
   local e services=""
   for e in ${EMULATORS[@]+"${EMULATORS[@]}"}; do services="$services${services:+,}${e%% *}"; done
   export EMULATE_SERVICES="$services"
-  export EMULATE_BASE_URL="${DEV_URL%%"$HOST"*}${ROUTE%"$PROJECT"}{service}.emulate.$PROJECT.localhost${DEV_URL#*"$HOST"}"
+  export EMULATE_BASE_URL="${ROUTED_DEV_URL%%"$HOST"*}${ROUTE%"$PROJECT"}{service}.emulate.$PROJECT.localhost${ROUTED_DEV_URL#*"$HOST"}"
 }
 
 # The emulators profile keeps plain `docker compose -f compose.dev.yml up` free of Emulators.
 b_compose() {
+  safe_mode_env
+  if has_portless; then emulator_env; fi
   b_emulate_env
+  local extra=()
+  [ "$MODE" != real-x ] || extra=(-f "$ROOT/compose.real-x.yml")
   docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/$B_COMPOSE_FILE" -f "$ROOT/$B_EMULATORS_COMPOSE_FILE" \
-    --profile emulators "$@"
+    ${extra[@]+"${extra[@]}"} --profile emulators "$@"
 }
 
 b_service_alive() { [ -n "$(b_compose ps -q --status running "$1" 2>/dev/null)" ]; }
@@ -221,11 +280,8 @@ b_alias() {
   grep -qxF "$1" "$routes" 2>/dev/null || printf '%s\n' "$1" >>"$routes"
 }
 
-b_emulators_up() {
+b_refresh_emulator_routes() {
   local e svc port hostport
-  [ "${#EMULATORS[@]}" -gt 0 ] || return 0
-  emulator_env
-  b_compose up -d --build --wait "$B_EMULATE_SERVICE" >&2 || die "docker compose up $B_EMULATE_SERVICE failed; see: scripts/dev-stack logs $B_EMULATE_SERVICE"
   for e in "${EMULATORS[@]}"; do
     svc=${e%% *}
     port=$(b_emulator_port "$svc")
@@ -235,15 +291,34 @@ b_emulators_up() {
   for e in "${EMULATORS[@]}"; do wait_emulator "${e%% *}" "${e#* }" "$B_EMULATE_SERVICE"; done
 }
 
+b_emulators_up() {
+  [ "${#EMULATORS[@]}" -gt 0 ] || return 0
+  emulator_env
+  b_compose up -d --build --wait "$B_EMULATE_SERVICE" >&2 || die "docker compose up $B_EMULATE_SERVICE failed; see: scripts/dev-stack logs $B_EMULATE_SERVICE"
+  b_refresh_emulator_routes
+}
+
 b_up() {
   b_emulators_up
   # The backend's start.sh migrates; e2e seeds its own User, so there is no seed step.
   b_compose up -d --build --wait >&2 || die "docker compose up failed; see: scripts/dev-stack logs"
+  # Compose may recreate the emulator container and change its published ports.
+  b_refresh_emulator_routes
   # e2e/backend.ts runs seed scripts in this project when E2E_BASE_URL is this Dev URL.
-  printf '%s\n%s\n' "$DEV_URL" "$COMPOSE_PROJECT" >"$STATE_DIR/e2e-target"
+  if [ "$MODE" = emulated ]; then
+    printf '%s\n%s\n%s\n' "$DEV_URL" "$COMPOSE_PROJECT" "$DEV_STAGED_X_URL" >"$STATE_DIR/e2e-target"
+  fi
   local hostport
   hostport=$(b_compose port "$B_WEB_SERVICE" "$B_WEB_PORT") || die "$B_WEB_SERVICE does not publish port $B_WEB_PORT"
   b_alias "$ROUTE" "${hostport##*:}"
+  hostport=$(b_compose port staged-x 8000) || die "staged-x does not publish its browser fixture port"
+  b_alias "${ROUTE%"$PROJECT"}staged-x.$PROJECT" "${hostport##*:}"
+  local deadline=$((SECONDS + HEALTH_TIMEOUT))
+  until answers "$DEV_STAGED_X_URL/"; do
+    b_service_alive staged-x || die "the staged X fixture exited; see: scripts/dev-stack logs staged-x"
+    [ "$SECONDS" -lt "$deadline" ] || die "the staged X fixture did not answer; see: scripts/dev-stack logs staged-x"
+    sleep 1
+  done
 }
 
 b_remove_routes() {
@@ -268,11 +343,14 @@ b_destroy() {
 
 b_logs() { b_compose logs --no-color --tail 200 ${1+"$1"}; }
 
-usage() { printf 'usage: scripts/dev-stack up|down|destroy|url|status|logs [service]\n' >&2; }
+usage() { printf 'usage: scripts/dev-stack up [--real-x [http://127.0.0.1:PORT]] | down|destroy|url|staged-x-url|status|logs [service]\n' >&2; }
 
 case "${1:-}" in
   up)
     check_emulators
+    init_names
+    shift
+    select_mode "$@"
     has_portless || die "portless is not installed; run the Portless section of setup-sdlc"
     ensure_proxy
     init_names
@@ -294,6 +372,10 @@ case "${1:-}" in
   url)
     init_names
     printf '%s\n' "$DEV_URL"
+    ;;
+  staged-x-url)
+    init_names
+    printf '%s\n' "$DEV_STAGED_X_URL"
     ;;
   status)
     init_names

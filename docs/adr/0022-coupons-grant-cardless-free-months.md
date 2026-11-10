@@ -1,10 +1,12 @@
 # Coupons grant cardless free months, including to existing subscribers
 
+ADR 0023 extends the repeat-redemption restriction below to both the X account and verified email, including across account deletion. Receiving Coupon benefits also removes that X account’s Trial eligibility across deletion and recreation.
+
 Coupons give Users free months of Pro without requiring a payment card or creating an obligation to pay afterward. Existing subscribers, including annual subscribers, may redeem them too: their benefit must defer or reduce payment rather than overlap access they already paid for. A User without a paid Subscription meets the Paywall when free access ends unless they choose to subscribe.
 
 This narrows ADR 0003’s subscription-only premise, ADR 0010’s checkout-only acceptance premise, ADR 0017’s Top-up purchase eligibility and ADR 0018’s Subscription-only access premise. A Coupon is not the existing card-backed Trial.
 
-A Coupon may be reserved for a verified email address before its recipient signs up, or available to anyone. Each Coupon has a configurable total redemption limit, defaulting to one, at most one redemption per verified email address, including after account deletion, and an optional claim deadline.
+A Coupon may be reserved for a verified email address before its recipient signs up, or available to anyone. Each Coupon has a configurable total redemption limit, defaulting to one, at most one redemption per X account and per verified email address, including after account deletion, and an optional claim deadline.
 
 ## Time and renewal
 
@@ -34,7 +36,7 @@ Use cryptographically random, high-entropy opaque codes backed by Instance recor
 
 Disabling a Coupon stops future claims and preserves benefits already redeemed. Removing an individual's granted benefits is a separate support action outside this implementation, because shortening free time could bring a payment forward unexpectedly.
 
-Deleting and recreating an account with the same email does not permit a second claim of the same Coupon. Keep a minimal, protected claim record while that Coupon remains redeemable, including across account deletion. The [retention and key-custody contract](../coupons.md#retention-and-purge) sets precise purge periods, account-deletion handling and key rotation. The English and Italian Privacy Policy describes fingerprints as pseudonymous personal data, including indefinite claim prevention for redeemable no-deadline codes. This does not prevent claims using different email addresses; recipient assignment and total redemption limits bound that risk.
+Deleting and recreating an account, changing its email, or using a distinct X account with the same email does not permit a second claim of the same Coupon by either identity (ADR 0023). Keep a minimal, protected claim record while that Coupon remains redeemable, including across account deletion. The [retention and key-custody contract](../coupons.md#retention-and-purge) sets precise purge periods, account-deletion handling and key rotation. The English and Italian Privacy Policy describes fingerprints as pseudonymous personal data, including indefinite claim prevention for redeemable no-deadline codes. This does not prevent one person using distinct X accounts with distinct verified emails; recipient assignment and total redemption limits still apply.
 
 Coupons are available only on Instances that sell Plans. Instances without billing already grant unrestricted access. Self-hosters with billing configured use the same public tooling to issue their own Coupons, consistent with ADR 0011.
 

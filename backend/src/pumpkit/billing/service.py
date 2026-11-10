@@ -12,6 +12,7 @@ from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pumpkit.billing import trial_eligibility
 from pumpkit.billing.allowance import (
     Allowance,
     AllowanceUsedUp,
@@ -81,6 +82,7 @@ async def get_subscription_offer(
         days == 0
         or await db.get(CouponHistory, user_id) is not None
         or await has_had_subscription(db, user_id=user_id)
+        or not await trial_eligibility.may_start_trial(db, user_id=user_id)
     ):
         # A zero length turns Trials off; Stripe rejects a zero-day Trial.
         return SubscriptionOffer(may_subscribe=True, trial_days=None)
@@ -101,6 +103,11 @@ async def has_had_subscription(db: AsyncSession, *, user_id: str) -> bool:
     """Whether the User ever had a Subscription in any status, which uses up their Trial."""
     result = await db.execute(select(exists().where(Subscription.user_id == user_id)))
     return bool(result.scalar())
+
+
+async def preserve_trial_eligibility(db: AsyncSession, *, user_id: str) -> None:
+    if await has_had_subscription(db, user_id=user_id) or await db.get(CouponHistory, user_id):
+        await trial_eligibility.exclude(db, user_id=user_id)
 
 
 async def get_user_subscription(db: AsyncSession, *, user_id: str) -> Optional[Subscription]:
@@ -275,6 +282,8 @@ async def sync_customer(
         subscription.trial_end = state.trial_end
         subscription.billing_cycle_anchor = state.billing_cycle_anchor
     await db.flush()
+    if states:
+        await trial_eligibility.exclude(db, user_id=user_id)
     return states
 
 

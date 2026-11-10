@@ -31,7 +31,7 @@ run_setup() {
   [ $# -gt 0 ] && shift
   set +e
   # shellcheck disable=SC2086 # The assignments hold no spaces, so splitting them is intended.
-  env -i PATH="$PATH" $assignments "$shell" "$repo_root/scripts/setup.sh" --env-file "$env_file" "$@" \
+  env -i PATH="$PATH" X_CLIENT_ID=setup-check-client X_CLIENT_SECRET=setup-check-secret $assignments "$shell" "$repo_root/scripts/setup.sh" --env-file "$env_file" "$@" \
     </dev/null >"$out" 2>&1
   status=$?
   set -e
@@ -59,7 +59,7 @@ else
   fail "expected mode 600, got $(ls -l "$env_file" | cut -c1-10)"
 fi
 
-for name in PUBLIC_URL POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY LLM_API_KEY TWITTERAPI_IO_API_KEY; do
+for name in PUBLIC_URL POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY TRIAL_IDENTITY_KEYS X_CLIENT_ID X_CLIENT_SECRET LLM_API_KEY TWITTERAPI_IO_API_KEY; do
   [ -n "$(value_of "$name")" ] || fail "$name is empty in the written .env"
 done
 [ "$(value_of LLM_API_KEY)" = "$llm_key" ] || fail "LLM_API_KEY is not the passed key"
@@ -68,7 +68,7 @@ pass "fills every required value"
 
 # Every output must leave out each secret and key the .env holds.
 check_output_hides_secrets() {
-  for name in POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY LLM_API_KEY TWITTERAPI_IO_API_KEY; do
+  for name in POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY TRIAL_IDENTITY_KEYS X_CLIENT_ID X_CLIENT_SECRET LLM_API_KEY TWITTERAPI_IO_API_KEY; do
     secret=$(value_of "$name")
     if grep -F -q -e "$secret" "$out"; then
       fail "$1: the output shows $name"
@@ -112,6 +112,16 @@ else
 fi
 if grep -F -q "$twitter_key" "$out"; then
   fail "the failing run shows TWITTERAPI_IO_API_KEY"
+fi
+
+env_file=$work/missing-x/.env
+out=$work/missing-x.out
+mkdir -p "$work/missing-x"
+run_setup PUBLIC_URL=http://localhost:8080 LLM_API_KEY=$llm_key TWITTERAPI_IO_API_KEY=$twitter_key X_CLIENT_ID=
+if [ "$status" -ne 0 ] && grep -q X_CLIENT_ID "$out" && [ ! -e "$env_file" ]; then
+  pass "refuses missing required X credentials without writing .env"
+else
+  fail "expected a missing-X startup configuration refusal"
 fi
 
 env_file=$work/providers/.env

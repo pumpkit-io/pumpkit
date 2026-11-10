@@ -50,12 +50,13 @@ function renderCallback(search: string) {
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <AuthProvider>
-          <OnboardingProvider initialNextStep="x_connection">
+          <OnboardingProvider initialNextStep="persona">
             <Routes>
               <Route path="/oauth/x/callback" element={<XConnectionCallback />} />
               <Route path="/settings" element={<Destination />} />
               <Route path="/posts/:id" element={<Destination />} />
               <Route path="/onboarding" element={<OnboardingDestination />} />
+              <Route path="/subscribe" element={<Destination />} />
             </Routes>
           </OnboardingProvider>
         </AuthProvider>
@@ -64,10 +65,10 @@ function renderCallback(search: string) {
   );
 }
 
-function apiError(status: number, detail: string) {
+function apiError(status: number, detail: string, code?: string) {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
     isAxiosError: true,
-    response: { status, data: { detail } },
+    response: { status, data: { detail, code } },
   });
 }
 
@@ -104,7 +105,7 @@ describe('the X callback', () => {
     renderCallback('?state=the-state&code=the-code');
 
     expect(
-      await screen.findByText('at /settings via REPLACE: Connected @ada.'),
+      await screen.findByText('at /settings via REPLACE: Reconnected @ada.'),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).toHaveBeenCalledTimes(1);
     expect(xConnectionService.complete).toHaveBeenCalledWith('the-code', 'the-state');
@@ -116,7 +117,7 @@ describe('the X callback', () => {
 
     expect(
       await screen.findByText(
-        'at /settings via REPLACE: You cancelled connecting X. Connect it again whenever you like.',
+        'at /settings via REPLACE: You cancelled reconnecting X. Try again when you are ready.',
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();
@@ -137,12 +138,35 @@ describe('the X callback', () => {
     expect(track).not.toHaveBeenCalledWith('x_connected');
   });
 
+  it('keeps the expected-account error while onboarding instead of reporting ownership elsewhere', async () => {
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('persona');
+    const detail = 'Reconnect the same X account, @ada. Sign out of X and retry with that account.';
+    vi.mocked(xConnectionService.complete).mockRejectedValue(
+      apiError(409, detail, 'X_ACCOUNT_MISMATCH'),
+    );
+
+    renderCallback('?state=the-state&code=the-code');
+
+    expect(await screen.findByText(`at /settings via REPLACE: ${detail}`)).toBeInTheDocument();
+  });
+
+  it('returns unpaid recovery directly to the paywall with its notice', async () => {
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
+    vi.mocked(xConnectionService.complete).mockResolvedValue(ADA);
+
+    renderCallback('?state=the-state&code=the-code');
+
+    expect(
+      await screen.findByText('at /subscribe via REPLACE: Reconnected @ada.'),
+    ).toBeInTheDocument();
+  });
+
   it('returns with a message when X sent neither a code nor an error', async () => {
     renderCallback('');
 
     expect(
       await screen.findByText(
-        "at /settings via REPLACE: X didn't finish connecting your account. Try again.",
+        "at /settings via REPLACE: X didn't finish reconnecting your account. Try again.",
       ),
     ).toBeInTheDocument();
     expect(xConnectionService.complete).not.toHaveBeenCalled();
@@ -163,7 +187,7 @@ describe('the X callback', () => {
       renderCallback('?state=the-state&code=the-code');
 
       expect(
-        await screen.findByText('at /posts/post_01 via REPLACE: Connected @ada.'),
+        await screen.findByText('at /posts/post_01 via REPLACE: Reconnected @ada.'),
       ).toBeInTheDocument();
     });
 
@@ -172,7 +196,7 @@ describe('the X callback', () => {
 
       expect(
         await screen.findByText(
-          'at /posts/post_01 via REPLACE: You cancelled connecting X. Connect it again whenever you like.',
+          'at /posts/post_01 via REPLACE: You cancelled reconnecting X. Try again when you are ready.',
         ),
       ).toBeInTheDocument();
     });
@@ -185,68 +209,8 @@ describe('the X callback', () => {
       renderCallback('?state=the-state&code=the-code');
 
       expect(
-        await screen.findByText('at /settings via REPLACE: Connected @ada.'),
+        await screen.findByText('at /settings via REPLACE: Reconnected @ada.'),
       ).toBeInTheDocument();
-    });
-  });
-
-  describe('during Onboarding', () => {
-    beforeEach(() => {
-      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('persona');
-    });
-
-    it('returns to Onboarding with the connected account', async () => {
-      vi.mocked(xConnectionService.complete).mockResolvedValue(ADA);
-
-      renderCallback('?state=the-state&code=the-code');
-
-      expect(
-        await screen.findByText(
-          'at /onboarding via REPLACE: {"outcome":"connected","handle":"ada","photoUrl":"https://pbs.twimg.com/ada.jpg"}',
-        ),
-      ).toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('x_connected');
-    });
-
-    it('returns to the X step with the reason when completing fails', async () => {
-      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
-      vi.mocked(xConnectionService.complete).mockRejectedValue(
-        apiError(400, "X didn't give Pumpkit access to your account. Connect X again."),
-      );
-
-      renderCallback('?state=the-state&code=the-code');
-
-      expect(
-        await screen.findByText(
-          'at /onboarding via REPLACE: {"outcome":"failed","reason":"X didn\'t give Pumpkit access to your account. Connect X again."}',
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it('returns to the X step saying the account is taken', async () => {
-      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
-      vi.mocked(xConnectionService.complete).mockRejectedValue(
-        apiError(409, '@ada is already connected to another Pumpkit account.'),
-      );
-
-      renderCallback('?state=the-state&code=the-code');
-
-      expect(
-        await screen.findByText('at /onboarding via REPLACE: {"outcome":"taken"}'),
-      ).toBeInTheDocument();
-    });
-
-    it('returns to the X step when the User cancelled on X', async () => {
-      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
-
-      renderCallback('?error=access_denied&state=the-state');
-
-      expect(
-        await screen.findByText(
-          'at /onboarding via REPLACE: {"outcome":"failed","reason":"You cancelled connecting X. Connect it whenever you\'re ready."}',
-        ),
-      ).toBeInTheDocument();
-      expect(xConnectionService.complete).not.toHaveBeenCalled();
     });
   });
 });

@@ -31,16 +31,49 @@ export function getAnalyticsConsent(): AnalyticsConsent | null {
   return value === 'granted' || value === 'denied' ? value : null;
 }
 
+function isProtocolCallback(path = window.location.pathname): boolean {
+  return (
+    (path.startsWith('/oauth/') && path.endsWith('/callback')) ||
+    path === '/auth/magic-link/callback'
+  );
+}
+
+function redactUrls(value: unknown): unknown {
+  if (typeof value === 'string' && /^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value);
+      url.search = '';
+      url.hash = '';
+      return url.href;
+    } catch {
+      return undefined;
+    }
+  }
+  if (Array.isArray(value)) return value.map(redactUrls);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, redactUrls(entry)]),
+    );
+  }
+  return value;
+}
+
 function capturing(): boolean {
-  return posthog.__loaded && getAnalyticsConsent() === 'granted';
+  return posthog.__loaded && getAnalyticsConsent() === 'granted' && !isProtocolCallback();
 }
 
 /** No-op on an Instance without analytics. */
 function startPostHog(): void {
-  if (!settings) return;
+  if (!settings || isProtocolCallback()) return;
   if (!posthog.__loaded) {
     const config: Partial<PostHogConfig> = {
       api_host: settings.host,
+      // Cover SDK events too; callback documents never initialize capture or recording.
+      before_send: (event) => {
+        if (!event || isProtocolCallback()) return null;
+        event.properties = redactUrls(event.properties) as typeof event.properties;
+        return event;
+      },
       ui_host: settings.ui_host,
       // Cheaper, and keeps anonymous traffic out of the persons table.
       person_profiles: 'identified_only',
@@ -147,6 +180,8 @@ export function resetPostHog(): void {
 }
 
 export function capturePageview(path: string): void {
+  if (isProtocolCallback(path.split('?')[0])) return;
+  if (!posthog.__loaded && getAnalyticsConsent() === 'granted') startPostHog();
   if (!capturing()) return;
   posthog.capture('$pageview', { $current_url: window.location.origin + path });
 }

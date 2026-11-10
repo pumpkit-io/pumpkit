@@ -20,9 +20,18 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, BinaryIO, Literal, Optional, Protocol
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    HttpUrl,
+    ValidationError,
+    field_validator,
+)
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError, NotConfiguredError
@@ -37,6 +46,7 @@ X_MEDIA_METADATA_URL = "https://api.x.com/2/media/metadata"
 X_MEDIA_SCOPE = "media.write"
 # Every scope Pumpkit uses, asked for at once so a User consents only once (ADR 0006).
 X_SCOPES = f"tweet.read tweet.write users.read offline.access {X_MEDIA_SCOPE}"
+X_SIGN_IN_SCOPES = f"{X_SCOPES} users.email"
 _TIMEOUT_SECONDS = 30.0
 # Under X's 5 MB cap on an APPEND segment, with room for the multipart framing around it.
 MEDIA_CHUNK_BYTES = 4 * 1024 * 1024
@@ -77,6 +87,10 @@ class XPublisherNotConfiguredError(NotConfiguredError, XPublisherError):
 
 class XReconnectNeededError(XPublisherError):
     """X refuses these tokens for good: only the User going through X's consent screen again helps."""
+
+
+class XPermissionsRequiredError(XReconnectNeededError):
+    """The grant lacks a permission needed for this authorization."""
 
 
 class XRateLimitedError(XPublisherError):
@@ -142,6 +156,26 @@ class XAccount:
     # X's `subscription_type` ("None", "Basic", "Premium", "PremiumPlus"); None when left out.
     subscription_type: Optional[str]
     photo_url: Optional[str] = None
+    confirmed_email: Optional[str] = None
+    display_name: Optional[str] = None
+
+
+class _XSignInProfile(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    id: str = Field(pattern=r"^[0-9]+$")
+    username: str = Field(pattern=r"^[A-Za-z0-9_]{1,15}$")
+    name: Optional[str] = None
+    confirmed_email: Optional[EmailStr] = None
+    subscription_type: Optional[str] = None
+    profile_image_url: Optional[HttpUrl] = None
+
+    @field_validator("id", "username", "name", "subscription_type")
+    @classmethod
+    def nonempty_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not value.strip():
+            raise ValueError("Expected nonempty text")
+        return value
 
 
 def new_code_verifier() -> str:
@@ -156,15 +190,17 @@ def code_challenge_for(verifier: str) -> str:
 
 
 class XPublisher(Protocol):
-    def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
+    def build_authorize_url(
+        self, *, state: str, code_challenge: str, scopes: str = X_SCOPES
+    ) -> str:
         """Where to send the User's browser for X's consent screen."""
         ...
 
-    async def exchange_code(self, *, code: str, code_verifier: str, now: datetime) -> XTokens:
-        """
-        The tokens for a code from X's redirect. A grant without a refresh token raises
-        `XReconnectNeededError`: it would stop working within two hours.
-        """
+    async def exchange_code(
+        self, *, code: str, code_verifier: str, now: datetime, required_scopes: str = ""
+    ) -> XTokens:
+        """Reject missing offline access or required permissions with `XReconnectNeededError`.
+        `required_scopes` must match the scopes requested for this authorization."""
         ...
 
     async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
@@ -174,8 +210,9 @@ class XPublisher(Protocol):
         """
         ...
 
-    async def fetch_account(self, *, access_token: str) -> XAccount:
-        """The X account the token acts for; a refused token raises `XReconnectNeededError`."""
+    async def fetch_account(self, *, access_token: str, for_sign_in: bool = False) -> XAccount:
+        """Publishing tokens may lack users.email, so only sign-in reads request confirmed email.
+        Sign-in reads also strictly validate identity; publishing retains existing field handling."""
         ...
 
     async def upload_media(
@@ -225,22 +262,26 @@ class XPublisher(Protocol):
 class OfficialXPublisher:
     """Calls the X API. The app settings are checked on use, so the app boots without them."""
 
-    def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
+    def build_authorize_url(
+        self, *, state: str, code_challenge: str, scopes: str = X_SCOPES
+    ) -> str:
         client_id, _, redirect_uri = _x_app()
         query = urlencode(
             {
                 "response_type": "code",
                 "client_id": client_id,
                 "redirect_uri": redirect_uri,
-                "scope": X_SCOPES,
+                "scope": scopes,
                 "state": state,
                 "code_challenge": code_challenge,
                 "code_challenge_method": "S256",
             }
         )
-        return f"{X_AUTHORIZE_URL}?{query}"
+        return f"{settings.X_AUTHORIZE_URL or X_AUTHORIZE_URL}?{query}"
 
-    async def exchange_code(self, *, code: str, code_verifier: str, now: datetime) -> XTokens:
+    async def exchange_code(
+        self, *, code: str, code_verifier: str, now: datetime, required_scopes: str = ""
+    ) -> XTokens:
         _, _, redirect_uri = _x_app()
         body = await _token_call(
             X_TOKEN_URL,
@@ -251,13 +292,15 @@ class OfficialXPublisher:
                 "code_verifier": code_verifier,
             },
         )
-        tokens = _tokens_from(body, now=now, previous_refresh_token="")
+        tokens = _tokens_from(
+            body, now=now, previous_refresh_token="", requested_scopes=required_scopes
+        )
         if not tokens.refresh_token:
-            raise XReconnectNeededError(
+            raise XPermissionsRequiredError(
                 "X returned no refresh token: the authorization is missing the offline.access "
                 "scope, so it would stop working within two hours."
             )
-        return tokens
+        return _require_scopes(tokens, required_scopes)
 
     async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
         body = await _token_call(
@@ -265,13 +308,16 @@ class OfficialXPublisher:
         )
         return _tokens_from(body, now=now, previous_refresh_token=refresh_token)
 
-    async def fetch_account(self, *, access_token: str) -> XAccount:
+    async def fetch_account(self, *, access_token: str, for_sign_in: bool = False) -> XAccount:
+        fields = "subscription_type,profile_image_url"
+        if for_sign_in:
+            fields += ",confirmed_email,name"
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 response = await client.get(
-                    X_USERS_ME_URL,
+                    _api_url(X_USERS_ME_URL),
                     headers={"Authorization": f"Bearer {access_token}"},
-                    params={"user.fields": "subscription_type,profile_image_url"},
+                    params={"user.fields": fields},
                 )
         except httpx.HTTPError as error:
             raise XPublisherError(f"X unreachable: {type(error).__name__}") from error
@@ -283,17 +329,39 @@ class OfficialXPublisher:
         data = body.get("data") if isinstance(body, dict) else None
         if not isinstance(data, dict):
             raise XPublisherError("X users/me returned a body without data")
-        user_id, handle = data.get("id"), data.get("username")
-        if not isinstance(user_id, str) or not user_id or not isinstance(handle, str) or not handle:
-            raise XPublisherError("X users/me returned no id or username")
-        subscription_type = data.get("subscription_type")
-        photo_url = data.get("profile_image_url")
+        if not for_sign_in:
+            user_id, handle = data.get("id"), data.get("username")
+            if (
+                not isinstance(user_id, str)
+                or not user_id
+                or not isinstance(handle, str)
+                or not handle
+            ):
+                raise XPublisherError("X users/me returned no id or username")
+            subscription_type = data.get("subscription_type")
+            photo_url = data.get("profile_image_url")
+            return XAccount(
+                user_id=user_id,
+                handle=handle,
+                subscription_type=subscription_type if isinstance(subscription_type, str) else None,
+                photo_url=_larger_photo(photo_url)
+                if isinstance(photo_url, str) and photo_url
+                else None,
+            )
+        try:
+            profile = _XSignInProfile.model_validate(data)
+        except ValidationError:
+            raise XPublisherError("X users/me returned malformed profile data") from None
         return XAccount(
-            user_id=user_id,
-            handle=handle,
-            subscription_type=subscription_type if isinstance(subscription_type, str) else None,
-            photo_url=_larger_photo(photo_url)
-            if isinstance(photo_url, str) and photo_url
+            user_id=profile.id,
+            handle=profile.username,
+            subscription_type=profile.subscription_type,
+            confirmed_email=str(profile.confirmed_email).lower()
+            if profile.confirmed_email is not None
+            else None,
+            display_name=profile.name,
+            photo_url=_larger_photo(str(profile.profile_image_url))
+            if profile.profile_image_url is not None
             else None,
         )
 
@@ -316,7 +384,7 @@ class OfficialXPublisher:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 initialized = await _media_call(
                     client.post(
-                        f"{X_MEDIA_UPLOAD_URL}/initialize",
+                        f"{_api_url(X_MEDIA_UPLOAD_URL)}/initialize",
                         json={
                             "media_type": content_type,
                             "total_bytes": byte_size,
@@ -331,7 +399,7 @@ class OfficialXPublisher:
                 segment = 0
                 while chunk := await asyncio.to_thread(source.read, MEDIA_CHUNK_BYTES):
                     append = client.post(
-                        f"{X_MEDIA_UPLOAD_URL}/{media_id}/append",
+                        f"{_api_url(X_MEDIA_UPLOAD_URL)}/{media_id}/append",
                         data={"segment_index": str(segment)},
                         files={"media": ("media", chunk, "application/octet-stream")},
                         headers=await headers(),
@@ -344,7 +412,8 @@ class OfficialXPublisher:
                     segment += 1
                 finalized = await _media_call(
                     client.post(
-                        f"{X_MEDIA_UPLOAD_URL}/{media_id}/finalize", headers=await headers()
+                        f"{_api_url(X_MEDIA_UPLOAD_URL)}/{media_id}/finalize",
+                        headers=await headers(),
                     )
                 )
                 await _await_processing(
@@ -367,7 +436,7 @@ class OfficialXPublisher:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 await _media_call(
                     client.post(
-                        X_MEDIA_METADATA_URL,
+                        _api_url(X_MEDIA_METADATA_URL),
                         json={"id": media_id, "metadata": {"alt_text": {"text": alt_text}}},
                         headers={"Authorization": f"Bearer {access_token}"},
                     )
@@ -402,7 +471,7 @@ class OfficialXPublisher:
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 response = await client.post(
-                    X_TWEETS_URL,
+                    _api_url(X_TWEETS_URL),
                     json=body,
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
@@ -483,7 +552,7 @@ async def _await_processing(
         waited += wait
         status = await _media_call(
             client.get(
-                X_MEDIA_UPLOAD_URL,
+                _api_url(X_MEDIA_UPLOAD_URL),
                 params={"command": "STATUS", "media_id": media_id},
                 headers=await headers(),
             )
@@ -501,7 +570,9 @@ def _larger_photo(url: str) -> str:
     return f"{stem[: -len(_SMALL_PHOTO_SUFFIX)]}{_LARGER_PHOTO_SUFFIX}{dot}{extension}"
 
 
-def _tokens_from(body: dict[str, Any], *, now: datetime, previous_refresh_token: str) -> XTokens:
+def _tokens_from(
+    body: dict[str, Any], *, now: datetime, previous_refresh_token: str, requested_scopes: str = ""
+) -> XTokens:
     """Tokens from a token response; a response without a refresh token keeps the previous one."""
     access_token = body.get("access_token")
     if not isinstance(access_token, str) or not access_token:
@@ -512,13 +583,22 @@ def _tokens_from(body: dict[str, Any], *, now: datetime, previous_refresh_token:
     expires_in = body.get("expires_in")
     if not isinstance(expires_in, int):
         expires_in = _DEFAULT_EXPIRES_IN_SECONDS
-    scope = body.get("scope")
+    # An omitted scope means the requested scopes were granted (RFC 6749, section 5.1).
+    scope = body.get("scope", requested_scopes)
+    if "scope" in body and not isinstance(scope, str):
+        raise XPublisherError("X returned malformed granted permissions")
     return XTokens(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_at=now + timedelta(seconds=expires_in),
         scope=scope if isinstance(scope, str) else "",
     )
+
+
+def _require_scopes(tokens: XTokens, required_scopes: str) -> XTokens:
+    if not set(required_scopes.split()).issubset(tokens.scope.split()):
+        raise XPermissionsRequiredError("X did not grant the required permissions")
+    return tokens
 
 
 def _detail(response: httpx.Response) -> str:
@@ -547,6 +627,12 @@ def _x_app() -> tuple[str, str, str]:
     return client_id, secret, settings.x_redirect_uri()
 
 
+def _api_url(official_url: str) -> str:
+    return (
+        f"{settings.X_API_URL}{urlsplit(official_url).path}" if settings.X_API_URL else official_url
+    )
+
+
 async def _token_call(url: str, data: dict[str, str]) -> dict[str, Any]:
     """
     One form POST to X's OAuth endpoints as a confidential client. Errors carry only the
@@ -557,7 +643,7 @@ async def _token_call(url: str, data: dict[str, str]) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
             response = await client.post(
-                url, data=data, headers={"Authorization": f"Basic {basic}"}
+                _api_url(url), data=data, headers={"Authorization": f"Basic {basic}"}
             )
     except httpx.HTTPError as error:
         raise XPublisherError(f"X unreachable: {type(error).__name__}") from error
@@ -623,7 +709,13 @@ class FakeXPublisher:
     """
 
     account: XAccount = field(
-        default_factory=lambda: XAccount(user_id="1001", handle="ada", subscription_type="None")
+        default_factory=lambda: XAccount(
+            user_id="1001",
+            handle="ada",
+            subscription_type="None",
+            confirmed_email="ada@example.com",
+            display_name="Ada",
+        )
     )
     exchanges: list[tuple[str, str]] = field(default_factory=list)
     refreshes: list[str] = field(default_factory=list)
@@ -657,17 +749,23 @@ class FakeXPublisher:
     upload_calls: int = 0
     upload_tokens: list[str] = field(default_factory=list)
 
-    def build_authorize_url(self, *, state: str, code_challenge: str) -> str:
+    def build_authorize_url(
+        self, *, state: str, code_challenge: str, scopes: str = X_SCOPES
+    ) -> str:
         if self.not_configured:
             raise XPublisherNotConfiguredError()
-        query = urlencode({"state": state, "code_challenge": code_challenge})
+        query = urlencode({"state": state, "code_challenge": code_challenge, "scope": scopes})
         return f"{X_AUTHORIZE_URL}?{query}"
 
-    async def exchange_code(self, *, code: str, code_verifier: str, now: datetime) -> XTokens:
+    async def exchange_code(
+        self, *, code: str, code_verifier: str, now: datetime, required_scopes: str = ""
+    ) -> XTokens:
         self.exchanges.append((code, code_verifier))
         if self.fail_exchange is not None:
             raise self.fail_exchange
-        return replace(self._issue(now), scope=self.exchange_scope)
+        return _require_scopes(
+            replace(self._issue(now), scope=self.exchange_scope), required_scopes
+        )
 
     async def refresh(self, *, refresh_token: str, now: datetime) -> XTokens:
         self.refreshes.append(refresh_token)
@@ -675,10 +773,14 @@ class FakeXPublisher:
             raise self.fail_refresh
         return replace(self._issue(now), scope=self.refresh_scope)
 
-    async def fetch_account(self, *, access_token: str) -> XAccount:
+    async def fetch_account(self, *, access_token: str, for_sign_in: bool = False) -> XAccount:
         if self.fail_fetch_account is not None:
             raise self.fail_fetch_account
-        return self.account
+        return (
+            self.account
+            if for_sign_in
+            else replace(self.account, confirmed_email=None, display_name=None)
+        )
 
     async def publish(
         self,

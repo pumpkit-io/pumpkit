@@ -3,6 +3,7 @@ Migration 0026 adds the Photo chosen marker, set for every existing User who has
 Pumpkit never replaces a Photo a User had before the marker existed.
 """
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -38,3 +39,8 @@ async def test_users_with_a_photo_get_the_marker_and_users_without_one_do_not(db
 
     async with db_engine.connect() as connection:
         assert await connection.run_sync(markers) == {user.id: False, "user_with_photo": True}
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

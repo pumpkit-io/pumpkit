@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import inspect
 
 from alembic import command
@@ -21,3 +22,8 @@ async def test_coupon_migration_preserves_existing_tables_and_can_be_reversed(db
     async with db_engine.connect() as connection:
         after = await connection.run_sync(lambda conn: set(inspect(conn).get_table_names()))
     assert after == before
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

@@ -129,20 +129,22 @@ async def test_a_signed_out_visitor_is_refused(new_browser):
     assert response.status_code == 401
 
 
-async def test_a_subscribed_user_without_x_is_sent_to_the_x_step(client, subscribed, x_configured):
+async def test_a_subscribed_user_without_publishing_permission_is_sent_to_persona(
+    client, subscribed, x_configured
+):
     response = await client.get(ONBOARDING)
 
-    assert response.json() == {"next_step": "x_connection"}
+    assert response.json() == {"next_step": "persona"}
 
 
-async def test_the_x_step_comes_before_the_persona_even_with_an_author(
+async def test_persona_stays_until_completion_even_without_publishing_permission(
     client, subscribed, x_configured, fake_x_reader
 ):
     await _add_author(client, fake_x_reader)
 
     response = await client.get(ONBOARDING)
 
-    assert response.json() == {"next_step": "x_connection"}
+    assert response.json() == {"next_step": "persona"}
 
 
 async def test_a_user_who_connected_x_moves_on_to_the_persona_step(
@@ -167,24 +169,23 @@ async def test_the_paywall_comes_before_the_x_step(client, x_configured):
     assert response.json() == {"next_step": "paywall"}
 
 
-async def test_an_instance_that_sells_no_plans_starts_at_the_x_step(
+async def test_an_instance_that_sells_no_plans_starts_directly_at_persona(
     client, sells_no_plans, x_configured
 ):
     response = await client.get(ONBOARDING)
 
-    assert response.json() == {"next_step": "x_connection"}
+    assert response.json() == {"next_step": "persona"}
 
 
-async def test_finishing_without_x_is_refused_while_the_x_step_is_required(
+async def test_finishing_does_not_require_publishing_permission(
     client, subscribed, x_configured, fake_x_reader
 ):
     await _add_author(client, fake_x_reader)
 
     response = await client.post(FINISH)
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Connect your X account to continue."
-    assert (await client.get(ONBOARDING)).json() == {"next_step": "x_connection"}
+    assert response.status_code == 204
+    assert (await client.get(ONBOARDING)).json() == {"next_step": None}
 
 
 async def test_finishing_after_connecting_x_opens_pumpkit(
@@ -199,7 +200,7 @@ async def test_finishing_after_connecting_x_opens_pumpkit(
     assert (await client.get(ONBOARDING)).json() == {"next_step": None}
 
 
-async def test_a_finished_user_stays_finished_after_disconnecting_x(
+async def test_a_finished_user_stays_finished_when_disconnection_is_refused(
     client, subscribed, x_configured, connect_x, fake_x_reader
 ):
     await connect_x()
@@ -208,5 +209,5 @@ async def test_a_finished_user_stays_finished_after_disconnecting_x(
 
     disconnected = await client.delete("/api/v1/x-connection")
 
-    assert disconnected.status_code == 204
+    assert disconnected.status_code == 405
     assert (await client.get(ONBOARDING)).json() == {"next_step": None}

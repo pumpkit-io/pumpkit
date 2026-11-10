@@ -31,15 +31,15 @@ _Avoid_: whitelist, invite list, access list
 ### Accounts
 
 **User**:
-A person with a Pumpkit account, identified by their email address.
+A person with a Pumpkit account, identified by the X account they sign in with.
 _Avoid_: account holder, customer (in auth contexts)
 
 **Photo**:
-The picture a User is shown with in Pumpkit. The User may upload one, take it from their Google account, their Gravatar or their X connection, or have none and be shown by their initials. Once a User has chosen or removed a Photo, Pumpkit never replaces it on its own. An X account and an Inspiration author also have a photo, the one X shows for them.
+The picture a User is shown with in Pumpkit, taken from their X account. A User with no X photo is shown by their initials; an Inspiration author also has the photo X shows for them.
 _Avoid_: avatar, profile picture, pfp
 
 **Sign-in method**:
-A way a User proves who they are to Pumpkit. The only Sign-in methods are Google and Magic link (see ADR 0002).
+A way a User proves who they are to Pumpkit. X is the only Sign-in method (see ADR 0023).
 _Avoid_: auth provider, login method, first-party auth, third-party auth
 
 **Magic link**:
@@ -59,7 +59,7 @@ A User who may not sign in or keep any Session until the suspension ends; a perm
 _Avoid_: banned, inactive, deactivated
 
 **Onboarding**:
-The steps a User goes through once, after the Paywall and before the rest of Pumpkit opens: connecting X, then choosing a Persona. Each step counts as done when what it asks for exists. Once a User finishes Onboarding they never see it again, even if they later disconnect X or empty their Persona.
+The steps a User goes through once, after the Paywall and before the rest of Pumpkit opens: choosing a Persona. Each step counts as done when what it asks for exists. Once a User finishes Onboarding they never see it again, even if they later empty their Persona.
 _Avoid_: setup wizard, first run, welcome flow
 
 **Connected app**:
@@ -69,7 +69,7 @@ _Avoid_: OAuth client, integration, connector, grant, authorized app
 ### Billing
 
 **Coupon**:
-A code a User redeems for a benefit, currently free months of the configured Plan offer (Pro on pumpkit.io). It may be reserved for one email address, even before sign-up, or open to anyone, with a total redemption limit, at most one redemption per verified email address, including across account deletion, and an optional claim deadline.
+A code a User redeems for a benefit, currently free months of the configured Plan offer (Pro on pumpkit.io). It may be reserved for one email address, even before sign-up, or open to anyone, with a total redemption limit, at most one redemption per X account and per verified email address, including across account deletion, and an optional claim deadline.
 _Avoid_: voucher, promo code, discount code
 
 **Free access**:
@@ -97,7 +97,7 @@ A User who currently has access to Pumpkit through Free access or a Subscription
 _Avoid_: active, paying, premium
 
 **Trial**:
-The free, card-backed opening period of a User's first Subscription. Each User gets at most one, and receiving Free access removes eligibility to start a new one.
+The free, card-backed opening period of a User's first Subscription. Each X account gets at most one per Instance, including after account deletion and recreation, and receiving Free access removes eligibility to start a new one.
 _Avoid_: free tier, cardless trial
 
 **Paywall**:
@@ -201,8 +201,8 @@ _Avoid_: revision request, comment, instruction
 ### Publishing
 
 **X connection**:
-A User's permission for Pumpkit to publish on one X account they own. Each User has at most one, and an X account belongs to at most one User. It is never a Sign-in method.
-_Avoid_: X login, X identity, linked account, X auth
+A User's permission for Pumpkit to publish on the X account they sign in with. Each User has at most one, and an X account belongs to at most one User.
+_Avoid_: linked account, X auth
 
 **Community**:
 An X Community: a group on X whose posts appear in the group rather than on each author's profile. A Scheduled post may go to one Community instead of the User's profile; it is still posted by the X account of the User's X connection, and the User chooses whether it is also shared with that account's followers.

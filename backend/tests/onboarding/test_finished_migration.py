@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -77,3 +78,8 @@ async def test_only_users_with_both_an_x_connection_and_an_author_count_as_finis
 
     await migrate(db_engine, lambda config: command.upgrade(config, "head"))
     assert (await client.get(ONBOARDING)).json() == {"next_step": None}
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

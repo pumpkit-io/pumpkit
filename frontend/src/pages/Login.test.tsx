@@ -1,137 +1,54 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { Login } from './Login';
-import { authService } from '@/services/authService';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
-import type { Instance } from '@/lib/instance';
-import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
+import { DEFAULT_INSTANCE } from '@/lib/instance';
+import { redirectTo } from '@/lib/navigation';
+import { xSignInService } from '@/services/xSignInService';
+import { Login } from './Login';
 
-vi.mock('@/services/authService', () => ({
-  authService: { requestMagicLink: vi.fn(), getGoogleLoginUrl: vi.fn() },
-}));
+vi.mock('@/services/xSignInService', () => ({ xSignInService: { start: vi.fn() } }));
+vi.mock('@/lib/navigation', () => ({ redirectTo: vi.fn() }));
 
-function renderLogin(path: string, instance: Instance = SELLS_PLANS) {
+beforeEach(() => vi.clearAllMocks());
+
+function show(error = '') {
   render(
-    <InstanceProvider instance={instance}>
-      <MemoryRouter
-        initialEntries={[path]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
+    <InstanceProvider instance={DEFAULT_INSTANCE}>
+      <MemoryRouter initialEntries={[`/login${error}`]}>
         <Login />
       </MemoryRouter>
     </InstanceProvider>,
   );
 }
 
-describe('the sign-in page', () => {
-  it.each([
-    ['invalid_magic_link', /magic link is invalid or has expired/i],
-    ['account_suspended', /account has been suspended/i],
-    ['sign_in_failed', /couldn't sign you in/i],
-    ['email_not_allowed', /^This site doesn't accept sign-ins from that email address\.$/i],
-  ])('explains the %s error', (code, message) => {
-    renderLogin(`/login?error=${code}`);
+it('offers only X and explains publishing authorization', () => {
+  show();
+  expect(screen.getByRole('button', { name: 'Continue with X' })).toBeInTheDocument();
+  expect(screen.getByText(/authorizes Pumpkit to publish/)).toBeInTheDocument();
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Continue with Google/)).not.toBeInTheDocument();
+});
 
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
-  });
+it('opens X once and disables repeated activation', async () => {
+  vi.mocked(xSignInService.start).mockResolvedValue('https://x.com/authorize');
+  show();
+  fireEvent.click(screen.getByRole('button', { name: 'Continue with X' }));
+  expect(screen.getByRole('button', { name: 'Opening X…' })).toBeDisabled();
+  expect(redirectTo).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://x.com/authorize'));
+  expect(xSignInService.start).toHaveBeenCalledTimes(1);
+});
 
-  it('shows a different message for each error code', () => {
-    const codes = [
-      'invalid_magic_link',
-      'account_suspended',
-      'sign_in_failed',
-      'email_not_allowed',
-    ];
-    const messages = codes.map((code) => {
-      const { unmount } = render(
-        <MemoryRouter
-          initialEntries={[`/login?error=${code}`]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <Login />
-        </MemoryRouter>,
-      );
-      const text = screen.getByRole('alert').textContent;
-      unmount();
-      return text;
-    });
+it('announces provider failure and permits retry', async () => {
+  vi.mocked(xSignInService.start).mockRejectedValue(new Error('network unavailable'));
+  show();
+  fireEvent.click(screen.getByRole('button', { name: 'Continue with X' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't open X. Try again.");
+  expect(screen.getByRole('button', { name: 'Continue with X' })).toBeEnabled();
+});
 
-    expect(new Set(messages).size).toBe(codes.length);
-  });
-
-  it.each([
-    ['without an error code', '/login'],
-    ['with an unknown error code', '/login?error=something_else'],
-  ])('shows no error message %s', (_label, path) => {
-    renderLogin(path);
-
-    expect(screen.getByRole('heading', { name: 'Welcome to Pumpkit' })).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it("welcomes people by the Instance's app name", () => {
-    renderLogin('/login', { ...SELLS_PLANS, app_name: 'acmeWriter' });
-
-    expect(screen.getByRole('heading', { name: 'Welcome to acmeWriter' })).toBeInTheDocument();
-  });
-
-  it('tells people that continuing means agreeing to the Terms, with links to both documents', () => {
-    renderLogin('/login', WITH_OPERATOR);
-
-    const notice = screen.getByText(/^By continuing, you agree to the/);
-    expect(notice).toHaveTextContent(
-      'By continuing, you agree to the Terms and acknowledge the Privacy Policy.',
-    );
-    expect(within(notice).getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms');
-    expect(within(notice).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
-      'href',
-      '/privacy',
-    );
-  });
-
-  it('shows no Terms notice or company footer on an Instance without Operator details', () => {
-    renderLogin('/login');
-
-    expect(screen.queryByText(/you agree to the/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
-  });
-
-  it('offers Google next to the magic link when the Instance has Google sign-in', () => {
-    renderLogin('/login', { ...SELLS_PLANS, sign_in_methods: ['magic_link', 'google'] });
-
-    expect(screen.getByRole('button', { name: /google/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in with email' })).toBeInTheDocument();
-  });
-
-  it('offers only the magic link when the Instance has no Google sign-in', () => {
-    renderLogin('/login', { ...SELLS_PLANS, sign_in_methods: ['magic_link'] });
-
-    expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/google/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in with email' })).toBeInTheDocument();
-  });
-
-  it('sends no magic link while the email field is empty', () => {
-    renderLogin('/login');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
-
-    expect(authService.requestMagicLink).not.toHaveBeenCalled();
-  });
-
-  it('says the site does not accept an email the Sign-up allowlist refuses', async () => {
-    vi.mocked(authService.requestMagicLink).mockRejectedValueOnce({
-      response: { status: 403, data: { detail: 'email_not_allowed' } },
-    });
-    renderLogin('/login');
-
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'mallory@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /^This site doesn't accept sign-ins from that email address\.$/i,
-    );
-  });
+it('explains how to retry after missing confirmed email', () => {
+  show('?error=x_email_required');
+  expect(screen.getByRole('alert')).toHaveTextContent('Confirm an email address on X');
 });

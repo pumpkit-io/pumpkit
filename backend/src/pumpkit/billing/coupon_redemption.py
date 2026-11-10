@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.billing import coupon_service, service
-from pumpkit.billing.models import Coupon, CouponClaim, CouponHistory, FreeAccess
+from pumpkit.billing import coupon_service, service, trial_eligibility
+from pumpkit.billing.models import Coupon, CouponHistory, FreeAccess
 from pumpkit.billing.schemas import (
     CouponPreviewResponse,
     CouponRedemptionRequest,
@@ -114,10 +114,11 @@ async def grant(
     now: datetime,
 ) -> FreeAccess:
     candidates = await coupon_service.require_unclaimed(
-        db, coupon=coupon, email=user.email, config=settings
+        db, coupon=coupon, email=user.email, config=settings, x_user_id=user.x_user_id
     )
-    key_id, _ = settings.coupon_identity_keys()
-    claim = CouponClaim(coupon_id=coupon.id, key_id=key_id, fingerprint=candidates[key_id])
+    claim = coupon_service.new_claim(
+        coupon=coupon, user=user, candidates=candidates, config=settings
+    )
     db.add(claim)
     await db.flush()
     previous = await service.get_free_access(db, user_id=user.id, now=now)
@@ -154,6 +155,7 @@ async def grant(
     db.add(access)
     if await db.get(CouponHistory, user.id) is None:
         db.add(CouponHistory(user_id=user.id))
+    await trial_eligibility.exclude(db, user_id=user.id)
     coupon.redeemed_count += 1
     if coupon.redeemed_count == coupon.max_redemptions:
         coupon.unclaimable_at = now

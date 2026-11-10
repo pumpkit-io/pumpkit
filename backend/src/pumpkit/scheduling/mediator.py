@@ -29,6 +29,7 @@ from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from pumpkit.core.logging import logger
+from pumpkit.core.photos import PhotoFetcher
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import Clock, as_utc
@@ -83,8 +84,9 @@ from pumpkit.scheduling.schemas import (
 )
 from pumpkit.scheduling.top_up_charges import rebalance_top_ups
 from pumpkit.x_connection.models import XConnection
+from pumpkit.x_connection.profile_photo import sync_photo
 from pumpkit.x_connection.x_length import has_premium, x_post_max_chars
-from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
+from pumpkit.x_connection.x_publisher import X_SCOPES, XPublisher, XReconnectNeededError
 
 # Where the User sees their Posts; one Post's page is under it.
 POSTS_PAGE = "/posts"
@@ -176,12 +178,12 @@ async def list_past_communities(db: AsyncSession, user: User) -> PastCommunities
     return PastCommunitiesResponse(data=[_community_response(c.id, c.name) for c in past])
 
 
-async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnection:
+async def connection_to_publish_on(db: AsyncSession, *, user: User) -> XConnection:
     """The X connection a new or rescheduled Scheduled post targets, or a 409."""
-    connection = await x_connections_service.get_connection(db, user_id=user_id)
+    connection = await x_connections_service.get_connection(db, user_id=user.id)
     if connection is None:
         raise ConflictError("Connect your X account first.", fix_page=X_CONNECTION_PAGE)
-    if connection.needs_reconnect:
+    if x_connections_service.needs_reconnect(connection, user):
         raise ConflictError(
             "X no longer accepts Pumpkit's access to your account. Reconnect X first.",
             fix_page=X_CONNECTION_PAGE,
@@ -318,6 +320,7 @@ async def create_scheduled_post(
     user: User,
     new: NewScheduledPost,
     clock: Clock,
+    photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostResponse:
     """
     With `publish_now`, published within the request: Published, Failed, or back in scheduled.
@@ -325,7 +328,7 @@ async def create_scheduled_post(
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     now = clock()
-    connection = await connection_to_publish_on(db, user_id=user.id)
+    connection = await connection_to_publish_on(db, user=user)
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=new.post_id)
@@ -365,7 +368,13 @@ async def create_scheduled_post(
     )
     if new.publish_now and not hand_off:
         return await _post_now(
-            db, publisher, storage, scheduled_post_id=scheduled_post.id, now=now, clock=clock
+            db,
+            publisher,
+            storage,
+            scheduled_post_id=scheduled_post.id,
+            now=now,
+            clock=clock,
+            photo_fetcher=photo_fetcher,
         )
     await db.commit()
     return scheduled_post_response(scheduled_post, now=now)
@@ -430,6 +439,7 @@ async def _post_now(
     scheduled_post_id: str,
     now: datetime,
     clock: Clock,
+    photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostResponse:
     # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(
@@ -439,6 +449,7 @@ async def _post_now(
         scheduled_post_id=scheduled_post_id,
         now=now,
         clock=clock,
+        photo_fetcher=photo_fetcher,
     )
     published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
     return scheduled_post_response(published, now=clock())
@@ -464,6 +475,7 @@ async def edit_scheduled_post(
     scheduled_post_id: str,
     edit: ScheduledPostEdit,
     clock: Clock,
+    photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostResponse:
     """
     New Parts or the Post's Text, time, Community or share with followers for a scheduled or Failed
@@ -500,7 +512,7 @@ async def edit_scheduled_post(
     )
     reschedule = None
     connection = (
-        await connection_to_publish_on(db, user_id=user.id)
+        await connection_to_publish_on(db, user=user)
         if edit.reschedules
         else await x_connections_service.get_connection(db, user_id=user.id)
     )
@@ -549,7 +561,13 @@ async def edit_scheduled_post(
     await rebalance_top_ups(db, user_id=user.id, moments=moments, now=now)
     if edit.publish_now and not hand_off:
         return await _post_now(
-            db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
+            db,
+            publisher,
+            storage,
+            scheduled_post_id=scheduled_post_id,
+            now=now,
+            clock=clock,
+            photo_fetcher=photo_fetcher,
         )
     await db.commit()
     return scheduled_post_response(
@@ -1316,13 +1334,13 @@ async def _x_connection_response(
         handle=connection.handle,
         char_limit=x_post_max_chars(connection.subscription_type),
         premium=has_premium(connection.subscription_type),
-        needs_reconnect=connection.needs_reconnect,
+        needs_reconnect=x_connections_service.needs_reconnect(connection, user),
         needs_reconnect_for_media=x_connections_service.needs_reconnect_for_media(connection),
         scheduled_posts_waiting=await service.count_waiting(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id
         ),
         photo_url=connection.photo_url,
-        offer_photo=x_connections_service.offers_photo(connection, user),
+        offer_photo=False,
     )
 
 
@@ -1338,9 +1356,15 @@ async def get_x_connection(db: AsyncSession, user: User) -> XConnectionResponse:
 
 
 async def complete_x_authorization(
-    db: AsyncSession, publisher: XPublisher, user: User, code: str, state: str, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    photo_fetcher: PhotoFetcher,
+    user: User,
+    code: str,
+    state: str,
+    now: datetime,
 ) -> XConnectionResponse:
-    """Replaces the User's X connection, whichever X account it was for."""
+    """Restore publishing access only for the signed-in X identity."""
     user_id = user.id
     code_verifier = await x_connections_service.consume(db, user_id=user_id, state=state, now=now)
     # Commit the delete before calling X: the state is then spent even if X fails, and no
@@ -1350,19 +1374,35 @@ async def complete_x_authorization(
         raise BadRequestError("This X authorization expired or was already used. Connect X again.")
 
     try:
-        tokens = await publisher.exchange_code(code=code, code_verifier=code_verifier, now=now)
+        tokens = await publisher.exchange_code(
+            code=code,
+            code_verifier=code_verifier,
+            now=now,
+            required_scopes=X_SCOPES,
+        )
         account = await publisher.fetch_account(access_token=tokens.access_token)
     except XReconnectNeededError:
         raise BadRequestError("X didn't give Pumpkit access to your account. Connect X again.")
+
+    user = await users_service.require_locked_user(db, user_id=user_id, clock=lambda: now)
+    if user.x_user_id != account.user_id:
+        expected = f"@{user.x_handle}" if user.x_handle else "the X account you signed in with"
+        raise ConflictError(
+            f"Reconnect the same X account, {expected}. Sign out of X and retry with that account.",
+            code="X_ACCOUNT_MISMATCH",
+        )
 
     # The grant isn't revoked here: X may scope revocation to the account, cutting off its owner.
     owner = await x_connections_service.get_connection_by_x_user_id(db, x_user_id=account.user_id)
     if owner is not None and owner.user_id != user_id:
         raise _owned_elsewhere(account.handle)
     try:
+        if user.x_user_id is not None:
+            user.x_handle = account.handle
         connection = await x_connections_service.save_connection(
             db, user_id=user_id, account=account, tokens=tokens, now=now
         )
+        await sync_photo(db, user, photo_url=account.photo_url, photo_fetcher=photo_fetcher)
         await db.commit()
     except IntegrityError:
         # Another User connected the same X account between the check and the save.

@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError, MultipleResultsFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import MagicLink, User
@@ -16,7 +17,15 @@ async def get_user_by_email(
 ) -> Optional[User]:
     query = select(User).where(User.email == email)
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    try:
+        user = result.scalar_one_or_none()
+        if user is not None and user.x_user_id is not None:
+            raise ForbiddenError("Sign in with the X account that owns this profile.")
+        return user
+    except MultipleResultsFound as error:
+        raise ForbiddenError(
+            "This email belongs to more than one account. Contact support."
+        ) from error
 
 
 async def get_user_by_id(
@@ -46,28 +55,35 @@ class NameHints:
     display_name: Optional[str] = None
 
 
+async def create_user(
+    db: AsyncSession,
+    email: str,
+    hints: NameHints = NameHints(),
+) -> User:
+    """Create without resolving identity or committing the caller's transaction."""
+    normalized_email = email.strip().lower()
+    user = User(
+        email=normalized_email,
+        display_name=hints.display_name or normalized_email.split("@", 1)[0],
+        first_name=hints.first_name,
+        last_name=hints.last_name,
+        is_admin=False,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
 async def resolve_user_by_verified_email(
     db: AsyncSession,
     email: str,
     hints: NameHints = NameHints(),
 ) -> User:
-    """
-    Every Sign-in method resolves through here, so one email always reaches one User.
-    Flushes, never commits: the sign-in commits once with its Session.
-    """
+    """Legacy email identity resolution. Flushes, never commits."""
     normalized_email = email.strip().lower()
     user = await get_user_by_email(db=db, email=normalized_email)
     if user is None:
-        user = User(
-            email=normalized_email,
-            display_name=hints.display_name or normalized_email.split("@", 1)[0],
-            first_name=hints.first_name,
-            last_name=hints.last_name,
-            is_admin=False,
-        )
-        db.add(user)
-        await db.flush()
-        return user
+        return await create_user(db, normalized_email, hints)
 
     fill_empty_profile(user, hints)
     await db.flush()
@@ -111,7 +127,7 @@ def fill_empty_profile(user: User, hints: NameHints) -> None:
 
 def may_fill_photo(user: User) -> bool:
     """Whether Pumpkit may give the User a Photo on its own: they have none and never chose one."""
-    return user.avatar_data_url is None and user.photo_chosen_at is None
+    return user.x_user_id is None and user.avatar_data_url is None and user.photo_chosen_at is None
 
 
 async def fill_photo(db: AsyncSession, user: User, photo_data_url: str) -> None:
@@ -132,9 +148,20 @@ async def choose_photo(
     Save the Photo the User chose, or clear it with `None`, and mark the Photo chosen, so
     Pumpkit never fills it again. Flushes, never commits.
     """
+    require_photo_editable(user)
     user.avatar_data_url = photo_data_url
     if user.photo_chosen_at is None:
         user.photo_chosen_at = now
+    await db.flush()
+
+
+def require_photo_editable(user: User) -> None:
+    if user.x_user_id is not None:
+        raise ForbiddenError("Your photo is managed by X.")
+
+
+async def save_x_photo(db: AsyncSession, user: User, photo_data_url: Optional[str]) -> None:
+    user.avatar_data_url = photo_data_url
     await db.flush()
 
 
@@ -181,3 +208,32 @@ async def delete_account(db: AsyncSession, user: User) -> None:
     await db.execute(delete(MagicLink).where(MagicLink.email == user.email))
     await db.execute(delete(User).where(User.id == user.id))
     await db.flush()
+
+
+async def resolve_user_by_x_id(
+    db: AsyncSession, *, x_user_id: str, handle: str, email: str, display_name: Optional[str]
+) -> User:
+    query = (
+        select(User)
+        .where(User.x_user_id == x_user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    user = await db.scalar(query)
+    if user is None:
+        try:
+            async with db.begin_nested():
+                user = await create_user(
+                    db, email, NameHints(first_name=display_name, display_name=display_name)
+                )
+                user.x_user_id = x_user_id
+                await db.flush()
+        except IntegrityError:
+            # The stable-ID constraint elects one creator; a competing sign-in uses its account.
+            user = await db.scalar(query)
+            if user is None:
+                raise
+    user.email = email.strip().lower()
+    user.x_handle = handle
+    await db.flush()
+    return user

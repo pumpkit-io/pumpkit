@@ -8,6 +8,26 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - Users can switch annual subscriptions in Stripe classic mode to monthly billing after coupon free access without an immediate charge or lost access. Existing interrupted changes retain their original recovery request.
 
+## [0.11.0] - 2026-11-10
+
+- Self-hosters can explicitly opt a dedicated local worktree into real X sign-in with a registered loopback callback, while normal development and automated checks retain emulated X. The personal stack keeps separate data; manual publishing in this mode reaches real X.
+
+- Self-hosters can preview and explicitly reset one selected prelaunch test account and its attributable benefit fingerprints through the guarded account-deletion CLI. Ordinary deletion still preserves trial and coupon restrictions; issuance limits and unrelated records are not reset. The [cutover procedure](docs/x-only-cutover.md) keeps this exception separate from normal deletion.
+
+- Users can read updated English and Italian Terms and Privacy Policy covering X-only identity, profile data, per-X trials and retained eligibility after deletion. Self-hosting and agent guidance now describe the required X setup and inactive legacy flows. **Upgrade notes:** the current Terms date is `2026-11-10`; existing current-version acceptance checks apply at the next checkout or coupon confirmation. Review your own legal documents and deliver material-change notices before they apply, under your existing notice process.
+
+- Users sign in only with X, authorizing publishing in the same action, then choose their Persona after any paywall. Profile keeps name editing with X-managed identity and photo; reconnect restores only the same X account. Self-hosters must configure X app credentials and the lifetime trial identity key ring. **Upgrade notes:** apply migrations through `0057`, configure `X_CLIENT_ID`, `X_CLIENT_SECRET`, the registered `PUBLIC_URL/oauth/x/callback` callback and the full `TRIAL_IDENTITY_KEYS` ring, and preserve encryption and identity keys with database backups. Google and magic link implementations remain inactive regardless of credentials or SMTP. Existing accounts are never deleted by startup or migration; plan any deliberate prelaunch reset separately before cutover.
+
+- Users: Coupons retain both the X account and confirmed email to prevent repeat claims after contact changes or account deletion; confirmed benefits also permanently remove that X account’s introductory trial eligibility. **Upgrade notes:** Apply migration `0057` and preserve both Coupon and Trial identity key rings. Coupons remain disabled pending their existing activation gates.
+
+- Self-hosters can exercise X authorization locally and in CI with deterministic accounts, single-use PKCE codes and rotating refresh tokens. The managed stack supplies throwaway credentials and refuses publishing locally; production rejects provider URL overrides. Existing X sign-in entry points remain staged until cutover.
+
+- Users who sign in with X see their read-only handle and confirmed email in Profile, use their X photo automatically, and keep name editing without photo or account-replacement controls.
+
+- Users' introductory trial eligibility follows their stable X account across contact changes and account deletion, with only a minimal keyed eligibility record retained for the instance's lifetime. **Upgrade notes:** apply migration `0056`, configure and securely back up the complete `TRIAL_IDENTITY_KEYS` ring before X-only cutover, and retain historical keys when rotating or restoring backups; missing keys fail closed. This preparation does not enable the staged X sign-in routes or reset existing accounts.
+
+- Users signed in with X can restore publishing without buying a subscription. Reconnecting accepts only the same X account, disconnection cannot change their identity, and lost publishing access leaves their session open.
+
 - Users whose billing changes during coupon confirmation can review and retry without a stranded reservation when no renewal deferral was sent; earlier uncertain deferrals retain their recovery guards.
 
 - Users retain uncertain coupon claims and billing recovery after access expires; the English and Italian billing instructions and browser-storage disclosures match the app. **Upgrade notes:** apply migration `0053` and audit pre-0053 pending/refused deferrals before activation, as `docs/coupons.md` describes. Keep bundled Terms dates together and arrange any required material-change notice before applying them.

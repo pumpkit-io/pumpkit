@@ -7,6 +7,12 @@ export const SIGN_IN_ERROR = {
   accountSuspended: 'account_suspended',
   signInFailed: 'sign_in_failed',
   emailNotAllowed: 'email_not_allowed',
+  xEmailRequired: 'x_email_required',
+  xAuthorizationInvalid: 'x_authorization_invalid',
+  xAuthorizationCancelled: 'x_authorization_cancelled',
+  xPermissionsRequired: 'x_permissions_required',
+  xProviderFailed: 'x_provider_failed',
+  xAccountUnavailable: 'x_account_unavailable',
 } as const;
 
 export type SignInErrorCode = (typeof SIGN_IN_ERROR)[keyof typeof SIGN_IN_ERROR];

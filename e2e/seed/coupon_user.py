@@ -19,6 +19,7 @@ from pumpkit.billing.schemas import CouponIssueRequest
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.onboarding.models import OnboardingFinish
+from tests.browser_seed import bind_x_identity, x_id_for
 
 
 def require_emulator() -> None:
@@ -29,9 +30,7 @@ def require_emulator() -> None:
         or settings.STRIPE_SECRET_KEY != "sk_test_dev"
         or settings.STRIPE_COUPON_PORTAL_CONFIGURATION_ID != "bpc_coupon_management"
     ):
-        raise RuntimeError(
-            "Coupon journeys require the isolated local Emulator configuration."
-        )
+        raise RuntimeError("Coupon journeys require the isolated local Emulator configuration.")
 
 
 async def main() -> None:
@@ -42,15 +41,13 @@ async def main() -> None:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     async with _db_session_handler.async_session_maker() as db:
         if action in {"finish", "expire"}:
-            user = await db.scalar(select(User).where(User.email == sys.argv[2]))
+            user = await db.scalar(select(User).where(User.x_user_id == x_id_for(sys.argv[2])))
             assert user is not None
             if action == "finish":
                 if await db.get(OnboardingFinish, user.id) is None:
                     db.add(OnboardingFinish(user_id=user.id, finished_at=now))
             else:
-                access = await db.scalar(
-                    select(FreeAccess).where(FreeAccess.user_id == user.id)
-                )
+                access = await db.scalar(select(FreeAccess).where(FreeAccess.user_id == user.id))
                 assert access is not None
                 assert user.stripe_customer_id is None
                 access.starts_at = now - timedelta(days=40)
@@ -61,6 +58,7 @@ async def main() -> None:
             return
         email = f"e2e-coupon-{uuid4().hex}@e2e-user.dev"
         user = User(email=email, display_name="E2E Coupon", first_name="E2E")
+        bind_x_identity(user)
         db.add(user)
         await db.flush()
         if action.startswith("subscriber-"):
@@ -73,11 +71,7 @@ async def main() -> None:
             )
             user.stripe_customer_id = customer
             await db.commit()
-            plan_key = (
-                "pumpkit_pro_yearly"
-                if action.endswith("year")
-                else "pumpkit_pro_monthly"
-            )
+            plan_key = "pumpkit_pro_yearly" if action.endswith("year") else "pumpkit_pro_monthly"
             plan = (await gateway.list_plans([plan_key]))[0]
             checkout = await gateway.create_subscription_checkout(
                 customer_id=customer,
@@ -91,9 +85,7 @@ async def main() -> None:
                     settings.STRIPE_API_URL + "/checkout/" + checkout.id + "/pay"
                 )
                 assert result.status_code == 303
-            await service.sync_customer(
-                db, gateway, user_id=user.id, customer_id=customer
-            )
+            await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer)
             db.add(OnboardingFinish(user_id=user.id, finished_at=now))
         elif action != "new":
             raise ValueError("Unknown coupon journey")

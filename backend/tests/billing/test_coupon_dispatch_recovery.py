@@ -30,7 +30,7 @@ async def test_late_original_deferral_survives_rejected_retry_and_restart(
     db_session_maker,
     file_storage,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     monkeypatch,
     coverage,
     process_stop,
@@ -74,7 +74,7 @@ async def test_late_original_deferral_survives_rejected_retry_and_restart(
     fake_billing.fail_on.add("refuse_deferral")
     assert (await authed_client.get(REDEEM + "/redeem-test-0001")).json()["status"] == "pending"
     other = new_browser()
-    signed = await sign_in_by_magic_link(other, "capacity-competitor@example.com")
+    signed = await sign_in_for_test(other, "capacity-competitor@example.com")
     other.headers["Authorization"] = "Bearer " + signed.access_token
     assert (await other.post(PREVIEW, json={"code": code["code"]})).status_code == 409
     assert (await authed_client.post("/api/v1/billing/cancel-renewal")).status_code == 409
@@ -252,7 +252,7 @@ async def test_first_dispatch_known_unsent_after_target_expiry_releases_capacity
     fixed_clock,
     monkeypatch,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
 ):
     await monthly(db, user, fake_billing, fixed_clock)
     code = await coupons("--months", "1")
@@ -272,6 +272,11 @@ async def test_first_dispatch_known_unsent_after_target_expiry_releases_capacity
     assert answer.json()["status"] == "refused"
     assert fake_billing.deferrals == []
     other = new_browser()
-    signed = await sign_in_by_magic_link(other, "unsent-competitor@example.com")
+    signed = await sign_in_for_test(other, "unsent-competitor@example.com")
     other.headers["Authorization"] = "Bearer " + signed.access_token
     assert (await other.post(PREVIEW, json={"code": code["code"]})).status_code == 200
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

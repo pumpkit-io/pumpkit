@@ -19,6 +19,7 @@ from pumpkit.posts.service import set_text_from_version
 from pumpkit.scheduling.service import create as schedule_post
 from pumpkit.x_connection.service import save_connection
 from pumpkit.x_connection.x_publisher import XAccount, XTokens
+from tests.browser_seed import bind_x_identity, x_id_for
 
 EMAIL = "e2e-usage@e2e-user.dev"
 PARTS = ["Read this: https://example.com/usage"]
@@ -43,8 +44,9 @@ async def main() -> None:
     # Old enough to avoid the hourly writing-attempt limit, inside this Allowance period.
     written_at = now - timedelta(hours=2)
     async with _db_session_handler.async_session_maker() as db:
-        await db.execute(delete(User).where(User.email == EMAIL))
+        await db.execute(delete(User).where(User.x_user_id == x_id_for(EMAIL)))
         user = User(email=EMAIL, display_name="E2E Usage")
+        bind_x_identity(user)
         db.add(user)
         await db.flush()
         db.add_all(
@@ -78,12 +80,12 @@ async def main() -> None:
         await save_connection(
             db,
             user_id=user.id,
-            account=XAccount(user_id="e2e-x-usage", handle="e2e_usage", subscription_type="None"),
+            account=XAccount(user_id=x_id_for(EMAIL), handle="e2e_usage", subscription_type="None"),
             tokens=XTokens(
                 access_token="e2e-access",
                 refresh_token="e2e-refresh",
                 expires_at=now + timedelta(hours=2),
-                scope="tweet.read tweet.write users.read offline.access",
+                scope="tweet.read tweet.write users.read offline.access media.write",
             ),
             now=now,
         )
@@ -129,7 +131,7 @@ async def main() -> None:
         await schedule_post(
             db,
             user_id=user.id,
-            x_user_id="e2e-x-usage",
+            x_user_id=x_id_for(EMAIL),
             post_id=scheduled.id,
             parts=PARTS,
             publish_at=now + timedelta(hours=1),

@@ -15,7 +15,6 @@ from pumpkit.support.schemas import (
     HealthResponse,
     InstanceResponse,
     OperatorDetails,
-    SignInMethod,
 )
 
 router = APIRouter(tags=["support"])
@@ -62,13 +61,10 @@ async def instance(request: Request) -> InstanceResponse:
         if settings.is_posthog_configured()
         else None
     )
-    sign_in_methods: list[SignInMethod] = ["magic_link"]
-    if settings.is_google_configured():
-        sign_in_methods.append("google")
     return InstanceResponse(
         app_name=settings.APP_NAME,
         sells_plans=billing_service.sells_plans(),
-        sign_in_methods=sign_in_methods,
+        sign_in_methods=["x"],
         operator=_operator_details(),
         support_email=settings.SUPPORT_EMAIL or None,
         analytics=analytics,

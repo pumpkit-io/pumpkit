@@ -14,6 +14,9 @@ vi.mock('@/services/authService', () => ({
     getGoogleLoginUrl: vi.fn(),
   },
 }));
+vi.mock('@/services/xSignInService', () => ({
+  xSignInService: { complete: vi.fn(), start: vi.fn().mockRejectedValue(new Error('no network')) },
+}));
 vi.mock('@/services/userService', () => ({
   userService: {
     fetchProfile: vi.fn().mockResolvedValue({
@@ -49,6 +52,7 @@ vi.mock('@/services/billingService', () => ({
 
 import { session } from '@/lib/session';
 import { authService } from '@/services/authService';
+import { xSignInService } from '@/services/xSignInService';
 import { oauthConsentService } from '@/services/oauthConsentService';
 import { storageKey } from '@/lib/storage';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -59,6 +63,7 @@ import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { Login } from './Login';
 import { MagicLinkCallback } from './MagicLinkCallback';
+import { XSignInCallback } from './XSignInCallback';
 import { MagicLinkSent } from './MagicLinkSent';
 import { apiError, renderSignedIn } from './testing/signedInApp';
 
@@ -126,17 +131,9 @@ async function visitSignedOut(path: string) {
   await screen.findByRole('heading', { name: 'Welcome to Pumpkit' });
 }
 
-/** Asks for a Magic link on the sign-in page already on screen. */
-async function requestMagicLink() {
-  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
-  await screen.findByRole('heading', { name: 'Magic link sent' });
-}
-
-/** Starts Google sign-in, which stops in jsdom before Google's page. */
-async function startGoogle() {
-  fireEvent.click(screen.getByRole('button', { name: /Google/ }));
-  await screen.findByText("We couldn't start Google sign-in. Try again.");
+async function continueWithX() {
+  fireEvent.click(screen.getByRole('button', { name: 'Continue with X' }));
+  await screen.findByText("Couldn't open X. Try again.");
 }
 
 const MINUTE = 60 * 1000;
@@ -150,16 +147,29 @@ const callbacks = [
     path: '/oauth/google/callback',
     page: <GoogleAuthCallback />,
     error: 'sign_in_failed',
+    valid: VALID,
   },
   {
     name: 'Magic link',
     path: '/auth/magic-link/callback',
     page: <MagicLinkCallback />,
     error: 'invalid_magic_link',
+    valid: VALID,
+  },
+  {
+    name: 'X',
+    path: '/oauth/x/callback',
+    page: <XSignInCallback />,
+    error: 'x_authorization_invalid',
+    valid: '?code=valid&state=bound-state',
   },
 ];
 
 beforeEach(async () => {
+  vi.mocked(xSignInService.complete).mockResolvedValue({
+    accessToken: 'tok',
+    expiresAt: EXPIRES_AT,
+  });
   // Google's page can't open in jsdom, so a click stops after it starts the sign-in.
   vi.mocked(authService.getGoogleLoginUrl).mockRejectedValue(new Error('no network'));
   await session.end('other_tab');
@@ -174,9 +184,9 @@ afterEach(() => {
   storageSpies.splice(0).forEach((spy) => spy.mockRestore());
 });
 
-describe.each(callbacks)('the $name callback', ({ path, page, error }) => {
+describe.each(callbacks)('the $name callback', ({ path, page, error, valid }) => {
   it('starts the Session and replaces the callback entry with New post', async () => {
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
     expect(session.get()).toEqual({ accessToken: 'tok', expiresAt: EXPIRES_AT });
@@ -195,13 +205,13 @@ describe.each(callbacks)('the $name callback', ({ path, page, error }) => {
   });
 });
 
-describe.each(callbacks)('returning after the $name callback', ({ path, page }) => {
+describe.each(callbacks)('returning after the $name callback', ({ path, page, valid }) => {
   it('lands on the consent request the User was sent to sign in from', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
-    await requestMagicLink();
+    await continueWithX();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(
       await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -211,11 +221,11 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
   it('returns once: the next sign-in lands on New post', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
     cleanup();
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
     await screen.findByText('at /oauth/consent?request=req_1 via REPLACE');
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -226,7 +236,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     cleanup();
     vi.setSystemTime(Date.now() + 31 * MINUTE);
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -235,7 +245,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     await visitSignedOut('/settings');
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -250,7 +260,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
       JSON.stringify({ path: saved, savedAt: Date.now() }),
     );
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -266,21 +276,19 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
       await screen.findByText(/Return to Claude\./);
       cleanup();
 
-      renderCallback(path, page, VALID);
+      renderCallback(path, page, valid);
 
       expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
     },
   );
 
-  it('lands on the consent request after going back to use a different email', async () => {
+  it('lands on the consent request after retrying X sign-in', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
-    await requestMagicLink();
-    fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
-    await screen.findByRole('heading', { name: 'Welcome to Pumpkit' });
-    await requestMagicLink();
+    await continueWithX();
+    await continueWithX();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(
       await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -288,8 +296,8 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
   });
 
   it.each([
-    ['an invalid or expired Magic link', 'invalid_magic_link', requestMagicLink],
-    ['Google failing or being cancelled', 'sign_in_failed', startGoogle],
+    ['an expired X attempt', 'x_authorization_invalid', continueWithX],
+    ['X failing or being cancelled', 'x_authorization_cancelled', continueWithX],
   ])(
     'lands on the consent request when signing in again after %s',
     async (_label, errorCode, firstTry) => {
@@ -299,10 +307,10 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
       // The backend or the callback sends the browser back with an error, as a new page load.
       renderSignIn(`/login?error=${errorCode}`);
       await screen.findByRole('alert');
-      await requestMagicLink();
+      await continueWithX();
       cleanup();
 
-      renderCallback(path, page, VALID);
+      renderCallback(path, page, valid);
 
       expect(
         await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -317,10 +325,10 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     await screen.findByRole('alert');
     cleanup();
     renderSignIn('/login');
-    await requestMagicLink();
+    await continueWithX();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(
       await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -338,7 +346,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     );
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -361,10 +369,10 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     }
 
     await visitSignedOut('/oauth/consent?request=req_1');
-    await requestMagicLink();
+    await continueWithX();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });

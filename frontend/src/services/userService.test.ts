@@ -23,12 +23,13 @@ describe('userService.updateProfile', () => {
       firstName: 'Ada',
       lastName: null,
       avatarUrl: null,
+      xHandle: null,
     });
   });
 
   it('sends explicit nulls to clear fields', async () => {
     const patch = vi.spyOn(apiService, 'patch').mockResolvedValue({ data: response } as never);
-    await userService.updateProfile({ avatarUrl: null });
-    expect(patch).toHaveBeenCalledWith('/users/me', { avatar_data_url: null });
+    await userService.updateProfile({ firstName: null });
+    expect(patch).toHaveBeenCalledWith('/users/me', { first_name: null });
   });
 });

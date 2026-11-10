@@ -124,16 +124,16 @@ async def test_reconnecting_an_x_account_that_lost_its_photo_forgets_it(
 
 
 async def test_the_x_connection_outlives_the_session_it_was_made_in(
-    new_browser, sign_in_by_magic_link, user, subscribed, clock
+    new_browser, sign_in_for_test, user, subscribed, clock
 ):
     first = new_browser()
-    signed_in = await sign_in_by_magic_link(first, user.email)
+    signed_in = await sign_in_for_test(first, user.email)
     first.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     assert (await _connect(first)).status_code == 200
     assert (await first.post("/api/v1/logout")).status_code == 200
 
     second = new_browser()
-    signed_in = await sign_in_by_magic_link(second, user.email)
+    signed_in = await sign_in_for_test(second, user.email)
     second.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     response = await second.get(X_CONNECTION)
 
@@ -141,7 +141,7 @@ async def test_the_x_connection_outlives_the_session_it_was_made_in(
     assert response.json()["handle"] == "ada"
 
 
-async def test_connecting_another_x_account_replaces_the_x_connection(
+async def test_connecting_another_x_account_is_refused_without_replacement(
     client, subscribed, fake_x_publisher, clock
 ):
     await _connect(client)
@@ -149,22 +149,8 @@ async def test_connecting_another_x_account_replaces_the_x_connection(
 
     response = await _connect(client)
 
-    assert response.status_code == 200
-    assert (await client.get(X_CONNECTION)).json()["handle"] == "grace"
-
-
-async def test_an_x_account_connected_to_another_user_is_refused(
-    client, db, subscribed, fake_x_publisher, clock
-):
-    await _connect(client)
-    switch_back = await _sign_in_as_another_subscribed_user(db)
-
-    response = await _connect(client)
-
     assert response.status_code == 409
-    assert response.json()["detail"] == "@ada is already connected to another Pumpkit account."
-    assert (await client.get(X_CONNECTION)).status_code == 404
-    switch_back()
+    assert response.json()["code"] == "X_ACCOUNT_MISMATCH"
     assert (await client.get(X_CONNECTION)).json()["handle"] == "ada"
 
 
@@ -269,16 +255,16 @@ async def test_without_the_x_app_settings_connecting_says_so(
     assert "X_CLIENT_ID" in response.json()["detail"]
 
 
-async def test_disconnecting_removes_the_x_connection_and_revokes_its_grant(
+async def test_disconnection_is_unavailable_without_revoking_the_grant(
     client, subscribed, fake_x_publisher, clock
 ):
     await _connect(client)
 
     response = await client.delete(X_CONNECTION)
 
-    assert response.status_code == 204
-    assert (await client.get(X_CONNECTION)).status_code == 404
-    assert fake_x_publisher.revoked == ["refresh-1001-1"]
+    assert response.status_code == 405
+    assert (await client.get(X_CONNECTION)).json()["handle"] == "ada"
+    assert fake_x_publisher.revoked == []
 
 
 async def test_the_x_connection_counts_the_scheduled_posts_waiting_to_go_out_on_it(
@@ -303,48 +289,20 @@ async def test_the_x_connection_counts_the_scheduled_posts_waiting_to_go_out_on_
     assert response.json()["scheduled_posts_waiting"] == 2
 
 
-async def test_scheduled_posts_waiting_for_another_x_account_are_not_counted(
-    client, subscribed, fake_x_publisher, fixed_clock, post_with
-):
-    await _connect(client)
-    await client.post(
-        "/api/v1/scheduled-posts",
-        json={
-            "post_id": await post_with("For ada"),
-            "publish_at": "2026-10-11T09:00:00Z",
-        },
-    )
-    fake_x_publisher.account = XAccount(user_id="2002", handle="grace", subscription_type="None")
-
-    connected = await _connect(client)
-
-    assert connected.json()["scheduled_posts_waiting"] == 0
-
-
-async def test_disconnecting_succeeds_when_x_fails_to_revoke(
-    client, subscribed, fake_x_publisher, clock
-):
-    await _connect(client)
-    fake_x_publisher.fail_revoke = True
-
+async def test_disconnecting_without_an_x_connection_is_unavailable(client, subscribed):
     response = await client.delete(X_CONNECTION)
 
-    assert response.status_code == 204
-    assert (await client.get(X_CONNECTION)).status_code == 404
+    assert response.status_code == 405
 
 
-async def test_disconnecting_without_an_x_connection_returns_404(client, subscribed):
-    response = await client.delete(X_CONNECTION)
-
-    assert response.status_code == 404
-
-
-async def test_a_user_who_is_not_subscribed_cannot_connect(client, fake_x_publisher, clock):
+async def test_a_user_who_is_not_subscribed_can_recover_publishing_permission(
+    client, fake_x_publisher, clock
+):
     started = await client.post(AUTHORIZATIONS)
     completed = await client.post(COMPLETE, json={"code": "c", "state": "s"})
 
-    assert started.status_code == 403
-    assert completed.status_code == 403
+    assert started.status_code == 200
+    assert completed.status_code == 400
     assert fake_x_publisher.exchanges == []
 
 
@@ -372,7 +330,7 @@ async def test_tokens_are_stored_encrypted_and_never_returned(client, db, user, 
 
 async def _sign_in_as_another_subscribed_user(db) -> Callable[[], None]:
     """Make `client` act as Bob, a second Subscribed User; call the result to switch back."""
-    other = User(email="bob@example.com", display_name="Bob")
+    other = User(email="bob@example.com", display_name="Bob", x_user_id="2002", x_handle="grace")
     db.add(other)
     await db.flush()
     db.add(
@@ -414,7 +372,7 @@ async def test_an_x_connection_made_before_media_write_needs_reconnecting_for_me
     reconnected = await _connect(client)
 
     assert before["needs_reconnect_for_media"] is True
-    assert before["needs_reconnect"] is False
+    assert before["needs_reconnect"] is True
     assert reconnected.json()["needs_reconnect_for_media"] is False
 
 
@@ -425,4 +383,8 @@ async def test_a_code_exchange_answer_without_scopes_means_every_scope_asked_for
 
     connected = await _connect(client)
 
-    assert connected.json()["needs_reconnect_for_media"] is False
+    assert connected.status_code == 400
+    assert (
+        connected.json()["detail"]
+        == "X didn't give Pumpkit access to your account. Connect X again."
+    )

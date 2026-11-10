@@ -132,7 +132,9 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
                 user = await user_service.get_user_by_id(db=db, user_id=caller.user_id)
                 if user is None:
                     return tool_error(CREDENTIALS_INVALID)
-                if not await billing_service.has_access(db, user_id=user.id, now=clock()):
+                if tool.requires_subscription and not await billing_service.has_access(
+                    db, user_id=user.id, now=clock()
+                ):
                     return _subscription_needed()
                 call = ToolCall(
                     user=user,

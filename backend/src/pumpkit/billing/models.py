@@ -76,6 +76,16 @@ class Subscription(Base):
     user: Mapped["User"] = relationship()
 
 
+class TrialEligibility(Base):
+    """Lifetime trial eligibility for X accounts, independent of account and billing records."""
+
+    __tablename__ = "trial_eligibility"
+
+    key_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class StripeEvent(Base):
     """
     Idempotency log: the insert succeeds only for an unseen ``event.id``,
@@ -194,7 +204,15 @@ class Coupon(Base):
 
 class CouponClaim(Base):
     __tablename__ = "coupon_claims"
-    __table_args__ = (UniqueConstraint("coupon_id", "key_id", "fingerprint"),)
+    __table_args__ = (
+        UniqueConstraint("coupon_id", "key_id", "fingerprint"),
+        UniqueConstraint(
+            "coupon_id",
+            "key_id",
+            "x_fingerprint",
+            name="uq_coupon_claims_coupon_id_key_id_x_fingerprint",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: ulid_with_prefix("claim")
@@ -202,6 +220,7 @@ class CouponClaim(Base):
     coupon_id: Mapped[str] = mapped_column(ForeignKey("coupons.id"), index=True)
     key_id: Mapped[str] = mapped_column(String(64))
     fingerprint: Mapped[str] = mapped_column(String(64))
+    x_fingerprint: Mapped[Optional[str]] = mapped_column(String(64))
 
 
 class CouponHistory(Base):

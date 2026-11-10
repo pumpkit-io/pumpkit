@@ -12,6 +12,7 @@ dev:
 	$(DEV_COMPOSE) up --build
 
 check: check-backend check-frontend check-e2e
+	python3 scripts/tests/test_dev_stack.py
 
 check-backend:
 	cd backend && uv run ruff check .
@@ -46,10 +47,13 @@ fmt:
 # Given E2E_BASE_URL, it only waits for the stack already serving there.
 e2e:
 ifeq ($(origin E2E_BASE_URL),file)
-	$(DEV_COMPOSE) up -d --build
-endif
+	@set -e; url=$$(scripts/dev-stack up); \
+	$(MAKE) e2e-wait E2E_BASE_URL="$$url"; \
+	cd e2e && E2E_BASE_URL="$$url" npm test
+else
 	$(MAKE) e2e-wait
 	cd e2e && npm test
+endif
 
 e2e-wait:
 	@for url in $(E2E_BASE_URL)/api/v1/health $(E2E_BASE_URL); do \

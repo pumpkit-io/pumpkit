@@ -4,10 +4,13 @@ Sessions over HTTP: Magic link sign-in starts one, `/refresh-token` rotates it a
 """
 
 import jwt
+import pytest
 from httpx import AsyncClient, Response
 
 from pumpkit.core.config import settings
 from tests.conftest import callback_fragment, magic_link_token
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 def _subject(access_token: str) -> str:
@@ -66,12 +69,12 @@ async def test_magic_link_sign_in_refresh_and_logout_journey(new_browser, auth_o
 
 
 async def test_reusing_a_rotated_refresh_token_revokes_only_that_session(
-    new_browser, sign_in_by_magic_link, user
+    new_browser, sign_in_for_test, user
 ):
     browser = new_browser()
     other_browser = new_browser()
-    await sign_in_by_magic_link(browser, user.email)
-    await sign_in_by_magic_link(other_browser, user.email)
+    await sign_in_for_test(browser, user.email)
+    await sign_in_for_test(other_browser, user.email)
 
     stolen_cookie = browser.cookies["refresh_token"]
     assert (await browser.post("/api/v1/refresh-token")).status_code == 200
@@ -90,13 +93,11 @@ async def test_reusing_a_rotated_refresh_token_revokes_only_that_session(
     assert (await other_browser.post("/api/v1/refresh-token")).status_code == 200
 
 
-async def test_logout_ends_only_the_session_in_this_browser(
-    new_browser, sign_in_by_magic_link, user
-):
+async def test_logout_ends_only_the_session_in_this_browser(new_browser, sign_in_for_test, user):
     browser = new_browser()
     other_browser = new_browser()
-    await sign_in_by_magic_link(browser, user.email)
-    await sign_in_by_magic_link(other_browser, user.email)
+    await sign_in_for_test(browser, user.email)
+    await sign_in_for_test(other_browser, user.email)
     signed_out_cookie = browser.cookies["refresh_token"]
 
     assert (await browser.post("/api/v1/logout")).status_code == 200
@@ -133,6 +134,14 @@ async def test_authed_client_reaches_protected_endpoints_as_the_user(authed_clie
 
     assert me.status_code == 200
     assert me.json()["email"] == "alice@example.com"
+
+
+async def test_general_authenticated_setup_does_not_deliver_a_legacy_sign_in_link(
+    authed_client, auth_outbox
+):
+    assert (await authed_client.get("/api/v1/users/me")).status_code == 200
+    assert auth_outbox.messages == []
+    assert (await authed_client.post("/api/v1/refresh-token")).status_code == 200
 
 
 async def test_refresh_without_a_cookie_is_refused(new_browser):

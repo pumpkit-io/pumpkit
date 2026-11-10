@@ -5,6 +5,9 @@ from pumpkit.core.config import Settings
 
 # What a Self-hoster must set: everything else has a default or belongs to an optional provider.
 _INSTANCE_ENV = {
+    "X_CLIENT_ID": "test-x-client",
+    "X_CLIENT_SECRET": "test-x-secret",
+    "TRIAL_IDENTITY_KEYS": '{"active":"test","keys":{"test":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}',
     "PUBLIC_URL": "https://pumpkit.example.org",
     "POSTGRES_PASSWORD": "postgres",
     "JWT_SECRET_KEY": "test-secret-key-test-secret-key-0123456789",
@@ -363,6 +366,8 @@ _EMULATOR_ENV = {
     "GOOGLE_ISSUER": "http://google.emulate.pumpkit.localhost:1355",
     "GOOGLE_API_URL": "http://emulate:4000",
     "STRIPE_API_URL": "http://emulate:4001",
+    "X_AUTHORIZE_URL": "http://pumpkit-x.emulate.pumpkit.localhost:1355/i/oauth2/authorize",
+    "X_API_URL": "http://emulate:4002",
 }
 
 
@@ -396,3 +401,25 @@ def test_google_issuer_and_api_url_are_set_together(instance_env, key):
 
     with pytest.raises(ValidationError, match=other):
         instance_env(ENV="local", **{key: _EMULATOR_ENV[key]})
+
+
+@pytest.mark.parametrize("key", ["X_AUTHORIZE_URL", "X_API_URL"])
+def test_x_browser_and_server_urls_are_set_together(instance_env, key):
+    other = "X_API_URL" if key == "X_AUTHORIZE_URL" else "X_AUTHORIZE_URL"
+    with pytest.raises(ValidationError, match=other):
+        instance_env(ENV="local", **{key: _EMULATOR_ENV[key]})
+
+
+@pytest.mark.parametrize(
+    "ring",
+    [
+        "not-json",
+        "{}",
+        '{"active":"missing","keys":{}}',
+        '{"active":"v1","keys":{"v1":"too-short"}}',
+    ],
+)
+def test_configured_trial_identity_keys_fail_without_exposing_the_secret(instance_env, ring):
+    with pytest.raises(ValidationError, match="TRIAL_IDENTITY_KEYS") as error:
+        instance_env(TRIAL_IDENTITY_KEYS=ring)
+    assert ring not in str(error.value)

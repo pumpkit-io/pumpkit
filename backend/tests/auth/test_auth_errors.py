@@ -1,5 +1,6 @@
 import re
 
+import pytest
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 
@@ -8,6 +9,8 @@ import pumpkit.auth.service.refresh_tokens as refresh_tokens_service
 import pumpkit.auth.service.sessions as sessions
 from pumpkit.auth.models import User
 from tests.conftest import magic_link_token
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 async def _boom(*_args, **_kwargs):

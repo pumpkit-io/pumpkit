@@ -97,7 +97,7 @@ async def test_the_list_leaves_out_other_users_and_disconnected_apps(
     app,
     oauth_client,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     sells_no_plans,
 ):
     other_app = await register(app, REDIRECT, client_name="Cursor")
@@ -105,7 +105,7 @@ async def test_the_list_leaves_out_other_users_and_disconnected_apps(
     [kept] = await listed(authed_client)
     await authed_client.delete(f"{CONNECTIONS}/{kept['id']}")
     bob = new_browser()
-    signed_in = await sign_in_by_magic_link(bob, "bob@example.com")
+    signed_in = await sign_in_for_test(bob, "bob@example.com")
     bob.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     await connect(bob, app, other_app)
 
@@ -135,12 +135,12 @@ async def test_disconnecting_another_users_app_is_404_and_leaves_it_connected(
     app,
     oauth_client,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
 ):
     tokens = await connect(authed_client, app, oauth_client)
     [connected] = await listed(authed_client)
     bob = new_browser()
-    signed_in = await sign_in_by_magic_link(bob, "bob@example.com")
+    signed_in = await sign_in_for_test(bob, "bob@example.com")
     bob.headers["Authorization"] = f"Bearer {signed_in.access_token}"
 
     response = await bob.delete(f"{CONNECTIONS}/{connected['id']}")

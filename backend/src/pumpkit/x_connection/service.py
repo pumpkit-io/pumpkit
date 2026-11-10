@@ -50,6 +50,12 @@ def needs_reconnect_for_media(connection: XConnection) -> bool:
     return X_MEDIA_SCOPE not in connection.scopes.split()
 
 
+def needs_reconnect(connection: XConnection, user: User) -> bool:
+    return connection.needs_reconnect or (
+        user.x_user_id is not None and not set(X_SCOPES.split()).issubset(connection.scopes.split())
+    )
+
+
 async def check_takes_media(db: AsyncSession, *, user_id: str) -> None:
     """
     Refuses Media while the User's X connection lacks `media.write` (ADR 0021). Without an
@@ -185,7 +191,9 @@ class StartedAuthorization:
 async def start(db: AsyncSession, *, user_id: str, now: datetime) -> StartedAuthorization:
     """Store a new pending authorization for the User, dropping every expired one. Flushes."""
     await db.execute(delete(PendingXAuthorization).where(PendingXAuthorization.expires_at <= now))
-    started = StartedAuthorization(state=generate_token(32), code_verifier=new_code_verifier())
+    started = StartedAuthorization(
+        state="reconnect." + generate_token(32), code_verifier=new_code_verifier()
+    )
     db.add(
         PendingXAuthorization(
             state_hash=hash_token(started.state),

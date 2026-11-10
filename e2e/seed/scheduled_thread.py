@@ -16,6 +16,7 @@ from pumpkit.auth.models import User
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.service import set_text_from_version
+from tests.browser_seed import x_id_for
 
 E2E_EMAIL = "e2e@e2e-user.dev"
 PARTS = ["E2E Thread, Part one.", "E2E Thread, Part two."]
@@ -24,7 +25,9 @@ PARTS = ["E2E Thread, Part one.", "E2E Thread, Part two."]
 async def main() -> None:
     now = datetime.now(timezone.utc)
     async with _db_session_handler.async_session_maker() as db:
-        user = (await db.execute(select(User).where(User.email == E2E_EMAIL))).scalar_one()
+        user = (
+            await db.execute(select(User).where(User.x_user_id == x_id_for(E2E_EMAIL)))
+        ).scalar_one()
         post = Post(user_id=user.id, brief="E2E Thread", corpus_post_ids=[], created_at=now)
         version = VersionAttempt(
             post=post,

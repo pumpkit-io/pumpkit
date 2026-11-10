@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSubscribed } from '@/features/billing/useSubscribed';
-import { track } from '@/lib/analytics';
+import { isSubscriptionNeeded } from '@/features/billing/subscriptionNeeded';
+import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { redirectTo } from '@/lib/navigation';
-import { errorMessage, errorStatus } from '@/services/apiErrors';
-import type { UserProfile } from '@/services/userService';
+import { errorMessage } from '@/services/apiErrors';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { xConnectionReturn } from './xConnectionReturn';
 
-/** Shown wherever `acceptPhoto` rejects. */
-export const USE_X_PHOTO_FAILED = "Couldn't use your X photo. Try again.";
-
-/** The User's X connection, loaded on mount, with connect and disconnect. */
+/** The User's X connection, loaded on mount, with same-account recovery. */
 export function useXConnection() {
-  const { refresh: refreshSubscribed } = useSubscribed();
+  const { refresh: refreshOnboarding } = useOnboarding();
   /** Undefined while loading; null when there is none. */
   const [connection, setConnection] = useState<XConnection | null | undefined>(undefined);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -33,14 +29,14 @@ export function useXConnection() {
   /** A refusal for want of a Subscription shows the prompt to subscribe, not an error. */
   const fail = useCallback(
     (e: unknown, fallback: string) => {
-      if (errorStatus(e) === 403) {
+      if (isSubscriptionNeeded(e)) {
         setError(null);
-        refreshSubscribed();
+        void refreshOnboarding();
       } else {
         setError(errorMessage(e, fallback));
       }
     },
-    [refreshSubscribed],
+    [refreshOnboarding],
   );
 
   /**
@@ -64,20 +60,6 @@ export function useXConnection() {
     [fail],
   );
 
-  const disconnect = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await xConnectionService.disconnect();
-      setConnection(null);
-      track('x_disconnected');
-    } catch (e) {
-      fail(e, "Couldn't disconnect X. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  }, [fail]);
-
   /** Picks up a change the backend made, such as flagging the X connection for reconnecting. */
   const reload = useCallback(async () => {
     try {
@@ -87,32 +69,12 @@ export function useXConnection() {
     }
   }, []);
 
-  const answerPhotoOffer = useCallback(() => {
-    setConnection((current) => (current ? { ...current, offerPhoto: false } : current));
-  }, []);
-
-  /** Makes the X account's photo the User's Photo; rejects when it can't be copied. */
-  const acceptPhoto = useCallback(async (): Promise<UserProfile> => {
-    const profile = await xConnectionService.acceptPhoto();
-    answerPhotoOffer();
-    return profile;
-  }, [answerPhotoOffer]);
-
-  const declinePhoto = useCallback(() => {
-    answerPhotoOffer();
-    // A lost decline only means the offer comes back on the next visit.
-    xConnectionService.declinePhoto().catch(() => {});
-  }, [answerPhotoOffer]);
-
   return {
     connection,
     loadFailed,
     busy,
     error,
     connect,
-    disconnect,
     reload,
-    acceptPhoto,
-    declinePhoto,
   };
 }

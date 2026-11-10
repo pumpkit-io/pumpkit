@@ -5,6 +5,7 @@ from enum import StrEnum
 from typing import Annotated, Literal, Optional, Self
 from urllib.parse import urlsplit
 
+from cryptography.fernet import Fernet
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -19,7 +20,13 @@ _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "no
 BILLING_PAGE = "/billing"
 PAYWALL_PAGE = "/subscribe"
 
-_PROVIDER_URL_OVERRIDES = ("GOOGLE_ISSUER", "GOOGLE_API_URL", "STRIPE_API_URL")
+_PROVIDER_URL_OVERRIDES = (
+    "GOOGLE_ISSUER",
+    "GOOGLE_API_URL",
+    "STRIPE_API_URL",
+    "X_AUTHORIZE_URL",
+    "X_API_URL",
+)
 
 
 class ProviderGroup(StrEnum):
@@ -30,6 +37,32 @@ class ProviderGroup(StrEnum):
     POSTHOG = "PostHog"
     SMTP = "SMTP"
     OPERATOR_DETAILS = "Operator details"
+
+
+def _identity_keys(secret: SecretStr, setting: str) -> tuple[str, dict[str, bytes]]:
+    try:
+        value = json.loads(secret.get_secret_value())
+        if not isinstance(value, dict) or set(value) != {"active", "keys"}:
+            raise ValueError
+        active, encoded = value["active"], value["keys"]
+        if not isinstance(active, str) or not isinstance(encoded, dict) or active not in encoded:
+            raise ValueError
+        keys = {}
+        for key_id, key in encoded.items():
+            if (
+                not isinstance(key_id, str)
+                or not key_id
+                or len(key_id) > 64
+                or not isinstance(key, str)
+            ):
+                raise ValueError
+            decoded = base64.b64decode(key, validate=True)
+            if len(decoded) != 32:
+                raise ValueError
+            keys[key_id] = decoded
+        return active, keys
+    except (ValueError, TypeError, binascii.Error):
+        raise ValueError(f"{setting} needs an active key and base64-encoded 32-byte keys") from None
 
 
 class Settings(BaseSettings):
@@ -65,7 +98,7 @@ class Settings(BaseSettings):
     # Comma-separated addresses and `@domain` entries that may sign in; empty lets anyone in.
     SIGN_UP_ALLOWLIST: str = ""
 
-    # Optional group: Google sign-in is on only with both credentials.
+    # Inactive Google flow settings, retained for deliberate adaptations.
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     GOOGLE_NONCE_TOKEN_NUM_BYTES: int = 64
@@ -88,7 +121,7 @@ class Settings(BaseSettings):
     # Required with Operator details, since their company footer gives it as the contact address.
     SUPPORT_EMAIL: Optional[str] = None
 
-    # Optional group: Magic links are emailed only with a host and a from address, else logged.
+    # Inactive Magic link delivery settings, retained for deliberate adaptations.
     SMTP_HOST: Optional[str] = None
     EMAIL_FROM: Optional[str] = None
     # None means the security mode's standard port.
@@ -113,6 +146,8 @@ class Settings(BaseSettings):
     GENERATIONS_MONTHLY_CAP: Optional[int] = Field(default=500, ge=0)
     # The Top-up's one-off price, as a Stripe price lookup key; unset or empty sells no Top-ups.
     BILLING_TOP_UP_KEY: Optional[str] = None
+
+    TRIAL_IDENTITY_KEYS: SecretStr = SecretStr("")
 
     COUPONS_ENABLED: bool = False
     STRIPE_COUPON_PORTAL_CONFIGURATION_ID: Optional[str] = None
@@ -144,9 +179,11 @@ class Settings(BaseSettings):
     # Pinned, so a new Jev release changes no answer without a config change (ADR 0013).
     TYPESAFE_MODEL: str = "jev-1.13.0"
 
-    # Optional: when unset, pumpkit.x_connection.x_publisher raises XPublisherNotConfiguredError on use.
+    # Required by X sign-in and publishing on every Instance.
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
+    X_AUTHORIZE_URL: Optional[str] = None
+    X_API_URL: Optional[str] = None
 
     # Where Media files are kept until published; the compose files mount the `media` volume here.
     MEDIA_STORAGE_DIR: str = "/var/lib/pumpkit/media"
@@ -175,14 +212,22 @@ class Settings(BaseSettings):
     def _bare_origin(cls, value: str) -> str:
         origin = value.rstrip("/")
         parts = urlsplit(origin)
-        if parts.scheme not in ("http", "https") or not parts.netloc or parts.path:
+        if (
+            parts.scheme not in ("http", "https")
+            or not parts.netloc
+            or parts.path
+            or parts.query
+            or parts.fragment
+            or parts.username
+            or parts.password
+        ):
             raise ValueError(
-                f"PUBLIC_URL must be an http or https origin with no path, "
-                f"like https://pumpkit.example.org; got {value!r}"
+                "PUBLIC_URL must be an http or https origin with no path, "
+                "like https://pumpkit.example.org"
             )
         return origin
 
-    @field_validator("GOOGLE_ISSUER", "GOOGLE_API_URL", "STRIPE_API_URL")
+    @field_validator(*_PROVIDER_URL_OVERRIDES)
     @classmethod
     def _no_trailing_slash(cls, value: Optional[str]) -> Optional[str]:
         return value.rstrip("/") if value else None
@@ -199,6 +244,11 @@ class Settings(BaseSettings):
             missing = "GOOGLE_API_URL" if self.GOOGLE_ISSUER else "GOOGLE_ISSUER"
             raise ValueError(
                 f"GOOGLE_ISSUER and GOOGLE_API_URL must be set together; missing: {missing}"
+            )
+        if bool(self.X_AUTHORIZE_URL) != bool(self.X_API_URL):
+            missing = "X_API_URL" if self.X_AUTHORIZE_URL else "X_AUTHORIZE_URL"
+            raise ValueError(
+                f"X_AUTHORIZE_URL and X_API_URL must be set together; missing: {missing}"
             )
         return self
 
@@ -222,36 +272,27 @@ class Settings(BaseSettings):
             self.coupon_identity_keys()
         return self
 
-    def coupon_identity_keys(self) -> tuple[str, dict[str, bytes]]:
+    @model_validator(mode="after")
+    def _x_sign_in_prerequisites(self) -> Self:
+        missing = [
+            key
+            for key in ("X_CLIENT_ID", "X_CLIENT_SECRET")
+            if not (getattr(self, key) or "").strip()
+        ]
+        if missing:
+            raise ValueError(f"X sign-in requires: {', '.join(missing)}")
         try:
-            value = json.loads(self.COUPON_IDENTITY_KEYS.get_secret_value())
-            if not isinstance(value, dict) or set(value) != {"active", "keys"}:
-                raise ValueError
-            active, encoded = value["active"], value["keys"]
-            if (
-                not isinstance(active, str)
-                or not isinstance(encoded, dict)
-                or active not in encoded
-            ):
-                raise ValueError
-            keys = {}
-            for key_id, key in encoded.items():
-                if (
-                    not isinstance(key_id, str)
-                    or not key_id
-                    or len(key_id) > 64
-                    or not isinstance(key, str)
-                ):
-                    raise ValueError
-                decoded = base64.b64decode(key, validate=True)
-                if len(decoded) != 32:
-                    raise ValueError
-                keys[key_id] = decoded
-            return active, keys
-        except (ValueError, TypeError, binascii.Error):
-            raise ValueError(
-                "COUPON_IDENTITY_KEYS needs an active key and base64-encoded 32-byte keys"
-            ) from None
+            Fernet(self.FERNET_ENCRYPTION_KEY.encode())
+        except (ValueError, TypeError):
+            raise ValueError("FERNET_ENCRYPTION_KEY must be a valid Fernet key") from None
+        self.trial_identity_keys()
+        return self
+
+    def coupon_identity_keys(self) -> tuple[str, dict[str, bytes]]:
+        return _identity_keys(self.COUPON_IDENTITY_KEYS, "COUPON_IDENTITY_KEYS")
+
+    def trial_identity_keys(self) -> tuple[str, dict[str, bytes]]:
+        return _identity_keys(self.TRIAL_IDENTITY_KEYS, "TRIAL_IDENTITY_KEYS")
 
     def _provider_groups(self) -> dict[ProviderGroup, dict[str, object]]:
         """Each optional provider's required settings; empty values count as unset."""
