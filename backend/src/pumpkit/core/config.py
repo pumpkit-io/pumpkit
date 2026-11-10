@@ -32,6 +32,32 @@ class ProviderGroup(StrEnum):
     OPERATOR_DETAILS = "Operator details"
 
 
+def _identity_keys(secret: SecretStr, setting: str) -> tuple[str, dict[str, bytes]]:
+    try:
+        value = json.loads(secret.get_secret_value())
+        if not isinstance(value, dict) or set(value) != {"active", "keys"}:
+            raise ValueError
+        active, encoded = value["active"], value["keys"]
+        if not isinstance(active, str) or not isinstance(encoded, dict) or active not in encoded:
+            raise ValueError
+        keys = {}
+        for key_id, key in encoded.items():
+            if (
+                not isinstance(key_id, str)
+                or not key_id
+                or len(key_id) > 64
+                or not isinstance(key, str)
+            ):
+                raise ValueError
+            decoded = base64.b64decode(key, validate=True)
+            if len(decoded) != 32:
+                raise ValueError
+            keys[key_id] = decoded
+        return active, keys
+    except (ValueError, TypeError, binascii.Error):
+        raise ValueError(f"{setting} needs an active key and base64-encoded 32-byte keys") from None
+
+
 class Settings(BaseSettings):
     # A settings error is logged at startup; its input values would include every secret.
     model_config = SettingsConfigDict(hide_input_in_errors=True)
@@ -113,6 +139,8 @@ class Settings(BaseSettings):
     GENERATIONS_MONTHLY_CAP: Optional[int] = Field(default=500, ge=0)
     # The Top-up's one-off price, as a Stripe price lookup key; unset or empty sells no Top-ups.
     BILLING_TOP_UP_KEY: Optional[str] = None
+
+    TRIAL_IDENTITY_KEYS: SecretStr = SecretStr("")
 
     COUPONS_ENABLED: bool = False
     STRIPE_COUPON_PORTAL_CONFIGURATION_ID: Optional[str] = None
@@ -222,36 +250,17 @@ class Settings(BaseSettings):
             self.coupon_identity_keys()
         return self
 
+    @model_validator(mode="after")
+    def _trial_keys_when_configured(self) -> Self:
+        if self.TRIAL_IDENTITY_KEYS.get_secret_value():
+            self.trial_identity_keys()
+        return self
+
     def coupon_identity_keys(self) -> tuple[str, dict[str, bytes]]:
-        try:
-            value = json.loads(self.COUPON_IDENTITY_KEYS.get_secret_value())
-            if not isinstance(value, dict) or set(value) != {"active", "keys"}:
-                raise ValueError
-            active, encoded = value["active"], value["keys"]
-            if (
-                not isinstance(active, str)
-                or not isinstance(encoded, dict)
-                or active not in encoded
-            ):
-                raise ValueError
-            keys = {}
-            for key_id, key in encoded.items():
-                if (
-                    not isinstance(key_id, str)
-                    or not key_id
-                    or len(key_id) > 64
-                    or not isinstance(key, str)
-                ):
-                    raise ValueError
-                decoded = base64.b64decode(key, validate=True)
-                if len(decoded) != 32:
-                    raise ValueError
-                keys[key_id] = decoded
-            return active, keys
-        except (ValueError, TypeError, binascii.Error):
-            raise ValueError(
-                "COUPON_IDENTITY_KEYS needs an active key and base64-encoded 32-byte keys"
-            ) from None
+        return _identity_keys(self.COUPON_IDENTITY_KEYS, "COUPON_IDENTITY_KEYS")
+
+    def trial_identity_keys(self) -> tuple[str, dict[str, bytes]]:
+        return _identity_keys(self.TRIAL_IDENTITY_KEYS, "TRIAL_IDENTITY_KEYS")
 
     def _provider_groups(self) -> dict[ProviderGroup, dict[str, object]]:
         """Each optional provider's required settings; empty values count as unset."""

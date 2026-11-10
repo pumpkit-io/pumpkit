@@ -390,7 +390,7 @@ tar tzf pumpkit-media.tar.gz | wc -l
 
 **Check:** `tar` exits 0 and the second command prints a count of at least `1`, the archive's top directory.
 
-Also keep a copy of `.env`: without `FERNET_ENCRYPTION_KEY` a restored database cannot read its X connections.
+Also keep a protected copy of `.env`: without `FERNET_ENCRYPTION_KEY` a restored database cannot read its X connections. Keep the complete `TRIAL_IDENTITY_KEYS` ring encrypted separately and restore the matching historical keys with the database. Losing or replacing those keys prevents safe eligibility matching; billing refuses rather than restoring introductory trials. The minimal eligibility fingerprints survive account deletion for the instance's lifetime. See [X account trial eligibility](configuration.md#x-account-trial-eligibility) for rotation and retention.
 
 Restore, which replaces the database's contents with the backup's:
 
