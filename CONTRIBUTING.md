@@ -20,7 +20,7 @@ npm install                                   # repo root: installs the Husky pr
 make dev
 ```
 
-`make dev` runs the stack in `compose.dev.yml`, which bind-mounts `backend/` and `frontend/` and sets `PUBLIC_URL` to `http://localhost:5173`. Open the app at http://localhost:5173 and the API docs at http://localhost:8000/docs. Without SMTP, Magic links go to the backend log (`docker compose -f compose.dev.yml logs backend | grep "Magic link for"`). To add a real key later, edit its line in `.env`: `setup.sh` keeps values already there.
+Use `scripts/dev-stack up` for isolated local work. It prints this worktree's Dev URL, starts provider stand-ins with throwaway credentials, and disables external publishing, email and analytics. Check and stop it through the same contract; see [the dev stack guide](docs/agents/dev-stack.md). Before the X-only cutover, its separate `scripts/dev-stack staged-x-url` fixture exercises the complete prepared X sign-in flow while normal app routes remain unmounted. No live Google, X or mail credentials are needed for browser authentication tests.
 
 ### Make targets
 
@@ -36,7 +36,7 @@ CI runs these same targets, so a branch that passes them locally passes CI.
 
 Each package also has its own targets: `check-backend`, `check-frontend`, `check-e2e`, `test-backend` and `test-frontend`. Run `make check test` before you push.
 
-The e2e suite checks Plan and Usage in Settings, so `make e2e` needs the Stripe billing group in `.env`. Dummy values work: `STRIPE_SECRET_KEY=sk_test_dummy`, `STRIPE_PUBLISHABLE_KEY=pk_test_dummy`, `STRIPE_WEBHOOK_SECRET=whsec_dummy` and `BILLING_PLAN_KEYS='["pumpkit_pro_monthly"]'`, plus `BILLING_TOP_UP_KEY=pumpkit_top_up`. Set `GENERATIONS_MONTHLY_CAP=500`, `X_POSTS_MONTHLY_CAP=100` and `X_LINK_POSTS_MONTHLY_CAP=10`. The usage tests seed a separate User before each test and stub the Stripe-backed catalog response; usage and generation refusals come from the backend. Purchase dialogs are cancelled before payment. Use only dummy billing credentials.
+The contract supplies the dummy Stripe billing group and Top-up key for browser tests; do not add live billing credentials for this purpose. Set `GENERATIONS_MONTHLY_CAP=500`, `X_POSTS_MONTHLY_CAP=100` and `X_LINK_POSTS_MONTHLY_CAP=10` in `.env`. Usage tests seed their own X-identified User and stub the catalog response. Real Checkout interactions run only against the isolated Stripe stand-in.
 
 ### Stripe webhooks
 

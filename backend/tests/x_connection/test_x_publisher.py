@@ -54,6 +54,49 @@ def test_the_challenge_has_no_padding():
     assert "=" not in code_challenge_for("a")
 
 
+@respx.mock
+async def test_local_x_overrides_cover_authorization_tokens_profile_and_publishing(monkeypatch):
+    monkeypatch.setattr(settings, "X_AUTHORIZE_URL", "http://x.local/i/oauth2/authorize")
+    monkeypatch.setattr(settings, "X_API_URL", "http://x.internal")
+    publisher = OfficialXPublisher()
+    authorize = publisher.build_authorize_url(
+        state="bound", code_challenge="challenge", scopes=X_SIGN_IN_SCOPES
+    )
+    assert authorize.startswith("http://x.local/i/oauth2/authorize?")
+    respx.post("http://x.internal/2/oauth2/token").respond(
+        200,
+        json={
+            "access_token": "local-access",
+            "refresh_token": "local-refresh",
+            "scope": X_SIGN_IN_SCOPES,
+        },
+    )
+    tokens = await publisher.exchange_code(
+        code="local-code",
+        code_verifier="verifier",
+        now=datetime.now(timezone.utc),
+        required_scopes=X_SIGN_IN_SCOPES,
+    )
+    respx.get("http://x.internal/2/users/me").respond(
+        200,
+        json={
+            "data": {
+                "id": "1001",
+                "username": "ada",
+                "name": "Ada",
+                "confirmed_email": "ada@example.com",
+            }
+        },
+    )
+    account = await publisher.fetch_account(access_token=tokens.access_token, for_sign_in=True)
+    assert account.confirmed_email == "ada@example.com"
+    respx.post("http://x.internal/2/tweets").respond(
+        403, json={"detail": "Local publishing disabled"}
+    )
+    with pytest.raises(XPostRejectedError):
+        await publisher.publish(access_token=tokens.access_token, text="Never sent to X")
+
+
 def test_a_verifier_is_a_fresh_43_to_128_character_string():
     first, second = new_code_verifier(), new_code_verifier()
 

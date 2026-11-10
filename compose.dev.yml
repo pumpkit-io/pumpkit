@@ -4,7 +4,6 @@
 name: pumpkit-dev
 
 services:
-
   db:
     image: postgres:15-alpine
     environment:
@@ -16,7 +15,7 @@ services:
     ports:
       - ${DEV_DB_BIND:-5432}:5432
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 10s
       timeout: 5s
 
@@ -31,13 +30,15 @@ services:
       - --host
       - 0.0.0.0
       - --port
-      - "4000"
+      - '4000'
       - --service
       - ${EMULATE_SERVICES:-google,pumpkit-stripe}
       - --base-url
       - ${EMULATE_BASE_URL:-http://localhost:4000}
     environment:
       DEV_PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
+      DEV_STAGED_X_URL: ${DEV_STAGED_X_URL:-http://localhost:5174}
+      X_API_URL: ${X_API_URL:-}
       STRIPE_WEBHOOK_URL: ${STRIPE_WEBHOOK_URL:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     volumes:
@@ -46,6 +47,7 @@ services:
     ports:
       - 127.0.0.1::4000
       - 127.0.0.1::4001
+      - 127.0.0.1::4002
 
   backend:
     build:
@@ -58,7 +60,7 @@ services:
       ENV: local
       PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
       POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
+      POSTGRES_PORT: '5432'
       # Safe-mode switches: read from .env unless scripts/dev-stack overrides them.
       PUBLISHER_ENABLED: ${PUBLISHER_ENABLED:-true}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -108,6 +110,17 @@ services:
       - ${DEV_WEB_BIND:-5173}:5173
     depends_on:
       - backend
+
+  staged-x:
+    extends:
+      service: backend
+    profiles: [emulators]
+    command: python -m uvicorn tests.staged_x_app:create_app --factory --host 0.0.0.0 --port 8000
+    ports: !override
+      - 127.0.0.1::8000
+    depends_on:
+      backend:
+        condition: service_started
 
 volumes:
   postgres_data:

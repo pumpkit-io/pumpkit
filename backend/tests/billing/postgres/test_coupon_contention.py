@@ -55,15 +55,15 @@ async def test_independent_requests_cannot_duplicate_identity_or_take_last_slot(
     db_engine,
     db_session_maker,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     coupons,
     fake_billing,
     same_identity,
 ):
-    first = await browser_for(new_browser, sign_in_by_magic_link, "first@example.com")
+    first = await browser_for(new_browser, sign_in_for_test, "first@example.com")
     second = await browser_for(
         new_browser,
-        sign_in_by_magic_link,
+        sign_in_for_test,
         "first@example.com" if same_identity else "second@example.com",
     )
     created = await coupons("--max-redemptions", "5" if same_identity else "1")
@@ -93,9 +93,9 @@ async def test_independent_requests_cannot_duplicate_identity_or_take_last_slot(
 
 @pytest.mark.parametrize("boundary", ["deadline", "preview"])
 async def test_waiting_confirmation_rechecks_deadline_and_preview_expiry(
-    db_engine, db_session_maker, new_browser, sign_in_by_magic_link, coupons, fixed_clock, boundary
+    db_engine, db_session_maker, new_browser, sign_in_for_test, coupons, fixed_clock, boundary
 ):
-    browser = await browser_for(new_browser, sign_in_by_magic_link, "waiting@example.com")
+    browser = await browser_for(new_browser, sign_in_for_test, "waiting@example.com")
     created = await coupons(
         *(
             ["--claim-deadline", (fixed_clock() + timedelta(minutes=1)).isoformat()]
@@ -116,9 +116,9 @@ async def test_waiting_confirmation_rechecks_deadline_and_preview_expiry(
 
 
 async def test_same_operation_concurrent_confirmation_recovers_one_result(
-    db_engine, db_session_maker, new_browser, sign_in_by_magic_link, coupons
+    db_engine, db_session_maker, new_browser, sign_in_for_test, coupons
 ):
-    browser = await browser_for(new_browser, sign_in_by_magic_link, "replay@example.com")
+    browser = await browser_for(new_browser, sign_in_for_test, "replay@example.com")
     created = await coupons()
     offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
     async with db_session_maker() as control:
@@ -133,9 +133,9 @@ async def test_same_operation_concurrent_confirmation_recovers_one_result(
 
 
 async def test_disable_contends_with_claim_without_revoking_a_committed_benefit(
-    db_engine, db_session_maker, new_browser, sign_in_by_magic_link, coupons
+    db_engine, db_session_maker, new_browser, sign_in_for_test, coupons
 ):
-    browser = await browser_for(new_browser, sign_in_by_magic_link, "disabled@example.com")
+    browser = await browser_for(new_browser, sign_in_for_test, "disabled@example.com")
     created = await coupons()
     offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
     async with db_session_maker() as control:
@@ -157,13 +157,13 @@ async def test_deletion_and_claim_serialize_without_orphaned_grant(
     db_engine,
     db_session_maker,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     coupons,
     fake_billing,
     file_storage,
 ):
 
-    browser = await browser_for(new_browser, sign_in_by_magic_link, "deleted@example.com")
+    browser = await browser_for(new_browser, sign_in_for_test, "deleted@example.com")
     created = await coupons("--max-redemptions", "2")
     offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
     async with db_session_maker() as control:
@@ -188,15 +188,15 @@ async def test_deletion_and_claim_serialize_without_orphaned_grant(
     assert status == 0
     assert result.status_code in [200, 403]
     assert (await browser.get("/api/v1/billing/me")).status_code == 401
-    recreated = await browser_for(new_browser, sign_in_by_magic_link, "deleted@example.com")
+    recreated = await browser_for(new_browser, sign_in_for_test, "deleted@example.com")
     retry = await recreated.post(PREVIEW, json={"code": created["code"]})
     assert retry.status_code == (409 if result.status_code == 200 else 200)
 
 
 async def test_rotating_active_key_between_same_email_requests_cannot_create_another_claim(
-    new_browser, sign_in_by_magic_link, coupons, monkeypatch
+    new_browser, sign_in_for_test, coupons, monkeypatch
 ):
-    browser = await browser_for(new_browser, sign_in_by_magic_link, "rotation@example.com")
+    browser = await browser_for(new_browser, sign_in_for_test, "rotation@example.com")
     created = await coupons("--max-redemptions", "2")
     offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
     assert (await browser.post(REDEEM, json=confirmation(offer))).status_code == 200
@@ -204,7 +204,7 @@ async def test_rotating_active_key_between_same_email_requests_cannot_create_ano
     ring["keys"]["v2"] = "MTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTE="
     ring["active"] = "v2"
     monkeypatch.setattr(settings, "COUPON_IDENTITY_KEYS", SecretStr(json.dumps(ring)))
-    second = await browser_for(new_browser, sign_in_by_magic_link, "rotation@example.com")
+    second = await browser_for(new_browser, sign_in_for_test, "rotation@example.com")
     assert (
         await second.post(REDEEM, json=confirmation(offer, "rotated-second-operation"))
     ).status_code == 409
@@ -215,7 +215,7 @@ async def test_deletion_checks_a_publisher_claim_committed_while_it_waited_for_t
     db_engine,
     db_session_maker,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     coupons,
     fixed_clock,
     user,
@@ -226,7 +226,7 @@ async def test_deletion_checks_a_publisher_claim_committed_while_it_waited_for_t
     file_storage,
 ):
     fixed_clock.advance(timedelta(seconds=-30))
-    browser = await browser_for(new_browser, sign_in_by_magic_link, user.email)
+    browser = await browser_for(new_browser, sign_in_for_test, user.email)
     created = await coupons()
     offer = (await browser.post(PREVIEW, json={"code": created["code"]})).json()
     assert (await browser.post(REDEEM, json=confirmation(offer))).status_code == 200
@@ -265,9 +265,9 @@ async def test_deletion_checks_a_publisher_claim_committed_while_it_waited_for_t
 
 
 async def test_concurrent_distinct_appends_require_a_fresh_offer_without_lost_months(
-    db_engine, db_session_maker, new_browser, sign_in_by_magic_link, coupons, fixed_clock
+    db_engine, db_session_maker, new_browser, sign_in_for_test, coupons, fixed_clock
 ):
-    browser = await browser_for(new_browser, sign_in_by_magic_link, "appending@example.com")
+    browser = await browser_for(new_browser, sign_in_for_test, "appending@example.com")
     initial = await coupons("--months", "1")
     offer = (await browser.post(PREVIEW, json={"code": initial["code"]})).json()
     assert (await browser.post(REDEEM, json=confirmation(offer))).status_code == 200

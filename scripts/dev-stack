@@ -21,7 +21,7 @@ safe_mode_env() {
 }
 
 # Emulators, as "<service> <path that answers 200>".
-EMULATORS=("google /.well-known/openid-configuration" "pumpkit-stripe /_emulate")
+EMULATORS=("google /.well-known/openid-configuration" "pumpkit-stripe /_emulate" "pumpkit-x /_pumpkit/events")
 
 # compose.emulators.yml hands these to the backend over .env's, so .env's real keys never reach an Emulator.
 emulator_env() {
@@ -29,7 +29,10 @@ emulator_env() {
   GOOGLE_ISSUER=$(emulator_url google)
   GOOGLE_API_URL=$(b_emulator_api_url google)
   STRIPE_API_URL=$(b_emulator_api_url pumpkit-stripe)
+  X_AUTHORIZE_URL="$(emulator_url pumpkit-x)/i/oauth2/authorize"
+  X_API_URL=$(b_emulator_api_url pumpkit-x)
   export GOOGLE_ISSUER GOOGLE_API_URL STRIPE_API_URL
+  export X_AUTHORIZE_URL X_API_URL
   export GOOGLE_CLIENT_ID="pumpkit-dev" GOOGLE_CLIENT_SECRET="pumpkit-dev-secret"
   export STRIPE_SECRET_KEY="sk_test_dev" STRIPE_PUBLISHABLE_KEY="pk_test_dev"
   export STRIPE_WEBHOOK_URL="http://backend:8000/api/v1/stripe/webhook" STRIPE_WEBHOOK_SECRET="whsec_dev"
@@ -111,6 +114,7 @@ init_names() {
   fi
   # Compose files interpolate it on every command, not only on up.
   export "$APP_URL_VAR=$DEV_URL"
+  export DEV_STAGED_X_URL="${DEV_URL%%"$HOST"*}${ROUTE%"$PROJECT"}staged-x.$PROJECT.localhost${DEV_URL#*"$HOST"}"
 }
 
 # In HTTPS mode, trust the Portless CA for this request only.
@@ -240,10 +244,18 @@ b_up() {
   # The backend's start.sh migrates; e2e seeds its own User, so there is no seed step.
   b_compose up -d --build --wait >&2 || die "docker compose up failed; see: scripts/dev-stack logs"
   # e2e/backend.ts runs seed scripts in this project when E2E_BASE_URL is this Dev URL.
-  printf '%s\n%s\n' "$DEV_URL" "$COMPOSE_PROJECT" >"$STATE_DIR/e2e-target"
+  printf '%s\n%s\n%s\n' "$DEV_URL" "$COMPOSE_PROJECT" "$DEV_STAGED_X_URL" >"$STATE_DIR/e2e-target"
   local hostport
   hostport=$(b_compose port "$B_WEB_SERVICE" "$B_WEB_PORT") || die "$B_WEB_SERVICE does not publish port $B_WEB_PORT"
   b_alias "$ROUTE" "${hostport##*:}"
+  hostport=$(b_compose port staged-x 8000) || die "staged-x does not publish its browser fixture port"
+  b_alias "${ROUTE%"$PROJECT"}staged-x.$PROJECT" "${hostport##*:}"
+  local deadline=$((SECONDS + HEALTH_TIMEOUT))
+  until answers "$DEV_STAGED_X_URL/"; do
+    b_service_alive staged-x || die "the staged X fixture exited; see: scripts/dev-stack logs staged-x"
+    [ "$SECONDS" -lt "$deadline" ] || die "the staged X fixture did not answer; see: scripts/dev-stack logs staged-x"
+    sleep 1
+  done
 }
 
 b_remove_routes() {
@@ -268,7 +280,7 @@ b_destroy() {
 
 b_logs() { b_compose logs --no-color --tail 200 ${1+"$1"}; }
 
-usage() { printf 'usage: scripts/dev-stack up|down|destroy|url|status|logs [service]\n' >&2; }
+usage() { printf 'usage: scripts/dev-stack up|down|destroy|url|staged-x-url|status|logs [service]\n' >&2; }
 
 case "${1:-}" in
   up)
@@ -294,6 +306,10 @@ case "${1:-}" in
   url)
     init_names
     printf '%s\n' "$DEV_URL"
+    ;;
+  staged-x-url)
+    init_names
+    printf '%s\n' "$DEV_STAGED_X_URL"
     ;;
   status)
     init_names

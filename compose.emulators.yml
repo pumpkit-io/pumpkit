@@ -4,6 +4,10 @@ x-emulator-environment: &emulator-environment
   GOOGLE_API_URL: ${GOOGLE_API_URL:-}
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  X_AUTHORIZE_URL: ${X_AUTHORIZE_URL:-}
+  X_API_URL: ${X_API_URL:-}
+  X_CLIENT_ID: pumpkit-dev-x
+  X_CLIENT_SECRET: pumpkit-dev-x-secret
   STRIPE_API_URL: ${STRIPE_API_URL:-}
   STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
   STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
@@ -17,3 +21,7 @@ services:
     environment: *emulator-environment
   publisher:
     environment: *emulator-environment
+  staged-x:
+    environment:
+      <<: *emulator-environment
+      PUBLIC_URL: ${DEV_STAGED_X_URL:-http://localhost:5174}

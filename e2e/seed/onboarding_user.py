@@ -27,6 +27,7 @@ from pumpkit.billing.models import Subscription
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.onboarding.models import OnboardingFinish
 from pumpkit.x_connection.models import XConnection
+from tests.browser_seed import bind_x_identity, x_id_for
 
 E2E_EMAIL = "e2e-onboarding@e2e-user.dev"
 AUTHOR = "e2e_author"
@@ -36,10 +37,13 @@ MISSING_HANDLE = "e2e_not_on_x"
 async def main() -> None:
     now = datetime.now(timezone.utc)
     async with _db_session_handler.async_session_maker() as db:
-        user = (await db.execute(select(User).where(User.email == E2E_EMAIL))).scalar_one_or_none()
+        user = (
+            await db.execute(select(User).where(User.x_user_id == x_id_for(E2E_EMAIL)))
+        ).scalar_one_or_none()
         if user is None:
             user = User(email=E2E_EMAIL, display_name="E2E Newcomer", first_name="E2E")
             db.add(user)
+        bind_x_identity(user)
         await db.flush()
 
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))

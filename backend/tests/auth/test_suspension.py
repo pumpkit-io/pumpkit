@@ -42,12 +42,12 @@ async def test_a_magic_link_refused_for_suspension_stays_used(
 
 
 async def test_suspending_a_signed_in_user_refuses_their_refresh_and_revokes_all_sessions(
-    new_browser, sign_in_by_magic_link, suspend_user, lift_suspension, user
+    new_browser, sign_in_for_test, suspend_user, lift_suspension, user
 ):
     browser = new_browser()
     other_browser = new_browser()
-    await sign_in_by_magic_link(browser, user.email)
-    await sign_in_by_magic_link(other_browser, user.email)
+    await sign_in_for_test(browser, user.email)
+    await sign_in_for_test(other_browser, user.email)
 
     await suspend_user(user.email)
     refused = await browser.post("/api/v1/refresh-token")
@@ -61,17 +61,17 @@ async def test_suspending_a_signed_in_user_refuses_their_refresh_and_revokes_all
     assert (await browser.post("/api/v1/refresh-token")).status_code == 401
     assert (await other_browser.post("/api/v1/refresh-token")).status_code == 401
 
-    await sign_in_by_magic_link(browser, user.email)
+    await sign_in_for_test(browser, user.email)
     assert (await browser.post("/api/v1/refresh-token")).status_code == 200
 
 
 async def test_a_suspended_user_replaying_a_rotated_refresh_token_is_refused_as_suspended(
-    new_browser, sign_in_by_magic_link, suspend_user, lift_suspension, user
+    new_browser, sign_in_for_test, suspend_user, lift_suspension, user
 ):
     browser = new_browser()
     other_browser = new_browser()
-    await sign_in_by_magic_link(browser, user.email)
-    await sign_in_by_magic_link(other_browser, user.email)
+    await sign_in_for_test(browser, user.email)
+    await sign_in_for_test(other_browser, user.email)
     rotated_away = browser.cookies["refresh_token"]
     assert (await browser.post("/api/v1/refresh-token")).status_code == 200
 

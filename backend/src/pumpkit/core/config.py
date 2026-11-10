@@ -19,7 +19,13 @@ _SMTP_DEFAULT_PORTS: dict[SmtpSecurity, int] = {"starttls": 587, "tls": 465, "no
 BILLING_PAGE = "/billing"
 PAYWALL_PAGE = "/subscribe"
 
-_PROVIDER_URL_OVERRIDES = ("GOOGLE_ISSUER", "GOOGLE_API_URL", "STRIPE_API_URL")
+_PROVIDER_URL_OVERRIDES = (
+    "GOOGLE_ISSUER",
+    "GOOGLE_API_URL",
+    "STRIPE_API_URL",
+    "X_AUTHORIZE_URL",
+    "X_API_URL",
+)
 
 
 class ProviderGroup(StrEnum):
@@ -175,6 +181,8 @@ class Settings(BaseSettings):
     # Optional: when unset, pumpkit.x_connection.x_publisher raises XPublisherNotConfiguredError on use.
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
+    X_AUTHORIZE_URL: Optional[str] = None
+    X_API_URL: Optional[str] = None
 
     # Where Media files are kept until published; the compose files mount the `media` volume here.
     MEDIA_STORAGE_DIR: str = "/var/lib/pumpkit/media"
@@ -210,7 +218,7 @@ class Settings(BaseSettings):
             )
         return origin
 
-    @field_validator("GOOGLE_ISSUER", "GOOGLE_API_URL", "STRIPE_API_URL")
+    @field_validator(*_PROVIDER_URL_OVERRIDES)
     @classmethod
     def _no_trailing_slash(cls, value: Optional[str]) -> Optional[str]:
         return value.rstrip("/") if value else None
@@ -227,6 +235,11 @@ class Settings(BaseSettings):
             missing = "GOOGLE_API_URL" if self.GOOGLE_ISSUER else "GOOGLE_ISSUER"
             raise ValueError(
                 f"GOOGLE_ISSUER and GOOGLE_API_URL must be set together; missing: {missing}"
+            )
+        if bool(self.X_AUTHORIZE_URL) != bool(self.X_API_URL):
+            missing = "X_API_URL" if self.X_AUTHORIZE_URL else "X_AUTHORIZE_URL"
+            raise ValueError(
+                f"X_AUTHORIZE_URL and X_API_URL must be set together; missing: {missing}"
             )
         return self
 

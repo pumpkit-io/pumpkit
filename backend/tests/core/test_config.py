@@ -363,6 +363,8 @@ _EMULATOR_ENV = {
     "GOOGLE_ISSUER": "http://google.emulate.pumpkit.localhost:1355",
     "GOOGLE_API_URL": "http://emulate:4000",
     "STRIPE_API_URL": "http://emulate:4001",
+    "X_AUTHORIZE_URL": "http://pumpkit-x.emulate.pumpkit.localhost:1355/i/oauth2/authorize",
+    "X_API_URL": "http://emulate:4002",
 }
 
 
@@ -394,6 +396,13 @@ def test_production_refuses_to_start_with_a_provider_url_override(instance_env, 
 def test_google_issuer_and_api_url_are_set_together(instance_env, key):
     other = "GOOGLE_API_URL" if key == "GOOGLE_ISSUER" else "GOOGLE_ISSUER"
 
+    with pytest.raises(ValidationError, match=other):
+        instance_env(ENV="local", **{key: _EMULATOR_ENV[key]})
+
+
+@pytest.mark.parametrize("key", ["X_AUTHORIZE_URL", "X_API_URL"])
+def test_x_browser_and_server_urls_are_set_together(instance_env, key):
+    other = "X_API_URL" if key == "X_AUTHORIZE_URL" else "X_AUTHORIZE_URL"
     with pytest.raises(ValidationError, match=other):
         instance_env(ENV="local", **{key: _EMULATOR_ENV[key]})
 

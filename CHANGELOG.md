@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Contributors can exercise X authorization locally and in CI with deterministic accounts, single-use PKCE codes and rotating refresh tokens. The managed stack supplies throwaway credentials and refuses publishing locally; production rejects provider URL overrides. Existing X sign-in entry points remain staged until cutover.
+
 - Users who sign in with X see their read-only handle and confirmed email in Profile, use their X photo automatically, and keep name editing without photo or account-replacement controls.
 
 - Users' introductory trial eligibility follows their stable X account across contact changes and account deletion, with only a minimal keyed eligibility record retained for the instance's lifetime. **Upgrade notes:** apply migration `0056`, configure and securely back up the complete `TRIAL_IDENTITY_KEYS` ring before X-only cutover, and retain historical keys when rotating or restoring backups; missing keys fail closed. This preparation does not enable the staged X sign-in routes or reset existing accounts.

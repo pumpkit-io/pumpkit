@@ -40,6 +40,7 @@ _TEST_ENV = {
     "BILLING_PLAN_KEYS": '["pumpkit_pro_monthly"]',
     "BILLING_TRIAL_PERIOD_DAYS": "7",
     "LLM_API_KEY": "sk-test",
+    "TRIAL_IDENTITY_KEYS": '{"active":"test","keys":{"test":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}',
     "POSTHOG_ENABLED": "false",
 }
 for _key, _value in _TEST_ENV.items():
@@ -56,6 +57,7 @@ import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from fastapi import Depends  # noqa: E402
 from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
+from httpx import Request as HttpxRequest  # noqa: E402
 from sqlalchemy import event, select  # noqa: E402
 from sqlalchemy.ext.asyncio import (  # noqa: E402
     AsyncSession,
@@ -75,6 +77,7 @@ from pumpkit.auth.google_sign_in import (  # noqa: E402
 )
 from pumpkit.auth.mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
 from pumpkit.auth.models import MagicLink, User  # noqa: E402
+from pumpkit.auth.service import sessions as auth_sessions  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
@@ -478,7 +481,7 @@ async def new_browser(db_session_maker):
 
 @dataclass(frozen=True)
 class SignedIn:
-    """What a browser holds after a Magic link sign-in: the fragment's access token and expiry."""
+    """The access token and expiry held by an authenticated test browser."""
 
     access_token: str
     expires_at: str
@@ -620,14 +623,42 @@ def next_version(db) -> Callable[..., Awaitable[None]]:
     return _next_version
 
 
+@pytest.fixture
+async def sign_in_for_test(db_session_maker):
+    """Internal session setup for API tests; retained login flows have their own fixtures."""
+
+    async def start(browser: AsyncClient, email: str) -> SignedIn:
+        async with db_session_maker() as db:
+            user = await db.scalar(select(User).where(User.email == email))
+            if user is None:
+                user = User(email=email, display_name=email.split("@", 1)[0])
+                db.add(user)
+                await db.flush()
+            issued = await auth_sessions.start(
+                db,
+                user=user,
+                sign_in_method="magic_link",
+                client=auth_sessions.ClientInfo(ip="127.0.0.1", user_agent="test"),
+            )
+            assert isinstance(issued, auth_sessions.IssuedSession)
+            await db.commit()
+        browser.cookies.extract_cookies(
+            Response(
+                200,
+                headers=dict(issued.as_json_response().headers),
+                request=HttpxRequest("GET", browser.base_url),
+            )
+        )
+        return SignedIn(issued.access_token, issued.access_token_expires_at.isoformat())
+
+    return start
+
+
 @pytest_asyncio.fixture
-async def authed_client(new_browser, sign_in_by_magic_link, user) -> AsyncClient:
-    """
-    A browser signed in as `user` by a real Magic link sign-in. It sends the issued
-    access token as a bearer header, so every request runs real token verification.
-    """
+async def authed_client(new_browser, sign_in_for_test, user) -> AsyncClient:
+    """A real session and bearer token, without a production login entry point."""
     browser = new_browser()
-    signed_in = await sign_in_by_magic_link(browser, user.email)
+    signed_in = await sign_in_for_test(browser, user.email)
     browser.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     return browser
 
