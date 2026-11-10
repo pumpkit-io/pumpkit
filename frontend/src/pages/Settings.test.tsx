@@ -223,6 +223,80 @@ describe('Settings', () => {
   });
 
   describe('Profile', () => {
+    it('shows X-managed photo and identity without account replacement or photo editing', async () => {
+      vi.mocked(userService.fetchProfile).mockResolvedValue({ ...ADA, xHandle: 'ada' });
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+      renderSettings();
+
+      const profile = await card('Profile');
+      expect(await profile.findByLabelText('X handle')).toHaveValue('@ada');
+      expect(profile.getByLabelText('X handle')).toHaveAttribute('readonly');
+      expect(profile.getByLabelText('Confirmed email')).toHaveValue('ada@example.com');
+      expect(profile.getByText('Managed by X')).toBeInTheDocument();
+      expect(profile.queryByRole('button', { name: 'Change photo' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'X account' })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /disconnect|replace|use photo/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('saves X profile names without sending any photo field', async () => {
+      const xProfile = { ...ADA, xHandle: 'ada', avatarUrl: X_PHOTO_DATA_URL };
+      vi.mocked(userService.fetchProfile).mockResolvedValue(xProfile);
+      vi.mocked(userService.updateProfile).mockResolvedValue({ ...xProfile, firstName: 'Augusta' });
+      renderSettings();
+      const profile = await card('Profile');
+      fireEvent.change(await profile.findByLabelText('First name'), {
+        target: { value: 'Augusta' },
+      });
+
+      fireEvent.click(profile.getByRole('button', { name: 'Save changes' }));
+
+      expect(await profile.findByText('Saved.')).toBeInTheDocument();
+      expect(userService.updateProfile).toHaveBeenCalledWith({
+        firstName: 'Augusta',
+        lastName: 'Lovelace',
+      });
+    });
+
+    it('falls back to initials when the X photo cannot be shown', async () => {
+      vi.mocked(userService.fetchProfile).mockResolvedValue({
+        ...ADA,
+        xHandle: 'ada',
+        avatarUrl: X_PHOTO_DATA_URL,
+      });
+      renderSettings();
+      const profile = await card('Profile');
+      await profile.findByLabelText('X handle');
+      const image = profile.getByText('AL').parentElement?.querySelector('img');
+      expect(image).toBeTruthy();
+
+      fireEvent.error(image!);
+
+      expect(profile.getByText('AL')).toBeInTheDocument();
+      expect(profile.getByText('AL').parentElement?.querySelector('img')).toBeNull();
+    });
+
+    it('never flashes legacy photo or replacement controls while the X profile loads', async () => {
+      let finish!: (value: UserProfile) => void;
+      vi.mocked(userService.fetchProfile).mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
+      renderSettings();
+      expect(await screen.findByText('Loading your profile…')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'X account' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+      act(() => finish({ ...ADA, xHandle: 'ada' }));
+
+      await screen.findByLabelText('X handle');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(xConnectionService.acceptPhoto).not.toHaveBeenCalled();
+    });
+
     it("shows the User's names and their email, read-only, as managed by sign-in", async () => {
       renderSettings();
 

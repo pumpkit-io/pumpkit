@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.auth.service import sessions, users
 from pumpkit.auth.sign_up_allowlist import EMAIL_NOT_ALLOWED, may_sign_in
 from pumpkit.core.config import settings
+from pumpkit.core.photos import PhotoFetcher
 from pumpkit.x_connection import service, sign_in_service
+from pumpkit.x_connection.profile_photo import sync_photo
 from pumpkit.x_connection.service import LIFETIME
 from pumpkit.x_connection.x_publisher import (
     X_SIGN_IN_SCOPES,
@@ -54,6 +56,7 @@ async def complete_sign_in(
     *,
     request: Request,
     publisher: XPublisher,
+    photo_fetcher: PhotoFetcher,
     now: datetime,
     state: str,
     code: Optional[str],
@@ -105,6 +108,7 @@ async def complete_sign_in(
     if isinstance(issued, sessions.SessionRefusal):
         await db.rollback()
         return _failed(issued.code, status_code=401)
+    await sync_photo(db, user, photo_url=account.photo_url, photo_fetcher=photo_fetcher)
     try:
         await service.save_connection(db, user_id=user.id, account=account, tokens=tokens, now=now)
     except IntegrityError:

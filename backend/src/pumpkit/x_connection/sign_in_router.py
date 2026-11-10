@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.photos import PhotoFetcher, get_photo_fetcher
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.x_connection import sign_in_mediator
@@ -36,12 +37,14 @@ async def complete_x_sign_in(
     data: XSignInCompleteRequest,
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
+    photo_fetcher: PhotoFetcher = Depends(get_photo_fetcher),
     clock: Clock = Depends(get_clock),
 ) -> JSONResponse:
     return await sign_in_mediator.complete_sign_in(
         db,
         request=request,
         publisher=publisher,
+        photo_fetcher=photo_fetcher,
         now=clock(),
         state=data.state,
         code=data.code,

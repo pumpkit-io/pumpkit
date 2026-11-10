@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SettingsCard } from '@/components/SettingsCard';
+import { UserAvatar } from '@/components/UserAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useInstance } from '@/features/instance/useInstance';
@@ -88,7 +89,7 @@ export function ProfileCard() {
       const next = await userService.updateProfile({
         firstName: form.firstName.trim() || null,
         lastName: form.lastName.trim() || null,
-        avatarUrl: form.avatarUrl,
+        ...(!profile?.xHandle && { avatarUrl: form.avatarUrl }),
       });
       setProfile(next);
       // Update the PostHog person now rather than at the next browser session.
@@ -136,14 +137,22 @@ export function ProfileCard() {
           }}
         >
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <AvatarEditor
-              value={form.avatarUrl}
-              initials={initialsFor(form.firstName, form.lastName, profile.email)}
-              onChange={(avatarUrl) => edit({ avatarUrl })}
-              onError={setError}
-              onUseXPhoto={connection?.photoUrl ? () => void takeXPhoto() : undefined}
-              usingXPhoto={usingXPhoto}
-            />
+            {profile.xHandle ? (
+              <UserAvatar
+                name={`${form.firstName} ${form.lastName}`.trim() || profile.email}
+                avatarUrl={profile.avatarUrl}
+                className="h-24 w-24 text-2xl"
+              />
+            ) : (
+              <AvatarEditor
+                value={form.avatarUrl}
+                initials={initialsFor(form.firstName, form.lastName, profile.email)}
+                onChange={(avatarUrl) => edit({ avatarUrl })}
+                onError={setError}
+                onUseXPhoto={connection?.photoUrl ? () => void takeXPhoto() : undefined}
+                usingXPhoto={usingXPhoto}
+              />
+            )}
             <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>First name</span>
@@ -152,6 +161,7 @@ export function ProfileCard() {
                   onChange={(e) => edit({ firstName: e.target.value })}
                   maxLength={80}
                   autoComplete="given-name"
+                  className="h-11"
                 />
               </label>
               <label className="flex flex-col gap-1.5">
@@ -161,21 +171,35 @@ export function ProfileCard() {
                   onChange={(e) => edit({ lastName: e.target.value })}
                   maxLength={80}
                   autoComplete="family-name"
+                  className="h-11"
                 />
               </label>
+              {profile.xHandle && (
+                <div className="flex flex-col gap-1.5 sm:col-span-2">
+                  <label htmlFor="profile-x-handle" className={LABEL}>
+                    X handle
+                  </label>
+                  <Input
+                    id="profile-x-handle"
+                    value={`@${profile.xHandle}`}
+                    readOnly
+                    className="h-11 bg-muted/30 text-muted-foreground"
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-1.5 sm:col-span-2">
                 <label htmlFor="profile-email" className={LABEL}>
-                  Email
+                  {profile.xHandle ? 'Confirmed email' : 'Email'}
                 </label>
                 <Input
                   id="profile-email"
                   value={profile.email}
                   readOnly
                   aria-describedby="profile-email-note"
-                  className="bg-muted/30 text-muted-foreground"
+                  className="h-11 bg-muted/30 text-muted-foreground"
                 />
                 <p id="profile-email-note" className="font-sans text-xs text-muted-foreground">
-                  Managed by sign-in
+                  {profile.xHandle ? 'Managed by X' : 'Managed by sign-in'}
                 </p>
               </div>
             </div>
@@ -189,7 +213,12 @@ export function ProfileCard() {
                 Saved.
               </p>
             )}
-            <Button type="submit" className="h-10" disabled={changed.length === 0 || saving}>
+            <Button
+              type="submit"
+              className="h-11"
+              disabled={changed.length === 0 || saving}
+              aria-busy={saving}
+            >
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>

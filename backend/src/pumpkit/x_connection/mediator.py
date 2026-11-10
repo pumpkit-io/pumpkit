@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
 from pumpkit.auth.schemas import UserProfileResponse
-from pumpkit.auth.service.users import choose_photo
+from pumpkit.auth.service.users import choose_photo, require_photo_editable
 from pumpkit.core.errors import ConflictError
 from pumpkit.core.logging import logger
 from pumpkit.core.photos import PhotoFetcher
@@ -53,6 +53,7 @@ async def use_photo(
     db: AsyncSession, photo_fetcher: PhotoFetcher, user: User, now: datetime
 ) -> UserProfileResponse:
     """Copy the X account's photo into the User's Photo, as the User chose, answering the offer."""
+    require_photo_editable(user)
     connection = await service.get_connection(db, user_id=user.id)
     if connection is None:
         raise service.XConnectionNotFoundError()
@@ -69,6 +70,7 @@ async def use_photo(
 
 async def decline_photo(db: AsyncSession, user: User, now: datetime) -> None:
     """The User said "Not now" to the X account's photo: stop offering it for this connection."""
+    require_photo_editable(user)
     connection = await service.get_connection(db, user_id=user.id)
     if connection is None:
         raise service.XConnectionNotFoundError()

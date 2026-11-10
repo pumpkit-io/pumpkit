@@ -6,6 +6,7 @@ export interface UserProfile {
   firstName: string | null;
   lastName: string | null;
   avatarUrl: string | null;
+  xHandle?: string | null;
 }
 
 export interface UserProfileResponse {
@@ -14,6 +15,7 @@ export interface UserProfileResponse {
   first_name: string | null;
   last_name: string | null;
   avatar_data_url: string | null;
+  x_handle?: string | null;
 }
 
 export function toUserProfile(data: UserProfileResponse): UserProfile {
@@ -23,6 +25,7 @@ export function toUserProfile(data: UserProfileResponse): UserProfile {
     firstName: data.first_name,
     lastName: data.last_name,
     avatarUrl: data.avatar_data_url,
+    xHandle: data.x_handle ?? null,
   };
 }
 

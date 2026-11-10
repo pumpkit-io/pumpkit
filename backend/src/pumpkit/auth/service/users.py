@@ -127,7 +127,7 @@ def fill_empty_profile(user: User, hints: NameHints) -> None:
 
 def may_fill_photo(user: User) -> bool:
     """Whether Pumpkit may give the User a Photo on its own: they have none and never chose one."""
-    return user.avatar_data_url is None and user.photo_chosen_at is None
+    return user.x_user_id is None and user.avatar_data_url is None and user.photo_chosen_at is None
 
 
 async def fill_photo(db: AsyncSession, user: User, photo_data_url: str) -> None:
@@ -148,9 +148,20 @@ async def choose_photo(
     Save the Photo the User chose, or clear it with `None`, and mark the Photo chosen, so
     Pumpkit never fills it again. Flushes, never commits.
     """
+    require_photo_editable(user)
     user.avatar_data_url = photo_data_url
     if user.photo_chosen_at is None:
         user.photo_chosen_at = now
+    await db.flush()
+
+
+def require_photo_editable(user: User) -> None:
+    if user.x_user_id is not None:
+        raise ForbiddenError("Your photo is managed by X.")
+
+
+async def save_x_photo(db: AsyncSession, user: User, photo_data_url: Optional[str]) -> None:
+    user.avatar_data_url = photo_data_url
     await db.flush()
 
 

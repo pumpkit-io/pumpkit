@@ -15,6 +15,7 @@ class UserProfileResponse(BaseModel):
     first_name: Optional[str]
     last_name: Optional[str]
     avatar_data_url: Optional[str] = None
+    x_handle: Optional[str] = None
 
     @field_validator("email", mode="after")
     def lowercase_email(cls, v: str) -> str:
@@ -22,10 +23,9 @@ class UserProfileResponse(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
-    """Partial update of the current User's editable profile fields.
+    """Only supplied fields change; photo edits remain for legacy accounts until X-only cutover."""
 
-    Only fields set in the request body are applied; ``null`` clears a field (e.g. the avatar).
-    """
+    model_config = ConfigDict(extra="forbid")
 
     first_name: Optional[str] = None
     last_name: Optional[str] = None

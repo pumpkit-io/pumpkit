@@ -149,7 +149,7 @@ async def update_current_user_profile(
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> UserProfileResponse:
-    """Apply only the fields present in the body; ``null`` clears a field (e.g. the avatar)."""
+    """Apply supplied profile fields; X accounts accept only name edits."""
 
     current_user = await user_service.update_user_profile(
         db=db, user=current_user, changes=update.model_dump(exclude_unset=True), now=clock()
