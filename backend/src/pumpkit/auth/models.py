@@ -24,10 +24,11 @@ from pumpkit.core.ids import ulid_with_prefix
 # Unique and primary key columns are indexed automatically, so they don't set index=True.
 
 
-# See docs/adr/0002-google-and-magic-link-only.md.
+# Session history can name a retained inactive method (ADR 0023).
 SignInMethod = Literal[
     "google",
     "magic_link",
+    "x",
 ]
 
 
@@ -38,7 +39,9 @@ class User(Base):
         String, primary_key=True, default=lambda: ulid_with_prefix("user")
     )
 
-    email: Mapped[str] = mapped_column(String, unique=True)
+    email: Mapped[str] = mapped_column(String)
+    x_user_id: Mapped[Optional[str]] = mapped_column(String, unique=True)
+    x_handle: Mapped[Optional[str]] = mapped_column(String)
     display_name: Mapped[str] = mapped_column(String)
     first_name: Mapped[Optional[str]] = mapped_column(String)
     last_name: Mapped[Optional[str]] = mapped_column(String)
