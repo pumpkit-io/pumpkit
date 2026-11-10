@@ -9,7 +9,7 @@ from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.billing.coupon_identity import fingerprints
+from pumpkit.billing.coupon_identity import fingerprints, x_fingerprints
 from pumpkit.billing.gateway import Plan
 from pumpkit.billing.models import (
     Coupon,
@@ -291,13 +291,48 @@ async def purge(db: AsyncSession, *, now: datetime) -> int:
 
 
 async def require_unclaimed(
-    db: AsyncSession, *, coupon: Coupon, email: str, config: Settings
+    db: AsyncSession,
+    *,
+    coupon: Coupon,
+    email: str,
+    config: Settings,
+    x_user_id: Optional[str] = None,
 ) -> dict[str, str]:
     from_config = fingerprints(config=config, coupon_id=coupon.id, email=email, purpose="claim")
+    x_candidates = (
+        x_fingerprints(config=config, coupon_id=coupon.id, x_user_id=x_user_id)
+        if x_user_id is not None
+        else {}
+    )
     retained = list(await db.scalars(select(CouponClaim).where(CouponClaim.coupon_id == coupon.id)))
     if any(claim.key_id not in from_config for claim in retained):
         logger.error("Coupon claim key missing for coupon %s", coupon.id)
         raise NotConfiguredError("A coupon identity key is unavailable. Contact support.")
-    if any(hmac.compare_digest(claim.fingerprint, from_config[claim.key_id]) for claim in retained):
+    if any(
+        hmac.compare_digest(claim.fingerprint, from_config[claim.key_id])
+        or (
+            claim.x_fingerprint is not None
+            and claim.key_id in x_candidates
+            and hmac.compare_digest(claim.x_fingerprint, x_candidates[claim.key_id])
+        )
+        for claim in retained
+    ):
         raise ConflictError("You have already redeemed this coupon.")
     return from_config
+
+
+def new_claim(
+    *, coupon: Coupon, user: User, candidates: dict[str, str], config: Settings
+) -> CouponClaim:
+    key_id, _ = config.coupon_identity_keys()
+    x_candidates = (
+        x_fingerprints(config=config, coupon_id=coupon.id, x_user_id=user.x_user_id)
+        if user.x_user_id is not None
+        else {}
+    )
+    return CouponClaim(
+        coupon_id=coupon.id,
+        key_id=key_id,
+        fingerprint=candidates[key_id],
+        x_fingerprint=x_candidates.get(key_id),
+    )
