@@ -636,11 +636,17 @@ export function pumpkitStripe(target: WebhookTarget) {
           billing_cycle_anchor: anchor,
           expand = [],
         } = await bodyParams(c);
+        if (trialEnd && trialEnd !== 'now') {
+          const target = Number(trialEnd);
+          if (!Number.isInteger(target) || target <= now() || target > now() + 730 * DAY) {
+            return c.json({ error: { type: 'invalid_request_error', message: 'Unsupported trial_end' } }, 400);
+          }
+        }
         if (items) {
           if (
             subscription.status !== 'trialing' ||
             proration !== 'none' ||
-            anchor !== 'unchanged'
+            (anchor !== undefined && anchor !== 'unchanged')
           ) {
             return c.json(
               { error: { type: 'invalid_request_error', message: 'Unsupported price update' } },
@@ -651,14 +657,21 @@ export function pumpkitStripe(target: WebhookTarget) {
           const price = state.prices[item?.price];
           if (!price || item.id !== subscription.items.data[0].id)
             return notFound(c, 'price', item?.price);
+          if (
+            subscription.billing_mode?.type === 'classic' &&
+            price.recurring?.interval !== subscription.items.data[0].price.recurring?.interval &&
+            anchor === 'unchanged'
+          ) {
+            return c.json(
+              { error: { type: 'invalid_request_error', message: 'Changing plan intervals requires the provider default anchor' } },
+              400,
+            );
+          }
           subscription.items.data[0].price = price;
           subscription.metadata = { ...subscription.metadata, ...metadata };
         }
         if (trialEnd && trialEnd !== 'now') {
           const target = Number(trialEnd);
-          if (!Number.isInteger(target) || target <= now() || target > now() + 730 * DAY) {
-            return c.json({ error: { type: 'invalid_request_error', message: 'Unsupported trial_end' } }, 400);
-          }
           Object.assign(subscription, {
             status: 'trialing', trial_start: now(), trial_end: target,
             billing_cycle_anchor: target, metadata: { ...subscription.metadata, ...metadata },
