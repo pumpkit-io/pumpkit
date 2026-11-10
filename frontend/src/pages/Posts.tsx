@@ -31,7 +31,7 @@ function PostingAs() {
         </>
       ) : (
         <Link to="/settings" className={LINK}>
-          Connect X to post
+          Reconnect X to post
         </Link>
       )}
       <span aria-hidden> · </span>

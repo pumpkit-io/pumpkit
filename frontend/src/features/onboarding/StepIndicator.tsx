@@ -13,14 +13,9 @@ interface Step {
 function stepsFor(instance: Instance): Step[] {
   const steps: Step[] = [
     { key: 'paywall', label: 'Plan' },
-    { key: 'x_connection', label: 'Connect X' },
     { key: 'persona', label: 'Persona' },
   ];
-  return steps.filter(
-    (step) =>
-      (step.key !== 'paywall' || instance.sells_plans) &&
-      (step.key !== 'x_connection' || instance.x_connection),
-  );
+  return steps.filter((step) => step.key !== 'paywall' || instance.sells_plans);
 }
 
 /** Numbered, since the steps are a sequence: done ones show a check, the current one the accent. */

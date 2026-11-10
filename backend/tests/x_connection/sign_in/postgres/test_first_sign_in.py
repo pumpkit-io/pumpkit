@@ -13,6 +13,7 @@ from tests.x_connection.test_x_identity_migration import (
 from tests.x_connection.test_x_identity_migration import (
     test_stable_x_identity_and_shared_contact_email_can_be_migrated_and_reversed as test_stable_x_identity_and_shared_contact_email_can_be_migrated_and_reversed,
 )
+from tests.x_connection.test_x_identity_migration import user as user
 
 pytestmark = pytest.mark.postgres
 

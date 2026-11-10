@@ -3,7 +3,7 @@ import { stagedXBaseURL } from '../backend';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-test('the prepared X flow completes browser and server calls without mounting production routes', async ({
+test('the X protocol completes browser and server calls alongside the active main routes', async ({
   page,
 }) => {
   const staged = stagedXBaseURL();
@@ -29,10 +29,9 @@ test('the prepared X flow completes browser and server calls without mounting pr
   expect(JSON.parse((await page.locator('#profile').textContent())!).id).toBe(first.id);
   const instance = await (await page.request.get('/api/v1/instance')).json();
   const main = await page.request.get('/api/v1/login/x');
-  expect(main.status()).toBe(instance.sign_in_methods.includes('x') ? 200 : 404);
-  if (!instance.sign_in_methods.includes('x')) {
-    expect((await page.request.post('/api/v1/login/x/complete', { data: {} })).status()).toBe(404);
-  }
+  expect(instance.sign_in_methods).toEqual(['x']);
+  expect(main.status()).toBe(200);
+  expect((await page.request.post('/api/v1/login/x/complete', { data: {} })).status()).toBe(422);
 });
 
 test('missing confirmed email and cancellation produce no session', async ({ page }) => {

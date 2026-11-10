@@ -1,28 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { cn } from '@/lib/utils';
-import { GoogleAuthButton } from '../components/google/GoogleAuthButton';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { useInstance } from '@/features/instance/useInstance';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
 import { TEXT_LINK_CLASS } from '@/features/legal/textLink';
-import { authService } from '../services/authService';
-import { errorMessage, errorStatus } from '../services/apiErrors';
+import { xSignInService } from '@/services/xSignInService';
+import { redirectTo } from '@/lib/navigation';
 import { track } from '../lib/analytics';
 import mascot from '@/assets/brand/mascot.svg';
 import mascotHopWave from '@/assets/brand/mascot-hop-wave.gif';
 import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
 
-function emailDomain(email: string): string {
-  const at = email.lastIndexOf('@');
-  return at >= 0 ? email.slice(at + 1).toLowerCase() : 'unknown';
-}
-
 const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
-  [SIGN_IN_ERROR.invalidMagicLink]:
-    'That magic link is invalid or has expired. Request a new one below.',
+  [SIGN_IN_ERROR.invalidMagicLink]: 'That sign-in link is no longer available. Continue with X.',
   [SIGN_IN_ERROR.accountSuspended]: 'Your account has been suspended, so you cannot sign in.',
   [SIGN_IN_ERROR.signInFailed]: "We couldn't sign you in. Try again.",
   [SIGN_IN_ERROR.xEmailRequired]: 'Confirm an email address on X, then try signing in again.',
@@ -37,49 +30,29 @@ const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
   [SIGN_IN_ERROR.emailNotAllowed]: "This site doesn't accept sign-ins from that email address.",
 };
 
-/** The 403 the backend answers when the Sign-up allowlist refuses the email. */
-function isEmailNotAllowed(err: unknown): boolean {
-  return errorStatus(err) === 403 && errorMessage(err, '') === SIGN_IN_ERROR.emailNotAllowed;
-}
-
 export function Login() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { sign_in_methods, operator, app_name } = useInstance();
-  const offersGoogle = sign_in_methods.includes('google');
+  const { operator, app_name } = useInstance();
   const hasTerms = operator !== null;
 
   useEffect(() => {
     const code = new URLSearchParams(location.search).get('error');
     if (!isSignInErrorCode(code)) return;
     setError(SIGN_IN_ERROR_MESSAGES[code]);
-    if (code === SIGN_IN_ERROR.invalidMagicLink) track('login_magic_link_invalid_shown');
     // Drop the code from the URL so a reload doesn't show the message again.
     window.history.replaceState({}, document.title, location.pathname);
   }, [location.search, location.pathname]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const domain = emailDomain(email);
-    track('login_magic_link_submitted', { email_domain: domain });
+  const continueWithX = async () => {
     setLoading(true);
     setError(null);
+    track('login_x_clicked');
     try {
-      await authService.requestMagicLink(email);
-      track('login_magic_link_requested_succeeded', { email_domain: domain });
-      navigate('/login/magic-link/sent', { state: { email } });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'unknown';
-      track('login_magic_link_requested_failed', { error_message: message });
-      setError(
-        isEmailNotAllowed(err)
-          ? SIGN_IN_ERROR_MESSAGES[SIGN_IN_ERROR.emailNotAllowed]
-          : "We couldn't send the magic link. Try again in a moment.",
-      );
-    } finally {
+      redirectTo(await xSignInService.start());
+    } catch {
+      setError("Couldn't open X. Try again.");
       setLoading(false);
     }
   };
@@ -99,58 +72,27 @@ export function Login() {
               </p>
 
               <div className="mt-8 grid gap-6">
-                {offersGoogle && (
-                  <>
-                    <GoogleAuthButton
-                      variant="raisedNeutral"
-                      className="h-11 text-base"
-                      onError={() => setError("We couldn't start Google sign-in. Try again.")}
-                    />
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <div className="h-px flex-1 bg-border" />
-                      or
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                  </>
-                )}
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <label
-                      className="text-sm font-medium leading-none text-foreground"
-                      htmlFor="email"
-                    >
-                      Email
-                    </label>
-                    <input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                      required
-                      disabled={loading}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="flex h-11 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                  </div>
-                  {error && (
-                    <div
-                      role="alert"
-                      className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
-                    >
-                      {error}
-                    </div>
-                  )}
-                  <Button
-                    type="submit"
-                    variant="solid"
-                    className={cn(CTA_CLASSES, 'h-11 w-full')}
-                    disabled={loading}
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Continuing with X signs you in and authorizes {app_name} to publish your posts,
+                  including media and scheduled posts.
+                </p>
+                {error && (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
                   >
-                    {loading ? 'Sending…' : 'Sign in with email'}
-                  </Button>
-                </form>
+                    {error}
+                  </div>
+                )}
+                <Button
+                  variant="solid"
+                  className={cn(CTA_CLASSES, 'h-11 w-full')}
+                  disabled={loading}
+                  aria-busy={loading}
+                  onClick={() => void continueWithX()}
+                >
+                  {loading ? 'Opening X…' : 'Continue with X'}
+                </Button>
               </div>
             </div>
             {/* Informational only: Users accept the Terms at checkout (ADR 0010). */}

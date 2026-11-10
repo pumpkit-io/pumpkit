@@ -5,6 +5,9 @@ from pumpkit.core.config import Settings
 
 # What a Self-hoster must set: everything else has a default or belongs to an optional provider.
 _INSTANCE_ENV = {
+    "X_CLIENT_ID": "test-x-client",
+    "X_CLIENT_SECRET": "test-x-secret",
+    "TRIAL_IDENTITY_KEYS": '{"active":"test","keys":{"test":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}',
     "PUBLIC_URL": "https://pumpkit.example.org",
     "POSTGRES_PASSWORD": "postgres",
     "JWT_SECRET_KEY": "test-secret-key-test-secret-key-0123456789",

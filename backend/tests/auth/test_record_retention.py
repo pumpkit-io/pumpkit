@@ -5,12 +5,15 @@ Magic link is requested or a Session is created.
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.google_sign_in import GoogleClaims
 from pumpkit.auth.models import MagicLink, RefreshToken, User
 from tests.conftest import magic_link_token
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 def _days_ago(days: int) -> datetime:

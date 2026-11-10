@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+import pytest
 import sqlalchemy as sa
 
 from alembic import command
@@ -52,3 +53,8 @@ async def test_upgrade_dates_a_cancellation_at_period_end_and_downgrade_restores
         "sub_cancelled": 1,
         "sub_renewing": 0,
     }
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

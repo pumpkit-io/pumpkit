@@ -58,7 +58,7 @@ async def test_x_identity_cannot_use_legacy_photo_actions(
 
     rejected = await client.post(f"/api/v1/x-connection/photo/{action}")
 
-    assert rejected.status_code == 403
+    assert rejected.status_code == 404
     assert fake_photo_fetcher.fetched == []
 
 
@@ -185,8 +185,7 @@ async def test_x_identity_cannot_disconnect_or_revoke_its_publishing_grant(
 
     refused = await client.delete("/api/v1/x-connection")
 
-    assert refused.status_code == 409, refused.text
-    assert "Sign out" in refused.json()["detail"]
+    assert refused.status_code == 405, refused.text
     assert (await client.get("/api/v1/x-connection")).json()["handle"] == "ada"
     assert fake_x_publisher.revoked == []
 

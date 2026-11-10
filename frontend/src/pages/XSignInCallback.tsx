@@ -5,7 +5,6 @@ import { returnTo } from '@/lib/returnTo';
 import { errorMessage } from '@/services/apiErrors';
 import { xSignInService } from '@/services/xSignInService';
 
-// Staged until X-only activation; App does not mount this component yet.
 export function XSignInCallback() {
   const { search } = useLocation();
   const navigate = useNavigate();
@@ -15,6 +14,7 @@ export function XSignInCallback() {
     if (handled.current) return;
     handled.current = true;
     const params = new URLSearchParams(search);
+    window.history.replaceState({}, document.title, window.location.pathname);
     const state = params.get('state');
     if (!state) {
       navigate(signInPath(SIGN_IN_ERROR.xAuthorizationInvalid), { replace: true });

@@ -35,7 +35,7 @@ async def test_x_profile_refuses_photo_overrides(sign_in_browser, fake_x_publish
         "/api/v1/users/me", json={"avatar_data_url": override}, headers=headers
     )
 
-    assert rejected.status_code == 403
+    assert rejected.status_code == 422
     me = await sign_in_browser.get("/api/v1/users/me", headers=headers)
     assert me.json()["avatar_data_url"] is None
 

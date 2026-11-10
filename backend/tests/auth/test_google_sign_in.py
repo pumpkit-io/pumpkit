@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Optional
 from urllib.parse import parse_qs, urlsplit
 
+import jwt
 import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import func, select
@@ -13,7 +14,9 @@ from sqlalchemy import func, select
 import pumpkit.auth.service.sessions as sessions
 from pumpkit.auth.google_sign_in import GoogleClaims
 from pumpkit.auth.models import GoogleIdentity, RefreshToken, User
+from pumpkit.auth.service.users import choose_photo
 from pumpkit.core.config import settings
+from pumpkit.core.time import system_clock
 from tests.conftest import callback_fragment
 
 SIGN_IN_FAILED = "http://localhost:5173/login?error=sign_in_failed"
@@ -25,6 +28,9 @@ ALICE_GOOGLE = GoogleClaims(
     family_name="Liddell",
     name="Alice Liddell",
 )
+
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 async def _profile(browser: AsyncClient, landed: Response) -> dict:
@@ -195,15 +201,16 @@ GOOGLE_PHOTO = "data:image/jpeg;base64,R29vZ2xlUGhvdG8="
 UPLOADED_PHOTO = "data:image/jpeg;base64,VXBsb2FkZWRQaG90bw=="
 
 
-async def _set_photo(browser: AsyncClient, landed: Response, photo: Optional[str]) -> None:
-    """Save or clear the Photo from Settings, as the User the callback redirect signed in."""
-    access_token = callback_fragment(landed.headers["location"])["access_token"]
-    saved = await browser.patch(
-        "/api/v1/users/me",
-        json={"avatar_data_url": photo},
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    assert saved.status_code == 200
+async def _set_photo(
+    browser: AsyncClient, landed: Response, photo: Optional[str], db_session_maker
+) -> None:
+    token = callback_fragment(landed.headers["location"])["access_token"]
+    user_id = jwt.decode(token, options={"verify_signature": False})["sub"]
+    async with db_session_maker() as db:
+        user = await db.get(User, user_id)
+        assert user is not None
+        await choose_photo(db, user, photo, system_clock())
+        await db.commit()
 
 
 async def test_a_first_google_sign_in_makes_the_google_picture_the_photo(
@@ -229,10 +236,15 @@ async def test_a_google_account_without_a_picture_signs_in_with_no_photo(
 
 
 async def test_google_sign_in_keeps_an_uploaded_photo(
-    new_browser, sign_in_with_google, fake_photo_fetcher
+    new_browser,
+    sign_in_with_google,
+    fake_photo_fetcher,
+    db_session_maker,
 ):
     browser = new_browser()
-    await _set_photo(browser, await sign_in_with_google(browser, ALICE_GOOGLE), UPLOADED_PHOTO)
+    await _set_photo(
+        browser, await sign_in_with_google(browser, ALICE_GOOGLE), UPLOADED_PHOTO, db_session_maker
+    )
     fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
 
     landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
@@ -241,11 +253,19 @@ async def test_google_sign_in_keeps_an_uploaded_photo(
 
 
 async def test_google_sign_in_never_fills_a_photo_the_user_cleared(
-    new_browser, sign_in_with_google, fake_photo_fetcher
+    new_browser,
+    sign_in_with_google,
+    fake_photo_fetcher,
+    db_session_maker,
 ):
     fake_photo_fetcher.photos[ALICE_PICTURE] = GOOGLE_PHOTO
     browser = new_browser()
-    await _set_photo(browser, await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE), None)
+    await _set_photo(
+        browser,
+        await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE),
+        None,
+        db_session_maker,
+    )
 
     landed = await sign_in_with_google(browser, ALICE_GOOGLE_WITH_PICTURE)
 
@@ -317,14 +337,18 @@ async def test_a_photo_that_fails_to_save_still_signs_in(
 
 
 async def test_a_photo_chosen_while_the_google_picture_downloads_stays(
-    new_browser, sign_in_with_google, fake_photo_fetcher, monkeypatch
+    new_browser,
+    sign_in_with_google,
+    fake_photo_fetcher,
+    monkeypatch,
+    db_session_maker,
 ):
     elsewhere = new_browser()
     signed_in_elsewhere = await sign_in_with_google(elsewhere, ALICE_GOOGLE)
     download = fake_photo_fetcher.fetch
 
     async def download_while_choosing_elsewhere(url: str) -> Optional[str]:
-        await _set_photo(elsewhere, signed_in_elsewhere, UPLOADED_PHOTO)
+        await _set_photo(elsewhere, signed_in_elsewhere, UPLOADED_PHOTO, db_session_maker)
         return await download(url)
 
     monkeypatch.setattr(fake_photo_fetcher, "fetch", download_while_choosing_elsewhere)

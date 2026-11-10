@@ -66,3 +66,8 @@ async def test_stable_x_identity_and_shared_contact_email_can_be_migrated_and_re
             sa.text("SELECT email FROM users WHERE id=:id"), {"id": user.id}
         )
         assert preserved == user.email
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

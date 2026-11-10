@@ -2,8 +2,12 @@
 A Suspended User can't sign in or keep a Session, over HTTP with real token verification.
 """
 
+import pytest
+
 from tests.auth.test_magic_link_request import GENERIC_MESSAGE
 from tests.conftest import magic_link_token
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 async def test_suspended_user_completing_a_magic_link_lands_on_the_sign_in_page_without_a_session(

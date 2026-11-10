@@ -191,7 +191,9 @@ class StartedAuthorization:
 async def start(db: AsyncSession, *, user_id: str, now: datetime) -> StartedAuthorization:
     """Store a new pending authorization for the User, dropping every expired one. Flushes."""
     await db.execute(delete(PendingXAuthorization).where(PendingXAuthorization.expires_at <= now))
-    started = StartedAuthorization(state=generate_token(32), code_verifier=new_code_verifier())
+    started = StartedAuthorization(
+        state="reconnect." + generate_token(32), code_verifier=new_code_verifier()
+    )
     db.add(
         PendingXAuthorization(
             state_hash=hash_token(started.state),

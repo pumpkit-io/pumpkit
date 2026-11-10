@@ -500,11 +500,10 @@ describe('Paywall', () => {
       const listed = within(steps.getByRole('list'));
       expect(listed.getAllByRole('listitem').map((step) => step.textContent)).toEqual([
         '1Plan',
-        '2Connect X',
-        '3Persona',
+        '2Persona',
       ]);
       expect(listed.getByText('Plan').closest('[aria-current="step"]')).not.toBeNull();
-      expect(steps.getByText(/Step 1 of 3/)).toBeInTheDocument();
+      expect(steps.getByText(/Step 1 of 2/)).toBeInTheDocument();
       expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
     });
 
@@ -798,7 +797,7 @@ describe('Coupon preview on the Paywall', () => {
     await reviewCoupon();
     fireEvent.click(screen.getByRole('button', { name: 'Redeem coupon' }));
     await screen.findByText('Coupon redeemed');
-    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('x_connection');
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('persona');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(currentPath()).toBe('/onboarding'));
     expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();

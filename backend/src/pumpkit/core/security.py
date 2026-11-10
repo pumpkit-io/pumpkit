@@ -26,9 +26,7 @@ def decrypt(s: str) -> str:
     try:
         return _fernet.decrypt(s.encode()).decode()
     except InvalidToken:
-        logger.exception(
-            "Unexpected error during decryption of string %s. An empty string will be returned.", s
-        )
+        logger.exception("Decryption failed; an empty string will be returned.")
         return ""
 
 

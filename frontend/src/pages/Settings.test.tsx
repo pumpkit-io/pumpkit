@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, render, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -66,6 +66,8 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
   track: vi.fn(),
 }));
 
+import App from '@/App';
+import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { storageKey } from '@/lib/storage';
@@ -92,6 +94,7 @@ const ADA: UserProfile = {
   firstName: 'Ada',
   lastName: 'Lovelace',
   avatarUrl: null,
+  xHandle: 'ada',
 };
 
 const CONNECTED: XConnection = {
@@ -171,11 +174,6 @@ function renderSettings(options: { state?: unknown; instance?: Instance } = {}) 
   return renderSignedIn('/settings', options);
 }
 
-function sidebarPhoto() {
-  // An open dialog hides the rest of the page from the accessibility tree.
-  return screen.getByRole('link', { name: /your account/i, hidden: true }).querySelector('img');
-}
-
 async function card(name: string) {
   return within(await screen.findByRole('region', { name }));
 }
@@ -197,9 +195,6 @@ describe('Settings', () => {
     vi.mocked(billingService.subscribeNow).mockReset();
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(xConnectionService.startAuthorization).mockReset();
-    vi.mocked(xConnectionService.disconnect).mockReset();
-    vi.mocked(xConnectionService.acceptPhoto).mockReset();
-    vi.mocked(xConnectionService.declinePhoto).mockReset().mockResolvedValue();
     vi.mocked(appConnectionService.list).mockReset().mockResolvedValue([]);
     vi.mocked(usageService.get).mockReset().mockResolvedValue(usageWith());
     vi.mocked(redirectTo).mockReset();
@@ -207,19 +202,54 @@ describe('Settings', () => {
     vi.mocked(track).mockClear();
   });
 
-  it('shows Profile, X account, Plan, Usage and Connect AI apps to a Subscribed User', async () => {
+  it('shows Profile, Plan, Usage and Connect AI apps to a Subscribed User', async () => {
     renderSettings();
 
     await card('Usage');
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Profile',
-      'X account',
       'Plan',
       'Usage',
       'Connect AI apps',
     ]);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('keeps the expected-account refusal through the assembled callback return to Settings', async () => {
+    const message =
+      'Reconnect the same X account, @ada. Sign out of X and retry with that account.';
+    localStorage.setItem(
+      storageKey('session'),
+      JSON.stringify({ accessToken: 'existing-session', expiresAt: '2099-01-01T00:00:00Z' }),
+    );
+    window.history.replaceState({}, '', '/oauth/x/callback?state=reconnect.bound&code=valid');
+    onTestFinished(() => window.history.replaceState({}, '', '/'));
+    vi.mocked(xConnectionService.complete).mockRejectedValue(
+      apiError(409, message, { code: 'X_ACCOUNT_MISMATCH' }),
+    );
+    vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, needsReconnect: true });
+    render(
+      <InstanceProvider instance={SELLS_PLANS}>
+        <App />
+      </InstanceProvider>,
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(window.location.pathname).toBe('/settings');
+    expect(await screen.findByRole('button', { name: 'Reconnect X' })).toBeEnabled();
+    expect(xConnectionService.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Reconnect the same X account, @ada. Sign out of X and retry with that account.',
+    'You cancelled reconnecting X. Try again when you are ready.',
+    "Couldn't reconnect X. Try again.",
+  ])('keeps a reconnect refusal visible after returning to Settings: %s', async (message) => {
+    vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, needsReconnect: true });
+    renderSettings({ state: { xConnectionNotice: message, xConnectionFailed: true } });
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(await screen.findByRole('button', { name: 'Reconnect X' })).toBeEnabled();
+    expect(screen.queryByRole('region', { name: 'X account' })).not.toBeInTheDocument();
   });
 
   describe('Profile', () => {
@@ -294,19 +324,18 @@ describe('Settings', () => {
 
       await screen.findByLabelText('X handle');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(xConnectionService.acceptPhoto).not.toHaveBeenCalled();
     });
 
-    it("shows the User's names and their email, read-only, as managed by sign-in", async () => {
+    it("shows the User's names and their email, read-only, as managed by X", async () => {
       renderSettings();
 
       const profile = await card('Profile');
       expect(await profile.findByLabelText('First name')).toHaveValue('Ada');
       expect(profile.getByLabelText('Last name')).toHaveValue('Lovelace');
-      expect(profile.getByLabelText('Email')).toHaveValue('ada@example.com');
-      expect(profile.getByLabelText('Email')).toHaveAttribute('readonly');
-      expect(profile.getByText('Managed by sign-in')).toBeInTheDocument();
-      expect(profile.getByRole('button', { name: 'Change photo' })).toBeInTheDocument();
+      expect(profile.getByLabelText('Confirmed email')).toHaveValue('ada@example.com');
+      expect(profile.getByLabelText('Confirmed email')).toHaveAttribute('readonly');
+      expect(profile.getByText('Managed by X')).toBeInTheDocument();
+      expect(profile.queryByRole('button', { name: 'Change photo' })).not.toBeInTheDocument();
       expect(profile.getByRole('button', { name: 'Save changes' })).toBeDisabled();
     });
 
@@ -324,7 +353,6 @@ describe('Settings', () => {
       expect(userService.updateProfile).toHaveBeenCalledWith({
         firstName: 'Augusta',
         lastName: 'Lovelace',
-        avatarUrl: null,
       });
       expect(
         within(screen.getByRole('link', { name: /your account/i })).getByText('Augusta Lovelace'),
@@ -333,25 +361,6 @@ describe('Settings', () => {
       expect(track).toHaveBeenCalledWith('account_profile_saved', {
         fields_changed: ['first_name'],
       });
-    });
-
-    it('removes the photo', async () => {
-      const withPhoto = { ...ADA, avatarUrl: 'data:image/png;base64,AAAA' };
-      vi.mocked(userService.fetchProfile).mockResolvedValue(withPhoto);
-      vi.mocked(userService.updateProfile).mockResolvedValue(ADA);
-      renderSettings();
-
-      const profile = await card('Profile');
-      fireEvent.click(await profile.findByRole('button', { name: 'Remove photo' }));
-      fireEvent.click(profile.getByRole('button', { name: 'Save changes' }));
-
-      await waitFor(() =>
-        expect(userService.updateProfile).toHaveBeenCalledWith({
-          firstName: 'Ada',
-          lastName: 'Lovelace',
-          avatarUrl: null,
-        }),
-      );
     });
 
     it('shows why saving failed and keeps the change', async () => {
@@ -367,286 +376,6 @@ describe('Settings', () => {
       expect(await profile.findByRole('alert')).toHaveTextContent('Name is too long.');
       expect(profile.getByLabelText('Last name')).toHaveValue('Byron');
       expect(profile.getByRole('button', { name: 'Save changes' })).toBeEnabled();
-    });
-  });
-
-  describe('X photo offer', () => {
-    it('asks a User offered the X photo whether to use it, showing it large', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
-      renderSettings();
-
-      const dialog = await screen.findByRole('dialog', { name: 'Use your X photo?' });
-      expect(dialog.querySelector('img')).toHaveAttribute('src', X_PHOTO);
-      expect(
-        within(dialog).getByText(
-          'It will show next to your name in Pumpkit. You can change it in Settings.',
-        ),
-      ).toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('x_photo_offer_shown');
-    });
-
-    it('asks nothing when the X connection offers no photo', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, photoUrl: X_PHOTO });
-      renderSettings();
-
-      await (await card('X account')).findByText('@ada');
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
-
-    it('uses the X photo, showing it in the sidebar at once', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
-      let finish: (profile: UserProfile) => void = () => {};
-      vi.mocked(xConnectionService.acceptPhoto).mockReturnValue(
-        new Promise((resolve) => (finish = resolve)),
-      );
-      renderSettings();
-
-      const dialog = await screen.findByRole('dialog', { name: 'Use your X photo?' });
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Use photo' }));
-
-      expect(within(dialog).getByRole('button', { name: 'Using photo…' })).toBeDisabled();
-      finish({ ...ADA, avatarUrl: X_PHOTO_DATA_URL });
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-      expect(sidebarPhoto()).toHaveAttribute('src', X_PHOTO_DATA_URL);
-      expect(xConnectionService.declinePhoto).not.toHaveBeenCalled();
-      expect(track).toHaveBeenCalledWith('x_photo_offer_accepted');
-    });
-
-    it('keeps the dialog open with an error line when the X photo cannot be used', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
-      vi.mocked(xConnectionService.acceptPhoto).mockRejectedValue(
-        apiError(502, "Couldn't use your X photo. Try again."),
-      );
-      renderSettings();
-
-      const dialog = await screen.findByRole('dialog', { name: 'Use your X photo?' });
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Use photo' }));
-
-      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-        "Couldn't use your X photo. Try again.",
-      );
-      expect(within(dialog).getByRole('button', { name: 'Use photo' })).toBeEnabled();
-      expect(sidebarPhoto()).toBeNull();
-    });
-
-    it.each([
-      [
-        'Not now',
-        (dialog: HTMLElement) =>
-          fireEvent.click(within(dialog).getByRole('button', { name: 'Not now' })),
-      ],
-      [
-        'the close control',
-        (dialog: HTMLElement) =>
-          fireEvent.click(within(dialog).getByRole('button', { name: 'Close' })),
-      ],
-      ['Escape', (dialog: HTMLElement) => fireEvent.keyDown(dialog, { key: 'Escape' })],
-    ])('declines the X photo with %s', async (_way, leave) => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(OFFERING_PHOTO);
-      renderSettings();
-
-      leave(await screen.findByRole('dialog', { name: 'Use your X photo?' }));
-
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-      expect(xConnectionService.declinePhoto).toHaveBeenCalledTimes(1);
-      expect(xConnectionService.acceptPhoto).not.toHaveBeenCalled();
-      expect(track).toHaveBeenCalledWith('x_photo_offer_declined');
-    });
-  });
-
-  describe('Use photo from X', () => {
-    it('switches the Photo to the X photo from the profile card', async () => {
-      vi.mocked(userService.fetchProfile).mockResolvedValue({
-        ...ADA,
-        avatarUrl: 'data:image/png;base64,AAAA',
-      });
-      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, photoUrl: X_PHOTO });
-      vi.mocked(xConnectionService.acceptPhoto).mockResolvedValue({
-        ...ADA,
-        avatarUrl: X_PHOTO_DATA_URL,
-      });
-      renderSettings();
-
-      const profile = await card('Profile');
-      fireEvent.click(await profile.findByRole('button', { name: 'Use photo from X' }));
-
-      await waitFor(() => expect(sidebarPhoto()).toHaveAttribute('src', X_PHOTO_DATA_URL));
-      expect(
-        profile.getByRole('button', { name: 'Change photo' }).querySelector('img'),
-      ).toHaveAttribute('src', X_PHOTO_DATA_URL);
-      expect(track).toHaveBeenCalledWith('account_x_photo_used');
-    });
-
-    it('shows why the X photo could not be used in the profile card', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue({ ...CONNECTED, photoUrl: X_PHOTO });
-      vi.mocked(xConnectionService.acceptPhoto).mockRejectedValue(apiError(502, 'X is down.'));
-      renderSettings();
-
-      const profile = await card('Profile');
-      fireEvent.click(await profile.findByRole('button', { name: 'Use photo from X' }));
-
-      expect(await profile.findByRole('alert')).toHaveTextContent(
-        "Couldn't use your X photo. Try again.",
-      );
-    });
-
-    it('is not offered without an X connection', async () => {
-      renderSettings();
-
-      const profile = await card('Profile');
-      await profile.findByLabelText('First name');
-      await (await card('X account')).findByRole('button', { name: 'Connect X' });
-      expect(profile.queryByRole('button', { name: 'Use photo from X' })).not.toBeInTheDocument();
-    });
-
-    it('is not offered when the X account has no photo', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      renderSettings();
-
-      const profile = await card('Profile');
-      await (await card('X account')).findByText('@ada');
-      expect(profile.queryByRole('button', { name: 'Use photo from X' })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('X account', () => {
-    it('connects X, saying Pumpkit never sees the password', async () => {
-      vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
-        'https://x.com/i/oauth2/authorize?state=s',
-      );
-      renderSettings();
-
-      const x = await card('X account');
-      expect(x.getByText(/never sees your X password/)).toBeInTheDocument();
-      fireEvent.click(await x.findByRole('button', { name: 'Connect X' }));
-
-      await waitFor(() =>
-        expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
-      );
-    });
-
-    it('shows the connected handle and disconnects it, warning about waiting Scheduled posts', async () => {
-      vi.mocked(xConnectionService.get)
-        .mockResolvedValueOnce(CONNECTED)
-        .mockResolvedValue({ ...CONNECTED, scheduledPostsWaiting: 3 });
-      vi.mocked(xConnectionService.disconnect).mockResolvedValue();
-      renderSettings();
-
-      const x = await card('X account');
-      expect(await x.findByText('@ada')).toBeInTheDocument();
-      fireEvent.click(x.getByRole('button', { name: 'Disconnect' }));
-      const dialog = within(await screen.findByRole('dialog', { name: 'Disconnect @ada?' }));
-      expect(await dialog.findByText(/3 scheduled posts are waiting/)).toBeInTheDocument();
-      fireEvent.click(dialog.getByRole('button', { name: 'Disconnect' }));
-
-      expect(await x.findByRole('button', { name: 'Connect X' })).toBeInTheDocument();
-      expect(x.queryByText('@ada')).not.toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('x_disconnected');
-    });
-
-    it('keeps the X connection on screen when disconnecting fails', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
-      vi.mocked(xConnectionService.disconnect).mockRejectedValue(apiError(500, 'Server error'));
-      renderSettings();
-
-      const x = await card('X account');
-      fireEvent.click(await x.findByRole('button', { name: 'Disconnect' }));
-      const dialog = within(await screen.findByRole('dialog'));
-      fireEvent.click(await dialog.findByRole('button', { name: 'Disconnect' }));
-
-      expect(await x.findByRole('alert')).toHaveTextContent('Server error');
-      expect(x.getByText('@ada')).toBeInTheDocument();
-    });
-
-    it('shows why connecting failed to start', async () => {
-      vi.mocked(xConnectionService.startAuthorization).mockRejectedValue(
-        apiError(503, 'X_CLIENT_ID and X_CLIENT_SECRET must be set in .env to connect X accounts.'),
-      );
-      renderSettings();
-
-      const x = await card('X account');
-      fireEvent.click(await x.findByRole('button', { name: 'Connect X' }));
-
-      expect(await x.findByRole('alert')).toHaveTextContent(/X_CLIENT_ID/);
-      expect(redirectTo).not.toHaveBeenCalled();
-    });
-
-    it("shows the X account's photo beside its handle", async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue({
-        ...CONNECTED,
-        photoUrl: 'https://pbs.twimg.com/ada_200x200.jpg',
-      });
-      renderSettings();
-
-      const x = await screen.findByRole('region', { name: 'X account' });
-      await within(x).findByText('@ada');
-      expect(x.querySelector('img')).toHaveAttribute(
-        'src',
-        'https://pbs.twimg.com/ada_200x200.jpg',
-      );
-    });
-
-    it("shows the X account's initials when its photo fails to load", async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue({
-        ...CONNECTED,
-        photoUrl: 'https://pbs.twimg.com/gone.jpg',
-      });
-      renderSettings();
-
-      const x = await screen.findByRole('region', { name: 'X account' });
-      await within(x).findByText('@ada');
-      fireEvent.error(x.querySelector('img')!);
-
-      expect(x.querySelector('img')).toBeNull();
-      expect(within(x).getByText('A')).toBeInTheDocument();
-    });
-
-    it('offers to reconnect X when the connection predates media', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue({
-        ...CONNECTED,
-        needsReconnectForMedia: true,
-      });
-      vi.mocked(xConnectionService.startAuthorization).mockResolvedValue(
-        'https://x.com/i/oauth2/authorize?state=s',
-      );
-      renderSettings();
-
-      const x = await card('X account');
-      expect(await x.findByText(/so Pumpkit can post media/)).toBeInTheDocument();
-      fireEvent.click(x.getByRole('button', { name: 'Reconnect X' }));
-
-      await waitFor(() =>
-        expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
-      );
-    });
-
-    it('asks to reconnect X once when its access is gone and it predates media', async () => {
-      vi.mocked(xConnectionService.get).mockResolvedValue({
-        ...CONNECTED,
-        needsReconnect: true,
-        needsReconnectForMedia: true,
-      });
-      renderSettings();
-
-      const x = await card('X account');
-      expect(await x.findByText(/no longer accepts/)).toBeInTheDocument();
-      expect(x.queryByText(/so Pumpkit can post media/)).not.toBeInTheDocument();
-      expect(x.getAllByRole('button', { name: 'Reconnect X' })).toHaveLength(1);
-    });
-
-    it('shows the message the X callback left behind', async () => {
-      renderSettings({ state: { xConnectionNotice: 'Connected @ada.' } });
-
-      expect(await (await card('X account')).findByText('Connected @ada.')).toBeInTheDocument();
-    });
-
-    it('says when the X connection could not be loaded', async () => {
-      vi.mocked(xConnectionService.get).mockRejectedValue(apiError(500, 'boom'));
-      renderSettings();
-
-      expect(await (await card('X account')).findByRole('alert')).toHaveTextContent(
-        /couldn't load your x connection/i,
-      );
     });
   });
 
@@ -1239,12 +968,9 @@ describe('Settings', () => {
       await card('Profile');
       expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
         'Profile',
-        'X account',
         'Connect AI apps',
       ]);
-      expect(
-        await (await card('X account')).findByRole('button', { name: 'Connect X' }),
-      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
       expect(usageService.get).not.toHaveBeenCalled();
     });

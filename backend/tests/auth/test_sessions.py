@@ -4,10 +4,13 @@ Sessions over HTTP: Magic link sign-in starts one, `/refresh-token` rotates it a
 """
 
 import jwt
+import pytest
 from httpx import AsyncClient, Response
 
 from pumpkit.core.config import settings
 from tests.conftest import callback_fragment, magic_link_token
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 def _subject(access_token: str) -> str:

@@ -150,3 +150,8 @@ async def test_the_migration_runs_down_and_up_again(
     await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
     read = (await client.get(f"{POSTS}/post_a")).json()
     assert read["text"]["version_number"] == 2
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

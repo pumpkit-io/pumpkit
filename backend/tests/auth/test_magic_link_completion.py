@@ -7,16 +7,22 @@ import asyncio
 from datetime import timedelta
 from typing import Optional
 
+import jwt
 import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import func, select
 
-from pumpkit.auth.models import RefreshToken
+from pumpkit.auth.models import RefreshToken, User
+from pumpkit.auth.service.users import choose_photo
 from pumpkit.core.config import settings
+from pumpkit.core.time import system_clock
 from tests.conftest import callback_fragment, magic_link_token
 
 INVALID_MAGIC_LINK = "http://localhost:5173/login?error=invalid_magic_link"
 CALLBACK = "http://localhost:5173/auth/magic-link/callback#"
+
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 async def _request_link(browser: AsyncClient, auth_outbox, email: str = "bob@example.com") -> str:
@@ -140,13 +146,16 @@ async def _photo(browser: AsyncClient, access_token: str) -> Optional[str]:
     return me.json()["avatar_data_url"]
 
 
-async def _set_photo(browser: AsyncClient, access_token: str, photo: Optional[str]) -> None:
-    saved = await browser.patch(
-        "/api/v1/users/me",
-        json={"avatar_data_url": photo},
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    assert saved.status_code == 200
+async def _set_photo(
+    browser: AsyncClient, access_token: str, photo: Optional[str], db_session_maker
+) -> None:
+    token = access_token
+    user_id = jwt.decode(token, options={"verify_signature": False})["sub"]
+    async with db_session_maker() as db:
+        user = await db.get(User, user_id)
+        assert user is not None
+        await choose_photo(db, user, photo, system_clock())
+        await db.commit()
 
 
 @pytest.mark.usefixtures("gravatar_on")
@@ -201,10 +210,16 @@ async def test_a_failed_gravatar_download_still_signs_in_and_the_next_magic_link
 
 @pytest.mark.usefixtures("gravatar_on")
 async def test_a_magic_link_keeps_an_uploaded_photo(
-    new_browser, auth_outbox, clock, fake_photo_fetcher
+    new_browser,
+    auth_outbox,
+    clock,
+    fake_photo_fetcher,
+    db_session_maker,
 ):
     browser = new_browser()
-    await _set_photo(browser, await _sign_in(browser, auth_outbox, clock), UPLOADED_PHOTO)
+    await _set_photo(
+        browser, await _sign_in(browser, auth_outbox, clock), UPLOADED_PHOTO, db_session_maker
+    )
     fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
 
     access_token = await _sign_in(browser, auth_outbox, clock)
@@ -214,11 +229,15 @@ async def test_a_magic_link_keeps_an_uploaded_photo(
 
 @pytest.mark.usefixtures("gravatar_on")
 async def test_a_magic_link_never_fills_a_photo_the_user_cleared(
-    new_browser, auth_outbox, clock, fake_photo_fetcher
+    new_browser,
+    auth_outbox,
+    clock,
+    fake_photo_fetcher,
+    db_session_maker,
 ):
     fake_photo_fetcher.photos[BOB_GRAVATAR] = GRAVATAR_PHOTO
     browser = new_browser()
-    await _set_photo(browser, await _sign_in(browser, auth_outbox, clock), None)
+    await _set_photo(browser, await _sign_in(browser, auth_outbox, clock), None, db_session_maker)
 
     access_token = await _sign_in(browser, auth_outbox, clock)
 

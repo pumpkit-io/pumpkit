@@ -7,8 +7,8 @@ repo_root=$(dirname -- "$script_dir")
 template=$repo_root/.env.example
 env_file=$repo_root/.env
 
-required="PUBLIC_URL LLM_API_KEY TWITTERAPI_IO_API_KEY"
-generated="POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY"
+required="PUBLIC_URL LLM_API_KEY TWITTERAPI_IO_API_KEY X_CLIENT_ID X_CLIENT_SECRET"
+generated="POSTGRES_PASSWORD JWT_SECRET_KEY FERNET_ENCRYPTION_KEY TRIAL_IDENTITY_KEYS"
 
 usage() {
   cat <<'EOF'
@@ -21,8 +21,11 @@ Required, as flags or environment variables of the same name:
   --public-url              PUBLIC_URL, the address Users open, like https://pumpkit.example.org
   --llm-api-key             LLM_API_KEY, for an OpenAI-compatible endpoint (OpenRouter by default)
   --twitterapi-io-api-key   TWITTERAPI_IO_API_KEY, from twitterapi.io
+  --x-client-id            X_CLIENT_ID, from your X developer app
+  --x-client-secret        X_CLIENT_SECRET, from the same X developer app
 
-Generated when absent: POSTGRES_PASSWORD, JWT_SECRET_KEY, FERNET_ENCRYPTION_KEY.
+Generated when absent: POSTGRES_PASSWORD, JWT_SECRET_KEY, FERNET_ENCRYPTION_KEY,
+TRIAL_IDENTITY_KEYS. Back up these keys with the database.
 
 Any other setting in .env.example is accepted the same way, for example
 --stripe-secret-key or STRIPE_SECRET_KEY. Prefer environment variables for keys:
@@ -132,6 +135,7 @@ generate() {
   command -v openssl >/dev/null 2>&1 || die "openssl is needed to generate $1; install it and run again"
   case $1 in
     FERNET_ENCRYPTION_KEY) openssl rand -base64 32 | tr '+/' '-_' ;;
+    TRIAL_IDENTITY_KEYS) printf '{"active":"v1","keys":{"v1":"%s"}}' "$(openssl rand -base64 32)" ;;
     *) openssl rand -hex 32 ;;
   esac
 }

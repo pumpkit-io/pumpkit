@@ -101,17 +101,17 @@ async def test_distinct_x_accounts_sharing_email_open_separate_accounts(
 
 
 async def test_an_x_account_does_not_inherit_a_legacy_account_by_email(
-    sign_in_browser, fake_x_publisher, user
+    sign_in_browser, fake_x_publisher, legacy_user
 ):
     fake_x_publisher.exchange_scope = X_SIGN_IN_SCOPES
-    fake_x_publisher.account = replace(fake_x_publisher.account, confirmed_email=user.email)
+    fake_x_publisher.account = replace(fake_x_publisher.account, confirmed_email=legacy_user.email)
 
     signed_in = await profile(
         sign_in_browser, await complete(sign_in_browser, await begin(sign_in_browser))
     )
 
-    assert signed_in["id"] != user.id
-    assert signed_in["email"] == user.email
+    assert signed_in["id"] != legacy_user.id
+    assert signed_in["email"] == legacy_user.email
 
 
 async def test_expired_attempt_cannot_issue_a_session_or_call_x(
@@ -278,7 +278,7 @@ async def test_email_sign_in_cannot_resolve_an_x_identified_user(
     response = await new_browser().post(
         "/api/v1/login/magic-link/request", json={"email": "ada@example.com"}
     )
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 async def test_sign_in_restores_lost_credentials_without_changing_stable_account(
@@ -301,16 +301,16 @@ async def test_sign_in_restores_lost_credentials_without_changing_stable_account
     assert connected.json()["needs_reconnect"] is False
 
 
-async def test_prepared_x_completion_is_not_mounted_in_the_production_app(new_browser):
+async def test_x_completion_is_mounted_in_the_production_app(new_browser):
     response = await new_browser().post(
         "/api/v1/login/x/complete", json={"state": "state", "code": "code"}
     )
-    assert response.status_code == 404
+    assert response.status_code == 400
     assert "refresh_token" not in response.cookies
 
 
 async def test_a_legacy_publishing_connection_cannot_be_taken_over_by_sign_in(
-    sign_in_browser, fake_x_publisher, db, user, fixed_clock
+    sign_in_browser, fake_x_publisher, db, legacy_user, fixed_clock
 ):
     fake_x_publisher.exchange_scope = X_SIGN_IN_SCOPES
     legacy_tokens = await fake_x_publisher.exchange_code(
@@ -318,7 +318,7 @@ async def test_a_legacy_publishing_connection_cannot_be_taken_over_by_sign_in(
     )
     await save_connection(
         db,
-        user_id=user.id,
+        user_id=legacy_user.id,
         account=fake_x_publisher.account,
         tokens=legacy_tokens,
         now=fixed_clock(),
@@ -328,13 +328,13 @@ async def test_a_legacy_publishing_connection_cannot_be_taken_over_by_sign_in(
     assert refused.status_code == 409
     assert refused.json()["detail"] == "x_account_unavailable"
     assert "refresh_token" not in sign_in_browser.cookies
-    await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
+    await db.execute(delete(XConnection).where(XConnection.user_id == legacy_user.id))
     await db.commit()
     fake_x_publisher.account = replace(fake_x_publisher.account, display_name="After refusal")
     created = await profile(
         sign_in_browser, await complete(sign_in_browser, await begin(sign_in_browser))
     )
-    assert created["id"] != user.id
+    assert created["id"] != legacy_user.id
     assert created["first_name"] == "After refusal"
 
 

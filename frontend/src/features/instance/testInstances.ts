@@ -1,10 +1,10 @@
 import { DEFAULT_INSTANCE, type Instance } from '@/lib/instance';
 
-/** For tests: an Instance that sells Plans, connects X and offers Google sign-in, without Operator details. */
+/** For tests: an Instance that sells Plans, offers X sign-in and publishing, without Operator details. */
 export const SELLS_PLANS: Instance = {
   ...DEFAULT_INSTANCE,
   sells_plans: true,
-  sign_in_methods: ['magic_link', 'google'],
+  sign_in_methods: ['x'],
   x_connection: true,
 };
 

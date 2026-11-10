@@ -16,6 +16,7 @@ from tests.billing.test_coupon_x_identity_migration import (
 from tests.billing.test_coupon_x_identity_migration import (
     test_downgrade_cannot_erase_retained_x_coupon_claims as test_downgrade_cannot_erase_retained_x_coupon_claims,
 )
+from tests.billing.test_coupon_x_identity_migration import user as user
 from tests.billing.test_top_up_account_deletion import remove_user
 from tests.billing.test_trial_eligibility import sign_in
 from tests.billing.test_trial_eligibility import sign_in_app as sign_in_app

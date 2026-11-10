@@ -26,6 +26,8 @@ _TEST_ENV = {
     "FERNET_ENCRYPTION_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
     "MAGIC_LINK_TOKEN_DURATION_MINUTES": "15",
     "MAGIC_LINK_TOKEN_NUM_BYTES": "32",
+    "X_CLIENT_ID": "test-x-client",
+    "X_CLIENT_SECRET": "test-x-secret",
     "GOOGLE_CLIENT_ID": "test-client-id",
     "GOOGLE_CLIENT_SECRET": "test-client-secret",
     "GOOGLE_NONCE_TOKEN_NUM_BYTES": "64",
@@ -46,6 +48,7 @@ _TEST_ENV = {
 for _key, _value in _TEST_ENV.items():
     os.environ.setdefault(_key, _value)
 
+import hashlib  # noqa: E402
 import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from datetime import datetime, timedelta, timezone  # noqa: E402
@@ -55,9 +58,10 @@ from urllib.parse import parse_qs, urlsplit  # noqa: E402
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
-from fastapi import Depends  # noqa: E402
+from fastapi import Depends, FastAPI  # noqa: E402
 from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
 from httpx import Request as HttpxRequest  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
 from sqlalchemy import event, select  # noqa: E402
 from sqlalchemy.ext.asyncio import (  # noqa: E402
     AsyncSession,
@@ -77,10 +81,13 @@ from pumpkit.auth.google_sign_in import (  # noqa: E402
 )
 from pumpkit.auth.mailer import OutboxAuthMailer, get_auth_mailer  # noqa: E402
 from pumpkit.auth.models import MagicLink, User  # noqa: E402
+from pumpkit.auth.router import legacy_router  # noqa: E402
+from pumpkit.auth.router import router as auth_router  # noqa: E402
 from pumpkit.auth.service import sessions as auth_sessions  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
+from pumpkit.connected_apps.router import rate_limit_exceeded_handler  # noqa: E402
 from pumpkit.connected_apps.service.client_metadata import (  # noqa: E402
     FakeClientMetadataFetcher,
     get_client_metadata_fetcher,
@@ -347,14 +354,20 @@ async def db(db_session_maker):
 
 
 @pytest_asyncio.fixture
-async def user(db) -> User:
-    u = User(email="alice@example.com", display_name="Alice")
-    db.add(u)
+async def legacy_user(db) -> User:
+    user = User(email="alice@example.com", display_name="Alice")
+    db.add(user)
     await db.commit()
-    await db.refresh(u)
-    # End refresh()'s read transaction: its WAL snapshot would hide request-session commits.
-    await db.commit()
-    return u
+    return user
+
+
+@pytest_asyncio.fixture
+async def user(db, request, legacy_user) -> User:
+    if "legacy_auth_app" not in request.fixturenames:
+        legacy_user.x_user_id = "1001"
+        legacy_user.x_handle = "ada"
+        await db.commit()
+    return legacy_user
 
 
 @pytest_asyncio.fixture
@@ -433,8 +446,28 @@ def no_support_email(monkeypatch) -> None:
     monkeypatch.setattr(settings, "SUPPORT_EMAIL", None)
 
 
+@pytest.fixture
+def legacy_auth_app():
+    """Test-owned assembly for the retained inactive sign-in implementations."""
+    isolated = FastAPI()
+    isolated.include_router(auth_router, prefix="/api/v1")
+    isolated.include_router(legacy_router, prefix="/api/v1")
+    isolated.state.limiter = limiter
+    isolated.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
+    errors_module.register_exception_handlers(isolated)
+    isolated.dependency_overrides = app.dependency_overrides
+    return isolated
+
+
+@pytest.fixture
+def http_app(request):
+    if "legacy_auth_app" in request.fixturenames:
+        return request.getfixturevalue("legacy_auth_app")
+    return app
+
+
 @pytest_asyncio.fixture
-async def client(db_session_maker, user):
+async def client(db_session_maker, user, http_app):
     async def _get_db():
         async with db_session_maker() as session:
             yield session
@@ -447,14 +480,14 @@ async def client(db_session_maker, user):
 
     app.dependency_overrides[get_async_db] = _get_db
     app.dependency_overrides[get_current_user] = _get_user
-    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    transport = ASGITransport(app=http_app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
-async def new_browser(db_session_maker):
+async def new_browser(db_session_maker, http_app):
     """
     Factory for ASGI clients that each act as one browser with its own cookie jar.
     Only the database is overridden: real access-token verification runs.
@@ -468,7 +501,7 @@ async def new_browser(db_session_maker):
     browsers: list[AsyncClient] = []
 
     def _new() -> AsyncClient:
-        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        transport = ASGITransport(app=http_app, raise_app_exceptions=False)
         browser = AsyncClient(transport=transport, base_url="http://test")
         browsers.append(browser)
         return browser
@@ -631,13 +664,20 @@ async def sign_in_for_test(db_session_maker):
         async with db_session_maker() as db:
             user = await db.scalar(select(User).where(User.email == email))
             if user is None:
-                user = User(email=email, display_name=email.split("@", 1)[0])
+                user = User(
+                    email=email,
+                    display_name=email.split("@", 1)[0],
+                    x_user_id=str(
+                        int.from_bytes(hashlib.sha256(email.encode()).digest()[:8], "big")
+                    ),
+                    x_handle=email.split("@", 1)[0],
+                )
                 db.add(user)
                 await db.flush()
             issued = await auth_sessions.start(
                 db,
                 user=user,
-                sign_in_method="magic_link",
+                sign_in_method="x" if user.x_user_id is not None else "magic_link",
                 client=auth_sessions.ClientInfo(ip="127.0.0.1", user_agent="test"),
             )
             assert isinstance(issued, auth_sessions.IssuedSession)

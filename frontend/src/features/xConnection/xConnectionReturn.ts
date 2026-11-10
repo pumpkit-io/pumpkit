@@ -16,6 +16,7 @@ export const xConnectionReturn = savedReturn('x-connection-return', isPostPage);
 /** What the X callback hands the page it returns to. */
 export interface XConnectionNoticeState {
   xConnectionNotice?: string;
+  xConnectionFailed?: boolean;
 }
 
 /** Shows the X callback's message on a Post page once, then drops it so a reload doesn't repeat it. */

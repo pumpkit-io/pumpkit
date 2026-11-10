@@ -56,6 +56,8 @@ export const EVENTS = {
     description: 'Landing: clicked "Self-hosting guide" in the open-source section.',
   },
 
+  login_x_clicked: { description: 'Login: clicked "Continue with X".' },
+
   // Login (/login) + auth callbacks
   login_google_clicked: { description: 'Login: clicked "Continue with Google".' },
   login_google_succeeded: {
@@ -130,7 +132,7 @@ export const EVENTS = {
 
   // Onboarding (/onboarding)
   onboarding_step_viewed: {
-    description: 'Onboarding: a step was shown. Props: step (x_connection | persona).',
+    description: 'Onboarding: a step was shown. Props: step (persona).',
   },
   onboarding_finished: {
     description:

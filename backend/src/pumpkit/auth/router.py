@@ -24,8 +24,11 @@ from pumpkit.core.time import Clock, get_clock
 # Tags are set per route: the Sign-in method and Session routes are "auth", the profile "users".
 router = APIRouter()
 
+# Retained for deliberate adaptations; the application never mounts these sign-in routes.
+legacy_router = APIRouter()
 
-@router.get(
+
+@legacy_router.get(
     "/login/google",
     status_code=status.HTTP_200_OK,
     tags=["auth"],
@@ -35,7 +38,7 @@ async def start_google_sign_in() -> JSONResponse:
     return await mediator.start_google_sign_in()
 
 
-@router.get(
+@legacy_router.get(
     "/oauth/google/callback",
     status_code=status.HTTP_303_SEE_OTHER,
     tags=["auth"],
@@ -63,7 +66,7 @@ async def oauth_google_callback(
     )
 
 
-@router.post(
+@legacy_router.post(
     "/login/magic-link/request",
     status_code=status.HTTP_200_OK,
     response_model=MessageResponse,
@@ -86,7 +89,7 @@ async def request_magic_link(
     )
 
 
-@router.get("/login/magic-link", status_code=status.HTTP_303_SEE_OTHER, tags=["auth"])
+@legacy_router.get("/login/magic-link", status_code=status.HTTP_303_SEE_OTHER, tags=["auth"])
 @limiter.limit("20/minute")
 async def complete_magic_link(
     request: Request,
@@ -105,7 +108,7 @@ async def complete_magic_link(
     )
 
 
-@router.get(
+@legacy_router.get(
     "/login/magic-link/inbox-redirect",
     status_code=status.HTTP_303_SEE_OTHER,
     tags=["auth"],
