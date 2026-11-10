@@ -119,6 +119,8 @@ ask() {
       case $1 in
         LLM_API_KEY) printf 'LLM_API_KEY, for an OpenAI-compatible endpoint (input hidden): ' >&2 ;;
         TWITTERAPI_IO_API_KEY) printf 'TWITTERAPI_IO_API_KEY, from twitterapi.io (input hidden): ' >&2 ;;
+        X_CLIENT_ID) printf 'X_CLIENT_ID, from your X developer app (input hidden): ' >&2 ;;
+        X_CLIENT_SECRET) printf 'X_CLIENT_SECRET, from the same X developer app (input hidden): ' >&2 ;;
       esac
       trap 'stty echo' EXIT INT TERM
       stty -echo
