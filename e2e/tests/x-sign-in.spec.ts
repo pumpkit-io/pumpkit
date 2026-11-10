@@ -129,6 +129,38 @@ test('the local provider consumes PKCE codes and rotates refresh credentials wit
       })
     ).status(),
   ).toBe(403);
+  const getProfile = (accessToken: string) =>
+    request.get(`${authorize.origin}/2/users/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  const revoke = (value: string, hint: string) =>
+    request.post(`${authorize.origin}/2/oauth2/revoke`, {
+      headers,
+      form: { token: value, token_type_hint: hint },
+    });
+  expect((await revoke(current.access_token, 'access_token')).status()).toBe(200);
+  expect((await getProfile(current.access_token)).status()).toBe(401);
+  expect((await getProfile(credentials.access_token)).status()).toBe(200);
+  const nextRefresh = await request.post(endpoint, {
+    headers,
+    form: { grant_type: 'refresh_token', refresh_token: current.refresh_token },
+  });
+  expect(nextRefresh.status()).toBe(200);
+  const next = await nextRefresh.json();
+  const separate = await (await exchange(await code(), verifier)).json();
+  expect((await getProfile(next.access_token)).status()).toBe(200);
+  expect((await revoke(next.refresh_token, 'refresh_token')).status()).toBe(200);
+  expect((await getProfile(credentials.access_token)).status()).toBe(401);
+  expect((await getProfile(next.access_token)).status()).toBe(401);
+  expect((await getProfile(separate.access_token)).status()).toBe(200);
+  expect(
+    (
+      await request.post(endpoint, {
+        headers,
+        form: { grant_type: 'refresh_token', refresh_token: next.refresh_token },
+      })
+    ).status(),
+  ).toBe(400);
   const events = await (await request.get(`${authorize.origin}/_pumpkit/events`)).json();
   expect(events.some((event: { kind: string }) => event.kind === 'profile')).toBe(true);
   for (const event of events) expect(Object.keys(event).sort()).toEqual(['kind', 'userId']);

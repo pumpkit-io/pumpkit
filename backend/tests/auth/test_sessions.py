@@ -105,10 +105,10 @@ async def test_logout_ends_only_the_session_in_this_browser(new_browser, sign_in
 
 
 async def test_first_magic_link_sign_in_creates_the_user_and_the_next_reaches_the_same_user(
-    new_browser, sign_in_for_test
+    new_browser, sign_in_by_magic_link
 ):
-    first = await sign_in_for_test(new_browser(), "carol@example.com")
-    second = await sign_in_for_test(new_browser(), "carol@example.com")
+    first = await sign_in_by_magic_link(new_browser(), "carol@example.com")
+    second = await sign_in_by_magic_link(new_browser(), "carol@example.com")
 
     renamed = await new_browser().patch(
         "/api/v1/users/me",

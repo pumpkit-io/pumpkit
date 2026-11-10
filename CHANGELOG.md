@@ -6,7 +6,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
-- Contributors can exercise X authorization locally and in CI with deterministic accounts, single-use PKCE codes and rotating refresh tokens. The managed stack supplies throwaway credentials and refuses publishing locally; production rejects provider URL overrides. Existing X sign-in entry points remain staged until cutover.
+- Self-hosters can exercise X authorization locally and in CI with deterministic accounts, single-use PKCE codes and rotating refresh tokens. The managed stack supplies throwaway credentials and refuses publishing locally; production rejects provider URL overrides. Existing X sign-in entry points remain staged until cutover.
 
 - Users who sign in with X see their read-only handle and confirmed email in Profile, use their X photo automatically, and keep name editing without photo or account-replacement controls.
 

@@ -1,8 +1,11 @@
 """Local browser fixture for the prepared X routes, never imported by production assembly."""
 
+from typing import Optional
+
 import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from PIL import Image
 from slowapi.errors import RateLimitExceeded
 
 from pumpkit.auth.router import router as auth_router
@@ -53,7 +56,7 @@ _CALLBACK = """<!doctype html><html lang="en"><meta charset="utf-8">
 
 
 class LocalPhotoFetcher:
-    async def fetch(self, url: str) -> str | None:
+    async def fetch(self, url: str) -> Optional[str]:
         if url != f"{settings.X_API_URL}/_pumpkit/avatar.png":
             return None
         try:
@@ -62,7 +65,7 @@ class LocalPhotoFetcher:
             if response.status_code != 200:
                 return None
             return _to_data_url(response.content)
-        except Exception:
+        except (httpx.HTTPError, OSError, ValueError, Image.DecompressionBombError):
             return None
 
 

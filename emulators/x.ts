@@ -8,6 +8,7 @@ interface Account {
 }
 
 interface Grant {
+  id: string;
   userId: string;
   scope: string;
 }
@@ -108,6 +109,7 @@ export function pumpkitX(config: {
           if (!state.users[userId]) return c.json({ error: 'invalid_request' }, 400);
           const code = token();
           state.codes[code] = {
+            id: token(),
             userId,
             scope: p.get('scope')!,
             challenge: p.get('code_challenge')!,
@@ -147,7 +149,9 @@ export function pumpkitX(config: {
           return c.json({ error: 'invalid_grant' }, 400);
         }
         state.events.push({ kind: 'token', userId: authorization.userId });
-        return c.json(issue({ userId: authorization.userId, scope: authorization.scope }));
+        return c.json(
+          issue({ id: authorization.id, userId: authorization.userId, scope: authorization.scope }),
+        );
       });
       app.get('/2/users/me', (c: any) => {
         const grant = state.access[(c.req.header('Authorization') ?? '').replace(/^Bearer /, '')];
@@ -173,8 +177,15 @@ export function pumpkitX(config: {
           return c.json({ error: 'invalid_client' }, 401);
         const p = new URLSearchParams(await c.req.text()),
           value = p.get('token') ?? '';
-        delete state.access[value];
-        delete state.refresh[value];
+        const grant = state.refresh[value];
+        if (grant) {
+          for (const [credential, active] of Object.entries(state.access)) {
+            if (active.id === grant.id) delete state.access[credential];
+          }
+          for (const [credential, active] of Object.entries(state.refresh)) {
+            if (active.id === grant.id) delete state.refresh[credential];
+          }
+        } else delete state.access[value];
         return c.json({ revoked: true });
       });
       app.get('/_pumpkit/events', (c: any) => c.json(state.events));

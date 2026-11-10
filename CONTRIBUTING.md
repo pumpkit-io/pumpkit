@@ -16,8 +16,8 @@ npm install                                   # repo root: installs the Husky pr
 (cd frontend && npm install) && (cd e2e && npm install && npx playwright install chromium)
 (cd backend && uv sync --extra dev)
 
-# Run everything with hot reload: Postgres, the backend on :8000, the publisher, and the app on :5173
-make dev
+# Run the isolated stack with hot reload and local provider stand-ins
+scripts/dev-stack up
 ```
 
 Use `scripts/dev-stack up` for isolated local work. It prints this worktree's Dev URL, starts provider stand-ins with throwaway credentials, and disables external publishing, email and analytics. Check and stop it through the same contract; see [the dev stack guide](docs/agents/dev-stack.md). Before the X-only cutover, its separate `scripts/dev-stack staged-x-url` fixture exercises the complete prepared X sign-in flow while normal app routes remain unmounted. No live Google, X or mail credentials are needed for browser authentication tests.
