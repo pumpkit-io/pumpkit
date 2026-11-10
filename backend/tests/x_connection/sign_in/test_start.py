@@ -135,8 +135,8 @@ async def test_sign_in_initiation_is_rate_limited_without_issuing_a_session(sign
     assert "refresh_token" not in sign_in_browser.cookies
 
 
-async def test_prepared_sign_in_is_not_mounted_in_the_production_app(new_browser):
+async def test_sign_in_is_mounted_in_the_production_app(new_browser):
     response = await new_browser().get("/api/v1/login/x")
 
-    assert response.status_code == 404
-    assert "x_sign_in_browser" not in response.cookies
+    assert response.status_code == 200
+    assert "x_sign_in_browser" in response.cookies

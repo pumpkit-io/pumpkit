@@ -132,9 +132,7 @@ def _handler(tool: McpTool) -> Callable[..., Awaitable[Any]]:
                 user = await user_service.get_user_by_id(db=db, user_id=caller.user_id)
                 if user is None:
                     return tool_error(CREDENTIALS_INVALID)
-                # Legacy accounts retain their gate until X-only activation.
-                requires_subscription = tool.requires_subscription or user.x_user_id is None
-                if requires_subscription and not await billing_service.has_access(
+                if tool.requires_subscription and not await billing_service.has_access(
                     db, user_id=user.id, now=clock()
                 ):
                     return _subscription_needed()

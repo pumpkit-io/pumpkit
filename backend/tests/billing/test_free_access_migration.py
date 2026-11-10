@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import inspect
 
 from alembic import command
@@ -20,3 +21,8 @@ async def test_cardless_migration_can_upgrade_and_reverse_without_rewriting_bill
         "account_file_deletions",
     }
     await migrate(db_engine, lambda config: command.downgrade(config, "0044"))
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

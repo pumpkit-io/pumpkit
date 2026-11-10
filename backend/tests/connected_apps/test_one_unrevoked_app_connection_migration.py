@@ -1,5 +1,6 @@
 """Migration 0037 makes unrevoked connections unique per User and app, and its downgrade doesn't."""
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -31,3 +32,8 @@ async def test_upgrade_adds_the_unique_index_and_downgrade_drops_it(db_engine):
 
     await migrate(db_engine, lambda config: command.downgrade(config, "0036"))
     assert INDEX not in await _unique_indexes(db_engine)
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

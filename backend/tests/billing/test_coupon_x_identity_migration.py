@@ -44,3 +44,8 @@ async def test_downgrade_cannot_erase_retained_x_coupon_claims(
     await migrate(db_engine, lambda config: command.stamp(config, "0057"))
     with pytest.raises(RuntimeError, match="Retained X coupon claims"):
         await migrate(db_engine, lambda config: command.downgrade(config, "0056"))
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

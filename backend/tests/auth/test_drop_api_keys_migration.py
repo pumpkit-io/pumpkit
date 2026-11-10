@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -43,3 +44,8 @@ async def test_upgrade_drops_api_keys_and_downgrade_recreates_the_table_empty(db
     async with db_engine.connect() as connection:
         count = await connection.scalar(sa.text("SELECT count(*) FROM api_keys"))
     assert count == 0
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

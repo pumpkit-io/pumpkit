@@ -93,6 +93,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh scripts/setup.sh --public-url http://localhost:8080 --llm-api-key dummy --twitterapi-io-api-key dummy </dev/null
+        env:
+          X_CLIENT_ID: setup-check-client
+          X_CLIENT_SECRET: setup-check-secret
       - run: make smoke
       - name: Check search indexing turned on
         run: |

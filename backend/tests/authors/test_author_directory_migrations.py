@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -148,3 +149,8 @@ async def test_the_seed_migration_skips_handles_already_in_the_directory(db_engi
     assert entries[seeded] == ("Looked up", None, "lookup")
     assert len(entries) == len(SEEDS)
     assert {source for _, _, source in entries.values()} == {"seed", "lookup"}
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

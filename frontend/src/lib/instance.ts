@@ -2,7 +2,7 @@ import { API_BASE_URL } from '@/lib/api';
 
 /** What this Instance offers, from `GET /instance`, so one frontend build serves every Instance. */
 
-export type SignInMethod = 'magic_link' | 'google';
+export type SignInMethod = 'x';
 
 export interface OperatorDetails {
   name: string;
@@ -23,7 +23,7 @@ export interface Instance {
   /** Where the support link sends Users' email; null hides it. */
   support_email: string | null;
   analytics: AnalyticsSettings | null;
-  /** False on an Instance without X's app keys: Onboarding skips its X step, and no page offers to connect X. */
+  /** Publishing recovery is available on every X-only Instance. */
   x_connection: boolean;
   /** The MCP endpoint at `PUBLIC_URL`, which differs from the browser's origin behind a tunnel. */
   mcp_url: string | null;
@@ -33,11 +33,11 @@ export interface Instance {
 export const DEFAULT_INSTANCE: Instance = {
   app_name: 'Pumpkit',
   sells_plans: false,
-  sign_in_methods: ['magic_link'],
+  sign_in_methods: ['x'],
   operator: null,
   support_email: null,
   analytics: null,
-  x_connection: false,
+  x_connection: true,
   mcp_url: null,
 };
 

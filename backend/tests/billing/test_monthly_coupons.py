@@ -2,6 +2,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 
+import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -404,3 +405,8 @@ async def test_refused_operation_audit_expires_after_resolution_without_a_benefi
     await coupons(command="purge")
     assert (await authed_client.get(REDEEM + "/redeem-test-0001")).status_code == 404
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 0
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

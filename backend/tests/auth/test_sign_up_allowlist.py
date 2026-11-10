@@ -14,6 +14,9 @@ EMAIL_NOT_ALLOWED = "http://localhost:5173/login?error=email_not_allowed"
 CALLBACK = "http://localhost:5173/auth/magic-link/callback#"
 
 
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
+
+
 @pytest.fixture
 def allowlist(monkeypatch):
     def _set(value: str) -> None:

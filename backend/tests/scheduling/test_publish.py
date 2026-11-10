@@ -3,8 +3,11 @@ Publishing as the publisher will call it: for a Scheduled post it didn't just
 create, in a session of its own. Outcomes are checked through the HTTP API.
 """
 
+from sqlalchemy import delete
+
 import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.scheduling.publishing import publish_scheduled_post
+from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.scheduling.reading import scheduled_posts
 
@@ -191,7 +194,8 @@ async def test_a_post_whose_x_connection_is_gone_fails(
 ):
     await connect_x()
     scheduled_post_id = await _waiting(db, user, clock, post_with)
-    assert (await client.delete("/api/v1/x-connection")).status_code == 204
+    await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
+    await db.commit()
 
     await _publish(db_session_maker, fake_x_publisher, file_storage, scheduled_post_id, clock)
 

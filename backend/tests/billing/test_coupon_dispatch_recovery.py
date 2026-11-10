@@ -275,3 +275,8 @@ async def test_first_dispatch_known_unsent_after_target_expiry_releases_capacity
     signed = await sign_in_for_test(other, "unsent-competitor@example.com")
     other.headers["Authorization"] = "Bearer " + signed.access_token
     assert (await other.post(PREVIEW, json={"code": code["code"]})).status_code == 200
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

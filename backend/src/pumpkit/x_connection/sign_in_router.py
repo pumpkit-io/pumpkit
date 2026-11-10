@@ -12,7 +12,6 @@ from pumpkit.x_connection import sign_in_mediator
 from pumpkit.x_connection.schemas import XSignInCompleteRequest, XSignInStartQuery
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
-# Staged until the X-only cutover; production assembly does not mount this router.
 router = APIRouter(tags=["auth"])
 
 

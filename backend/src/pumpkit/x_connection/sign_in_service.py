@@ -22,7 +22,7 @@ class StartedSignIn:
 async def start(db: AsyncSession, *, now: datetime, return_to: Optional[str]) -> StartedSignIn:
     await db.execute(delete(PendingXSignIn).where(PendingXSignIn.expires_at <= now))
     started = StartedSignIn(
-        state=generate_token(32),
+        state="signin." + generate_token(32),
         browser_secret=generate_token(32),
         code_verifier=new_code_verifier(),
     )

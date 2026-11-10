@@ -43,3 +43,8 @@ async def test_downgrade_cannot_erase_retained_trial_eligibility(db_engine):
 
     async with db_engine.connect() as connection:
         assert await connection.scalar(sa.text("SELECT count(*) FROM trial_eligibility")) == 1
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

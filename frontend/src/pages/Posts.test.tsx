@@ -181,7 +181,7 @@ describe('Posts page', () => {
     renderSignedIn('/posts/scheduled');
 
     const header = within(screen.getByRole('banner'));
-    expect(await header.findByRole('link', { name: 'Connect X to post' })).toHaveAttribute(
+    expect(await header.findByRole('link', { name: 'Reconnect X to post' })).toHaveAttribute(
       'href',
       '/settings',
     );
@@ -193,7 +193,7 @@ describe('Posts page', () => {
 
     const header = within(screen.getByRole('banner'));
     expect(await header.findByText(TIME_ZONE)).toBeInTheDocument();
-    expect(header.queryByRole('link', { name: 'Connect X to post' })).not.toBeInTheDocument();
+    expect(header.queryByRole('link', { name: 'Reconnect X to post' })).not.toBeInTheDocument();
   });
 
   it('has a tab for each status with its count, each at its own address', async () => {

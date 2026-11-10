@@ -725,7 +725,10 @@ async def test_scheduling_media_on_an_x_connection_without_media_write_asks_to_r
     response = await _schedule(client, post_id)
 
     assert response.status_code == 409, response.text
-    assert response.json()["code"] == "X_RECONNECT_FOR_MEDIA"
+    assert (
+        response.json()["detail"]
+        == "X no longer accepts Pumpkit's access to your account. Reconnect X first."
+    )
     assert (await client.get(f"{POSTS}/{post_id}")).json()["scheduled_post"] is None
 
 

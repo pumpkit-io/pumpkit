@@ -431,14 +431,10 @@ async def get_usage(call: ToolCall[User]) -> UsageResponse:
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
     Where the user restores publishing permission in a browser: the Settings page of Pumpkit.
-    If you signed in with X, reconnect only restores publishing for that same account.
+    Reconnect only restores publishing for the same X account you signed in with.
     """
     url = f"{settings.frontend_url()}{mediator.X_CONNECTION_PAGE}"
-    action = (
-        "Reconnect the X account you signed in with"
-        if call.user.x_user_id is not None
-        else "Connect, reconnect or disconnect your X account"
-    )
+    action = "Reconnect the X account you signed in with"
     return LinkToolResponse(
         message=f"{action} on the Settings page: {url}",
         url=url,

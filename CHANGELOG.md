@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users sign in only with X, authorizing publishing in the same action, then choose their Persona after any paywall. Profile keeps name editing with X-managed identity and photo; reconnect restores only the same X account. Self-hosters must configure X app credentials and the lifetime trial identity key ring. **Upgrade notes:** apply migrations through `0057`, configure `X_CLIENT_ID`, `X_CLIENT_SECRET`, the registered `PUBLIC_URL/oauth/x/callback` callback and the full `TRIAL_IDENTITY_KEYS` ring, and preserve encryption and identity keys with database backups. Google and magic link implementations remain inactive regardless of credentials or SMTP. Existing accounts are never deleted by startup or migration; plan any deliberate prelaunch reset separately before cutover.
+
 - Users: Coupons retain both the X account and confirmed email to prevent repeat claims after contact changes or account deletion; confirmed benefits also permanently remove that X account’s introductory trial eligibility. **Upgrade notes:** Apply migration `0057` and preserve both Coupon and Trial identity key rings. Coupons remain disabled pending their existing activation gates.
 
 - Self-hosters can exercise X authorization locally and in CI with deterministic accounts, single-use PKCE codes and rotating refresh tokens. The managed stack supplies throwaway credentials and refuses publishing locally; production rejects provider URL overrides. Existing X sign-in entry points remain staged until cutover.

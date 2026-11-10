@@ -112,3 +112,8 @@ async def test_the_migration_runs_down_and_up_again(
     await migrate(db_engine, lambda config: command.upgrade(config, "0021"))
     read = (await client.get(f"{POSTS}/post_a")).json()
     assert read["scheduled_post"]["id"] == "scheduled_post_a"
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

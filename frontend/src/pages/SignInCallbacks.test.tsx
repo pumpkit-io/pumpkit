@@ -14,7 +14,9 @@ vi.mock('@/services/authService', () => ({
     getGoogleLoginUrl: vi.fn(),
   },
 }));
-vi.mock('@/services/xSignInService', () => ({ xSignInService: { complete: vi.fn() } }));
+vi.mock('@/services/xSignInService', () => ({
+  xSignInService: { complete: vi.fn(), start: vi.fn().mockRejectedValue(new Error('no network')) },
+}));
 vi.mock('@/services/userService', () => ({
   userService: {
     fetchProfile: vi.fn().mockResolvedValue({
@@ -129,17 +131,9 @@ async function visitSignedOut(path: string) {
   await screen.findByRole('heading', { name: 'Welcome to Pumpkit' });
 }
 
-/** Asks for a Magic link on the sign-in page already on screen. */
-async function requestMagicLink() {
-  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
-  await screen.findByRole('heading', { name: 'Magic link sent' });
-}
-
-/** Starts Google sign-in, which stops in jsdom before Google's page. */
-async function startGoogle() {
-  fireEvent.click(screen.getByRole('button', { name: /Google/ }));
-  await screen.findByText("We couldn't start Google sign-in. Try again.");
+async function continueWithX() {
+  fireEvent.click(screen.getByRole('button', { name: 'Continue with X' }));
+  await screen.findByText("Couldn't open X. Try again.");
 }
 
 const MINUTE = 60 * 1000;
@@ -214,7 +208,7 @@ describe.each(callbacks)('the $name callback', ({ path, page, error, valid }) =>
 describe.each(callbacks)('returning after the $name callback', ({ path, page, valid }) => {
   it('lands on the consent request the User was sent to sign in from', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
-    await requestMagicLink();
+    await continueWithX();
     cleanup();
 
     renderCallback(path, page, valid);
@@ -288,12 +282,10 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page, va
     },
   );
 
-  it('lands on the consent request after going back to use a different email', async () => {
+  it('lands on the consent request after retrying X sign-in', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
-    await requestMagicLink();
-    fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
-    await screen.findByRole('heading', { name: 'Welcome to Pumpkit' });
-    await requestMagicLink();
+    await continueWithX();
+    await continueWithX();
     cleanup();
 
     renderCallback(path, page, valid);
@@ -304,8 +296,8 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page, va
   });
 
   it.each([
-    ['an invalid or expired Magic link', 'invalid_magic_link', requestMagicLink],
-    ['Google failing or being cancelled', 'sign_in_failed', startGoogle],
+    ['an expired X attempt', 'x_authorization_invalid', continueWithX],
+    ['X failing or being cancelled', 'x_authorization_cancelled', continueWithX],
   ])(
     'lands on the consent request when signing in again after %s',
     async (_label, errorCode, firstTry) => {
@@ -315,7 +307,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page, va
       // The backend or the callback sends the browser back with an error, as a new page load.
       renderSignIn(`/login?error=${errorCode}`);
       await screen.findByRole('alert');
-      await requestMagicLink();
+      await continueWithX();
       cleanup();
 
       renderCallback(path, page, valid);
@@ -333,7 +325,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page, va
     await screen.findByRole('alert');
     cleanup();
     renderSignIn('/login');
-    await requestMagicLink();
+    await continueWithX();
     cleanup();
 
     renderCallback(path, page, valid);
@@ -377,7 +369,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page, va
     }
 
     await visitSignedOut('/oauth/consent?request=req_1');
-    await requestMagicLink();
+    await continueWithX();
     cleanup();
 
     renderCallback(path, page, valid);

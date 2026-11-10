@@ -1340,7 +1340,7 @@ async def _x_connection_response(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id
         ),
         photo_url=connection.photo_url,
-        offer_photo=x_connections_service.offers_photo(connection, user),
+        offer_photo=False,
     )
 
 
@@ -1378,14 +1378,14 @@ async def complete_x_authorization(
             code=code,
             code_verifier=code_verifier,
             now=now,
-            required_scopes=X_SCOPES if user.x_user_id is not None else "",
+            required_scopes=X_SCOPES,
         )
         account = await publisher.fetch_account(access_token=tokens.access_token)
     except XReconnectNeededError:
         raise BadRequestError("X didn't give Pumpkit access to your account. Connect X again.")
 
     user = await users_service.require_locked_user(db, user_id=user_id, clock=lambda: now)
-    if user.x_user_id is not None and user.x_user_id != account.user_id:
+    if user.x_user_id != account.user_id:
         expected = f"@{user.x_handle}" if user.x_handle else "the X account you signed in with"
         raise ConflictError(
             f"Reconnect the same X account, {expected}. Sign out of X and retry with that account.",

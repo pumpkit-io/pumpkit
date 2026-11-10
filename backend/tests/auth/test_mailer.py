@@ -110,9 +110,9 @@ async def test_log_mailer_writes_the_link_recipient_and_expiry_at_warning(caplog
     assert "15 minutes" in record.getMessage()
 
 
-async def test_startup_says_magic_links_go_to_the_log_without_smtp(caplog):
+async def test_startup_never_announces_inactive_magic_link_delivery(caplog):
     with caplog.at_level(logging.INFO):
         async with lifespan(app):
             pass
 
-    assert any("Magic links are written to this log" in r.getMessage() for r in caplog.records)
+    assert not any("Magic links are written to this log" in r.getMessage() for r in caplog.records)

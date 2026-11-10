@@ -10,7 +10,7 @@ async def test_get_me_includes_avatar(client, user):
         "first_name": None,
         "last_name": None,
         "avatar_data_url": None,
-        "x_handle": None,
+        "x_handle": "ada",
     }
 
 
@@ -24,10 +24,8 @@ async def test_patch_updates_only_present_fields_and_derives_display_name(client
     assert user.display_name == "Ada Lovelace"
 
     response = await client.patch("/api/v1/users/me", json={"avatar_data_url": _TINY_JPEG})
-    assert response.status_code == 200
-    body = response.json()
-    assert body["first_name"] == "Ada"  # untouched because omitted
-    assert body["avatar_data_url"] == _TINY_JPEG
+    assert response.status_code == 422
+    assert (await client.get("/api/v1/users/me")).json()["first_name"] == "Ada"
 
 
 async def test_current_user_response_identifies_the_user_by_id(authed_client, user):
@@ -40,10 +38,10 @@ async def test_current_user_response_identifies_the_user_by_id(authed_client, us
     assert response.json()["id"] == user.id
 
 
-async def test_patch_null_clears_avatar(client):
+async def test_patch_cannot_clear_the_x_managed_photo(client):
     await client.patch("/api/v1/users/me", json={"avatar_data_url": _TINY_JPEG})
     response = await client.patch("/api/v1/users/me", json={"avatar_data_url": None})
-    assert response.json()["avatar_data_url"] is None
+    assert response.status_code == 422
 
 
 async def test_clearing_names_falls_back_to_email_local_part(client, db, user):

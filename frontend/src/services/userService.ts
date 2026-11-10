@@ -32,7 +32,6 @@ export function toUserProfile(data: UserProfileResponse): UserProfile {
 export interface UserProfileUpdate {
   firstName?: string | null;
   lastName?: string | null;
-  avatarUrl?: string | null;
 }
 
 export const userService = {
@@ -47,7 +46,6 @@ export const userService = {
     const body: Record<string, string | null> = {};
     if ('firstName' in payload) body.first_name = payload.firstName ?? null;
     if ('lastName' in payload) body.last_name = payload.lastName ?? null;
-    if ('avatarUrl' in payload) body.avatar_data_url = payload.avatarUrl ?? null;
 
     const response = await apiService.patch<UserProfileResponse>('/users/me', body);
     return toUserProfile(response.data);

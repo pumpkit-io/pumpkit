@@ -5,6 +5,7 @@ from enum import StrEnum
 from typing import Annotated, Literal, Optional, Self
 from urllib.parse import urlsplit
 
+from cryptography.fernet import Fernet
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -97,7 +98,7 @@ class Settings(BaseSettings):
     # Comma-separated addresses and `@domain` entries that may sign in; empty lets anyone in.
     SIGN_UP_ALLOWLIST: str = ""
 
-    # Optional group: Google sign-in is on only with both credentials.
+    # Inactive Google flow settings, retained for deliberate adaptations.
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     GOOGLE_NONCE_TOKEN_NUM_BYTES: int = 64
@@ -120,7 +121,7 @@ class Settings(BaseSettings):
     # Required with Operator details, since their company footer gives it as the contact address.
     SUPPORT_EMAIL: Optional[str] = None
 
-    # Optional group: Magic links are emailed only with a host and a from address, else logged.
+    # Inactive Magic link delivery settings, retained for deliberate adaptations.
     SMTP_HOST: Optional[str] = None
     EMAIL_FROM: Optional[str] = None
     # None means the security mode's standard port.
@@ -178,7 +179,7 @@ class Settings(BaseSettings):
     # Pinned, so a new Jev release changes no answer without a config change (ADR 0013).
     TYPESAFE_MODEL: str = "jev-1.13.0"
 
-    # Optional: when unset, pumpkit.x_connection.x_publisher raises XPublisherNotConfiguredError on use.
+    # Required by X sign-in and publishing on every Instance.
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
     X_AUTHORIZE_URL: Optional[str] = None
@@ -211,10 +212,18 @@ class Settings(BaseSettings):
     def _bare_origin(cls, value: str) -> str:
         origin = value.rstrip("/")
         parts = urlsplit(origin)
-        if parts.scheme not in ("http", "https") or not parts.netloc or parts.path:
+        if (
+            parts.scheme not in ("http", "https")
+            or not parts.netloc
+            or parts.path
+            or parts.query
+            or parts.fragment
+            or parts.username
+            or parts.password
+        ):
             raise ValueError(
-                f"PUBLIC_URL must be an http or https origin with no path, "
-                f"like https://pumpkit.example.org; got {value!r}"
+                "PUBLIC_URL must be an http or https origin with no path, "
+                "like https://pumpkit.example.org"
             )
         return origin
 
@@ -264,9 +273,19 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def _trial_keys_when_configured(self) -> Self:
-        if self.TRIAL_IDENTITY_KEYS.get_secret_value():
-            self.trial_identity_keys()
+    def _x_sign_in_prerequisites(self) -> Self:
+        missing = [
+            key
+            for key in ("X_CLIENT_ID", "X_CLIENT_SECRET")
+            if not (getattr(self, key) or "").strip()
+        ]
+        if missing:
+            raise ValueError(f"X sign-in requires: {', '.join(missing)}")
+        try:
+            Fernet(self.FERNET_ENCRYPTION_KEY.encode())
+        except (ValueError, TypeError):
+            raise ValueError("FERNET_ENCRYPTION_KEY must be a valid Fernet key") from None
+        self.trial_identity_keys()
         return self
 
     def coupon_identity_keys(self) -> tuple[str, dict[str, bytes]]:

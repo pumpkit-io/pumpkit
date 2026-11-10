@@ -1,6 +1,5 @@
 import { errorStatus } from './apiErrors';
 import { apiService } from './apiService';
-import { toUserProfile, type UserProfile, type UserProfileResponse } from './userService';
 
 /** The User's permission for Pumpkit to publish on one X account. */
 export interface XConnection {
@@ -69,20 +68,5 @@ export const xConnectionService = {
       },
     );
     return toXConnection(data);
-  },
-
-  disconnect: async (): Promise<void> => {
-    await apiService.delete('/x-connection');
-  },
-
-  /** Copies the X account's photo into the User's Photo; answers with the updated profile. */
-  acceptPhoto: async (): Promise<UserProfile> => {
-    const { data } = await apiService.post<UserProfileResponse>('/x-connection/photo/use');
-    return toUserProfile(data);
-  },
-
-  /** "Not now": stops offering the X account's photo for this X connection. */
-  declinePhoto: async (): Promise<void> => {
-    await apiService.post('/x-connection/photo/decline');
   },
 };

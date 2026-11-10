@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-SignInMethod = Literal["magic_link", "google"]
+SignInMethod = Literal["x"]
 
 
 class OperatorDetails(BaseModel):

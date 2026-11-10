@@ -15,10 +15,6 @@ SUBSCRIPTION_NEEDED = "This needs a subscription. Subscribe to continue."
 
 GATED_ROUTES = [
     ("GET", "/api/v1/inspiration-authors"),
-    ("GET", "/api/v1/x-connection"),
-    ("DELETE", "/api/v1/x-connection"),
-    ("POST", "/api/v1/x-connection/photo/use"),
-    ("POST", "/api/v1/x-connection/photo/decline"),
     ("POST", "/api/v1/oauth/authorizations/request_unknown/approve"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/posts/post_unknown"),

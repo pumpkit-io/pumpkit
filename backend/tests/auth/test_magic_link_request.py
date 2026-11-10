@@ -1,4 +1,9 @@
+import pytest
+
 GENERIC_MESSAGE = "If an account exists for that email, we've sent you a sign-in link."
+
+
+pytestmark = pytest.mark.usefixtures("legacy_auth_app")
 
 
 async def test_requesting_a_magic_link_emails_one_sign_in_link(client, auth_outbox):

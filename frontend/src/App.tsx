@@ -1,10 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { XConnectionCallback } from './pages/XConnectionCallback';
+import { XOAuthCallback } from './pages/XOAuthCallback';
 import { Login } from './pages/Login';
 import { Landing } from './pages/Landing';
-import { GoogleAuthCallback } from './components/google/GoogleAuthCallback';
-import { MagicLinkCallback } from './pages/MagicLinkCallback';
-import { MagicLinkSent } from './pages/MagicLinkSent';
 import {
   BillingCancelledRedirect,
   BillingSuccessRedirect,
@@ -59,17 +56,10 @@ function AppRoutes() {
       >
         {signedInRoutes()}
       </Route>
-      <Route
-        path="/oauth/x/callback"
-        element={
-          <ProtectedRoute>
-            <XConnectionCallback />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/oauth/google/callback" element={<GoogleAuthCallback />} />
-      <Route path="/auth/magic-link/callback" element={<MagicLinkCallback />} />
-      <Route path="/login/magic-link/sent" element={<MagicLinkSent />} />
+      <Route path="/oauth/x/callback" element={<XOAuthCallback />} />
+      <Route path="/oauth/google/callback" element={<Navigate to="/login" replace />} />
+      <Route path="/auth/magic-link/callback" element={<Navigate to="/login" replace />} />
+      <Route path="/login/magic-link/sent" element={<Navigate to="/login" replace />} />
       {sells_plans && (
         <>
           <Route

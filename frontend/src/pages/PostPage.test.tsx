@@ -5131,10 +5131,10 @@ describe('Post page', () => {
       );
       const dialog = await openPostTo();
 
-      expect(dialog.getByText('Connect your X account to post this post.')).toBeInTheDocument();
+      expect(dialog.getByText('Reconnect X to post this post.')).toBeInTheDocument();
       expect(dialog.queryByRole('radio', { name: 'My profile' })).not.toBeInTheDocument();
       expect(dialog.queryByRole('radio', { name: 'Now' })).not.toBeInTheDocument();
-      fireEvent.click(dialog.getByRole('button', { name: 'Connect X' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Reconnect X' }));
       await waitFor(() =>
         expect(redirectTo).toHaveBeenCalledWith('https://x.com/i/oauth2/authorize?state=s'),
       );
@@ -5147,7 +5147,7 @@ describe('Post page', () => {
       expect(
         dialog.getByText("Posting to X isn't set up on this Pumpkit yet."),
       ).toBeInTheDocument();
-      expect(dialog.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Reconnect X' })).not.toBeInTheDocument();
     });
 
     it('asks the User to reconnect X when X no longer accepts its access', async () => {

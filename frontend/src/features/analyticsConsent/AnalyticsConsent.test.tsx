@@ -22,7 +22,7 @@ import posthog from 'posthog-js';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { PostHogPageviewTracker } from '@/lib/PostHogPageviewTracker';
 import { track } from '@/lib/analytics';
-import { startAnalytics } from '@/lib/analyticsConsent';
+import { startAnalytics, identifyUser } from '@/lib/analyticsConsent';
 import { DEFAULT_INSTANCE, type AnalyticsSettings } from '@/lib/instance';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { ConsentBanner } from './ConsentBanner';
@@ -213,4 +213,45 @@ describe('Cookie settings', () => {
     track('login_google_clicked');
     expect(posthog.capture).toHaveBeenCalledWith('login_google_clicked', undefined);
   });
+});
+
+describe('OAuth protocol privacy', () => {
+  it('does not start or identify through the SDK on a callback document', () => {
+    window.history.replaceState({}, '', '/oauth/x/callback?code=private-code&state=private-state');
+    localStorage.setItem('pumpkit:analytics-consent', '"granted"');
+    startAnalytics(ANALYTICS);
+    track('login_x_clicked');
+    identifyUser('test-user');
+    expect(posthog.identify).not.toHaveBeenCalled();
+    expect(posthog.init).not.toHaveBeenCalled();
+    expect(posthog.capture).not.toHaveBeenCalled();
+    window.history.replaceState({}, '', '/');
+  });
+});
+
+it('redacts protocol query and fragment values inherited by SDK automatic events', () => {
+  localStorage.setItem('pumpkit:analytics-consent', '"granted"');
+  startAnalytics(ANALYTICS);
+  const beforeSend = vi.mocked(posthog.init).mock.calls[0]?.[1]?.before_send;
+  if (typeof beforeSend !== 'function') throw new Error('Missing SDK privacy boundary');
+  const event = beforeSend({
+    uuid: '00000000-0000-4000-8000-000000000000',
+    event: '$identify',
+    properties: {
+      $current_url: 'https://pumpkit.example/new?code=secret#token',
+      $referrer: 'https://pumpkit.example/oauth/x/callback?code=secret&state=bound',
+      $set: { $initial_current_url: 'https://pumpkit.example/oauth/x/callback?code=secret' },
+    },
+  } as Parameters<typeof beforeSend>[0]);
+  expect(JSON.stringify(event)).not.toContain('secret');
+  expect(JSON.stringify(event)).not.toContain('bound');
+  window.history.replaceState({}, '', '/oauth/x/callback?code=secret&state=bound');
+  expect(
+    beforeSend({
+      uuid: '00000000-0000-4000-8000-000000000001',
+      event: '$autocapture',
+      properties: {},
+    } as Parameters<typeof beforeSend>[0]),
+  ).toBeNull();
+  window.history.replaceState({}, '', '/');
 });

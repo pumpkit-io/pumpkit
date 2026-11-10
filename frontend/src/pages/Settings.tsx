@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { showToast } from '@/components/Toaster';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileCard } from '@/features/account/ProfileCard';
@@ -13,12 +14,9 @@ import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { useInstance } from '@/features/instance/useInstance';
 import { LegalLinks } from '@/features/legal/LegalLinks';
 import { Topbar } from '@/features/topbar/Topbar';
-import { XAccountCard } from '@/features/xConnection/XAccountCard';
-import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
 import type { XConnectionNoticeState } from '@/features/xConnection/xConnectionReturn';
 import { track } from '@/lib/analytics';
 import type { TopUpOffer } from '@/services/billingService';
-import { useProfile } from '@/pages/layout/ProfileContext';
 
 /** What the X callback and the Top-up return route leave in the location state for Settings. */
 export interface SettingsLocationState extends XConnectionNoticeState {
@@ -77,9 +75,8 @@ function useTopUpAddedToast(topUpBought: boolean, offer: TopUpOffer | null | und
 /** Rendered inside AppLayout: the User's account as one column of cards. */
 export function Settings() {
   const { logout } = useAuth();
-  const { sells_plans, x_connection } = useInstance();
+  const { sells_plans } = useInstance();
   const billing = useBilling();
-  const profile = useProfile();
   const { refresh } = useOnboarding();
   const arrival = useArrivalState();
   const data = billing.data;
@@ -107,13 +104,15 @@ export function Settings() {
       />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-8 sm:px-6">
+          {arrival.xConnectionNotice &&
+            (arrival.xConnectionFailed ? (
+              <ErrorBanner message={arrival.xConnectionNotice} />
+            ) : (
+              <p role="status" className="font-sans text-sm text-foreground">
+                {arrival.xConnectionNotice}
+              </p>
+            ))}
           <ProfileCard />
-          {x_connection && profile && !profile.xHandle && (
-            <>
-              <XAccountCard notice={arrival.xConnectionNotice ?? null} />
-              <XPhotoOfferDialog />
-            </>
-          )}
           {sells_plans && (
             <SubscriptionCard
               data={data}

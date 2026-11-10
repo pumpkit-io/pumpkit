@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -56,3 +57,8 @@ async def test_pending_sign_ins_expand_and_contract_without_changing_legacy_auth
         assert not await connection.run_sync(
             lambda sync: sa.inspect(sync).has_table("pending_x_sign_ins")
         )
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

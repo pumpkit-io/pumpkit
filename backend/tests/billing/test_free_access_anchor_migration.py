@@ -1,3 +1,5 @@
+import pytest
+
 from alembic import command
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
@@ -23,3 +25,8 @@ async def test_anchor_upgrade_preserves_existing_benefit_and_replay(client, coup
     assert (
         await client.post(REDEEM, json=confirmation(appended, "after-anchor-upgrade"))
     ).status_code == 200
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user

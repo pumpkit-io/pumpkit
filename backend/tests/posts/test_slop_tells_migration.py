@@ -2,6 +2,7 @@
 Migration 0024 drops the slop check's tells from Version attempts, since the check no longer runs.
 """
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -34,3 +35,8 @@ async def test_the_migration_runs_down_and_up_again(db_engine, post_with, subscr
         assert "slop_tells" not in await connection.run_sync(_columns)
     read = (await client.get(f"{POSTS}/{post_id}")).json()
     assert read["versions"][0]["parts"][0]["text"] == "One."
+
+
+@pytest.fixture
+async def user(legacy_user):
+    return legacy_user
