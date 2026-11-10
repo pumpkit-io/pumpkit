@@ -3,10 +3,11 @@ import { useInstance } from '@/features/instance/useInstance';
 import { useXConnectionContext } from './useXConnectionContext';
 
 /** Across the top of every page while X no longer accepts the X connection. */
-export function ReconnectXBanner() {
+export function ReconnectXBanner({ notice = null }: { notice?: string | null }) {
   const { connection, busy, error, connect } = useXConnectionContext();
   const { x_connection } = useInstance();
   if (!x_connection || !connection?.needsReconnect) return null;
+  const problem = error ?? notice;
 
   return (
     <section
@@ -20,11 +21,15 @@ export function ReconnectXBanner() {
           </span>{' '}
           Scheduled posts won&apos;t go out until you reconnect.
         </p>
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {problem && (
+          <p role="alert" className="text-xs text-destructive">
+            {problem}
+          </p>
+        )}
       </div>
       <Button
         size="sm"
-        className="h-9 shrink-0 self-start sm:self-auto"
+        className="h-11 min-w-11 shrink-0 self-start sm:self-auto"
         disabled={busy}
         onClick={() => void connect()}
       >

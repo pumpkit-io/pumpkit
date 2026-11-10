@@ -41,6 +41,7 @@ from pumpkit.scheduling.schemas import (
     UsageResponse,
     XConnectionResponse,
 )
+from pumpkit.x_connection.dependencies import require_x_connection_user
 from pumpkit.x_connection.schemas import XAuthorizationCompleteRequest
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
@@ -73,7 +74,7 @@ async def get_usage(
     "/x-connection", response_model=XConnectionResponse, status_code=status.HTTP_200_OK
 )
 async def get_x_connection(
-    current_user: User = Depends(require_subscribed_user),
+    current_user: User = Depends(require_x_connection_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> XConnectionResponse:
     return await mediator.get_x_connection(db=db, user=current_user)
@@ -88,7 +89,7 @@ async def get_x_connection(
 async def complete_x_authorization(
     request: Request,
     complete_request: XAuthorizationCompleteRequest,
-    current_user: User = Depends(require_subscribed_user),
+    current_user: User = Depends(require_x_connection_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
     clock: Clock = Depends(get_clock),

@@ -56,6 +56,7 @@ function renderCallback(search: string) {
               <Route path="/settings" element={<Destination />} />
               <Route path="/posts/:id" element={<Destination />} />
               <Route path="/onboarding" element={<OnboardingDestination />} />
+              <Route path="/subscribe" element={<Destination />} />
             </Routes>
           </OnboardingProvider>
         </AuthProvider>
@@ -64,10 +65,10 @@ function renderCallback(search: string) {
   );
 }
 
-function apiError(status: number, detail: string) {
+function apiError(status: number, detail: string, code?: string) {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
     isAxiosError: true,
-    response: { status, data: { detail } },
+    response: { status, data: { detail, code } },
   });
 }
 
@@ -135,6 +136,31 @@ describe('the X callback', () => {
       ),
     ).toBeInTheDocument();
     expect(track).not.toHaveBeenCalledWith('x_connected');
+  });
+
+  it('keeps the expected-account error while onboarding instead of reporting ownership elsewhere', async () => {
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('persona');
+    const detail = 'Reconnect the same X account, @ada. Sign out of X and retry with that account.';
+    vi.mocked(xConnectionService.complete).mockRejectedValue(
+      apiError(409, detail, 'X_ACCOUNT_MISMATCH'),
+    );
+
+    renderCallback('?state=the-state&code=the-code');
+
+    expect(await screen.findByText(/at \/onboarding via REPLACE:/)).toHaveTextContent(
+      JSON.stringify({ outcome: 'failed', reason: detail }),
+    );
+  });
+
+  it('returns unpaid recovery directly to the paywall with its notice', async () => {
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
+    vi.mocked(xConnectionService.complete).mockResolvedValue(ADA);
+
+    renderCallback('?state=the-state&code=the-code');
+
+    expect(
+      await screen.findByText('at /subscribe via REPLACE: Connected @ada.'),
+    ).toBeInTheDocument();
   });
 
   it('returns with a message when X sent neither a code nor an error', async () => {
