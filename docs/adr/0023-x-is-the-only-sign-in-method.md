@@ -1,6 +1,6 @@
 # X is the only sign-in method
 
-Pumpkit will use X as its only sign-in method: the X account a User signs in with is also the account they publish through. This removes the separate X connection step from Onboarding and the ability to replace the X account in Settings, and prevents obtaining another Trial merely by signing up with another email address.
+Pumpkit uses X as its only sign-in method: the X account a User signs in with is also the account they publish through. This removes the separate X connection step from Onboarding and the ability to replace the X account in Settings, and prevents obtaining another Trial merely by signing up with another email address.
 
 Keep the Google and Magic link flow implementations in the codebase, but disable them in both the backend and frontend. There is no supported configuration switch to enable them; someone who wants them must change the code. Their presence must not imply that they are usable sign-in methods. This applies to every Instance, including Self-hosters' Instances.
 
