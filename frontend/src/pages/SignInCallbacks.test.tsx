@@ -14,6 +14,7 @@ vi.mock('@/services/authService', () => ({
     getGoogleLoginUrl: vi.fn(),
   },
 }));
+vi.mock('@/services/xSignInService', () => ({ xSignInService: { complete: vi.fn() } }));
 vi.mock('@/services/userService', () => ({
   userService: {
     fetchProfile: vi.fn().mockResolvedValue({
@@ -49,6 +50,7 @@ vi.mock('@/services/billingService', () => ({
 
 import { session } from '@/lib/session';
 import { authService } from '@/services/authService';
+import { xSignInService } from '@/services/xSignInService';
 import { oauthConsentService } from '@/services/oauthConsentService';
 import { storageKey } from '@/lib/storage';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -59,6 +61,7 @@ import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { ThemeProvider } from '@/features/theme/ThemeProvider';
 import { Login } from './Login';
 import { MagicLinkCallback } from './MagicLinkCallback';
+import { XSignInCallback } from './XSignInCallback';
 import { MagicLinkSent } from './MagicLinkSent';
 import { apiError, renderSignedIn } from './testing/signedInApp';
 
@@ -150,16 +153,29 @@ const callbacks = [
     path: '/oauth/google/callback',
     page: <GoogleAuthCallback />,
     error: 'sign_in_failed',
+    valid: VALID,
   },
   {
     name: 'Magic link',
     path: '/auth/magic-link/callback',
     page: <MagicLinkCallback />,
     error: 'invalid_magic_link',
+    valid: VALID,
+  },
+  {
+    name: 'X',
+    path: '/oauth/x/callback',
+    page: <XSignInCallback />,
+    error: 'x_authorization_invalid',
+    valid: '?code=valid&state=bound-state',
   },
 ];
 
 beforeEach(async () => {
+  vi.mocked(xSignInService.complete).mockResolvedValue({
+    accessToken: 'tok',
+    expiresAt: EXPIRES_AT,
+  });
   // Google's page can't open in jsdom, so a click stops after it starts the sign-in.
   vi.mocked(authService.getGoogleLoginUrl).mockRejectedValue(new Error('no network'));
   await session.end('other_tab');
@@ -174,9 +190,9 @@ afterEach(() => {
   storageSpies.splice(0).forEach((spy) => spy.mockRestore());
 });
 
-describe.each(callbacks)('the $name callback', ({ path, page, error }) => {
+describe.each(callbacks)('the $name callback', ({ path, page, error, valid }) => {
   it('starts the Session and replaces the callback entry with New post', async () => {
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
     expect(session.get()).toEqual({ accessToken: 'tok', expiresAt: EXPIRES_AT });
@@ -195,13 +211,13 @@ describe.each(callbacks)('the $name callback', ({ path, page, error }) => {
   });
 });
 
-describe.each(callbacks)('returning after the $name callback', ({ path, page }) => {
+describe.each(callbacks)('returning after the $name callback', ({ path, page, valid }) => {
   it('lands on the consent request the User was sent to sign in from', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
     await requestMagicLink();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(
       await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -211,11 +227,11 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
   it('returns once: the next sign-in lands on New post', async () => {
     await visitSignedOut('/oauth/consent?request=req_1');
     cleanup();
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
     await screen.findByText('at /oauth/consent?request=req_1 via REPLACE');
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -226,7 +242,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     cleanup();
     vi.setSystemTime(Date.now() + 31 * MINUTE);
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -235,7 +251,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     await visitSignedOut('/settings');
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -250,7 +266,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
       JSON.stringify({ path: saved, savedAt: Date.now() }),
     );
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -266,7 +282,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
       await screen.findByText(/Return to Claude\./);
       cleanup();
 
-      renderCallback(path, page, VALID);
+      renderCallback(path, page, valid);
 
       expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
     },
@@ -280,7 +296,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     await requestMagicLink();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(
       await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -302,7 +318,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
       await requestMagicLink();
       cleanup();
 
-      renderCallback(path, page, VALID);
+      renderCallback(path, page, valid);
 
       expect(
         await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -320,7 +336,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     await requestMagicLink();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(
       await screen.findByText('at /oauth/consent?request=req_1 via REPLACE'),
@@ -338,7 +354,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     );
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
@@ -364,7 +380,7 @@ describe.each(callbacks)('returning after the $name callback', ({ path, page }) 
     await requestMagicLink();
     cleanup();
 
-    renderCallback(path, page, VALID);
+    renderCallback(path, page, valid);
 
     expect(await screen.findByText('at /new via REPLACE')).toBeInTheDocument();
   });
