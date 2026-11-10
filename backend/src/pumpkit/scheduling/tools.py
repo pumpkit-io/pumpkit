@@ -430,12 +430,17 @@ async def get_usage(call: ToolCall[User]) -> UsageResponse:
 
 async def connect_x(call: ToolCall[User]) -> LinkToolResponse:
     """
-    Where the user connects, reconnects or disconnects their X account: the Settings page of
-    the Pumpkit web app, since X asks them to sign in and approve in a browser.
+    Where the user restores publishing permission in a browser: the Settings page of Pumpkit.
+    If you signed in with X, reconnect only restores publishing for that same account.
     """
     url = f"{settings.frontend_url()}{mediator.X_CONNECTION_PAGE}"
+    action = (
+        "Reconnect the X account you signed in with"
+        if call.user.x_user_id is not None
+        else "Connect, reconnect or disconnect your X account"
+    )
     return LinkToolResponse(
-        message=f"Connect, reconnect or disconnect your X account on the Settings page: {url}",
+        message=f"{action} on the Settings page: {url}",
         url=url,
     )
 
@@ -459,5 +464,5 @@ TOOLS = [
     McpTool(remove_media, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     McpTool(list_past_communities, rate=READ_ONLY_RATE, annotations=READ_ONLY),
     McpTool(get_usage, rate=READ_ONLY_RATE, annotations=READ_ONLY),
-    McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY),
+    McpTool(connect_x, rate=READ_ONLY_RATE, annotations=READ_ONLY, requires_subscription=False),
 ]

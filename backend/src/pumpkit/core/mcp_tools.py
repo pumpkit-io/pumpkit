@@ -40,6 +40,7 @@ class McpTool:
     # Per User, in slowapi's notation; the web route's rate where the route has one.
     rate: str
     annotations: ToolAnnotations
+    requires_subscription: bool = True
 
 
 @dataclass(frozen=True)

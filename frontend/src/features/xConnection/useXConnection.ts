@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSubscribed } from '@/features/billing/useSubscribed';
+import { isSubscriptionNeeded } from '@/features/billing/subscriptionNeeded';
+import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
-import { errorMessage, errorStatus } from '@/services/apiErrors';
+import { errorMessage } from '@/services/apiErrors';
 import type { UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { xConnectionReturn } from './xConnectionReturn';
@@ -12,7 +13,7 @@ export const USE_X_PHOTO_FAILED = "Couldn't use your X photo. Try again.";
 
 /** The User's X connection, loaded on mount, with connect and disconnect. */
 export function useXConnection() {
-  const { refresh: refreshSubscribed } = useSubscribed();
+  const { refresh: refreshOnboarding } = useOnboarding();
   /** Undefined while loading; null when there is none. */
   const [connection, setConnection] = useState<XConnection | null | undefined>(undefined);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -33,14 +34,14 @@ export function useXConnection() {
   /** A refusal for want of a Subscription shows the prompt to subscribe, not an error. */
   const fail = useCallback(
     (e: unknown, fallback: string) => {
-      if (errorStatus(e) === 403) {
+      if (isSubscriptionNeeded(e)) {
         setError(null);
-        refreshSubscribed();
+        void refreshOnboarding();
       } else {
         setError(errorMessage(e, fallback));
       }
     },
-    [refreshSubscribed],
+    [refreshOnboarding],
   );
 
   /**

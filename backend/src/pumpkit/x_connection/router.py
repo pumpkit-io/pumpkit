@@ -9,6 +9,7 @@ from pumpkit.core.photos import PhotoFetcher, get_photo_fetcher
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.x_connection import mediator
+from pumpkit.x_connection.dependencies import require_x_connection_user
 from pumpkit.x_connection.schemas import XAuthorizationStartResponse
 from pumpkit.x_connection.x_publisher import XPublisher, get_x_publisher
 
@@ -25,7 +26,7 @@ router = APIRouter(tags=["x-connection"])
 @limiter.limit("10/minute")
 async def start_x_authorization(
     request: Request,
-    current_user: User = Depends(require_subscribed_user),
+    current_user: User = Depends(require_x_connection_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
     clock: Clock = Depends(get_clock),
@@ -37,7 +38,7 @@ async def start_x_authorization(
 
 @router.delete("/x-connection", status_code=status.HTTP_204_NO_CONTENT)
 async def disconnect_x(
-    current_user: User = Depends(require_subscribed_user),
+    current_user: User = Depends(require_x_connection_user),
     db: AsyncSession = Depends(get_async_db),
     publisher: XPublisher = Depends(get_x_publisher),
 ) -> None:

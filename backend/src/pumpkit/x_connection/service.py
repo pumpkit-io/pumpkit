@@ -50,6 +50,12 @@ def needs_reconnect_for_media(connection: XConnection) -> bool:
     return X_MEDIA_SCOPE not in connection.scopes.split()
 
 
+def needs_reconnect(connection: XConnection, user: User) -> bool:
+    return connection.needs_reconnect or (
+        user.x_user_id is not None and not set(X_SCOPES.split()).issubset(connection.scopes.split())
+    )
+
+
 async def check_takes_media(db: AsyncSession, *, user_id: str) -> None:
     """
     Refuses Media while the User's X connection lacks `media.write` (ADR 0021). Without an

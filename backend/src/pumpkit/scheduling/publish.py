@@ -11,6 +11,7 @@ from typing import Literal, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as subscriptions_service
 import pumpkit.posts.media as media_service
 import pumpkit.x_connection.service as x_connections_service
@@ -157,7 +158,8 @@ async def connection_still_publishing_on(
     connection = await x_connections_service.lock_connection(db, user_id=scheduled_post.user_id)
     if connection is None or connection.x_user_id != scheduled_post.x_user_id:
         raise Failed("x_account_changed", X_ACCOUNT_CHANGED_REASON)
-    if connection.needs_reconnect:
+    user = await users_service.get_user_by_id(db, scheduled_post.user_id)
+    if user is None or x_connections_service.needs_reconnect(connection, user):
         raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
     return connection
 
@@ -188,6 +190,10 @@ async def fresh_access_token(
     except XPublisherError:
         raise Failed("x_unavailable", X_UNAVAILABLE_REASON)
     await x_connections_service.save_tokens(db, connection, tokens=tokens, now=now)
+    user = await users_service.get_user_by_id(db, connection.user_id)
+    if user is None or x_connections_service.needs_reconnect(connection, user):
+        await x_connections_service.flag_needs_reconnect(db, connection, now=now)
+        raise Failed("reconnect_needed", RECONNECT_NEEDED_REASON)
     try:
         account = await publisher.fetch_account(access_token=tokens.access_token)
     except XPublisherError:

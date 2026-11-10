@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ONBOARDING_PATH,
+  PAYWALL_PATH,
   type OnboardingLocationState,
   type XConnectionArrival,
 } from '@/features/onboarding/paths';
@@ -11,7 +12,7 @@ import {
   type XConnectionNoticeState,
 } from '@/features/xConnection/xConnectionReturn';
 import { track } from '@/lib/analytics';
-import { errorMessage, errorStatus } from '@/services/apiErrors';
+import { errorCode, errorMessage, errorStatus } from '@/services/apiErrors';
 import { xConnectionService } from '@/services/xConnectionService';
 
 /**
@@ -35,9 +36,13 @@ export function XConnectionCallback() {
       const returnPath = xConnectionReturn.take();
       // A failed check lands on the saved Post or Settings, whose gate sends the User on if
       // Onboarding isn't done.
-      if ((await refresh()) == null) {
+      const nextStep = await refresh();
+      if (nextStep == null || nextStep === 'paywall') {
         const state: XConnectionNoticeState = { xConnectionNotice };
-        navigate(returnPath ?? '/settings', { replace: true, state });
+        navigate(nextStep === 'paywall' ? PAYWALL_PATH : (returnPath ?? '/settings'), {
+          replace: true,
+          state,
+        });
       } else {
         const state: OnboardingLocationState = { xConnection: arrival };
         navigate(ONBOARDING_PATH, { replace: true, state });
@@ -71,7 +76,9 @@ export function XConnectionCallback() {
       })
       .catch((e) => {
         const reason = errorMessage(e, "Couldn't connect X. Try again.");
-        return errorStatus(e) === 409 ? back({ outcome: 'taken' }, reason) : fail(reason);
+        return errorStatus(e) === 409 && errorCode(e) !== 'X_ACCOUNT_MISMATCH'
+          ? back({ outcome: 'taken' }, reason)
+          : fail(reason);
       });
   }, [search, navigate, refresh]);
 

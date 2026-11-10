@@ -199,6 +199,23 @@ async def test_every_user_uses_the_tools_on_an_instance_that_sells_no_plans(sell
     assert result["structuredContent"] == {"data": []}
 
 
+async def test_x_identity_can_get_its_reconnect_link_after_paid_access_ends(
+    subscribed, mcp, db, user
+):
+    user.x_user_id = "1001"
+    user.x_handle = "ada"
+    await db.execute(delete(Subscription))
+    await db.commit()
+
+    result = await mcp.call_tool("connect_x")
+
+    assert result["isError"] is False, result
+    assert result["structuredContent"]["url"] == "http://localhost:5173/settings"
+    assert "Reconnect the X account you signed in with" in result["structuredContent"]["message"]
+    assert "disconnect" not in result["structuredContent"]["message"]
+    assert (await mcp.call_tool("list_inspiration_authors"))["isError"] is True
+
+
 async def test_a_tool_over_its_per_user_limit_answers_retry_later(subscribed, mcp):
     for _ in range(20):
         await mcp.call_tool("remove_inspiration_author", handle="levelsio")

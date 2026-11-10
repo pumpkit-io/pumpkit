@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.auth.models import User
 from pumpkit.auth.schemas import UserProfileResponse
 from pumpkit.auth.service.users import choose_photo
+from pumpkit.core.errors import ConflictError
 from pumpkit.core.logging import logger
 from pumpkit.core.photos import PhotoFetcher
 from pumpkit.x_connection import service
@@ -29,6 +30,11 @@ async def disconnect(db: AsyncSession, publisher: XPublisher, user: User) -> Non
     Delete the User's X connection, then ask X to revoke its grant. A failed revoke is only
     logged: the User asked to stop publishing, and Pumpkit no longer holds the tokens.
     """
+    if user.x_user_id is not None:
+        raise ConflictError(
+            "Your X account identifies your Pumpkit account. Sign out to use another X account.",
+            code="X_IDENTITY_FIXED",
+        )
     connection = await service.get_connection(db, user_id=user.id)
     if connection is None:
         raise service.XConnectionNotFoundError()

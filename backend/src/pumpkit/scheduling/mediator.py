@@ -84,7 +84,7 @@ from pumpkit.scheduling.schemas import (
 from pumpkit.scheduling.top_up_charges import rebalance_top_ups
 from pumpkit.x_connection.models import XConnection
 from pumpkit.x_connection.x_length import has_premium, x_post_max_chars
-from pumpkit.x_connection.x_publisher import XPublisher, XReconnectNeededError
+from pumpkit.x_connection.x_publisher import X_SCOPES, XPublisher, XReconnectNeededError
 
 # Where the User sees their Posts; one Post's page is under it.
 POSTS_PAGE = "/posts"
@@ -176,12 +176,12 @@ async def list_past_communities(db: AsyncSession, user: User) -> PastCommunities
     return PastCommunitiesResponse(data=[_community_response(c.id, c.name) for c in past])
 
 
-async def connection_to_publish_on(db: AsyncSession, *, user_id: str) -> XConnection:
+async def connection_to_publish_on(db: AsyncSession, *, user: User) -> XConnection:
     """The X connection a new or rescheduled Scheduled post targets, or a 409."""
-    connection = await x_connections_service.get_connection(db, user_id=user_id)
+    connection = await x_connections_service.get_connection(db, user_id=user.id)
     if connection is None:
         raise ConflictError("Connect your X account first.", fix_page=X_CONNECTION_PAGE)
-    if connection.needs_reconnect:
+    if x_connections_service.needs_reconnect(connection, user):
         raise ConflictError(
             "X no longer accepts Pumpkit's access to your account. Reconnect X first.",
             fix_page=X_CONNECTION_PAGE,
@@ -325,7 +325,7 @@ async def create_scheduled_post(
     Every check that needs no twitterapi.io call runs before the Community lookup.
     """
     now = clock()
-    connection = await connection_to_publish_on(db, user_id=user.id)
+    connection = await connection_to_publish_on(db, user=user)
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=new.post_id)
@@ -500,7 +500,7 @@ async def edit_scheduled_post(
     )
     reschedule = None
     connection = (
-        await connection_to_publish_on(db, user_id=user.id)
+        await connection_to_publish_on(db, user=user)
         if edit.reschedules
         else await x_connections_service.get_connection(db, user_id=user.id)
     )
@@ -1316,7 +1316,7 @@ async def _x_connection_response(
         handle=connection.handle,
         char_limit=x_post_max_chars(connection.subscription_type),
         premium=has_premium(connection.subscription_type),
-        needs_reconnect=connection.needs_reconnect,
+        needs_reconnect=x_connections_service.needs_reconnect(connection, user),
         needs_reconnect_for_media=x_connections_service.needs_reconnect_for_media(connection),
         scheduled_posts_waiting=await service.count_waiting(
             db, user_id=connection.user_id, x_user_id=connection.x_user_id
@@ -1340,7 +1340,7 @@ async def get_x_connection(db: AsyncSession, user: User) -> XConnectionResponse:
 async def complete_x_authorization(
     db: AsyncSession, publisher: XPublisher, user: User, code: str, state: str, now: datetime
 ) -> XConnectionResponse:
-    """Replaces the User's X connection, whichever X account it was for."""
+    """Restore an X identity's authorization; legacy accounts may still replace theirs."""
     user_id = user.id
     code_verifier = await x_connections_service.consume(db, user_id=user_id, state=state, now=now)
     # Commit the delete before calling X: the state is then spent even if X fails, and no
@@ -1350,16 +1350,31 @@ async def complete_x_authorization(
         raise BadRequestError("This X authorization expired or was already used. Connect X again.")
 
     try:
-        tokens = await publisher.exchange_code(code=code, code_verifier=code_verifier, now=now)
+        tokens = await publisher.exchange_code(
+            code=code,
+            code_verifier=code_verifier,
+            now=now,
+            required_scopes=X_SCOPES if user.x_user_id is not None else "",
+        )
         account = await publisher.fetch_account(access_token=tokens.access_token)
     except XReconnectNeededError:
         raise BadRequestError("X didn't give Pumpkit access to your account. Connect X again.")
+
+    user = await users_service.require_locked_user(db, user_id=user_id, clock=lambda: now)
+    if user.x_user_id is not None and user.x_user_id != account.user_id:
+        expected = f"@{user.x_handle}" if user.x_handle else "the X account you signed in with"
+        raise ConflictError(
+            f"Reconnect the same X account, {expected}. Sign out of X and retry with that account.",
+            code="X_ACCOUNT_MISMATCH",
+        )
 
     # The grant isn't revoked here: X may scope revocation to the account, cutting off its owner.
     owner = await x_connections_service.get_connection_by_x_user_id(db, x_user_id=account.user_id)
     if owner is not None and owner.user_id != user_id:
         raise _owned_elsewhere(account.handle)
     try:
+        if user.x_user_id is not None:
+            user.x_handle = account.handle
         connection = await x_connections_service.save_connection(
             db, user_id=user_id, account=account, tokens=tokens, now=now
         )

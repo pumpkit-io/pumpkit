@@ -8,6 +8,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - Users' introductory trial eligibility follows their stable X account across contact changes and account deletion, with only a minimal keyed eligibility record retained for the instance's lifetime. **Upgrade notes:** apply migration `0056`, configure and securely back up the complete `TRIAL_IDENTITY_KEYS` ring before X-only cutover, and retain historical keys when rotating or restoring backups; missing keys fail closed. This preparation does not enable the staged X sign-in routes or reset existing accounts.
 
+- Users signed in with X can restore publishing without buying a subscription. Reconnecting accepts only the same X account, disconnection cannot change their identity, and lost publishing access leaves their session open.
+
 - Users whose billing changes during coupon confirmation can review and retry without a stranded reservation when no renewal deferral was sent; earlier uncertain deferrals retain their recovery guards.
 
 - Users retain uncertain coupon claims and billing recovery after access expires; the English and Italian billing instructions and browser-storage disclosures match the app. **Upgrade notes:** apply migration `0053` and audit pre-0053 pending/refused deferrals before activation, as `docs/coupons.md` describes. Keep bundled Terms dates together and arrange any required material-change notice before applying them.
