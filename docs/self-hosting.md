@@ -1,5 +1,7 @@
 # Self-hosting Pumpkit
 
+For an explicitly authorized prelaunch test-account reset, use the [X-only cutover procedure](x-only-cutover.md). Its privileged preview/execute mode is separate from ordinary deletion and never runs automatically.
+
 This guide runs your own Instance of Pumpkit with Docker Compose, on your computer or on a server. It is the source of truth for the prompt in the README: an agent following that prompt follows this guide.
 
 Every step is a command, then a **Check** with its expected output. Run the check before moving on. When a check fails, stop and look the symptom up in [Troubleshooting](#troubleshooting).

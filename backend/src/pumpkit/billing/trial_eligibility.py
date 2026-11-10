@@ -16,7 +16,7 @@ class TrialEligibilityUnavailableError(AppError):
     public_detail = "Trial eligibility is unavailable. Please contact support."
 
 
-def _fingerprints(x_user_id: str) -> tuple[str, dict[str, str]]:
+def fingerprints(x_user_id: str) -> tuple[str, dict[str, str]]:
     try:
         active, keys = settings.trial_identity_keys()
     except ValueError:
@@ -45,12 +45,12 @@ async def may_start_trial(db: AsyncSession, *, user_id: str) -> bool:
     user = await users.get_user_by_id(db, user_id)
     if user is None or user.x_user_id is None:
         return True
-    _, fingerprints = _fingerprints(user.x_user_id)
-    records = await _matching_records(db, fingerprints)
+    _, candidates = fingerprints(user.x_user_id)
+    records = await _matching_records(db, candidates)
     if any(not record.eligible for record in records):
         return False
     retained_keys = set(await db.scalars(select(TrialEligibility.key_id).distinct()))
-    if retained_keys - fingerprints.keys():
+    if retained_keys - candidates.keys():
         # An unavailable historical key could hide this account's earlier eligibility record.
         raise TrialEligibilityUnavailableError("Restore historical TRIAL_IDENTITY_KEYS")
     return True
@@ -60,10 +60,10 @@ async def exclude(db: AsyncSession, *, user_id: str) -> None:
     user = await users.lock_user_id(db, user_id=user_id)
     if user is None or user.x_user_id is None:
         return
-    active, fingerprints = _fingerprints(user.x_user_id)
-    record = await db.get(TrialEligibility, (active, fingerprints[active]))
+    active, candidates = fingerprints(user.x_user_id)
+    record = await db.get(TrialEligibility, (active, candidates[active]))
     if record is None:
-        db.add(TrialEligibility(key_id=active, fingerprint=fingerprints[active], eligible=False))
+        db.add(TrialEligibility(key_id=active, fingerprint=candidates[active], eligible=False))
     else:
         record.eligible = False
     await db.flush()

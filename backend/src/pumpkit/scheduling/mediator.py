@@ -1364,7 +1364,7 @@ async def complete_x_authorization(
     state: str,
     now: datetime,
 ) -> XConnectionResponse:
-    """Restore an X identity's authorization; legacy accounts may still replace theirs."""
+    """Restore publishing access only for the signed-in X identity."""
     user_id = user.id
     code_verifier = await x_connections_service.consume(db, user_id=user_id, state=state, now=now)
     # Commit the delete before calling X: the state is then spent even if X fails, and no
