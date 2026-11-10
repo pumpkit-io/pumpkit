@@ -225,11 +225,8 @@ b_alias() {
   grep -qxF "$1" "$routes" 2>/dev/null || printf '%s\n' "$1" >>"$routes"
 }
 
-b_emulators_up() {
+b_refresh_emulator_routes() {
   local e svc port hostport
-  [ "${#EMULATORS[@]}" -gt 0 ] || return 0
-  emulator_env
-  b_compose up -d --build --wait "$B_EMULATE_SERVICE" >&2 || die "docker compose up $B_EMULATE_SERVICE failed; see: scripts/dev-stack logs $B_EMULATE_SERVICE"
   for e in "${EMULATORS[@]}"; do
     svc=${e%% *}
     port=$(b_emulator_port "$svc")
@@ -239,10 +236,19 @@ b_emulators_up() {
   for e in "${EMULATORS[@]}"; do wait_emulator "${e%% *}" "${e#* }" "$B_EMULATE_SERVICE"; done
 }
 
+b_emulators_up() {
+  [ "${#EMULATORS[@]}" -gt 0 ] || return 0
+  emulator_env
+  b_compose up -d --build --wait "$B_EMULATE_SERVICE" >&2 || die "docker compose up $B_EMULATE_SERVICE failed; see: scripts/dev-stack logs $B_EMULATE_SERVICE"
+  b_refresh_emulator_routes
+}
+
 b_up() {
   b_emulators_up
   # The backend's start.sh migrates; e2e seeds its own User, so there is no seed step.
   b_compose up -d --build --wait >&2 || die "docker compose up failed; see: scripts/dev-stack logs"
+  # Compose may recreate the emulator container and change its published ports.
+  b_refresh_emulator_routes
   # e2e/backend.ts runs seed scripts in this project when E2E_BASE_URL is this Dev URL.
   printf '%s\n%s\n%s\n' "$DEV_URL" "$COMPOSE_PROJECT" "$DEV_STAGED_X_URL" >"$STATE_DIR/e2e-target"
   local hostport

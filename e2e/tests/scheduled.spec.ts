@@ -3,7 +3,7 @@ import { runSeedScript } from '../backend';
 
 test('Settings shows the seeded X identity without replacement controls', async ({ page }) => {
   await page.goto('/settings');
-  await expect(page.getByText('@e2e_user', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('X handle', { exact: true })).toHaveValue('@e2e_user');
   await expect(page.getByRole('region', { name: 'X account' })).toHaveCount(0);
 });
 
