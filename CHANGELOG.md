@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-10
+
 - Self-hosters can explicitly opt a dedicated local worktree into real X sign-in with a registered loopback callback, while normal development and automated checks retain emulated X. The personal stack keeps separate data; manual publishing in this mode reaches real X.
 
 - Self-hosters can preview and explicitly reset one selected prelaunch test account and its attributable benefit fingerprints through the guarded account-deletion CLI. Ordinary deletion still preserves trial and coupon restrictions; issuance limits and unrelated records are not reset. The [cutover procedure](docs/x-only-cutover.md) keeps this exception separate from normal deletion.
