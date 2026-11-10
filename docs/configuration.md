@@ -17,6 +17,35 @@ Each optional provider is a group of settings (ADR 0011). With all of a group's 
 | `LLM_API_KEY` | Key for the LLM endpoint, which writes every Post. The backend boots without it, but writing a Post then fails with a 503 naming the variable. |
 | `TWITTERAPI_IO_API_KEY` | Looks up X accounts and reads Inspiration authors' posts from twitterapi.io (ADR 0005), and the names of Communities Users paste. The backend boots without it, but adding an author then fails with a 503 naming the variable, and a pasted Community shows its ID instead of its name. |
 
+## X account trial eligibility
+
+`TRIAL_IDENTITY_KEYS` is a secret JSON key ring, separate from the Coupon ring:
+`{"active":"v1","keys":{"v1":"<base64 of 32 random bytes>"}}`.
+Generate each key once with `openssl rand -base64 32`, choose an explicit key identifier,
+and protect the complete ring like the database credentials. Configuring this setting
+never enables the staged X sign-in routes. It is required before X-only cutover and for
+billing operations on X-identified accounts; malformed configured rings stop startup.
+
+An X account can receive at most one introductory trial per instance. Subscription
+history removes eligibility even if the subscription ended or its first payment failed,
+matching the existing billing rule. Failed or abandoned checkout attempts alone do not
+consume eligibility. Different X accounts keep separate histories when they share email.
+
+The `trial_eligibility` table keeps only a keyed fingerprint of the stable X ID, its key
+identifier and eligibility state. Ordinary account deletion preserves it for the lifetime
+of the instance, independently of the deleted profile, contact email, posts and publishing
+credentials. The fingerprints remain pseudonymous personal data. Coupon claim records keep their separate retention and purge contract.
+
+Back up the complete ring encrypted, separately from the database, and restore its
+matching copy with every database restore. Rotate by adding a new key under a new ID and
+changing `active`, while retaining every old key used by retained records or backups.
+Never reuse an ID for different bytes or discard historical keys. Missing or invalid
+keys make an unproven eligibility decision fail closed with a 503, rather than offering a
+new trial. Proven ineligibility stays ineligible. Recording further ineligibility uses the
+current key, so a lost historical key does not block settled account deletion or non-trial
+billing. Restore the keys to recover; deleting eligibility rows is not a rotation or recovery
+procedure. Migration `0056` refuses downgrade while retained eligibility exists.
+
 ## URLs derived from `PUBLIC_URL`
 
 None of these is a setting. A trailing slash on `PUBLIC_URL` is dropped.

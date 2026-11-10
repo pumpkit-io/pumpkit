@@ -76,6 +76,16 @@ class Subscription(Base):
     user: Mapped["User"] = relationship()
 
 
+class TrialEligibility(Base):
+    """Lifetime trial eligibility for X accounts, independent of account and billing records."""
+
+    __tablename__ = "trial_eligibility"
+
+    key_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class StripeEvent(Base):
     """
     Idempotency log: the insert succeeds only for an unseen ``event.id``,
