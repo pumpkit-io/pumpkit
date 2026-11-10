@@ -94,10 +94,20 @@ The app run's 24 owned clocks and their synthetic customers were removed; final 
 
 The test webhook listener was stopped. The disposable real-provider app/database and private clock/fault overrides were removed, the tracked dev-stack script restored, and the worktree restarted with dummy credentials and the local Stripe Emulator. Publishing, SMTP and analytics remain off. No other worktree's app or shared/live Stripe configuration was changed.
 
-## Remaining activation work
+## November 9 remaining activation work
 
 1. Resolve #430 with a demonstrated transition for outstanding sessions, applicable configuration/login inventory and safe reopening procedure. Restricting a configuration or selecting a new ID is insufficient evidence of revocation.
 2. Establish notices appropriate to the independently accepted renewal and cancellation rights. The inspected generic reminders are off and are not evidence of delivery or suitable coupon wording.
 3. Merge the #429 correction, pass required review/CI, retain the default-off setting, and close #394 only after its remaining acceptance criteria are evidenced. This report does not authorize live activation.
+
+## November 10 continuation
+
+The #429 correction and its shared-clock regression fix merged in [PR #431](https://github.com/pumpkit-io/pumpkit/pull/431). The separate [portal transition verification](stripe-portal-transition.md) supplies six successful unrestricted controls and twelve protected transition cases, all passing against the installed SDK/API in Stripe test mode with retries disabled. It verifies provider-specific refusal classes, preserved subscription/invoice state, replacement-customer isolation, refreshed old sessions and inactive public logins. Nine local guard tests cover Python optimization and retained cleanup state. This new evidence supersedes the November 9 outstanding-session investigation only for the runbook's explicit conditions; feature restriction alone and an arbitrary drain period remain insufficient.
+
+On current main including #431, a fresh run of the 24 opt-in deferral/gateway cases passed against real Stripe test mode. Normal checks passed with 2,592 backend tests and 1,120 frontend tests; 87 opt-in backend cases skipped without their separate prerequisites. The portal matrix above passed all 18 browser cases with retries disabled.
+
+Keep the inspected generic trial-ending and upcoming-renewal reminders off. Spec #392 requires no new notification campaign: applicable in-app acceptance/status continues to show the actual free period, independently agreed future payment and cancellation rights. Enabling any provider reminder separately requires appropriate wording and delivery verification. No real email delivery or legal approval is claimed by either test run.
+
+Complete the required review and CI, verify each instance's configuration, key custody, recovery/purge/file-cleanup jobs and historical billing inventory, then close #394 with its final evidence before activation. These documents and tests keep the shared feature setting off by default.
 
 Provider references: [test cards and test-mode funds](https://docs.stripe.com/testing), [Billing test clocks](https://docs.stripe.com/billing/testing), [automated UI testing limitations](https://docs.stripe.com/automated-testing), [portal configurations](https://docs.stripe.com/api/customer_portal/configurations/update), and [trial messaging](https://docs.stripe.com/billing/subscriptions/trials/manage-trial-compliance).

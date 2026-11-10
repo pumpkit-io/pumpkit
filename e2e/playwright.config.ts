@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: '**/stripe-portal-live.spec.ts',
   globalSetup: require.resolve('./global-setup'),
   timeout: 90_000,
   expect: { timeout: 10_000 },
