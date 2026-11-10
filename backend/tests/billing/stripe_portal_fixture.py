@@ -32,7 +32,8 @@ def restricted_features() -> ConfigurationCreateParamsFeatures:
 
 
 def create(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, Any]:
-    assert not args.ledger.exists()
+    if args.ledger.exists():
+        raise ValueError("Existing resource ledger must be recovered first")
     data: dict[str, Any] = {
         "configs": [],
         "prices": [],
@@ -78,8 +79,10 @@ def create(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, A
             "billing_mode": {"type": args.mode},
         }
     ).to_dict()
-    assert subscription["livemode"] is False
+    if subscription["livemode"] is not False:
+        raise ValueError("Created subscription must be in test mode")
     data.update(subscription=subscription["id"], trial_end=subscription["trial_end"])
+    data["cancellation"] = {key: subscription[key] for key in ("cancel_at", "cancel_at_period_end")}
     save(args.ledger, data)
     if not list(client.v1.billing_portal.configurations.list({"limit": 1}).data):
         baseline = client.v1.billing_portal.configurations.create(
@@ -112,7 +115,8 @@ def create(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, A
     data["config"] = configuration["id"]
     data["login_url"] = configuration["login_page"]["url"]
     save(args.ledger, data)
-    assert configuration["is_default"] is False
+    if configuration["is_default"]:
+        raise ValueError("Unsafe fixture configuration must not be the default")
     flow: SessionCreateParamsFlowData = (
         {"type": "subscription_cancel", "subscription_cancel": {"subscription": subscription["id"]}}
         if args.action == "cancel"
@@ -156,13 +160,17 @@ def execute(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, 
         if not args.keep_active:
             restriction["active"] = False
         configuration = client.v1.billing_portal.configurations.update(data["config"], restriction)
-        assert configuration.active is args.keep_active
+        if configuration.active is not args.keep_active:
+            raise ValueError("Portal restriction readback did not match")
         return {"restricted": True, "active": configuration.active}
     if args.command == "end-legacy":
         subscription = client.v1.subscriptions.cancel(
             data["subscription"], {"invoice_now": False, "prorate": False}
         )
-        assert subscription.status == "canceled"
+        if subscription.status != "canceled":
+            raise ValueError("Historical subscription did not end")
+        ended = subscription.to_dict()
+        data["cancellation"] = {key: ended[key] for key in ("cancel_at", "cancel_at_period_end")}
         customer = client.v1.customers.create(
             {"test_clock": data["clocks"][0], "name": "Synthetic replacement customer"}
         )
@@ -189,7 +197,14 @@ def execute(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, 
             "status": subscription["status"],
             "price_preserved": subscription["items"]["data"][0]["price"]["id"] == data["prices"][0],
             "trial_end_preserved": subscription["trial_end"] == data["trial_end"],
-            "cancellation_preserved": not subscription["cancel_at_period_end"],
+            "cancellation_preserved": all(
+                subscription[key] == value for key, value in data["cancellation"].items()
+            ),
+            "cancellation_targets_original_end": subscription["cancel_at"] == data["trial_end"]
+            or (
+                subscription["cancel_at_period_end"]
+                and subscription["items"]["data"][0]["current_period_end"] == data["trial_end"]
+            ),
             "nonzero_invoices": sum(
                 invoice.amount_due != 0
                 for invoice in client.v1.invoices.list(
@@ -204,6 +219,7 @@ def execute(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, 
                 and replacement["trial_end"] == data["replacement_end"]
                 and replacement["items"]["data"][0]["price"]["id"] == data["prices"][0]
                 and not replacement["cancel_at_period_end"]
+                and replacement["cancel_at"] is None
                 and not any(
                     invoice.amount_due
                     for invoice in client.v1.invoices.list(
@@ -240,7 +256,8 @@ def execute(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, 
             client.v1.products.update(data["product"], {"active": False})
         except stripe.StripeError:
             failures.append("product")
-    assert not failures, "Owned resource cleanup is incomplete"
+    if failures:
+        raise ValueError("Owned resource cleanup is incomplete")
     return {"cleaned_up": True}
 
 
@@ -256,9 +273,11 @@ def main() -> None:
     parser.add_argument("--keep-active", action="store_true")
     args = parser.parse_args()
     key = os.environ.get("PUMPKIT_STRIPE_TEST_KEY", "")
-    assert key.startswith(("sk_test_", "rk_test_")), "Explicit Stripe test credential required"
+    if not key.startswith(("sk_test_", "rk_test_")):
+        raise ValueError("Explicit Stripe test credential required")
     client = stripe.StripeClient(key, max_network_retries=0)
-    assert client.v1.balance.retrieve().livemode is False
+    if client.v1.balance.retrieve().livemode is not False:
+        raise ValueError("Provider account must be in test mode")
     print(json.dumps(execute(client, args)))
 
 

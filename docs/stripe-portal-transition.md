@@ -10,9 +10,9 @@ Stripe [documents portal expiry](https://docs.stripe.com/customer-management#fea
 
 ## Verified transitions
 
-The opt-in browser harness uses stripe-python 15.6.1, API `2026-08-26.dahlia`, synthetic test-clock customers and Stripe test-mode payment methods. It opens a fully rendered confirmation before changing provider state, then submits that same page twice. Both submissions must return a provider 4xx. Provider readback must establish unchanged prices, trial ends, cancellation state and no nonzero invoice. The old public login must be inactive.
+The opt-in browser harness uses stripe-python 15.6.1, API `2026-08-26.dahlia`, synthetic test-clock customers and Stripe test-mode payment methods. Six unrestricted controls first establish that equivalent synthetic price updates and cancellations really succeed. Twelve transition cases open a fully rendered confirmation before changing provider state, then submit that same page twice. Each rejection must identify the inactive configuration (400) or missing ended subscription (404/resource_missing); authentication, anti-abuse and rate-limit errors cannot pass. Provider readback must establish unchanged prices, trial ends, both cancellation fields and no nonzero invoice. Refreshed old sessions must expose no unsafe action and old public logins must be inactive.
 
-The matrix covers classic and flexible billing, both `end_trial` and `continue_trial` price-update policies, and old cancellation confirmations. The unsafe fixture permits prorations and begins with an enabled public login; it is not the new management-only configuration.
+On November 10, 2026, all 18 cases passed with retries disabled. The matrix covers classic and flexible billing, both `end_trial` and `continue_trial` price-update policies, and old cancellation confirmations. The unsafe fixture permits prorations and begins with an enabled public login; it is not the new management-only configuration. The successful `end_trial` controls intentionally produce a paid test-mode invoice. They use Stripe test cards and move no real funds; the twelve protected transition cases must create no nonzero invoice.
 
 ### Permanently deactivate non-default legacy configurations
 
@@ -50,7 +50,7 @@ Use a disposable worktree with the normal backend and E2E dependencies installed
 npm test -- --config playwright.stripe-portal.config.ts
 ```
 
-The separate configuration uses a fresh visible browser, no app sign-in or global seed, no retries, and no traces/video/automatic screenshots. The normal E2E configuration excludes this file entirely. With no explicit test key, all provider cases skip. The fixture rejects live-mode key prefixes before creating resources and confirms `livemode=false` through Stripe before every operation.
+The separate configuration uses a fresh visible browser, no app sign-in or global seed, no retries, and no traces/video/automatic screenshots. The normal E2E configuration excludes this file entirely. With no explicit test key, all provider cases skip. Explicit, non-assertion guards reject live-mode key prefixes before creating resources and confirm `livemode=false` through Stripe before every operation. Nine local regression cases verify key rejection, provider-mode rejection and retained cleanup state with Python optimization levels 0, 1 and 2.
 
 Private screenshots and sanitized results stay in `pumpkit-portal-verification-*` directories under the operating system's temporary directory. Resource ledgers are mode 600 inside those private directories and are deleted after successful cleanup. Do not publish a ledger, bearer URL or credential. On cleanup failure, retain its private state and resolve the owned resources before declaring validation complete.
 
