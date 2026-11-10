@@ -396,3 +396,18 @@ def test_google_issuer_and_api_url_are_set_together(instance_env, key):
 
     with pytest.raises(ValidationError, match=other):
         instance_env(ENV="local", **{key: _EMULATOR_ENV[key]})
+
+
+@pytest.mark.parametrize(
+    "ring",
+    [
+        "not-json",
+        "{}",
+        '{"active":"missing","keys":{}}',
+        '{"active":"v1","keys":{"v1":"too-short"}}',
+    ],
+)
+def test_configured_trial_identity_keys_fail_without_exposing_the_secret(instance_env, ring):
+    with pytest.raises(ValidationError, match="TRIAL_IDENTITY_KEYS") as error:
+        instance_env(TRIAL_IDENTITY_KEYS=ring)
+    assert ring not in str(error.value)

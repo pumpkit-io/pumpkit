@@ -25,6 +25,8 @@ Emulator state resets to its config whenever `up` starts an Emulator, so on the 
 
 ## Safe mode
 
+- `TRIAL_IDENTITY_KEYS` is a committed throwaway ring supplied only by `compose.emulators.yml`, so local X-account eligibility checks never use an Instance's real keys.
+
 - `PUBLISHER_ENABLED=false`: the publisher process runs but publishes nothing to X. X has no Emulator in emulate 0.13.0, so it is a custom-Emulator candidate.
 - `SMTP_HOST=` and `EMAIL_FROM=`: Magic links are logged instead of emailed. Blanking only one leaves SMTP partly configured, and the backend refuses to start. emulate covers Resend, not SMTP, so mail is a custom-Emulator candidate.
 - `POSTHOG_ENABLED=false`: the backend sends no analytics events. PostHog is a custom-Emulator candidate.

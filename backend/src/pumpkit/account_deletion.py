@@ -58,6 +58,7 @@ async def delete_account(db: AsyncSession, gateway: BillingGateway, *, user_id: 
     for coupon_id in coupon_ids:
         await coupon_redemption.lock_coupon(db, coupon_id)
     await post_deletion.queue_files(db, user_id=user.id)
+    await billing.preserve_trial_eligibility(db, user_id=user.id)
     await users.delete_account(db, user)
     await db.commit()
 

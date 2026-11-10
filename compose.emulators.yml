@@ -10,6 +10,7 @@ x-emulator-environment: &emulator-environment
   STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
   BILLING_PLAN_KEYS: ${BILLING_PLAN_KEYS:-}
   BILLING_TOP_UP_KEY: ${BILLING_TOP_UP_KEY:-}
+  TRIAL_IDENTITY_KEYS: '{"active":"dev","keys":{"dev":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}'
 
 services:
   backend:
