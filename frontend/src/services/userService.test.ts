@@ -23,6 +23,7 @@ describe('userService.updateProfile', () => {
       firstName: 'Ada',
       lastName: null,
       avatarUrl: null,
+      xHandle: null,
     });
   });
 

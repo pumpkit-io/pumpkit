@@ -18,6 +18,7 @@ import { XPhotoOfferDialog } from '@/features/xConnection/XPhotoOfferDialog';
 import type { XConnectionNoticeState } from '@/features/xConnection/xConnectionReturn';
 import { track } from '@/lib/analytics';
 import type { TopUpOffer } from '@/services/billingService';
+import { useProfile } from '@/pages/layout/ProfileContext';
 
 /** What the X callback and the Top-up return route leave in the location state for Settings. */
 export interface SettingsLocationState extends XConnectionNoticeState {
@@ -78,6 +79,7 @@ export function Settings() {
   const { logout } = useAuth();
   const { sells_plans, x_connection } = useInstance();
   const billing = useBilling();
+  const profile = useProfile();
   const { refresh } = useOnboarding();
   const arrival = useArrivalState();
   const data = billing.data;
@@ -106,7 +108,7 @@ export function Settings() {
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-8 sm:px-6">
           <ProfileCard />
-          {x_connection && (
+          {x_connection && profile && !profile.xHandle && (
             <>
               <XAccountCard notice={arrival.xConnectionNotice ?? null} />
               <XPhotoOfferDialog />

@@ -18,6 +18,7 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.billing.entitlement import Entitlement
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.logging import logger
+from pumpkit.core.photos import PhotoFetcher
 from pumpkit.core.storage import FileStorage, StoredFileNotFoundError
 from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import format_of, part_name
@@ -25,6 +26,7 @@ from pumpkit.posts.models import MEDIA_GIF, MEDIA_IMAGE, MEDIA_VIDEO, Media, Med
 from pumpkit.scheduling import service
 from pumpkit.scheduling.models import ScheduledPost, ScheduledPostPart
 from pumpkit.x_connection.models import XConnection
+from pumpkit.x_connection.profile_photo import sync_photo
 from pumpkit.x_connection.x_publisher import (
     MediaCategory,
     TokenForCall,
@@ -165,7 +167,12 @@ async def connection_still_publishing_on(
 
 
 async def fresh_access_token(
-    db: AsyncSession, publisher: XPublisher, connection: XConnection, *, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    connection: XConnection,
+    photo_fetcher: PhotoFetcher,
+    *,
+    now: datetime,
 ) -> str:
     """
     Refreshed when near expiry. Flushes the rotated tokens, or the needs-reconnect flag before
@@ -200,6 +207,7 @@ async def fresh_access_token(
         # What users/me last said stands until the next refresh; the publish goes on.
         return tokens.access_token
     await x_connections_service.save_account(db, connection, account=account, now=now)
+    await sync_photo(db, user, photo_url=account.photo_url, photo_fetcher=photo_fetcher)
     return tokens.access_token
 
 

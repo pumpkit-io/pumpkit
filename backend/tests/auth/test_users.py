@@ -10,6 +10,7 @@ async def test_get_me_includes_avatar(client, user):
         "first_name": None,
         "last_name": None,
         "avatar_data_url": None,
+        "x_handle": None,
     }
 
 

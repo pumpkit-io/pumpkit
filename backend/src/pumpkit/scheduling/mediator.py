@@ -29,6 +29,7 @@ from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from pumpkit.core.logging import logger
+from pumpkit.core.photos import PhotoFetcher
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import Clock, as_utc
@@ -83,6 +84,7 @@ from pumpkit.scheduling.schemas import (
 )
 from pumpkit.scheduling.top_up_charges import rebalance_top_ups
 from pumpkit.x_connection.models import XConnection
+from pumpkit.x_connection.profile_photo import sync_photo
 from pumpkit.x_connection.x_length import has_premium, x_post_max_chars
 from pumpkit.x_connection.x_publisher import X_SCOPES, XPublisher, XReconnectNeededError
 
@@ -318,6 +320,7 @@ async def create_scheduled_post(
     user: User,
     new: NewScheduledPost,
     clock: Clock,
+    photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostResponse:
     """
     With `publish_now`, published within the request: Published, Failed, or back in scheduled.
@@ -365,7 +368,13 @@ async def create_scheduled_post(
     )
     if new.publish_now and not hand_off:
         return await _post_now(
-            db, publisher, storage, scheduled_post_id=scheduled_post.id, now=now, clock=clock
+            db,
+            publisher,
+            storage,
+            scheduled_post_id=scheduled_post.id,
+            now=now,
+            clock=clock,
+            photo_fetcher=photo_fetcher,
         )
     await db.commit()
     return scheduled_post_response(scheduled_post, now=now)
@@ -430,6 +439,7 @@ async def _post_now(
     scheduled_post_id: str,
     now: datetime,
     clock: Clock,
+    photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostResponse:
     # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(
@@ -439,6 +449,7 @@ async def _post_now(
         scheduled_post_id=scheduled_post_id,
         now=now,
         clock=clock,
+        photo_fetcher=photo_fetcher,
     )
     published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
     return scheduled_post_response(published, now=clock())
@@ -464,6 +475,7 @@ async def edit_scheduled_post(
     scheduled_post_id: str,
     edit: ScheduledPostEdit,
     clock: Clock,
+    photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostResponse:
     """
     New Parts or the Post's Text, time, Community or share with followers for a scheduled or Failed
@@ -549,7 +561,13 @@ async def edit_scheduled_post(
     await rebalance_top_ups(db, user_id=user.id, moments=moments, now=now)
     if edit.publish_now and not hand_off:
         return await _post_now(
-            db, publisher, storage, scheduled_post_id=scheduled_post_id, now=now, clock=clock
+            db,
+            publisher,
+            storage,
+            scheduled_post_id=scheduled_post_id,
+            now=now,
+            clock=clock,
+            photo_fetcher=photo_fetcher,
         )
     await db.commit()
     return scheduled_post_response(
@@ -1338,7 +1356,13 @@ async def get_x_connection(db: AsyncSession, user: User) -> XConnectionResponse:
 
 
 async def complete_x_authorization(
-    db: AsyncSession, publisher: XPublisher, user: User, code: str, state: str, now: datetime
+    db: AsyncSession,
+    publisher: XPublisher,
+    photo_fetcher: PhotoFetcher,
+    user: User,
+    code: str,
+    state: str,
+    now: datetime,
 ) -> XConnectionResponse:
     """Restore an X identity's authorization; legacy accounts may still replace theirs."""
     user_id = user.id
@@ -1378,6 +1402,7 @@ async def complete_x_authorization(
         connection = await x_connections_service.save_connection(
             db, user_id=user_id, account=account, tokens=tokens, now=now
         )
+        await sync_photo(db, user, photo_url=account.photo_url, photo_fetcher=photo_fetcher)
         await db.commit()
     except IntegrityError:
         # Another User connected the same X account between the check and the save.

@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import timedelta
 from io import StringIO
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -27,6 +28,104 @@ async def authorize(client):
         "/api/v1/x-connection/authorizations/complete",
         json={"code": "reconnect-code", "state": state},
     )
+
+
+async def test_reconnect_refreshes_the_x_photo_without_offering_photo_choices(
+    client, x_identity, fake_x_publisher, fake_photo_fetcher
+):
+    photo_url = "https://pbs.twimg.com/profile_images/ada.jpg"
+    fake_x_publisher.account = replace(fake_x_publisher.account, photo_url=photo_url)
+    fake_photo_fetcher.photos[photo_url] = "data:image/jpeg;base64,eA=="
+
+    restored = await authorize(client)
+
+    assert restored.status_code == 200
+    assert restored.json()["offer_photo"] is False
+    assert (await client.get("/api/v1/users/me")).json()[
+        "avatar_data_url"
+    ] == "data:image/jpeg;base64,eA=="
+
+
+@pytest.mark.parametrize("action", ["use", "decline"])
+async def test_x_identity_cannot_use_legacy_photo_actions(
+    client, x_identity, subscribed, fake_x_publisher, fake_photo_fetcher, action
+):
+    photo_url = "https://pbs.twimg.com/profile_images/ada.jpg"
+    fake_x_publisher.account = replace(fake_x_publisher.account, photo_url=photo_url)
+    fake_photo_fetcher.photos[photo_url] = "data:image/jpeg;base64,eA=="
+    assert (await authorize(client)).status_code == 200
+    fake_photo_fetcher.fetched.clear()
+
+    rejected = await client.post(f"/api/v1/x-connection/photo/{action}")
+
+    assert rejected.status_code == 403
+    assert fake_photo_fetcher.fetched == []
+
+
+async def test_existing_publish_refresh_updates_x_photo_without_an_extra_x_call(
+    client, x_identity, subscribed, fixed_clock, fake_x_publisher, fake_photo_fetcher, post_with
+):
+    old_url = "https://pbs.twimg.com/profile_images/ada.jpg"
+    new_url = "https://pbs.twimg.com/profile_images/new.jpg"
+    fake_x_publisher.account = replace(fake_x_publisher.account, photo_url=old_url)
+    fake_photo_fetcher.photos[old_url] = "data:image/jpeg;base64,eA=="
+    fake_photo_fetcher.photos[new_url] = "data:image/jpeg;base64,eQ=="
+    spy = AsyncMock(wraps=fake_x_publisher.fetch_account)
+    fake_x_publisher.fetch_account = spy
+    assert (await authorize(client)).status_code == 200
+    fixed_clock.advance(timedelta(hours=2))
+    fake_x_publisher.account = replace(fake_x_publisher.account, photo_url=new_url)
+
+    published = await client.post(
+        "/api/v1/scheduled-posts",
+        json={
+            "post_id": await post_with("A new photo during ordinary refresh"),
+            "publish_now": True,
+        },
+    )
+
+    assert published.status_code == 201, published.text
+    assert (await client.get("/api/v1/users/me")).json()[
+        "avatar_data_url"
+    ] == "data:image/jpeg;base64,eQ=="
+    assert len(fake_x_publisher.refreshes) == 1
+    assert spy.await_count == 2
+
+
+@pytest.mark.parametrize("outcome", ["removed", "unavailable", "download_failed"])
+async def test_publish_photo_refresh_distinguishes_removal_from_failure(
+    client,
+    x_identity,
+    subscribed,
+    fixed_clock,
+    fake_x_publisher,
+    fake_photo_fetcher,
+    post_with,
+    outcome,
+):
+    old_url = "https://pbs.twimg.com/profile_images/ada.jpg"
+    old_photo = "data:image/jpeg;base64,eA=="
+    fake_x_publisher.account = replace(fake_x_publisher.account, photo_url=old_url)
+    fake_photo_fetcher.photos[old_url] = old_photo
+    assert (await authorize(client)).status_code == 200
+    fixed_clock.advance(timedelta(hours=2))
+    fake_x_publisher.account = replace(
+        fake_x_publisher.account,
+        photo_url="https://pbs.twimg.com/profile_images/unavailable.jpg"
+        if outcome == "download_failed"
+        else None,
+    )
+    if outcome == "unavailable":
+        fake_x_publisher.fail_fetch_account = XPublisherError("unavailable")
+
+    published = await client.post(
+        "/api/v1/scheduled-posts",
+        json={"post_id": await post_with("Photo refresh result"), "publish_now": True},
+    )
+
+    assert published.status_code == 201, published.text
+    expected = None if outcome == "removed" else old_photo
+    assert (await client.get("/api/v1/users/me")).json()["avatar_data_url"] == expected
 
 
 async def test_x_identity_can_restore_publishing_without_a_subscription(
