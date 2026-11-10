@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import MagicLink, User
@@ -16,7 +17,12 @@ async def get_user_by_email(
 ) -> Optional[User]:
     query = select(User).where(User.email == email)
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    try:
+        return result.scalar_one_or_none()
+    except MultipleResultsFound as error:
+        raise ForbiddenError(
+            "This email belongs to more than one account. Contact support."
+        ) from error
 
 
 async def get_user_by_id(
@@ -46,28 +52,35 @@ class NameHints:
     display_name: Optional[str] = None
 
 
+async def create_user(
+    db: AsyncSession,
+    email: str,
+    hints: NameHints = NameHints(),
+) -> User:
+    """Create without resolving identity or committing the caller's transaction."""
+    normalized_email = email.strip().lower()
+    user = User(
+        email=normalized_email,
+        display_name=hints.display_name or normalized_email.split("@", 1)[0],
+        first_name=hints.first_name,
+        last_name=hints.last_name,
+        is_admin=False,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
 async def resolve_user_by_verified_email(
     db: AsyncSession,
     email: str,
     hints: NameHints = NameHints(),
 ) -> User:
-    """
-    Every Sign-in method resolves through here, so one email always reaches one User.
-    Flushes, never commits: the sign-in commits once with its Session.
-    """
+    """Legacy email identity resolution. Flushes, never commits."""
     normalized_email = email.strip().lower()
     user = await get_user_by_email(db=db, email=normalized_email)
     if user is None:
-        user = User(
-            email=normalized_email,
-            display_name=hints.display_name or normalized_email.split("@", 1)[0],
-            first_name=hints.first_name,
-            last_name=hints.last_name,
-            is_admin=False,
-        )
-        db.add(user)
-        await db.flush()
-        return user
+        return await create_user(db, normalized_email, hints)
 
     fill_empty_profile(user, hints)
     await db.flush()
