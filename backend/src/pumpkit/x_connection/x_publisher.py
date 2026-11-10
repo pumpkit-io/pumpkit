@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, BinaryIO, Literal, Optional, Protocol
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from pydantic import (
@@ -277,7 +277,7 @@ class OfficialXPublisher:
                 "code_challenge_method": "S256",
             }
         )
-        return f"{X_AUTHORIZE_URL}?{query}"
+        return f"{settings.X_AUTHORIZE_URL or X_AUTHORIZE_URL}?{query}"
 
     async def exchange_code(
         self, *, code: str, code_verifier: str, now: datetime, required_scopes: str = ""
@@ -315,7 +315,7 @@ class OfficialXPublisher:
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 response = await client.get(
-                    X_USERS_ME_URL,
+                    _api_url(X_USERS_ME_URL),
                     headers={"Authorization": f"Bearer {access_token}"},
                     params={"user.fields": fields},
                 )
@@ -384,7 +384,7 @@ class OfficialXPublisher:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 initialized = await _media_call(
                     client.post(
-                        f"{X_MEDIA_UPLOAD_URL}/initialize",
+                        f"{_api_url(X_MEDIA_UPLOAD_URL)}/initialize",
                         json={
                             "media_type": content_type,
                             "total_bytes": byte_size,
@@ -399,7 +399,7 @@ class OfficialXPublisher:
                 segment = 0
                 while chunk := await asyncio.to_thread(source.read, MEDIA_CHUNK_BYTES):
                     append = client.post(
-                        f"{X_MEDIA_UPLOAD_URL}/{media_id}/append",
+                        f"{_api_url(X_MEDIA_UPLOAD_URL)}/{media_id}/append",
                         data={"segment_index": str(segment)},
                         files={"media": ("media", chunk, "application/octet-stream")},
                         headers=await headers(),
@@ -412,7 +412,8 @@ class OfficialXPublisher:
                     segment += 1
                 finalized = await _media_call(
                     client.post(
-                        f"{X_MEDIA_UPLOAD_URL}/{media_id}/finalize", headers=await headers()
+                        f"{_api_url(X_MEDIA_UPLOAD_URL)}/{media_id}/finalize",
+                        headers=await headers(),
                     )
                 )
                 await _await_processing(
@@ -435,7 +436,7 @@ class OfficialXPublisher:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 await _media_call(
                     client.post(
-                        X_MEDIA_METADATA_URL,
+                        _api_url(X_MEDIA_METADATA_URL),
                         json={"id": media_id, "metadata": {"alt_text": {"text": alt_text}}},
                         headers={"Authorization": f"Bearer {access_token}"},
                     )
@@ -470,7 +471,7 @@ class OfficialXPublisher:
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
                 response = await client.post(
-                    X_TWEETS_URL,
+                    _api_url(X_TWEETS_URL),
                     json=body,
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
@@ -551,7 +552,7 @@ async def _await_processing(
         waited += wait
         status = await _media_call(
             client.get(
-                X_MEDIA_UPLOAD_URL,
+                _api_url(X_MEDIA_UPLOAD_URL),
                 params={"command": "STATUS", "media_id": media_id},
                 headers=await headers(),
             )
@@ -626,6 +627,12 @@ def _x_app() -> tuple[str, str, str]:
     return client_id, secret, settings.x_redirect_uri()
 
 
+def _api_url(official_url: str) -> str:
+    return (
+        f"{settings.X_API_URL}{urlsplit(official_url).path}" if settings.X_API_URL else official_url
+    )
+
+
 async def _token_call(url: str, data: dict[str, str]) -> dict[str, Any]:
     """
     One form POST to X's OAuth endpoints as a confidential client. Errors carry only the
@@ -636,7 +643,7 @@ async def _token_call(url: str, data: dict[str, str]) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
             response = await client.post(
-                url, data=data, headers={"Authorization": f"Basic {basic}"}
+                _api_url(url), data=data, headers={"Authorization": f"Basic {basic}"}
             )
     except httpx.HTTPError as error:
         raise XPublisherError(f"X unreachable: {type(error).__name__}") from error

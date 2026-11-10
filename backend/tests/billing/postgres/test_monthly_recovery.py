@@ -28,16 +28,16 @@ async def test_last_reservation_and_duplicate_recovery_use_independent_database_
     db_session_maker,
     db,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     coupons,
     fake_billing,
     fixed_clock,
     same_identity,
 ):
-    first = await browser_for(new_browser, sign_in_by_magic_link, "monthly-first@example.com")
+    first = await browser_for(new_browser, sign_in_for_test, "monthly-first@example.com")
     second = await browser_for(
         new_browser,
-        sign_in_by_magic_link,
+        sign_in_for_test,
         "monthly-first@example.com" if same_identity else "monthly-second@example.com",
     )
     user = await db.scalar(select(User).where(User.email == "monthly-first@example.com"))
@@ -146,16 +146,14 @@ async def test_independent_recovery_and_capacity_competition_preserve_delayed_de
     authed_client,
     user,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     coupons,
     fake_billing,
     fixed_clock,
     replay_error,
 ):
     await monthly(db, user, fake_billing, fixed_clock)
-    competitor = await browser_for(
-        new_browser, sign_in_by_magic_link, "deferral-competitor@example.com"
-    )
+    competitor = await browser_for(new_browser, sign_in_for_test, "deferral-competitor@example.com")
     code = await coupons("--months", "1")
     offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
     other_offer = (await competitor.post(PREVIEW, json={"code": code["code"]})).json()
@@ -244,11 +242,11 @@ async def test_unsent_settlement_refusal_releases_last_slot_under_independent_re
     fixed_clock,
     monkeypatch,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     settlement,
 ):
     await monthly(db, user, fake_billing, fixed_clock)
-    other = await browser_for(new_browser, sign_in_by_magic_link, "settlement-slot@example.com")
+    other = await browser_for(new_browser, sign_in_for_test, "settlement-slot@example.com")
     code = await coupons("--months", "1")
     offer = (await authed_client.post(PREVIEW, json={"code": code["code"]})).json()
     other_offer = (await other.post(PREVIEW, json={"code": code["code"]})).json()

@@ -116,17 +116,17 @@ async def test_magic_link_sign_in_deletes_records_expired_over_90_days_ago(
 
 
 async def test_a_purged_refresh_token_is_refused_like_an_unknown_one(
-    new_browser, sign_in_by_magic_link, db, user
+    new_browser, sign_in_for_test, db, user
 ):
     browser = new_browser()
-    await sign_in_by_magic_link(browser, user.email)
+    await sign_in_for_test(browser, user.email)
     purged_cookie = browser.cookies["refresh_token"]
     token = (await db.execute(select(RefreshToken))).scalar_one()
     token.created_at = _days_ago(120)
     token.expires_at = _days_ago(91)
     await db.commit()
 
-    await sign_in_by_magic_link(new_browser(), "bob@example.com")
+    await sign_in_for_test(new_browser(), "bob@example.com")
     assert token.refresh_token_hash not in await _stored_refresh_token_hashes(db)
 
     browser.cookies.set("refresh_token", purged_cookie)

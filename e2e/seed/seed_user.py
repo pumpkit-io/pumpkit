@@ -21,6 +21,7 @@ from pumpkit.onboarding.models import OnboardingFinish
 from pumpkit.posts.models import Post
 from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.models import XConnection
+from tests.browser_seed import bind_x_identity, x_id_for
 
 # Not a `.test`/`.example` TLD: those are special-use and rejected by the
 # EmailStr validation in UserProfileResponse.
@@ -29,7 +30,7 @@ E2E_EMAIL = "e2e@e2e-user.dev"
 
 async def main() -> None:
     async with _db_session_handler.async_session_maker() as db:
-        result = await db.execute(select(User).where(User.email == E2E_EMAIL))
+        result = await db.execute(select(User).where(User.x_user_id == x_id_for(E2E_EMAIL)))
         user = result.scalar_one_or_none()
         if user is None:
             user = User(
@@ -38,6 +39,7 @@ async def main() -> None:
             db.add(user)
         else:
             user.first_name, user.last_name, user.display_name = "E2E", "User", "E2E User"
+        bind_x_identity(user)
         await db.flush()
 
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))

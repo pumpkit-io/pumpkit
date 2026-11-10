@@ -24,7 +24,7 @@ async def test_new_payment_obligation_before_first_deferral_does_not_strand_the_
     fixed_clock,
     monkeypatch,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     db_session_maker,
     file_storage,
     settlement,
@@ -64,7 +64,7 @@ async def test_new_payment_obligation_before_first_deferral_does_not_strand_the_
     assert me["subscribed"] is True
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 0
     other = new_browser()
-    signed = await sign_in_by_magic_link(other, "unsent-capacity@example.com")
+    signed = await sign_in_for_test(other, "unsent-capacity@example.com")
     other.headers["Authorization"] = "Bearer " + signed.access_token
     assert (await other.post(PREVIEW, json={"code": created["code"]})).status_code == 200
     assert (await authed_client.post("/api/v1/billing/cancel-renewal")).status_code == 200
@@ -94,7 +94,7 @@ async def test_later_payment_obligation_never_releases_an_earlier_unknown_deferr
     fixed_clock,
     monkeypatch,
     new_browser,
-    sign_in_by_magic_link,
+    sign_in_for_test,
     db_session_maker,
     file_storage,
     settlement,
@@ -147,7 +147,7 @@ async def test_later_payment_obligation_never_releases_an_earlier_unknown_deferr
         == 1
     )
     other = new_browser()
-    signed = await sign_in_by_magic_link(other, "unknown-capacity@example.com")
+    signed = await sign_in_for_test(other, "unknown-capacity@example.com")
     other.headers["Authorization"] = "Bearer " + signed.access_token
     assert (await other.post(PREVIEW, json={"code": created["code"]})).status_code == 409
     assert (await coupons(created["id"], command="inspect"))["redeemed_count"] == 0

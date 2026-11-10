@@ -1,13 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { runSeedScript } from '../backend';
 
-test('Settings offers to connect X', async ({ page }) => {
-  const instance = await (await page.request.get('/api/v1/instance')).json();
-  test.skip(!instance.x_connection, 'The stack has no X keys, so Settings has no X account card.');
+test('Settings shows the seeded X identity without replacement controls', async ({ page }) => {
   await page.goto('/settings');
-
-  const xAccount = page.getByRole('region', { name: 'X account' });
-  await expect(xAccount.getByRole('button', { name: 'Connect X' })).toBeVisible();
+  await expect(page.getByLabel('X handle', { exact: true })).toHaveValue('@e2e_user');
+  await expect(page.getByRole('region', { name: 'X account' })).toHaveCount(0);
 });
 
 test('the Posts page opens on an empty Scheduled tab', async ({ page }) => {

@@ -124,16 +124,16 @@ async def test_reconnecting_an_x_account_that_lost_its_photo_forgets_it(
 
 
 async def test_the_x_connection_outlives_the_session_it_was_made_in(
-    new_browser, sign_in_by_magic_link, user, subscribed, clock
+    new_browser, sign_in_for_test, user, subscribed, clock
 ):
     first = new_browser()
-    signed_in = await sign_in_by_magic_link(first, user.email)
+    signed_in = await sign_in_for_test(first, user.email)
     first.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     assert (await _connect(first)).status_code == 200
     assert (await first.post("/api/v1/logout")).status_code == 200
 
     second = new_browser()
-    signed_in = await sign_in_by_magic_link(second, user.email)
+    signed_in = await sign_in_for_test(second, user.email)
     second.headers["Authorization"] = f"Bearer {signed_in.access_token}"
     response = await second.get(X_CONNECTION)
 
