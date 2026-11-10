@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-10
+
 - Users can switch annual subscriptions in Stripe classic mode to monthly billing after coupon free access without an immediate charge or lost access. Existing interrupted changes retain their original recovery request.
 
 ## [0.11.0] - 2026-11-10
