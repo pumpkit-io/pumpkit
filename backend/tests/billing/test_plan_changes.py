@@ -18,6 +18,7 @@ from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_monthly_coupons import monthly
 from tests.billing.test_paid_signups import SIGNUPS, _open
+from tests.billing.test_paid_signups import billing_clock as billing_clock
 from tests.billing.test_top_ups import _send
 from tests.posts.writing_replies import written
 
