@@ -6,6 +6,8 @@ X is the only active sign-in method in every Instance (ADR 0023). `GET /api/v1/l
 
 `auth/router.py` retains an unmounted `legacy_router`, and `pages/LegacyLogin.tsx` retains the original isolated UI. Google, magic link, mail and photo-source implementations are inactive. Old frontend callbacks redirect without creating Sessions. Google or SMTP settings cannot reactivate them; restoring a method requires code changes and an account-policy review. Focused legacy tests mount their own test-owned assembly, while general backend fixtures use the Session service and browser seeds require the local X stand-in.
 
+Personal local testing uses `make dev-personal` at `http://localhost:5173` with real X and Stripe sandbox; see [setup and the callback relay](agents/dev-stack.md#personal-testing-on-localhost-with-real-providers). Agent checks retain their isolated emulated stack.
+
 The shared `/oauth/x/callback` selects sign-in or reconnect from the pending attempt's purpose, independently of any Session another tab might change. The prefix only routes; backend state, browser binding, PKCE and stable-ID checks remain authoritative. Callback query credentials are removed before rendering and excluded at the global analytics boundary, including automatic SDK events. Pending Connected app consent retains its original 30-minute deadline across failed attempts and retries, and is consumed only after successful sign-in.
 
 Profile stores the X photo and read-only handle/email, with editable Pumpkit names preserved across sign-ins. Existing sign-in/reconnect/refresh profile fetches can update a changed or explicitly absent photo; ordinary profile reads do not contact X. No photo editor, extra photo-sync request or timer exists. Failed image fetches preserve the old photo for a later retry.
@@ -228,18 +230,10 @@ Before the first `make e2e`, run `cd e2e && npm install && npx playwright instal
 
 The e2e suite opens Settings' Plan card, so its Instance must sell Plans: set the Stripe billing group in `.env`. [CONTRIBUTING](../CONTRIBUTING.md#make-targets) gives dummy values that work.
 
-If host port 5432 is already taken, add a local compose override that remaps the db service and point `COMPOSE_FILE` at it:
-
-```yaml
-# compose.dev.override.local.yml
-services:
-  db:
-    ports: !override ['55433:5432']
-```
-
-```bash
-make dev DEV_COMPOSE="docker compose -f compose.dev.yml -f compose.dev.override.local.yml"
-```
+`make dev` uses `scripts/dev-stack up`, which allocates worktree-specific loopback
+ports for the backend and database, so another stack on port 5432 does not
+conflict. Use `scripts/dev-stack url`, `status`, `logs` and `down` for that stack.
+`make dev-personal` selects the separate persistent personal mode described above.
 
 ## Self-hosting and releases
 

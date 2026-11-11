@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import type { Server } from 'http';
 import path from 'path';
+import { localXCallbackRelay } from './localXCallbackRelayPlugin';
 
 /** Node ends a request whose body still arrives after 5 minutes: a slow 512 MB video upload. */
 const longUploads: Plugin = {
@@ -13,7 +14,7 @@ const longUploads: Plugin = {
 };
 
 export default defineConfig({
-  plugins: [react(), longUploads],
+  plugins: [localXCallbackRelay(process.env), react(), longUploads],
   // The repo root's single .env; inside the dev container compose passes it as the environment.
   envDir: path.resolve(__dirname, '..'),
   resolve: {

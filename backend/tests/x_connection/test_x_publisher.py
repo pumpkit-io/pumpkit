@@ -104,7 +104,11 @@ def test_a_verifier_is_a_fresh_43_to_128_character_string():
     assert first != second
 
 
-def test_the_authorize_url_asks_for_the_publishing_scopes_with_an_s256_challenge():
+@pytest.mark.parametrize("relay", [False, True])
+def test_the_authorize_url_asks_for_the_publishing_scopes_with_an_s256_challenge(
+    monkeypatch, relay
+):
+    monkeypatch.setattr(settings, "X_LOCAL_CALLBACK_RELAY", relay)
     url = OfficialXPublisher().build_authorize_url(state="the-state", code_challenge="chal")
 
     parts = urlsplit(url)
@@ -112,7 +116,9 @@ def test_the_authorize_url_asks_for_the_publishing_scopes_with_an_s256_challenge
     assert {key: values[0] for key, values in parse_qs(parts.query).items()} == {
         "response_type": "code",
         "client_id": "x-client-id",
-        "redirect_uri": "http://localhost:5173/oauth/x/callback",
+        "redirect_uri": "http://127.0.0.1:5173/oauth/x/callback"
+        if relay
+        else "http://localhost:5173/oauth/x/callback",
         "scope": "tweet.read tweet.write users.read offline.access media.write",
         "state": "the-state",
         "code_challenge": "chal",
@@ -149,7 +155,11 @@ def _token_body(**overrides) -> dict:
 
 
 @respx.mock
-async def test_exchanging_a_code_sends_it_with_the_verifier_as_a_confidential_client():
+@pytest.mark.parametrize("relay", [False, True])
+async def test_exchanging_a_code_sends_it_with_the_verifier_as_a_confidential_client(
+    monkeypatch, relay
+):
+    monkeypatch.setattr(settings, "X_LOCAL_CALLBACK_RELAY", relay)
     route = respx.post(X_TOKEN_URL).mock(return_value=httpx.Response(200, json=_token_body()))
 
     tokens = await OfficialXPublisher().exchange_code(
@@ -168,7 +178,9 @@ async def test_exchanging_a_code_sends_it_with_the_verifier_as_a_confidential_cl
         "grant_type": "authorization_code",
         "code": "the-code",
         "code_verifier": "the-verifier",
-        "redirect_uri": "http://localhost:5173/oauth/x/callback",
+        "redirect_uri": "http://127.0.0.1:5173/oauth/x/callback"
+        if relay
+        else "http://localhost:5173/oauth/x/callback",
     }
 
 

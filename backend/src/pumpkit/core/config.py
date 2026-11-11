@@ -182,6 +182,7 @@ class Settings(BaseSettings):
     # Required by X sign-in and publishing on every Instance.
     X_CLIENT_ID: Optional[str] = None
     X_CLIENT_SECRET: Optional[str] = None
+    X_LOCAL_CALLBACK_RELAY: bool = False
     X_AUTHORIZE_URL: Optional[str] = None
     X_API_URL: Optional[str] = None
 
@@ -270,6 +271,21 @@ class Settings(BaseSettings):
     def _coupon_keys_when_enabled(self) -> Self:
         if self.COUPONS_ENABLED:
             self.coupon_identity_keys()
+        return self
+
+    @model_validator(mode="after")
+    def _local_x_callback_relay(self) -> Self:
+        if self.X_LOCAL_CALLBACK_RELAY:
+            origin = urlsplit(self.PUBLIC_URL)
+            if (
+                self.ENV != "local"
+                or origin.scheme != "http"
+                or origin.hostname != "localhost"
+                or origin.port is None
+            ):
+                raise ValueError(
+                    "X_LOCAL_CALLBACK_RELAY requires ENV=local and http://localhost:PORT"
+                )
         return self
 
     @model_validator(mode="after")
@@ -376,7 +392,10 @@ class Settings(BaseSettings):
 
     def x_redirect_uri(self) -> str:
         """The frontend's callback route, registered on the X developer app."""
-        return f"{self.frontend_url()}/oauth/x/callback"
+        origin = self.frontend_url()
+        if self.X_LOCAL_CALLBACK_RELAY:
+            origin = f"http://127.0.0.1:{urlsplit(origin).port}"
+        return f"{origin}/oauth/x/callback"
 
     def stripe_checkout_success_url(self) -> str:
         return f"{self.frontend_url()}/billing/success"

@@ -1,0 +1,15 @@
+services:
+  backend:
+    environment:
+      X_LOCAL_CALLBACK_RELAY: 'true'
+  publisher:
+    environment:
+      X_LOCAL_CALLBACK_RELAY: 'true'
+  frontend:
+    environment:
+      ENV: local
+      X_LOCAL_CALLBACK_RELAY: 'true'
+      DEV_PUBLIC_URL: ${DEV_PUBLIC_URL:?personal mode needs DEV_PUBLIC_URL}
+    ports: !override
+      - 127.0.0.1:${DEV_PUBLIC_PORT:?personal mode needs DEV_PUBLIC_PORT}:5173
+      - '[::1]:${DEV_PUBLIC_PORT}:5173'

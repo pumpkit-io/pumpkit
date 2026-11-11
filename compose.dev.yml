@@ -57,6 +57,7 @@ services:
     env_file: .env
     # The dev stack always runs locally against its own Postgres, behind the Vite dev server.
     environment: &dev-backend-environment
+      X_LOCAL_CALLBACK_RELAY: 'false'
       ENV: local
       PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
       POSTGRES_HOST: db

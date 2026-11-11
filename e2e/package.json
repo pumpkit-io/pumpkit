@@ -10,7 +10,8 @@
     "report": "playwright show-report",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:safety": "playwright test --config playwright.safety.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
