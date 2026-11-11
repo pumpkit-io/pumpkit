@@ -81,8 +81,9 @@ local_host() {
 
 # The hostname comes from Portless, so the Slug matches the one portless run derives.
 init_names() {
-  local got=""
-  if has_portless; then
+  local got="" saved_mode=""
+  [ ! -f "$STATE_DIR/mode" ] || IFS= read -r saved_mode <"$STATE_DIR/mode"
+  if has_portless && [ "$saved_mode" != personal ] && [ "${REQUESTED_PERSONAL:-0}" != 1 ]; then
     got=$(portless get "$PROJECT" </dev/null) || die "portless get $PROJECT failed"
     HOST=${got#*://}
     HOST=${HOST%%[:/]*}
@@ -119,12 +120,13 @@ init_names() {
   MODE=emulated
   if [ -f "$STATE_DIR/mode" ]; then
     IFS= read -r MODE <"$STATE_DIR/mode"
-    case "$MODE" in emulated|real-x) ;; *) die "invalid saved stack mode" ;; esac
+    case "$MODE" in emulated|real-x|personal) ;; *) die "invalid saved stack mode" ;; esac
   fi
-  if [ "$MODE" = real-x ]; then
+  if [ "$MODE" != emulated ]; then
     IFS= read -r DEV_URL <"$STATE_DIR/public-url"
-    validate_real_url "$DEV_URL"
-    COMPOSE_PROJECT="$COMPOSE_PROJECT-real-x"
+    validate_mode_url "$MODE" "$DEV_URL"
+    COMPOSE_PROJECT="$COMPOSE_PROJECT-$MODE"
+    export DEV_PUBLIC_PORT="${DEV_URL##*:}"
     export DEV_WEB_BIND="127.0.0.1:${DEV_URL##*:}"
     export "$APP_URL_VAR=$DEV_URL"
   fi
@@ -135,29 +137,46 @@ validate_real_url() {
   [ "${1##*:}" -le 65535 ] || die "callback port must be between 1 and 65535"
 }
 
+validate_mode_url() {
+  if [ "$1" = personal ]; then
+    [[ "$2" =~ ^http://localhost:([1-9][0-9]{0,4})$ ]] || die "personal mode needs http://localhost:PORT without a path"
+    [ "${2##*:}" -le 65535 ] || die "callback port must be between 1 and 65535"
+  else
+    validate_real_url "$2"
+  fi
+}
+
 select_mode() {
   local requested=emulated requested_url=http://127.0.0.1:5173
   if [ "$#" -gt 0 ]; then
-    [ "$1" = --real-x ] && [ "$#" -le 2 ] || die "expected up [--real-x [http://127.0.0.1:PORT]]"
-    requested=real-x
-    if [ "$MODE" = real-x ]; then requested_url=$DEV_URL; fi
+    [ "$#" -le 2 ] || die "expected up [--real-x|--personal [ORIGIN]]"
+    case "$1" in
+      --real-x) requested=real-x ;;
+      --personal) requested=personal; requested_url=http://localhost:5173 ;;
+      *) die "expected up [--real-x|--personal [ORIGIN]]" ;;
+    esac
+    if [ "$MODE" = "$requested" ]; then requested_url=$DEV_URL; fi
     requested_url=${2:-$requested_url}
-    validate_real_url "$requested_url"
+    validate_mode_url "$requested" "$requested_url"
   fi
   if [ -f "$STATE_DIR/mode" ]; then
     [ "$requested" = "$MODE" ] || die "saved $MODE stack: use a separate worktree, or explicitly destroy this stack before changing mode"
-    [ "$MODE" != real-x ] || [ "$DEV_URL" = "$requested_url" ] || die "saved real-X callback differs; use its saved URL or a separate worktree"
+    [ "$MODE" = emulated ] || [ "$DEV_URL" = "$requested_url" ] || die "saved callback differs; use its saved URL or a separate worktree"
   else
-    if [ "$requested" = real-x ]; then
+    if [ "$requested" != emulated ]; then
       [ ! -f "$STATE_DIR/e2e-target" ] && [ ! -f "$STATE_DIR/routes" ] || die "existing emulated stack: use a separate worktree or explicitly destroy it first"
-      python3 - "${requested_url##*:}" <<'PORTCHECK' || die "callback port is occupied; choose and register a free loopback port"
+      python3 - "${requested_url##*:}" "$requested" <<'PORTCHECK' || die "callback port is occupied; choose and register a free loopback port"
 import socket
 import sys
-with socket.socket() as listener:
-    try:
-        listener.bind(("127.0.0.1", int(sys.argv[1])))
-    except OSError:
-        sys.exit(1)
+families = [(socket.AF_INET, "127.0.0.1")]
+if sys.argv[2] == "personal":
+    families.append((socket.AF_INET6, "::1"))
+for family, host in families:
+    with socket.socket(family) as listener:
+        try:
+            listener.bind((host, int(sys.argv[1])))
+        except OSError:
+            sys.exit(1)
 PORTCHECK
     fi
     [ "$requested" != emulated ] || requested_url=$DEV_URL
@@ -239,6 +258,10 @@ b_emulate_env() {
 # The emulators profile keeps plain `docker compose -f compose.dev.yml up` free of Emulators.
 b_compose() {
   safe_mode_env
+  if [ "$MODE" = personal ]; then
+    docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/$B_COMPOSE_FILE" -f "$ROOT/compose.personal.yml" "$@"
+    return
+  fi
   if has_portless; then emulator_env; fi
   b_emulate_env
   local extra=()
@@ -251,7 +274,7 @@ b_service_alive() { [ -n "$(b_compose ps -q --status running "$1" 2>/dev/null)" 
 
 b_alive() {
   b_service_alive "$B_WEB_SERVICE" || return 1
-  [ "${#EMULATORS[@]}" -eq 0 ] || b_service_alive "$B_EMULATE_SERVICE"
+  [ "$MODE" = personal ] || [ "${#EMULATORS[@]}" -eq 0 ] || b_service_alive "$B_EMULATE_SERVICE"
 }
 
 b_emulator_route() { printf '%s%s.emulate.%s\n' "${ROUTE%"$PROJECT"}" "$1" "$PROJECT"; }
@@ -299,6 +322,11 @@ b_emulators_up() {
 }
 
 b_up() {
+  if [ "$MODE" = personal ]; then
+    b_compose config --format json | python3 "$ROOT/scripts/check-personal-stack.py" || die "personal configuration check failed"
+    b_compose up -d --build --wait db backend publisher frontend >&2 || die "personal stack failed; see: scripts/dev-stack logs"
+    return
+  fi
   b_emulators_up
   # The backend's start.sh migrates; e2e seeds its own User, so there is no seed step.
   b_compose up -d --build --wait >&2 || die "docker compose up failed; see: scripts/dev-stack logs"
@@ -322,6 +350,7 @@ b_up() {
 }
 
 b_remove_routes() {
+  [ "$MODE" != personal ] || return 0
   local r routes="$STATE_DIR/routes"
   portless alias --remove "$ROUTE" </dev/null >/dev/null 2>&1 || true
   [ -f "$routes" ] || return 0
@@ -343,16 +372,20 @@ b_destroy() {
 
 b_logs() { b_compose logs --no-color --tail 200 ${1+"$1"}; }
 
-usage() { printf 'usage: scripts/dev-stack up [--real-x [http://127.0.0.1:PORT]] | down|destroy|url|staged-x-url|status|logs [service]\n' >&2; }
+usage() { printf 'usage: scripts/dev-stack up [--real-x [http://127.0.0.1:PORT] | --personal [http://localhost:PORT]] | down|destroy|url|staged-x-url|status|logs [service]\n' >&2; }
 
 case "${1:-}" in
   up)
     check_emulators
+    REQUESTED_PERSONAL=0
+    [ "${2:-}" != --personal ] || REQUESTED_PERSONAL=1
     init_names
     shift
     select_mode "$@"
-    has_portless || die "portless is not installed; run the Portless section of setup-sdlc"
-    ensure_proxy
+    if [ "$MODE" != personal ]; then
+      has_portless || die "portless is not installed; run the Portless section of setup-sdlc"
+      ensure_proxy
+    fi
     init_names
     mkdir -p "$STATE_DIR"
     safe_mode_env
@@ -375,6 +408,7 @@ case "${1:-}" in
     ;;
   staged-x-url)
     init_names
+    [ "$MODE" != personal ] || die "personal mode has no staged X fixture"
     printf '%s\n' "$DEV_STAGED_X_URL"
     ;;
   status)

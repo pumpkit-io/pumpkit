@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { assertSeedStack } from './personal-safety';
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 // Written by `scripts/dev-stack up`: its Dev URL, then the Compose project serving it.
@@ -30,6 +31,7 @@ export function stagedXBaseURL(): string | undefined {
 
 /** Runs one of `seed/`'s Python scripts inside the dev stack's backend container, with `args`. */
 export function runSeedScript(name: string, args: string[] = []): string {
+  assertSeedStack();
   return execFileSync(
     'docker',
     [

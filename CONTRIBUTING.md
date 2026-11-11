@@ -26,13 +26,14 @@ Use `scripts/dev-stack up` for isolated local work. It prints this worktree's De
 
 CI runs these same targets, so a branch that passes them locally passes CI.
 
-| Target       | What it runs                                                                                              |
-| ------------ | --------------------------------------------------------------------------------------------------------- |
-| `make dev`   | The dev stack in `compose.dev.yml`, in the foreground                                                     |
-| `make check` | Lint, format check, typecheck and import contracts for backend, frontend and e2e, plus the frontend build |
-| `make test`  | Backend pytest and frontend vitest                                                                        |
-| `make fmt`   | The formatters in all three packages (ruff format and Prettier)                                           |
-| `make e2e`   | Starts the dev stack in the background if it is down, waits for it, then runs Playwright against it       |
+| Target              | What it runs                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| `make dev`          | The isolated emulated dev stack through `scripts/dev-stack up`                                            |
+| `make dev-personal` | Personal localhost stack with real X and Stripe sandbox                                                   |
+| `make check`        | Lint, format check, typecheck and import contracts for backend, frontend and e2e, plus the frontend build |
+| `make test`         | Backend pytest and frontend vitest                                                                        |
+| `make fmt`          | The formatters in all three packages (ruff format and Prettier)                                           |
+| `make e2e`          | Starts the dev stack in the background if it is down, waits for it, then runs Playwright against it       |
 
 Each package also has its own targets: `check-backend`, `check-frontend`, `check-e2e`, `test-backend` and `test-frontend`. Run `make check test` before you push.
 
@@ -40,13 +41,14 @@ The contract supplies the dummy Stripe billing group and Top-up key for browser 
 
 ### Stripe webhooks
 
-To try billing against Stripe in test mode, put your test keys in `.env` and forward webhooks to the dev backend with the [Stripe CLI](https://docs.stripe.com/stripe-cli):
+For personal testing with real X and Stripe's sandbox, use a dedicated worktree
+and `make dev-personal`. Configure its sandbox catalog, keys and webhook listener
+as described in [Personal testing on localhost](docs/agents/dev-stack.md#personal-testing-on-localhost-with-real-providers).
+Open `http://localhost:5173`; register `http://127.0.0.1:5173/oauth/x/callback` on X.
+The dev server relays that callback back to localhost before login completes.
 
-```bash
-stripe listen --forward-to localhost:8000/api/v1/stripe/webhook
-```
-
-Use the `whsec_...` secret it prints as `STRIPE_WEBHOOK_SECRET`, then restart the backend so it reads the new value.
+The default `make dev` and agent stacks keep using provider stand-ins and their
+own data. Existing `--real-x` stacks retain their separate data and emulated Stripe.
 
 The project layout and common recipes are in [docs/development.md](./docs/development.md).
 

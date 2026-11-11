@@ -7,5 +7,12 @@
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "tailwind.config.ts"]
+  "include": [
+    "localXCallbackRelay.ts",
+    "localXCallbackRelayPlugin.ts",
+    "localXCallbackRelay.test.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "tailwind.config.ts"
+  ]
 }

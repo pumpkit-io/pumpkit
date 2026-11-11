@@ -1,15 +1,17 @@
 # CI calls these targets (.github/workflows/ci.yml), so a target that passes here passes there.
-DEV_COMPOSE ?= docker compose -f compose.dev.yml
 # The production stack; pass COMPOSE="docker compose -p NAME" to run it beside another one.
 COMPOSE ?= docker compose
 SMOKE_URL ?= http://localhost:8080
 # The app e2e runs against. For a worktree's own stack, pass the Dev URL `scripts/dev-stack up` prints.
 E2E_BASE_URL ?= http://localhost:5173
 
-.PHONY: dev check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-wait smoke
+.PHONY: dev dev-personal check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-wait smoke
 
 dev:
-	$(DEV_COMPOSE) up --build
+	scripts/dev-stack up
+
+dev-personal:
+	scripts/dev-stack up --personal
 
 check: check-backend check-frontend check-e2e
 	python3 scripts/tests/test_dev_stack.py
@@ -27,6 +29,7 @@ check-frontend:
 	cd frontend && npm run build
 
 check-e2e:
+	cd e2e && npm run test:safety
 	cd e2e && npm run format:check
 	cd e2e && npm run typecheck
 

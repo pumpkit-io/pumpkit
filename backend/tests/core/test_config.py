@@ -423,3 +423,25 @@ def test_configured_trial_identity_keys_fail_without_exposing_the_secret(instanc
     with pytest.raises(ValidationError, match="TRIAL_IDENTITY_KEYS") as error:
         instance_env(TRIAL_IDENTITY_KEYS=ring)
     assert ring not in str(error.value)
+
+
+def test_local_x_relay_keeps_app_on_localhost_and_callback_on_loopback(instance_env):
+    s = instance_env(ENV="local", PUBLIC_URL="http://localhost:5173", X_LOCAL_CALLBACK_RELAY="true")
+    assert s.frontend_url() == "http://localhost:5173"
+    assert s.x_redirect_uri() == "http://127.0.0.1:5173/oauth/x/callback"
+    assert not s.serves_https()
+
+
+@pytest.mark.parametrize(
+    "env,url",
+    [
+        ("prod", "http://localhost:5173"),
+        ("local", "http://127.0.0.1:5173"),
+        ("local", "https://localhost:5173"),
+        ("local", "http://localhost"),
+        ("local", "http://pumpkit.example.org:5173"),
+    ],
+)
+def test_local_x_relay_refuses_other_environments_and_origins(instance_env, env, url):
+    with pytest.raises(ValidationError, match="X_LOCAL_CALLBACK_RELAY"):
+        instance_env(ENV=env, PUBLIC_URL=url, X_LOCAL_CALLBACK_RELAY="true")

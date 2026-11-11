@@ -1,6 +1,7 @@
 import { chromium, type FullConfig } from '@playwright/test';
 import * as path from 'node:path';
 import { runSeedScript } from './backend';
+import { assertEmulatedTarget } from './personal-safety';
 
 const STORAGE_STATE = path.join(__dirname, 'storageState.json');
 
@@ -14,6 +15,7 @@ function seedUserAndGetToken(): string {
 export default async function globalSetup(config: FullConfig): Promise<void> {
   const appOrigin = config.projects[0].use.baseURL;
   if (!appOrigin) throw new Error('playwright.config.ts sets no baseURL');
+  await assertEmulatedTarget(appOrigin);
   const token = seedUserAndGetToken();
   if (process.env.E2E_COUPONS === '1') {
     runSeedScript('coupon_user.py', ['check']);

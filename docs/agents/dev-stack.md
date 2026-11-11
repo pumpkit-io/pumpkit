@@ -91,3 +91,80 @@ step. Shared Portless proxy settings and other worktrees' routes remain untouche
 
 Provider setup references: [X Apps](https://docs.x.com/fundamentals/developer-apps)
 and [OAuth2 authorization code](https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code).
+
+## Personal testing on localhost with real providers
+
+This human-operated mode uses real X, Stripe's sandbox and the configured writing
+providers, with a persistent local database and media. It is separate from the
+emulated agent stack and the older `--real-x` mode (which still emulates Stripe).
+Automated checks always use plain `scripts/dev-stack up` in an emulated worktree.
+
+Use a dedicated worktree and configure its protected root `.env`:
+
+- Set real `X_CLIENT_ID` and `X_CLIENT_SECRET`, preserving the required publishing
+  and confirmed-email permissions. Register exactly
+  `http://127.0.0.1:5173/oauth/x/callback` on that X app, keeping its other callbacks.
+- Set the selected Stripe sandbox's `STRIPE_SECRET_KEY=sk_test_...`,
+  `STRIPE_PUBLISHABLE_KEY=pk_test_...`, `STRIPE_WEBHOOK_SECRET` and
+  `BILLING_PLAN_KEYS`. Set `BILLING_TOP_UP_KEY` to test top-ups.
+  The mode refuses live keys and provider URL overrides; it does not replace them
+  with emulator credentials. Use the same sandbox for the CLI, API keys, catalog
+  and portal configurations. The startup check validates configuration shape,
+  not provider permissions or resource ownership.
+- Keep the instance's `FERNET_ENCRYPTION_KEY`, signing secrets and persistent
+  `TRIAL_IDENTITY_KEYS` ring with its data. Generate keys once for a new instance;
+  never reuse the emulator ring for personal accounts.
+- Configure the actual LLM, twitterapi.io and classifier providers as usual.
+- To test coupons, explicitly set `COUPONS_ENABLED=true`, a persistent
+  `COUPON_IDENTITY_KEYS` ring and that sandbox's
+  `STRIPE_COUPON_PORTAL_CONFIGURATION_ID`. Follow [the coupon setup and activation
+  guidance](../coupons.md); this isolated test opt-in does not activate production
+  coupons. Back up both identity rings with the database.
+
+Configure Stripe's sandbox catalog and tax prerequisites as described in
+[Subscriptions](../development.md#subscriptions). Start Stripe CLI forwarding in
+another terminal, authenticated to the same sandbox:
+
+```sh
+stripe listen --forward-to http://localhost:5173/api/v1/stripe/webhook
+```
+
+Put the listener's displayed signing secret into `STRIPE_WEBHOOK_SECRET` in
+`.env`, then start or restart the stack so it reads the secret:
+
+```sh
+scripts/dev-stack up --personal
+# Equivalent: make dev-personal
+```
+
+Open only the printed `http://localhost:5173` app address. The dev server briefly
+receives X's callback at `127.0.0.1`, then redirects it to the fixed localhost
+callback before React loads. Login and reconnect finish on localhost with their
+original browser cookies and storage. State, PKCE and browser-binding checks stay
+in place. The relay is unavailable in production builds. The dev server marks
+responses `X-Pumpkit-Dev-Mode: personal` so E2E refuses this target before seeding
+or opening a browser, including from another worktree.
+
+For another port, register its exact X callback first, then run
+`scripts/dev-stack up --personal http://localhost:5175` from a fresh dedicated
+worktree and change the Stripe forwarding URL to match. Use one personal instance per browser profile: localhost cookies are shared
+across ports. Both IPv4 and IPv6 loopback bindings must be available. No Portless installation or route is needed.
+The selected port must be free; startup never stops its owner.
+
+The mode sets `PUBLIC_URL` to its selected localhost origin regardless of `.env`'s
+`PUBLIC_URL`, so Checkout, portal and other return URLs use localhost too.
+Scheduled publishing, mail and analytics remain disabled. **Post now and media
+requests use real X.** Writing uses the configured real services.
+
+Personal mode has its own Compose project and volumes. It starts with a fresh
+local database; existing emulated or `--real-x` data is never copied or removed.
+`url`, `status`, `logs` and `down` remember the selection. `down` preserves data;
+`up --personal` resumes it. Plain `up`, including `make dev` and `make e2e`, refuses
+to change this worktree's mode. `staged-x-url` is unavailable. Do not run E2E or
+seed scripts against personal data. `destroy` explicitly deletes this stack's
+volumes; never run it as automated cleanup for a personal stack.
+
+Acceptance: sign in with real X, reconnect the same account, complete sandbox
+Checkout and a portal return, redeem a sandbox coupon, observe signed webhook
+success, and restart to confirm saved data remains. Transport tests and emulated
+checks do not prove real-provider permissions or billing behavior.
