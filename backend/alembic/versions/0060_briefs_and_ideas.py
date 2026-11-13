@@ -1,7 +1,7 @@
 """a Post belongs to an Idea of a Brief
 
-Revision ID: 0059
-Revises: 0058
+Revision ID: 0060
+Revises: 0059
 Create Date: 2026-11-13 22:00:00.000000
 
 """
@@ -14,8 +14,8 @@ from ulid import ULID
 
 from alembic import op
 
-revision: str = "0059"
-down_revision: Union[str, None] = "0058"
+revision: str = "0060"
+down_revision: Union[str, None] = "0059"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

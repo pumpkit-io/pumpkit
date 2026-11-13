@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from pumpkit.auth.models import User
 from pumpkit.auth.service import users
 from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.llm import LLMError
+from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Brief, Idea, Post
 from tests.connected_apps.conftest import foreign_keys_session as foreign_keys_session
 from tests.posts.writing_replies import written

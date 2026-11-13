@@ -1,5 +1,5 @@
 """
-Migration 0059 gives every Post an Idea of a Brief holding the text the Post used to store
+Migration 0060 gives every Post an Idea of a Brief holding the text the Post used to store
 (ADR 0025), and its downgrade puts the text back on the Post.
 """
 
@@ -55,9 +55,9 @@ async def bob(db) -> User:
 
 @pytest.fixture
 async def posts_storing_their_briefs(db_engine, user, bob) -> None:
-    """At 0058: `post_a` and `post_b` of `user` and `post_c` of Bob, each storing its Brief."""
+    """At 0059: `post_a` and `post_b` of `user` and `post_c` of Bob, each storing its Brief."""
     await migrate(db_engine, lambda config: command.stamp(config, "head"))
-    await migrate(db_engine, lambda config: command.downgrade(config, "0058"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0059"))
 
     def fill(connection: Connection) -> None:
         _old_post(connection, post_id="post_a", user_id=user.id, brief="ship small things")
@@ -99,7 +99,7 @@ async def test_downgrade_keeps_each_posts_brief_and_gives_a_post_without_a_corpu
             sa.text("UPDATE posts SET corpus_post_ids = NULL WHERE id = 'post_b'")
         )
 
-    await migrate(db_engine, lambda config: command.downgrade(config, "0058"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0059"))
 
     async with db_engine.connect() as connection:
         posts = await connection.run_sync(
@@ -126,7 +126,7 @@ async def test_downgrade_gives_a_post_whose_corpus_was_set_to_none_an_empty_one(
     post.corpus_post_ids = None
     await db.commit()
 
-    await migrate(db_engine, lambda config: command.downgrade(config, "0058"))
+    await migrate(db_engine, lambda config: command.downgrade(config, "0059"))
 
     async with db_engine.connect() as connection:
         posts = await connection.run_sync(

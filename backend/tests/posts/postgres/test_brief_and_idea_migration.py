@@ -1,4 +1,4 @@
-"""Migration 0059 on Postgres, by the tests that cover it on SQLite."""
+"""Migration 0060 on Postgres, by the tests that cover it on SQLite."""
 
 import pytest
 
