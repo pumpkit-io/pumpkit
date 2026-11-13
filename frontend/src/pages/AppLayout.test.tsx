@@ -94,6 +94,7 @@ const POST: PostDetail = {
   plan: null,
   text: {
     format: 'post',
+    firstReply: false,
     parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],
     versionNumber: 1,
     edited: false,
@@ -104,6 +105,7 @@ const POST: PostDetail = {
       number: 1,
       feedback: null,
       format: 'post',
+      firstReply: false,
       parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],
       createdAt: '2026-10-10T12:00:30Z',
     },

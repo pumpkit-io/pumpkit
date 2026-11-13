@@ -17,6 +17,7 @@ from pumpkit.posts.writing.prompts.guide import (
     writing_guide,
 )
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZATION_GUIDELINES
+from pumpkit.posts.writing.prompts.parts import tagged_post
 
 
 @dataclass(frozen=True)
@@ -245,4 +246,4 @@ def post_message(post: str, first_reply: Optional[str]) -> str:
     """The post as the app sends it: bare. With a first reply, both are tagged so they can be told apart."""
     if not first_reply:
         return post
-    return f"<post>\n{post}\n</post>\n\n<first_reply>\n{first_reply}\n</first_reply>"
+    return tagged_post(post, first_reply)

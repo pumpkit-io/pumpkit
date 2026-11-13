@@ -22,7 +22,7 @@ function controllerFor(post: PostDetail): TextController {
   const { id } = post;
   return new TextController(post, {
     backend: {
-      saveText: (parts) => postService.saveText(id, parts),
+      saveText: (parts, firstReply) => postService.saveText(id, parts, firstReply),
       restoreVersion: (versionNumber) => postService.restoreVersion(id, versionNumber),
       addVersion: (feedback, format, parts) => postService.addVersion(id, feedback, format, parts),
     },

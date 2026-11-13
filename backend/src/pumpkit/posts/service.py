@@ -10,7 +10,7 @@ from pumpkit.billing.models import TopUpCharge
 from pumpkit.core.errors import ConflictError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import media
-from pumpkit.posts.formats import Format
+from pumpkit.posts.formats import FORMAT_POST, Format
 from pumpkit.posts.models import (
     ATTEMPT_FAILED,
     ATTEMPT_SUCCEEDED,
@@ -176,6 +176,7 @@ async def record_version(
         version_number=version_number,
         sketch_parts=written.sketch_parts,
         parts=written.parts,
+        first_reply=written.first_reply,
         sketch_model=written.sketch_model,
         humanizing_model=written.humanizing_model,
         sketch_usage=written.sketch_usage,
@@ -190,6 +191,7 @@ async def record_version(
         starting_text_format=starting_text.format if starting_text else None,
         starting_text_parts=list(starting_text.parts) if starting_text else None,
         starting_text_version_number=starting_text.version_number if starting_text else None,
+        starting_text_first_reply=starting_text.first_reply if starting_text else False,
         created_at=now,
     )
     db.add(attempt)
@@ -206,6 +208,7 @@ def set_text_from_version(post: Post, version: VersionAttempt) -> None:
     """
     post.text_format = version.format
     post.text_parts = list(version.parts or [])
+    post.text_first_reply = version.first_reply
     post.text_version_number = version.version_number
     post.text_edited = False
     media.move_dropped_parts_media(post)
@@ -240,24 +243,37 @@ class TextShapeKept(ConflictError):
     pass
 
 
-def edit_text(post: Post, parts: list[str]) -> None:
+def edit_text(post: Post, parts: list[str], *, first_reply: Optional[bool] = None) -> None:
     """
     Replace the Text's Parts with the User's, as typed. The Format and the number of Parts stay,
-    since only Feedback changes them, and the Text reads as edited while it differs from its
-    Version. Not flushed.
+    since only Feedback changes them, except that a single post's first reply may be added or
+    removed. `first_reply` None keeps the Text's. The Text reads as edited while it differs from
+    its Version. Not flushed.
     """
     current = post.text_parts
     if current is None:
         raise ConflictError("This post has no text to edit. Start a new post.")
-    if len(parts) != len(current):
+    if first_reply is None:
+        first_reply = post.text_first_reply
+    elif first_reply and post.text_format != FORMAT_POST:
+        raise TextShapeKept("Only a single post has a first reply.")
+    if first_reply != post.text_first_reply:
+        expected = 1 + first_reply
+    else:
+        expected = len(current)
+    if len(parts) != expected:
         raise TextShapeKept(
             f"Editing keeps the text's {len(current)} parts. Give feedback to change its shape."
-            if len(current) > 1
+            if post.text_format != FORMAT_POST
             else "Editing keeps the text a single post. Give feedback to make it a thread."
         )
     version = next((a for a in post.attempts if a.version_number == post.text_version_number), None)
     post.text_parts = list(parts)
-    post.text_edited = version is None or version.parts != parts
+    post.text_first_reply = first_reply
+    post.text_edited = (
+        version is None or version.parts != parts or version.first_reply != first_reply
+    )
+    media.move_dropped_parts_media(post)
 
 
 async def record_failed_attempt(

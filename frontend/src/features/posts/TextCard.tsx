@@ -5,7 +5,7 @@ import { useXConnectionContext } from '@/features/xConnection/useXConnectionCont
 import { formatCount } from '@/lib/characters';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/pages/layout/ProfileContext';
-import type { ShownPart } from './shownText';
+import { partName, type ShownPart } from './shownText';
 
 /**
  * What a Part shows of its Media, and, on a Part that takes more, its media button and where
@@ -37,9 +37,13 @@ function PartCounter({ part }: { part: ShownPart }) {
   );
 }
 
-/** One Part drawn as an X post: who posts it, its place in the Thread, its text and count. */
+/**
+ * One Part drawn as an X post: who posts it, its place in the Thread or its "First reply" label,
+ * its text and count.
+ */
 function XPart({
   part,
+  label,
   number,
   total,
   name,
@@ -49,8 +53,11 @@ function XPart({
   media,
   busy,
   clearCorner,
+  action,
 }: {
   part: ShownPart;
+  /** "Post", "First reply" or "Part 2", from `partName`. */
+  label: string;
   number: number;
   total: number;
   name: string;
@@ -62,8 +69,10 @@ function XPart({
   busy: boolean;
   /** Leaves room on the name line for the card's corner action. */
   clearCorner: boolean;
+  /** On the name line, after the Part's place, such as removing a first reply. */
+  action?: ReactNode;
 }) {
-  const inThread = total > 1;
+  const inThread = !part.firstReply && label !== 'Post';
   const [dropping, setDropping] = useState(false);
   const dim = cn('transition-opacity motion-reduce:transition-none', busy && 'opacity-60');
   const onFiles = media?.onFiles;
@@ -88,7 +97,7 @@ function XPart({
     : {};
   return (
     <li
-      aria-label={inThread ? `Part ${number} of ${total}` : 'Post'}
+      aria-label={inThread ? `Part ${number} of ${total}` : label}
       className={cn(
         'flex gap-3 px-4 py-4 transition-colors sm:px-5 motion-reduce:transition-none',
         dropping && 'bg-primary/5 ring-2 ring-inset ring-primary/50',
@@ -109,6 +118,12 @@ function XPart({
           {inThread && (
             <span className="ml-auto shrink-0 text-[13px] tabular-nums text-muted-foreground">
               {number}/{total}
+            </span>
+          )}
+          {part.firstReply && (
+            <span className="ml-auto flex shrink-0 items-center gap-1 text-[13px] text-muted-foreground">
+              {label}
+              {action}
             </span>
           )}
         </div>
@@ -136,6 +151,7 @@ function XPart({
 export function TextCard({
   parts,
   renderText,
+  firstReplyAction,
   media,
   corner,
   header,
@@ -144,6 +160,8 @@ export function TextCard({
   parts: ShownPart[];
   /** Replaces a Part's text, such as with a box to edit it in. */
   renderText?: (part: ShownPart, index: number) => ReactNode;
+  /** A control on a first reply's label line, such as removing it. */
+  firstReplyAction?: ReactNode;
   /** The Media on a Part that takes it; Parts with none show no media controls. */
   media?: (index: number) => PartMedia | null;
   /** At the card's top right, such as Copy. */
@@ -175,6 +193,7 @@ export function TextCard({
           <XPart
             key={index}
             part={part}
+            label={partName(parts, index)}
             number={index + 1}
             total={parts.length}
             name={name}
@@ -184,6 +203,7 @@ export function TextCard({
             media={media?.(index) ?? null}
             busy={busy}
             clearCorner={!!corner && index === 0}
+            action={part.firstReply ? firstReplyAction : undefined}
           />
         ))}
       </ol>

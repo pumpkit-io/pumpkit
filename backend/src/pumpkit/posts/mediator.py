@@ -1,4 +1,3 @@
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import BinaryIO, Literal
@@ -28,8 +27,6 @@ from pumpkit.posts.version_writing import (
 )
 from pumpkit.posts.writing.planning import plan_brief
 from pumpkit.posts.writing.post_writing import write_planned_version
-
-logger = logging.getLogger(__name__)
 
 # Where the User saves their Positioning and adds Inspiration authors.
 PERSONA_PAGE = "/persona"
@@ -101,8 +98,6 @@ async def start_post(
     # Before the insert: its key share on the User deadlocks two requests upgrading it to charge.
     await users_service.lock_user_id(db, user_id=user_id)
     idea, post = await store_post()
-    if written.first_reply is not None:
-        logger.info("Post %s: the first reply the writing added is dropped", post.id)
     version = await service.record_version(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now
     )

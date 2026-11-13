@@ -23,11 +23,11 @@ def earlier_feedback_message(feedback: list[str]) -> str:
     )
 
 
-def previous_final_message(format: Format, parts: list[str]) -> str:
+def previous_final_message(format: Format, parts: list[str], first_reply: bool = False) -> str:
     noun = format_noun(format)
     return (
         f"This is the {noun} as I last saw it, before my latest feedback.\n\n"
-        f"<previous_{noun}>\n{format_text(format, parts)}\n</previous_{noun}>"
+        f"<previous_{noun}>\n{format_text(format, parts, first_reply)}\n</previous_{noun}>"
     )
 
 

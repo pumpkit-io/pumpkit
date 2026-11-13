@@ -134,6 +134,7 @@ function postWith(final: string): PostDetail {
     plan: null,
     text: {
       format: 'post',
+      firstReply: false,
       parts: [{ text: final, charCount: final.length, charLimit: 280 }],
       versionNumber: 1,
       edited: false,
@@ -144,6 +145,7 @@ function postWith(final: string): PostDetail {
         number: 1,
         feedback: null,
         format: 'post',
+        firstReply: false,
         parts: [{ text: final, charCount: final.length, charLimit: 280 }],
         createdAt: '2026-10-10T12:00:30Z',
       },

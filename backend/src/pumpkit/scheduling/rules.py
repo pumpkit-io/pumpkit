@@ -40,36 +40,46 @@ def x_posts_in(parts: list[str]) -> XPosts:
     return XPosts(x_posts=len(parts), link_x_posts=sum(1 for part in parts if has_link(part)))
 
 
-def _subject(number: int, count: int) -> str:
-    """Part `number` of `count` as a sentence's subject: "Part 2", or "This post" for one."""
-    name = part_name(number, count)
+# Where the writing leaves the User's real link out (ADR 0027).
+LINK_PLACEHOLDER = "[link]"
+
+
+def _subject(number: int, count: int, first_reply: bool = False) -> str:
+    """Part `number` of `count` as a sentence's subject: "Part 2", "The first reply", or "This post"."""
+    name = part_name(number, count, first_reply=first_reply)
     return name.capitalize() if name else "This post"
 
 
-def check_parts_written(parts: list[str]) -> None:
+def check_parts_written(parts: list[str], *, first_reply: bool = False) -> None:
     """Every Part has some text: the User may have left one blank mid-edit."""
     for number, part in enumerate(parts, start=1):
         if not part:
-            name = part_name(number, len(parts))
+            name = part_name(number, len(parts), first_reply=first_reply)
             raise RuleBroken(f"Write {name} first." if name else "Write the post first.")
 
 
-def check_length(parts: list[str], *, limit: int) -> None:
+def check_no_link_placeholder(parts: Sequence[str]) -> None:
+    """No Part still holds the placeholder, which would go out on X as it is."""
+    if any(LINK_PLACEHOLDER in part for part in parts):
+        raise RuleBroken("Replace [link] with the real link first.", code="LINK_PLACEHOLDER")
+
+
+def check_length(parts: list[str], *, limit: int, first_reply: bool = False) -> None:
     """Each Part by X's own count; the refusal names the first Part over the limit."""
     for number, text in enumerate(parts, start=1):
         length = x_weighted_length(text)
         if length > limit:
             raise RuleBroken(
-                f"{_subject(number, len(parts))} is {length:,} characters by X's count, over the {limit:,} limit."
+                f"{_subject(number, len(parts), first_reply)} is {length:,} characters by X's count, over the {limit:,} limit."
             )
 
 
-def check_media(kinds_by_part: Sequence[Sequence[MediaKind]]) -> None:
+def check_media(kinds_by_part: Sequence[Sequence[MediaKind]], *, first_reply: bool = False) -> None:
     """Each Part's Media fits on one X post; the refusal names the first Part that doesn't."""
     for number, kinds in enumerate(kinds_by_part, start=1):
         if over_x_rule(kinds):
             raise RuleBroken(
-                f"{_subject(number, len(kinds_by_part))} has more media than X takes. {X_MEDIA_RULE}",
+                f"{_subject(number, len(kinds_by_part), first_reply)} has more media than X takes. {X_MEDIA_RULE}",
                 code="MEDIA_OVER_X_RULE",
             )
 

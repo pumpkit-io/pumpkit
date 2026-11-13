@@ -293,4 +293,28 @@ describe('postService', () => {
       edited: false,
     });
   });
+
+  it('saves the Text with whether it ends with a first reply, and reads it back', async () => {
+    vi.spyOn(apiService, 'put').mockResolvedValue({
+      data: {
+        format: 'post',
+        parts: [
+          { text: 'the post', char_count: 8, char_limit: 280, media: [] },
+          { text: 'Try it: x.co', char_count: 12, char_limit: 280, media: [] },
+        ],
+        first_reply: true,
+        version_number: 1,
+        edited: true,
+      },
+    } as never);
+
+    const text = await postService.saveText('post_01', ['the post', 'Try it: x.co'], true);
+
+    expect(apiService.put).toHaveBeenCalledWith('/posts/post_01/text', {
+      parts: ['the post', 'Try it: x.co'],
+      first_reply: true,
+    });
+    expect(text.firstReply).toBe(true);
+    expect(text.format).toBe('post');
+  });
 });

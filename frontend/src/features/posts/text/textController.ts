@@ -2,7 +2,7 @@ import type { track as trackEvent } from '@/lib/analytics';
 import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import { errorMessage } from '@/services/apiErrors';
 import {
-  formatOf,
+  FORMAT_POST,
   textOf,
   type Format,
   type PostDetail,
@@ -25,7 +25,7 @@ export type { TextSaveState };
 
 /** The server calls the Text needs, for one Post: `postService` in production. */
 export interface TextBackend {
-  saveText: (parts: string[]) => Promise<PostText>;
+  saveText: (parts: string[], firstReply: boolean) => Promise<PostText>;
   restoreVersion: (versionNumber: number) => Promise<PostText>;
   addVersion: (feedback: string, format: Format, parts: string[]) => Promise<Version>;
 }
@@ -133,7 +133,10 @@ export class TextController {
         this.emit();
       },
       (parts) =>
-        deps.track('post_text_edited', { format: formatOf(parts), part_count: parts.length }),
+        deps.track('post_text_edited', {
+          format: this.text?.format ?? FORMAT_POST,
+          part_count: parts.length,
+        }),
       deps.clock,
     );
     this.current = this.build();
@@ -161,6 +164,13 @@ export class TextController {
     // A restore out saves the Text it lands on itself.
     if (!this.restoring) this.saver.edit(parts);
     this.emit();
+  }
+
+  /** Drops the single post's first reply, as an edit of its own that undo brings back. */
+  removeFirstReply() {
+    const parts = textsOf(this.text?.parts ?? []);
+    if (!this.text?.firstReply) return;
+    this.edit(parts.slice(0, -1), 'cut');
   }
 
   undo() {
@@ -312,7 +322,7 @@ export class TextController {
    * waits for the save out before it starts, so its answer always lands while the restore is out.
    */
   private async saveOnServer(parts: string[]): Promise<void> {
-    const text = await this.deps.backend.saveText(parts);
+    const text = await this.deps.backend.saveText(parts, this.endsWithFirstReply(parts));
     const onScreen = textsOf(this.text?.parts ?? []);
     if (this.restoring || !sameParts(parts, onScreen)) return;
     this.stored(text);
@@ -327,9 +337,11 @@ export class TextController {
     const { text } = this;
     if (!text) return;
     const source = this.versions.find((v) => v.number === versionNumber);
+    const format = source?.format ?? text.format;
     this.text = {
       ...text,
-      format: source?.format ?? text.format,
+      format,
+      firstReply: this.endsWithFirstReply(parts, format),
       versionNumber: source?.number ?? text.versionNumber,
       parts: parts.map((t, i) => ({
         text: t,
@@ -338,6 +350,14 @@ export class TextController {
       })),
       edited: !source || !sameParts(textsOf(source.parts), parts),
     };
+  }
+
+  /**
+   * Whether `parts` end with a first reply. Edits keep the Format and a Thread's Parts, so a
+   * single post's Part after the post can only be its first reply.
+   */
+  private endsWithFirstReply(parts: string[], format = this.text?.format): boolean {
+    return format === FORMAT_POST && parts.length > 1;
   }
 
   private stored(text: PostText) {
@@ -391,7 +411,10 @@ export class TextController {
       text,
       storedPartCount: this.storedPartCount,
       versions,
-      textVersion: text && source ? { ...source, format: text.format, parts: text.parts } : source,
+      textVersion:
+        text && source
+          ? { ...source, format: text.format, parts: text.parts, firstReply: text.firstReply }
+          : source,
       can: {
         edit,
         undo: edit && !restoring && !!history?.canUndo,

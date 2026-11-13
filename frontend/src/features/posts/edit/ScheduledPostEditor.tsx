@@ -13,7 +13,7 @@ import { useTextMedia } from '../media/useTextMedia';
 import { Panel } from '../panels/panelParts';
 import { DateTimeFields, dateTimeOf } from '../postTo/WhenField';
 import { WhereField } from '../postTo/WhereField';
-import type { ShownPart } from '../shownText';
+import { partName, type ShownPart } from '../shownText';
 import { TextCard } from '../TextCard';
 import { changesFrom, type ScheduledPostEdit } from './scheduledPostEdit';
 import { useScheduledPostActions } from './useScheduledPostActions';
@@ -73,6 +73,7 @@ export function ScheduledPostEditor({
       live: part.live,
       xPostUrl: part.xPostUrl,
       media: part.media,
+      firstReply: scheduledPost.firstReply && i === total - 1,
     };
   });
 
@@ -120,7 +121,7 @@ export function ScheduledPostEditor({
         renderText={(part, index) =>
           part.live ? undefined : (
             <Textarea
-              aria-label={total > 1 ? `Part ${index + 1} text` : 'Post text'}
+              aria-label={`${partName(parts, index)} text`}
               value={part.text}
               onChange={(e) => setText(index, e.target.value)}
               onPaste={(e) => {

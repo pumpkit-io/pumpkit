@@ -80,7 +80,7 @@ function overLimit(
   return lengths.flatMap((length, i) => {
     const over = length - limit;
     if (over <= 0 || parts[i]?.live) return [];
-    const what = thread ? `Part ${i + 1}` : 'The post';
+    const what = thread ? `Part ${i + 1}` : parts[i]?.firstReply ? 'The first reply' : 'The post';
     const characters = `${formatCount(over)} ${over === 1 ? 'character' : 'characters'}`;
     return [`${what} is ${characters} over X's ${formatCount(limit)}-character limit.`];
   });
@@ -93,6 +93,16 @@ function overMediaRule(parts: ShownPart[], thread: boolean): string[] {
     const what = thread ? `Part ${i + 1}` : 'This post';
     return [`${what} has more media than X takes. ${X_MEDIA_RULE}.`];
   });
+}
+
+/** The placeholder the writing leaves where the User's real link goes (ADR 0027). */
+const LINK_PLACEHOLDER = '[link]';
+
+/** Why the Parts can't go out while one not yet live still holds the link placeholder. */
+function linkPlaceholder(parts: ShownPart[]): string[] {
+  return parts.some((part) => !part.live && part.text.includes(LINK_PLACEHOLDER))
+    ? ['Replace [link] with the real link first.']
+    : [];
 }
 
 /**
@@ -130,6 +140,9 @@ function PartsToPost({
       <div className={PARTS_BOX}>
         {parts.map((part, i) => (
           <div key={i} className="space-y-1.5">
+            {part.firstReply && (
+              <p className="font-sans text-xs font-medium text-muted-foreground">First reply</p>
+            )}
             <p className={PART_TEXT}>{part.text}</p>
             <ReadOnlyMediaTiles media={part.media} where={mediaWhere(0, 1)} />
             <XLengthCounter length={lengths[i] ?? 0} limit={limit} />
@@ -211,7 +224,11 @@ export function PostToDialog({
   const lengths = parts.map((part) => xWeightedLength(part.text));
   const ready = connection && !connection.needsReconnect;
   const unpostable = ready
-    ? [...overLimit(parts, lengths, connection.charLimit, thread), ...overMediaRule(parts, thread)]
+    ? [
+        ...linkPlaceholder(parts),
+        ...overLimit(parts, lengths, connection.charLimit, thread),
+        ...overMediaRule(parts, thread),
+      ]
     : [];
   const links = linkNote(
     parts.filter((part) => !part.live && hasLink(part.text)).length,

@@ -167,6 +167,7 @@ def version_response(attempt: VersionAttempt, char_limit: int) -> VersionRespons
         feedback=attempt.feedback,
         format=attempt.format,
         parts=_part_responses(attempt.parts, char_limit),
+        first_reply=attempt.first_reply,
         starting_text=_starting_text_response(attempt, char_limit),
         created_at=as_utc(attempt.created_at),
     )
@@ -181,6 +182,7 @@ def _starting_text_response(
     return StartingTextResponse(
         format=starting.format,
         parts=_part_responses(starting.parts, char_limit),
+        first_reply=starting.first_reply,
         version_number=starting.version_number,
     )
 
@@ -196,6 +198,7 @@ def stored_starting_text(attempt: VersionAttempt) -> Optional[StartingText]:
         format=attempt.starting_text_format,
         parts=list(attempt.starting_text_parts),
         version_number=attempt.starting_text_version_number,
+        first_reply=attempt.starting_text_first_reply,
     )
 
 
@@ -207,6 +210,7 @@ def post_text(post: Post) -> Optional[StartingText]:
         format=post.text_format,
         parts=list(post.text_parts),
         version_number=post.text_version_number,
+        first_reply=post.text_first_reply,
     )
 
 
@@ -224,6 +228,7 @@ def text_response(post: Post, char_limit: int) -> Optional[TextResponse]:
             )
             for part, on_part in zip(_part_responses(text.parts, char_limit), media, strict=True)
         ],
+        first_reply=text.first_reply,
         version_number=text.version_number,
         edited=post.text_edited,
     )
@@ -310,10 +315,11 @@ async def prepare_next_version(
                 format=v.format,
                 parts=v.parts or [],
                 starting_text=stored_starting_text(v),
+                first_reply=v.first_reply,
             )
             for v in versions
         ],
-        starting_text=starting_text(text, latest.format, latest.parts or []),
+        starting_text=starting_text(text, latest.format, latest.parts or [], latest.first_reply),
         format=format or text.format,
         sequence=len(post.attempts) + 1,
         number=len(versions) + 1,

@@ -13,11 +13,6 @@ export type Format = 'post' | 'thread';
 export const FORMAT_POST: Format = 'post';
 export const FORMAT_THREAD: Format = 'thread';
 
-/** One Part is a single post; several are a Thread. */
-export function formatOf(parts: readonly unknown[]): Format {
-  return parts.length > 1 ? FORMAT_THREAD : FORMAT_POST;
-}
-
 /** One Part of a Version's text, in its place in the order. */
 export interface Part {
   text: string;
@@ -34,8 +29,10 @@ export interface Version {
   /** Null for the first Version, which comes from the Brief. */
   feedback: string | null;
   format: Format;
-  /** A single X post has one Part. */
+  /** A single X post has one Part, or two with its first reply. */
   parts: Part[];
+  /** Whether the last Part is the single post's first reply (ADR 0027). */
+  firstReply: boolean;
   /** When Pumpkit wrote it. */
   createdAt: string;
 }
@@ -44,6 +41,8 @@ export interface Version {
 export interface PostText {
   format: Format;
   parts: Part[];
+  /** Whether the last Part is the single post's first reply, posted as a reply to it. */
+  firstReply: boolean;
   /** The Version it came from: the last one written or restored. */
   versionNumber: number;
   /** Whether the User changed it since it came from that Version. */
@@ -130,6 +129,8 @@ export interface PostListItem {
   /** The Scheduled post's text when it has one, else the latest Version's. */
   parts: string[];
   format: Format;
+  /** Whether the last Part is the single post's first reply. */
+  firstReply: boolean;
   versionCount: number;
   latestVersionAt: string;
   scheduledPost: ScheduledPostSummary | null;
@@ -161,6 +162,7 @@ interface PostsPageApi {
     status: PostStatus;
     parts: string[];
     format: Format;
+    first_reply: boolean;
     version_count: number;
     latest_version_at: string;
     scheduled_post: ScheduledPostSummaryApi | null;
@@ -196,6 +198,7 @@ interface VersionApi {
   feedback: string | null;
   format: Format;
   parts: PartApi[];
+  first_reply: boolean;
   created_at: string;
 }
 
@@ -208,6 +211,7 @@ interface PostApi {
 interface PostTextApi {
   format: Format;
   parts: (PartApi & { media: MediaApi[] })[];
+  first_reply: boolean;
   version_number: number;
   edited: boolean;
 }
@@ -251,12 +255,14 @@ const toVersion = (v: VersionApi): Version => ({
   feedback: v.feedback,
   format: v.format,
   parts: v.parts.map(toPart),
+  firstReply: v.first_reply,
   createdAt: v.created_at,
 });
 
 const toText = (t: PostTextApi): PostText => ({
   format: t.format,
   parts: t.parts.map(toPart),
+  firstReply: t.first_reply,
   versionNumber: t.version_number,
   edited: t.edited,
 });
@@ -266,6 +272,7 @@ export function textOf(version: Version): PostText {
   return {
     format: version.format,
     parts: version.parts,
+    firstReply: version.firstReply,
     versionNumber: version.number,
     edited: false,
   };
@@ -289,6 +296,7 @@ export const postService = {
         status: p.status,
         parts: p.parts,
         format: p.format,
+        firstReply: p.first_reply,
         versionCount: p.version_count,
         latestVersionAt: p.latest_version_at,
         scheduledPost: p.scheduled_post ? toSummary(p.scheduled_post) : null,
@@ -334,13 +342,14 @@ export const postService = {
     return toVersion(data);
   },
   /**
-   * Stores the User's edit of the Post's Text, every Part in order, as typed. Saving the same
-   * Parts again changes nothing, so a failed save can be retried as it is.
+   * Stores the User's edit of the Post's Text, every Part in order, as typed, and whether the
+   * last is a single post's first reply, which the User may add or remove. Saving the same Parts
+   * again changes nothing, so a failed save can be retried as it is.
    */
-  saveText: async (postId: string, parts: string[]): Promise<PostText> => {
+  saveText: async (postId: string, parts: string[], firstReply: boolean): Promise<PostText> => {
     const { data } = await apiService.put<PostTextApi>(
       `/posts/${encodeURIComponent(postId)}/text`,
-      { parts },
+      { parts, first_reply: firstReply },
     );
     return toText(data);
   },

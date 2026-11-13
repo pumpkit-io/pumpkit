@@ -151,6 +151,8 @@ class Post(Base):
     # Versions are never removed, so the number names the one the Text came from for good.
     text_version_number: Mapped[Optional[int]] = mapped_column(Integer)
     text_edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Whether the Text's last Part is a single post's first reply (ADR 0027).
+    text_first_reply: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # When Feedback's Version started being written, which then becomes the Text; None otherwise.
     writing_since: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
@@ -212,11 +214,13 @@ class VersionAttempt(Base):
     )
     # Counts succeeded attempts only: the number the User sees.
     version_number: Mapped[Optional[int]] = mapped_column(Integer)
-    # The Sketch's Part texts in order; a single X post has one. Only kept, never shown.
+    # The Sketch's Part texts in order; a single X post has one, and its first reply. Only kept.
     sketch_parts: Mapped[Optional[list[str]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
     parts: Mapped[Optional[list[str]]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    # Whether the last of `parts` is a single post's first reply (ADR 0027).
+    first_reply: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # The model of the call that wrote the Sketch: the merge, or the sketch call on a first Version
     # written with a corpus, or the revision call after Feedback.
     sketch_model: Mapped[Optional[str]] = mapped_column(String)
@@ -252,6 +256,9 @@ class VersionAttempt(Base):
         JSON().with_variant(JSONB, "postgresql")
     )
     starting_text_version_number: Mapped[Optional[int]] = mapped_column(Integer)
+    starting_text_first_reply: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

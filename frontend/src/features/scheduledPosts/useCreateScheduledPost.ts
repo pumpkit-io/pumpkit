@@ -4,7 +4,6 @@ import { useSubscribed } from '@/features/billing/useSubscribed';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
-import { formatOf } from '@/services/postService';
 import {
   scheduledPostService,
   type Destination,
@@ -51,7 +50,7 @@ export function useCreateScheduledPost() {
           ? await scheduledPostService.postNow(post, destination)
           : await scheduledPostService.schedule(post, request.publishAt, destination);
         track('scheduled_post_created', {
-          format: formatOf(created.parts),
+          format: created.parts.length > 1 && !created.firstReply ? 'thread' : 'post',
           part_count: created.parts.length,
           // Never typed since ADR 0015; kept so the event's history reads the same.
           source: 'final',

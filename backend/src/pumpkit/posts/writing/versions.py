@@ -135,6 +135,7 @@ class EarlierVersion:
     format: Format
     parts: list[str]
     starting_text: Optional[StartingText] = None
+    first_reply: bool = False
 
 
 @dataclass(frozen=True)
@@ -163,8 +164,8 @@ class WrittenVersion:
     # Every sketch call and the merge's reviews and reasoning. Only kept, never shown.
     sketches: Optional[list[dict]] = None
     merge: Optional[dict] = None
-    # The writing doesn't put a first reply on the Text yet, so it is dropped when recorded.
-    first_reply: Optional[str] = None
+    # Whether the last of `parts` is a single post's first reply (ADR 0027).
+    first_reply: bool = False
 
 
 def system_message(prompt: str) -> dict:
@@ -223,9 +224,9 @@ def revision_humanizer_messages(
     Version's, keeps its own Format.
     """
     previous = (
-        (earlier[-1].format, earlier[-1].parts)
+        (earlier[-1].format, earlier[-1].parts, earlier[-1].first_reply)
         if starting is None
-        else (starting.format, starting.parts)
+        else (starting.format, starting.parts, starting.first_reply)
     )
     messages = _humanizer_prefix(corpus, brief, format, char_limit)
     earlier_feedback = [v.feedback for v in earlier if v.feedback is not None]
@@ -261,13 +262,20 @@ def _framed_feedback(
     after = earlier[-1]
     if starting is None:
         return feedback_message(feedback, after.number, after.format, format)
-    same = [v.number for v in earlier if (v.format, v.parts) == (starting.format, starting.parts)]
+    shown = (starting.format, starting.parts, starting.first_reply)
+    same = [v.number for v in earlier if (v.format, v.parts, v.first_reply) == shown]
     if same:
         back_to = starting.version_number if starting.version_number in same else same[-1]
         return went_back_message(feedback, after.number, back_to, starting.format, format)
     began_from = None if starting.version_number == after.number else starting.version_number
     return changed_message(
-        feedback, after.number, began_from, starting.format, starting.parts, format
+        feedback,
+        after.number,
+        began_from,
+        starting.format,
+        starting.parts,
+        format,
+        starting.first_reply,
     )
 
 
@@ -305,7 +313,7 @@ def replayed_versions(
                 version.feedback, earlier[:index], version.starting_text, version.format
             )
             messages.append(user_message(framed))
-        content = format_text(version.format, version.parts)
+        content = format_text(version.format, version.parts, version.first_reply)
         messages.append({"role": "assistant", "content": content})
     messages.append(user_message(_framed_feedback(feedback, earlier, starting, format)))
     return messages

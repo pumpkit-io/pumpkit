@@ -84,8 +84,10 @@ class ScheduledPostPartResponse(BaseModel):
 
 class ScheduledPostResponse(BaseModel):
     id: str
-    # In the order they go out; one Part is a single X post.
+    # In the order they go out; one Part, or one and its first reply, is a single X post.
     parts: list[ScheduledPostPartResponse]
+    # Whether the last Part is the single post's first reply, posted as a reply to it.
+    first_reply: bool
     state: ScheduledPostState
     publish_at: datetime
     published_at: Optional[datetime]
@@ -153,6 +155,8 @@ class PostListItemResponse(BaseModel):
     # first line is the Post's title.
     parts: list[str]
     format: Format
+    # Whether the last Part is the single post's first reply.
+    first_reply: bool
     version_count: int
     latest_version_at: datetime
     scheduled_post: Optional[ScheduledPostSummaryResponse]
@@ -276,6 +280,8 @@ class TextEditRequest(BaseModel):
 
     # Every Part of the Text in order, as typed, so a Part may be blank while the User writes it.
     parts: Parts
+    # Whether the last Part is a single post's first reply; None keeps the Text's, and its Parts.
+    first_reply: Optional[bool] = None
 
 
 class XConnectionResponse(BaseModel):

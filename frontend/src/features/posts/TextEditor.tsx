@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { IS_MAC } from '@/lib/shortcuts';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { changeDiff, type PartChange } from './changeDiff';
-import type { ShownPart } from './shownText';
+import { HoverLabel, HoverLabels } from './HoverLabel';
+import { partName, type ShownPart } from './shownText';
 import type { EditCause } from './textHistory';
 import { TextCard, type PartMedia } from './TextCard';
 import type { TextTrace } from './text/textController';
@@ -173,10 +175,29 @@ function useShownTrace(trace: TextTrace | null | undefined) {
   return { key: trace.key, changes, first, still };
 }
 
+/** Removes the single post's first reply, from its label line. */
+function RemoveFirstReply({ onRemove }: { onRemove: () => void }) {
+  return (
+    <HoverLabels>
+      <HoverLabel label="Remove first reply">
+        <button
+          type="button"
+          aria-label="Remove first reply"
+          onClick={onRemove}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </HoverLabel>
+    </HoverLabels>
+  );
+}
+
 /**
  * The Post's card with each Part's text editable in place, except Parts live on X. `texts` are
- * the Text's Parts; an edit hands back all of them, so the number and order of Parts never change.
- * `trace` marks the words the last undo, redo, restore or rewrite changed.
+ * the Text's Parts; an edit hands back all of them, so the number and order of Parts never change,
+ * except that `onRemoveFirstReply` drops a single post's first reply. `trace` marks the words the
+ * last undo, redo, restore or rewrite changed.
  */
 export function TextEditor({
   parts,
@@ -185,6 +206,7 @@ export function TextEditor({
   onEdit,
   onUndo,
   onRedo,
+  onRemoveFirstReply,
   trace,
   media,
   corner,
@@ -198,13 +220,13 @@ export function TextEditor({
   onEdit: (texts: string[], change: TextChange) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  onRemoveFirstReply?: () => void;
   trace?: TextTrace | null;
   media?: (index: number) => PartMedia | null;
   corner?: ReactNode;
   header?: ReactNode;
   busy?: boolean;
 }) {
-  const total = parts.length;
   const caret = useRef<{ part: number; at: number } | null>(null);
   const shownTrace = useShownTrace(trace);
 
@@ -228,12 +250,17 @@ export function TextEditor({
       media={media}
       corner={corner}
       header={header}
+      firstReplyAction={
+        editable && onRemoveFirstReply ? (
+          <RemoveFirstReply onRemove={onRemoveFirstReply} />
+        ) : undefined
+      }
       renderText={
         editable
           ? (part, index) =>
               part.live ? undefined : (
                 <PartBox
-                  label={total > 1 ? `Part ${index + 1} text` : 'Post text'}
+                  label={`${partName(parts, index)} text`}
                   value={part.text}
                   onChange={(value, inputType, at) => edit(index, value, inputType, at)}
                   onUndo={onUndo}

@@ -44,6 +44,8 @@ class StartingTextResponse(BaseModel):
 
     format: Format
     parts: list[PartResponse]
+    # Whether the last Part is the single post's first reply.
+    first_reply: bool
     version_number: int
 
 
@@ -55,6 +57,8 @@ class VersionResponse(BaseModel):
     format: Format
     # The Version's text, one Part at a time, in order.
     parts: list[PartResponse]
+    # Whether the last Part is the single post's first reply, posted as a reply to it.
+    first_reply: bool
     starting_text: Optional[StartingTextResponse]
     created_at: datetime
 
@@ -96,6 +100,8 @@ class TextResponse(BaseModel):
 
     format: Format
     parts: list[TextPartResponse]
+    # Whether the last Part is the single post's first reply, posted as a reply to it.
+    first_reply: bool
     # The Version it came from: the last one written or restored.
     version_number: int
     edited: bool

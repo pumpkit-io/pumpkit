@@ -71,9 +71,10 @@ def text_media_by_part(post: Post) -> list[list[Media]]:
 def move_dropped_parts_media(post: Post) -> None:
     """
     Moves the Media of Parts the Text no longer has onto its last Part, after that Part's own, in
-    order. The Post page's `useTextMedia` moves tiles the same way. Not flushed.
+    order, and that of a first reply's place onto the post, since a first reply takes none. The
+    Post page's `useTextMedia` moves tiles the same way. Not flushed.
     """
-    last = len(post.text_parts or []) - 1
+    last = len(post.text_parts or []) - 1 - post.text_first_reply
     position = max((p.position for p in post.text_media if p.part_index == last), default=-1)
     dropped = [p for p in post.text_media if p.part_index > last]
     for placed in sorted(dropped, key=lambda p: (p.part_index, p.position)):
@@ -99,19 +100,32 @@ def check_text_part_room(post: Post, *, part_index: int, kind: Optional[MediaKin
     count = len(post.text_parts or [])
     if not 0 <= part_index < count:
         raise NotFoundError(f"This post's text has no part {part_index + 1}.")
-    check_part_room(text_media_by_part(post), part_index=part_index, kind=kind)
+    check_part_room(
+        text_media_by_part(post),
+        part_index=part_index,
+        kind=kind,
+        first_reply=post.text_first_reply,
+    )
 
 
 def check_part_room(
-    media_by_part: list[list[Media]], *, part_index: int, kind: Optional[MediaKind] = None
+    media_by_part: list[list[Media]],
+    *,
+    part_index: int,
+    kind: Optional[MediaKind] = None,
+    first_reply: bool = False,
 ) -> None:
     """
     Refuses Part `part_index` of a Text or Scheduled post when its X post can't take Media of
-    `kind` too. With no `kind`, before the file is read, only when it can't take any more.
+    `kind` too, or is a first reply, which takes none (ADR 0027). With no `kind`, before the file
+    is read, only when it can't take any more.
     """
+    count = len(media_by_part)
+    if first_reply and part_index == count - 1:
+        raise ConflictError("A first reply goes out without media. Attach it to the post.")
     holds = kinds_by_part(media_by_part)[part_index]
     if not takes_more(holds, kind):
-        name = part_name(part_index + 1, len(media_by_part)) or "this post"
+        name = part_name(part_index + 1, count, first_reply=first_reply) or "this post"
         raise part_full(name.capitalize(), holds)
 
 

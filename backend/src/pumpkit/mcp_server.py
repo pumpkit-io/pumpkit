@@ -66,6 +66,10 @@ other than the version before keeps that text as its starting text.
 each one X post, published on X with each part replying to the one before. A \
 post starts as a single X post unless the user asks for a thread, and feedback may switch the \
 format.
+- A single X post may end with a first reply, a reply the user's account posts under it, where \
+the writing puts an external link: `first_reply` on a version or the text says its last part is \
+one. Feedback may add, change or remove it. Where the writing has no real link it writes \
+`[link]`, and scheduling and Post now are refused until the user replaces it.
 - Every version stays in the post's history. `restore_version` makes an earlier one the \
 post's text again, by its number, without writing a new version; feedback then rewrites it.
 - The post's text can become a scheduled post, published at a chosen time or at once with Post \
@@ -76,7 +80,8 @@ by hand.
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.
 - Each post started and each feedback uses one generation of the user's allowance, \
-and each X post published uses one X post, each part of a thread counting as one. Write a new \
+and each X post published uses one X post, each part of a thread and each first reply \
+counting as one. Write a new \
 version only when the user asks for one. `get_usage` says what is left and when it resets.
 - `attach_media` attaches an image, a GIF or a video to a part from a public URL, or, without \
 one, answers with a one-time upload link and the `curl` command that sends local media to it. `remove_media` \

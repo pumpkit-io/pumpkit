@@ -357,6 +357,7 @@ function LoadedPost({
           onEdit={(texts, change) => controller.edit(texts, change.cause)}
           onUndo={onUndo}
           onRedo={onRedo}
+          onRemoveFirstReply={() => controller.removeFirstReply()}
           trace={text.trace}
           busy={text.writing}
           media={
