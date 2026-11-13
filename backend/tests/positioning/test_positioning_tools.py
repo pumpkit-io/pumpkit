@@ -21,7 +21,10 @@ async def test_set_positioning_saves_what_the_web_app_then_reads(
     assert (await mcp.call_tool("get_positioning"))["structuredContent"] == (
         result["structuredContent"]
     )
-    assert (await authed_client.get(POSITIONING)).json() == result["structuredContent"]
+    assert (await authed_client.get(POSITIONING)).json() == {
+        **result["structuredContent"],
+        "can_draft": True,
+    }
 
 
 async def test_set_positioning_leaves_a_nul_character_out_of_the_saved_text(subscribed, mcp):

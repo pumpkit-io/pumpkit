@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.llm import LLMError
+from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt

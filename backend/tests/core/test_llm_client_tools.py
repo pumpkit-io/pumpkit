@@ -1,7 +1,7 @@
 import pytest
 
-from pumpkit.posts.llm_client import llm_client
-from pumpkit.posts.llm_schemas import AssembledToolCall
+from pumpkit.core.llm_client import llm_client
+from pumpkit.core.llm_schemas import AssembledToolCall
 
 
 class _Delta:

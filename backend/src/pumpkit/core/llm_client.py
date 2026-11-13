@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import NotConfiguredError
-from pumpkit.posts.llm_schemas import (
+from pumpkit.core.llm_schemas import (
     AssembledToolCall,
     CompleteResult,
     ModelUsage,
@@ -41,6 +41,9 @@ class LLMClient:
 
     def __init__(self) -> None:
         self._client: Optional[AsyncOpenAI] = None
+
+    def is_configured(self) -> bool:
+        return bool(settings.LLM_API_KEY)
 
     @property
     def _llm_client(self) -> AsyncOpenAI:

@@ -365,3 +365,41 @@ async def test_reads_the_author_s_name_from_their_posts():
     recent = await TwitterApiIoReader().fetch_recent_posts("levelsio")
 
     assert recent.name == "@levelsio"
+
+
+@respx.mock
+async def test_reads_an_account_s_posts_and_its_handle_by_its_x_id():
+    route = respx.get(TWITTERAPI_IO_LAST_TWEETS_URL).mock(
+        return_value=httpx.Response(200, json=_last_tweets())
+    )
+
+    recent = await TwitterApiIoReader().fetch_recent_posts_by_user_id("1001")
+
+    assert [post.post_id for post in recent.posts] == [
+        "1843000000000000006",
+        "1843000000000000005",
+        "1843000000000000000",
+    ]
+    assert recent.handle == "levelsio"
+    assert dict(route.calls.last.request.url.params) == {
+        "userId": "1001",
+        "includeReplies": "false",
+    }
+
+
+@respx.mock
+async def test_an_x_id_twitterapi_io_does_not_know_is_not_found():
+    respx.get(TWITTERAPI_IO_LAST_TWEETS_URL).mock(
+        return_value=httpx.Response(200, json={"status": "error", "message": "user not found"})
+    )
+
+    with pytest.raises(HandleNotFoundError):
+        await TwitterApiIoReader().fetch_recent_posts_by_user_id("1001")
+
+
+def test_it_is_configured_only_with_the_key(monkeypatch):
+    assert TwitterApiIoReader().is_configured() is True
+
+    monkeypatch.setattr(settings, "TWITTERAPI_IO_API_KEY", None)
+
+    assert TwitterApiIoReader().is_configured() is False

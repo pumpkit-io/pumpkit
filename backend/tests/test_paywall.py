@@ -18,6 +18,7 @@ GATED_ROUTES = [
     ("POST", "/api/v1/oauth/authorizations/request_unknown/approve"),
     ("GET", "/api/v1/positioning"),
     ("PUT", "/api/v1/positioning"),
+    ("POST", "/api/v1/positioning/draft"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/posts/post_unknown"),
     ("GET", "/api/v1/scheduled-posts/communities"),

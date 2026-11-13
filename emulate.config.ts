@@ -20,7 +20,15 @@ export default {
       }),
       seed: {
         users: [
-          { id: '1001', username: 'ada', name: 'Ada', confirmed_email: 'ada@e2e-user.dev' },
+          {
+            id: '1001',
+            username: 'ada',
+            name: 'Ada',
+            confirmed_email: 'ada@e2e-user.dev',
+            description: 'Solo founder. Building a pricing tool in public.',
+            location: 'Lisbon',
+            url: 'https://ada.example',
+          },
           { id: '1002', username: 'grace', name: 'Grace', confirmed_email: 'grace@e2e-user.dev' },
           { id: '1003', username: 'no_email', name: 'No email' },
           {
@@ -28,6 +36,9 @@ export default {
             username: 'e2e_user',
             name: 'E2E User',
             confirmed_email: 'e2e@e2e-user.dev',
+            description: 'Testing Pumpkit end to end.',
+            location: 'Localhost',
+            url: 'https://e2e-user.example',
           },
           {
             id: '2002',

@@ -7,8 +7,8 @@ import respx
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
-from pumpkit.posts.llm import LLMError, OpenAICompatibleLLM
-from pumpkit.posts.llm_client import LLMClient
+from pumpkit.core.llm import LLMError, OpenAICompatibleLLM
+from pumpkit.core.llm_client import LLMClient
 
 COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 LOCAL_BASE_URL = "http://localhost:11434/v1"
@@ -180,3 +180,12 @@ async def test_an_answer_without_usage_comes_back_parsed_with_no_usage():
 
     assert result.parsed == _Answer(post="hello")
     assert result.usage is None
+
+
+def test_it_is_configured_only_with_the_key(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_API_KEY", "local-key")
+    assert OpenAICompatibleLLM(LLMClient()).is_configured() is True
+
+    monkeypatch.setattr(settings, "LLM_API_KEY", None)
+
+    assert OpenAICompatibleLLM(LLMClient()).is_configured() is False

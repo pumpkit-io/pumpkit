@@ -23,4 +23,4 @@ async def test_upgrade_adds_the_positionings_table_and_downgrade_drops_it(
     await migrate(db_engine, lambda config: command.upgrade(config, "head"))
     saved = await client.put(POSITIONING, json={"text": "I post about bootstrapping."})
     assert saved.status_code == 200
-    assert (await client.get(POSITIONING)).json() == saved.json()
+    assert (await client.get(POSITIONING)).json() == {**saved.json(), "can_draft": True}

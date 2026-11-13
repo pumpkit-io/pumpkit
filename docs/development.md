@@ -21,7 +21,7 @@ backend/src/pumpkit/
   main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
   mcp_server.py    the MCP server: every area's tools behind OAuth access tokens (ADR 0020), the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
-  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the classifier port (Jev), the photo-fetching port
+  core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the LLM port and OpenAI-compatible client, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions and refresh tokens; retained inactive Google/Magic link implementations and mail templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
   connected_apps/  Connected apps: OAuth clients, app connections, authorization requests and access and refresh tokens for the MCP server (ADR 0020)
@@ -29,8 +29,8 @@ backend/src/pumpkit/
   authors/         Inspiration authors, their posts and the Author directory; the X reader (twitterapi.io)
   x_connection/    X sign-in and same-account publishing authorization; the X publisher port (X's API) and X's weighted length count
   support/         the support contact redirect (a router only)
-  positioning/     each User's Positioning: the free text saying who they are on X and what they post for
-  posts/           Posts and Versions; the LLM port and OpenAI-compatible client
+  positioning/     each User's Positioning: the free text saying who they are on X and what they post for, and its draft from their X profile
+  posts/           Posts and Versions
   onboarding/      where the web app sends a signed-in User next: the Paywall, then Onboarding
   posts/writing/   the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
   scheduling/      Scheduled posts: rules, publish steps, publishing, and the publisher process
@@ -61,7 +61,7 @@ Every other page renders inside `pages/AppLayout.tsx` (the providers, the sideba
 - `/new` (`pages/NewPost.tsx`): the Brief and Format form, `features/posts/PostWriter.tsx`.
 - `/posts/scheduled`, `/posts/drafts`, `/posts/published` and `/posts/failed` (`pages/Posts.tsx`): one tab per status, built from `features/posts/list/`. `/posts` opens the Scheduled tab.
 - `/posts/:id` (`pages/PostPage.tsx`): the Text card (`features/posts/TextCard.tsx`) and, pinned below it, one dock per status from `features/posts/panels/`; the "Post to…" dialog is `features/posts/postTo/` and the inline edit of a Scheduled post is `features/posts/edit/`.
-- `/persona` (`pages/Persona.tsx`): the Positioning panel (`features/positioning/`), a textarea saved through `GET` and `PUT /api/v1/positioning`, then the Inspiration authors, `features/inspirationAuthors/`. Writing doesn't read the Positioning yet.
+- `/persona` (`pages/Persona.tsx`): the Positioning panel (`features/positioning/`), a textarea saved through `GET` and `PUT /api/v1/positioning` and filled, unsaved, by `POST /api/v1/positioning/draft`, then the Inspiration authors, `features/inspirationAuthors/`. Writing doesn't read the Positioning yet.
 - `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile) and `features/connectedApps/` (Connect AI apps). `features/xConnection/` supplies the shared connection provider and recovery banner, not a separate account card.
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
@@ -167,9 +167,9 @@ Test a tool through the endpoint with the `mcp` fixture: Claude Code connected w
 
 ### Call an LLM
 
-Set `LLM_API_KEY` (and `LLM_BASE_URL` for an endpoint other than OpenRouter). Mediators reach models through the `LLM` port (`posts/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
+Set `LLM_API_KEY` (and `LLM_BASE_URL` for an endpoint other than OpenRouter). Mediators reach models through the `LLM` port (`core/llm.py`): the router injects it with `llm: LLM = Depends(get_llm)` and passes it to the mediator, which calls `await llm.structured(model=..., messages=..., response_model=MyPydanticModel)`. Any provider failure is an `LLMError`, which the global handler returns as a 502 with an `error_id`; a missing key is a 503 naming the variable. Tests get the scripted `FakeLLM` through the autouse `fake_llm` fixture: queue `fake_llm.replies` and read the messages each call received in `fake_llm.calls`.
 
-The port wraps `llm_client` (`posts/llm_client.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
+The port wraps `llm_client` (`core/llm_client.py`), which also has `llm_complete(...)` and `llm_stream(...)` (yielding `StreamDelta`, `ToolCallDelta`, `AssembledToolCall` and `ModelUsage`) for calls that don't fit it.
 
 ### Ask Jev a question
 

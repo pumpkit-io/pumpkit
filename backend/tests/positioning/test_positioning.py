@@ -11,7 +11,7 @@ async def test_a_user_who_saved_nothing_reads_no_positioning(client, subscribed)
     response = await client.get(POSITIONING)
 
     assert response.status_code == 200
-    assert response.json() == {"text": None, "saved_at": None}
+    assert response.json() == {"text": None, "saved_at": None, "can_draft": True}
 
 
 async def test_saving_a_positioning_stores_it_with_when_it_was_saved(
@@ -21,7 +21,7 @@ async def test_saving_a_positioning_stores_it_with_when_it_was_saved(
 
     assert response.status_code == 200
     assert response.json() == {"text": TEXT, "saved_at": "2026-10-10T12:00:30Z"}
-    assert (await client.get(POSITIONING)).json() == response.json()
+    assert (await client.get(POSITIONING)).json() == {**response.json(), "can_draft": True}
 
 
 async def test_saving_again_replaces_the_positioning_and_its_time(client, subscribed, fixed_clock):
@@ -34,7 +34,7 @@ async def test_saving_again_replaces_the_positioning_and_its_time(client, subscr
         "text": "I post about pricing now.",
         "saved_at": "2026-10-10T13:00:30Z",
     }
-    assert (await client.get(POSITIONING)).json() == response.json()
+    assert (await client.get(POSITIONING)).json() == {**response.json(), "can_draft": True}
 
 
 async def test_the_text_is_saved_without_the_space_around_it(client, subscribed):
@@ -109,6 +109,10 @@ async def test_each_user_reads_and_saves_only_their_own_positioning(
 
     await sign_in_as_another_subscribed_user()
 
-    assert (await client.get(POSITIONING)).json() == {"text": None, "saved_at": None}
+    assert (await client.get(POSITIONING)).json() == {
+        "text": None,
+        "saved_at": None,
+        "can_draft": True,
+    }
     await client.put(POSITIONING, json={"text": "I'm Bob."})
     assert (await client.get(POSITIONING)).json()["text"] == "I'm Bob."
