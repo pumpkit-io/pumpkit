@@ -37,6 +37,8 @@ class Brief(Base):
     text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
+    user: Mapped["User"] = relationship()
+
 
 class Idea(Base):
     """One Post proposed from a Brief, written or not."""
@@ -63,12 +65,12 @@ class Post(Base):
         String, primary_key=True, default=lambda: ulid_with_prefix("post")
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    # Unique: an Idea has at most one Post.
+    # An Idea has at most one Post.
     idea_id: Mapped[str] = mapped_column(ForeignKey("ideas.id", ondelete="CASCADE"), unique=True)
-    # The corpus's author post ids in the order the calls get them, fixed when the Post starts
-    # so changing the User's Inspiration authors later doesn't change it. None with no corpus.
+    # The corpus's author post ids in call order, fixed when the Post starts so a later change
+    # of Inspiration authors doesn't change it. With no corpus it is SQL NULL, never JSON null.
     corpus_post_ids: Mapped[Optional[list[str]]] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql")
+        JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # The Text, set from each new Version; None only while the Post has no Version.
@@ -101,9 +103,9 @@ class Post(Base):
         """`brief` starts the Post from a new Brief with that text and one Idea."""
         super().__init__(**fields)
         if brief is not None:
+            owner = {"user": fields["user"]} if "user" in fields else {"user_id": self.user_id}
             self.idea = Idea(
-                brief=Brief(user_id=self.user_id, text=brief, created_at=self.created_at),
-                posting_order=1,
+                brief=Brief(text=brief, created_at=self.created_at, **owner), posting_order=1
             )
 
     @property

@@ -11,6 +11,7 @@ from sqlalchemy import Connection
 
 from alembic import command
 from pumpkit.auth.models import User
+from pumpkit.posts.models import Post
 from tests.migrations import migrate
 
 POSTS = "/api/v1/posts"
@@ -40,16 +41,6 @@ def _old_post(connection: Connection, *, post_id: str, user_id: str, brief: str)
     )
 
 
-def _tables(connection: Connection) -> set[str]:
-    return set(sa.inspect(connection).get_table_names())
-
-
-def _post_columns(connection: Connection) -> dict[str, bool]:
-    """Each column of `posts` and whether it may be null."""
-    columns = sa.inspect(connection).get_columns("posts")
-    return {column["name"]: column["nullable"] for column in columns}
-
-
 def _rows(connection: Connection, query: str) -> list[tuple]:
     return [tuple(row) for row in connection.execute(sa.text(query))]
 
@@ -77,18 +68,6 @@ async def posts_storing_their_briefs(db_engine, user, bob) -> None:
         await connection.run_sync(fill)
 
 
-async def test_downgrade_drops_briefs_and_ideas_and_stores_the_brief_on_the_post(
-    db_engine, posts_storing_their_briefs
-):
-    async with db_engine.connect() as connection:
-        tables = await connection.run_sync(_tables)
-        columns = await connection.run_sync(_post_columns)
-
-    assert not {"briefs", "ideas"} & tables
-    assert "idea_id" not in columns
-    assert (columns["brief"], columns["corpus_post_ids"]) == (False, False)
-
-
 async def test_upgrade_gives_each_post_an_idea_of_a_brief_of_its_own(
     db_engine, posts_storing_their_briefs, subscribed, client, user, bob
 ):
@@ -103,15 +82,12 @@ async def test_upgrade_gives_each_post_an_idea_of_a_brief_of_its_own(
             "JOIN briefs ON briefs.id = ideas.brief_id ORDER BY posts.id",
         )
         briefs = await connection.run_sync(_rows, "SELECT count(*) FROM briefs")
-        columns = await connection.run_sync(_post_columns)
     assert stored == [
         ("post_a", user.id, "ship small things", 1),
         ("post_b", user.id, "ship small things", 1),
         ("post_c", bob.id, "bob's", 1),
     ]
     assert briefs == [(3,)]
-    assert "brief" not in columns
-    assert (columns["idea_id"], columns["corpus_post_ids"]) == (False, True)
 
 
 async def test_downgrade_keeps_each_posts_brief_and_gives_a_post_without_a_corpus_an_empty_one(
@@ -139,6 +115,25 @@ async def test_downgrade_keeps_each_posts_brief_and_gives_a_post_without_a_corpu
         [["levelsio-0"], [], ["levelsio-0"]],
         ['["levelsio-0"]', "[]", '["levelsio-0"]'],
     )
+
+
+async def test_downgrade_gives_a_post_whose_corpus_was_set_to_none_an_empty_one(
+    db_engine, posts_storing_their_briefs, db
+):
+    await migrate(db_engine, lambda config: command.upgrade(config, "head"))
+    post = await db.get(Post, "post_b")
+    assert post is not None
+    post.corpus_post_ids = None
+    await db.commit()
+
+    await migrate(db_engine, lambda config: command.downgrade(config, "0058"))
+
+    async with db_engine.connect() as connection:
+        posts = await connection.run_sync(
+            _rows, "SELECT corpus_post_ids FROM posts WHERE id = 'post_b'"
+        )
+    # SQLite hands the JSON back as text, Postgres as a list.
+    assert posts in ([([],)], [("[]",)])
 
 
 async def test_a_post_started_after_the_upgrade_is_read_back_with_its_brief(

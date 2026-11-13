@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from pumpkit.auth.models import User
 from pumpkit.auth.service import users
@@ -15,6 +16,7 @@ from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
+NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
 
 @pytest.fixture
@@ -76,8 +78,16 @@ async def test_an_idea_has_at_most_one_post(db, post_with):
     assert post is not None
     db.add(Post(user_id=post.user_id, idea_id=post.idea_id, created_at=post.created_at))
 
-    with pytest.raises(Exception, match="(?i)unique"):
+    with pytest.raises(IntegrityError):
         await db.flush()
+
+
+async def test_a_post_built_with_its_user_gives_its_brief_that_user(db, user):
+    post = Post(user=user, brief="ship small things", created_at=NOW, text_media=[])
+    db.add(post)
+    await db.commit()
+
+    assert await _stored(db) == [(user.id, "ship small things", 1, post.id)]
 
 
 async def test_deleting_a_user_deletes_their_briefs_and_ideas(foreign_keys_session):
