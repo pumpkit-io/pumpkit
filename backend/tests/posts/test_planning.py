@@ -1,6 +1,5 @@
 """Starting a Post plans its Brief first, from the User's Positioning, and stores the Plan (ADR 0025)."""
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -439,12 +438,7 @@ async def test_a_failed_plan_call_stores_nothing_and_charges_nothing(
 async def test_a_plan_call_that_runs_out_of_time_fails_like_any_other(
     client, ready, db, monkeypatch, assert_reported_502
 ):
-    class _NeverAnswers(FakeLLM):
-        async def structured(self, **call):
-            await asyncio.sleep(60)
-            return await super().structured(**call)
-
-    app.dependency_overrides[get_llm] = lambda: _NeverAnswers()
+    app.dependency_overrides[get_llm] = lambda: FakeLLM(latency=60)
     monkeypatch.setattr(planning, "PLAN_CALL_SECONDS", 0.01)
 
     response = await client.post(POSTS, json={"brief": BRIEF})

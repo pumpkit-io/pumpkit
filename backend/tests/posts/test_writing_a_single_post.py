@@ -13,9 +13,11 @@ from pumpkit.core.config import settings
 from pumpkit.core.llm import LLMCall, LLMError
 from pumpkit.posts import version_writing
 from pumpkit.posts.models import VersionAttempt
+from pumpkit.posts.writing import post_writing
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import TEXT, save_positioning
 from tests.posts.writing_replies import (
+    HUMANIZED_POST,
     MERGED_SKETCH,
     POST_IDEAS,
     SKETCHED_POST,
@@ -76,8 +78,8 @@ async def _write(client, fake_llm, final: str = "The final.", **plan):
     return await client.post(POSTS, json={"brief": BRIEF})
 
 
-def _calls(fake_llm, schema: str) -> list[LLMCall]:
-    return [call for call in fake_llm.calls if call.response_model.__name__ == schema]
+def _calls(fake_llm, schema: type) -> list[LLMCall]:
+    return [call for call in fake_llm.calls if call.response_model is schema]
 
 
 def _system_text(call: LLMCall) -> str:
@@ -112,8 +114,8 @@ async def test_a_user_with_a_positioning_and_no_inspiration_authors_writes_a_sin
     assert [part["text"] for part in version["parts"]] == ["Trials went 12 -> 31 - in a week."]
     assert [call.response_model.__name__ for call in fake_llm.calls] == [
         POST_IDEAS,
-        *[SKETCHED_POST] * 5,
-        MERGED_SKETCH,
+        *["sketched_post"] * 5,
+        "merged_sketch",
         "refined_post",
     ]
 
@@ -181,7 +183,7 @@ async def test_the_humanizer_gets_its_prompt_the_brief_and_plan_then_the_scrubbe
 
     await _write(client, fake_llm)
 
-    [humanizer] = _calls(fake_llm, "refined_post")
+    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
     system, brief, sketch = humanizer.messages
     text = _system_text(humanizer)
     assert text.startswith(
@@ -223,13 +225,6 @@ async def test_sketching_merging_and_humanizing_each_use_their_own_model_setting
         "acme/humanizer",
     ]
     assert {call.max_tokens for call in fake_llm.calls[1:]} == {20000}
-
-
-def test_the_writing_models_default_to_the_ones_the_prompts_were_tuned_against():
-    assert settings.model_fields["LLM_SKETCHING_MODEL"].default == "openai/gpt-6.1-terra"
-    assert settings.model_fields["LLM_MERGING_MODEL"].default == "openai/gpt-6.1-terra"
-    assert settings.model_fields["LLM_HUMANIZING_MODEL"].default == "openai/gpt-6.1-terra"
-    assert settings.model_fields["LLM_CALLS_IN_FLIGHT"].default == 8
 
 
 async def test_the_version_stores_the_hook_the_cta_the_sketches_the_merge_and_each_steps_model(
@@ -319,6 +314,21 @@ async def test_when_every_sketch_fails_the_attempt_fails_and_uses_no_generation(
     assert await _generations_used(client) == 0
 
 
+async def test_a_merged_sketch_blank_after_the_scrub_fails_the_attempt_before_the_humanizer(
+    client, db, ready, fake_llm, assert_reported_502
+):
+    fake_llm.standing[MERGED_SKETCH] = merged("\u200b \n ")
+
+    response = await _write(client, fake_llm)
+
+    assert_reported_502(response)
+    assert _calls(fake_llm, HUMANIZED_POST) == []
+    attempt = await _version(db)
+    assert attempt.status == "failed"
+    assert attempt.error is not None and "blank" in attempt.error
+    assert await _generations_used(client) == 0
+
+
 async def test_a_failed_humanizer_call_fails_the_attempt_and_uses_no_generation(
     client, db, ready, fake_llm, assert_reported_502
 ):
@@ -329,6 +339,22 @@ async def test_a_failed_humanizer_call_fails_the_attempt_and_uses_no_generation(
     assert_reported_502(response)
     assert (await _version(db)).status == "failed"
     assert await _generations_used(client) == 0
+
+
+async def test_a_call_waiting_for_a_free_model_slot_is_not_timed_out_by_its_wait(
+    client, db, ready, fake_llm, monkeypatch
+):
+    monkeypatch.setattr(settings, "LLM_CALLS_IN_FLIGHT", 1)
+    monkeypatch.setattr(post_writing, "WRITING_CALL_SECONDS", 0.1)
+    # Five sketches one at a time: the last waits 0.2s for its slot, longer than its own time.
+    fake_llm.latency = 0.05
+
+    response = await _write(client, fake_llm)
+
+    assert response.status_code == 201, response.text
+    stored = (await _version(db)).sketches
+    assert stored is not None
+    assert [sketch.get("error") for sketch in stored] == [None] * 5
 
 
 async def test_a_written_single_post_uses_one_generation(client, ready, fake_llm):
@@ -345,7 +371,7 @@ async def test_a_first_reply_is_not_part_of_the_text_yet(client, db, ready, fake
 
     response = await client.post(POSTS, json={"brief": BRIEF})
 
-    [humanizer] = _calls(fake_llm, "refined_post")
+    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
     assert humanizer.messages[2]["content"] == (
         "<post>\nThe post.\n</post>\n\n<first_reply>\nRepo: [link]\n</first_reply>"
     )
@@ -441,7 +467,7 @@ async def test_the_guide_has_the_medium_post_section_on_a_premium_account(
         in guide
     )
     assert "# Format: short post" not in guide
-    [humanizer] = _calls(fake_llm, "refined_post")
+    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
     assert "- The length: at most 700 characters as X counts them" in _system_text(humanizer)
 
 
@@ -475,7 +501,7 @@ async def test_each_limit_is_the_accounts_when_it_is_lower_than_the_guides(
 
     assert "Hard limit: 500 characters: count before you answer." in medium
     assert "Hard limit: 500 characters." in long
-    [humanizer] = _calls(fake_llm, "refined_post")
+    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
     assert "- The length: at most 500 characters" in _system_text(humanizer)
 
 

@@ -11,7 +11,7 @@ import asyncio
 import weakref
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Callable, Optional, Protocol, TypeVar, Union
+from typing import Any, Awaitable, Callable, Optional, Protocol, TypeVar, Union
 
 from openai import OpenAIError
 from pydantic import BaseModel, ValidationError
@@ -22,6 +22,7 @@ from pumpkit.core.llm_client import LLMClient, llm_client
 from pumpkit.core.llm_schemas import ModelUsage, StructuredResult
 
 T = TypeVar("T", bound=BaseModel)
+R = TypeVar("R")
 
 
 class LLMError(AppError):
@@ -44,7 +45,13 @@ class LLM(Protocol):
         messages: list[dict],
         response_model: type[T],
         max_tokens: Optional[int] = None,
-    ) -> StructuredResult[T]: ...
+        timeout_seconds: Optional[float] = None,
+    ) -> StructuredResult[T]:
+        """
+        One call, made once a slot under `LLM_CALLS_IN_FLIGHT` is free. `timeout_seconds` starts
+        once the slot is held, so time spent waiting for one never counts against the call.
+        """
+        ...
 
 
 # One per event loop: a semaphore can't be shared across loops, and each test runs its own.
@@ -62,6 +69,17 @@ def _call_slots() -> asyncio.Semaphore:
     return slots
 
 
+async def _in_a_slot(
+    model: str, timeout_seconds: Optional[float], call: Callable[[], Awaitable[R]]
+) -> R:
+    async with _call_slots():
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                return await call()
+        except TimeoutError as error:
+            raise LLMError(f"{model}: the call took over {timeout_seconds:.0f}s") from error
+
+
 class OpenAICompatibleLLM:
     def __init__(self, client: LLMClient) -> None:
         self._client = client
@@ -76,15 +94,19 @@ class OpenAICompatibleLLM:
         messages: list[dict],
         response_model: type[T],
         max_tokens: Optional[int] = None,
+        timeout_seconds: Optional[float] = None,
     ) -> StructuredResult[T]:
         try:
-            async with _call_slots():
-                return await self._client.llm_structured(
+            return await _in_a_slot(
+                model,
+                timeout_seconds,
+                lambda: self._client.llm_structured(
                     model=model,
                     messages=messages,
                     response_model=response_model,
                     max_tokens=max_tokens,
-                )
+                ),
+            )
         # ValueError covers an empty answer and one that fails the schema's validation.
         except (OpenAIError, ValueError) as error:
             raise LLMError(f"{model}: {type(error).__name__}: {error}") from error
@@ -104,15 +126,19 @@ class LLMCall:
 @dataclass
 class FakeLLM:
     """
-    A scripted model: each call takes the reply `standing` holds for its schema name, or else the
-    next of `replies`: a dict of fields or an exception. A standing reply can also be a function
-    of the call, for calls that run in parallel. Clear `configured` for a missing key.
+    A scripted model: each call takes the reply `standing` holds for its schema class or name, or
+    else the next of `replies`: a dict of fields or an exception. A standing reply can also be a
+    function of the call, for calls that run in parallel. Each call holds a slot under the
+    Instance's cap for `latency` seconds, as a real one does. Clear `configured` for a missing key.
     """
 
     replies: list[_Reply] = field(default_factory=list)
-    standing: dict[str, Union[_Reply, Callable[["LLMCall"], _Reply]]] = field(default_factory=dict)
+    standing: dict[Union[str, type[BaseModel]], Union[_Reply, Callable[["LLMCall"], _Reply]]] = (
+        field(default_factory=dict)
+    )
     calls: list[LLMCall] = field(default_factory=list)
     configured: bool = True
+    latency: float = 0.0
 
     def is_configured(self) -> bool:
         return self.configured
@@ -124,13 +150,22 @@ class FakeLLM:
         messages: list[dict],
         response_model: type[T],
         max_tokens: Optional[int] = None,
+        timeout_seconds: Optional[float] = None,
     ) -> StructuredResult[T]:
         call = LLMCall(
             model=model, messages=messages, response_model=response_model, max_tokens=max_tokens
         )
         self.calls.append(call)
-        if response_model.__name__ in self.standing:
-            standing = self.standing[response_model.__name__]
+        return await _in_a_slot(model, timeout_seconds, lambda: self._answer(call))
+
+    async def _answer(self, call: LLMCall) -> StructuredResult[Any]:
+        model, response_model = call.model, call.response_model
+        if self.latency:
+            await asyncio.sleep(self.latency)
+        # A class key tells apart two schemas the model reads under one name.
+        key = response_model if response_model in self.standing else response_model.__name__
+        if key in self.standing:
+            standing = self.standing[key]
             reply = standing(call) if callable(standing) else standing
         elif not self.replies:
             raise LLMError("Fake LLM has no reply left")

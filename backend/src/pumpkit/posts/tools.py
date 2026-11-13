@@ -15,8 +15,8 @@ async def start_post(
     Start a post from a brief, what the post is about and what the user thinks about it. Pumpkit
     plans the post around the user's positioning, then writes its first version from that plan.
     It is refused until the user has a positioning, which `set_positioning` saves. A thread is
-    still written in the style of the user's inspiration authors, so it is also refused until
-    one of them has posts. `plan` says what the post is built for: its core idea, the
+    written in the style of the user's inspiration authors, so it is also refused until one of
+    them has posts. `plan` says what the post is built for: its core idea, the
     takeaway, the funnel stage (`top` for reach, `middle` for trust, `bottom` for conversion),
     the desired action and the length. `format` is "post"
     for a single X post, the default, or "thread" for a thread: several parts, each one X post

@@ -108,28 +108,25 @@ def sketch_angle(index: int) -> HookType:
     return HOOK_TYPE_ROTATION[index % len(HOOK_TYPE_ROTATION)]
 
 
-def sketch_user(inputs: PostInputs, angle: Optional[HookType]) -> str:
-    text = post_inputs_block(inputs)
-    if angle:
-        text += (
-            "\n\n<angle>\n"
-            "Several writers are sketching this same post, each from a different angle, so I can compare them. "
-            f"Your angle: build the hook around the `{angle}` hook type ({HOOK_TYPE_NAMES[angle]}), combined with one or two other types. "
-            "If the raw input can't support that type honestly, use the closest type that it can support and say so in hook_reasoning. "
-            "Everything else in the guide applies unchanged.\n"
-            "</angle>"
-        )
-    return text
+def sketch_user(inputs: PostInputs, angle: HookType) -> str:
+    return post_inputs_block(inputs) + (
+        "\n\n<angle>\n"
+        "Several writers are sketching this same post, each from a different angle, so I can compare them. "
+        f"Your angle: build the hook around the `{angle}` hook type ({HOOK_TYPE_NAMES[angle]}), combined with one or two other types. "
+        "If the raw input can't support that type honestly, use the closest type that it can support and say so in hook_reasoning. "
+        "Everything else in the guide applies unchanged.\n"
+        "</angle>"
+    )
 
 
-def merge_prompt(inputs: PostInputs, n: int) -> str:
+def merge_prompt(inputs: PostInputs, sketch_count: int) -> str:
     return f"""\
 # Role
 
-You are the editor of one post on X written on my behalf. {n} writers each sketched the same post from the same inputs and the same guide. You produce the one sketch that gets published: it takes the best of each sketch and leaves out what is bad in them.
+You are the editor of one post on X written on my behalf. {sketch_count} writers each sketched the same post from the same inputs and the same guide. You produce the one sketch that gets published: it takes the best of each sketch and leaves out what is bad in them.
 
 {GIVEN}
-- sketches: the {n} sketches, numbered. Each has the levers and hook types its writer chose, their reasoning, the post, and sometimes a first reply.
+- sketches: the {sketch_count} sketches, numbered. Each has the levers and hook types its writer chose, their reasoning, the post, and sometimes a first reply.
 
 # How to merge
 
@@ -169,15 +166,19 @@ The final sketch must follow it too.
 
 def sketches_block(sketches: Sequence[SketchedPost]) -> str:
     parts = []
-    for number, s in enumerate(sketches, start=1):
-        reply = f"\n<first_reply>\n{s.first_reply.strip()}\n</first_reply>" if s.first_reply else ""
+    for number, sketch in enumerate(sketches, start=1):
+        reply = (
+            f"\n<first_reply>\n{sketch.first_reply.strip()}\n</first_reply>"
+            if sketch.first_reply
+            else ""
+        )
         parts.append(
             f'<sketch number="{number}">\n'
-            f"hook_levers: {', '.join(s.hook_levers)}\n"
-            f"hook_types: {', '.join(s.hook_types)}\n"
-            f"hook_reasoning: {s.hook_reasoning.strip()}\n"
-            f"cta_type: {s.cta_type}\n"
-            f"<post>\n{s.post.strip()}\n</post>{reply}\n"
+            f"hook_levers: {', '.join(sketch.hook_levers)}\n"
+            f"hook_types: {', '.join(sketch.hook_types)}\n"
+            f"hook_reasoning: {sketch.hook_reasoning.strip()}\n"
+            f"cta_type: {sketch.cta_type}\n"
+            f"<post>\n{sketch.post.strip()}\n</post>{reply}\n"
             "</sketch>"
         )
     return "<sketches>\n" + "\n\n".join(parts) + "\n</sketches>"

@@ -7,6 +7,7 @@ from alembic import command
 from pumpkit.posts.models import VersionAttempt
 from tests.migrations import migrate
 from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import MERGED_SKETCH, merged
 
 POSTS = "/api/v1/posts"
 COLUMNS = {"hook_levers", "hook_types", "cta_type", "sketches", "merge"}
@@ -41,6 +42,7 @@ async def test_a_single_post_written_after_the_upgrade_keeps_its_sketches(
     await migrate(db_engine, lambda config: command.downgrade(config, "0061"))
     await migrate(db_engine, lambda config: command.upgrade(config, "head"))
     await save_positioning(client)
+    fake_llm.standing[MERGED_SKETCH] = merged(hook_types=["story"], reasoning="Sketch 2's story.")
     fake_llm.replies = [{"post": "The final.", "first_reply": None}]
 
     started = await client.post(POSTS, json={"brief": "ship small things"})
@@ -48,5 +50,5 @@ async def test_a_single_post_written_after_the_upgrade_keeps_its_sketches(
     assert started.status_code == 201, started.text
     [version] = (await db.scalars(select(VersionAttempt))).all()
     assert version.sketches is not None and len(version.sketches) == 5
-    assert version.merge is not None and version.merge["reasoning"]
-    assert version.hook_types == ["proof", "number_list"]
+    assert version.merge is not None and version.merge["reasoning"] == "Sketch 2's story."
+    assert version.hook_types == ["story"]

@@ -48,7 +48,7 @@ TOOLS: list[McpTool] = [
 ]
 
 INSTRUCTIONS = """\
-Pumpkit writes X posts from the user's positioning and publishes them on X. A thread is still \
+Pumpkit writes X posts from the user's positioning and publishes them on X. A thread is \
 written in the style of X accounts the user picks, their inspiration authors (up to three).
 
 - A brief says what a post is about and what the user thinks about it. Starting a post from \

@@ -605,3 +605,26 @@ async def test_feedback_sent_with_the_saved_text_is_written(client, post_id, fak
     )
 
     assert response.status_code == 201
+
+
+async def test_feedback_on_a_post_written_with_no_inspiration_authors_is_refused(
+    client, subscribed, fake_llm
+):
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "final 1"}]
+    started = await client.post(POSTS, json={"brief": "ship small things"})
+    assert started.status_code == 201
+    fake_llm.calls.clear()
+    used = (await client.get("/api/v1/usage")).json()["allowance"]["generations"]["used"]
+
+    response = await client.post(
+        _versions_url(started.json()["id"]), json={"feedback": "make it shorter"}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Feedback can't revise a post written without inspiration authors yet. "
+        "Start a new post instead."
+    )
+    assert fake_llm.calls == []
+    assert (await client.get("/api/v1/usage")).json()["allowance"]["generations"]["used"] == used

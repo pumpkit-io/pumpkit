@@ -82,7 +82,7 @@ export function PostWriter() {
     briefRef.current?.focus();
   }, [key, isWriting, clear]);
 
-  // Only a Thread is still written from the Inspiration authors' posts.
+  // A Thread is written from the Inspiration authors' posts; a single post needs none.
   const thread = format === FORMAT_THREAD;
   const noCorpus = thread && authors !== null && !authors.some((a) => a.postCount > 0);
   const typed = brief.trim();

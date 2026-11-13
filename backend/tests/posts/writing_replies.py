@@ -2,10 +2,14 @@
 
 from typing import Optional
 
-# The schema names of the answers `fake_llm.standing` keys its replies by.
+from pumpkit.posts.writing.post_replies import HumanizedPost, MergedSketch, SketchedPost
+
+# What `fake_llm.standing` keys its replies by: the plan's schema name, which both of its answer
+# classes share, and the single post's classes, since the old path reuses two of their names.
 POST_IDEAS = "post_ideas"
-SKETCHED_POST = "sketched_post"
-MERGED_SKETCH = "merged_sketch"
+SKETCHED_POST = SketchedPost
+MERGED_SKETCH = MergedSketch
+HUMANIZED_POST = HumanizedPost
 
 
 def planned_post(
@@ -97,5 +101,9 @@ def writing_calls(fake_llm) -> list:
     The calls the fake model received that wrote or revised the Version's text: the old path's,
     and the humanizer's of a single post written from its Plan.
     """
-    planning = {POST_IDEAS, SKETCHED_POST, MERGED_SKETCH}
-    return [call for call in fake_llm.calls if call.response_model.__name__ not in planning]
+    return [
+        call
+        for call in fake_llm.calls
+        if call.response_model.__name__ != POST_IDEAS
+        and call.response_model not in (SKETCHED_POST, MERGED_SKETCH)
+    ]

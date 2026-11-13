@@ -1,6 +1,9 @@
 """
 The structured replies of the calls that write a single post's first Version, ported from
 pumpkit-new-architecture-v5. Field order is deliberate: reasoning and choices before the post.
+
+`first_reply` defaults to None only for Python: the SDK's strict schema still requires it,
+nullable, as v5's does.
 """
 
 from typing import Literal, Optional
@@ -32,10 +35,6 @@ CtaType = Literal["none", "reply", "share", "follow", "bookmark", "click", "DM",
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-# `first_reply` defaults to None only for Python: the SDK's strict schema still requires it,
-# nullable, as v5's does.
 
 
 class SketchedPost(_Strict):

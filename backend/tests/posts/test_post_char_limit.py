@@ -59,12 +59,12 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
     ]
 
     post = await client.post(POSTS, json={"brief": "ship"})
+    fake_llm.calls.clear()
     thread = await client.post(POSTS, json={"brief": "ship", "format": "thread"})
 
     assert _limits(post.json()["versions"][0]) == [X_POST_MAX_CHARS]
     assert _limits(thread.json()["versions"][0]) == [X_POST_MAX_CHARS, X_POST_MAX_CHARS]
-    # The single post's own prompts are covered in test_writing_a_single_post.py.
-    assert [_system_text(call) for call in writing_calls(fake_llm)[1:]] == [
+    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
         sketch_thread_prompt(X_POST_MAX_CHARS),
         humanizer_thread_prompt(X_POST_MAX_CHARS),
     ]
@@ -90,11 +90,12 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
     ]
 
     post = await client.post(POSTS, json={"brief": "ship"})
+    fake_llm.calls.clear()
     thread = await client.post(POSTS, json={"brief": "ship", "format": "thread"})
 
     assert _limits(post.json()["versions"][0]) == [char_limit]
     assert _limits(thread.json()["versions"][0]) == [char_limit, char_limit]
-    assert [_system_text(call) for call in writing_calls(fake_llm)[1:]] == [
+    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
         sketch_thread_prompt(char_limit),
         humanizer_thread_prompt(char_limit),
     ]

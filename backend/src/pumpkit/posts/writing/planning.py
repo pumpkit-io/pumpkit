@@ -1,6 +1,5 @@
 """Planning a Brief: one model call that returns its Ideas, each with a Plan (ADR 0025)."""
 
-import asyncio
 import logging
 from dataclasses import dataclass, replace
 from typing import Literal, Optional, Sequence, Union
@@ -8,7 +7,7 @@ from typing import Literal, Optional, Sequence, Union
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
-from pumpkit.core.llm import LLM, LLMError
+from pumpkit.core.llm import LLM
 from pumpkit.core.text import drop_unstorable
 from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
 from pumpkit.posts.plans import (
@@ -25,7 +24,7 @@ from pumpkit.posts.writing.prompts.plan import SHORT_LIMIT, is_short_only, plan_
 
 logger = logging.getLogger(__name__)
 
-# The request waits on the plan, so the call gets this long before it counts as failed.
+# The request waits on the plan, so the call gets this long once sent before it counts as failed.
 PLAN_CALL_SECONDS = 120.0
 
 _PromptFunnel = Literal["TOF", "MOF", "BOF"]
@@ -173,18 +172,13 @@ async def plan_brief(
     response_model: type[Union[PostIdeas, ShortPostIdeas]] = (
         ShortPostIdeas if is_short_only(char_limit) else PostIdeas
     )
-    try:
-        async with asyncio.timeout(PLAN_CALL_SECONDS):
-            result = await llm.structured(
-                model=settings.LLM_PLANNING_MODEL,
-                messages=plan_messages(brief, positioning, char_limit),
-                response_model=response_model,
-                max_tokens=MAX_TOKENS,
-            )
-    except TimeoutError as error:
-        raise LLMError(
-            f"{settings.LLM_PLANNING_MODEL}: the plan call took over {PLAN_CALL_SECONDS:.0f}s"
-        ) from error
+    result = await llm.structured(
+        model=settings.LLM_PLANNING_MODEL,
+        messages=plan_messages(brief, positioning, char_limit),
+        response_model=response_model,
+        max_tokens=MAX_TOKENS,
+        timeout_seconds=PLAN_CALL_SECONDS,
+    )
     ideas = result.parsed
     [single] = _plans([ideas.single_idea], user_id)
     if format == FORMAT_THREAD:

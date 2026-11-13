@@ -27,9 +27,7 @@ from pumpkit.posts.version_writing import (
     version_response,
 )
 from pumpkit.posts.writing.planning import plan_brief
-from pumpkit.posts.writing.post_writing import write_post
-from pumpkit.posts.writing.prompts.post import PostInputs
-from pumpkit.posts.writing.versions import write_first_version
+from pumpkit.posts.writing.post_writing import write_planned_version
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ async def start_post(
     if positioning is None:
         raise RefusedError("Set up your persona before writing a post.", fix_page=PERSONA_PAGE)
     corpus = await service.corpus_for_user(db, user_id=user_id)
-    # Only a Thread is still written from the Inspiration authors' posts.
+    # A Thread is written from the Inspiration authors' posts; a single post needs none.
     if format == FORMAT_THREAD and not corpus.post_ids:
         raise RefusedError(
             "Add an inspiration author with posts before writing a post.", fix_page=PERSONA_PAGE
@@ -81,16 +79,16 @@ async def start_post(
         return idea, post
 
     try:
-        if planned.single.format == FORMAT_THREAD:
-            written = await write_first_version(llm, corpus, brief, format, char_limit)
-        else:
-            inputs = PostInputs(
-                brief=brief,
-                positioning=positioning.text,
-                plan=planned.single,
-                char_limit=char_limit,
-            )
-            written = await write_post(llm, inputs, user_id=user_id)
+        written = await write_planned_version(
+            llm,
+            corpus=corpus,
+            brief=brief,
+            positioning=positioning.text,
+            plan=planned.single,
+            format=format,
+            char_limit=char_limit,
+            user_id=user_id,
+        )
     except Exception as error:
         _, post = await store_post()
         await record_failed_attempt(

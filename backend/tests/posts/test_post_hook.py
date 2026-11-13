@@ -87,7 +87,9 @@ async def test_the_first_version_writes_the_hook_in_the_sketch_call_then_humaniz
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
-    assert SKETCH in humanizer_call.messages[-1]["content"]
+    assert humanizer_call.messages[-1] == _user(
+        f'<part number="1">\n{SKETCH}\n</part>\n\n<part number="2">\npart two\n</part>'
+    )
 
 
 async def test_the_version_stores_the_hook_reasoning_and_the_library_hook(

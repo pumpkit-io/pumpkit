@@ -231,7 +231,7 @@ class VersionAttempt(Base):
     hook_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     hook_name: Mapped[Optional[str]] = mapped_column(String)
     # The psychological levers, hook types and CTA type the merge chose, on a Version written from
-    # a Plan. Only kept, never shown, like the two below.
+    # a Plan. These and the sketches and merge below are kept, never shown.
     hook_levers: Mapped[Optional[list[str]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
