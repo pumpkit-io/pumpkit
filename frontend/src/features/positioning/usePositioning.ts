@@ -1,0 +1,70 @@
+import { useCallback, useEffect, useState } from 'react';
+import { useOnboarding } from '@/features/onboarding/useOnboarding';
+import { track } from '@/lib/analytics';
+import { errorMessage, errorStatus } from '@/services/apiErrors';
+import { positioningService } from '@/services/positioningService';
+
+type Loading = 'loading' | 'failed' | 'loaded';
+
+/** The User's Positioning as they are editing it, loaded on mount, with save. */
+export function usePositioning() {
+  const { refresh: refreshOnboarding } = useOnboarding();
+  const [loading, setLoading] = useState<Loading>('loading');
+  const [attempt, setAttempt] = useState(0);
+  /** The text as last saved; empty until the User saves a Positioning. */
+  const [saved, setSaved] = useState('');
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /** True from a save until the next edit. */
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    positioningService
+      .get()
+      .then((positioning) => {
+        if (cancelled) return;
+        setSaved(positioning?.text ?? '');
+        setText(positioning?.text ?? '');
+        setLoading('loaded');
+      })
+      .catch(() => !cancelled && setLoading('failed'));
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  const reload = useCallback(() => {
+    setLoading('loading');
+    setAttempt((n) => n + 1);
+  }, []);
+
+  const edit = useCallback((next: string) => {
+    setText(next);
+    setJustSaved(false);
+  }, []);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const positioning = await positioningService.save(text);
+      setSaved(positioning.text);
+      setText(positioning.text);
+      setJustSaved(true);
+      track('positioning_saved');
+    } catch (e) {
+      // A refusal for want of a Subscription sends the User to the Paywall, not to an error.
+      if (errorStatus(e) === 403) void refreshOnboarding();
+      else setError(errorMessage(e, "Couldn't save your positioning. Try again."));
+    } finally {
+      setSaving(false);
+    }
+  }, [text, refreshOnboarding]);
+
+  const trimmed = text.trim();
+  const canSave = loading === 'loaded' && !saving && trimmed !== '' && trimmed !== saved;
+
+  return { loading, reload, text, edit, save, saving, canSave, error, justSaved };
+}

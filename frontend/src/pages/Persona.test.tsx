@@ -33,6 +33,10 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
     refresh: vi.fn(),
   },
 }));
+vi.mock('@/services/positioningService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/positioningService')>()),
+  positioningService: { get: vi.fn().mockResolvedValue(null), save: vi.fn() },
+}));
 vi.mock('@/services/authorDirectoryService', () => ({
   authorDirectoryService: { list: vi.fn() },
 }));

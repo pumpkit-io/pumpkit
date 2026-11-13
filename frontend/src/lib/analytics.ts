@@ -140,6 +140,7 @@ export const EVENTS = {
   },
 
   // Writing: Persona, New post and the Post page
+  positioning_saved: { description: 'Persona: saved their Positioning.' },
   inspiration_author_added: {
     description: 'Persona: added an Inspiration author and its posts were fetched.',
   },
