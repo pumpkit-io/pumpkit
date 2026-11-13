@@ -10,7 +10,7 @@ This amends ADR 0018 and ADR 0019, extends ADR 0008's area order, and takes ADR 
 - Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It runs when Onboarding's Persona step first opens, so the Operator pays twitterapi.io only for a User who is past the Paywall.
 - The draft states only what the profile and posts show, leaves out what they don't, and copies no post's wording.
 - A failed X read or model call gives no draft and no error page: the User starts from an empty Positioning.
-- A draft is not a Generation, and requesting one saves nothing: a redraft on the Persona page leaves the saved Positioning alone until the User saves. Redrafts are limited per User per day. #470 sets that number, and #469 sets the minimum length of a Positioning, if any.
+- A draft is not a Generation, and requesting one saves nothing: a redraft on the Persona page leaves the saved Positioning alone until the User saves. Redrafts are limited per User per day. #470 sets that number. A Positioning must not be blank once the space around it is trimmed; it has no minimum length and holds at most 4,000 characters.
 - A Brief keeps the Positioning it was planned with (ADR 0025), so editing the Positioning later doesn't change how Feedback on older Posts behaves.
 - A User with no Positioning can't plan a Brief and is pointed at the Persona page. This replaces the check that refused a Post when the User had no Inspiration author's posts to write from.
 

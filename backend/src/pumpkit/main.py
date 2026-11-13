@@ -25,6 +25,7 @@ from pumpkit.core.logging import logger, redact_access_log_paths
 from pumpkit.core.open_cors import OpenCorsMiddleware
 from pumpkit.core.rate_limit import limiter
 from pumpkit.onboarding.router import router as onboarding_router
+from pumpkit.positioning.router import router as positioning_router
 from pumpkit.posts.router import router as posts_router
 from pumpkit.scheduling.mediator import UPLOAD_LINKS_PATH
 from pumpkit.support.router import router as support_router
@@ -67,6 +68,7 @@ app.include_router(scheduling_router.x_authorization_router, prefix="/api/v1")
 app.include_router(scheduling_router.router, prefix="/api/v1")
 app.include_router(scheduling_router.usage_router, prefix="/api/v1")
 app.include_router(onboarding_router, prefix="/api/v1")
+app.include_router(positioning_router, prefix="/api/v1")
 app.include_router(discovery_router)
 app.include_router(oauth_router, prefix="/api/v1")
 app.include_router(consent_router, prefix="/api/v1")
