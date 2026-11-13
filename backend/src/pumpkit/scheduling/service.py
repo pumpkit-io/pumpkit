@@ -61,6 +61,7 @@ async def create(
     x_user_id: str,
     post_id: str,
     parts: list[str],
+    first_reply: bool,
     publish_at: datetime,
     now: datetime,
     destination: Destination = Destination(),
@@ -74,6 +75,7 @@ async def create(
         user_id=user_id,
         x_user_id=x_user_id,
         parts=_parts(parts),
+        first_reply=first_reply,
         media=[ScheduledPostMedia(**row) for row in _media_rows(media)],
         **_destination_columns(destination),
         community_set_at=now if destination.community else None,
@@ -244,6 +246,7 @@ async def edit(
     now: datetime,
     destination: Optional[Destination] = None,
     media: Optional[Sequence[Sequence[str]]] = None,
+    first_reply: Optional[bool] = None,
 ) -> bool:
     """
     Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
@@ -252,9 +255,11 @@ async def edit(
     A `destination` of None leaves it where it goes; moving it into another Community is a use.
     New `parts` replace every Part not live; the live ones, which open the list, stay as they
     are with their X post ids. New `media`, each Part's Media ids in order, likewise replaces the
-    Media of every Part not live.
+    Media of every Part not live. `first_reply` None leaves whether the last Part is one.
     """
     values: dict[str, object] = {"updated_at": now}
+    if first_reply is not None:
+        values["first_reply"] = first_reply
     if destination is not None:
         community = destination.community
         values.update(_destination_columns(destination))

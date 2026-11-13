@@ -70,6 +70,7 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
                 "feedback": None,
                 "format": "post",
                 "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
+                "first_reply": False,
                 "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }
@@ -136,6 +137,7 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
         "feedback": "shorter",
         "format": "post",
         "parts": [{"text": "shorter final", "char_count": 13, "char_limit": X_POST_MAX_CHARS}],
+        "first_reply": False,
         "starting_text": None,
         "created_at": "2026-10-10T12:00:30Z",
     }
@@ -162,6 +164,7 @@ async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_w
     starting_text = {
         "format": "post",
         "parts": [{"text": "final 1. Mine now.", "char_count": 18, "char_limit": X_POST_MAX_CHARS}],
+        "first_reply": False,
         "version_number": 1,
     }
     assert result["structuredContent"]["starting_text"] == starting_text
@@ -186,6 +189,7 @@ async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fak
                 "media": [],
             }
         ],
+        "first_reply": False,
         "version_number": 2,
         "edited": False,
     }
@@ -281,6 +285,7 @@ async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post
         "feedback",
         "format",
         "parts",
+        "first_reply",
         "starting_text",
         "created_at",
     }

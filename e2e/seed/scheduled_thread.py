@@ -37,6 +37,7 @@ async def main() -> None:
             version_number=1,
             sketch_parts=PARTS,
             parts=PARTS,
+            first_reply=False,
             created_at=now,
         )
         set_text_from_version(post, version)
@@ -48,6 +49,7 @@ async def main() -> None:
             x_user_id="e2e-x-user",
             post_id=post.id,
             parts=PARTS,
+            first_reply=False,
             publish_at=(now + timedelta(days=1)).replace(second=0, microsecond=0),
             now=now,
         )

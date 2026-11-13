@@ -621,10 +621,10 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
     """
     Store a new Post of `user` whose one Version, and so its Text, is the given Parts, as writing
     it would, and return the Post's id: what a Scheduled post is copied from. Several Parts make a
-    Thread.
+    Thread, or with `first_reply` a single post and its first reply.
     """
 
-    async def _post_with(*parts: str) -> str:
+    async def _post_with(*parts: str, first_reply: bool = False) -> str:
         now = datetime.now(timezone.utc)
         post = Post(
             user_id=user.id, brief="Seeded", corpus_post_ids=[], created_at=now, text_media=[]
@@ -632,11 +632,12 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
         version = VersionAttempt(
             post=post,
             sequence=1,
-            format=format_of(parts),
+            format=format_of(parts, first_reply=first_reply),
             status=ATTEMPT_SUCCEEDED,
             version_number=1,
             sketch_parts=list(parts),
             parts=list(parts),
+            first_reply=first_reply,
             created_at=now,
         )
         set_text_from_version(post, version)
@@ -651,7 +652,7 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
 def next_version(db) -> Callable[..., Awaitable[None]]:
     """Store the next Version of the Post, as Feedback would, with the given Parts as its Text."""
 
-    async def _next_version(post_id: str, *parts: str) -> None:
+    async def _next_version(post_id: str, *parts: str, first_reply: bool = False) -> None:
         now = datetime.now(timezone.utc)
         post = await db.get(Post, post_id, options=[selectinload(Post.attempts)])
         assert post is not None
@@ -659,12 +660,13 @@ def next_version(db) -> Callable[..., Awaitable[None]]:
         version = VersionAttempt(
             post_id=post_id,
             sequence=previous.sequence + 1,
-            format=format_of(parts),
+            format=format_of(parts, first_reply=first_reply),
             status=ATTEMPT_SUCCEEDED,
             version_number=(previous.version_number or 0) + 1,
             feedback="Try again",
             sketch_parts=list(parts),
             parts=list(parts),
+            first_reply=first_reply,
             created_at=now,
         )
         set_text_from_version(post, version)

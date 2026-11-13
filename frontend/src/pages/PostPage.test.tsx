@@ -162,6 +162,7 @@ function version(number: number, texts: string[], extra: Partial<Version> = {}):
     number,
     feedback: number === 1 ? null : 'punchier',
     format: texts.length > 1 ? 'thread' : 'post',
+    firstReply: false,
     parts: texts.map((text) => part(text)),
     createdAt: `2026-10-10T0${number}:00:00Z`,
     ...extra,
@@ -208,6 +209,7 @@ function threadWith(parts: Part[]): PostDetail {
 const SCHEDULED: ScheduledPost = {
   id: 'scheduled_post_01',
   parts: [{ text: 'the final text', live: false, xPostUrl: null, media: [] }],
+  firstReply: false,
   state: 'scheduled',
   publishAt: '2026-10-12T07:00:00Z',
   publishedAt: null,
@@ -452,6 +454,7 @@ describe('Post page', () => {
         ...draft([version(1, ['the first text']), version(2, ['the second text'])]),
         text: {
           format: 'post',
+          firstReply: false,
           parts: [part('the text on screen')],
           versionNumber: 1,
           edited: true,
@@ -654,7 +657,13 @@ describe('Post page', () => {
     it('follows the Version the Text came from, and says when it was edited', async () => {
       renderPost({
         ...draft([version(1, ['the first text']), version(2, ['the second text'])]),
-        text: { format: 'post', parts: [part('changed')], versionNumber: 1, edited: true },
+        text: {
+          format: 'post',
+          firstReply: false,
+          parts: [part('changed')],
+          versionNumber: 1,
+          edited: true,
+        },
       });
       await textCard();
 
@@ -764,7 +773,13 @@ describe('Post page', () => {
       vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(THREE[2]!));
       renderPost({
         ...draft(THREE),
-        text: { format: 'post', parts: [part('changed by hand')], versionNumber: 3, edited: true },
+        text: {
+          format: 'post',
+          firstReply: false,
+          parts: [part('changed by hand')],
+          versionNumber: 3,
+          edited: true,
+        },
       });
       const history = await openHistory();
 
@@ -881,6 +896,7 @@ describe('Post page', () => {
         .mockReset()
         .mockImplementation(async (_postId, texts) => ({
           format: texts.length > 1 ? 'thread' : 'post',
+          firstReply: false,
           parts: texts.map((text) => part(text)),
           versionNumber: 1,
           edited: true,
@@ -911,7 +927,11 @@ describe('Post page', () => {
       expect(postService.saveText).not.toHaveBeenCalled();
       await pause();
       expect(postService.saveText).toHaveBeenCalledTimes(1);
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['the final text, edited']);
+      expect(postService.saveText).toHaveBeenCalledWith(
+        'post_01',
+        ['the final text, edited'],
+        false,
+      );
     });
 
     it('edits each Part of a Thread, keeping its Parts in number and order', async () => {
@@ -923,10 +943,11 @@ describe('Post page', () => {
       });
       await pause();
 
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', [
-        'part one',
-        'part two, edited',
-      ]);
+      expect(postService.saveText).toHaveBeenCalledWith(
+        'post_01',
+        ['part one', 'part two, edited'],
+        false,
+      );
       expect(card.getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2);
     });
 
@@ -957,10 +978,11 @@ describe('Post page', () => {
       });
       await pause();
 
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', [
-        'Rewritten one.',
-        'Fixed two.',
-      ]);
+      expect(postService.saveText).toHaveBeenCalledWith(
+        'post_01',
+        ['Rewritten one.', 'Fixed two.'],
+        false,
+      );
     });
 
     it('says an edit was not saved and retries it until it is', async () => {
@@ -968,6 +990,7 @@ describe('Post page', () => {
         .mockRejectedValueOnce(new Error('Network Error'))
         .mockResolvedValueOnce({
           format: 'post',
+          firstReply: false,
           parts: [part('edited')],
           versionNumber: 1,
           edited: true,
@@ -981,7 +1004,7 @@ describe('Post page', () => {
       expect(await card().findByText('Edit not saved. Retrying.')).toBeInTheDocument();
       await pause(TEXT_SAVE_RETRY_MS);
       expect(postService.saveText).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(postService.saveText).mock.calls[1]).toEqual(['post_01', ['edited']]);
+      expect(vi.mocked(postService.saveText).mock.calls[1]).toEqual(['post_01', ['edited'], false]);
       expect(
         await card().findByRole('button', { name: 'V1 · From your brief · edited' }),
       ).toBeInTheDocument();
@@ -996,7 +1019,7 @@ describe('Post page', () => {
 
       unmount();
 
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']);
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited'], false);
     });
 
     it('opens "Post to…" only once the edit is saved', async () => {
@@ -1005,7 +1028,13 @@ describe('Post page', () => {
         () =>
           new Promise((resolve) => {
             saved = () =>
-              resolve({ format: 'post', parts: [part('edited')], versionNumber: 1, edited: true });
+              resolve({
+                format: 'post',
+                firstReply: false,
+                parts: [part('edited')],
+                versionNumber: 1,
+                edited: true,
+              });
           }),
       );
       renderPost(postWith('the final text'));
@@ -1015,7 +1044,9 @@ describe('Post page', () => {
 
       fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
 
-      await waitFor(() => expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']));
+      await waitFor(() =>
+        expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited'], false),
+      );
       expect(screen.queryByRole('dialog', { name: 'Post to…' })).not.toBeInTheDocument();
       expect(card().getByRole('button', { name: 'Post to…' })).toHaveAttribute('aria-busy', 'true');
       await act(async () => saved());
@@ -2798,6 +2829,42 @@ describe('Post page', () => {
         expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
       });
 
+      it('puts the Media of a Part where the first reply goes onto the post', async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(
+          version(2, ['the post', 'Try it: [link]'], { format: 'post', firstReply: true }),
+        );
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        await sendFeedback('one post, link in a reply');
+
+        expect(await card().findByRole('textbox', { name: 'First reply text' })).toHaveValue(
+          'Try it: [link]',
+        );
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
+      it('puts the Media of a Part where a restored first reply goes onto the post', async () => {
+        const withReply = version(1, ['the post', 'Try it: [link]'], {
+          format: 'post',
+          firstReply: true,
+        });
+        vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(withReply));
+        renderPost(
+          withMedia(draft([withReply, version(2, ['one', 'two'])]), [[image('m1')], [image('m2')]]),
+        );
+        await textCard();
+
+        fireEvent.click(card().getByRole('button', { name: 'History' }));
+        const history = within(await screen.findByRole('dialog', { name: 'History' }));
+        fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+        expect(await card().findByRole('textbox', { name: 'First reply text' })).toHaveValue(
+          'Try it: [link]',
+        );
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
       it("keeps every tile on a Part over X's rule, says so under them, and Post to refuses it", async () => {
         vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['one post']));
         renderPost(
@@ -3097,6 +3164,7 @@ describe('Post page', () => {
       it('leaves Media be when a text edit is undone and redone', async () => {
         vi.mocked(postService.saveText).mockImplementation(async (_postId, texts) => ({
           format: 'thread',
+          firstReply: false,
           parts: texts.map((text) => part(text)),
           versionNumber: 1,
           edited: true,
@@ -3591,6 +3659,7 @@ describe('Post page', () => {
         .mockReset()
         .mockImplementation(async (_postId, texts) => ({
           format: 'post',
+          firstReply: false,
           parts: texts.map((text) => part(text)),
           versionNumber: 1,
           edited: true,
@@ -3658,13 +3727,17 @@ describe('Post page', () => {
       expect(await origin('V1 · From your brief')).toBeInTheDocument();
       expect(await screen.findByText('Undid: your edit')).toBeInTheDocument();
       await pause(TEXT_SAVE_PAUSE_MS);
-      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text']);
+      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text'], false);
 
       fireEvent.click(button('Redo'));
       expect(box).toHaveValue('the final text, again');
       expect(await origin('V1 · From your brief · edited')).toBeInTheDocument();
       await pause(TEXT_SAVE_PAUSE_MS);
-      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text, again']);
+      expect(postService.saveText).toHaveBeenLastCalledWith(
+        'post_01',
+        ['the final text, again'],
+        false,
+      );
       expect(track).toHaveBeenCalledWith('text_undone', { step: 'edit' });
       expect(track).toHaveBeenCalledWith('text_redone', { step: 'edit' });
     });
@@ -5312,7 +5385,7 @@ describe('Post page', () => {
       });
       const dialog = await openRetry();
 
-      expect(dialog.getByText('Single post · 1 part · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Single post · as @ada')).toBeInTheDocument();
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
 
@@ -5597,5 +5670,185 @@ describe('Post page', () => {
 
     expect(await sidebar.findByRole('link', { name: 'Posts' })).toBeInTheDocument();
     expect(sidebar.queryByRole('link', { name: 'Posts, 1 failed' })).not.toBeInTheDocument();
+  });
+});
+
+describe('A first reply on the Post page', () => {
+  const WITH_REPLY = draft([
+    version(1, ['the post', 'Try it: [link]'], { format: 'post', firstReply: true }),
+  ]);
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    localStorage.clear();
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+    vi.mocked(postService.saveText)
+      .mockReset()
+      .mockImplementation(async (_postId, texts, firstReply) => ({
+        format: 'post',
+        firstReply,
+        parts: texts.map((text) => part(text)),
+        versionNumber: 1,
+        edited: true,
+      }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function pause() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TEXT_SAVE_PAUSE_MS);
+    });
+  }
+
+  it('shows the first reply as the last Part, labelled, with its own editor and no media', async () => {
+    renderPost(WITH_REPLY);
+    const text = await textCard();
+
+    const post = text.getByRole('listitem', { name: 'Post' });
+    const reply = text.getByRole('listitem', { name: 'First reply' });
+    expect(within(post).getByRole('textbox', { name: 'Post text' })).toHaveValue('the post');
+    expect(within(reply).getByRole('textbox', { name: 'First reply text' })).toHaveValue(
+      'Try it: [link]',
+    );
+    expect(within(reply).getByText('First reply')).toBeInTheDocument();
+    expect(within(post).getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    expect(within(reply).queryByRole('button', { name: /media/i })).not.toBeInTheDocument();
+    expect(text.queryByText('1/2')).not.toBeInTheDocument();
+  });
+
+  it('saves an edit of the first reply as a first reply', async () => {
+    renderPost(WITH_REPLY);
+    const text = await textCard();
+
+    fireEvent.change(text.getByRole('textbox', { name: 'First reply text' }), {
+      target: { value: 'Try it: pumpkit.io/calc' },
+    });
+    await pause();
+
+    expect(postService.saveText).toHaveBeenCalledWith(
+      'post_01',
+      ['the post', 'Try it: pumpkit.io/calc'],
+      true,
+    );
+  });
+
+  it('removes the first reply, and undo brings it back', async () => {
+    renderPost(WITH_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Remove first reply' }));
+    await pause();
+
+    expect(text.queryByRole('listitem', { name: 'First reply' })).not.toBeInTheDocument();
+    expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the post'], false);
+
+    fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+    await pause();
+
+    expect(await text.findByRole('listitem', { name: 'First reply' })).toBeInTheDocument();
+    expect(postService.saveText).toHaveBeenLastCalledWith(
+      'post_01',
+      ['the post', 'Try it: [link]'],
+      true,
+    );
+  });
+
+  const WITHOUT_REPLY = draft([version(1, ['the post'])]);
+
+  it('adds an empty first reply under a single post, ready to type in, and saves it', async () => {
+    renderPost(WITHOUT_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Add first reply' }));
+
+    const box = await text.findByRole('textbox', { name: 'First reply text' });
+    expect(box).toHaveValue('');
+    expect(box).toHaveFocus();
+    expect(
+      within(text.getByRole('listitem', { name: 'First reply' })).queryByRole('button', {
+        name: /media/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(text.queryByRole('button', { name: 'Add first reply' })).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'Try it: pumpkit.io/calc' } });
+    await pause();
+
+    expect(postService.saveText).toHaveBeenLastCalledWith(
+      'post_01',
+      ['the post', 'Try it: pumpkit.io/calc'],
+      true,
+    );
+  });
+
+  it('takes an added first reply away again on undo', async () => {
+    renderPost(WITHOUT_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Add first reply' }));
+    await text.findByRole('listitem', { name: 'First reply' });
+    fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+    await pause();
+
+    expect(text.queryByRole('listitem', { name: 'First reply' })).not.toBeInTheDocument();
+    expect(text.getByRole('button', { name: 'Add first reply' })).toBeInTheDocument();
+  });
+
+  it('offers no first reply to add on a thread', async () => {
+    renderPost(draft([version(1, ['one', 'two'])]));
+
+    expect((await textCard()).queryByRole('button', { name: 'Add first reply' })).toBeNull();
+  });
+
+  it('offers no second first reply on a post that has one', async () => {
+    renderPost(WITH_REPLY);
+
+    expect((await textCard()).queryByRole('button', { name: 'Add first reply' })).toBeNull();
+  });
+
+  it('refuses "Post to…" while a Part holds the [link] placeholder', async () => {
+    renderPost(WITH_REPLY);
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.getByText('Replace [link] with the real link first.')).toBeInTheDocument();
+    expect(dialog.getByText('Single post · first reply · as @ada')).toBeInTheDocument();
+  });
+
+  it('reads a markdown link named link as no placeholder', async () => {
+    renderPost(
+      draft([
+        version(1, ['the post', 'Try it: [link](https://pumpkit.io/calc)'], {
+          format: 'post',
+          firstReply: true,
+        }),
+      ]),
+    );
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.queryByText('Replace [link] with the real link first.')).toBeNull();
+  });
+
+  it('reads the placeholder in any case, with spaces inside', async () => {
+    renderPost(
+      draft([version(1, ['the post', 'Try it: [ LINK ]'], { format: 'post', firstReply: true })]),
+    );
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.getByText('Replace [link] with the real link first.')).toBeInTheDocument();
   });
 });

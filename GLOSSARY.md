@@ -105,7 +105,7 @@ The page a signed-in User who is not Subscribed sees in place of the rest of Pum
 _Avoid_: subscription gate, upgrade screen, hard wall
 
 **Allowance**:
-How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may be Link posts. Each Part of a Thread is one X post. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans and each month of Free access give the same full monthly Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
+How much a Subscribed User may write and publish in one Allowance period: a number of Generations, and a number of X posts, a few of which may be Link posts. Each Part of a Thread is one X post, and so is a First reply. An X post counts once it is scheduled or posted now, and stops counting if it is unscheduled or fails without X accepting it. What is left at the end of a period does not carry over. Monthly and annual Plans and each month of Free access give the same full monthly Allowance. A Trial has its own, smaller Allowance. An Instance that sells no Plans has no Allowances.
 _Avoid_: quota, usage limit, credits, cap (in text users read; setting names and code may say cap)
 
 **Link post**:
@@ -195,7 +195,7 @@ One of the ordered texts that make up a Text, a Version or a Scheduled post, pub
 _Avoid_: tweet, segment, item
 
 **First reply**:
-A reply to a single X post, published with it by the same X account, that carries what the post itself should not, such as an external link. It is the last Part of the Post's Text, and the Format stays a single X post. A Thread has none: its link goes in its last Part.
+A reply to a single X post, published with it by the same X account, that carries what the post itself should not, such as an external link. It is the last Part of the Post's Text, and the Format stays a single X post. Like any Part, it is one X post of the Allowance, and a Link post when it contains a link. A Thread has none: its link goes in its last Part.
 _Avoid_: self-reply, link reply, comment
 
 **Media**:

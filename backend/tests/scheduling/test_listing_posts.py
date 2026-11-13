@@ -66,7 +66,7 @@ def seed_post(db, user):
                 VersionAttempt(
                     post=post,
                     sequence=number,
-                    format=format_of(parts),
+                    format=format_of(parts, first_reply=False),
                     status=ATTEMPT_SUCCEEDED,
                     version_number=number,
                     sketch_parts=parts,
@@ -270,6 +270,7 @@ async def test_a_draft_carries_its_latest_versions_text_and_no_scheduled_post(cl
         "status": "draft",
         "parts": ["Hook line.\nMore.", "Second part."],
         "format": "thread",
+        "first_reply": False,
         "version_count": 2,
         "latest_version_at": "2026-10-01T09:00:00Z",
         "scheduled_post": None,

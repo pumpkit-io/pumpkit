@@ -51,7 +51,7 @@ export function useCreateScheduledPost() {
           ? await scheduledPostService.postNow(post, destination)
           : await scheduledPostService.schedule(post, request.publishAt, destination);
         track('scheduled_post_created', {
-          format: formatOf(created.parts),
+          format: formatOf(created.parts.length, created.firstReply),
           part_count: created.parts.length,
           // Never typed since ADR 0015; kept so the event's history reads the same.
           source: 'final',

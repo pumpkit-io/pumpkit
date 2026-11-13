@@ -120,24 +120,28 @@ export class MemoryBackend {
   }
 
   readonly port: TextBackend = {
-    saveText: (parts) =>
-      this.answer('saveText', [parts], () => {
+    saveText: (parts, firstReply) =>
+      this.answer('saveText', [parts, firstReply], () => {
         const text = this.text!;
         const version = this.versions.find((v) => v.number === text.versionNumber)!;
-        this.text = {
-          format: formatOf(parts),
+        const saved: PostText = {
+          format: text.format,
+          firstReply,
           parts: parts.map((t, i) => ({
             text: t,
             charCount: xWeightedLength(t),
             charLimit: text.parts[i]?.charLimit ?? text.parts[0]!.charLimit,
           })),
           versionNumber: text.versionNumber,
-          edited: !sameParts(
-            parts,
-            version.parts.map((p) => p.text),
-          ),
+          edited:
+            firstReply !== version.firstReply ||
+            !sameParts(
+              parts,
+              version.parts.map((p) => p.text),
+            ),
         };
-        return this.text;
+        this.text = saved;
+        return saved;
       }),
     restoreVersion: (versionNumber) =>
       this.answer('restoreVersion', [versionNumber], () => {
@@ -157,7 +161,8 @@ export class MemoryBackend {
           id: `version_${number}`,
           number,
           feedback,
-          format: formatOf(texts),
+          format: formatOf(texts.length, false),
+          firstReply: false,
           parts: texts.map((t) => ({ text: t, charCount: xWeightedLength(t), charLimit: 280 })),
           createdAt: '2026-10-31T10:00:00Z',
         };

@@ -2,12 +2,17 @@ import { MediaButton } from './MediaButton';
 import { MediaTiles, ReadOnlyMediaTiles } from './MediaTiles';
 import { mediaWhere } from './mediaRules';
 import { aMedia, kindOfTile, type TextMedia } from './useTextMedia';
-import type { ShownPart } from '../shownText';
+import { mediaPartCount } from '../postShape';
+import { hasFirstReply, type ShownPart } from '../shownText';
 import type { PartMedia } from '../TextCard';
 
+function postCount(parts: ShownPart[]): number {
+  return mediaPartCount(parts.length, hasFirstReply(parts));
+}
+
 /**
- * Media controls for each Part not yet live on X. With `askToReconnect`, the media
- * button, a drop and a paste each ask to reconnect X instead of taking files.
+ * Media controls for each Part not yet live on X, except a first reply. With `askToReconnect`,
+ * the media button, a drop and a paste each ask to reconnect X instead of taking files.
  */
 export function partMediaOf(
   media: TextMedia,
@@ -15,8 +20,10 @@ export function partMediaOf(
   askToReconnect: (() => void) | undefined,
 ) {
   return (index: number): PartMedia | null => {
+    // A first reply goes out without media (ADR 0027).
+    if (parts[index]?.firstReply) return null;
     if (parts[index]?.live) return readOnlyMediaOf(parts)(index);
-    const where = mediaWhere(index, parts.length);
+    const where = mediaWhere(index, postCount(parts));
     return {
       tiles: (
         <MediaTiles
@@ -52,7 +59,7 @@ export function readOnlyMediaOf(parts: ShownPart[]) {
       tiles: (
         <ReadOnlyMediaTiles
           media={part.media}
-          where={mediaWhere(index, parts.length)}
+          where={mediaWhere(index, postCount(parts))}
           onX={part.xPostUrl !== null}
         />
       ),

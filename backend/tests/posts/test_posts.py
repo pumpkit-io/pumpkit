@@ -58,6 +58,7 @@ async def test_starting_a_post_returns_it_with_its_first_version(
             "feedback": None,
             "format": "post",
             "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
+            "first_reply": False,
             "starting_text": None,
             "created_at": "2026-10-10T12:00:30Z",
         }
@@ -85,6 +86,7 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
             "feedback",
             "format",
             "parts",
+            "first_reply",
             "starting_text",
             "created_at",
         }

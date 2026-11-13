@@ -21,7 +21,9 @@ A single X post with a First reply publishes as two Parts: the post, then the Fi
 
 A Post still goes out once and has at most one Scheduled post. That Scheduled post is now a single X post, with its First reply when it has one, or a Thread, published at one time. The post and its First reply are not two Posts and never have two statuses.
 
-This ADR does not decide whether a First reply counts as an X post and a Link post of the Allowance. #475 settles it.
+## The Allowance
+
+A First reply is an X post like any other Part. Once it is scheduled or posted now it counts as one X post of the Allowance, and as a Link post when its text contains a link by X's link rule, the same rules each Part of a Thread follows. Counting it any other way would leave an X post that X publishes and the Allowance doesn't see.
 
 ## Considered Options
 

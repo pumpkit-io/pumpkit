@@ -110,6 +110,7 @@ async def main() -> None:
                 status=ATTEMPT_SUCCEEDED,
                 sketch_parts=PARTS,
                 parts=PARTS,
+                first_reply=False,
                 created_at=written_at,
             )
             db.add(version)
@@ -128,6 +129,7 @@ async def main() -> None:
             status=ATTEMPT_SUCCEEDED,
             sketch_parts=PARTS,
             parts=PARTS,
+            first_reply=False,
             created_at=anchor - timedelta(days=1),
         )
         set_text_from_version(scheduled, version)
@@ -139,6 +141,7 @@ async def main() -> None:
             x_user_id=x_id_for(EMAIL),
             post_id=scheduled.id,
             parts=PARTS,
+            first_reply=False,
             publish_at=now + timedelta(hours=1),
             now=now,
         )

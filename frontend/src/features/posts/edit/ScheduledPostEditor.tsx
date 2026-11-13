@@ -10,10 +10,11 @@ import { HoverLabel, HoverLabels } from '../HoverLabel';
 import { scheduledPostMediaPlace } from '../media/mediaPlaces';
 import { mediaWait, partMediaOf } from '../media/partMedia';
 import { useTextMedia } from '../media/useTextMedia';
+import { mediaPartCount } from '../postShape';
 import { Panel } from '../panels/panelParts';
 import { DateTimeFields, dateTimeOf } from '../postTo/WhenField';
 import { WhereField } from '../postTo/WhereField';
-import type { ShownPart } from '../shownText';
+import { partName, type ShownPart } from '../shownText';
 import { TextCard } from '../TextCard';
 import { changesFrom, type ScheduledPostEdit } from './scheduledPostEdit';
 import { useScheduledPostActions } from './useScheduledPostActions';
@@ -59,7 +60,7 @@ export function ScheduledPostEditor({
   const media = useTextMedia(
     postId,
     scheduledPost.parts.map((part) => part.media),
-    total,
+    mediaPartCount(total, scheduledPost.firstReply),
     onReconnectNeeded,
     place,
   );
@@ -73,6 +74,7 @@ export function ScheduledPostEditor({
       live: part.live,
       xPostUrl: part.xPostUrl,
       media: part.media,
+      firstReply: scheduledPost.firstReply && i === total - 1,
     };
   });
 
@@ -120,7 +122,7 @@ export function ScheduledPostEditor({
         renderText={(part, index) =>
           part.live ? undefined : (
             <Textarea
-              aria-label={total > 1 ? `Part ${index + 1} text` : 'Post text'}
+              aria-label={`${partName(parts, index)} text`}
               value={part.text}
               onChange={(e) => setText(index, e.target.value)}
               onPaste={(e) => {

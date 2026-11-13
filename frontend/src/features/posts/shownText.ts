@@ -2,6 +2,7 @@ import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import type { Media } from '@/services/mediaService';
 import type { PostDetail, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
+import { partName as namePart } from './postShape';
 
 /** One Part as the Version card shows it and Copy post copies it. */
 export interface ShownPart {
@@ -13,6 +14,13 @@ export interface ShownPart {
   xPostUrl: string | null;
   /** What goes out with it; the Text's Media is filled in by the page that holds it. */
   media: Media[];
+  /** The single post's first reply, its last Part, which goes out as a reply to it. */
+  firstReply: boolean;
+}
+
+/** Marks the last of `parts` as a first reply when `firstReply` says it is one. */
+function withFirstReply(parts: Omit<ShownPart, 'firstReply'>[], firstReply: boolean): ShownPart[] {
+  return parts.map((part, i) => ({ ...part, firstReply: firstReply && i === parts.length - 1 }));
 }
 
 /**
@@ -20,12 +28,12 @@ export interface ShownPart {
  * the Text's Parts in their places are skipped, as the server does (ADR 0014).
  */
 export function retryParts(
-  text: Pick<Version, 'parts'>,
+  text: Pick<Version, 'parts' | 'firstReply'>,
   scheduledPost: ScheduledPost,
   xCharLimit: number | null,
 ): ShownPart[] {
   const charLimit = xCharLimit ?? text.parts[0]?.charLimit ?? X_POST_MAX_CHARS;
-  const live: ShownPart[] = scheduledPost.parts
+  const live = scheduledPost.parts
     .filter((part) => part.live)
     .map((part) => ({
       text: part.text,
@@ -38,7 +46,7 @@ export function retryParts(
   const rest = text.parts
     .slice(live.length)
     .map((part) => ({ ...part, live: false, xPostUrl: null, media: [] }));
-  return [...live, ...rest];
+  return withFirstReply([...live, ...rest], text.firstReply);
 }
 
 /**
@@ -52,18 +60,34 @@ export function cardParts(
 ): ShownPart[] {
   const { scheduledPost } = post;
   if (!scheduledPost) {
-    return textVersion.parts.map((p) => ({ ...p, live: false, xPostUrl: null, media: [] }));
+    return withFirstReply(
+      textVersion.parts.map((p) => ({ ...p, live: false, xPostUrl: null, media: [] })),
+      textVersion.firstReply,
+    );
   }
   if (scheduledPost.state === 'failed') return retryParts(textVersion, scheduledPost, xCharLimit);
   const charLimit = xCharLimit ?? textVersion.parts[0]?.charLimit ?? X_POST_MAX_CHARS;
-  return scheduledPost.parts.map((part) => ({
-    text: part.text,
-    charCount: xWeightedLength(part.text),
-    charLimit,
-    live: false,
-    xPostUrl: part.xPostUrl,
-    media: part.media,
-  }));
+  return withFirstReply(
+    scheduledPost.parts.map((part) => ({
+      text: part.text,
+      charCount: xWeightedLength(part.text),
+      charLimit,
+      live: false,
+      xPostUrl: part.xPostUrl,
+      media: part.media,
+    })),
+    scheduledPost.firstReply,
+  );
+}
+
+/** Whether the Parts end with a single post's first reply. */
+export function hasFirstReply(parts: ShownPart[]): boolean {
+  return parts.at(-1)?.firstReply ?? false;
+}
+
+/** What the page calls Part `index` of `parts`, by `postShape.partName`. */
+export function partName(parts: ShownPart[], index: number): string {
+  return namePart(index, parts.length, hasFirstReply(parts));
 }
 
 /** Every Part, as Copy puts it on the clipboard: a Thread's Parts split by a line of `---`. */
