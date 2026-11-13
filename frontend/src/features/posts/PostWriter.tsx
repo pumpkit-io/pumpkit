@@ -4,7 +4,13 @@ import { Button } from '@/components/ui/button';
 import { useHasPositioning } from '@/features/positioning/useHasPositioning';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { track } from '@/lib/analytics';
-import { BRIEF_MAX_CHARS, FORMAT_POST, postService, type Format } from '@/services/postService';
+import {
+  BRIEF_MAX_CHARS,
+  FORMAT_POST,
+  FORMAT_THREAD,
+  postService,
+  type Format,
+} from '@/services/postService';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Composer } from './Composer';
 import { Notice } from '@/components/Notice';
@@ -76,7 +82,9 @@ export function PostWriter() {
     briefRef.current?.focus();
   }, [key, isWriting, clear]);
 
-  const noCorpus = authors !== null && !authors.some((a) => a.postCount > 0);
+  // Only a Thread is still written from the Inspiration authors' posts.
+  const thread = format === FORMAT_THREAD;
+  const noCorpus = thread && authors !== null && !authors.some((a) => a.postCount > 0);
   const typed = brief.trim();
   const send = () => void start(typed, format);
 
@@ -108,7 +116,7 @@ export function PostWriter() {
         sendLabel="Write the post"
         onSend={send}
         isWriting={isWriting}
-        sendDisabled={authors === null || hasPositioning === null}
+        sendDisabled={(thread && authors === null) || hasPositioning === null}
         gate={gate}
       />
       {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}

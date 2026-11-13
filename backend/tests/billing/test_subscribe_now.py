@@ -11,7 +11,6 @@ from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 CUSTOMER = "cus_alice"
 SUBSCRIBE_NOW = "/api/v1/billing/subscribe-now"
@@ -113,7 +112,7 @@ async def test_a_trial_user_at_the_trials_limit_can_write_again_once_subscribed(
     await client.post(AUTHORS, json={"handle": "levelsio"})
     await _trial_attempts(db, user.id, 125)
     assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 409
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
 
     assert (await client.post(SUBSCRIBE_NOW)).status_code == 200
     response = await client.post(POSTS, json={"brief": "ship"})

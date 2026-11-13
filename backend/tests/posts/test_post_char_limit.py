@@ -6,14 +6,12 @@ import pytest
 
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
-from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import writing_calls, written, written_thread
+from tests.posts.writing_replies import writing_calls, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -55,7 +53,6 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
     client, with_author, fake_llm
 ):
     fake_llm.replies = [
-        written("sketch"),
         {"post": "final"},
         written_thread(["one", "two"]),
         {"parts": ["one", "two"]},
@@ -66,9 +63,8 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
 
     assert _limits(post.json()["versions"][0]) == [X_POST_MAX_CHARS]
     assert _limits(thread.json()["versions"][0]) == [X_POST_MAX_CHARS, X_POST_MAX_CHARS]
-    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
-        sketch_post_prompt(X_POST_MAX_CHARS),
-        HUMANIZER_PROMPT,
+    # The single post's own prompts are covered in test_writing_a_single_post.py.
+    assert [_system_text(call) for call in writing_calls(fake_llm)[1:]] == [
         sketch_thread_prompt(X_POST_MAX_CHARS),
         humanizer_thread_prompt(X_POST_MAX_CHARS),
     ]
@@ -88,7 +84,6 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
 ):
     await connect_x_as(subscription_type)
     fake_llm.replies = [
-        written("sketch"),
         {"post": "final"},
         written_thread(["one", "two"]),
         {"parts": ["one", "two"]},
@@ -99,9 +94,7 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
 
     assert _limits(post.json()["versions"][0]) == [char_limit]
     assert _limits(thread.json()["versions"][0]) == [char_limit, char_limit]
-    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
-        sketch_post_prompt(char_limit),
-        HUMANIZER_PROMPT,
+    assert [_system_text(call) for call in writing_calls(fake_llm)[1:]] == [
         sketch_thread_prompt(char_limit),
         humanizer_thread_prompt(char_limit),
     ]

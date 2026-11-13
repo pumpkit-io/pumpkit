@@ -7,13 +7,16 @@ with an `error_id`); a missing key stays the client's `LLMNotConfiguredError` (a
 Mediators reach the model only through `get_llm`; tests override it with `FakeLLM`.
 """
 
+import asyncio
+import weakref
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Optional, Protocol, TypeVar, Union
+from typing import Any, Callable, Optional, Protocol, TypeVar, Union
 
 from openai import OpenAIError
 from pydantic import BaseModel, ValidationError
 
+from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError
 from pumpkit.core.llm_client import LLMClient, llm_client
 from pumpkit.core.llm_schemas import ModelUsage, StructuredResult
@@ -44,6 +47,21 @@ class LLM(Protocol):
     ) -> StructuredResult[T]: ...
 
 
+# One per event loop: a semaphore can't be shared across loops, and each test runs its own.
+_in_flight: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _call_slots() -> asyncio.Semaphore:
+    """The Instance's cap on model calls in flight, `LLM_CALLS_IN_FLIGHT`, shared by every call."""
+    loop = asyncio.get_running_loop()
+    slots = _in_flight.get(loop)
+    if slots is None:
+        slots = _in_flight[loop] = asyncio.Semaphore(settings.LLM_CALLS_IN_FLIGHT)
+    return slots
+
+
 class OpenAICompatibleLLM:
     def __init__(self, client: LLMClient) -> None:
         self._client = client
@@ -60,12 +78,19 @@ class OpenAICompatibleLLM:
         max_tokens: Optional[int] = None,
     ) -> StructuredResult[T]:
         try:
-            return await self._client.llm_structured(
-                model=model, messages=messages, response_model=response_model, max_tokens=max_tokens
-            )
+            async with _call_slots():
+                return await self._client.llm_structured(
+                    model=model,
+                    messages=messages,
+                    response_model=response_model,
+                    max_tokens=max_tokens,
+                )
         # ValueError covers an empty answer and one that fails the schema's validation.
         except (OpenAIError, ValueError) as error:
             raise LLMError(f"{model}: {type(error).__name__}: {error}") from error
+
+
+_Reply = Union[dict[str, Any], Exception]
 
 
 @dataclass(frozen=True)
@@ -80,11 +105,12 @@ class LLMCall:
 class FakeLLM:
     """
     A scripted model: each call takes the reply `standing` holds for its schema name, or else the
-    next of `replies`: a dict of fields or an exception. Clear `configured` for a missing key.
+    next of `replies`: a dict of fields or an exception. A standing reply can also be a function
+    of the call, for calls that run in parallel. Clear `configured` for a missing key.
     """
 
-    replies: list[Union[dict[str, Any], Exception]] = field(default_factory=list)
-    standing: dict[str, Union[dict[str, Any], Exception]] = field(default_factory=dict)
+    replies: list[_Reply] = field(default_factory=list)
+    standing: dict[str, Union[_Reply, Callable[["LLMCall"], _Reply]]] = field(default_factory=dict)
     calls: list[LLMCall] = field(default_factory=list)
     configured: bool = True
 
@@ -99,16 +125,13 @@ class FakeLLM:
         response_model: type[T],
         max_tokens: Optional[int] = None,
     ) -> StructuredResult[T]:
-        self.calls.append(
-            LLMCall(
-                model=model,
-                messages=messages,
-                response_model=response_model,
-                max_tokens=max_tokens,
-            )
+        call = LLMCall(
+            model=model, messages=messages, response_model=response_model, max_tokens=max_tokens
         )
+        self.calls.append(call)
         if response_model.__name__ in self.standing:
-            reply = self.standing[response_model.__name__]
+            standing = self.standing[response_model.__name__]
+            reply = standing(call) if callable(standing) else standing
         elif not self.replies:
             raise LLMError("Fake LLM has no reply left")
         else:

@@ -153,7 +153,17 @@ class WrittenVersion:
     humanizing_model: str
     sketch_usage: Optional[dict]
     humanizing_usage: Optional[dict]
-    hook: Hook
+    # The library Hook of a Version written with a corpus; None for one written from a Plan.
+    hook: Optional[Hook] = None
+    # What the merge chose, on a single post written from a Plan; None otherwise.
+    hook_levers: Optional[list[str]] = None
+    hook_types: Optional[list[str]] = None
+    cta_type: Optional[str] = None
+    # Every sketch call and the merge's reviews and reasoning. Only kept, never shown.
+    sketches: Optional[list[dict]] = None
+    merge: Optional[dict] = None
+    # Not yet stored: the Text has no first reply, so it is dropped when the Version is recorded.
+    first_reply: Optional[str] = None
 
 
 def _system(prompt: str) -> dict:

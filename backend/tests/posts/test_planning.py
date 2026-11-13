@@ -17,7 +17,7 @@ from pumpkit.posts.writing import planning
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.mcp_client import error_text
 from tests.positioning.positioning import POSITIONING, TEXT, save_positioning
-from tests.posts.writing_replies import POST_IDEAS, ideas, planned_post, written, written_thread
+from tests.posts.writing_replies import POST_IDEAS, ideas, planned_post, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -57,7 +57,7 @@ def premium(fake_x_publisher, connect_x):
 
 
 async def _start(client, fake_llm, brief: str = BRIEF):
-    fake_llm.replies = [written("the sketch"), {"post": "the final"}]
+    fake_llm.replies = [{"post": "the final"}]
     return await client.post(POSTS, json={"brief": brief})
 
 
@@ -100,7 +100,7 @@ async def test_the_plan_call_comes_first_with_the_plan_prompt_the_brief_and_the_
         "role": "user",
         "content": (f"<raw_input>\n{BRIEF}\n</raw_input>\n\n<positioning>\n{TEXT}\n</positioning>"),
     }
-    assert len(fake_llm.calls) == 3
+    assert len(fake_llm.calls) == 8
 
 
 async def test_the_planning_model_is_its_own_setting(client, ready, fake_llm, monkeypatch):
@@ -108,7 +108,7 @@ async def test_the_planning_model_is_its_own_setting(client, ready, fake_llm, mo
 
     await _start(client, fake_llm)
 
-    plan_call, sketch_call, _ = fake_llm.calls
+    plan_call, sketch_call, *_ = fake_llm.calls
     assert plan_call.model == "acme/planner"
     assert sketch_call.model == settings.LLM_SKETCHING_MODEL
 
@@ -331,7 +331,8 @@ async def test_the_post_is_written_from_the_single_post_idea_and_split_plans_are
     [post] = list(await db.scalars(select(Post)))
     assert (post.id, post.idea_id) == (started["id"], single.id)
     assert started["plan"]["core_idea"] == "Everything I learned from two failed products."
-    assert len(fake_llm.calls) == 3
+    # One plan call and one Post's writing: five sketches, the merge, the humanizer.
+    assert len(fake_llm.calls) == 8
 
 
 async def test_at_most_five_split_plans_are_kept_in_the_planners_order(client, ready, fake_llm, db):
@@ -423,7 +424,7 @@ async def test_a_failed_plan_call_stores_nothing_and_charges_nothing(
     client, ready, fake_llm, db, assert_reported_502
 ):
     fake_llm.standing[POST_IDEAS] = LLMError("gpt-6-luna: APIConnectionError: down")
-    fake_llm.replies = [written("the sketch"), {"post": "the final"}]
+    fake_llm.replies = [{"post": "the final"}]
 
     response = await client.post(POSTS, json={"brief": BRIEF})
 

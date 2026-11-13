@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Any
 
@@ -189,3 +190,34 @@ def test_it_is_configured_only_with_the_key(monkeypatch):
     monkeypatch.setattr(settings, "LLM_API_KEY", None)
 
     assert OpenAICompatibleLLM(LLMClient()).is_configured() is False
+
+
+@respx.mock
+async def test_model_calls_in_flight_are_capped_across_the_instance(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_CALLS_IN_FLIGHT", 2)
+    in_flight = 0
+    most = 0
+
+    async def _respond(request: httpx.Request) -> httpx.Response:
+        nonlocal in_flight, most
+        in_flight += 1
+        most = max(most, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        return httpx.Response(200, json=_completion(json.dumps({"post": "hello"})))
+
+    respx.post(COMPLETIONS_URL).mock(side_effect=_respond)
+    message = [{"role": "user", "content": "x"}]
+
+    # Separate adapters share the cap, as every area's calls do.
+    results = await asyncio.gather(
+        *(
+            OpenAICompatibleLLM(LLMClient()).structured(
+                model="m", messages=message, response_model=_Answer
+            )
+            for _ in range(5)
+        )
+    )
+
+    assert [result.parsed.post for result in results] == ["hello"] * 5
+    assert most == 2

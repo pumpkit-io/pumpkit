@@ -92,7 +92,7 @@ async def _generations_left(client) -> tuple[int, list[int]]:
 
 
 async def _start_post(client, fake_llm):
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
     return await client.post(POSTS, json={"brief": "ship"})
 
 

@@ -217,7 +217,8 @@ class VersionAttempt(Base):
         JSON().with_variant(JSONB, "postgresql")
     )
     parts: Mapped[Optional[list[str]]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
-    # The sketch call's model on a first Version, the revision call's on a later one.
+    # The model of the call that wrote the Sketch: the merge, or the sketch call on a first Version
+    # written with a corpus, or the revision call after Feedback.
     sketch_model: Mapped[Optional[str]] = mapped_column(String)
     humanizing_model: Mapped[Optional[str]] = mapped_column(String)
     # The provider's whole usage payload, cost and cache counts included.
@@ -229,6 +230,19 @@ class VersionAttempt(Base):
     # name is None for an opening with no library Hook or one the library doesn't have.
     hook_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     hook_name: Mapped[Optional[str]] = mapped_column(String)
+    # The psychological levers, hook types and CTA type the merge chose, on a Version written from
+    # a Plan. Only kept, never shown, like the two below.
+    hook_levers: Mapped[Optional[list[str]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
+    hook_types: Mapped[Optional[list[str]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
+    cta_type: Mapped[Optional[str]] = mapped_column(String)
+    # Every sketch call, failed ones with their error, each with its model and usage.
+    sketches: Mapped[Optional[list[dict]]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    # The merge's reviews of the sketches, its reasoning and the first reply it wrote, if any.
+    merge: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     # The Starting text: the Post's Text the Feedback was given on, kept only when it differs from
     # the Version before. The number is the Version that Text came from.
     starting_text_format: Mapped[Optional[Format]] = mapped_column(

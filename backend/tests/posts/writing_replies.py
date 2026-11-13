@@ -1,9 +1,11 @@
-"""The plan, sketch and revision calls' scripted replies, for tests that write a Version."""
+"""The plan, sketch, merge, humanizer and revision calls' scripted replies, for tests that write a Version."""
 
 from typing import Optional
 
-# The schema name of the plan call's answer, which `fake_llm.standing` keys its reply by.
+# The schema names of the answers `fake_llm.standing` keys its replies by.
 POST_IDEAS = "post_ideas"
+SKETCHED_POST = "sketched_post"
+MERGED_SKETCH = "merged_sketch"
 
 
 def planned_post(
@@ -60,6 +62,40 @@ def written_thread(
     return {"hook_reasoning": hook_reasoning, "hook_name": hook_name, "parts": parts}
 
 
+def sketched(post: str = "A sketch.", **fields) -> dict:
+    """One sketch call's answer: a proof hook with no CTA, unless `fields` say otherwise."""
+    return {
+        "hook_levers": ["proof", "payoff"],
+        "hook_types": ["proof"],
+        "hook_reasoning": "The brief's numbers make the claim believable.",
+        "cta_type": "none",
+        "post": post,
+        "first_reply": None,
+        **fields,
+    }
+
+
+def merged(post: str = "The merged sketch.", sketches: int = 5, **fields) -> dict:
+    """The merge call's answer, reviewing `sketches` sketches."""
+    return {
+        "reviews": [
+            {"sketch_number": number, "keep": f"keep {number}", "drop": f"drop {number}"}
+            for number in range(1, sketches + 1)
+        ],
+        "reasoning": "Sketch 1's hook, sketch 2's body.",
+        "hook_levers": ["proof", "curiosity_gap"],
+        "hook_types": ["proof", "number_list"],
+        "cta_type": "bookmark",
+        "post": post,
+        "first_reply": None,
+        **fields,
+    }
+
+
 def writing_calls(fake_llm) -> list:
-    """The calls the fake model received after the plan call: the ones that wrote a Version."""
-    return [call for call in fake_llm.calls if call.response_model.__name__ != POST_IDEAS]
+    """
+    The calls the fake model received that wrote or revised the Version's text: the old path's,
+    and the humanizer's of a single post written from its Plan.
+    """
+    planning = {POST_IDEAS, SKETCHED_POST, MERGED_SKETCH}
+    return [call for call in fake_llm.calls if call.response_model.__name__ not in planning]

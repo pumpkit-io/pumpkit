@@ -11,7 +11,15 @@ from pumpkit.core.config import settings
 from pumpkit.core.llm import LLM, LLMError
 from pumpkit.core.text import drop_unstorable
 from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
-from pumpkit.posts.plans import LENGTH_SHORT, DesiredAction, Funnel, Length, Plan, Structure
+from pumpkit.posts.plans import (
+    FUNNEL_ACTIONS,
+    LENGTH_SHORT,
+    DesiredAction,
+    Funnel,
+    Length,
+    Plan,
+    Structure,
+)
 from pumpkit.posts.writing.constants import CACHE_TTL, MAX_SPLIT_IDEAS, MAX_TOKENS
 from pumpkit.posts.writing.prompts.plan import SHORT_LIMIT, is_short_only, plan_prompt, plan_user
 
@@ -24,13 +32,6 @@ _PromptFunnel = Literal["TOF", "MOF", "BOF"]
 _FUNNELS: dict[_PromptFunnel, Funnel] = {"TOF": "top", "MOF": "middle", "BOF": "bottom"}
 _ShortStructure = Literal["one_line", "few_lines"]
 _SHORT_STRUCTURES: tuple[Structure, ...] = ("one_line", "few_lines")
-
-# Which desired actions sit naturally at each funnel stage, as the plan prompt lists them.
-_FUNNEL_ACTIONS: dict[Funnel, set[DesiredAction]] = {
-    "top": {"dwell_time", "reply", "repost", "share", "follow"},
-    "middle": {"dwell_time", "reply", "bookmark", "follow", "trust", "click"},
-    "bottom": {"click", "DM", "sign-up", "buy"},
-}
 
 
 class _Strict(BaseModel):
@@ -132,8 +133,8 @@ def _pulls(planned: _Planned, plan: Plan) -> list[str]:
             f"structure={plan.structure} is a short post: format={planned.format} is ignored "
             "and the post is planned short."
         )
-    if plan.desired_action not in _FUNNEL_ACTIONS[plan.funnel]:
-        fits = ", ".join(sorted(_FUNNEL_ACTIONS[plan.funnel]))
+    if plan.desired_action not in FUNNEL_ACTIONS[plan.funnel]:
+        fits = ", ".join(sorted(FUNNEL_ACTIONS[plan.funnel]))
         pulls.append(
             f"desired_action={plan.desired_action} is unusual for the {plan.funnel} of the "
             f"funnel (usual: {fits})."

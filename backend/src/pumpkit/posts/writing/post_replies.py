@@ -1,0 +1,75 @@
+"""
+The structured replies of the calls that write a single post's first Version, ported from
+pumpkit-new-architecture-v5. Field order is deliberate: reasoning and choices before the post.
+"""
+
+from typing import Literal, Optional
+
+from pydantic import BaseModel, ConfigDict
+
+HookType = Literal[
+    "bold_claim",
+    "callout",
+    "curiosity_gap",
+    "clear_outcome",
+    "contrarian",
+    "story",
+    "number_list",
+    "proof",
+]
+Lever = Literal[
+    "payoff",
+    "curiosity_gap",
+    "surprise",
+    "identity",
+    "proof",
+    "exclusivity",
+    "loss_aversion",
+    "vulnerability",
+]
+CtaType = Literal["none", "reply", "share", "follow", "bookmark", "click", "DM", "sign-up", "buy"]
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+# `first_reply` defaults to None only for Python: the SDK's strict schema still requires it,
+# nullable, as v5's does.
+
+
+class SketchedPost(_Strict):
+    hook_levers: list[Lever]
+    hook_types: list[HookType]
+    hook_reasoning: str
+    cta_type: CtaType
+    post: str
+    first_reply: Optional[str] = None
+
+
+class SketchReview(_Strict):
+    sketch_number: int
+    keep: str
+    drop: str
+
+
+class MergedSketch(_Strict):
+    reviews: list[SketchReview]
+    reasoning: str
+    hook_levers: list[Lever]
+    hook_types: list[HookType]
+    cta_type: CtaType
+    post: str
+    first_reply: Optional[str] = None
+
+
+class HumanizedPost(_Strict):
+    post: str
+    first_reply: Optional[str] = None
+
+
+# The model reads the schema names, v5's. `refined_post` is also the name of the old path's
+# humanizer reply, a different class: each call sends its own class's schema under that name.
+SketchedPost.__name__ = "sketched_post"
+MergedSketch.__name__ = "merged_sketch"
+HumanizedPost.__name__ = "refined_post"

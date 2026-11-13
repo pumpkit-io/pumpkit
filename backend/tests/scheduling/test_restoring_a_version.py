@@ -15,7 +15,7 @@ from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.writing_replies import written_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -43,7 +43,7 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     await save_positioning(client)
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [written("sketch one"), {"post": "Version one."}]
+    fake_llm.replies = [{"post": "Version one."}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["Part one.", "Part two."]}]
