@@ -8,7 +8,7 @@ This amends ADR 0013, ADR 0015 and ADR 0017, as the sections below say. Their ot
 
 - The first Version of a Post runs: five sketch calls in parallel, each asked to try a different hook type first, then the merge, the scrub, the humanizer and the scrub again. A sketch call that fails is skipped as long as one succeeds.
 - The five candidates are sketches, in lowercase. The Sketch of the glossary is the one text the merge makes of them, after the scrub. The Version also keeps the hook levers, hook types and CTA type the writing chose, in place of a hook library name, and the sketches, the merge's reviews and reasoning and each step's model and usage. Those are never shown: they are there to diagnose a bad Post.
-- Feedback writes a Version with a revise call and a humanizer. Its conversation replays the Post's Versions, as ADR 0016 says, and never the sketches or the merge.
+- Feedback writes a Version with a revise call and a humanizer. Its conversation replays the Post's Versions and Feedback, and never the sketches or the merge.
 - A single X post and a Thread never share a prompt. Each step has one prompt per Format, assembled from shared sections.
 - Each step's model is a setting with a working default. The sketch count, the cap on Ideas and the hook-type rotation are constants in code, because the prompts are tuned against them.
 
