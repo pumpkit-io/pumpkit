@@ -371,3 +371,30 @@ async def test_adding_a_first_reply_to_a_post_written_from_the_corpus_is_no_goin
     assert framings[-2].startswith("That was Version 2.\n\nChange the post you just wrote")
     assert framings[-1].startswith("That was Version 3.\n\nChange the post you just wrote")
     assert not any("went back" in framing for framing in framings)
+
+
+async def _with_a_blank_first_reply(client, fake_llm) -> str:
+    """A post written from the corpus whose User added a first reply and left it blank."""
+    post_id = await _corpus_post(client, fake_llm)
+    added = await _edit(client, post_id, parts=["One post.", ""], first_reply=True)
+    assert added.status_code == 200, added.text
+    return post_id
+
+
+async def test_a_switch_to_a_thread_appends_no_blank_first_reply(client, with_author, fake_llm):
+    post_id = await _with_a_blank_first_reply(client, fake_llm)
+    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["One.", "x" * 279]}]
+
+    version = await _feedback(client, post_id, "expand it", format="thread")
+
+    assert _texts(version["parts"]) == ["One.", "x" * 279]
+
+
+async def test_feedback_on_a_post_with_a_blank_first_reply_drops_it(client, with_author, fake_llm):
+    post_id = await _with_a_blank_first_reply(client, fake_llm)
+    fake_llm.replies = [written("one shorter post"), {"post": "One shorter post."}]
+
+    version = await _feedback(client, post_id, "shorter")
+
+    assert version["first_reply"] is False
+    assert _texts(version["parts"]) == ["One shorter post."]

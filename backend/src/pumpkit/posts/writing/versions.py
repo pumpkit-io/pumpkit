@@ -383,10 +383,11 @@ async def write_next_version(
     `char_limit` characters. Raises whatever the LLM port raises, or an
     `LLMError` for a Thread of the wrong length; nothing is stored here.
     A first reply stays out of the calls: a single post keeps the one its Feedback was given on
-    as it is, and a Thread ends with its text (ADR 0027).
+    as it is, and a Thread ends with its text (ADR 0027). A blank one is dropped, as the single
+    post writing drops one.
     """
     shown = earlier[-1] if starting is None else starting
-    kept_reply = shown.parts[-1] if shown.first_reply else None
+    kept_reply = shown.parts[-1] if shown.first_reply and shown.parts[-1].strip() else None
     earlier = [_without_first_reply(v) for v in earlier]
     starting = _without_first_reply(starting) if starting is not None else None
     revised = await llm.structured(
