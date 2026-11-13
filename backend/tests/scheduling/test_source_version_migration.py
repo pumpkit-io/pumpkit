@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy import Connection
 
 from alembic import command
-from tests.migrations import insert, migrate
+from tests.migrations import insert, insert_idea, migrate
 
 POSTS = "/api/v1/posts"
 WRITTEN_AT = "2026-10-01 12:00:00"
@@ -31,7 +31,7 @@ async def scheduled_with_its_source_version(db_engine, user) -> None:
             "posts",
             id="post_a",
             user_id=user.id,
-            brief="ship",
+            idea_id=insert_idea(connection, user_id=user.id, brief="ship", created_at=WRITTEN_AT),
             corpus_post_ids="[]",
             created_at=WRITTEN_AT,
             text_format="post",
