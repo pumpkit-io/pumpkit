@@ -5823,6 +5823,23 @@ describe('A first reply on the Post page', () => {
     expect(dialog.getByText('Single post · first reply · as @ada')).toBeInTheDocument();
   });
 
+  it('reads a markdown link named link as no placeholder', async () => {
+    renderPost(
+      draft([
+        version(1, ['the post', 'Try it: [link](https://pumpkit.io/calc)'], {
+          format: 'post',
+          firstReply: true,
+        }),
+      ]),
+    );
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.queryByText('Replace [link] with the real link first.')).toBeNull();
+  });
+
   it('reads the placeholder in any case, with spaces inside', async () => {
     renderPost(
       draft([version(1, ['the post', 'Try it: [ LINK ]'], { format: 'post', firstReply: true })]),

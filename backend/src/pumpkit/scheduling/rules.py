@@ -43,8 +43,9 @@ def x_posts_in(parts: list[str]) -> XPosts:
 
 # Where the writing leaves the User's real link out (ADR 0027).
 LINK_PLACEHOLDER = "[link]"
-# The placeholder in any case and with spaces inside, as a model or the User may retype it.
-_LINK_PLACEHOLDER = re.compile(r"\[\s*link\s*\]", re.IGNORECASE)
+# The placeholder in any case and with spaces inside, as a model or the User may retype it, but
+# not a markdown link's text, which a "(" follows.
+_LINK_PLACEHOLDER_PATTERN = re.compile(r"\[\s*link\s*\](?!\()", re.IGNORECASE)
 
 
 def _subject(number: int, count: int, *, first_reply: bool) -> str:
@@ -63,7 +64,7 @@ def check_parts_written(parts: list[str], *, first_reply: bool) -> None:
 
 def check_no_link_placeholder(parts: Sequence[str]) -> None:
     """No Part still holds the placeholder, which would go out on X as it is."""
-    if any(_LINK_PLACEHOLDER.search(part) for part in parts):
+    if any(_LINK_PLACEHOLDER_PATTERN.search(part) for part in parts):
         raise RuleBroken(
             f"Replace {LINK_PLACEHOLDER} with the real link first.", code="LINK_PLACEHOLDER"
         )

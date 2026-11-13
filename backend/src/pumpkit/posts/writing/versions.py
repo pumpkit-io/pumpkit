@@ -47,6 +47,7 @@ from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.posts.writing.scrub import scrub
 from pumpkit.posts.writing.starting_text import StartingText, hand_written_sentences
+from pumpkit.x_connection.x_length import x_weighted_length
 
 
 class _HookedWriting(BaseModel):
@@ -268,6 +269,9 @@ def _framed_feedback(
     same = [v.number for v in earlier if (v.format, v.parts, v.first_reply) == shown]
     if same:
         back_to = starting.version_number if starting.version_number in same else same[-1]
+        # Only a first reply, which the model never sees, made the Text differ from this Version.
+        if back_to == after.number:
+            return feedback_message(feedback, after.number, after.format, format)
         return went_back_message(feedback, after.number, back_to, starting.format, format)
     began_from = None if starting.version_number == after.number else starting.version_number
     return changed_message(
@@ -379,10 +383,10 @@ async def write_next_version(
     `char_limit` characters. Raises whatever the LLM port raises, or an
     `LLMError` for a Thread of the wrong length; nothing is stored here.
     A first reply stays out of the calls: a single post keeps the one its Feedback was given on
-    as it is, and a Thread has none.
+    as it is, and a Thread ends with its text (ADR 0027).
     """
     shown = earlier[-1] if starting is None else starting
-    kept_reply = shown.parts[-1] if shown.first_reply and format == FORMAT_POST else None
+    kept_reply = shown.parts[-1] if shown.first_reply else None
     earlier = [_without_first_reply(v) for v in earlier]
     starting = _without_first_reply(starting) if starting is not None else None
     revised = await llm.structured(
@@ -398,7 +402,20 @@ async def write_next_version(
     written = await _humanize(llm, format, messages, revised, sketch_parts, _hook(revised.parsed))
     if kept_reply is None:
         return written
+    if format == FORMAT_THREAD:
+        return replace(written, parts=_ending_with(written.parts, scrub(kept_reply), char_limit))
     return replace(written, parts=[*written.parts, kept_reply], first_reply=True)
+
+
+def _ending_with(parts: list[str], text: str, char_limit: int) -> list[str]:
+    """
+    A Thread's Parts with `text` after its last Part, or as a Part of its own when the last has no
+    room for it. A Thread with no Part to spare takes it over the limit, which is flagged, not refused.
+    """
+    joined = f"{parts[-1]}\n\n{text}"
+    if x_weighted_length(joined) > char_limit and len(parts) < THREAD_MAX_PARTS:
+        return [*parts, text]
+    return [*parts[:-1], joined]
 
 
 def _without_first_reply[T: (EarlierVersion, StartingText)](text: T) -> T:

@@ -89,8 +89,8 @@ function overMediaRule(parts: ShownPart[], thread: boolean): string[] {
 
 /** The placeholder the writing leaves where the User's real link goes (ADR 0027). */
 const LINK_PLACEHOLDER = '[link]';
-/** The placeholder in any case, spaces inside allowed, as `scheduling/rules.py` reads it. */
-const LINK_PLACEHOLDER_PATTERN = /\[\s*link\s*\]/i;
+/** The placeholder in any case, spaces inside allowed, no markdown link, as `scheduling/rules.py` reads it. */
+const LINK_PLACEHOLDER_PATTERN = /\[\s*link\s*\](?!\()/i;
 
 /** Why the Parts can't go out while one not yet live still holds the link placeholder. */
 function linkPlaceholder(parts: ShownPart[]): string[] {

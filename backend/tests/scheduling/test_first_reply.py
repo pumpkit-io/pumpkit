@@ -151,6 +151,16 @@ async def test_scheduling_or_posting_a_text_with_the_link_placeholder_is_refused
     assert await scheduled_posts(client) == []
 
 
+async def test_a_markdown_link_named_link_is_no_placeholder(client, connected, post_with):
+    post_id = await post_with(
+        "The post.", "Try it: [link](https://pumpkit.io/calc)", first_reply=True
+    )
+
+    response = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
+
+    assert response.status_code == 201, response.text
+
+
 async def test_a_thread_with_the_link_placeholder_is_refused_too(client, connected, post_with):
     post_id = await post_with("One.", "Two, at [link].")
 
