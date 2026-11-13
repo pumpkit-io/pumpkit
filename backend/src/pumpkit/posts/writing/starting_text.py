@@ -17,7 +17,7 @@ class StartingText:
     # The Version the Text came from, the last one written or restored before the Feedback.
     version_number: int
     # Whether the last of `parts` is a single post's first reply (ADR 0027).
-    first_reply: bool = False
+    first_reply: bool
 
 
 def starting_text(

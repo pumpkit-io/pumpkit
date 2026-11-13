@@ -61,11 +61,11 @@ async def create(
     x_user_id: str,
     post_id: str,
     parts: list[str],
+    first_reply: bool,
     publish_at: datetime,
     now: datetime,
     destination: Destination = Destination(),
     media: Sequence[Sequence[str]] = (),
-    first_reply: bool = False,
 ) -> ScheduledPost:
     """
     A new Scheduled post in scheduled, copied from the Text of the Post `post_id`, with `media`,

@@ -3,8 +3,11 @@ A single post's first reply (ADR 0027): the last Part of the Text, which the wri
 external link in. The Text and each Version record it, and the Post's Format stays post.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
+from pumpkit.authors.x_reader import FetchedPost
 from tests.media_files import png
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import (
@@ -13,6 +16,8 @@ from tests.posts.writing_replies import (
     REVISED_POST,
     merged,
     revised,
+    written,
+    written_thread,
 )
 
 POSTS = "/api/v1/posts"
@@ -183,6 +188,9 @@ async def test_editing_without_saying_keeps_the_first_reply_and_the_part_count(c
     refused = await _edit(client, with_reply, parts=["The post."])
 
     assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "Editing keeps the post and its first reply. Remove the first reply to save the post alone."
+    )
     assert (await _text(client, with_reply))["first_reply"] is True
 
 
@@ -231,3 +239,60 @@ async def test_media_in_the_first_replys_place_moves_onto_the_post(
         [attached.json()["id"]],
         [],
     ]
+
+
+@pytest.fixture
+async def with_author(client, ready, fake_x_reader):
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(
+            post_id="levelsio-0",
+            text="levelsio post",
+            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    ]
+    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
+    assert added.status_code == 201, added.text
+
+
+def _prompts(fake_llm) -> str:
+    return "\n".join(
+        str(message["content"]) for call in fake_llm.calls for message in call.messages
+    )
+
+
+async def test_feedback_written_from_the_corpus_keeps_the_first_reply_as_it_is(
+    client, with_author, fake_llm
+):
+    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["a", "b"]}]
+    started = await client.post(POSTS, json={"brief": BRIEF, "format": "thread"})
+    post_id = started.json()["id"]
+    fake_llm.replies = [written("one post"), {"post": "One post."}]
+    await _feedback(client, post_id, "condense it", format="post")
+    added = await _edit(client, post_id, parts=["One post.", "Try it: x.co/c"], first_reply=True)
+    assert added.status_code == 200, added.text
+    fake_llm.calls.clear()
+    fake_llm.replies = [written("one shorter post"), {"post": "One shorter post."}]
+
+    version = await _feedback(client, post_id, "shorter")
+
+    assert version["format"] == "post"
+    assert version["first_reply"] is True
+    assert _texts(version["parts"]) == ["One shorter post.", "Try it: x.co/c"]
+    assert "x.co/c" not in _prompts(fake_llm)
+    assert "<first_reply>" not in _prompts(fake_llm)
+
+
+async def test_a_switch_to_a_thread_and_back_never_shows_the_model_a_tagged_post(
+    client, with_author, fake_llm
+):
+    post = await _written(client, fake_llm, "Try it: [link]", "Try it: [link]")
+    fake_llm.calls.clear()
+    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["a", "b"]}]
+    await _feedback(client, post["id"], "expand it", format="thread")
+    fake_llm.replies = [written("back"), {"post": "Back to one."}]
+
+    version = await _feedback(client, post["id"], "condense it", format="post")
+
+    assert _texts(version["parts"]) == ["Back to one."]
+    assert "Try it: [link]" not in _prompts(fake_llm)
+    assert "<first_reply>" not in _prompts(fake_llm)

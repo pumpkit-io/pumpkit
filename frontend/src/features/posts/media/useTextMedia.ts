@@ -145,7 +145,7 @@ function folded<T>(parts: T[][], count: number): T[][] {
 export function useTextMedia(
   postId: string,
   initial: Media[][],
-  /** How many Parts the server's Text has. */
+  /** How many of the server's Text's Parts take Media, by `mediaPartCount`. */
   partCount: number,
   /** Called when the server refuses an upload until X is reconnected; the file is dropped. */
   onReconnectNeeded: () => void,

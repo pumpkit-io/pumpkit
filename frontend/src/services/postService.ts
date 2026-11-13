@@ -13,6 +13,11 @@ export type Format = 'post' | 'thread';
 export const FORMAT_POST: Format = 'post';
 export const FORMAT_THREAD: Format = 'thread';
 
+/** The Format of Parts that record none, as a Scheduled post's: a first reply keeps it a post. */
+export function formatOf(partCount: number, firstReply: boolean): Format {
+  return partCount > 1 && !firstReply ? FORMAT_THREAD : FORMAT_POST;
+}
+
 /** One Part of a Version's text, in its place in the order. */
 export interface Part {
   text: string;

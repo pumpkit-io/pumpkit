@@ -12,6 +12,7 @@ import type { PostListItem } from '@/services/postService';
 import type { PostPageState } from '../edit/scheduledPostEdit';
 import { formatWhen } from '../panels/panelFacts';
 import { DestinationName, Facts } from '../panels/panelParts';
+import { partLabel, shapeName } from '../postShape';
 import { postTitle } from '../postStatus';
 import { rowMoment, rowWhen } from './rowWhen';
 
@@ -20,14 +21,7 @@ import { rowMoment, rowWhen } from './rowWhen';
 const EDIT_STATE: PostPageState = { edit: true };
 
 function shape(post: PostListItem): string {
-  if (post.format === 'thread') return `Thread · ${post.parts.length} parts`;
-  return post.firstReply ? 'Single post · first reply' : 'Single post';
-}
-
-/** How a screen reader names Part `i` of an expanded row. */
-function partLabel(post: PostListItem, i: number): string {
-  if (post.firstReply && i === post.parts.length - 1) return 'First reply';
-  return post.format === 'thread' ? `Part ${i + 1} of ${post.parts.length}` : 'Post';
+  return shapeName(post.parts.length, post.firstReply);
 }
 
 /** What a row says under its title, by the Post's status. */
@@ -89,7 +83,7 @@ function Expanded({
         {post.parts.map((text, i) => (
           <li
             key={i}
-            aria-label={partLabel(post, i)}
+            aria-label={partLabel(i, post.parts.length, post.firstReply)}
             className="space-y-1 rounded-lg bg-muted/60 px-3 py-2"
           >
             <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">

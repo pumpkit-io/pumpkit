@@ -2829,6 +2829,42 @@ describe('Post page', () => {
         expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
       });
 
+      it('puts the Media of a Part where the first reply goes onto the post', async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(
+          version(2, ['the post', 'Try it: [link]'], { format: 'post', firstReply: true }),
+        );
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        await sendFeedback('one post, link in a reply');
+
+        expect(await card().findByRole('textbox', { name: 'First reply text' })).toHaveValue(
+          'Try it: [link]',
+        );
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
+      it('puts the Media of a Part where a restored first reply goes onto the post', async () => {
+        const withReply = version(1, ['the post', 'Try it: [link]'], {
+          format: 'post',
+          firstReply: true,
+        });
+        vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(withReply));
+        renderPost(
+          withMedia(draft([withReply, version(2, ['one', 'two'])]), [[image('m1')], [image('m2')]]),
+        );
+        await textCard();
+
+        fireEvent.click(card().getByRole('button', { name: 'History' }));
+        const history = within(await screen.findByRole('dialog', { name: 'History' }));
+        fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+        expect(await card().findByRole('textbox', { name: 'First reply text' })).toHaveValue(
+          'Try it: [link]',
+        );
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
       it("keeps every tile on a Part over X's rule, says so under them, and Post to refuses it", async () => {
         vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['one post']));
         renderPost(
@@ -5349,7 +5385,7 @@ describe('Post page', () => {
       });
       const dialog = await openRetry();
 
-      expect(dialog.getByText('Single post · 1 part · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Single post · as @ada')).toBeInTheDocument();
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
 
@@ -5657,7 +5693,7 @@ describe('A first reply on the Post page', () => {
         firstReply,
         parts: texts.map((text) => part(text)),
         versionNumber: 1,
-        edited: !firstReply,
+        edited: true,
       }));
   });
 
@@ -5724,6 +5760,58 @@ describe('A first reply on the Post page', () => {
     );
   });
 
+  const WITHOUT_REPLY = draft([version(1, ['the post'])]);
+
+  it('adds an empty first reply under a single post, ready to type in, and saves it', async () => {
+    renderPost(WITHOUT_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Add first reply' }));
+
+    const box = await text.findByRole('textbox', { name: 'First reply text' });
+    expect(box).toHaveValue('');
+    expect(box).toHaveFocus();
+    expect(
+      within(text.getByRole('listitem', { name: 'First reply' })).queryByRole('button', {
+        name: /media/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(text.queryByRole('button', { name: 'Add first reply' })).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'Try it: pumpkit.io/calc' } });
+    await pause();
+
+    expect(postService.saveText).toHaveBeenLastCalledWith(
+      'post_01',
+      ['the post', 'Try it: pumpkit.io/calc'],
+      true,
+    );
+  });
+
+  it('takes an added first reply away again on undo', async () => {
+    renderPost(WITHOUT_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Add first reply' }));
+    await text.findByRole('listitem', { name: 'First reply' });
+    fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+    await pause();
+
+    expect(text.queryByRole('listitem', { name: 'First reply' })).not.toBeInTheDocument();
+    expect(text.getByRole('button', { name: 'Add first reply' })).toBeInTheDocument();
+  });
+
+  it('offers no first reply to add on a thread', async () => {
+    renderPost(draft([version(1, ['one', 'two'])]));
+
+    expect((await textCard()).queryByRole('button', { name: 'Add first reply' })).toBeNull();
+  });
+
+  it('offers no second first reply on a post that has one', async () => {
+    renderPost(WITH_REPLY);
+
+    expect((await textCard()).queryByRole('button', { name: 'Add first reply' })).toBeNull();
+  });
+
   it('refuses "Post to…" while a Part holds the [link] placeholder', async () => {
     renderPost(WITH_REPLY);
     await textCard();
@@ -5732,6 +5820,18 @@ describe('A first reply on the Post page', () => {
     const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
 
     expect(dialog.getByText('Replace [link] with the real link first.')).toBeInTheDocument();
-    expect(dialog.getByText('Single post · 2 parts · as @ada')).toBeInTheDocument();
+    expect(dialog.getByText('Single post · first reply · as @ada')).toBeInTheDocument();
+  });
+
+  it('reads the placeholder in any case, with spaces inside', async () => {
+    renderPost(
+      draft([version(1, ['the post', 'Try it: [ LINK ]'], { format: 'post', firstReply: true })]),
+    );
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.getByText('Replace [link] with the real link first.')).toBeInTheDocument();
   });
 });

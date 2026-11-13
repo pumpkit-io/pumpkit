@@ -1,5 +1,6 @@
 """The rules a new or moved Scheduled post meets, each refusal in words for the User."""
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -42,15 +43,17 @@ def x_posts_in(parts: list[str]) -> XPosts:
 
 # Where the writing leaves the User's real link out (ADR 0027).
 LINK_PLACEHOLDER = "[link]"
+# The placeholder in any case and with spaces inside, as a model or the User may retype it.
+_LINK_PLACEHOLDER = re.compile(r"\[\s*link\s*\]", re.IGNORECASE)
 
 
-def _subject(number: int, count: int, first_reply: bool = False) -> str:
-    """Part `number` of `count` as a sentence's subject: "Part 2", "The first reply", or "This post"."""
+def _subject(number: int, count: int, *, first_reply: bool) -> str:
+    """Part `number` as a sentence's subject: "Part 2", "The first reply" or "This post"."""
     name = part_name(number, count, first_reply=first_reply)
     return name.capitalize() if name else "This post"
 
 
-def check_parts_written(parts: list[str], *, first_reply: bool = False) -> None:
+def check_parts_written(parts: list[str], *, first_reply: bool) -> None:
     """Every Part has some text: the User may have left one blank mid-edit."""
     for number, part in enumerate(parts, start=1):
         if not part:
@@ -60,26 +63,28 @@ def check_parts_written(parts: list[str], *, first_reply: bool = False) -> None:
 
 def check_no_link_placeholder(parts: Sequence[str]) -> None:
     """No Part still holds the placeholder, which would go out on X as it is."""
-    if any(LINK_PLACEHOLDER in part for part in parts):
-        raise RuleBroken("Replace [link] with the real link first.", code="LINK_PLACEHOLDER")
+    if any(_LINK_PLACEHOLDER.search(part) for part in parts):
+        raise RuleBroken(
+            f"Replace {LINK_PLACEHOLDER} with the real link first.", code="LINK_PLACEHOLDER"
+        )
 
 
-def check_length(parts: list[str], *, limit: int, first_reply: bool = False) -> None:
+def check_length(parts: list[str], *, limit: int, first_reply: bool) -> None:
     """Each Part by X's own count; the refusal names the first Part over the limit."""
     for number, text in enumerate(parts, start=1):
         length = x_weighted_length(text)
         if length > limit:
             raise RuleBroken(
-                f"{_subject(number, len(parts), first_reply)} is {length:,} characters by X's count, over the {limit:,} limit."
+                f"{_subject(number, len(parts), first_reply=first_reply)} is {length:,} characters by X's count, over the {limit:,} limit."
             )
 
 
-def check_media(kinds_by_part: Sequence[Sequence[MediaKind]], *, first_reply: bool = False) -> None:
+def check_media(kinds_by_part: Sequence[Sequence[MediaKind]], *, first_reply: bool) -> None:
     """Each Part's Media fits on one X post; the refusal names the first Part that doesn't."""
     for number, kinds in enumerate(kinds_by_part, start=1):
         if over_x_rule(kinds):
             raise RuleBroken(
-                f"{_subject(number, len(kinds_by_part), first_reply)} has more media than X takes. {X_MEDIA_RULE}",
+                f"{_subject(number, len(kinds_by_part), first_reply=first_reply)} has more media than X takes. {X_MEDIA_RULE}",
                 code="MEDIA_OVER_X_RULE",
             )
 
@@ -96,7 +101,9 @@ def hands_post_now_to_publisher(
     )
 
 
-def check_media_kept(kept_by_part: Sequence[Sequence[bool]], *, live_count: int = 0) -> None:
+def check_media_kept(
+    kept_by_part: Sequence[Sequence[bool]], *, live_count: int, first_reply: bool
+) -> None:
     """
     Every Media of the Parts not live still has its file: one already published on X was
     deleted, and only its preview stays.
@@ -104,13 +111,13 @@ def check_media_kept(kept_by_part: Sequence[Sequence[bool]], *, live_count: int 
     for number, kept in enumerate(kept_by_part, start=1):
         if number > live_count and not all(kept):
             raise RuleBroken(
-                f"{_subject(number, len(kept_by_part))} has media that already went out on X, so Pumpkit no longer keeps it. "
+                f"{_subject(number, len(kept_by_part), first_reply=first_reply)} has media that already went out on X, so Pumpkit no longer keeps it. "
                 "Remove it and attach the file again.",
                 code="MEDIA_GONE",
             )
 
 
-def check_media_once(ids_by_part: Sequence[Sequence[str]]) -> None:
+def check_media_once(ids_by_part: Sequence[Sequence[str]], *, first_reply: bool) -> None:
     """
     No Media is on two Parts: a live Part whose file couldn't be deleted keeps it, and the Text
     may have moved it onto a later Part since.
@@ -119,7 +126,7 @@ def check_media_once(ids_by_part: Sequence[Sequence[str]]) -> None:
     for number, ids in enumerate(ids_by_part, start=1):
         if seen.intersection(ids):
             raise RuleBroken(
-                f"{_subject(number, len(ids_by_part))} has media that's already on an earlier "
+                f"{_subject(number, len(ids_by_part), first_reply=first_reply)} has media that's already on an earlier "
                 "part. Remove it and attach the file again.",
                 code="MEDIA_ON_TWO_PARTS",
             )
@@ -127,7 +134,7 @@ def check_media_once(ids_by_part: Sequence[Sequence[str]]) -> None:
 
 
 def check_part_count_kept_with_media(
-    has_media_by_part: Sequence[bool], *, live_count: int, part_count: int
+    has_media_by_part: Sequence[bool], *, live_count: int, part_count: int, first_reply: bool
 ) -> None:
     """
     An edit's Parts give no sign of which Part is which, so Media stays with the Part in its
@@ -138,7 +145,7 @@ def check_part_count_kept_with_media(
     for number, has_media in enumerate(has_media_by_part, start=1):
         if number > live_count and has_media:
             raise RuleBroken(
-                f"{_subject(number, len(has_media_by_part))} has media, so this edit can't add or "
+                f"{_subject(number, len(has_media_by_part), first_reply=first_reply)} has media, so this edit can't add or "
                 "remove parts. Remove the media first, or change the post's text and copy it "
                 "onto the scheduled post.",
                 code="MEDIA_PART_COUNT",

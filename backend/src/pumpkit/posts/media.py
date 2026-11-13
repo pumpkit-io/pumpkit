@@ -74,7 +74,7 @@ def move_dropped_parts_media(post: Post) -> None:
     order, and that of a first reply's place onto the post, since a first reply takes none. The
     Post page's `useTextMedia` moves tiles the same way. Not flushed.
     """
-    last = len(post.text_parts or []) - 1 - post.text_first_reply
+    last = _media_holders(len(post.text_parts or []), first_reply=post.text_first_reply) - 1
     position = max((p.position for p in post.text_media if p.part_index == last), default=-1)
     dropped = [p for p in post.text_media if p.part_index > last]
     for placed in sorted(dropped, key=lambda p: (p.part_index, p.position)):
@@ -82,15 +82,24 @@ def move_dropped_parts_media(post: Post) -> None:
         placed.part_index, placed.position = last, position
 
 
-def check_dropped_parts_media_movable(post: Post, *, part_count: int, live_count: int) -> None:
+def _media_holders(part_count: int, *, first_reply: bool) -> int:
+    """How many of a Text's first Parts can hold Media: all but a first reply."""
+    return part_count - first_reply
+
+
+def check_dropped_parts_media_movable(
+    post: Post, *, part_count: int, first_reply: bool, live_count: int
+) -> None:
     """
-    Refuses a Text of `part_count` Parts whose last Part is already on X while a Part it drops
-    holds Media: a live Part's Media is set, so the moved Media would be stuck there unseen.
+    Refuses a Text of `part_count` Parts whose last Part that holds Media is already on X while a
+    Part it drops holds Media: a live Part's Media is set, so the moved Media would be stuck there.
     """
-    if part_count > live_count or all(p.part_index < part_count for p in post.text_media):
+    holders = _media_holders(part_count, first_reply=first_reply)
+    if holders > live_count or all(p.part_index < holders for p in post.text_media):
         return
+    name = part_name(holders, part_count, first_reply=first_reply) or f"part {holders}"
     raise ConflictError(
-        f"Part {part_count} is already on X, so it can't take the media of the parts this "
+        f"{name.capitalize()} is already on X, so it can't take the media of the parts this "
         "version drops."
     )
 
@@ -113,7 +122,7 @@ def check_part_room(
     *,
     part_index: int,
     kind: Optional[MediaKind] = None,
-    first_reply: bool = False,
+    first_reply: bool,
 ) -> None:
     """
     Refuses Part `part_index` of a Text or Scheduled post when its X post can't take Media of

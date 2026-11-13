@@ -393,14 +393,16 @@ async def _check_media(
     *,
     user_id: str,
     live_count: int = 0,
-    first_reply: bool = False,
+    first_reply: bool,
 ) -> None:
     """The Media the Parts not live will go out with fits X, is still stored, and can go out."""
     rules.check_media(media_service.kinds_by_part(media), first_reply=first_reply)
     rules.check_media_kept(
-        [[m.file_key is not None for m in part] for part in media], live_count=live_count
+        [[m.file_key is not None for m in part] for part in media],
+        live_count=live_count,
+        first_reply=first_reply,
     )
-    rules.check_media_once(_ids(media))
+    rules.check_media_once(_ids(media), first_reply=first_reply)
     if any(media[live_count:]):
         await x_connections_service.check_takes_media(db, user_id=user_id)
 
@@ -422,7 +424,10 @@ def _media_after_edit(
         text = media_service.text_media_by_part(post)
         return current[:live_count] + text[live_count:part_count]
     rules.check_part_count_kept_with_media(
-        [bool(part) for part in current], live_count=live_count, part_count=part_count
+        [bool(part) for part in current],
+        live_count=live_count,
+        part_count=part_count,
+        first_reply=scheduled_post.first_reply,
     )
     return current[:part_count] + [[] for _ in range(part_count - len(current))]
 
@@ -503,15 +508,16 @@ async def edit_scheduled_post(
     live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
     parts = edit.parts
     post = None
-    first_reply = None
+    first_reply = scheduled_post.first_reply
     if edit.copy_text:
         post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
         # The Text's Parts in the places of the live ones are already on X as they were.
         parts = live + _text_of(post)[len(live) :]
         first_reply = post.text_first_reply
     elif parts is not None:
-        # Typed Parts say nothing of a first reply, so it stays only while the Parts keep their number.
-        first_reply = scheduled_post.first_reply and len(parts) == len(scheduled_post.parts)
+        # Typed Parts say nothing of a first reply: it stays only while they keep their number.
+        first_reply = first_reply and len(parts) == len(scheduled_post.parts)
+        rules.check_parts_written(parts, first_reply=first_reply)
     media = None
     if parts is not None or edit.reschedules:
         # Only what goes out next: a live Part is on X already, whatever it holds.
@@ -521,7 +527,7 @@ async def edit_scheduled_post(
         rules.check_live_parts_kept(live, parts)
         media = _media_after_edit(scheduled_post, post, len(parts))
         await _check_media(
-            db, media, user_id=user.id, live_count=len(live), first_reply=bool(first_reply)
+            db, media, user_id=user.id, live_count=len(live), first_reply=first_reply
         )
     elif edit.reschedules:
         await _check_media(
@@ -546,7 +552,7 @@ async def edit_scheduled_post(
     if parts is not None:
         subscription_type = connection.subscription_type if connection else None
         rules.check_length(
-            parts, limit=x_post_max_chars(subscription_type), first_reply=bool(first_reply)
+            parts, limit=x_post_max_chars(subscription_type), first_reply=first_reply
         )
     current = [part.text for part in scheduled_post.parts]
     if connection is not None and edit.reschedules:
@@ -783,7 +789,10 @@ async def give_feedback(
         post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
         scheduled_post = await _check_takes_feedback(db, post_id=post_id)
         media_service.check_dropped_parts_media_movable(
-            post, part_count=len(written.parts), live_count=_live_count(scheduled_post)
+            post,
+            part_count=len(written.parts),
+            first_reply=written.first_reply,
+            live_count=_live_count(scheduled_post),
         )
     except Exception as error:
         await version_writing.record_failed_attempt(
@@ -828,7 +837,10 @@ async def restore_version(
     if version is None:
         raise NotFoundError(f"This post has no version {version_number}.")
     media_service.check_dropped_parts_media_movable(
-        post, part_count=len(version.parts or []), live_count=_live_count(scheduled_post)
+        post,
+        part_count=len(version.parts or []),
+        first_reply=version.first_reply,
+        live_count=_live_count(scheduled_post),
     )
     posts_service.set_text_from_version(post, version)
     return await _commit_text(db, user=user, post=post)

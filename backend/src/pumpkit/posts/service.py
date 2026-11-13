@@ -262,11 +262,18 @@ def edit_text(post: Post, parts: list[str], *, first_reply: Optional[bool] = Non
     else:
         expected = len(current)
     if len(parts) != expected:
-        raise TextShapeKept(
-            f"Editing keeps the text's {len(current)} parts. Give feedback to change its shape."
-            if post.text_format != FORMAT_POST
-            else "Editing keeps the text a single post. Give feedback to make it a thread."
-        )
+        if post.text_format != FORMAT_POST:
+            why = (
+                f"Editing keeps the text's {len(current)} parts. Give feedback to change its shape."
+            )
+        elif first_reply:
+            why = (
+                "Editing keeps the post and its first reply. Remove the first reply to save the "
+                "post alone."
+            )
+        else:
+            why = "Editing keeps the text a single post. Give feedback to make it a thread."
+        raise TextShapeKept(why)
     version = next((a for a in post.attempts if a.version_number == post.text_version_number), None)
     post.text_parts = list(parts)
     post.text_first_reply = first_reply

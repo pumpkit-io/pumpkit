@@ -130,7 +130,12 @@ async def test_the_posts_list_reads_a_scheduled_first_reply_as_a_single_post(
 
 @pytest.mark.parametrize(
     "parts",
-    [("The post.", "Try it: [link]"), ("Sign up at [link] today.", "More soon.")],
+    [
+        ("The post.", "Try it: [link]"),
+        ("Sign up at [link] today.", "More soon."),
+        ("The post.", "Try it: [LINK]"),
+        ("The post.", "Try it: [ Link ]"),
+    ],
 )
 @pytest.mark.parametrize("when", [{"publish_at": LATER}, {"publish_now": True}])
 async def test_scheduling_or_posting_a_text_with_the_link_placeholder_is_refused(
@@ -227,3 +232,43 @@ async def test_an_ai_app_reads_the_first_reply_and_is_told_about_it(
     assert "each first reply counting as one" in instructions
     assert (read["text"]["format"], read["text"]["first_reply"]) == ("post", True)
     assert read["versions"][0]["first_reply"] is True
+
+
+async def test_restoring_a_first_reply_over_a_part_already_on_x_with_media_is_refused(
+    client, connected, post_with, next_version, fake_x_publisher
+):
+    post_id = await post_with("The post.", "Try it: pumpkit.io/calc", first_reply=True)
+    await next_version(post_id, "One.", "Two.")
+    attached = await client.post(
+        f"{POSTS}/{post_id}/text/parts/2/media",
+        files={"file": ("photo.png", png(), "image/png")},
+    )
+    assert attached.status_code == 201, attached.text
+    fake_x_publisher.fail_publish = XPostRejectedError(400, "Nope")
+    fake_x_publisher.fail_publish_on = 2
+    failed = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
+    assert failed.json()["state"] == "failed", failed.text
+
+    restored = await client.post(f"{POSTS}/{post_id}/versions/1/restore")
+
+    assert restored.status_code == 409, restored.text
+    assert restored.json()["detail"] == (
+        "The post is already on X, so it can't take the media of the parts this version drops."
+    )
+    text = (await client.get(f"{POSTS}/{post_id}")).json()["text"]
+    assert [[m["id"] for m in part["media"]] for part in text["parts"]] == [
+        [],
+        [attached.json()["id"]],
+    ]
+
+
+async def test_a_blank_first_reply_is_named_as_the_first_reply(client, connected, post_with):
+    post_id = await post_with("The post.", "Try it: pumpkit.io/calc", first_reply=True)
+    scheduled = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
+
+    response = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled.json()['id']}", json={"parts": ["The post.", "  "]}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Write the first reply first."

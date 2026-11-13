@@ -2,6 +2,7 @@ import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import type { Media } from '@/services/mediaService';
 import type { PostDetail, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
+import { partName as namePart } from './postShape';
 
 /** One Part as the Version card shows it and Copy post copies it. */
 export interface ShownPart {
@@ -79,14 +80,14 @@ export function cardParts(
   );
 }
 
-/**
- * What the page calls Part `index`: "First reply", "Part 2" in a Thread, or "Post" for a single
- * post, with or without its first reply.
- */
+/** Whether the Parts end with a single post's first reply. */
+export function hasFirstReply(parts: ShownPart[]): boolean {
+  return parts.at(-1)?.firstReply ?? false;
+}
+
+/** What the page calls Part `index` of `parts`, by `postShape.partName`. */
 export function partName(parts: ShownPart[], index: number): string {
-  if (parts[index]?.firstReply) return 'First reply';
-  const inThread = parts.filter((part) => !part.firstReply).length > 1;
-  return inThread ? `Part ${index + 1}` : 'Post';
+  return namePart(index, parts.length, hasFirstReply(parts));
 }
 
 /** Every Part, as Copy puts it on the clipboard: a Thread's Parts split by a line of `---`. */

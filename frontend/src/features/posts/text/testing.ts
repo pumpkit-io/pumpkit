@@ -1,5 +1,6 @@
 import { xWeightedLength } from '@/lib/xLength';
 import {
+  formatOf,
   textOf,
   type Format,
   type PostDetail,
@@ -160,7 +161,7 @@ export class MemoryBackend {
           id: `version_${number}`,
           number,
           feedback,
-          format: texts.length > 1 ? 'thread' : 'post',
+          format: formatOf(texts.length, false),
           firstReply: false,
           parts: texts.map((t) => ({ text: t, charCount: xWeightedLength(t), charLimit: 280 })),
           createdAt: '2026-10-31T10:00:00Z',

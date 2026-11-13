@@ -23,11 +23,11 @@ def earlier_feedback_message(feedback: list[str]) -> str:
     )
 
 
-def previous_final_message(format: Format, parts: list[str], first_reply: bool = False) -> str:
+def previous_final_message(format: Format, parts: list[str], *, first_reply: bool) -> str:
     noun = format_noun(format)
     return (
         f"This is the {noun} as I last saw it, before my latest feedback.\n\n"
-        f"<previous_{noun}>\n{format_text(format, parts, first_reply)}\n</previous_{noun}>"
+        f"<previous_{noun}>\n{format_text(format, parts, first_reply=first_reply)}\n</previous_{noun}>"
     )
 
 
@@ -68,5 +68,5 @@ def revised_sketch_message(previous: Format, format: Format, sketch_parts: list[
         "sentence that differs only in punctuation counts as unchanged. Apply your guidelines "
         "only to the sentences that are new or reworded, and don't add sentences or ideas the "
         f"{noun} doesn't have.\n\n"
-        f"<{noun}>\n{format_text(format, sketch_parts)}\n</{noun}>"
+        f"<{noun}>\n{format_text(format, sketch_parts, first_reply=False)}\n</{noun}>"
     )

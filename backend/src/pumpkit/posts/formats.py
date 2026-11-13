@@ -9,10 +9,7 @@ FORMAT_THREAD: Format = "thread"
 
 
 def format_of(parts: Sized, *, first_reply: bool) -> Format:
-    """
-    The Format of Parts that record no Format of their own, as a Scheduled post's: one Part, or a
-    post and its first reply, is a single post; else they are a Thread.
-    """
+    """Parts with no Format of their own, as a Scheduled post's: a first reply keeps them a post."""
     return FORMAT_THREAD if len(parts) > 1 and not first_reply else FORMAT_POST
 
 
@@ -21,11 +18,8 @@ def format_noun(format: Format) -> str:
     return "thread" if format == FORMAT_THREAD else "post"
 
 
-def part_name(number: int, part_count: int, *, first_reply: bool = False) -> Optional[str]:
-    """
-    How a message names Part `number` mid-sentence: "part 3" in a Thread, None in a single post
-    alone, and "the post" or "the first reply" in one with a first reply.
-    """
+def part_name(number: int, part_count: int, *, first_reply: bool) -> Optional[str]:
+    """Part `number` mid-sentence: "part 3", "the post", "the first reply", or None if alone."""
     if first_reply:
         return "the first reply" if number == part_count else "the post"
     return f"part {number}" if part_count > 1 else None

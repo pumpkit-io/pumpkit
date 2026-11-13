@@ -10,6 +10,7 @@ import { HoverLabel, HoverLabels } from '../HoverLabel';
 import { scheduledPostMediaPlace } from '../media/mediaPlaces';
 import { mediaWait, partMediaOf } from '../media/partMedia';
 import { useTextMedia } from '../media/useTextMedia';
+import { mediaPartCount } from '../postShape';
 import { Panel } from '../panels/panelParts';
 import { DateTimeFields, dateTimeOf } from '../postTo/WhenField';
 import { WhereField } from '../postTo/WhereField';
@@ -59,7 +60,7 @@ export function ScheduledPostEditor({
   const media = useTextMedia(
     postId,
     scheduledPost.parts.map((part) => part.media),
-    total,
+    mediaPartCount(total, scheduledPost.firstReply),
     onReconnectNeeded,
     place,
   );

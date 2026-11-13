@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from pumpkit.billing.allowance import WayOut
-from pumpkit.posts.formats import Format, part_name
+from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.schemas import MediaResponse, PlanResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
@@ -22,14 +22,8 @@ Parts = Annotated[list[PartText], Field(min_length=1, max_length=SCHEDULED_POST_
 
 
 def _strip_parts(value: Optional[list[str]]) -> Optional[list[str]]:
-    if value is None:
-        return None
-    stripped = [part.strip() for part in value]
-    for number, part in enumerate(stripped, start=1):
-        if not part:
-            name = part_name(number, len(stripped))
-            raise ValueError(f"Write {name} first." if name else "Write the post first.")
-    return stripped
+    """Trims each Part; the mediator refuses a blank one, as only it knows a first reply."""
+    return None if value is None else [part.strip() for part in value]
 
 
 # Per caller, for the create route and the MCP tools that change Scheduled posts.

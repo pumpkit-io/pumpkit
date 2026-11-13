@@ -2,17 +2,17 @@ import { MediaButton } from './MediaButton';
 import { MediaTiles, ReadOnlyMediaTiles } from './MediaTiles';
 import { mediaWhere } from './mediaRules';
 import { aMedia, kindOfTile, type TextMedia } from './useTextMedia';
-import type { ShownPart } from '../shownText';
+import { mediaPartCount } from '../postShape';
+import { hasFirstReply, type ShownPart } from '../shownText';
 import type { PartMedia } from '../TextCard';
 
-/** How many of the Parts are X posts that take Media: every one but a first reply. */
 function postCount(parts: ShownPart[]): number {
-  return parts.filter((part) => !part.firstReply).length;
+  return mediaPartCount(parts.length, hasFirstReply(parts));
 }
 
 /**
- * Media controls for each Part not yet live on X, except a first reply. With `askToReconnect`, the media
- * button, a drop and a paste each ask to reconnect X instead of taking files.
+ * Media controls for each Part not yet live on X, except a first reply. With `askToReconnect`,
+ * the media button, a drop and a paste each ask to reconnect X instead of taking files.
  */
 export function partMediaOf(
   media: TextMedia,

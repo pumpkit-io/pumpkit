@@ -15,7 +15,7 @@ def tagged_post(post: str, first_reply: str) -> str:
     return f"<post>\n{post}\n</post>\n\n<first_reply>\n{first_reply}\n</first_reply>"
 
 
-def format_text(format: Format, parts: list[str], first_reply: bool = False) -> str:
+def format_text(format: Format, parts: list[str], *, first_reply: bool) -> str:
     """A single post as written, or tagged with its first reply; a Thread as its numbered Parts."""
     if format == FORMAT_THREAD:
         return numbered_parts(parts)

@@ -35,7 +35,7 @@ import { Topbar } from '@/features/topbar/Topbar';
 import { ReconnectXForMediaDialog } from '@/features/xConnection/ReconnectXForMediaDialog';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { useXConnectionNotice } from '@/features/xConnection/xConnectionReturn';
-import type { Format, PostDetail } from '@/services/postService';
+import { FORMAT_POST, type Format, type PostDetail } from '@/services/postService';
 import { usePosting } from '@/features/scheduledPosts/usePosting';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
@@ -193,7 +193,12 @@ function LoadedPost({
     askToReconnect();
     void reloadXConnection();
   }, [askToReconnect, reloadXConnection]);
-  const media = useTextMedia(loaded.id, loaded.textMedia, text.storedPartCount, onReconnectNeeded);
+  const media = useTextMedia(
+    loaded.id,
+    loaded.textMedia,
+    text.storedMediaPartCount,
+    onReconnectNeeded,
+  );
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
@@ -357,6 +362,9 @@ function LoadedPost({
           onEdit={(texts, change) => controller.edit(texts, change.cause)}
           onUndo={onUndo}
           onRedo={onRedo}
+          onAddFirstReply={
+            post.text?.format === FORMAT_POST ? () => controller.addFirstReply() : undefined
+          }
           onRemoveFirstReply={() => controller.removeFirstReply()}
           trace={text.trace}
           busy={text.writing}
