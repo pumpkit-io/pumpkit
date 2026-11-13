@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { useHasPositioning } from '@/features/positioning/useHasPositioning';
 import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { track } from '@/lib/analytics';
 import { BRIEF_MAX_CHARS, FORMAT_POST, postService, type Format } from '@/services/postService';
@@ -54,6 +55,7 @@ function useStartPost() {
 /** The line and the composer: a Brief and its Format, sent with the arrow or ⌘Enter. */
 export function PostWriter() {
   const { authors } = useInspirationAuthorsContext();
+  const hasPositioning = useHasPositioning();
   const { start, isWriting, error, notice, allowanceUsedUp, clear } = useStartPost();
   const { usage } = useUsage();
   const [brief, setBrief] = useState('');
@@ -78,11 +80,12 @@ export function PostWriter() {
   const typed = brief.trim();
   const send = () => void start(typed, format);
 
-  const gate = noCorpus ? (
-    <Button asChild variant="solid" className="h-10 shrink-0">
-      <Link to="/persona">Set up your persona</Link>
-    </Button>
-  ) : undefined;
+  const gate =
+    noCorpus || hasPositioning === false ? (
+      <Button asChild variant="solid" className="h-10 shrink-0">
+        <Link to="/persona">Set up your persona</Link>
+      </Button>
+    ) : undefined;
 
   return (
     <section aria-labelledby="new-post-line" className="space-y-3">
@@ -105,7 +108,7 @@ export function PostWriter() {
         sendLabel="Write the post"
         onSend={send}
         isWriting={isWriting}
-        sendDisabled={authors === null}
+        sendDisabled={authors === null || hasPositioning === null}
         gate={gate}
       />
       {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}

@@ -10,7 +10,8 @@ from pumpkit.core.config import settings
 from pumpkit.core.llm import FakeLLM, StructuredResult, get_llm
 from pumpkit.main import app
 from pumpkit.posts.models import Post, VersionAttempt
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import POST_IDEAS, ideas, written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -32,6 +33,7 @@ async def with_author(client, subscribed, fake_x_reader):
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=_utc(2026, 9, 1))
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
@@ -316,7 +318,9 @@ async def test_a_version_written_while_a_concurrent_request_filled_the_allowance
     client, db, user, subscribed, with_author, fixed_clock, cap
 ):
     cap(1)
-    llm = _FillsTheAllowanceWhileWriting(replies=[written("sketch"), {"post": "final"}])
+    llm = _FillsTheAllowanceWhileWriting(
+        replies=[written("sketch"), {"post": "final"}], standing={POST_IDEAS: ideas()}
+    )
     llm.fill = lambda: _store_attempts(db, user.id, [_utc(2026, 10, 10, 12)])
     app.dependency_overrides[get_llm] = lambda: llm
 

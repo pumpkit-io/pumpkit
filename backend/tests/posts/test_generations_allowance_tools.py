@@ -26,6 +26,9 @@ async def with_author(subscribed, mcp, fake_x_reader, monkeypatch):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    assert (await mcp.call_tool("set_positioning", text="I post about bootstrapping."))[
+        "isError"
+    ] is False
     assert (await mcp.call_tool("add_inspiration_author", handle="levelsio"))["isError"] is False
 
 

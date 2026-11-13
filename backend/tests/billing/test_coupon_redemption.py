@@ -20,6 +20,7 @@ from tests.billing.test_top_ups import _send
 from tests.mcp_client import McpClient
 from tests.media_files import png
 from tests.oauth_app import REDIRECT, approved_code, exchange, register
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 
 PREVIEW = "/api/v1/billing/coupons/preview"
@@ -388,6 +389,7 @@ async def test_cardless_writing_spends_the_full_monthly_allowance_and_resets(
             post_id="coupon-author-post", text="A useful writing example", posted_at=fixed_clock()
         )
     ]
+    await save_positioning(client)
     assert (
         await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     ).status_code == 201
@@ -570,6 +572,7 @@ async def test_distinct_coupons_append_from_january_anchor_without_resetting_usa
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(post_id="append-author", text="An example", posted_at=fixed_clock())
     ]
+    await save_positioning(client)
     await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     fake_llm.replies = [written("Sketch"), {"post": "Before appending"}]
     assert (await client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201

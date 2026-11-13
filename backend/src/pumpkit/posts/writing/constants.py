@@ -21,3 +21,6 @@ CACHE_TTL = "1h"
 # Guards against abuse, not product limits.
 BRIEF_MAX_CHARS = 200_000
 FEEDBACK_MAX_CHARS = 100_000
+
+# The most split Ideas kept from one Brief. The plan prompt states it.
+MAX_SPLIT_IDEAS = 5

@@ -20,8 +20,10 @@ from pumpkit.posts import media as media_service
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
+from pumpkit.posts.plans import Plan
 from pumpkit.posts.schemas import (
     PartResponse,
+    PlanResponse,
     StartingTextResponse,
     TextPartResponse,
     TextResponse,
@@ -138,6 +140,21 @@ def _part_responses(parts: list[str], char_limit: int) -> list[PartResponse]:
         PartResponse(text=text, char_count=x_weighted_length(text), char_limit=char_limit)
         for text in parts
     ]
+
+
+def plan_response(plan: Optional[Plan]) -> Optional[PlanResponse]:
+    """The Plan as a response shows it, without the planner's reasoning."""
+    if plan is None:
+        return None
+    return PlanResponse(
+        core_idea=plan.core_idea,
+        takeaway=plan.takeaway,
+        funnel=plan.funnel,
+        desired_action=plan.desired_action,
+        format=plan.format,
+        length=plan.length,
+        structure=plan.structure,
+    )
 
 
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:

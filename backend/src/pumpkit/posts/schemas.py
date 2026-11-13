@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pumpkit.posts.formats import FORMAT_POST, Format
 from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.models import MediaKind
+from pumpkit.posts.plans import DesiredAction, Funnel, Length, Structure
 from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS
 
 # Per caller, for the routes and MCP tools that write a Version.
@@ -100,7 +101,23 @@ class TextResponse(BaseModel):
     edited: bool
 
 
+class PlanResponse(BaseModel):
+    """What Pumpkit decided about a Post before writing it."""
+
+    core_idea: str
+    takeaway: str
+    # Who the Post is for: `top` for reach, `middle` for trust, `bottom` for conversion.
+    funnel: Funnel
+    desired_action: DesiredAction
+    format: Format
+    # None for a Thread.
+    length: Optional[Length]
+    structure: Structure
+
+
 class PostResponse(BaseModel):
     id: str
     brief: str
+    # None for a Post written before Briefs were planned.
+    plan: Optional[PlanResponse]
     versions: list[VersionResponse]

@@ -115,6 +115,7 @@ from tests.oauth_app import (  # noqa: E402
     exchange,
     register,
 )
+from tests.posts.writing_replies import POST_IDEAS, ideas  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -257,10 +258,10 @@ def fake_x_publisher():
 @pytest.fixture(autouse=True)
 def fake_llm():
     """
-    Every test calls models through a scripted fake instead of a real endpoint. Request it by name
-    to queue `fake_llm.replies` (field dicts or exceptions) and read `fake_llm.calls`.
+    Every test calls a scripted fake model: queue `fake_llm.replies`, read `fake_llm.calls`.
+    The plan call has a standing answer; set `fake_llm.standing[POST_IDEAS]` to plan otherwise.
     """
-    fake = FakeLLM()
+    fake = FakeLLM(standing={POST_IDEAS: ideas()})
     app.dependency_overrides[get_llm] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_llm, None)

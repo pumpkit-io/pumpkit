@@ -12,8 +12,12 @@ async def start_post(
     call: ToolCall[User], brief: str, format: Format = FORMAT_POST
 ) -> PostResponse:
     """
-    Start a post from a brief, what the post is about and what the user thinks about it, and
-    write its first version in the style of the user's inspiration authors. `format` is "post"
+    Start a post from a brief, what the post is about and what the user thinks about it. Pumpkit
+    plans the post around the user's positioning, then writes its first version in the style of
+    the user's inspiration authors. It is refused until the user has a positioning, which
+    `set_positioning` saves. `plan` says what the post is built for: its core idea, the
+    takeaway, the funnel stage (`top` for reach, `middle` for trust, `bottom` for conversion),
+    the desired action and the length. `format` is "post"
     for a single X post, the default, or "thread" for a thread: several parts, each one X post
     that replies to the one before, as many as the brief needs. Show the user the version's
     text, meant for X, with every part and its character count. Takes up to a minute.

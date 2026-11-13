@@ -12,6 +12,7 @@ from pumpkit.core.llm import FakeLLM, get_llm
 from pumpkit.main import app
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 from tests.scheduling.reading import scheduled_posts
 
@@ -37,6 +38,7 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    await save_positioning(client)
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
     fake_llm.replies = [written("sketch one"), {"post": "Version one."}]

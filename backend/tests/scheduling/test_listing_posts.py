@@ -23,6 +23,7 @@ from pumpkit.scheduling.models import (
 )
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written, written_thread
 
 POSTS = "/api/v1/posts"
@@ -363,6 +364,7 @@ async def with_author_and_x(client, subscribed, fake_x_reader, connect_x, fixed_
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=T0)
     ]
+    await save_positioning(client)
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
 

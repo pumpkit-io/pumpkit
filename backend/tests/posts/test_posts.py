@@ -14,7 +14,8 @@ from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import writing_calls, written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -37,6 +38,7 @@ def _posts(handle: str, count: int) -> list[FetchedPost]:
 async def with_author(client, subscribed, fake_x_reader):
     """`levelsio` on the User's list, with two stored posts."""
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
@@ -120,7 +122,7 @@ async def test_the_sketch_call_gets_the_sketch_prompt_then_the_corpus_then_the_b
 
     await client.post(POSTS, json={"brief": "  ship small things\n"})
 
-    sketch_call = fake_llm.calls[0]
+    sketch_call = writing_calls(fake_llm)[0]
     assert sketch_call.model == DEFAULT_MODEL
     assert sketch_call.response_model.__name__ == "drafted_post"
     assert sketch_call.messages == [
@@ -139,7 +141,7 @@ async def test_the_sketch_and_humanizer_calls_use_the_configured_models(
 
     await client.post(POSTS, json={"brief": "ship"})
 
-    assert [call.model for call in fake_llm.calls] == ["llama3.3", "qwen3"]
+    assert [call.model for call in writing_calls(fake_llm)] == ["llama3.3", "qwen3"]
 
 
 async def test_the_humanizer_gets_its_prompt_the_corpus_the_brief_message_then_the_scrubbed_sketch(
@@ -149,7 +151,7 @@ async def test_the_humanizer_gets_its_prompt_the_corpus_the_brief_message_then_t
 
     await client.post(POSTS, json={"brief": "ship small things"})
 
-    humanizer_call = fake_llm.calls[1]
+    humanizer_call = writing_calls(fake_llm)[1]
     assert humanizer_call.model == DEFAULT_MODEL
     assert humanizer_call.response_model.__name__ == "refined_post"
     assert humanizer_call.messages == [
@@ -171,12 +173,13 @@ async def test_the_corpus_is_the_newest_20_posts_of_each_author_in_list_order(
     fake_x_reader.posts["paulg"] = _posts("paulg", 21)
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 1)
     await client.post(AUTHORS, json={"handle": "paulg"})
+    await save_positioning(client)
     await client.post(AUTHORS, json={"handle": "levelsio"})
     fake_llm.replies = [written("sketch"), {"post": "final"}]
 
     await client.post(POSTS, json={"brief": "ship"})
 
-    corpus = fake_llm.calls[0].messages[1]["content"]
+    corpus = writing_calls(fake_llm)[0].messages[1]["content"]
     assert corpus.count("<post>") == 21
     assert "<post>paulg post 19</post>" in corpus
     assert "paulg post 20<" not in corpus
@@ -191,12 +194,13 @@ async def test_posts_posted_in_the_same_second_are_ordered_by_post_id_descending
         FetchedPost(post_id="aaa", text="lower id", posted_at=same_time),
         FetchedPost(post_id="bbb", text="higher id", posted_at=same_time),
     ]
+    await save_positioning(client)
     await client.post(AUTHORS, json={"handle": "levelsio"})
     fake_llm.replies = [written("sketch"), {"post": "final"}]
 
     await client.post(POSTS, json={"brief": "ship"})
 
-    corpus = fake_llm.calls[0].messages[1]["content"]
+    corpus = writing_calls(fake_llm)[0].messages[1]["content"]
     assert corpus.index("higher id") < corpus.index("lower id")
 
 
@@ -242,6 +246,8 @@ async def test_a_blank_brief_returns_422(client, with_author, fake_llm):
 async def test_starting_a_post_with_no_inspiration_authors_returns_422(
     client, subscribed, fake_llm
 ):
+    await save_positioning(client)
+
     response = await client.post(POSTS, json={"brief": "ship"})
 
     assert response.status_code == 422
@@ -256,6 +262,7 @@ async def test_starting_a_post_when_no_author_has_stored_posts_returns_422(
 ):
     db.add(InspirationAuthor(user_id=user.id, handle="quiet", position=0, added_at=clock()))
     await db.commit()
+    await save_positioning(client)
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
@@ -274,6 +281,7 @@ async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_so
     client, sells_no_plans, fake_x_reader, fake_llm
 ):
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
+    await save_positioning(client)
     await client.post(AUTHORS, json={"handle": "levelsio"})
     fake_llm.replies = [written("sketch"), {"post": "final"}]
 

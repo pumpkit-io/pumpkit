@@ -11,7 +11,8 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import writing_calls, written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -37,6 +38,7 @@ async def with_author(client, subscribed, fake_x_reader):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc) - timedelta(hours=1),
         )
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
@@ -67,16 +69,17 @@ async def test_the_first_version_writes_the_hook_in_the_sketch_call_then_humaniz
 ):
     await _start(client, fake_llm, written(SKETCH, "stop_x_do_y", HOOK_REASONING))
 
-    assert [call.response_model.__name__ for call in fake_llm.calls] == [
+    sketch_call, humanizer_call = writing_calls(fake_llm)
+    assert (sketch_call.response_model.__name__, humanizer_call.response_model.__name__) == (
         "drafted_post",
         "refined_post",
-    ]
-    assert fake_llm.calls[0].messages == [
+    )
+    assert sketch_call.messages == [
         _system(sketch_post_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
-    assert fake_llm.calls[1].messages[-1] == _user(SKETCH)
+    assert humanizer_call.messages[-1] == _user(SKETCH)
 
 
 async def test_the_version_stores_the_hook_reasoning_and_the_library_hook(

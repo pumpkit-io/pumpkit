@@ -15,7 +15,8 @@ from pumpkit.scheduling import service
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import PLAN, written, written_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -33,6 +34,7 @@ async def with_author(client, subscribed, fake_x_reader, connect_x) -> None:
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    await save_positioning(client)
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
 
@@ -60,6 +62,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
     assert response.json() == {
         "id": post["id"],
         "brief": "ship small things",
+        "plan": PLAN,
         "text": {
             "format": "post",
             "parts": [{**one, "media": []}],
@@ -209,6 +212,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
     assert read == {
         "id": post["id"],
         "brief": "ship small things",
+        "plan": PLAN,
         "text": {
             "format": "post",
             "parts": [{**one, "media": []}],

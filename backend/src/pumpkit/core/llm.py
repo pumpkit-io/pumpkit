@@ -12,7 +12,7 @@ from functools import lru_cache
 from typing import Any, Optional, Protocol, TypeVar, Union
 
 from openai import OpenAIError
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from pumpkit.core.errors import AppError
 from pumpkit.core.llm_client import LLMClient, llm_client
@@ -79,12 +79,12 @@ class LLMCall:
 @dataclass
 class FakeLLM:
     """
-    A scripted model: each call takes the next of `replies`, a dict of the response model's
-    fields or an exception to raise, and is recorded in `calls`. Clear `configured` to stand
-    for a missing key.
+    A scripted model: each call takes the reply `standing` holds for its schema name, or else the
+    next of `replies`: a dict of fields or an exception. Clear `configured` for a missing key.
     """
 
     replies: list[Union[dict[str, Any], Exception]] = field(default_factory=list)
+    standing: dict[str, Union[dict[str, Any], Exception]] = field(default_factory=dict)
     calls: list[LLMCall] = field(default_factory=list)
     configured: bool = True
 
@@ -107,14 +107,21 @@ class FakeLLM:
                 max_tokens=max_tokens,
             )
         )
-        if not self.replies:
+        if response_model.__name__ in self.standing:
+            reply = self.standing[response_model.__name__]
+        elif not self.replies:
             raise LLMError("Fake LLM has no reply left")
-        reply = self.replies.pop(0)
+        else:
+            reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
+        try:
+            parsed = response_model.model_validate(reply)
+        except ValidationError as error:
+            raise LLMError(f"{model}: {type(error).__name__}: {error}") from error
         usage = {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
         return StructuredResult(
-            parsed=response_model.model_validate(reply),
+            parsed=parsed,
             model=model,
             usage=ModelUsage(**usage, raw=usage),
         )
