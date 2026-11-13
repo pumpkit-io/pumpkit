@@ -2,6 +2,8 @@
 
 ADR 0020 supersedes API-key authentication below; Connected apps use OAuth. ADR 0023 supersedes its browser sign-in references; X alone opens a Session. The transport and tool-assembly decisions remain.
 
+ADR 0025 amends the tools named below: `plan_posts` and `write_posts` replace `start_post`, and ADR 0024 removes the Inspiration author tools.
+
 ## Historical decision
 
 Users can drive Pumpkit from Claude Code and other MCP clients: start Posts, give Feedback, manage Inspiration authors, schedule posts and Post now. The backend serves an MCP endpoint over Streamable HTTP, and its tools call the same mediators the routers call. Because the endpoint ships inside the backend, every Self-hoster's Instance has it with nothing extra to install or release. A program authenticates with an API key that the User creates in Pumpkit and pastes into the client's config. An API key is not a Sign-in method and opens no Session, so ADR 0002 still holds: people sign in only with Google or a Magic link, and an API key only lets a program act for a User who already has an account. API key access follows the web app's access rule, with no separate Plan (ADR 0003): on an Instance that sells Plans, only Subscribed Users can create API keys and use the tools, and on an Instance that sells none, every User can (ADR 0011). Tools that need a browser, such as connecting X or managing the Subscription, answer with a link to the web app instead.

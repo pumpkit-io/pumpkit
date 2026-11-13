@@ -2,6 +2,8 @@
 
 ADR 0023 removes the separate X connection step from Onboarding below: X is authorized at sign-in, then the Paywall and Persona setup retain their order. The usual access gates remain; ADR 0023 also permits authenticated same-account X recovery without a paid Subscription.
 
+ADR 0024 amends the Persona step below: it asks for a Positioning in place of an Inspiration author, and is done when one exists.
+
 ## Historical decision
 
 On an Instance that sells Plans, a signed-in User who is not Subscribed sees only the Paywall, and every area route on the backend refuses them, reads included. Only auth, the User's own account, billing, `/instance` and the Onboarding state (`GET /onboarding`) stay open, so they can still subscribe, sign out or delete their account, and the web app knows to show them the Paywall. Until now only writes needed a subscription and each page showed its own Subscribe prompt. That left the app open to look around in without paying, which the Operator doesn't want. The Paywall is checked on every visit, so a User whose Subscription Ends meets it again.

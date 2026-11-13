@@ -1,0 +1,42 @@
+# Positioning replaces Inspiration authors, which stay in the code inactive
+
+A User's Persona is their Positioning: one free text saying who they are on X, what they post about, who they write for, what they post for and what they can point readers to. Until now the Persona was up to three Inspiration authors, whose recent posts set the writing style of the User's Posts. Copying the style of other accounts told the writing nothing about who the User is, who reads them, or whether a Post should earn reach, trust or a sign-up, so every Post got the same treatment whatever its material. The writing now plans every Post around the Positioning, and no Inspiration author's posts reach it.
+
+This amends ADR 0018 and ADR 0019, and extends ADR 0008's area order. Their other decisions continue to apply.
+
+## Positioning
+
+- A User has at most one Positioning. It is one textarea, with helper text naming the five things to cover, and no guided fields.
+- Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It runs when Onboarding's Persona step first opens, which is after the Paywall, so the Operator pays twitterapi.io only for Users who are Subscribed.
+- The draft states only what the profile and posts show, leaves out what they don't, and copies no post's wording.
+- A failed X read or model call gives no draft and no error page: the textarea opens empty.
+- A draft is not a Generation, and requesting one saves nothing. The Persona page's "Draft again from my X profile" fills the textarea and leaves the saved Positioning alone until the User saves. Redrafts are limited per User per day. The Ticket that builds the draft sets that number, and the Ticket that builds saving sets the minimum length of a Positioning, if any.
+- A Brief keeps the Positioning it was planned with (ADR 0025), so editing the Positioning later doesn't change how Feedback on older Posts behaves.
+- A User with no Positioning can't plan a Brief and is pointed at the Persona page. This replaces the check that refused a Post when the User had no Inspiration author's posts to write from.
+
+## Onboarding (amends ADR 0018)
+
+Onboarding's Persona step asks for a Positioning in place of an Inspiration author. ADR 0018's rule is unchanged: a step is done when what it asks for exists, so the step is done once a Positioning is saved, and a User who finished Onboarding is never sent back.
+
+## Inspiration authors are inactive (amends ADR 0019)
+
+This follows ADR 0023's mechanism for Google and Magic link. The Inspiration author code stays in the repository, and nothing a User or an AI app can reach runs it:
+
+- The author routes move to a router the application never mounts.
+- The three Inspiration author MCP tools leave the server's tool list.
+- The Persona panel, the picker and their provider stay in the frontend with nothing rendering them.
+- There is no configuration switch. Someone who wants Inspiration authors back changes the code.
+- The `authors` area, the Author directory, the X reader's profile and post reads, the corpus module, the old sketch and thread prompts and the hook library keep their tests, which mount their own assembly. One test asserts that the application mounts none of those routes or tools.
+
+The Author directory of ADR 0019 therefore stops growing: no User can look a handle up or pick from it. ADR 0005 still holds, and an Instance still needs its twitterapi.io key, now for the Positioning draft and Communities.
+
+## Where Positioning lives (extends ADR 0008)
+
+Positioning gets its own backend area, `positioning`, with a router, mediator, service, schemas, models and MCP tools. In ADR 0008's order it sits above `authors`, whose service it calls to read the User's posts, and below `posts` and `onboarding`, which read the Positioning to plan a Brief and to tell whether the Persona step is done. Its draft goes through the LLM port.
+
+## Considered Options
+
+- **Keep Inspiration authors as the Persona and add Positioning beside them.** The writing would have to serve a style corpus and a Positioning at once, and a User would have to choose between them. The new prompts have no place for a corpus.
+- **Delete the Inspiration author code.** Keeping it with passing tests lets someone adapt it later, as ADR 0023 did for Google and Magic link.
+- **A configuration switch for Inspiration authors.** ADR 0023 refused one for the inactive Sign-in methods, and the same holds here: the code being present must not imply that Inspiration authors can be turned on.
+- **Positioning in the `onboarding` area.** Positioning outlives Onboarding: the Persona page edits it and every Brief is planned with it. `posts` would also have to import `onboarding`, which sits beside it in the area order.
