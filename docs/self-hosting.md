@@ -166,8 +166,8 @@ Pumpkit needs X, an LLM endpoint and twitterapi.io. Every other one is optional:
 Writes every Post and drafts each Positioning. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](https://openrouter.ai) by default.
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
-- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls. Starting a Post first makes one more to plan it, and a Positioning draft makes one, both on [`openai/gpt-6-luna`](https://openrouter.ai/openai/gpt-6-luna) by default.
-- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the five models it serves: `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL`, `LLM_PLANNING_MODEL` and `LLM_POSITIONING_MODEL`.
+- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit writes and revises with [`openai/gpt-6.1-terra`](https://openrouter.ai/openai/gpt-6.1-terra) by default, whose page lists its price per token. A single post's first Version makes seven model calls, a Thread's two, and each Version from Feedback two. Starting a Post first makes one more to plan it, and a Positioning draft makes one, both on [`openai/gpt-6-luna`](https://openrouter.ai/openai/gpt-6-luna) by default.
+- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the six models it serves: `LLM_SKETCHING_MODEL`, `LLM_MERGING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL`, `LLM_PLANNING_MODEL` and `LLM_POSITIONING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).
 

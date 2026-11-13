@@ -1,15 +1,21 @@
-"""The plan, sketch, merge, humanizer and revision calls' scripted replies, for tests that write a Version."""
+"""The plan, sketch, merge, humanizer, revise and revision calls' scripted replies, for tests that write a Version."""
 
 from typing import Optional
 
-from pumpkit.posts.writing.post_replies import HumanizedPost, MergedSketch, SketchedPost
+from pumpkit.posts.writing.post_replies import (
+    HumanizedPost,
+    MergedSketch,
+    RevisedPost,
+    SketchedPost,
+)
 
 # What `fake_llm.standing` keys its replies by: the plan's schema name, which both of its answer
-# classes share, and the single post's classes, since the old path reuses two of their names.
+# classes share, and the single post's classes, since the old path reuses some of their names.
 POST_IDEAS = "post_ideas"
 SKETCHED_POST = SketchedPost
 MERGED_SKETCH = MergedSketch
 HUMANIZED_POST = HumanizedPost
+REVISED_POST = RevisedPost
 
 
 def planned_post(
@@ -96,14 +102,25 @@ def merged(post: str = "The merged sketch.", sketches: int = 5, **fields) -> dic
     }
 
 
+def revised(post: str = "The revised post.", **fields) -> dict:
+    """The revise call's answer: no CTA and no first reply, unless `fields` say otherwise."""
+    return {
+        "reasoning": "The feedback asks for less; the hook stays.",
+        "cta_type": "none",
+        "post": post,
+        "first_reply": None,
+        **fields,
+    }
+
+
 def writing_calls(fake_llm) -> list:
     """
     The calls the fake model received that wrote or revised the Version's text: the old path's,
-    and the humanizer's of a single post written from its Plan.
+    and the humanizer's of a single post written or revised from its Plan.
     """
     return [
         call
         for call in fake_llm.calls
         if call.response_model.__name__ != POST_IDEAS
-        and call.response_model not in (SKETCHED_POST, MERGED_SKETCH)
+        and call.response_model not in (SKETCHED_POST, MERGED_SKETCH, REVISED_POST)
     ]

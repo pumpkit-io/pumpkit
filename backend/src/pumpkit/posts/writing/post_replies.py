@@ -1,5 +1,5 @@
 """
-The structured replies of the calls that write a single post's first Version, ported from
+The structured replies of the calls that write a single post's Versions, ported from
 pumpkit-new-architecture-v5. Field order is deliberate: reasoning and choices before the post.
 
 `first_reply` defaults to None only for Python: the SDK's strict schema still requires it,
@@ -67,8 +67,16 @@ class HumanizedPost(_Strict):
     first_reply: Optional[str] = None
 
 
-# The model reads the schema names, v5's. `refined_post` is also the name of the old path's
-# humanizer reply, a different class: each call sends its own class's schema under that name.
+class RevisedPost(_Strict):
+    reasoning: str
+    cta_type: CtaType
+    post: str
+    first_reply: Optional[str] = None
+
+
+# The model reads the schema names, v5's. `refined_post` and `revised_post` also name the old
+# path's replies, other classes: each call sends its own class's schema under that name.
 SketchedPost.__name__ = "sketched_post"
 MergedSketch.__name__ = "merged_sketch"
 HumanizedPost.__name__ = "refined_post"
+RevisedPost.__name__ = "revised_post"

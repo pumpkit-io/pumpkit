@@ -12,7 +12,7 @@ from pumpkit.core.llm import FakeLLM, LLMError, get_llm
 from pumpkit.main import app
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
+from tests.posts.writing_replies import REVISED_POST, revised
 
 POSTS = "/api/v1/posts"
 BEING_WRITTEN = "Pumpkit is writing a new version of this post. Try again once it's written."
@@ -35,7 +35,7 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     fake_llm.replies = [{"post": "Version one."}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    fake_llm.replies = [written("sketch two"), {"post": "Version two."}]
+    fake_llm.replies = [{"post": "Version two."}]
     given = await client.post(f"{POSTS}/{started.json()['id']}/versions", json={"feedback": "more"})
     assert given.status_code == 201, given.text
     return started.json()
@@ -51,12 +51,14 @@ def _llm_that_meanwhile(change, *replies) -> list:
                 answers.append(await change())
             return await super().structured(**kwargs)
 
-    app.dependency_overrides[get_llm] = lambda: MeanwhileLLM(replies=list(replies))
+    app.dependency_overrides[get_llm] = lambda: MeanwhileLLM(
+        replies=list(replies), standing={REVISED_POST: revised("sketch three")}
+    )
     return answers
 
 
 def _written_next() -> list:
-    return [written("sketch three"), {"post": "Version three."}]
+    return [{"post": "Version three."}]
 
 
 async def _text_of(client, post_id: str) -> dict:

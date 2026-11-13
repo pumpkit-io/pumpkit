@@ -20,7 +20,7 @@ from pumpkit.x_connection.x_publisher import (
 )
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.writing_replies import written_thread
 from tests.scheduling.reading import scheduled_posts_through_mcp
 
 POSTS_PAGE = "http://localhost:5173/posts"
@@ -785,7 +785,7 @@ async def test_deleting_a_failed_scheduled_post_lets_its_post_be_scheduled_again
 
 
 async def _give_feedback(mcp, fake_llm, post_id: str) -> dict:
-    fake_llm.replies = [written("sketch two"), {"post": "The final, version two."}]
+    fake_llm.replies = [{"post": "The final, version two."}]
     return await mcp.call_tool("give_feedback", post_id=post_id, feedback="punchier")
 
 

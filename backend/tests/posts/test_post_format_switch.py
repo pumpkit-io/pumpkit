@@ -99,7 +99,7 @@ async def test_feedback_with_the_post_format_turns_a_thread_into_a_single_post(
 @pytest.mark.parametrize(
     ("format", "replies"),
     [
-        ("post", [written("sketch 2"), {"post": "final 2"}]),
+        ("post", [{"post": "final 2"}]),
         ("thread", [written_thread(["c", "d"]), {"parts": ["final c", "final d"]}]),
     ],
 )
