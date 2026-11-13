@@ -35,7 +35,7 @@ A person with a Pumpkit account, identified by the X account they sign in with.
 _Avoid_: account holder, customer (in auth contexts)
 
 **Photo**:
-The picture a User is shown with in Pumpkit, taken from their X account. A User with no X photo is shown by their initials; an Inspiration author also has the photo X shows for them.
+The picture a User is shown with in Pumpkit, taken from their X account. A User with no X photo is shown by their initials; an account in the Author directory also has the photo X shows for it.
 _Avoid_: avatar, profile picture, pfp
 
 **Sign-in method**:
@@ -113,7 +113,7 @@ An X post whose text contains a link, by the rule X uses to spot links when it c
 _Avoid_: URL post, linked tweet, link X post
 
 **Generation**:
-One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: each Post written from a Brief is one, and so is each Feedback. Planning a Brief, drafting a Positioning and a writing attempt that fails are not Generations.
+One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: each Post written from a Brief is one, and so is each Feedback. Planning a Brief, drafting a Positioning and a writing attempt that produces no Version are not Generations.
 _Avoid_: prompt, post prompt, credit, request
 
 **Allowance period**:
@@ -131,11 +131,11 @@ A User's own account of who they are on X, what they post about, who they write 
 _Avoid_: bio, profile, niche, brand
 
 **Persona**:
-What Pumpkit writes a User's Posts around: their Positioning. It is also the name of the page where they edit it. A User with no Positioning has an empty Persona and cannot plan a Brief.
+What Pumpkit writes a User's Posts around: their Positioning, which they edit on the Persona page. A User with no Positioning has an empty Persona and cannot plan a Brief.
 _Avoid_: voice, style, profile
 
 **Inspiration author**:
-An X account whose recent posts set the writing style of a User's posts, and never their content. Inactive since ADR 0024: Positioning replaced Inspiration authors as the Persona, and no User can pick one.
+An X account whose recent posts set the writing style of a User's Posts, and never what they said, while Inspiration authors were the Persona. Inactive since ADR 0024: Positioning replaced Inspiration authors as the Persona, and no User can pick one.
 _Avoid_: creator, voice, style source
 
 **Author directory**:
@@ -143,7 +143,7 @@ The X accounts an Instance knows, each with its handle, name and photo, shared b
 _Avoid_: catalog, pool, library, collection
 
 **Brief**:
-What a User writes to say what they want to post about and what they think about it. Pumpkit plans it into one or more Ideas, and it is the content of every Post written from it. It keeps the Positioning it was planned with.
+What a User writes to say what they want to post about and what they think about it. Pumpkit plans it into one or more Ideas and writes their Posts from it. It keeps the Positioning it was planned with.
 _Avoid_: prompt, topic, input
 
 **Idea**:
@@ -159,23 +159,23 @@ How long a Plan makes a single X post: short, medium or long, within the charact
 _Avoid_: size, word count
 
 **Post**:
-One piece of writing made from one Idea of a Brief: its Text, and every Version Pumpkit has written for it. A Brief may have several Posts. Its Versions may differ in Format. A Post goes out at most once, so it has at most one Scheduled post, and takes its status from it: Scheduled while it waits or is being published, then Published or Failed. A Post with no Scheduled post is a Draft, once its first Version is written.
+One piece of writing made from one Idea of a Brief: its Text, and every Version Pumpkit has written for it. A Brief may have several Posts. Its Versions may differ in Format. A Post goes out at most once, so it has at most one Scheduled post, and takes its status from it: Scheduled while it waits or is being published, then Published or Failed. A Post with no Scheduled post is a Draft once its first Version is written. Until then it has no status and appears only with its Brief: Pumpkit is writing it, or couldn't write it and the User may retry.
 _Avoid_: tweet, run
 
 **Draft**:
-A Post that has at least one Version and no Scheduled post: it was never scheduled, or the User unscheduled it.
+A Post that has at least one Version and no Scheduled post: it was never scheduled, or the User unscheduled it. A Post still waiting for its first Version is not a Draft. The User may discard a Draft, which deletes the Post and its Versions for good.
 _Avoid_: unpublished post, not published
 
 **Text**:
-The one text a Post has at any time, the text meant for X. It is what the User reads and edits on the Post, what Feedback rewrites, and what a Scheduled post is copied from. It starts as the first Version and changes when the User edits it, sends Feedback, or restores a Version. A Thread's Text has one text per Part. The Text also holds the Media the User attached; Versions never do.
+The one text a Post has at any time, the text meant for X. It is what the User reads and edits on the Post, what Feedback rewrites, and what a Scheduled post is copied from. It starts as the first Version and changes when the User edits it, sends Feedback, or restores a Version. It has one text per Part. The Text also holds the Media the User attached; Versions never do.
 _Avoid_: working text, current version, content
 
 **Version**:
-A Text Pumpkit wrote for a Post. The first comes from the Post's Idea and its Brief, and each later one from one piece of Feedback on the Post's Text as it was then. Versions are numbered in the order Pumpkit wrote them and none is ever removed. Each Version has one Format, and a Thread's Version has one text per Part. Pumpkit writes each one in the background: a Sketch first, then the Version's text rewritten from it.
+A Text Pumpkit wrote for a Post. The first comes from the Post's Idea and its Brief, and each later one from one piece of Feedback on the Post's Text as it was then. Versions are numbered in the order Pumpkit wrote them, and none is removed while its Post exists: only discarding a Draft deletes them, along with the Post. Each Version has one Format and one text per Part. Its text is rewritten from a Sketch.
 _Avoid_: revision, iteration, round, snapshot, Final, final version
 
 **History**:
-Every Version of a Post in the order Pumpkit wrote them, each with the Brief or Feedback it came from. Restoring a Version makes it the Post's Text again. Editing the Text and undoing never change History. The button that opens it is labelled "Versions history".
+Every Version of a Post in the order Pumpkit wrote them, each with what it came from: the Post's Idea, or a piece of Feedback. Restoring a Version makes it the Post's Text again. Editing the Text and undoing never change History. The button that opens it is labelled "Versions history".
 _Avoid_: log, timeline
 
 **Starting text**:
@@ -183,23 +183,23 @@ The Post's Text a piece of Feedback was given on, kept with the Version it made 
 _Avoid_: base text, input, source text
 
 **Format**:
-The shape of a Version's text: a single X post, or a Thread. The Plan sets it for the first Version, following the Brief when it asks for one, and the User may change it with any Feedback; Versions already written keep theirs. Editing the Text never changes its Format.
+The shape of a Version's text: a single X post, or a Thread. The Plan sets it for the first Version, following the Brief when it asks for one, and the User may change it with any Feedback; Versions already written keep theirs. Editing the Text never changes its Format, and a single X post with a First reply is still a single X post.
 _Avoid_: type, mode, kind
 
 **Thread**:
-Text made of several ordered Parts, published on X with each Part replying to the one before. A Text, a Version or a Scheduled post may be a Thread.
+One of the two Formats: text written as several ordered Parts, published on X with each Part replying to the one before. A single X post with a First reply has two Parts and is not a Thread. A Text, a Version or a Scheduled post may be a Thread.
 _Avoid_: tweetstorm, chain, multi-post
 
 **Part**:
-One X post within a Thread, in its place in the order. A single X post with a First reply has two Parts: the post and the reply.
+One of the ordered texts that make up a Text, a Version or a Scheduled post, published on X in that order, each after the first as a reply to the one before. A Thread has several. A single X post has one, or two when it has a First reply: the post, then the First reply.
 _Avoid_: tweet, segment, item
 
 **First reply**:
-A reply to a single X post, published with it by the same X account, that carries what the post itself should not, such as an external link. It is the last Part of the Post's Text, and the Format stays a single X post. A Thread has none: its link goes in its last Part.
+A reply to a single X post, published with it by the same X account, that carries what the post itself should not, such as an external link. It is the last Part of the Post's Text, and the Format stays a single X post. A Thread has none: its link goes in its last Part. Whether a First reply counts as an X post of the Allowance is not decided yet (ADR 0027).
 _Avoid_: self-reply, link reply, comment
 
 **Media**:
-The images, animated GIF or video a User attaches to a Post's Text, on its single X post or on one Part of a Thread, to be published with that X post on X. It is the User's own content, like a hand edit: Pumpkit's writing never sees it, Feedback and restoring a Version keep it on its Part, or move it to the last Part when that Part is gone, and only the User, or the AI app they ask, writes an image's alt text: Pumpkit's writing never does. Alt text belongs to the Media, so a Scheduled post's copy and the Text show the same alt text. One X post carries up to four images, or one GIF, or one video.
+The images, animated GIF or video a User attaches to a Post's Text, on its single X post or on one Part of a Thread, to be published with that X post on X. A First reply carries none. It is the User's own content, like a hand edit: Pumpkit's writing never sees it, Feedback and restoring a Version keep it on its Part, or, when that Part is gone, move it to the last Part of a Thread or to the post of a single X post, and only the User, or the AI app they ask, writes an image's alt text: Pumpkit's writing never does. Alt text belongs to the Media, so a Scheduled post's copy and the Text show the same alt text. One X post carries up to four images, or one GIF, or one video.
 _Avoid_: attachment, file, asset, upload
 
 **Upload link**:
@@ -207,11 +207,11 @@ A one-time link an AI app asks for to send a Media file from the User's computer
 _Avoid_: upload URL, presigned URL, drop link
 
 **Sketch**:
-The text a Version is rewritten from, Hook included. For a Post's first Version, Pumpkit writes several attempts at once and merges them into the Sketch; it is then rewritten to sound like a person typed it. Users never see it.
+The text Pumpkit settles on first for a Version, Hook included, before rewriting it to sound like a person typed it. Users never see it.
 _Avoid_: draft, first pass, raw output
 
 **Hook**:
-The opening of a Post's text: the line or lines meant to make a reader stop and read the rest. Pumpkit writes it as part of the Sketch, trying a different kind of opening in each attempt before the merge settles on one, and changes it in a later Version only when the Feedback asks. In a Thread, the Hook opens the first Part.
+The opening of a Post's text: the line or lines meant to make a reader stop and read the rest. Pumpkit writes it as part of the Sketch, and changes it in a later Version only when the Feedback asks. In a Thread, the Hook opens the first Part.
 _Avoid_: headline, intro, opener, lede
 
 **Feedback**:
@@ -233,7 +233,7 @@ Where a Scheduled post goes: the profile of the X account of the User's X connec
 _Avoid_: target, location, channel
 
 **Scheduled post**:
-A Post's Text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is always copied from the Post's Text, Media included, and a Post has at most one. One Scheduled post is one X post, one X post with its First reply, or one Thread, published at one time; posting the same text in two places takes two Posts. It keeps its own copy of the text, which the User may edit, and stays a Scheduled post after it is Published or Failed. Unscheduling a waiting one deletes it and makes its Post a Draft again.
+A Post's Text a User has set to be published at a chosen time by the X account of their X connection, at its Destination. It is always copied from the Post's Text, Media included, and a Post has at most one. One Scheduled post is published at one time: a single X post, with its First reply when it has one, or a Thread. Posting the same text in two places takes two Posts. It keeps its own copy of the text, which the User may edit, and stays a Scheduled post after it is Published or Failed. Unscheduling a waiting one deletes it and makes its Post a Draft again.
 _Avoid_: queued tweet, publication, scheduled tweet
 
 **Posting**:
@@ -241,11 +241,11 @@ A Scheduled post being published, or whose time has come while it waits for its 
 _Avoid_: publishing, sending, in progress
 
 **Published**:
-A Scheduled post that X has accepted and shows on the User's X account, or in its Community; for a Thread, every Part has been accepted. It can no longer change.
+A Scheduled post that X has accepted and shows on the User's X account, or in its Community; when it has several Parts, every one has been accepted. It can no longer change.
 _Avoid_: posted, sent, live
 
 **Failed**:
-A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it, also with its Post's Text as edited or rewritten since. A Thread may fail after some of its Parts are live; those Parts can no longer change, and rescheduling publishes only the rest.
+A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it, also with its Post's Text as edited or rewritten since. One with several Parts may fail after some of them are live; those Parts can no longer change, and rescheduling publishes only the rest.
 _Avoid_: errored, rejected, dead
 
 ### Legal

@@ -1,6 +1,6 @@
 # A shared Author directory that remembers misses
 
-ADR 0024 makes Inspiration authors and the Author directory inactive: the code below stays, and no User can look a handle up or pick from the directory.
+ADR 0024 makes Inspiration authors and the Author directory inactive: no User can look a handle up or pick from the directory, so it stops growing. The code that implements the decision below stays in the repository with its tests, and nothing the application mounts runs it.
 
 ## Historical decision
 

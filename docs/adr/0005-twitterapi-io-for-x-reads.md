@@ -2,6 +2,8 @@
 
 Pumpkit reads Inspiration authors' recent posts from twitterapi.io, a third-party scraper API, instead of the official X API. Each author costs one request for about twenty original posts, and the X API's read pricing is much higher for the same data. The pumpkit-v6 experiments already used it to fetch the posts their prompts were tuned on. In exchange, Pumpkit depends on a provider X does not sanction, which can break or change without notice, and it needs a `TWITTERAPI_IO_API_KEY` beside the OpenRouter key.
 
+ADR 0024 changes what these reads are for: Inspiration authors are inactive, and twitterapi.io now reads the User's own recent posts for the Positioning draft. The choice of provider is unchanged.
+
 ## Considered Options
 
 - **Official X API.** Sanctioned and stable, but costs far more per post read.

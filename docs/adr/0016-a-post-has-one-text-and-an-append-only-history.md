@@ -4,7 +4,7 @@ A Post has one Text, the text on screen, which the User edits in place in the we
 
 Undo and redo are one straight line per browser tab through every change to the Text, the User's edit bursts and Pumpkit's rewrites alike, and typing after an undo drops the redo steps, as in a document editor. Nothing is lost that cost a write: every Version stays in History, and restoring one is a single undoable step. This amends ADR 0015: a Scheduled post is copied from its Post's Text, not from a Version.
 
-ADR 0025 amends the premise of one Brief per Post: a Brief plans one or more Posts, each from one Idea, and each Post keeps the Text and History described here. Discarding a Draft deletes its Versions with it.
+ADR 0025 amends the premise of one Brief per Post: a Brief plans one or more Posts, each from one Idea, and each Post keeps the Text and History described here. Discarding a Draft deletes the Post and its Versions, the one case where Versions are removed.
 
 ## Considered Options
 

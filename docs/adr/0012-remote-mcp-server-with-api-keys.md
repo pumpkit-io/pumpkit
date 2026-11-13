@@ -2,7 +2,7 @@
 
 ADR 0020 supersedes API-key authentication below; Connected apps use OAuth. ADR 0023 supersedes its browser sign-in references; X alone opens a Session. The transport and tool-assembly decisions remain.
 
-ADR 0025 amends the tools named below: `plan_posts` and `write_posts` replace `start_post`, and ADR 0024 removes the Inspiration author tools.
+ADR 0025 amends the tools: planning a Brief and writing its Ideas are two tools, `plan_posts` and `write_posts`, in place of the one that started a Post. ADR 0024 takes the tools that manage Inspiration authors off the server.
 
 ## Historical decision
 
