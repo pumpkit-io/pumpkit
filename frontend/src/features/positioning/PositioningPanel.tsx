@@ -10,13 +10,26 @@ const COUNT_SHOWN_WITHIN = 400;
 
 /** The Persona page's Positioning: one textarea the User writes and saves. */
 export function PositioningPanel() {
-  const { loading, reload, text, edit, save, saving, canSave, error, textRefused, justSaved } =
-    usePositioning();
+  const {
+    loading,
+    reload,
+    text,
+    length,
+    edit,
+    save,
+    saving,
+    canSave,
+    error,
+    textRefused,
+    justSaved,
+  } = usePositioning();
   const id = useId();
   const headingId = `${id}-heading`;
   const helperId = `${id}-helper`;
   const errorId = `${id}-error`;
-  const nearLimit = text.length >= POSITIONING_MAX_CHARS - COUNT_SHOWN_WITHIN;
+  const nearLimit = length >= POSITIONING_MAX_CHARS - COUNT_SHOWN_WITHIN;
+  // maxLength counts UTF-16 units, so it grows by one for each character that takes two.
+  const maxUnits = POSITIONING_MAX_CHARS + text.length - length;
 
   return (
     <section aria-labelledby={headingId} className="space-y-5">
@@ -55,7 +68,7 @@ export function PositioningPanel() {
                   : 'I’m … I post about … I write for … I post to …'
               }
               disabled={loading === 'loading'}
-              maxLength={POSITIONING_MAX_CHARS}
+              maxLength={maxUnits}
               rows={7}
               className="min-h-40 resize-y font-sans text-base/6 text-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring sm:text-sm/6"
             />
@@ -73,8 +86,7 @@ export function PositioningPanel() {
           <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
             {nearLimit && (
               <p className="mr-auto font-mono text-xs tabular-nums text-muted-foreground">
-                {text.length.toLocaleString('en-US')} /{' '}
-                {POSITIONING_MAX_CHARS.toLocaleString('en-US')}
+                {length.toLocaleString('en-US')} / {POSITIONING_MAX_CHARS.toLocaleString('en-US')}
               </p>
             )}
             <p role="status" className="font-sans text-sm text-muted-foreground">

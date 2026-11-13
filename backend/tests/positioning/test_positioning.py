@@ -51,6 +51,28 @@ async def test_a_nul_character_is_left_out_of_the_saved_text(client, subscribed)
     assert (await client.get(POSITIONING)).json()["text"] == "I post about pricing."
 
 
+async def test_an_unpaired_surrogate_is_left_out_of_the_saved_text(client, subscribed):
+    response = await client.put(
+        POSITIONING,
+        content=rb'{"text": "I post about\ud800 pricing.\udfff"}',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["text"] == "I post about pricing."
+    assert (await client.get(POSITIONING)).json()["text"] == "I post about pricing."
+
+
+async def test_a_positioning_of_only_an_unpaired_surrogate_is_refused(client, subscribed):
+    response = await client.put(
+        POSITIONING,
+        content=rb'{"text": " \ud800 "}',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+
+
 @pytest.mark.parametrize("text", ["", "   \n\t ", "\x00", " \x00 "])
 async def test_a_blank_positioning_is_refused_and_the_saved_one_kept(client, subscribed, text):
     await client.put(POSITIONING, json={"text": TEXT})

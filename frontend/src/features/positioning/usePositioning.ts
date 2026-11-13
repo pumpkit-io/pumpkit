@@ -7,6 +7,12 @@ import { positioningService } from '@/services/positioningService';
 
 type Loading = 'loading' | 'failed' | 'loaded';
 
+/** True when the backend would find `text` blank: it drops what Postgres can't store, then trims. */
+function isBlank(text: string): boolean {
+  // Python strips the C0 separators and U+0085 too, which a JS trim() keeps.
+  return [...text].every((ch) => ch <= '\x1f' || ch === '\x85' || /[\s\p{Cs}]/u.test(ch));
+}
+
 /** The User's Positioning as they are editing it, loaded on mount, with save. */
 export function usePositioning() {
   const { refresh: refreshOnboarding } = useOnboarding();
@@ -73,16 +79,38 @@ export function usePositioning() {
       // A refusal for want of a Subscription sends the User to the Paywall, not to an error.
       if (isSubscriptionNeeded(e)) void refreshOnboarding();
       else {
-        setError(errorMessage(e, "Couldn't save your positioning. Try again."));
-        setTextRefused(errorStatus(e) === 422);
+        // FastAPI's 422 carries a list, not a sentence, so the panel says its own.
+        const refused = errorStatus(e) === 422;
+        setError(
+          errorMessage(
+            e,
+            refused
+              ? "That text can't be saved as your positioning. Change it and save again."
+              : "Couldn't save your positioning. Try again.",
+          ),
+        );
+        setTextRefused(refused);
       }
     } finally {
       setSaving(false);
     }
   }, [text, refreshOnboarding]);
 
-  const trimmed = text.trim();
-  const canSave = loading === 'loaded' && !saving && trimmed !== '' && trimmed !== saved;
+  const canSave = loading === 'loaded' && !saving && !isBlank(text) && text.trim() !== saved;
+  /** Counted in code points, as the backend's limit counts, so an emoji is one character. */
+  const length = [...text].length;
 
-  return { loading, reload, text, edit, save, saving, canSave, error, textRefused, justSaved };
+  return {
+    loading,
+    reload,
+    text,
+    length,
+    edit,
+    save,
+    saving,
+    canSave,
+    error,
+    textRefused,
+    justSaved,
+  };
 }

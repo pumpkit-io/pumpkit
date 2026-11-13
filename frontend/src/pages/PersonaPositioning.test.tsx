@@ -71,6 +71,27 @@ import {
 const SAVED =
   "I'm a solo founder. I post about bootstrapping for people starting their first SaaS.";
 
+/** The 422 FastAPI answers when `PositioningSaveRequest` refuses the text: `detail` is a list. */
+function textRefused() {
+  return Object.assign(new Error('Request failed with status code 422'), {
+    isAxiosError: true,
+    response: {
+      status: 422,
+      data: {
+        detail: [
+          {
+            type: 'value_error',
+            loc: ['body', 'text'],
+            msg: 'Value error, A positioning can be up to 4,000 characters.',
+            input: 'I post about pricing.',
+            ctx: { error: {} },
+          },
+        ],
+      },
+    },
+  });
+}
+
 async function panel() {
   return within(await screen.findByRole('region', { name: 'Who you are on X' }));
 }
@@ -176,6 +197,19 @@ describe('Persona: the Positioning panel', () => {
     expect(save).toBeDisabled();
   });
 
+  it.each(['\0', ' \ud800 ', '\x1f\x85'])(
+    'keeps Save disabled for text the backend would find blank (%j)',
+    async (blank) => {
+      renderSignedIn('/persona');
+
+      const textarea = await field();
+      await waitFor(() => expect(textarea).toBeEnabled());
+      fireEvent.change(textarea, { target: { value: blank } });
+
+      expect((await panel()).getByRole('button', { name: 'Save' })).toBeDisabled();
+    },
+  );
+
   it('shows "Saving…" and disables the button while a save is on its way', async () => {
     vi.mocked(positioningService.save).mockReturnValue(new Promise(() => {}));
     renderSignedIn('/persona');
@@ -245,9 +279,7 @@ describe('Persona: the Positioning panel', () => {
 
   it('marks the textarea invalid when the server refuses the text, until the next edit', async () => {
     vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED });
-    vi.mocked(positioningService.save).mockRejectedValue(
-      apiError(422, 'A positioning can be up to 4,000 characters.'),
-    );
+    vi.mocked(positioningService.save).mockRejectedValue(textRefused());
     renderSignedIn('/persona');
 
     const textarea = await field();
@@ -257,7 +289,7 @@ describe('Persona: the Positioning panel', () => {
     fireEvent.click(region.getByRole('button', { name: 'Save' }));
 
     expect(await region.findByRole('alert')).toHaveTextContent(
-      'A positioning can be up to 4,000 characters.',
+      "That text can't be saved as your positioning. Change it and save again.",
     );
     expect(textarea).toHaveAttribute('aria-invalid', 'true');
 
@@ -296,6 +328,18 @@ describe('Persona: the Positioning panel', () => {
     fireEvent.change(textarea, { target: { value: 'a'.repeat(3600) } });
 
     expect((await panel()).getByText('3,600 / 4,000')).toBeInTheDocument();
+  });
+
+  it('counts an emoji as one character, as the backend does, and leaves room to edit', async () => {
+    const emoji = '🎃'.repeat(4000);
+    vi.mocked(positioningService.get).mockResolvedValue({ text: emoji });
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toHaveValue(emoji));
+
+    expect((await panel()).getByText('4,000 / 4,000')).toBeInTheDocument();
+    expect(textarea).toHaveAttribute('maxlength', '8000');
   });
 
   it('sends the User to the Paywall when saving is refused for want of a Subscription', async () => {
