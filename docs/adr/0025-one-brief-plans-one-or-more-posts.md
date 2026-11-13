@@ -35,7 +35,7 @@ No data is migrated, because no Instance has real Users. A Post written before t
 - `write_posts` starts writing the Ideas the AI app names, split Ideas or the single-post Idea, and returns the Post ids. `get_post` reports whether a Post is still being written.
 - `delete_post` discards a Draft, and refuses any other Post.
 - `get_positioning` and `set_positioning` live in the `positioning` area's tools.
-- `start_post` is removed. The three Inspiration author tools leave the server's tool list and stay in the code (ADR 0024). `give_feedback` keeps its shape.
+- `start_post` is removed. The three Inspiration author tools leave the server's tool list and stay in the code (ADR 0024). `give_feedback` keeps its arguments. Once Feedback is written in the background (ADR 0026), it answers that the Version is being written, and `get_post` reports when it is done.
 - The server instructions describe Positioning and the two steps, and tell the AI app to show the Ideas and ask the User which to write.
 
 The web API's create-Post endpoint is removed as well, and planning a Brief and writing its Ideas take its place. It differs from the tools in one way: its planning request starts the single-post Idea when there are no split Ideas, where an AI app always calls `write_posts`.

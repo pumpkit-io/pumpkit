@@ -2,7 +2,7 @@
 
 ADR 0023 supersedes the separation of X authorization from sign-in below. X sign-in also grants publishing authorization; the publishing-provider and token-handling decisions remain unchanged.
 
-ADR 0024 changes what twitterapi.io reads below: the Positioning draft and Communities, with Inspiration authors inactive.
+ADR 0024 changes what twitterapi.io is used for below: the User's own posts for the Positioning draft, and Communities, with Inspiration authors inactive.
 
 ## Historical decision
 
