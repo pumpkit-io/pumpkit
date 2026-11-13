@@ -6,6 +6,7 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import get_x_reader
 from pumpkit.core.config import settings
 from pumpkit.core.errors import RefusedError
+from pumpkit.core.llm import get_llm
 from pumpkit.core.mcp_tools import (
     ADDITIVE,
     DESTRUCTIVE,
@@ -18,7 +19,6 @@ from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.core.storage import get_file_storage
 from pumpkit.core.time import get_clock
 from pumpkit.posts.formats import Format
-from pumpkit.posts.llm import get_llm
 from pumpkit.posts.media_fetcher import get_media_url_fetcher
 from pumpkit.posts.media_upload_links import LIFETIME as UPLOAD_LINK_LIFETIME
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE

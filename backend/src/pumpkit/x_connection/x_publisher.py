@@ -35,6 +35,7 @@ from pydantic import (
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import AppError, NotConfiguredError
+from pumpkit.core.text import drop_unstorable
 
 X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize"
 X_TOKEN_URL = "https://api.x.com/2/oauth2/token"
@@ -158,6 +159,26 @@ class XAccount:
     photo_url: Optional[str] = None
     confirmed_email: Optional[str] = None
     display_name: Optional[str] = None
+    # The profile's bio, location and website as the account wrote them; None when blank.
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    website: Optional[str] = None
+
+
+def _profile_text(value: object) -> Optional[str]:
+    """A free-text profile field as Postgres can store it; None when blank or not text."""
+    if not isinstance(value, str):
+        return None
+    return drop_unstorable(value).strip() or None
+
+
+def _website(data: dict) -> Optional[str]:
+    """The profile's website: the address behind X's t.co link when X gives it, else the link."""
+    try:
+        expanded = _profile_text(data["entities"]["url"]["urls"][0]["expanded_url"])
+    except (KeyError, IndexError, TypeError):
+        expanded = None
+    return expanded or _profile_text(data.get("url"))
 
 
 class _XSignInProfile(BaseModel):
@@ -309,7 +330,7 @@ class OfficialXPublisher:
         return _tokens_from(body, now=now, previous_refresh_token=refresh_token)
 
     async def fetch_account(self, *, access_token: str, for_sign_in: bool = False) -> XAccount:
-        fields = "subscription_type,profile_image_url"
+        fields = "subscription_type,profile_image_url,description,location,url,entities"
         if for_sign_in:
             fields += ",confirmed_email,name"
         try:
@@ -329,6 +350,11 @@ class OfficialXPublisher:
         data = body.get("data") if isinstance(body, dict) else None
         if not isinstance(data, dict):
             raise XPublisherError("X users/me returned a body without data")
+        profile_fields = {
+            "bio": _profile_text(data.get("description")),
+            "location": _profile_text(data.get("location")),
+            "website": _website(data),
+        }
         if not for_sign_in:
             user_id, handle = data.get("id"), data.get("username")
             if (
@@ -347,6 +373,7 @@ class OfficialXPublisher:
                 photo_url=_larger_photo(photo_url)
                 if isinstance(photo_url, str) and photo_url
                 else None,
+                **profile_fields,
             )
         try:
             profile = _XSignInProfile.model_validate(data)
@@ -363,6 +390,7 @@ class OfficialXPublisher:
             photo_url=_larger_photo(str(profile.profile_image_url))
             if profile.profile_image_url is not None
             else None,
+            **profile_fields,
         )
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:

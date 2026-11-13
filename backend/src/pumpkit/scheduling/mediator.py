@@ -28,13 +28,13 @@ from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
 from pumpkit.billing.models import AllowanceCount
 from pumpkit.core.config import settings
 from pumpkit.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
+from pumpkit.core.llm import LLM
 from pumpkit.core.logging import logger
 from pumpkit.core.photos import PhotoFetcher
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import Clock, as_utc
 from pumpkit.posts.formats import Format, format_of
-from pumpkit.posts.llm import LLM
 from pumpkit.posts.media_fetcher import MediaUrlFetcher
 from pumpkit.posts.media_upload import ReceivedMedia
 from pumpkit.posts.media_upload_links import NewUploadLink

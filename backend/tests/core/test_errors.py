@@ -12,9 +12,9 @@ import pumpkit.core.errors as errors_module
 from pumpkit.authors.x_reader import HandleNotFoundError, XReaderError, XReaderNotConfiguredError
 from pumpkit.billing.gateway import BillingProviderError
 from pumpkit.core.errors import AppError, ConflictError, RetryLaterError
+from pumpkit.core.llm import LLMError
+from pumpkit.core.llm_client import LLMNotConfiguredError
 from pumpkit.main import app as main_app
-from pumpkit.posts.llm import LLMError
-from pumpkit.posts.llm_client import LLMNotConfiguredError
 from pumpkit.x_connection.x_publisher import (
     XNotReceivedError,
     XOutcomeUnknownError,

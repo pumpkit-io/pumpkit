@@ -1,10 +1,12 @@
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.positioning.models import Positioning
+from pumpkit.core.time import as_utc
+from pumpkit.positioning.models import Positioning, PositioningDraftRequest
 
 
 async def get_positioning(db: AsyncSession, *, user_id: str) -> Optional[Positioning]:
@@ -31,3 +33,35 @@ async def save_positioning(
     positioning.saved_at = now
     await db.flush()
     return positioning
+
+
+async def draft_requests_since(
+    db: AsyncSession, *, user_id: str, since: datetime
+) -> list[datetime]:
+    """When the User made each draft request after `since`, oldest first."""
+    query = (
+        select(PositioningDraftRequest.requested_at)
+        .where(
+            PositioningDraftRequest.user_id == user_id,
+            PositioningDraftRequest.requested_at > since,
+        )
+        .order_by(PositioningDraftRequest.requested_at)
+    )
+    return [as_utc(requested_at) for requested_at in (await db.execute(query)).scalars()]
+
+
+async def log_draft_request(
+    db: AsyncSession, *, user_id: str, now: datetime, counted_since: datetime
+) -> None:
+    """
+    Record one draft request that goes on to read X, and drop the User's requests the limit
+    no longer counts: those made at or before `counted_since`. Flushes.
+    """
+    await db.execute(
+        delete(PositioningDraftRequest).where(
+            PositioningDraftRequest.user_id == user_id,
+            PositioningDraftRequest.requested_at <= counted_since,
+        )
+    )
+    db.add(PositioningDraftRequest(user_id=user_id, requested_at=now))
+    await db.flush()
