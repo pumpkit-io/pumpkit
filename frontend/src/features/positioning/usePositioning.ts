@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isSubscriptionNeeded } from '@/features/billing/subscriptionNeeded';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
@@ -17,7 +18,10 @@ export function usePositioning() {
   /** The text as of the last edit, which a save in flight can't see in its closure. */
   const latestText = useRef('');
   const [saving, setSaving] = useState(false);
+  /** Why the last save failed, until the next edit or save. */
   const [error, setError] = useState<string | null>(null);
+  /** True when that save failed because the server refused the text itself. */
+  const [textRefused, setTextRefused] = useState(false);
   /** True from a save until the next edit. */
   const [justSaved, setJustSaved] = useState(false);
 
@@ -47,11 +51,14 @@ export function usePositioning() {
     setText(next);
     latestText.current = next;
     setJustSaved(false);
+    setError(null);
+    setTextRefused(false);
   }, []);
 
   const save = useCallback(async () => {
     setSaving(true);
     setError(null);
+    setTextRefused(false);
     try {
       const positioning = await positioningService.save(text);
       setSaved(positioning.text);
@@ -64,8 +71,11 @@ export function usePositioning() {
       track('positioning_saved');
     } catch (e) {
       // A refusal for want of a Subscription sends the User to the Paywall, not to an error.
-      if (errorStatus(e) === 403) void refreshOnboarding();
-      else setError(errorMessage(e, "Couldn't save your positioning. Try again."));
+      if (isSubscriptionNeeded(e)) void refreshOnboarding();
+      else {
+        setError(errorMessage(e, "Couldn't save your positioning. Try again."));
+        setTextRefused(errorStatus(e) === 422);
+      }
     } finally {
       setSaving(false);
     }
@@ -74,5 +84,5 @@ export function usePositioning() {
   const trimmed = text.trim();
   const canSave = loading === 'loaded' && !saving && trimmed !== '' && trimmed !== saved;
 
-  return { loading, reload, text, edit, save, saving, canSave, error, justSaved };
+  return { loading, reload, text, edit, save, saving, canSave, error, textRefused, justSaved };
 }

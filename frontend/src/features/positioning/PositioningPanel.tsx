@@ -10,7 +10,8 @@ const COUNT_SHOWN_WITHIN = 400;
 
 /** The Persona page's Positioning: one textarea the User writes and saves. */
 export function PositioningPanel() {
-  const { loading, reload, text, edit, save, saving, canSave, error, justSaved } = usePositioning();
+  const { loading, reload, text, edit, save, saving, canSave, error, textRefused, justSaved } =
+    usePositioning();
   const id = useId();
   const headingId = `${id}-heading`;
   const helperId = `${id}-helper`;
@@ -45,7 +46,7 @@ export function PositioningPanel() {
             <Textarea
               aria-labelledby={headingId}
               aria-describedby={error ? `${errorId} ${helperId}` : helperId}
-              aria-invalid={error ? true : undefined}
+              aria-invalid={textRefused ? true : undefined}
               value={loading === 'loading' ? '' : text}
               onChange={(event) => edit(event.target.value)}
               placeholder={

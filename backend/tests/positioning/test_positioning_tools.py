@@ -24,6 +24,13 @@ async def test_set_positioning_saves_what_the_web_app_then_reads(
     assert (await authed_client.get(POSITIONING)).json() == result["structuredContent"]
 
 
+async def test_set_positioning_leaves_a_nul_character_out_of_the_saved_text(subscribed, mcp):
+    result = await mcp.call_tool("set_positioning", text="I post about\x00 pricing.")
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["text"] == "I post about pricing."
+
+
 async def test_a_blank_positioning_is_refused_in_words(subscribed, mcp):
     await mcp.call_tool("set_positioning", text=TEXT)
 
@@ -48,5 +55,9 @@ async def test_tools_list_shows_the_positioning_tools_with_their_annotations(sub
         "destructiveHint": False,
     }
     assert tools["set_positioning"]["inputSchema"]["required"] == ["text"]
-    for name in ("get_positioning", "set_positioning"):
-        assert "who they write for" in tools[name]["description"]
+    reading = tools["get_positioning"]["description"]
+    saving = tools["set_positioning"]["description"]
+    assert "Read the user's positioning" in reading
+    assert "`text` is null" in reading
+    assert "Save the user's positioning, in place of any they had" in saving
+    assert "Up to 4,000 characters" in saving

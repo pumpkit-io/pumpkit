@@ -43,7 +43,15 @@ async def test_the_text_is_saved_without_the_space_around_it(client, subscribed)
     assert response.json()["text"] == TEXT
 
 
-@pytest.mark.parametrize("text", ["", "   \n\t "])
+async def test_a_nul_character_is_left_out_of_the_saved_text(client, subscribed):
+    response = await client.put(POSITIONING, json={"text": "I post about\x00 pricing.\x00"})
+
+    assert response.status_code == 200
+    assert response.json()["text"] == "I post about pricing."
+    assert (await client.get(POSITIONING)).json()["text"] == "I post about pricing."
+
+
+@pytest.mark.parametrize("text", ["", "   \n\t ", "\x00", " \x00 "])
 async def test_a_blank_positioning_is_refused_and_the_saved_one_kept(client, subscribed, text):
     await client.put(POSITIONING, json={"text": TEXT})
 

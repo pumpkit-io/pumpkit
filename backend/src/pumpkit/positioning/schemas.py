@@ -18,7 +18,8 @@ class PositioningSaveRequest(BaseModel):
     @field_validator("text")
     @classmethod
     def _strip(cls, value: str) -> str:
-        stripped = value.strip()
+        # Postgres refuses a NUL in TEXT, and no one types one on purpose.
+        stripped = value.replace("\x00", "").strip()
         if not stripped:
             raise ValueError("Write your positioning first.")
         if len(stripped) > POSITIONING_MAX_CHARS:

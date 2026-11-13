@@ -88,10 +88,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it("shows the User's saved Positioning in the textarea, above the Inspiration authors", async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({
-      text: SAVED,
-      savedAt: '2026-10-10T12:00:30Z',
-    });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED });
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
@@ -129,7 +126,7 @@ describe('Persona: the Positioning panel', () => {
   it("says the Positioning couldn't be loaded, and Try again loads it", async () => {
     vi.mocked(positioningService.get)
       .mockRejectedValueOnce(apiError(500, 'boom'))
-      .mockResolvedValue({ text: SAVED, savedAt: '2026-10-10T12:00:30Z' });
+      .mockResolvedValue({ text: SAVED });
     renderSignedIn('/persona');
 
     const region = await panel();
@@ -142,10 +139,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('saves what the User wrote, says so, and waits for the next edit to offer Save again', async () => {
-    vi.mocked(positioningService.save).mockResolvedValue({
-      text: 'I post about pricing.',
-      savedAt: '2026-10-10T13:00:30Z',
-    });
+    vi.mocked(positioningService.save).mockResolvedValue({ text: 'I post about pricing.' });
     renderSignedIn('/persona');
 
     const textarea = await field();
@@ -167,10 +161,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('keeps Save disabled while the text is blank or the same as what is saved', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({
-      text: SAVED,
-      savedAt: '2026-10-10T12:00:30Z',
-    });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED });
     renderSignedIn('/persona');
 
     const textarea = await field();
@@ -214,7 +205,7 @@ describe('Persona: the Positioning panel', () => {
     await region.findByRole('button', { name: 'Saving…' });
     fireEvent.change(textarea, { target: { value: 'I post about pricing and churn.' } });
 
-    finishSave({ text: 'I post about pricing.', savedAt: '2026-10-10T13:00:30Z' });
+    finishSave({ text: 'I post about pricing.' });
 
     await waitFor(() => expect(region.getByRole('button', { name: 'Save' })).toBeEnabled());
     expect(textarea).toHaveValue('I post about pricing and churn.');
@@ -246,9 +237,51 @@ describe('Persona: the Positioning panel', () => {
     expect(await region.findByRole('alert')).toHaveTextContent(message);
     expect(textarea).toHaveValue('I post about pricing.');
     expect(textarea).toHaveAccessibleDescription(described);
+    expect(textarea).not.toHaveAttribute('aria-invalid');
     expect(region.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(region.queryByText('Saved')).not.toBeInTheDocument();
     expect(track).not.toHaveBeenCalledWith('positioning_saved');
+  });
+
+  it('marks the textarea invalid when the server refuses the text, until the next edit', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED });
+    vi.mocked(positioningService.save).mockRejectedValue(
+      apiError(422, 'A positioning can be up to 4,000 characters.'),
+    );
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toHaveValue(SAVED));
+    fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: 'Save' }));
+
+    expect(await region.findByRole('alert')).toHaveTextContent(
+      'A positioning can be up to 4,000 characters.',
+    );
+    expect(textarea).toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.change(textarea, { target: { value: SAVED } });
+
+    expect(region.queryByRole('alert')).not.toBeInTheDocument();
+    expect(textarea).not.toHaveAttribute('aria-invalid');
+    expect(textarea).toHaveAccessibleDescription(/^Cover:/);
+  });
+
+  it('says why a save was refused with a 403 that is not for want of a Subscription', async () => {
+    vi.mocked(positioningService.save).mockRejectedValue(
+      apiError(403, 'Your account is suspended.'),
+    );
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: 'Save' }));
+
+    expect(await region.findByRole('alert')).toHaveTextContent('Your account is suspended.');
+    expect(currentPath()).toBe('/persona');
   });
 
   it('shows the character count once the text nears 4,000 characters, and stops typing there', async () => {
@@ -265,7 +298,7 @@ describe('Persona: the Positioning panel', () => {
     expect((await panel()).getByText('3,600 / 4,000')).toBeInTheDocument();
   });
 
-  it('sends the User to the Paywall when saving is refused with a 403', async () => {
+  it('sends the User to the Paywall when saving is refused for want of a Subscription', async () => {
     vi.mocked(billingService.fetchBillingMe)
       .mockResolvedValueOnce(SUBSCRIBED)
       .mockResolvedValue(NOT_SUBSCRIBED);
