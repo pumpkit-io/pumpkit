@@ -5,6 +5,9 @@ interface Account {
   username: string;
   name: string;
   confirmed_email?: string;
+  description?: string;
+  location?: string;
+  url?: string;
 }
 
 interface Grant {
@@ -169,6 +172,8 @@ export function pumpkitX(config: {
         if (fields.includes('profile_image_url'))
           data.profile_image_url = `${config.apiUrl}/_pumpkit/avatar.png`;
         if (fields.includes('subscription_type')) data.subscription_type = 'None';
+        for (const field of ['description', 'location', 'url'] as const)
+          if (fields.includes(field) && user[field]) data[field] = user[field];
         state.events.push({ kind: 'profile', userId: user.id });
         return c.json({ data });
       });

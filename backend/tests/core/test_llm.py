@@ -7,8 +7,8 @@ import respx
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
-from pumpkit.posts.llm import LLMError, OpenAICompatibleLLM
-from pumpkit.posts.llm_client import LLMClient
+from pumpkit.core.llm import LLMError, OpenAICompatibleLLM
+from pumpkit.core.llm_client import LLMClient
 
 COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 LOCAL_BASE_URL = "http://localhost:11434/v1"

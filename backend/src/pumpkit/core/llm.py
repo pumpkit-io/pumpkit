@@ -15,8 +15,8 @@ from openai import OpenAIError
 from pydantic import BaseModel
 
 from pumpkit.core.errors import AppError
-from pumpkit.posts.llm_client import LLMClient, llm_client
-from pumpkit.posts.llm_schemas import ModelUsage, StructuredResult
+from pumpkit.core.llm_client import LLMClient, llm_client
+from pumpkit.core.llm_schemas import ModelUsage, StructuredResult
 
 T = TypeVar("T", bound=BaseModel)
 

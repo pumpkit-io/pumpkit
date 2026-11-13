@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from pumpkit.core.config import settings
 from pumpkit.core.errors import NotConfiguredError
-from pumpkit.posts.llm_schemas import (
+from pumpkit.core.llm_schemas import (
     AssembledToolCall,
     CompleteResult,
     ModelUsage,

@@ -7,8 +7,8 @@ from sqlalchemy.orm import selectinload
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
+from pumpkit.core.llm import LLMError
 from pumpkit.core.time import as_utc
-from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt

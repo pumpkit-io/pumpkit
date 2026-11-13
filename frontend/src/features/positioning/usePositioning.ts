@@ -13,7 +13,7 @@ function isBlank(text: string): boolean {
   return [...text].every((ch) => ch <= '\x1f' || ch === '\x85' || /[\s\p{Cs}]/u.test(ch));
 }
 
-/** The User's Positioning as they are editing it, loaded on mount, with save. */
+/** The User's Positioning as they are editing it, loaded on mount, with save and draft. */
 export function usePositioning() {
   const { refresh: refreshOnboarding } = useOnboarding();
   const [loading, setLoading] = useState<Loading>('loading');
@@ -30,6 +30,11 @@ export function usePositioning() {
   const [textRefused, setTextRefused] = useState(false);
   /** True from a save until the next edit. */
   const [justSaved, setJustSaved] = useState(false);
+  /** False once the User has used up today's drafts. */
+  const [canDraft, setCanDraft] = useState(true);
+  const [drafting, setDrafting] = useState(false);
+  /** What came of the last draft request, until the next edit, save or draft. */
+  const [draftNote, setDraftNote] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,9 +42,10 @@ export function usePositioning() {
       .get()
       .then((positioning) => {
         if (cancelled) return;
-        setSaved(positioning?.text ?? '');
-        setText(positioning?.text ?? '');
-        latestText.current = positioning?.text ?? '';
+        setSaved(positioning.text ?? '');
+        setText(positioning.text ?? '');
+        latestText.current = positioning.text ?? '';
+        setCanDraft(positioning.canDraft);
         setLoading('loaded');
       })
       .catch(() => !cancelled && setLoading('failed'));
@@ -59,12 +65,14 @@ export function usePositioning() {
     setJustSaved(false);
     setError(null);
     setTextRefused(false);
+    setDraftNote(null);
   }, []);
 
   const save = useCallback(async () => {
     setSaving(true);
     setError(null);
     setTextRefused(false);
+    setDraftNote(null);
     try {
       const positioning = await positioningService.save(text);
       setSaved(positioning.text);
@@ -96,7 +104,34 @@ export function usePositioning() {
     }
   }, [text, refreshOnboarding]);
 
-  const canSave = loading === 'loaded' && !saving && !isBlank(text) && text.trim() !== saved;
+  const draft = useCallback(async () => {
+    setDrafting(true);
+    setError(null);
+    setTextRefused(false);
+    setDraftNote(null);
+    try {
+      const drafted = await positioningService.draft();
+      setCanDraft(drafted.canDraft);
+      if (drafted.text === null) {
+        setDraftNote(drafted.reason ?? "Couldn't draft your positioning. Try again.");
+      } else {
+        setText(drafted.text);
+        latestText.current = drafted.text;
+        setJustSaved(false);
+        setDraftNote('Drafted from your X profile. Save to keep it.');
+      }
+    } catch (e) {
+      if (isSubscriptionNeeded(e)) void refreshOnboarding();
+      // The only 429 this request gets is the daily limit, which the button's own line explains.
+      else if (errorStatus(e) === 429) setCanDraft(false);
+      else setDraftNote(errorMessage(e, "Couldn't draft your positioning. Try again."));
+    } finally {
+      setDrafting(false);
+    }
+  }, [refreshOnboarding]);
+
+  const idle = loading === 'loaded' && !saving && !drafting;
+  const canSave = idle && !isBlank(text) && text.trim() !== saved;
   /** Counted in code points, as the backend's limit counts, so an emoji is one character. */
   const length = [...text].length;
 
@@ -112,5 +147,10 @@ export function usePositioning() {
     error,
     textRefused,
     justSaved,
+    draft,
+    drafting,
+    canDraft,
+    canRequestDraft: idle && canDraft,
+    draftNote,
   };
 }

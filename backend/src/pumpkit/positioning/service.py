@@ -1,10 +1,13 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pumpkit.positioning.models import Positioning
+from pumpkit.core.time import as_utc
+from pumpkit.positioning.models import Positioning, PositioningDraftRequest
 
 
 async def get_positioning(db: AsyncSession, *, user_id: str) -> Optional[Positioning]:
@@ -31,3 +34,27 @@ async def save_positioning(
     positioning.saved_at = now
     await db.flush()
     return positioning
+
+
+@dataclass(frozen=True)
+class DraftRequestCount:
+    count: int
+    # When the oldest counted request was made; None when none was.
+    oldest: Optional[datetime]
+
+
+async def count_draft_requests(
+    db: AsyncSession, *, user_id: str, since: datetime
+) -> DraftRequestCount:
+    """The User's draft requests made after `since`."""
+    query = select(func.count(), func.min(PositioningDraftRequest.requested_at)).where(
+        PositioningDraftRequest.user_id == user_id, PositioningDraftRequest.requested_at > since
+    )
+    count, oldest = (await db.execute(query)).one()
+    return DraftRequestCount(count=count, oldest=None if oldest is None else as_utc(oldest))
+
+
+async def log_draft_request(db: AsyncSession, *, user_id: str, now: datetime) -> None:
+    """Record one draft request that goes on to read X. Flushes."""
+    db.add(PositioningDraftRequest(user_id=user_id, requested_at=now))
+    await db.flush()

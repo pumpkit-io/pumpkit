@@ -1,10 +1,10 @@
 """The MCP tools for writing Posts, over the same mediator as the router."""
 
 from pumpkit.auth.models import User
+from pumpkit.core.llm import get_llm
 from pumpkit.core.mcp_tools import ADDITIVE, McpTool, ToolCall
 from pumpkit.posts import mediator
 from pumpkit.posts.formats import FORMAT_POST, Format
-from pumpkit.posts.llm import get_llm
 from pumpkit.posts.schemas import WRITE_RATE, PostResponse, PostStartRequest
 
 

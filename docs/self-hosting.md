@@ -167,7 +167,7 @@ Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](ht
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
 - Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls.
-- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the three models it serves: `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
+- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the four models it serves: `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` and `LLM_POSITIONING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).
 
