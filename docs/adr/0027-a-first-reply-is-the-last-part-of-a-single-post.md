@@ -1,6 +1,6 @@
 # A First reply is the last Part of a single X post
 
-Pumpkit's writing puts an external link in a First reply, a reply the User's account posts under its own post. The Spec (#467) gives the reason: the post itself shouldn't be penalised for carrying the link. A First reply is stored as the last Part of a single X post's Text. The Text and each Version record whether their last Part is one, and the Post keeps the Format of a single X post. Parts already have an editor, a place in a Version and a way to publish as a reply to the Part before, so a First reply needs none of its own.
+Pumpkit's writing puts an external link in a First reply, a reply the User's account posts under its own post. #467 gives the reason: the post itself shouldn't be penalised for carrying the link. A First reply is stored as the last Part of a single X post's Text. The Text and each Version record whether their last Part is one, and the Post keeps the Format of a single X post. Parts already have an editor, a place in a Version and a way to publish as a reply to the Part before, so a First reply needs none of its own.
 
 This amends ADR 0014 and ADR 0015. Their other decisions continue to apply.
 
@@ -11,11 +11,11 @@ This amends ADR 0014 and ADR 0015. Their other decisions continue to apply.
 - When Feedback turns a single X post into a Thread, the First reply's text moves into the Thread's last Part.
 - A First reply the humanizer adds to a single X post that had none is dropped.
 - Media stays on the post. A First reply carries none, and Media whose Part is gone after Feedback or a restore moves to the post, where in a Thread it moves to the last Part.
-- Scheduling and Post now are refused while any Part of the Text contains the `[link]` placeholder, with a message naming it.
+- Scheduling and Post now are refused while any Part of the Text contains the `[link]` placeholder, which the writing leaves where the User's real link goes, with a message naming it.
 
 ## Publishing (amends ADR 0014)
 
-A single X post with a First reply publishes as a chain of two Parts: the post, then the First reply as a reply to it. ADR 0014's rules for a Thread apply to it. Each Part is published at most once. When the post is live and the First reply is refused or its outcome is unknown, the Scheduled post becomes Failed, the live post is kept and locked, and rescheduling publishes only the First reply.
+A single X post with a First reply publishes as two Parts: the post, then the First reply as a reply to it. ADR 0014's rules for a Thread apply to it. Each Part is published at most once. When X has accepted the post and the First reply is refused or its outcome is unknown, the Scheduled post becomes Failed, the post stays on X and is locked, and rescheduling publishes only the First reply.
 
 ## One Scheduled post (amends ADR 0015)
 

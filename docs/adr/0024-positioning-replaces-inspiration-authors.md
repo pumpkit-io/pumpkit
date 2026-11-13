@@ -7,7 +7,7 @@ This amends ADR 0018 and ADR 0019, extends ADR 0008's area order, and takes ADR 
 ## Positioning
 
 - A User has at most one Positioning. It is one free text, with no guided fields.
-- Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It runs when Onboarding's Persona step first opens, which is after the Paywall, so the Operator pays twitterapi.io only for Users who are Subscribed.
+- Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It runs when Onboarding's Persona step first opens, so the Operator pays twitterapi.io only for a User who is past the Paywall.
 - The draft states only what the profile and posts show, leaves out what they don't, and copies no post's wording.
 - A failed X read or model call gives no draft and no error page: the User starts from an empty Positioning.
 - A draft is not a Generation, and requesting one saves nothing: a redraft on the Persona page leaves the saved Positioning alone until the User saves. Redrafts are limited per User per day. #470 sets that number, and #469 sets the minimum length of a Positioning, if any.
@@ -20,13 +20,16 @@ Onboarding's Persona step asks for a Positioning in place of an Inspiration auth
 
 ## Inspiration authors are inactive (amends ADR 0019)
 
-This follows ADR 0023's mechanism for Google and Magic link. The Inspiration author code stays in the repository, and nothing a User or an AI app can reach runs it:
+This follows ADR 0023's mechanism for Google and Magic link. The code listed here stays in the repository, and nothing a User or an AI app can reach runs it:
 
 - The author routes move to a router the application never mounts.
 - The three Inspiration author MCP tools leave the server's tool list.
-- The Persona panel, the picker and their provider stay in the frontend with nothing rendering them.
+- The Persona page's author panel, the picker and their provider stay in the frontend with nothing rendering them.
+- The Author directory, the corpus module, the old sketch and thread prompts and the hook library stay in the backend with no caller the application mounts.
 - There is no configuration switch. Someone who wants Inspiration authors back changes the code.
-- The `authors` area, the Author directory, the X reader's profile and post reads, the corpus module, the old sketch and thread prompts and the hook library keep their tests, which mount their own assembly. One test asserts that the application mounts none of those routes or tools.
+- All of it keeps its tests, which mount their own assembly. One test asserts that the application mounts none of those routes or tools.
+
+The X reader is not on that list. It stays in use: the Positioning draft reads the User's posts through it, by way of the `authors` area's service, and Community lookups call it as before.
 
 The Author directory of ADR 0019 therefore stops growing: no User can look a handle up or pick from it. Its lookups, limits and search stay in the code with their tests, inactive like the rest. ADR 0005 still holds: twitterapi.io stays the only way Pumpkit reads X, and an Instance still needs its key, now for the Positioning draft and Communities.
 

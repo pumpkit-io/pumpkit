@@ -2,21 +2,21 @@
 
 A Version used to be written inside the request by one sketch call and one humanizer call. A Brief can now start several Posts at once (ADR 0025), and each Post takes more model calls, so a request can no longer wait for the writing. Pumpkit writes every Version in an in-process background task, the User's page polls for it, and a write that never finishes is shown as a Post Pumpkit couldn't write, which the User can retry.
 
-This amends one premise of ADR 0013, adds a state that comes before ADR 0015's four statuses, and changes the model calls behind ADR 0017's cost per Generation. Their other decisions continue to apply.
+This amends ADR 0013, ADR 0015 and ADR 0017, as the sections below say. Their other decisions continue to apply.
 
 ## The pipeline
 
 - The first Version of a Post runs: five sketch calls in parallel, each asked to try a different hook type first, then the merge, the scrub, the humanizer and the scrub again. A sketch call that fails is skipped as long as one succeeds.
-- The merged sketch after the scrub is the Version's Sketch. The Version also keeps the hook levers, hook types and CTA type the writing chose, in place of a hook library name, and the sketches, the merge's reviews and reasoning and each step's model and usage. Those are never shown: they are there to diagnose a bad Post.
+- The five candidates are sketches, in lowercase. The Sketch of the glossary is the one text the merge makes of them, after the scrub. The Version also keeps the hook levers, hook types and CTA type the writing chose, in place of a hook library name, and the sketches, the merge's reviews and reasoning and each step's model and usage. Those are never shown: they are there to diagnose a bad Post.
 - Feedback writes a Version with a revise call and a humanizer. Its conversation replays the Post's Versions, as ADR 0016 says, and never the sketches or the merge.
 - A single X post and a Thread never share a prompt. Each step has one prompt per Format, assembled from shared sections.
 - Each step's model is a setting with a working default. The sketch count, the cap on Ideas and the hook-type rotation are constants in code, because the prompts are tuned against them.
 
 ## The background task
 
-- The request that starts writing checks the attempt limit and the Generations left for every Idea asked for, creates each Post in its writing state, starts the task and returns.
+- The request that starts writing checks the hourly attempt limit and the Generations left for every Idea asked for, creates each Post in its writing state, starts the task and returns.
 - The Posts of one Brief are written in parallel. One Instance-wide setting caps the model calls in flight, 8 by default, so a burst of Briefs doesn't trip the provider's rate limits.
-- One Generation is charged per Post when its first Version succeeds, and one per Feedback. A write that produces no Version is free. Each Post written counts toward the existing hourly attempt limit.
+- One Generation is charged per Post when its first Version succeeds, and one per Feedback. A write that produces no Version is free. Each Post written counts toward the hourly attempt limit, which exists already.
 - Feedback runs through the same task and the same polling, so writing has one way to run.
 
 ## The writing state and ADR 0015's statuses
@@ -29,15 +29,14 @@ A Post that Feedback is rewriting keeps its status while the next Version is wri
 
 ## The timeout rule
 
-The task lives in the backend process and nothing else records that it is running, so a restart loses the writes in flight. Pumpkit therefore treats a Post whose writing state is older than a timeout as one it couldn't write, and shows it with Retry. Retry reuses the Idea's Plan and counts as a new attempt. #479 sets the timeout.
+The task lives in the backend process and nothing else records that it is running, so a restart loses the writes in flight. Pumpkit therefore treats a Post whose writing state is older than a timeout as one it couldn't write, and shows it with Retry. Retry reuses the Idea's Plan and counts toward the hourly attempt limit again. #479 sets the timeout.
 
 ## Consequences
 
 - ADR 0013 chose Jev partly because Versions were written inside the request. That premise no longer holds. Its rule that Jev classifies and LLMs write is unchanged.
 - ADR 0017 set the Allowance and the Top-up from what a Generation cost in model calls under the earlier pipeline. A Post's first Version now takes five sketch calls, a merge and a humanizer, and this ADR does not estimate the new cost.
-- A write that produces no Version, or that a restart loses, costs the User a retry and no Generation.
 
 ## Considered Options
 
 - **Keep writing inside the request.** Five Posts from one Brief would take five times as long behind one response, and the User couldn't leave the page while they are written.
-- **A durable job queue, or a worker process as the publisher has (ADR 0007).** It would survive a restart. We left it out because a write lost to a restart is recoverable without one: the Plan is stored, a write that produces no Version is free, and the timeout rule shows the Post with Retry.
+- **A durable job queue, or a worker process as the publisher has (ADR 0007).** It would survive a restart. We left it out because a write lost to a restart is recoverable without one: the Plan is stored, the User was charged nothing, and the timeout rule shows the Post with Retry.

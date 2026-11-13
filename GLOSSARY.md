@@ -1,10 +1,10 @@
 # Pumpkit
 
-Open-source AI writing tool for X: turns a brief into a post written in the style of X authors you choose, then revises it with your feedback.
+Open-source AI writing tool for X: turns a brief into posts planned around your positioning, then revises them with your feedback.
 
 ## Language
 
-The _Avoid_ lists don't bind the Pro offer's marketing copy or its info popovers, wherever they appear (the Usage card included): there, "prompt" and "X creators" may stand for a Generation and Inspiration authors.
+The _Avoid_ lists don't bind the Pro offer's marketing copy or its info popovers, wherever they appear (the Usage card included): there, "prompt" may stand for a Generation.
 
 ### Instances
 
@@ -113,7 +113,7 @@ An X post whose text contains a link, by the rule X uses to spot links when it c
 _Avoid_: URL post, linked tweet, link X post
 
 **Generation**:
-One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: each Post written from a Brief is one, and so is each Feedback. Planning a Brief, drafting a Positioning and a writing attempt that produces no Version are not Generations.
+One Version Pumpkit writes for a User, as an Allowance or a Top-up counts it: each Post written from a Brief is one, and so is each Feedback. Planning a Brief, drafting a Positioning and a write that produces no Version are not Generations.
 _Avoid_: prompt, post prompt, credit, request
 
 **Allowance period**:
@@ -159,11 +159,11 @@ How long a Plan makes a single X post: short, medium or long, within the charact
 _Avoid_: size, word count
 
 **Post**:
-One piece of writing made from one Idea of a Brief: its Text, and every Version Pumpkit has written for it. A Brief may have several Posts. Its Versions may differ in Format. A Post goes out at most once, so it has at most one Scheduled post, and takes its status from it: Scheduled while it waits or is being published, then Published or Failed. A Post with no Scheduled post is a Draft once its first Version is written. Until then it has no status and appears only with its Brief: Pumpkit is writing it, or couldn't write it and the User may retry.
+One piece of writing made from one Idea of a Brief: its Text, and every Version Pumpkit has written for it. Its Versions may differ in Format. A Post goes out at most once, so it has at most one Scheduled post, and takes its status from it: Scheduled while it waits or is being published, then Published or Failed. A Post with no Scheduled post is a Draft once its first Version is written. Until then it has no status and appears only with its Brief: Pumpkit is writing it, or couldn't write it and the User may retry.
 _Avoid_: tweet, run
 
 **Draft**:
-A Post that has at least one Version and no Scheduled post: it was never scheduled, or the User unscheduled it. A Post still waiting for its first Version is not a Draft. The User may discard a Draft, which deletes the Post and its Versions for good.
+A Post that has at least one Version and no Scheduled post: it was never scheduled, or the User unscheduled it. A Post still waiting for its first Version is not a Draft. Only a Draft can be discarded, which deletes the Post and its Versions for good.
 _Avoid_: unpublished post, not published
 
 **Text**:
@@ -195,7 +195,7 @@ One of the ordered texts that make up a Text, a Version or a Scheduled post, pub
 _Avoid_: tweet, segment, item
 
 **First reply**:
-A reply to a single X post, published with it by the same X account, that carries what the post itself should not, such as an external link. It is the last Part of the Post's Text, and the Format stays a single X post. A Thread has none: its link goes in its last Part. Whether a First reply counts as an X post of the Allowance is not decided yet (ADR 0027).
+A reply to a single X post, published with it by the same X account, that carries what the post itself should not, such as an external link. It is the last Part of the Post's Text, and the Format stays a single X post. A Thread has none: its link goes in its last Part.
 _Avoid_: self-reply, link reply, comment
 
 **Media**:
@@ -203,11 +203,11 @@ The images, animated GIF or video a User attaches to a Post's Text, on its singl
 _Avoid_: attachment, file, asset, upload
 
 **Upload link**:
-A one-time link an AI app asks for to send a Media file from the User's computer to one Part of a Post, with no other credentials. It expires 15 minutes after it is made.
+A one-time link an AI app asks for to send a Media file from the User's computer to a Post's single X post or to one Part of its Thread, with no other credentials. It expires 15 minutes after it is made.
 _Avoid_: upload URL, presigned URL, drop link
 
 **Sketch**:
-The text Pumpkit settles on first for a Version, Hook included, before rewriting it to sound like a person typed it. Users never see it.
+The text Pumpkit settles on for a Version, Hook included, before rewriting it to sound like a person typed it. For a Post's first Version it is merged from several candidate sketches, which are not Sketches. Users never see it.
 _Avoid_: draft, first pass, raw output
 
 **Hook**:
@@ -245,7 +245,7 @@ A Scheduled post that X has accepted and shows on the User's X account, or in it
 _Avoid_: posted, sent, live
 
 **Failed**:
-A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it, also with its Post's Text as edited or rewritten since. One with several Parts may fail after some of them are live; those Parts can no longer change, and rescheduling publishes only the rest.
+A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it, also with its Post's Text as edited or rewritten since. One with several Parts may fail after X has accepted some of them; those Parts can no longer change, and rescheduling publishes only the rest.
 _Avoid_: errored, rejected, dead
 
 ### Legal
