@@ -12,7 +12,7 @@ from alembic import command
 from pumpkit.authors.x_reader import FetchedPost
 from tests.migrations import migrate
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import PLAN, written
+from tests.posts.writing_replies import PLAN
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -93,7 +93,7 @@ async def test_a_post_started_after_the_upgrade_is_read_back_with_its_plan(
     ]
     await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [written("the sketch"), {"post": "the final"}]
+    fake_llm.replies = [{"post": "the final"}]
 
     started = await client.post(POSTS, json={"brief": "ship small things"})
 

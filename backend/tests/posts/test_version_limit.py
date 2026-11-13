@@ -13,7 +13,6 @@ from pumpkit.core.llm import LLMError
 from pumpkit.main import app
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -79,7 +78,7 @@ async def test_an_attempt_stops_counting_exactly_an_hour_after_it_was_made(
     first = clock()
     await _store_attempts(db, user.id, [first + timedelta(minutes=n) for n in range(30)])
     clock.advance(timedelta(hours=1))
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
@@ -118,7 +117,7 @@ async def test_failed_attempts_count_toward_the_limit(
 async def test_the_31st_attempt_giving_feedback_returns_429_with_no_model_call(
     client, db, user, with_author, fake_llm, clock
 ):
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
     post_id = (await client.post(POSTS, json={"brief": "ship"})).json()["id"]
     first = clock()
     await _store_attempts(
@@ -177,7 +176,7 @@ async def test_the_limit_is_per_user_so_another_users_attempts_dont_count(
     await _sign_in_as_another_subscribed_user(db)
     await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 

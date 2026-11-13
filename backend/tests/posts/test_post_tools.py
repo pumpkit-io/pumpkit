@@ -46,7 +46,7 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
 async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
     with_author, mcp, fake_llm, fixed_clock
 ):
-    fake_llm.replies = [written("the sketch"), {"post": "the final"}]
+    fake_llm.replies = [{"post": "the final"}]
 
     result = await mcp.call_tool("start_post", brief="  ship small things ")
 
@@ -98,10 +98,10 @@ async def test_start_post_takes_an_optional_format_of_post_or_thread(subscribed,
     assert schema["properties"]["format"]["default"] == "post"
 
 
-async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
+async def test_starting_a_thread_without_authors_links_to_persona(subscribed, mcp):
     await mcp.call_tool("set_positioning", text="I post about bootstrapping.")
 
-    result = await mcp.call_tool("start_post", brief="ship small things")
+    result = await mcp.call_tool("start_post", brief="ship small things", format="thread")
 
     assert error_text(result) == (
         "Add an inspiration author with posts before writing a post. http://localhost:5173/persona"
@@ -111,7 +111,7 @@ async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
 @pytest.fixture
 async def post_id(with_author, mcp, fake_llm) -> str:
     """A Post of the User's with one Version, whose text is "final 1"."""
-    fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
+    fake_llm.replies = [{"post": "final 1"}]
     return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
 
 
@@ -337,7 +337,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
         )
     await db.commit()
     fixed_clock.advance(timedelta(minutes=10))
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
     assert (await client.post("/api/v1/posts", json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 

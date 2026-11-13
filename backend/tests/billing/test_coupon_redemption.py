@@ -21,7 +21,6 @@ from tests.mcp_client import McpClient
 from tests.media_files import png
 from tests.oauth_app import REDIRECT, approved_code, exchange, register
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 PREVIEW = "/api/v1/billing/coupons/preview"
 REDEEM = "/api/v1/billing/coupons/redemptions"
@@ -393,7 +392,7 @@ async def test_cardless_writing_spends_the_full_monthly_allowance_and_resets(
     assert (
         await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     ).status_code == 201
-    fake_llm.replies = [written("Sketch"), {"post": "Written during free access"}]
+    fake_llm.replies = [{"post": "Written during free access"}]
     response = await client.post("/api/v1/posts", json={"brief": "Write a useful note"})
     assert response.status_code == 201, response.text
     usage = (await client.get("/api/v1/usage")).json()["allowance"]
@@ -574,7 +573,7 @@ async def test_distinct_coupons_append_from_january_anchor_without_resetting_usa
     ]
     await save_positioning(client)
     await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    fake_llm.replies = [written("Sketch"), {"post": "Before appending"}]
+    fake_llm.replies = [{"post": "Before appending"}]
     assert (await client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
     before = (await client.get("/api/v1/usage")).json()
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 700)

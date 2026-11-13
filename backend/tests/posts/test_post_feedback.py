@@ -20,6 +20,8 @@ AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
 # The model the prompts were tuned against, used for every call unless a setting says otherwise.
 DEFAULT_MODEL = "openai/gpt-5.6-luna"
+# The humanizer's default, which Feedback's humanizer call shares with a first Version's.
+HUMANIZING_MODEL = "openai/gpt-6.1-terra"
 
 
 def _versions_url(post_id: str) -> str:
@@ -42,7 +44,7 @@ async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
+    fake_llm.replies = [{"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things"})
     assert response.status_code == 201
     fake_llm.calls.clear()
@@ -198,7 +200,7 @@ async def test_the_humanizer_gets_the_previous_final_the_feedback_and_the_scrubb
     await client.post(_versions_url(post_id), json={"feedback": "shorter"})
 
     humanizer_call = fake_llm.calls[1]
-    assert humanizer_call.model == DEFAULT_MODEL
+    assert humanizer_call.model == HUMANIZING_MODEL
     assert humanizer_call.response_model.__name__ == "refined_post"
     assert humanizer_call.messages == [
         _system(HUMANIZER_PROMPT),
@@ -384,7 +386,7 @@ async def test_a_version_stores_its_feedback_models_and_usage(client, db, post_i
         ["sketch 2"],
         ["final 2"],
     )
-    assert (version.sketch_model, version.humanizing_model) == (DEFAULT_MODEL, DEFAULT_MODEL)
+    assert (version.sketch_model, version.humanizing_model) == (DEFAULT_MODEL, HUMANIZING_MODEL)
     assert version.sketch_usage is not None and version.humanizing_usage is not None
 
 
@@ -603,3 +605,26 @@ async def test_feedback_sent_with_the_saved_text_is_written(client, post_id, fak
     )
 
     assert response.status_code == 201
+
+
+async def test_feedback_on_a_post_written_with_no_inspiration_authors_is_refused(
+    client, subscribed, fake_llm
+):
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "final 1"}]
+    started = await client.post(POSTS, json={"brief": "ship small things"})
+    assert started.status_code == 201
+    fake_llm.calls.clear()
+    used = (await client.get("/api/v1/usage")).json()["allowance"]["generations"]["used"]
+
+    response = await client.post(
+        _versions_url(started.json()["id"]), json={"feedback": "make it shorter"}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Feedback can't revise a post written without inspiration authors yet. "
+        "Start a new post instead."
+    )
+    assert fake_llm.calls == []
+    assert (await client.get("/api/v1/usage")).json()["allowance"]["generations"]["used"] == used

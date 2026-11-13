@@ -1,4 +1,7 @@
-"""The Hook, chosen and written by the sketch and revision calls, seen through the Posts API and the scripted model."""
+"""
+The library Hook, chosen and written by a Thread's sketch call and by the revision call, seen
+through the Posts API and the scripted model. A single post's first Version has none.
+"""
 
 import logging
 from datetime import datetime, timedelta, timezone
@@ -9,10 +12,10 @@ from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.models import Post
-from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
+from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import writing_calls, written
+from tests.posts.writing_replies import REASONING, writing_calls, written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -43,8 +46,9 @@ async def with_author(client, subscribed, fake_x_reader):
 
 
 async def _start(client, fake_llm, reply: dict) -> dict:
-    fake_llm.replies = [reply, {"post": "the final"}]
-    response = await client.post(POSTS, json={"brief": "ship small things"})
+    """A Thread, whose first Version is still written with the library Hook."""
+    fake_llm.replies = [reply, {"parts": ["the final", "part two"]}]
+    response = await client.post(POSTS, json={"brief": "ship small things", "format": "thread"})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -53,6 +57,10 @@ async def _attempts(db):
     result = await db.execute(select(Post).options(selectinload(Post.attempts)))
     [post] = result.scalars()
     return sorted(post.attempts, key=lambda attempt: attempt.created_at)
+
+
+def _thread(sketch: str, hook_name=None, hook_reasoning=REASONING) -> dict:
+    return written_thread([sketch, "part two"], hook_name, hook_reasoning)
 
 
 def _system(prompt: str) -> dict:
@@ -67,25 +75,27 @@ def _user(content: str) -> dict:
 async def test_the_first_version_writes_the_hook_in_the_sketch_call_then_humanizes(
     client, with_author, fake_llm
 ):
-    await _start(client, fake_llm, written(SKETCH, "stop_x_do_y", HOOK_REASONING))
+    await _start(client, fake_llm, _thread(SKETCH, "stop_x_do_y", HOOK_REASONING))
 
     sketch_call, humanizer_call = writing_calls(fake_llm)
     assert (sketch_call.response_model.__name__, humanizer_call.response_model.__name__) == (
-        "drafted_post",
-        "refined_post",
+        "drafted_thread",
+        "refined_thread",
     )
     assert sketch_call.messages == [
-        _system(sketch_post_prompt(X_POST_MAX_CHARS)),
+        _system(sketch_thread_prompt(X_POST_MAX_CHARS)),
         _user(LEVELSIO_CORPUS),
         _user("ship small things"),
     ]
-    assert humanizer_call.messages[-1] == _user(SKETCH)
+    assert humanizer_call.messages[-1] == _user(
+        f'<part number="1">\n{SKETCH}\n</part>\n\n<part number="2">\npart two\n</part>'
+    )
 
 
 async def test_the_version_stores_the_hook_reasoning_and_the_library_hook(
     client, db, with_author, fake_llm
 ):
-    await _start(client, fake_llm, written(SKETCH, "stop_x_do_y", HOOK_REASONING))
+    await _start(client, fake_llm, _thread(SKETCH, "stop_x_do_y", HOOK_REASONING))
 
     [attempt] = await _attempts(db)
     assert (attempt.hook_reasoning, attempt.hook_name) == (HOOK_REASONING, "stop_x_do_y")
@@ -94,7 +104,7 @@ async def test_the_version_stores_the_hook_reasoning_and_the_library_hook(
 async def test_an_opening_with_no_library_hook_stores_its_reasoning_and_no_name(
     client, db, with_author, fake_llm
 ):
-    await _start(client, fake_llm, written("every week i ship one tiny thing"))
+    await _start(client, fake_llm, _thread("every week i ship one tiny thing"))
 
     [attempt] = await _attempts(db)
     assert attempt.hook_name is None
@@ -105,7 +115,7 @@ async def test_an_unknown_hook_name_is_logged_and_stored_as_none(
     client, db, with_author, fake_llm, caplog
 ):
     with caplog.at_level(logging.WARNING):
-        version = (await _start(client, fake_llm, written(SKETCH, "made_up", HOOK_REASONING)))[
+        version = (await _start(client, fake_llm, _thread(SKETCH, "made_up", HOOK_REASONING)))[
             "versions"
         ][0]
 
@@ -119,7 +129,9 @@ async def test_an_unknown_hook_name_is_logged_and_stored_as_none(
 async def test_a_feedback_version_stores_the_revision_calls_hook_without_a_classifier_question(
     client, db, with_author, fake_llm, fake_classifier
 ):
-    post_id = (await _start(client, fake_llm, written("sketch 1")))["id"]
+    fake_llm.replies = [{"post": "the final"}]
+    started = await client.post(POSTS, json={"brief": "ship small things"})
+    post_id = started.json()["id"]
     fake_llm.calls.clear()
     fake_llm.replies = [written(SKETCH, "stop_x_do_y", HOOK_REASONING), {"post": "final 2"}]
 

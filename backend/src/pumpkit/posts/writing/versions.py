@@ -153,10 +153,20 @@ class WrittenVersion:
     humanizing_model: str
     sketch_usage: Optional[dict]
     humanizing_usage: Optional[dict]
-    hook: Hook
+    # The library Hook of a Version written with a corpus; None for one written from a Plan.
+    hook: Optional[Hook] = None
+    # What the merge chose, on a single post written from a Plan; None otherwise.
+    hook_levers: Optional[list[str]] = None
+    hook_types: Optional[list[str]] = None
+    cta_type: Optional[str] = None
+    # Every sketch call and the merge's reviews and reasoning. Only kept, never shown.
+    sketches: Optional[list[dict]] = None
+    merge: Optional[dict] = None
+    # The writing doesn't put a first reply on the Text yet, so it is dropped when recorded.
+    first_reply: Optional[str] = None
 
 
-def _system(prompt: str) -> dict:
+def system_message(prompt: str) -> dict:
     # The only cache breakpoint, as in v6: the system prompt is what every call of every Post shares.
     cache_control = {"type": "ephemeral", "ttl": CACHE_TTL}
     return {
@@ -165,23 +175,23 @@ def _system(prompt: str) -> dict:
     }
 
 
-def _user(content: str) -> dict:
+def user_message(content: str) -> dict:
     return {"role": "user", "content": content}
 
 
 def sketch_messages(corpus: Corpus, brief: str, format: Format, char_limit: int) -> list[dict]:
     return [
-        _system(_SKETCH_PROMPTS[format](char_limit)),
-        _user(context_message(corpus)),
-        _user(brief),
+        system_message(_SKETCH_PROMPTS[format](char_limit)),
+        user_message(context_message(corpus)),
+        user_message(brief),
     ]
 
 
 def _humanizer_prefix(corpus: Corpus, brief: str, format: Format, char_limit: int) -> list[dict]:
     return [
-        _system(_HUMANIZER_PROMPTS[format](char_limit)),
-        _user(context_message(corpus)),
-        _user(brief_message(brief, format)),
+        system_message(_HUMANIZER_PROMPTS[format](char_limit)),
+        user_message(context_message(corpus)),
+        user_message(brief_message(brief, format)),
     ]
 
 
@@ -191,7 +201,7 @@ def humanizer_messages(
     """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Sketch last."""
     return [
         *_humanizer_prefix(corpus, brief, format, char_limit),
-        _user(format_text(format, sketch_parts)),
+        user_message(format_text(format, sketch_parts)),
     ]
 
 
@@ -219,13 +229,13 @@ def revision_humanizer_messages(
     messages = _humanizer_prefix(corpus, brief, format, char_limit)
     earlier_feedback = [v.feedback for v in earlier if v.feedback is not None]
     if earlier_feedback:
-        messages.append(_user(earlier_feedback_message(earlier_feedback)))
-    messages.append(_user(previous_final_message(*previous)))
-    messages.append(_user(latest_feedback_message(feedback, previous[0], format)))
+        messages.append(user_message(earlier_feedback_message(earlier_feedback)))
+    messages.append(user_message(previous_final_message(*previous)))
+    messages.append(user_message(latest_feedback_message(feedback, previous[0], format)))
     hand_written = _hand_written(earlier, starting)
     if hand_written:
-        messages.append(_user(hand_written_message(hand_written, format)))
-    messages.append(_user(revised_sketch_message(previous[0], format, sketch_parts)))
+        messages.append(user_message(hand_written_message(hand_written, format)))
+    messages.append(user_message(revised_sketch_message(previous[0], format, sketch_parts)))
     return messages
 
 
@@ -281,10 +291,10 @@ def revision_messages(
             framed = _framed_feedback(
                 version.feedback, earlier[:index], version.starting_text, version.format
             )
-            messages.append(_user(framed))
+            messages.append(user_message(framed))
         content = format_text(version.format, version.parts)
         messages.append({"role": "assistant", "content": content})
-    messages.append(_user(_framed_feedback(feedback, earlier, starting, format)))
+    messages.append(user_message(_framed_feedback(feedback, earlier, starting, format)))
     return messages
 
 

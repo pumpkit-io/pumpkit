@@ -21,7 +21,7 @@ DRAFT_POST_MAX_CHARS = 1000
 
 # Several times a full-length Positioning, so a model that reasons first still has room.
 DRAFT_MAX_TOKENS = 4000
-# The panel stays locked while the draft is written, so the call gets this long.
+# The panel stays locked while the draft is written, so the call gets this long once sent.
 DRAFT_CALL_SECONDS = 90.0
 
 
