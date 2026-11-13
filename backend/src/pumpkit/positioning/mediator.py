@@ -1,3 +1,5 @@
+import asyncio
+from dataclasses import replace
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +17,8 @@ from pumpkit.core.logging import logger
 from pumpkit.core.time import as_utc
 from pumpkit.positioning import service
 from pumpkit.positioning.draft import (
+    DRAFT_CALL_SECONDS,
+    DRAFT_MAX_TOKENS,
     DRAFT_WINDOW,
     DRAFTS_PER_DAY,
     PositioningDraft,
@@ -59,10 +63,8 @@ async def get_positioning_page(
     db: AsyncSession, user: User, now: datetime
 ) -> PositioningPageResponse:
     positioning = _response(await service.get_positioning(db, user_id=user.id))
-    used = await service.count_draft_requests(db, user_id=user.id, since=now - DRAFT_WINDOW)
-    return PositioningPageResponse(
-        **positioning.model_dump(), can_draft=used.count < DRAFTS_PER_DAY
-    )
+    used = await service.draft_requests_since(db, user_id=user.id, since=now - DRAFT_WINDOW)
+    return PositioningPageResponse(**positioning.model_dump(), can_draft=len(used) < DRAFTS_PER_DAY)
 
 
 async def draft_positioning(
@@ -74,47 +76,57 @@ async def draft_positioning(
     """
     # Serializes a User's requests, so two at once can't both take the last draft of the day.
     await users.lock_user_id(db, user_id=user.id)
-    used = await service.count_draft_requests(db, user_id=user.id, since=now - DRAFT_WINDOW)
-    if used.count >= DRAFTS_PER_DAY and used.oldest is not None:
+    counted_since = now - DRAFT_WINDOW
+    used = await service.draft_requests_since(db, user_id=user.id, since=counted_since)
+    if len(used) >= DRAFTS_PER_DAY:
         raise RetryLaterError(
-            "You can draft again tomorrow.", retry_at=used.oldest + DRAFT_WINDOW, now=now
+            "You can draft again tomorrow.", retry_at=used[0] + DRAFT_WINDOW, now=now
         )
     connection = await x_connection_service.get_connection(db, user_id=user.id)
-    if connection is None:
+    # Checked before X is read: without both providers a request would be paid for and wasted.
+    if connection is None or not reader.is_configured():
         return PositioningDraftResponse(text=None, reason=_X_NOT_READ, can_draft=True)
+    if not llm.is_configured():
+        return PositioningDraftResponse(text=None, reason=_NOT_DRAFTED, can_draft=True)
+    x_user_id = connection.x_user_id
     profile = XProfile(
         handle=connection.handle,
         bio=connection.bio,
         location=connection.location,
         website=connection.website,
     )
-    await service.log_draft_request(db, user_id=user.id, now=now)
+    await service.log_draft_request(db, user_id=user.id, now=now, counted_since=counted_since)
     # Early commit: reading X is paid for whatever comes of it, and the lock ends before the calls.
     await db.commit()
 
     def answer(text: Optional[str], reason: Optional[str]) -> PositioningDraftResponse:
         return PositioningDraftResponse(
-            text=text, reason=reason, can_draft=used.count + 1 < DRAFTS_PER_DAY
+            text=text, reason=reason, can_draft=len(used) + 1 < DRAFTS_PER_DAY
         )
 
     try:
-        newest = await authors_service.newest_posts(reader, handle=profile.handle)
+        # By X ID: the stored handle is as old as the last sign-in, and may now be someone else's.
+        newest = await authors_service.newest_posts(reader, x_user_id=x_user_id)
     except XReaderError as error:
         logger.warning(
-            "Reading @%s's posts for a positioning draft failed: %s", profile.handle, error
+            "Reading X account %s's posts for a positioning draft failed: %s", x_user_id, error
         )
         return answer(None, _X_NOT_READ)
-    posts = post_texts([post.text for post in newest])
+    if newest.handle is not None:
+        profile = replace(profile, handle=newest.handle)
+    posts = post_texts([post.text for post in newest.posts])
     if profile.is_blank() and not posts:
         return answer(None, _NOTHING_TO_DRAFT_FROM)
     try:
-        result = await llm.structured(
-            model=settings.LLM_POSITIONING_MODEL,
-            messages=draft_messages(profile, posts),
-            response_model=PositioningDraft,
-        )
-    except (LLMError, LLMNotConfiguredError) as error:
-        logger.warning("Drafting a positioning failed: %s", error)
+        async with asyncio.timeout(DRAFT_CALL_SECONDS):
+            result = await llm.structured(
+                model=settings.LLM_POSITIONING_MODEL,
+                messages=draft_messages(profile, posts),
+                response_model=PositioningDraft,
+                max_tokens=DRAFT_MAX_TOKENS,
+            )
+    except (LLMError, LLMNotConfiguredError, TimeoutError) as error:
+        logger.warning("Drafting a positioning failed: %s", error or type(error).__name__)
         return answer(None, _NOT_DRAFTED)
     text = draft_text(result.parsed)
     return answer(text, None if text is not None else _NOT_DRAFTED)

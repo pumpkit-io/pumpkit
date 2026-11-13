@@ -180,3 +180,12 @@ async def test_an_answer_without_usage_comes_back_parsed_with_no_usage():
 
     assert result.parsed == _Answer(post="hello")
     assert result.usage is None
+
+
+def test_it_is_configured_only_with_the_key(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_API_KEY", "local-key")
+    assert OpenAICompatibleLLM(LLMClient()).is_configured() is True
+
+    monkeypatch.setattr(settings, "LLM_API_KEY", None)
+
+    assert OpenAICompatibleLLM(LLMClient()).is_configured() is False

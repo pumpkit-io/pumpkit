@@ -1,8 +1,7 @@
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,25 +35,33 @@ async def save_positioning(
     return positioning
 
 
-@dataclass(frozen=True)
-class DraftRequestCount:
-    count: int
-    # When the oldest counted request was made; None when none was.
-    oldest: Optional[datetime]
-
-
-async def count_draft_requests(
+async def draft_requests_since(
     db: AsyncSession, *, user_id: str, since: datetime
-) -> DraftRequestCount:
-    """The User's draft requests made after `since`."""
-    query = select(func.count(), func.min(PositioningDraftRequest.requested_at)).where(
-        PositioningDraftRequest.user_id == user_id, PositioningDraftRequest.requested_at > since
+) -> list[datetime]:
+    """When the User made each draft request after `since`, oldest first."""
+    query = (
+        select(PositioningDraftRequest.requested_at)
+        .where(
+            PositioningDraftRequest.user_id == user_id,
+            PositioningDraftRequest.requested_at > since,
+        )
+        .order_by(PositioningDraftRequest.requested_at)
     )
-    count, oldest = (await db.execute(query)).one()
-    return DraftRequestCount(count=count, oldest=None if oldest is None else as_utc(oldest))
+    return [as_utc(requested_at) for requested_at in (await db.execute(query)).scalars()]
 
 
-async def log_draft_request(db: AsyncSession, *, user_id: str, now: datetime) -> None:
-    """Record one draft request that goes on to read X. Flushes."""
+async def log_draft_request(
+    db: AsyncSession, *, user_id: str, now: datetime, counted_since: datetime
+) -> None:
+    """
+    Record one draft request that goes on to read X, and drop the User's requests the limit
+    no longer counts: those made at or before `counted_since`. Flushes.
+    """
+    await db.execute(
+        delete(PositioningDraftRequest).where(
+            PositioningDraftRequest.user_id == user_id,
+            PositioningDraftRequest.requested_at <= counted_since,
+        )
+    )
     db.add(PositioningDraftRequest(user_id=user_id, requested_at=now))
     await db.flush()

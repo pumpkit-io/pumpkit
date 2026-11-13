@@ -16,6 +16,13 @@ DRAFT_WINDOW = timedelta(days=1)
 
 # One page of the X reader, which is as many posts as one paid call returns.
 DRAFT_POSTS = 20
+# A Premium account's post runs to 25,000 characters; its opening shows what it is about.
+DRAFT_POST_MAX_CHARS = 1000
+
+# Several times a full-length Positioning, so a model that reasons first still has room.
+DRAFT_MAX_TOKENS = 4000
+# The panel stays locked while the draft is written, so the call gets this long.
+DRAFT_CALL_SECONDS = 90.0
 
 
 @dataclass(frozen=True)
@@ -57,8 +64,14 @@ def draft_messages(profile: XProfile, posts: Sequence[str]) -> list[dict]:
 
 
 def post_texts(texts: Sequence[str]) -> list[str]:
-    """The newest `DRAFT_POSTS` of `texts`, given newest first, as the model can be sent them."""
-    cleaned = (drop_unstorable(text).strip() for text in texts[:DRAFT_POSTS])
+    """
+    The newest `DRAFT_POSTS` of `texts`, given newest first, as the model can be sent them:
+    each cut to `DRAFT_POST_MAX_CHARS`.
+    """
+    cleaned = (
+        drop_unstorable(text).strip()[:DRAFT_POST_MAX_CHARS].rstrip()
+        for text in texts[:DRAFT_POSTS]
+    )
     return [text for text in cleaned if text]
 
 

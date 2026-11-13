@@ -106,6 +106,7 @@ async def save_connection(
 
 
 def _keep_profile(connection: XConnection, account: XAccount) -> None:
+    # X leaves a blank profile field out of users/me, so a missing one clears what was stored.
     connection.bio = account.bio
     connection.location = account.location
     connection.website = account.website

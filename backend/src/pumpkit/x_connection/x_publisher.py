@@ -350,6 +350,11 @@ class OfficialXPublisher:
         data = body.get("data") if isinstance(body, dict) else None
         if not isinstance(data, dict):
             raise XPublisherError("X users/me returned a body without data")
+        profile_fields = {
+            "bio": _profile_text(data.get("description")),
+            "location": _profile_text(data.get("location")),
+            "website": _website(data),
+        }
         if not for_sign_in:
             user_id, handle = data.get("id"), data.get("username")
             if (
@@ -368,9 +373,7 @@ class OfficialXPublisher:
                 photo_url=_larger_photo(photo_url)
                 if isinstance(photo_url, str) and photo_url
                 else None,
-                bio=_profile_text(data.get("description")),
-                location=_profile_text(data.get("location")),
-                website=_website(data),
+                **profile_fields,
             )
         try:
             profile = _XSignInProfile.model_validate(data)
@@ -387,9 +390,7 @@ class OfficialXPublisher:
             photo_url=_larger_photo(str(profile.profile_image_url))
             if profile.profile_image_url is not None
             else None,
-            bio=_profile_text(data.get("description")),
-            location=_profile_text(data.get("location")),
-            website=_website(data),
+            **profile_fields,
         )
 
     async def revoke(self, *, token: str, token_type_hint: TokenTypeHint) -> None:

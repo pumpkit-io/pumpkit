@@ -42,6 +42,9 @@ class LLMClient:
     def __init__(self) -> None:
         self._client: Optional[AsyncOpenAI] = None
 
+    def is_configured(self) -> bool:
+        return bool(settings.LLM_API_KEY)
+
     @property
     def _llm_client(self) -> AsyncOpenAI:
         if self._client is None:

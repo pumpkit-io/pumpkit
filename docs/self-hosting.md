@@ -163,10 +163,10 @@ Pumpkit needs X, an LLM endpoint and twitterapi.io. Every other one is optional:
 
 ### LLM endpoint (required)
 
-Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](https://openrouter.ai) by default.
+Writes every Post and drafts each Positioning. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](https://openrouter.ai) by default.
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
-- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls.
+- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls. A Positioning draft makes one, on [`openai/gpt-6-luna`](https://openrouter.ai/openai/gpt-6-luna) by default.
 - Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the four models it serves: `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL` and `LLM_POSITIONING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).

@@ -7,6 +7,10 @@ import { positioningService } from '@/services/positioningService';
 
 type Loading = 'loading' | 'failed' | 'loaded';
 
+/** The backend's sentence for a draft it couldn't write, for a request that never got one. */
+const NOT_DRAFTED =
+  "We couldn't draft your positioning. Write it yourself, a few sentences is enough.";
+
 /** True when the backend would find `text` blank: it drops what Postgres can't store, then trims. */
 function isBlank(text: string): boolean {
   // Python strips the C0 separators and U+0085 too, which a JS trim() keeps.
@@ -24,7 +28,7 @@ export function usePositioning() {
   /** The text as of the last edit, which a save in flight can't see in its closure. */
   const latestText = useRef('');
   const [saving, setSaving] = useState(false);
-  /** Why the last save failed, until the next edit or save. */
+  /** Why the last save or draft failed, until the next edit, save or draft. */
   const [error, setError] = useState<string | null>(null);
   /** True when that save failed because the server refused the text itself. */
   const [textRefused, setTextRefused] = useState(false);
@@ -33,8 +37,8 @@ export function usePositioning() {
   /** False once the User has used up today's drafts. */
   const [canDraft, setCanDraft] = useState(true);
   const [drafting, setDrafting] = useState(false);
-  /** What came of the last draft request, until the next edit, save or draft. */
-  const [draftNote, setDraftNote] = useState<string | null>(null);
+  /** True from a draft filling the textarea until the next edit, save or draft. */
+  const [justDrafted, setJustDrafted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,14 +69,14 @@ export function usePositioning() {
     setJustSaved(false);
     setError(null);
     setTextRefused(false);
-    setDraftNote(null);
+    setJustDrafted(false);
   }, []);
 
   const save = useCallback(async () => {
     setSaving(true);
     setError(null);
     setTextRefused(false);
-    setDraftNote(null);
+    setJustDrafted(false);
     try {
       const positioning = await positioningService.save(text);
       setSaved(positioning.text);
@@ -108,23 +112,23 @@ export function usePositioning() {
     setDrafting(true);
     setError(null);
     setTextRefused(false);
-    setDraftNote(null);
+    setJustDrafted(false);
     try {
       const drafted = await positioningService.draft();
       setCanDraft(drafted.canDraft);
       if (drafted.text === null) {
-        setDraftNote(drafted.reason ?? "Couldn't draft your positioning. Try again.");
+        setError(drafted.reason ?? NOT_DRAFTED);
       } else {
         setText(drafted.text);
         latestText.current = drafted.text;
         setJustSaved(false);
-        setDraftNote('Drafted from your X profile. Save to keep it.');
+        setJustDrafted(true);
       }
     } catch (e) {
       if (isSubscriptionNeeded(e)) void refreshOnboarding();
       // The only 429 this request gets is the daily limit, which the button's own line explains.
       else if (errorStatus(e) === 429) setCanDraft(false);
-      else setDraftNote(errorMessage(e, "Couldn't draft your positioning. Try again."));
+      else setError(errorMessage(e, NOT_DRAFTED));
     } finally {
       setDrafting(false);
     }
@@ -151,6 +155,6 @@ export function usePositioning() {
     drafting,
     canDraft,
     canRequestDraft: idle && canDraft,
-    draftNote,
+    justDrafted,
   };
 }

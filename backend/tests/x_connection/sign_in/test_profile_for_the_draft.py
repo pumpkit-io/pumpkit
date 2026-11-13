@@ -30,6 +30,7 @@ async def test_sign_in_keeps_the_bio_location_and_website_for_the_draft(
         location="Lisbon",
         website="https://ada.dev",
     )
+    fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada"
     fake_x_reader.posts["ada"] = []
 
     signed_in = await complete(sign_in_browser, await begin(sign_in_browser))
@@ -51,6 +52,7 @@ async def test_a_later_sign_in_replaces_what_the_profile_said(
     fake_x_publisher.account = replace(
         fake_x_publisher.account, bio="Solo founder.", location="Lisbon"
     )
+    fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada"
     fake_x_reader.posts["ada"] = []
     await complete(sign_in_browser, await begin(sign_in_browser))
     fake_x_publisher.account = replace(

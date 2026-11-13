@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Optional, Sequence
 
@@ -16,7 +16,7 @@ from pumpkit.authors.models import (
     AuthorPost,
     InspirationAuthor,
 )
-from pumpkit.authors.x_reader import FetchedPost, XReader
+from pumpkit.authors.x_reader import FetchedPost, RecentPosts, XReader
 from pumpkit.core.time import as_utc
 
 
@@ -179,13 +179,15 @@ def _author_post(post: FetchedPost, *, handle: str, now: datetime) -> AuthorPost
     )
 
 
-async def newest_posts(reader: XReader, *, handle: str) -> list[FetchedPost]:
+async def newest_posts(reader: XReader, *, x_user_id: str) -> RecentPosts:
     """
-    The handle's newest original posts and quotes on X, about 20, newest first, in one paid
-    twitterapi.io call that stores nothing. Raises `XReaderError`.
+    The newest original posts and quotes of the X account with this ID, about 20, newest first,
+    in one paid twitterapi.io call that stores nothing. Raises `XReaderError`.
     """
-    recent = await reader.fetch_recent_posts(handle)
-    return sorted(recent.posts, key=lambda post: post.posted_at, reverse=True)
+    recent = await reader.fetch_recent_posts_by_user_id(x_user_id)
+    return replace(
+        recent, posts=sorted(recent.posts, key=lambda post: post.posted_at, reverse=True)
+    )
 
 
 async def count_posts(db: AsyncSession, *, handle: str) -> int:

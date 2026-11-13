@@ -1,5 +1,6 @@
 """`POST /positioning/draft`: a draft of the User's Positioning from their X profile and posts."""
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
@@ -7,8 +8,10 @@ import pytest
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
-from pumpkit.core.llm import LLMError
+from pumpkit.core.llm import FakeLLM, LLMError, get_llm
 from pumpkit.core.llm_client import LLMNotConfiguredError
+from pumpkit.main import app
+from pumpkit.positioning import mediator
 from pumpkit.positioning.draft_prompt import DRAFT_PROMPT
 from tests.positioning.positioning import DRAFT, DRAFTED, POSITIONING, TEXT
 
@@ -33,6 +36,7 @@ async def on_x(fake_x_publisher, fake_x_reader, connect_x, fixed_clock, subscrib
         website="https://ada.dev",
     )
     await connect_x()
+    fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada"
     fake_x_reader.posts["ada"] = [
         _post(1, "Raised my prices 20% and nobody left."),
         _post(2, "Shipped usage-based pricing today."),
@@ -59,17 +63,16 @@ async def test_a_draft_leaves_the_saved_positioning_alone(client, on_x, fake_llm
 
 
 async def test_the_model_is_asked_once_with_the_profile_and_the_newest_posts(
-    client, on_x, fake_llm, fake_x_reader
+    client, on_x, fake_llm, fake_x_reader, fake_x_publisher
 ):
     fake_llm.replies = [{"positioning": DRAFTED}]
 
     await client.post(DRAFT)
 
-    assert fake_x_reader.calls == ["ada"]
+    assert fake_x_reader.user_id_calls == [fake_x_publisher.account.user_id]
     assert len(fake_llm.calls) == 1
     call = fake_llm.calls[0]
     assert call.model == "openai/gpt-6-luna"
-    assert call.response_model.__name__ == "PositioningDraft"
     assert call.messages == [
         {"role": "system", "content": DRAFT_PROMPT},
         {
@@ -89,6 +92,24 @@ async def test_the_model_is_asked_once_with_the_profile_and_the_newest_posts(
             ),
         },
     ]
+
+
+async def test_a_user_who_renamed_their_x_account_gets_a_draft_from_their_own_posts(
+    client, on_x, fake_llm, fake_x_reader, fake_x_publisher
+):
+    # @ada became @ada_builds on X since she signed in, and someone else took @ada.
+    fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada_builds"
+    fake_x_reader.posts["ada_builds"] = fake_x_reader.posts["ada"]
+    fake_x_reader.posts["ada"] = [_post(3, "A stranger's post.")]
+    fake_llm.replies = [{"positioning": DRAFTED}]
+
+    response = await client.post(DRAFT)
+
+    assert response.json()["text"] == DRAFTED
+    content = fake_llm.calls[0].messages[1]["content"]
+    assert "Handle: @ada_builds\n" in content
+    assert "Shipped usage-based pricing today." in content
+    assert "A stranger's post." not in content
 
 
 async def test_the_draft_call_uses_its_own_model_setting(client, on_x, fake_llm, monkeypatch):
@@ -175,11 +196,8 @@ async def test_an_empty_profile_with_no_posts_gives_no_draft_and_asks_no_model(
     assert fake_llm.calls == []
 
 
-@pytest.mark.parametrize("failure", ["fail", "not_configured"])
-async def test_a_failed_x_read_gives_no_draft_and_a_reason(
-    client, on_x, fake_llm, fake_x_reader, failure
-):
-    setattr(fake_x_reader, failure, True)
+async def test_a_failed_x_read_gives_no_draft_and_a_reason(client, on_x, fake_llm, fake_x_reader):
+    fake_x_reader.fail = True
 
     response = await client.post(DRAFT)
 
@@ -188,10 +206,10 @@ async def test_a_failed_x_read_gives_no_draft_and_a_reason(
     assert fake_llm.calls == []
 
 
-async def test_a_handle_x_no_longer_has_gives_no_draft_and_a_reason(
+async def test_an_account_x_no_longer_has_gives_no_draft_and_a_reason(
     client, on_x, fake_llm, fake_x_reader
 ):
-    del fake_x_reader.posts["ada"]
+    fake_x_reader.user_ids.clear()
 
     response = await client.post(DRAFT)
 
@@ -205,7 +223,7 @@ async def test_a_user_with_no_x_connection_gets_no_draft_and_x_is_not_read(
 
     assert response.status_code == 200
     assert response.json() == {"text": None, "reason": NO_X_READ, "can_draft": True}
-    assert fake_x_reader.calls == []
+    assert fake_x_reader.user_id_calls == []
     assert fake_llm.calls == []
 
 
@@ -258,6 +276,43 @@ async def test_posts_reach_the_model_without_nuls_or_unpaired_surrogates(
     assert "<post>\nRaised my prices.\n</post>" in fake_llm.calls[0].messages[1]["content"]
 
 
+async def test_a_long_post_reaches_the_model_cut_to_1000_characters(
+    client, on_x, fake_llm, fake_x_reader
+):
+    fake_x_reader.posts["ada"] = [_post(1, "a" * 999 + "bc")]
+    fake_llm.replies = [{"positioning": DRAFTED}]
+
+    await client.post(DRAFT)
+
+    content = fake_llm.calls[0].messages[1]["content"]
+    assert f"<post>\n{'a' * 999}b\n</post>" in content
+
+
+async def test_the_models_answer_is_capped_at_4000_tokens(client, on_x, fake_llm):
+    fake_llm.replies = [{"positioning": DRAFTED}]
+
+    await client.post(DRAFT)
+
+    assert fake_llm.calls[0].max_tokens == 4000
+
+
+async def test_a_model_call_that_runs_too_long_gives_no_draft_and_a_reason(
+    client, on_x, monkeypatch
+):
+    class NeverAnswers(FakeLLM):
+        async def structured(self, **call):
+            await asyncio.sleep(3600)
+            return await super().structured(**call)
+
+    app.dependency_overrides[get_llm] = lambda: NeverAnswers()
+    monkeypatch.setattr(mediator, "DRAFT_CALL_SECONDS", 0.01)
+
+    response = await client.post(DRAFT)
+
+    assert response.status_code == 200
+    assert response.json() == {"text": None, "reason": NO_MODEL, "can_draft": True}
+
+
 async def test_a_draft_is_not_a_generation(client, on_x, fake_llm, monkeypatch):
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 500)
     before = (await client.get(USAGE)).json()
@@ -288,7 +343,7 @@ async def test_a_user_gets_5_drafts_a_day(client, on_x, fake_llm, fake_x_reader,
         "detail": "You can draft again tomorrow.",
         "retry_at": "2026-10-11T12:01:30Z",
     }
-    assert len(fake_x_reader.calls) == 5
+    assert len(fake_x_reader.user_id_calls) == 5
     assert len(fake_llm.calls) == 5
 
 
@@ -322,6 +377,34 @@ async def test_a_request_that_never_read_x_does_not_count(client, subscribed, fa
         assert (await client.post(DRAFT)).status_code == 200
 
     assert (await client.get(POSITIONING)).json()["can_draft"] is True
+
+
+async def test_without_a_twitterapi_io_key_x_is_not_read_and_no_draft_is_used(
+    client, on_x, fake_llm, fake_x_reader
+):
+    fake_x_reader.not_configured = True
+
+    for _ in range(6):
+        response = await client.post(DRAFT)
+        assert response.status_code == 200
+        assert response.json() == {"text": None, "reason": NO_X_READ, "can_draft": True}
+
+    assert fake_x_reader.user_id_calls == []
+    assert fake_llm.calls == []
+
+
+async def test_without_an_llm_key_x_is_not_read_and_no_draft_is_used(
+    client, on_x, fake_llm, fake_x_reader
+):
+    fake_llm.configured = False
+
+    for _ in range(6):
+        response = await client.post(DRAFT)
+        assert response.status_code == 200
+        assert response.json() == {"text": None, "reason": NO_MODEL, "can_draft": True}
+
+    assert fake_x_reader.user_id_calls == []
+    assert fake_llm.calls == []
 
 
 async def test_each_user_has_their_own_5_drafts(

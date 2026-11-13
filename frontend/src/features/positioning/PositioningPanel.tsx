@@ -26,7 +26,7 @@ export function PositioningPanel() {
     drafting,
     canDraft,
     canRequestDraft,
-    draftNote,
+    justDrafted,
   } = usePositioning();
   const id = useId();
   const headingId = `${id}-heading`;
@@ -86,11 +86,6 @@ export function PositioningPanel() {
                 {error}
               </p>
             )}
-            {draftNote && (
-              <p role="status" className="font-sans text-sm text-foreground">
-                {draftNote}
-              </p>
-            )}
             <p id={helperId} className="font-sans text-sm text-muted-foreground">
               Cover: who you are · what you post about · who you write for · what you post for ·
               what you can point to
@@ -121,7 +116,11 @@ export function PositioningPanel() {
               </p>
             )}
             <p role="status" className="font-sans text-sm text-muted-foreground">
-              {justSaved ? 'Saved' : ''}
+              {justSaved
+                ? 'Saved'
+                : justDrafted
+                  ? 'Drafted from your X profile. Save to keep it.'
+                  : ''}
             </p>
             <Button type="submit" className="h-11 sm:h-10" disabled={!canSave}>
               {saving ? 'Saving…' : 'Save'}

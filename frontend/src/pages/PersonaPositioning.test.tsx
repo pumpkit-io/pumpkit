@@ -379,7 +379,9 @@ describe('Persona: the Positioning panel', () => {
     fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
 
     await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
-    expect(region.getByText('Drafted from your X profile. Save to keep it.')).toBeInTheDocument();
+    expect(region.getByRole('status')).toHaveTextContent(
+      'Drafted from your X profile. Save to keep it.',
+    );
     expect(positioningService.save).not.toHaveBeenCalled();
     expect(region.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
@@ -433,7 +435,8 @@ describe('Persona: the Positioning panel', () => {
     const region = await panel();
     fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
 
-    expect(await region.findByText(reason)).toBeInTheDocument();
+    expect(await region.findByRole('alert')).toHaveTextContent(reason);
+    expect(textarea).toHaveAccessibleDescription(new RegExp(`^${reason}`));
     expect(textarea).toHaveValue(SAVED);
     expect(textarea).toBeEnabled();
     expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
@@ -446,7 +449,7 @@ describe('Persona: the Positioning panel', () => {
     },
     {
       failure: Object.assign(new Error('Network Error'), { isAxiosError: true }),
-      message: "Couldn't draft your positioning. Try again.",
+      message: "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
     },
   ])('keeps the text and says so when the draft request fails', async ({ failure, message }) => {
     vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
@@ -458,7 +461,7 @@ describe('Persona: the Positioning panel', () => {
     const region = await panel();
     fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
 
-    expect(await region.findByText(message)).toBeInTheDocument();
+    expect(await region.findByRole('alert')).toHaveTextContent(message);
     expect(textarea).toHaveValue(SAVED);
     expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
   });
